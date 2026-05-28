@@ -52,7 +52,7 @@ export type ConsumeOutcome =
   | { kind: 'consumed' }
   | { kind: 'weak_password' };
 
-export const consumePasswordResetToken = (presentedToken: string, newPassword: string): ConsumeOutcome => {
+export const consumePasswordResetToken = async (presentedToken: string, newPassword: string): Promise<ConsumeOutcome> => {
   const record = db.findPasswordResetTokenByHash(sha256(presentedToken));
   if (!record) return { kind: 'invalid' };
   if (record.consumedAt) return { kind: 'consumed' };
@@ -62,7 +62,7 @@ export const consumePasswordResetToken = (presentedToken: string, newPassword: s
   const user = db.getUserById(record.userId);
   if (!user) return { kind: 'invalid' };
 
-  const passwordHash = hashPassword(newPassword);
+  const passwordHash = await hashPassword(newPassword);
   const updated = db.updateUserPassword(user.id, passwordHash);
   if (!updated) return { kind: 'invalid' };
 

@@ -12,11 +12,11 @@ services:
     image: bitnami/postgresql-repmgr:16
     restart: unless-stopped
     environment:
-      POSTGRESQL_POSTGRES_PASSWORD: postgres
+      POSTGRESQL_POSTGRES_PASSWORD: ${POSTGRES_POSTGRES_PASSWORD:?POSTGRES_POSTGRES_PASSWORD must be set}
       POSTGRESQL_USERNAME: synapse_user
-      POSTGRESQL_PASSWORD: postgres
+      POSTGRESQL_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
       POSTGRESQL_DATABASE: synapse
-      REPMGR_PASSWORD: repmgrpassword
+      REPMGR_PASSWORD: ${REPMGR_PASSWORD:?REPMGR_PASSWORD must be set}
       REPMGR_PRIMARY_HOST: postgres-primary
       REPMGR_NODE_NAME: postgres-primary
       REPMGR_NODE_NETWORK_NAME: postgres-primary
@@ -35,11 +35,11 @@ services:
     image: bitnami/postgresql-repmgr:16
     restart: unless-stopped
     environment:
-      POSTGRESQL_POSTGRES_PASSWORD: postgres
+      POSTGRESQL_POSTGRES_PASSWORD: ${POSTGRES_POSTGRES_PASSWORD:?POSTGRES_POSTGRES_PASSWORD must be set}
       POSTGRESQL_USERNAME: synapse_user
-      POSTGRESQL_PASSWORD: postgres
+      POSTGRESQL_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
       POSTGRESQL_DATABASE: synapse
-      REPMGR_PASSWORD: repmgrpassword
+      REPMGR_PASSWORD: ${REPMGR_PASSWORD:?REPMGR_PASSWORD must be set}
       REPMGR_PRIMARY_HOST: postgres-primary
       REPMGR_NODE_NAME: postgres-replica
       REPMGR_NODE_NETWORK_NAME: postgres-replica
@@ -62,17 +62,17 @@ services:
     environment:
       PGPOOL_BACKEND_NODES: 0:postgres-primary:5432,1:postgres-replica:5432
       PGPOOL_SR_CHECK_USER: synapse_user
-      PGPOOL_SR_CHECK_PASSWORD: postgres
+      PGPOOL_SR_CHECK_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
       PGPOOL_POSTGRES_USERNAME: synapse_user
-      PGPOOL_POSTGRES_PASSWORD: postgres
+      PGPOOL_POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
       PGPOOL_ADMIN_USERNAME: admin
-      PGPOOL_ADMIN_PASSWORD: admin
+      PGPOOL_ADMIN_PASSWORD: ${PGPOOL_ADMIN_PASSWORD:?PGPOOL_ADMIN_PASSWORD must be set}
       PGPOOL_ENABLE_LOAD_BALANCING: "yes"
     depends_on:
       - postgres-primary
       - postgres-replica
     healthcheck:
-      test: ["CMD-SHELL", "PGPASSWORD=postgres psql -h 127.0.0.1 -p 5432 -U synapse_user -d synapse -c 'select 1' >/dev/null"]
+      test: ["CMD-SHELL", "PGPASSWORD=$${POSTGRES_PASSWORD:-postgres} psql -h 127.0.0.1 -p 5432 -U synapse_user -d synapse -c 'select 1' >/dev/null"]
       interval: 10s
       timeout: 5s
       retries: 6
@@ -84,11 +84,11 @@ services:
     restart: unless-stopped
     environment:
       REDIS_REPLICATION_MODE: master
-      REDIS_PASSWORD: redispassword
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD must be set}
     volumes:
       - redis_primary:/bitnami/redis/data
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "redispassword", "ping"]
+      test: ["CMD", "redis-cli", "-a", "$${REDIS_PASSWORD}", "ping"]
       interval: 10s
       timeout: 5s
       retries: 6
@@ -102,14 +102,14 @@ services:
       REDIS_REPLICATION_MODE: replica
       REDIS_MASTER_HOST: redis-primary
       REDIS_MASTER_PORT_NUMBER: 6379
-      REDIS_MASTER_PASSWORD: redispassword
-      REDIS_PASSWORD: redispassword
+      REDIS_MASTER_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD must be set}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD must be set}
     depends_on:
       - redis-primary
     volumes:
       - redis_replica:/bitnami/redis/data
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "redispassword", "ping"]
+      test: ["CMD", "redis-cli", "-a", "$${REDIS_PASSWORD}", "ping"]
       interval: 10s
       timeout: 5s
       retries: 6
@@ -117,7 +117,7 @@ services:
       - backend
 
   synapse:
-    image: ${SYNAPSE_IMAGE_OVERRIDE:-matrixdotorg/synapse:latest}
+    image: ${SYNAPSE_IMAGE_OVERRIDE:-matrixdotorg/synapse:v1.130.0}
     container_name: synapse
     restart: unless-stopped
     volumes:
@@ -137,7 +137,7 @@ services:
       - backend
 
   synapse-generic-worker-1:
-    image: ${SYNAPSE_IMAGE_OVERRIDE:-matrixdotorg/synapse:latest}
+    image: ${SYNAPSE_IMAGE_OVERRIDE:-matrixdotorg/synapse:v1.130.0}
     restart: unless-stopped
     entrypoint: ["/start.py", "run", "--config-path=/data/homeserver.yaml", "--config-path=/data/workers/synapse-generic-worker-1.yaml"]
     environment:
@@ -155,7 +155,7 @@ services:
       - backend
 
   synapse-background-worker-1:
-    image: ${SYNAPSE_IMAGE_OVERRIDE:-matrixdotorg/synapse:latest}
+    image: ${SYNAPSE_IMAGE_OVERRIDE:-matrixdotorg/synapse:v1.130.0}
     restart: unless-stopped
     entrypoint: ["/start.py", "run", "--config-path=/data/homeserver.yaml", "--config-path=/data/workers/synapse-background-worker-1.yaml"]
     environment:
@@ -173,7 +173,7 @@ services:
       - backend
 
   synapse-persister-1:
-    image: ${SYNAPSE_IMAGE_OVERRIDE:-matrixdotorg/synapse:latest}
+    image: ${SYNAPSE_IMAGE_OVERRIDE:-matrixdotorg/synapse:v1.130.0}
     restart: unless-stopped
     entrypoint: ["/start.py", "run", "--config-path=/data/homeserver.yaml", "--config-path=/data/workers/synapse-persister-1.yaml"]
     environment:
@@ -191,7 +191,7 @@ services:
       - backend
 
   synapse-federation-sender-1:
-    image: ${SYNAPSE_IMAGE_OVERRIDE:-matrixdotorg/synapse:latest}
+    image: ${SYNAPSE_IMAGE_OVERRIDE:-matrixdotorg/synapse:v1.130.0}
     restart: unless-stopped
     entrypoint: ["/start.py", "run", "--config-path=/data/homeserver.yaml", "--config-path=/data/workers/synapse-federation-sender-1.yaml"]
     environment:

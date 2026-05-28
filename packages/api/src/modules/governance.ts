@@ -1,10 +1,11 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { tallyVotes } from '@blackout/core';
+import { verifyAuditChain } from '@blackout/core';
 import { db } from '../db/store';
 import { readJsonBody } from '../middleware/validate';
 import { emitDomainEvent, listDomainEvents } from './domain-events';
-import { requireDomainCapability } from './authz';
+import { requireDomainCapability, getAuthenticatedUserId } from './authz';
 import {
     cancelMeeting,
     getLatestTreasurySnapshot,
@@ -17,7 +18,6 @@ import type { FeatureModule } from './types';
 
 const proposalSchema = z.object({
   communityId: z.string().min(1),
-  proposerId: z.string().min(1),
   title: z.string().min(1),
   description: z.string().optional(),
   options: z.array(z.object({ id: z.string().optional(), label: z.string().optional() })).optional(),
@@ -26,9 +26,8 @@ const proposalSchema = z.object({
 
 const voteSchema = z.object({
   voteId: z.string().min(1),
-  userId: z.string().min(1),
   choice: z.union([z.string().min(1), z.array(z.string()).min(1)]),
-  weight: z.number().optional(),
+  weight: z.number().min(1).optional(),
 });
 
 const meetingStatusSchema = z.enum(['scheduled', 'in_progress', 'completed', 'cancelled']);
@@ -70,16 +69,24 @@ const treasurySnapshotSchema = z.object({
     .optional(),
 });
 
+function idempotencyKey(voteId: string, userId: string): string {
+  return `${voteId}::${userId}`;
+}
+
 function createGovernanceRouter() {
   const governance = new Hono();
 
   governance.post('/proposals', async (c) => {
     const denied = requireDomainCapability(c, 'governance', 'write');
     if (denied) return denied;
+    const proposerId = getAuthenticatedUserId(c);
+    if (!proposerId) {
+      return c.json({ code: 'unauthorized', message: 'Sign in required' }, 401);
+    }
 
     const parsed = await readJsonBody(c, proposalSchema);
     if (parsed instanceof Response) return parsed;
-    const { communityId, proposerId, title, description } = parsed;
+    const { communityId, title, description } = parsed;
     const options = parsed.options ?? [{ id: 'yes', label: 'Yes' }, { id: 'no', label: 'No' }];
     const durationHours = parsed.durationHours ?? 168;
 
@@ -104,10 +111,14 @@ function createGovernanceRouter() {
   governance.post('/votes', async (c) => {
     const denied = requireDomainCapability(c, 'governance', 'write');
     if (denied) return denied;
+    const userId = getAuthenticatedUserId(c);
+    if (!userId) {
+      return c.json({ code: 'unauthorized', message: 'Sign in required' }, 401);
+    }
 
     const parsed = await readJsonBody(c, voteSchema);
     if (parsed instanceof Response) return parsed;
-    const { voteId, userId, choice } = parsed;
+    const { voteId, choice } = parsed;
     const weight = parsed.weight ?? 1;
     const normalizedChoice = Array.isArray(choice) ? choice[0] : choice;
 
@@ -116,10 +127,22 @@ function createGovernanceRouter() {
       return c.json({ code: 'vote_not_found', message: 'Vote not found' }, 404);
     }
 
+    if (vote.status !== 'active') {
+      return c.json({ code: 'vote_closed', message: 'This vote is no longer active' }, 409);
+    }
+
+    if (vote.endsAt && new Date(vote.endsAt) < new Date()) {
+      return c.json({ code: 'vote_expired', message: 'Voting period has ended' }, 409);
+    }
+
     try {
       db.castVote({ id: crypto.randomUUID(), voteId, userId, choice: normalizedChoice, weight });
     } catch (error) {
-      return c.json({ code: 'invalid_request', message: (error as Error).message }, 400);
+      const message = error instanceof Error ? error.message : String(error);
+      if (message === 'You have already voted') {
+        return c.json({ code: 'invalid_request', message: 'You have already submitted a vote' }, 409);
+      }
+      return c.json({ code: 'invalid_request', message: 'Unable to process vote' }, 400);
     }
 
     const tally = tallyVotes(db.getVoteEntries(voteId));
@@ -136,6 +159,17 @@ function createGovernanceRouter() {
     if (!vote) return c.json({ code: 'proposal_not_found', message: 'Proposal not found' }, 404);
 
     return c.json({ ...vote, results: tallyVotes(db.getVoteEntries(proposalId)) });
+  });
+
+  governance.get('/proposals/:proposalId/audit', (c) => {
+    const denied = requireDomainCapability(c, 'governance', 'read');
+    if (denied) return denied;
+    const { proposalId } = c.req.param();
+    const vote = db.getVote(proposalId);
+    if (!vote) return c.json({ code: 'proposal_not_found', message: 'Proposal not found' }, 404);
+    const entries = db.getVoteEntriesOrdered(proposalId);
+    const chain = verifyAuditChain(entries);
+    return c.json({ proposalId, entries, chain });
   });
 
   governance.get('/events', (c) => {

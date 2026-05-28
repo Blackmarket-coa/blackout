@@ -38,6 +38,10 @@ paths-ignore:
   - "**/pnpm-lock.yaml"
   - "package-lock.json"
   - "**/package-lock.json"
+  # gitleaks ignore file — contains commit/fingerprint entries and rule
+  # names (generic-api-key, generic-password, etc.) that look like secrets
+  # to a generic detector but are the scanner's own allowlist format.
+  - ".gitleaksignore"
 
 secret:
   ignored_paths:
@@ -78,3 +82,5 @@ secret:
     - "**/pnpm-lock.yaml"
     - "package-lock.json"
     - "**/package-lock.json"
+    # gitleaks ignore file — same rationale as the top-level paths-ignore entry.
+    - ".gitleaksignore"

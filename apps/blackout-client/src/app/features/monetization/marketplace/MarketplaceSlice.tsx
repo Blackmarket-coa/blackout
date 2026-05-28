@@ -186,7 +186,14 @@ export function MarketplaceSlice() {
                         embed: true,
                     });
                 } else {
-                    window.open(result.redirectUrl, '_blank', 'noopener,noreferrer');
+                    try {
+                        const parsed = new URL(result.redirectUrl);
+                        if (parsed.protocol === 'https:' || parsed.protocol === 'http:') {
+                            window.open(result.redirectUrl, '_blank', 'noopener,noreferrer');
+                        }
+                    } catch {
+                        // Invalid redirect URL — silently skip
+                    }
                     setTimeout(() => void refreshEntitlements(), 3_000);
                 }
             } catch (err) {

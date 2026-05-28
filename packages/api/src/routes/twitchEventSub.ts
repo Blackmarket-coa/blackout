@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { webhookRateLimit } from '../middleware/rate-limit';
 import {
   normalizeEventSub,
   verifyEventSubMessage,
@@ -295,6 +296,7 @@ export const buildDefaultEventForwarder = (
 
 export const buildTwitchEventSubRoute = (options: EventSubRouteOptions = {}) => {
   const router = new Hono();
+  router.use('*', webhookRateLimit);
   const secretResolver = options.secretResolver ?? defaultSecretResolver;
   const onEvent =
     options.onEvent ?? buildDefaultEventForwarder(options.matrixClient ?? defaultMatrixClient);

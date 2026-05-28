@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
+import { webhookRateLimit } from '../middleware/rate-limit';
 import { z } from 'zod';
 import {
     feeForProvider,
@@ -240,7 +241,10 @@ marketplace.get('/fulfillment/:entitlementId/asset', (c) => {
     const nonce = crypto.randomBytes(8).toString('hex');
     const expiresAt = Date.now() + 5 * 60 * 1_000;
     const payload = `${entitlement.id}:${nonce}:${expiresAt}`;
-    const signingSecret = process.env.MARKETPLACE_FULFILLMENT_SECRET || 'local-dev-fulfillment';
+    const signingSecret = process.env.MARKETPLACE_FULFILLMENT_SECRET;
+    if (!signingSecret) {
+        return c.json({ code: 'fulfillment_unavailable', message: 'Fulfillment is not configured' }, 503);
+    }
     const signature = crypto.createHmac('sha256', signingSecret).update(payload).digest('hex');
     const assetUrlTemplate = entitlement.metadata['assetUrl'];
 
@@ -371,8 +375,8 @@ marketplace.post('/stub/checkout/:sessionId/complete', async (c) => {
     );
 });
 
-marketplace.post('/webhooks/:providerId', async (c) => {
-    const providerIdRaw = c.req.param('providerId');
+marketplace.post('/webhooks/:providerId', webhookRateLimit, async (c) => {
+    const providerIdRaw = c.req.param('providerId')!;
     if (!isProviderId(providerIdRaw)) {
         return c.json({ code: 'invalid_provider', message: 'Unknown provider id' }, 400);
     }

@@ -20,7 +20,7 @@ spec:
             otlp:
                 endpoint: jaeger-collector.observability.svc.cluster.local:4317
                 tls:
-                    insecure: true
+                    insecure: false
         service:
             pipelines:
                 traces:

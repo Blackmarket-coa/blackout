@@ -193,7 +193,14 @@ export const ProductAttachment = ({
             if (result.embed) {
                 setActiveCheckout({ redirectUrl: result.redirectUrl, sessionId: result.sessionId });
             } else {
-                window.open(result.redirectUrl, '_blank', 'noopener,noreferrer');
+                try {
+                    const parsed = new URL(result.redirectUrl);
+                    if (parsed.protocol === 'https:' || parsed.protocol === 'http:') {
+                        window.open(result.redirectUrl, '_blank', 'noopener,noreferrer');
+                    }
+                } catch {
+                    // Invalid redirect URL
+                }
             }
             return result;
         } catch (err) {

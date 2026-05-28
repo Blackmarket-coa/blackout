@@ -80,21 +80,41 @@ const permittedTagToAttributes = {
   del: ['data-md'],
 };
 
-const transformFontTag: Transformer = (tagName, attribs) => ({
-  tagName,
-  attribs: {
-    ...attribs,
-    style: `background-color: ${attribs['data-mx-bg-color']}; color: ${attribs['data-mx-color']}`,
-  },
-});
+const CSS_COLOR_RE = /^#(?:[0-9a-fA-F]{3}){1,2}$/;
 
-const transformSpanTag: Transformer = (tagName, attribs) => ({
-  tagName,
-  attribs: {
-    ...attribs,
-    style: `background-color: ${attribs['data-mx-bg-color']}; color: ${attribs['data-mx-color']}`,
-  },
-});
+const transformFontTag: Transformer = (tagName, attribs) => {
+    const bg = typeof attribs['data-mx-bg-color'] === 'string' ? attribs['data-mx-bg-color'] : '';
+    const fg = typeof attribs['data-mx-color'] === 'string' ? attribs['data-mx-color'] : '';
+    const safeBg = CSS_COLOR_RE.test(bg) ? bg : '';
+    const safeFg = CSS_COLOR_RE.test(fg) ? fg : '';
+    const parts = [];
+    if (safeBg) parts.push(`background-color: ${safeBg}`);
+    if (safeFg) parts.push(`color: ${safeFg}`);
+    return {
+        tagName,
+        attribs: {
+            ...attribs,
+            style: parts.join('; '),
+        },
+    };
+};
+
+const transformSpanTag: Transformer = (tagName, attribs) => {
+    const bg = typeof attribs['data-mx-bg-color'] === 'string' ? attribs['data-mx-bg-color'] : '';
+    const fg = typeof attribs['data-mx-color'] === 'string' ? attribs['data-mx-color'] : '';
+    const safeBg = CSS_COLOR_RE.test(bg) ? bg : '';
+    const safeFg = CSS_COLOR_RE.test(fg) ? fg : '';
+    const parts = [];
+    if (safeBg) parts.push(`background-color: ${safeBg}`);
+    if (safeFg) parts.push(`color: ${safeFg}`);
+    return {
+        tagName,
+        attribs: {
+            ...attribs,
+            style: parts.join('; '),
+        },
+    };
+};
 
 const transformATag: Transformer = (tagName, attribs) => ({
   tagName,

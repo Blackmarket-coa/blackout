@@ -335,7 +335,7 @@ export const logoutClient = async (client: MatrixClient): Promise<void> => {
             deleteIndexedDb(`${SYNC_STORE_PREFIX}${userId}`),
         ]);
     }
-    clearSession(userId ?? undefined);
+    await clearSession(userId ?? undefined);
 };
 
 export const clearCacheAndReload = async (client: MatrixClient): Promise<void> => {

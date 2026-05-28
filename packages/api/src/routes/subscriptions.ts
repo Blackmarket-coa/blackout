@@ -1,8 +1,10 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { z } from 'zod';
+import { requireAdmin } from '../middleware/require-admin';
 import { requireUser } from '../middleware/require-user';
 import { readJsonBody } from '../middleware/validate';
+import { webhookRateLimit } from '../middleware/rate-limit';
 import {
   applyManualComp,
   applySubscriptionWebhookEvent,
@@ -56,14 +58,7 @@ const adminUserSchema = z.object({
   actor: z.string().optional(),
 });
 
-function requireAdmin(c: Context): true | Response {
-  const expected = process.env.BLACKOUT_ADMIN_API_KEY ?? 'dev-admin-key';
-  const got = c.req.header('x-admin-api-key');
-  if (!got || got !== expected) {
-    return c.json({ code: 'forbidden', message: 'Admin API key required' }, 403);
-  }
-  return true;
-}
+// Admin gate is provided by the shared middleware (packages/api/src/middleware/require-admin.ts).
 
 subscriptions.get('/plans', (c) => {
   return c.json({ products: listCanopyProducts() });
@@ -103,7 +98,7 @@ subscriptions.post('/portal', async (c) => {
   return c.json(createCustomerPortalSession(user.sub, returnUrl));
 });
 
-subscriptions.post('/webhooks/lago', async (c) => {
+subscriptions.post('/webhooks/lago', webhookRateLimit, async (c) => {
   // Read the raw body so HMAC verification is byte-exact. Re-parsing JSON
   // afterwards is safe — we already require valid JSON via the Zod schema.
   const rawBody = await c.req.text();

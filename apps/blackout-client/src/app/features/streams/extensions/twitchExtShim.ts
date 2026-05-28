@@ -56,9 +56,8 @@ export const REQUIRED_EXT_CAPABILITY: Partial<Record<ExtRpcMethod, string>> = {
 export const TWITCH_EXT_SHIM_SOURCE = `(function(){
   var auth = window.__BLACKOUT_EXT_AUTH__ || {};
   var pending = new Map();
-  var nextId = 1;
   function rpc(method, params){
-    var id = nextId++;
+    var id = crypto.randomUUID();
     return new Promise(function(resolve, reject){
       pending.set(id, { resolve: resolve, reject: reject });
       parent.postMessage({ kind:'rpc-request', id: id, method: method, params: params }, '*');

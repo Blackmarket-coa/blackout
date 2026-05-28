@@ -78,9 +78,8 @@ export class PluginSandbox {
         const html = `<!doctype html><html><head><meta charset="utf-8"></head><body><script>(function(){
             const sdk = (function(){
                 const pending = new Map();
-                let nextId = 1;
                 function call(method, params){
-                    const id = nextId++;
+                    const id = crypto.randomUUID();
                     return new Promise((resolve, reject) => {
                         pending.set(id, { resolve, reject });
                         parent.postMessage({ kind:'rpc-request', id, method, params }, '*');

@@ -53,6 +53,14 @@ export const pad = (
     plaintext: Uint8Array,
     strategy: PaddingStrategy
 ): { padded: Uint8Array; bucket: number } => {
+    if (!Number.isInteger(plaintext.length) || plaintext.length < 0) {
+        throw new Error('plaintextLength must be a non-negative integer');
+    }
+    if (plaintext.length > ABSOLUTE_MAX - 1) {
+        throw new Error(
+            `payload of ${plaintext.length} bytes exceeds the maximum allowed size (${ABSOLUTE_MAX - 1})`
+        );
+    }
     const target =
         strategy === 'bucket'
             ? selectBucket(plaintext.length)

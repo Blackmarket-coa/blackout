@@ -6,9 +6,9 @@ services:
     container_name: blackout-dev-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: synapse
-      POSTGRES_USER: synapse
-      POSTGRES_PASSWORD: synapse
+      POSTGRES_DB: ${POSTGRES_DB:-synapse}
+      POSTGRES_USER: ${POSTGRES_USER:-synapse}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required. Create a .env file with POSTGRES_PASSWORD=your-secure-password.}
       POSTGRES_INITDB_ARGS: "--locale=C --encoding=UTF8"
     ports:
       - "127.0.0.1:5432:5432"
@@ -24,13 +24,13 @@ services:
     image: redis:7-alpine
     container_name: blackout-dev-redis
     restart: unless-stopped
-    command: ["redis-server", "--appendonly", "yes"]
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:-dev-redis-password}"]
     ports:
       - "127.0.0.1:6379:6379"
     volumes:
       - dev_redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "PING"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-dev-redis-password}", "--no-auth-warning", "PING"]
       interval: 5s
       timeout: 3s
       retries: 10

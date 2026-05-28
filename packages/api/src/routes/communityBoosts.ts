@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
+import { requireAdmin } from '../middleware/require-admin';
 import { requireUser } from '../middleware/require-user';
 import { readJsonBody } from '../middleware/validate';
 import {
@@ -45,14 +46,7 @@ const ERROR_STATUS: Record<CommunityBoostError['code'], number> = {
     forbidden: 403,
 };
 
-function adminGate(c: import('hono').Context): true | Response {
-    const expected = process.env.BLACKOUT_ADMIN_API_KEY ?? 'dev-admin-key';
-    const got = c.req.header('x-admin-api-key');
-    if (!got || got !== expected) {
-        return c.json({ code: 'forbidden', message: 'Admin API key required' }, 403);
-    }
-    return true;
-}
+// Admin gate is provided by the shared middleware (packages/api/src/middleware/require-admin.ts).
 
 boosts.post('/pledge', async (c) => {
     const user = requireUser(c, 'Sign in to pledge a boost');
@@ -130,7 +124,7 @@ boosts.post('/pledges/:id/cancel', (c) => {
 });
 
 boosts.post('/pledges/:id/capture', async (c) => {
-    const guard = adminGate(c);
+    const guard = requireAdmin(c);
     if (guard !== true) return guard;
     const parsed = await readJsonBody(c, captureSchema);
     const detail = parsed instanceof Response ? {} : (parsed ?? {});
@@ -140,7 +134,7 @@ boosts.post('/pledges/:id/capture', async (c) => {
 });
 
 boosts.post('/pledges/:id/refund', (c) => {
-    const guard = adminGate(c);
+    const guard = requireAdmin(c);
     if (guard !== true) return guard;
     const pledge = refundBoostPledge(c.req.param('id'));
     if (!pledge) return c.json({ code: 'pledge_not_found', message: 'No such pledge' }, 404);

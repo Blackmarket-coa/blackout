@@ -11,9 +11,9 @@ COPY packages/ ./packages/
 
 COPY apps/ ./apps/
 
+# Copy blackout-specific sources (config.sample.json is NOT copied into the image;
+# deployers must provide a real config.json via bind-mount or build-time injection).
 COPY blackout/ ./blackout/
-
-COPY config.sample.json ./config.json
 
 RUN pnpm install --frozen-lockfile
 
@@ -28,8 +28,6 @@ USER root
 RUN apk add jq moreutils
 
 COPY --from=builder /src/apps/blackout-client/dist /app
-
-COPY config.sample.json /app/config.json
 
 COPY deploy/docker/nginx-templates/* /etc/nginx/templates/
 

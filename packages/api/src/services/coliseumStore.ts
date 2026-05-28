@@ -437,6 +437,9 @@ export interface CastVoteResult {
 export function castVote(input: CastVoteInput, nowMs: number = Date.now()): CastVoteResult | null {
     const argument = db.getColiseumArgument(input.argumentId);
     if (!argument) return null;
+
+    const topic = db.getColiseumTopic(argument.topicId);
+    if (!topic || topic.status === 'archived') return null;
     const vote: ColiseumVote = {
         argumentId: input.argumentId,
         voterId: input.voterId,

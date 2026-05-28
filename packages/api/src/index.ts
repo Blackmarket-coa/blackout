@@ -4,6 +4,7 @@ import { cors } from 'hono/cors';
 import { API_ROOTS } from '@blackout/contracts';
 import { isOriginAllowed, readCorsRuntimeConfig } from './config/cors';
 import authRoutes from './routes/auth';
+import mfaRoutes from './routes/mfa';
 import invitationRoutes from './routes/invitations';
 import followRoutes from './routes/follows';
 import shareRoutes from './routes/sharePreview';
@@ -145,6 +146,7 @@ if (legacyAliasEnabled) {
 
 for (const root of legacyAliasEnabled ? [API_ROOTS.v1, API_ROOTS.legacyApiAlias] : [API_ROOTS.v1]) {
   app.route(`${root}/auth`, authRoutes);
+  app.route(`${root}/mfa`, mfaRoutes);
   app.route(`${root}/admin`, adminRoutes);
   app.route(`${root}/invitations`, invitationRoutes);
   app.route(`${root}/follows`, followRoutes);

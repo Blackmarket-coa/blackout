@@ -13,6 +13,6 @@ export const saveSessionSnapshot = (snapshot: SessionSnapshot): void => {
     saveSession(snapshot);
 };
 
-export const clearSession = (): void => {
-    clearPersistedSession();
+export const clearSession = async (): Promise<void> => {
+    await clearPersistedSession();
 };

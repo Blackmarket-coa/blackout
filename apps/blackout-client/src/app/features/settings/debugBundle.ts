@@ -24,11 +24,19 @@ export type DebugBundle = {
     featureFlags?: Record<string, unknown>;
 };
 
+const SENSITIVE_KEY_PATTERNS = [
+    'access_token',
+    'refresh_token',
+    'matrix.sessions',
+    'push.token',
+];
+
 const readLocalStorageKeys = (): Record<string, string | null> => {
     if (typeof window === 'undefined') return {};
     return Object.fromEntries(
         Object.keys(window.localStorage)
             .filter((key) => key.startsWith('blackout.'))
+            .filter((key) => !SENSITIVE_KEY_PATTERNS.some((pattern) => key.includes(pattern)))
             .map((key) => [key, window.localStorage.getItem(key)])
     );
 };

@@ -29,9 +29,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 RUN apt-get update && apt-get install -y --no-install-recommends \
       libssl3 libffi8 gettext-base \
     && rm -rf /var/lib/apt/lists/*
+RUN useradd -m -u 1000 -s /bin/bash appuser
 COPY --from=py-builder /usr/local /usr/local
 COPY services/blackout-server/entrypoint.sh /entrypoint.sh
 COPY services/blackout-server/homeserver.yaml.template /templates/homeserver.yaml.template
 RUN chmod +x /entrypoint.sh
+USER appuser
 EXPOSE 8008
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8008/health')"
 ENTRYPOINT ["/entrypoint.sh"]

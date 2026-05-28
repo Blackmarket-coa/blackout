@@ -14,7 +14,40 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, createCipheriv, createDecipheriv } from 'node:crypto';
+
+const DEFAULT_DB_PATH = '.blackout/data/deaddrop.json';
+const STORAGE_ENCRYPTION_KEY_HEX = process.env.BLACKOUT_DEADDROP_STORAGE_KEY || null;
+
+const emptyState = () => ({ drops: {}, decoySeeds: {} });
+
+const encryptValue = (plaintext) => {
+    if (!STORAGE_ENCRYPTION_KEY_HEX) return plaintext;
+    const key = Buffer.from(STORAGE_ENCRYPTION_KEY_HEX, 'hex');
+    if (key.length !== 32) throw new Error('BLACKOUT_DEADDROP_STORAGE_KEY must be 64 hex chars (32 bytes)');
+    const iv = randomBytes(12);
+    const cipher = createCipheriv('aes-256-gcm', key, iv);
+    const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
+    const tag = cipher.getAuthTag();
+    return `${iv.toString('hex')}:${tag.toString('hex')}:${encrypted.toString('hex')}`;
+};
+
+const decryptValue = (ciphertext) => {
+    if (!STORAGE_ENCRYPTION_KEY_HEX || !ciphertext.includes(':')) return ciphertext;
+    const key = Buffer.from(STORAGE_ENCRYPTION_KEY_HEX, 'hex');
+    const [ivHex, tagHex, ctHex] = ciphertext.split(':');
+    if (!ivHex || !tagHex || !ctHex) return ciphertext;
+    const iv = Buffer.from(ivHex, 'hex');
+    const tag = Buffer.from(tagHex, 'hex');
+    const ct = Buffer.from(ctHex, 'hex');
+    const decipher = createDecipheriv('aes-256-gcm', key, iv);
+    decipher.setAuthTag(tag);
+    try {
+        return Buffer.concat([decipher.update(ct), decipher.final()]).toString('utf8');
+    } catch {
+        return ciphertext;
+    }
+};
 
 const DEFAULT_DB_PATH = '.blackout/data/deaddrop.json';
 
@@ -38,7 +71,8 @@ export class DeadDropStore {
         }
         try {
             const raw = readFileSync(this.path, 'utf8');
-            const parsed = JSON.parse(raw);
+            const decrypted = decryptValue(raw);
+            const parsed = JSON.parse(decrypted);
             this.state = {
                 drops: parsed.drops ?? {},
                 decoySeeds: parsed.decoySeeds ?? {},
@@ -52,7 +86,7 @@ export class DeadDropStore {
     persist() {
         if (this.mode !== 'file') return;
         mkdirSync(dirname(this.path), { recursive: true });
-        writeFileSync(this.path, `${JSON.stringify(this.state, null, 2)}\n`, 'utf8');
+        writeFileSync(this.path, `${encryptValue(JSON.stringify(this.state, null, 2))}\n`, 'utf8');
     }
 
     /**

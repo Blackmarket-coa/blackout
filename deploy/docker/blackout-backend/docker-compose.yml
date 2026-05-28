@@ -133,7 +133,7 @@ services:
       - blackout-backend
 
   lk-jwt-service:
-    image: ghcr.io/element-hq/lk-jwt-service:latest
+    image: ghcr.io/element-hq/lk-jwt-service:v0.4.0
     container_name: blackout-lk-jwt
     restart: unless-stopped
     depends_on:
@@ -272,7 +272,7 @@ services:
       - blackout-backend
 
   rageshake:
-    image: ghcr.io/matrix-org/rageshake:latest
+    image: ghcr.io/matrix-org/rageshake:v1.5.0
     container_name: blackout-rageshake
     restart: unless-stopped
     environment:
@@ -828,7 +828,7 @@ services:
       - blackout-backend
 
   dimension:
-    image: turt2live/matrix-dimension:latest
+    image: turt2live/matrix-dimension:v1.3.0
     container_name: blackout-dimension
     restart: unless-stopped
     profiles:

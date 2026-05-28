@@ -57,6 +57,9 @@ export interface ProviderSpec {
   identityExtraHeaders?: (config: ProviderOAuthConfig) => Record<string, string>;
   /** Parse the provider's identity JSON into our normalized shape; return null on miss. */
   parseIdentity: (json: unknown) => NormalizedIdentity | null;
+  /** Optional: validate the token response before proceeding to identity lookup.
+   *  Used for OpenID Connect id_token validation (e.g. YouTube/Google). */
+  validateTokenResponse?: (tokens: ProviderTokenResponse, config: ProviderOAuthConfig) => boolean;
 }
 
 export interface AuthorizeUrlResult {
@@ -83,6 +86,7 @@ interface ProviderTokenResponse {
   expires_in?: number;
   scope?: string[] | string;
   token_type?: string;
+  id_token?: string;
 }
 
 const sha256Hex = (input: string): string => createHash('sha256').update(input).digest('hex');
@@ -200,6 +204,11 @@ export const completeFlow = async (
   const tokenJson = (await tokenRes.json()) as ProviderTokenResponse;
   if (!tokenJson.access_token) {
     return { kind: 'token_exchange_failed', status: tokenRes.status, detail: 'missing access_token' };
+  }
+
+  // ---- optional per-provider token validation (e.g. OIDC id_token) ----
+  if (spec.validateTokenResponse && !spec.validateTokenResponse(tokenJson, config)) {
+    return { kind: 'token_exchange_failed', status: tokenRes.status, detail: 'token validation failed' };
   }
 
   // ---- identity lookup ----

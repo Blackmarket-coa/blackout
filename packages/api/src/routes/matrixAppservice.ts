@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { webhookRateLimit } from '../middleware/rate-limit';
 import {
   routeOutboundMatrixMessage,
   shouldRouteOutbound,
@@ -82,6 +83,7 @@ export const buildMatrixAppserviceRoute = (
   options: AppserviceRouteOptions = {},
 ): Hono => {
   const router = new Hono();
+  router.use('*', webhookRateLimit);
   const hsTokenResolver = options.hsTokenResolver ?? defaultHsTokenResolver;
   const onMessage =
     options.onMessage ??

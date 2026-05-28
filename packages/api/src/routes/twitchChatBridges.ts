@@ -84,7 +84,7 @@ bridges.post('/', async (c) => {
     }
   } catch (err) {
     log.error('twitch_chat_bridge_create_failed', { userId: userOrResp.sub, error: String(err) });
-    return c.json({ code: 'internal_error', message: (err as Error).message }, 500);
+    return c.json({ code: 'internal_error', message: 'An internal error occurred' }, 500);
   }
 });
 

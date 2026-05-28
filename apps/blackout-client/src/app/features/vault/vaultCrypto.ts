@@ -33,6 +33,12 @@ export function getOrCreateVaultSalt(): Uint8Array {
     const salt = crypto.getRandomValues(new Uint8Array(16));
     try {
         window.localStorage.setItem(SALT_STORAGE_KEY, bytesToBase64(salt));
+        // Re-read to detect a concurrent write from another tab (last-writer-wins):
+        // if our write was overwritten, use the winning value so we share a salt.
+        const stored = window.localStorage.getItem(SALT_STORAGE_KEY);
+        if (stored && stored !== bytesToBase64(salt)) {
+            try { return base64ToBytes(stored); } catch { /* fall through */ }
+        }
     } catch {
         /* non-fatal: key just won't persist across reloads */
     }

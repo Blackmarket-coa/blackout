@@ -220,7 +220,7 @@ export const verifyAttestation = async (
             expectedChallenge: input.expectedChallenge,
             expectedOrigin: input.config.expectedOrigins,
             expectedRPID: input.config.rpId,
-            requireUserVerification: false,
+            requireUserVerification: true,
         });
     } catch (error) {
         return {
@@ -278,7 +278,7 @@ export const verifyAssertion = async (
                 counter: stored.signCount,
                 transports: stored.transports as never,
             },
-            requireUserVerification: false,
+            requireUserVerification: true,
         });
     } catch (error) {
         return {

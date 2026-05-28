@@ -230,6 +230,14 @@ coliseum.post('/arguments/:id/vote', voteRateLimit, async (c) => {
     }
     const parsed = await readJsonBody(c, voteSchema);
     if (parsed instanceof Response) return parsed;
+
+    if (parsed.direction === 'up' && typeof parsed.stanceShift === 'number' && parsed.stanceShift < 0) {
+        return c.json({ code: 'invalid_request', message: 'stanceShift must be non-negative for up votes' }, 400);
+    }
+    if (parsed.direction === 'down' && typeof parsed.stanceShift === 'number' && parsed.stanceShift > 0) {
+        return c.json({ code: 'invalid_request', message: 'stanceShift must be non-positive for down votes' }, 400);
+    }
+
     const result = castVote({
         argumentId,
         voterId: user.sub,

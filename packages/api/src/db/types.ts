@@ -584,6 +584,37 @@ export interface VoteEntryRecord {
   choice: string;
   weight: number;
   createdAt: string;
+  entryHash?: string;
+  previousHash?: string;
+}
+
+export interface MFAConfigRecord {
+  userId: UUID;
+  secretBase32: string;
+  recoveryCodeHashes: string[];
+  usedRecoveryCodes: number[];
+  enabled: boolean;
+  verified: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WebAuthnChallengeRecord {
+  challenge: string;
+  userId: UUID;
+  purpose: 'register' | 'login';
+  issuedAt: string;
+}
+
+export interface WebAuthnCredentialRecord {
+  credentialId: string;
+  userId: UUID;
+  publicKeyCose: string;
+  signCount: number;
+  transports: string[];
+  createdAt: string;
+  lastUsedAt: string | null;
+  label: string;
 }
 
 export interface FederationLinkRecord {

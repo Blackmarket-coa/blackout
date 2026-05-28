@@ -158,3 +158,10 @@ export const clipWriteRateLimit = createRateLimit({
   windowMs: 60_000,
   maxRequests: Number.isFinite(clipWriteMax) && clipWriteMax > 0 ? clipWriteMax : 30,
 });
+
+const webhookMax = Number.parseInt(process.env.WEBHOOK_RATE_LIMIT_MAX ?? '', 10);
+export const webhookRateLimit = createRateLimit({
+  bucket: 'webhook',
+  windowMs: 60_000,
+  maxRequests: Number.isFinite(webhookMax) && webhookMax > 0 ? webhookMax : 60,
+});

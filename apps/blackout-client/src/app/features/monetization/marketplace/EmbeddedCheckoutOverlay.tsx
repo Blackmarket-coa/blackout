@@ -136,7 +136,7 @@ export function EmbeddedCheckoutOverlay(props: EmbeddedCheckoutOverlayProps) {
                     ref={iframeRef}
                     title="Marketplace checkout"
                     src={redirectUrl}
-                    sandbox="allow-scripts allow-forms allow-same-origin allow-top-navigation-by-user-activation"
+                    sandbox="allow-scripts allow-forms allow-top-navigation-by-user-activation"
                     referrerPolicy="strict-origin-when-cross-origin"
                     style={{ flex: 1, width: '100%', border: 0, background: '#fff' }}
                 />
