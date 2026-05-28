@@ -1,0 +1,24 @@
+# This is the authoritiative configuration of this project's Rust toolchain.
+#
+# Other files that need upkeep when this changes:
+#
+# * `Cargo.toml`
+# * `flake.nix`
+#
+# Search in those files for `rust-toolchain.toml` to find the relevant places.
+# If you're having trouble making the relevant changes, bug a maintainer.
+
+[toolchain]
+profile = "minimal"
+channel = "1.95.0"
+components = [
+    # For rust-analyzer
+    "rust-src",
+    "rust-analyzer",
+    # For CI and editors
+    "clippy",
+    # you have to install rustfmt nightly yourself (if you're not on NixOS)
+    #
+    # The rust-toolchain.toml file doesn't provide any syntax for specifying components from different toolchains
+    # "rustfmt"
+]

@@ -1,0 +1,172 @@
+:root {
+    --rp-c-brand: #8a5cd0;
+    --rp-c-brand-light: oklch(from var(--rp-c-brand) 0.7197 c h);
+    --rp-c-brand-lighter: oklch(from var(--rp-c-brand) 0.7818 c h);
+    --rp-c-brand-dark: oklch(from var(--rp-c-brand) 0.5967 c h);
+    --rp-c-brand-darker: oklch(from var(--rp-c-brand) 0.5069 c h);
+    --rp-c-brand-tint: oklch(from var(--rp-c-brand) 0.4 c h / 0.16);
+
+    --name-lightness: 0.5;
+    --background-lightness: 0.9;
+
+    --c1: oklch(0.44 0.177 353.06);
+    --c2: oklch(0.59 0.158 150.88);
+    .rp-home-hero__title-brand {
+        --rp-home-hero-title-bg: linear-gradient(
+            130deg,
+            oklch(from var(--c1) var(--name-lightness) c h),
+            oklch(from var(--c2) var(--name-lightness) c h)
+        );
+    }
+
+
+    --rp-home-background-bg: radial-gradient(42.12% 56.13% at 100% 0%, oklch(from var(--c2) var(--background-lightness) c h) 0%, #fff0 100%), radial-gradient(42.01% 79.63% at 52.86% 0%, #d9ff5333 0%, #fff0 100%), radial-gradient(79.67% 58.09% at 0% 0%, oklch(from var(--c1) var(--background-lightness) c h) 0%, #fff0 100%), var(--rp-c-bg);
+
+    --rp-c-divider: rgba(0, 0, 0, 0.2);
+    --rp-c-divider-light: rgba(0, 0, 0, 0.1);
+
+    --rp-c-text-0: #000000;
+    --rp-c-text-1: #242424;
+    --rp-c-text-2: rgba(0, 0, 0, 0.7);
+    --rp-c-text-3: rgba(60, 60, 60, 0.33);
+    --rp-c-text-4: rgba(60, 60, 60, 0.18);
+
+    --rp-c-text-code: oklch(0.49 0.158 150.88);
+    --rp-c-text-code-bg: oklch(0.85 0.08 150.88 / 0.15);
+
+    --rp-c-link: oklch(0.49 0.158 150.88);
+}
+
+.dark {
+    --name-lightness: 0.8;
+    --background-lightness: 0.2;
+
+    --rp-c-bg: oklch(0.15 0.042 317.27);
+    --rp-c-bg-soft: oklch(0.24 0.03 317.27);
+    --rp-c-bg-mute: oklch(0.28 0.035 317.27);
+    --rp-c-bg-alt: #000;
+
+    --rp-home-background-bg: radial-gradient(42.12% 56.13% at 100% 0%, oklch(from var(--c2) var(--background-lightness) c h) 0%, #12121200 100%), radial-gradient(55.81% 87.78% at 48.37% 0%, #000 0%, #12121200 89.55%), radial-gradient(122.65% 88.24% at 0% 0%, oklch(from var(--c1) var(--background-lightness) c h) 0%, #12121200 100%), var(--rp-c-bg);
+
+
+    --rp-c-divider: rgba(84, 84, 84, 0.65);
+    --rp-c-divider-light: rgba(84, 84, 84, 0.48);
+
+    --rp-c-text-0: #ffffff;
+    --rp-c-text-1: rgba(255, 255, 245, 0.93);
+    --rp-c-text-2: rgba(255, 255, 245, 0.65);
+    --rp-c-text-3: rgba(235, 235, 235, 0.38);
+    --rp-c-text-4: rgba(235, 235, 235, 0.18);
+
+    --rp-c-text-code: oklch(0.8 0.158 150.88);
+    --rp-c-text-code-bg: oklch(0.59 0.158 150.88 / 0.15);
+
+    --rp-c-link: oklch(0.69 0.158 150.88);
+}
+
+img {
+    display: inline-block;
+}
+
+/* Override silly colours on code links */
+.rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(a > code),
+.rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(a > code),
+.rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(a:hover > code) {
+    color: var(--rp-c-link);
+}
+
+.rp-button--big {
+    padding-inline: 1.25em;
+}
+
+/* Vertical layout */
+
+.rp-home-hero {
+    flex-direction: column-reverse;
+    align-items: center;
+    margin: 0 auto;
+}
+
+.rp-home-hero .rp-home-hero__container {
+    text-align: center;
+    align-items: center;
+}
+
+.rp-home-hero__image {
+    max-height: 35vh;
+    max-width: none; /* Having this set causes slight aspect ratio breakage */
+}
+
+/* fix navigation bar resizing when scrolling */
+body:not(.notTopArrived) header.rp-nav {
+    border-bottom: 1px solid transparent !important;
+}
+/* fix the small logo on the top left looking blurry */
+.rspress-logo {
+    height: 32px;
+}
+
+/* pre-hero */
+.custom-section {
+    padding: 4rem 1.5rem;
+    background: var(--rp-c-bg);
+}
+
+.custom-cards {
+    display: flex;
+    gap: 2rem;
+    max-width: 800px;
+    margin: 0 auto;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.custom-card {
+    padding: 2rem;
+    border: 1px solid var(--rp-c-divider-light);
+    border-radius: 12px;
+    background: var(--rp-c-bg-soft);
+    text-decoration: none;
+    color: var(--rp-c-text-1);
+    transition: all 0.3s ease;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 280px;
+    max-width: 350px;
+}
+
+.custom-card:hover {
+    border-color: var(--rp-c-brand);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    transform: translateY(-2px);
+}
+
+.custom-card h3 {
+    margin: 0 0 1rem 0;
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--rp-c-text-0);
+}
+
+.custom-card p {
+    margin: 0 0 1.5rem 0;
+    color: var(--rp-c-text-2);
+    line-height: 1.6;
+    flex: 1;
+}
+
+.custom-card-button {
+    display: inline-block;
+    padding: 0.5rem 1.5rem;
+    background: var(--rp-c-brand);
+    color: white;
+    border-radius: 6px;
+    font-weight: 500;
+    text-align: center;
+    transition: background 0.2s ease;
+}
+
+.custom-card:hover .custom-card-button {
+    background: var(--rp-c-brand-light);
+}

@@ -1,0 +1,120 @@
+name: timelord
+description: |
+  Use timelord to set file timestamps with git-warp-time fallback for cache misses
+inputs:
+  key:
+    description: |
+      The key to use for caching the timelord data.
+    required: false
+    default: ''
+  path:
+    description: |
+      The path to the directory to be timestamped.
+    required: false
+    default: ''
+
+outputs:
+  database-path:
+    description: Path to timelord database
+    value: '${{ env.TIMELORD_CACHE_PATH }}'
+
+runs:
+  using: composite
+  steps:
+    - name: Set defaults
+      shell: bash
+      run: |
+        echo "TIMELORD_KEY=${{ inputs.key || format('timelord-v1-{0}-{1}', github.repository, hashFiles('**/*.rs', '**/Cargo.toml', '**/Cargo.lock')) }}" >> $GITHUB_ENV
+        echo "TIMELORD_PATH=${{ inputs.path || '.' }}" >> $GITHUB_ENV
+        echo "TIMELORD_CACHE_PATH=$HOME/.cache/timelord" >> $GITHUB_ENV
+        echo "PATH=$HOME/.cargo/bin:/usr/share/rust/.cargo/bin:$PATH" >> $GITHUB_ENV
+
+    - name: Restore binary cache
+      id: binary-cache
+      uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+      with:
+        path: |
+          /usr/share/rust/.cargo/bin
+          ~/.cargo/bin
+        key: continuwuity-timelord-binaries
+
+    - name: Check if binaries need installation
+      shell: bash
+      id: check-binaries
+      run: |
+        NEED_INSTALL=false
+
+        # Ensure ~/.cargo/bin exists
+        mkdir -p ~/.cargo/bin
+
+        # Check and move timelord if needed
+        if [ -f /usr/share/rust/.cargo/bin/timelord ] && [ ! -f ~/.cargo/bin/timelord ]; then
+          echo "Moving timelord from /usr/share/rust/.cargo/bin to ~/.cargo/bin"
+          mv /usr/share/rust/.cargo/bin/timelord ~/.cargo/bin/
+        fi
+        if [ ! -f ~/.cargo/bin/timelord ]; then
+          echo "timelord-cli not found, needs installation"
+          NEED_INSTALL=true
+        fi
+
+        # Check and move git-warp-time if needed
+        if [ -f /usr/share/rust/.cargo/bin/git-warp-time ] && [ ! -f ~/.cargo/bin/git-warp-time ]; then
+          echo "Moving git-warp-time from /usr/share/rust/.cargo/bin to ~/.cargo/bin"
+          mv /usr/share/rust/.cargo/bin/git-warp-time ~/.cargo/bin/
+        fi
+        if [ ! -f ~/.cargo/bin/git-warp-time ]; then
+          echo "git-warp-time not found, needs installation"
+          NEED_INSTALL=true
+        fi
+
+        echo "need-install=$NEED_INSTALL" >> $GITHUB_OUTPUT
+
+    - name: Install timelord-cli and git-warp-time
+      if: steps.check-binaries.outputs.need-install == 'true'
+      uses: https://github.com/taiki-e/install-action@920ab1831fbf4fb3ef75c8ead83556c918bb7290 # v2
+      with:
+        tool: git-warp-time,timelord-cli@3.0.1
+
+    - name: Save binary cache
+      if: steps.check-binaries.outputs.need-install == 'true'
+      uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+      with:
+        path: |
+          /usr/share/rust/.cargo/bin
+          ~/.cargo/bin
+        key: continuwuity-timelord-binaries
+
+
+    - name: Restore timelord cache with fallbacks
+      id: timelord-restore
+      uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+      with:
+        path: ${{ env.TIMELORD_CACHE_PATH }}
+        key: ${{ env.TIMELORD_KEY }}
+        restore-keys: |
+          continuwuity-timelord-${{ github.repository }}-
+
+    - name: Initialize timestamps on complete cache miss
+      if: steps.timelord-restore.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        echo "Complete timelord cache miss - running git-warp-time"
+        git fetch --unshallow
+        if [ "${{ env.TIMELORD_PATH }}" = "." ]; then
+          git-warp-time --quiet
+        else
+          git-warp-time --quiet ${{ env.TIMELORD_PATH }}
+        fi
+        echo "Git timestamps restored"
+
+    - name: Run timelord sync
+      shell: bash
+      run: |
+        mkdir -p ${{ env.TIMELORD_CACHE_PATH }}
+        timelord sync --source-dir ${{ env.TIMELORD_PATH }} --cache-dir ${{ env.TIMELORD_CACHE_PATH }}
+
+    - name: Save updated timelord cache immediately
+      uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+      with:
+        path: ${{ env.TIMELORD_CACHE_PATH }}
+        key: ${{ env.TIMELORD_KEY }}

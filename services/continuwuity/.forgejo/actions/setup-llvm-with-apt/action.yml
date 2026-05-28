@@ -1,0 +1,167 @@
+name: setup-llvm-with-apt
+description: |
+  Set up LLVM toolchain with APT package management and smart caching.
+  Supports cross-compilation architectures and additional package installation.
+
+  Creates symlinks in /usr/bin: clang, clang++, lld, llvm-ar, llvm-ranlib
+
+inputs:
+  dpkg-arch:
+    description: 'Debian architecture for cross-compilation (e.g. arm64)'
+    required: false
+    default: ''
+  extra-packages:
+    description: 'Additional APT packages to install (space-separated)'
+    required: false
+    default: ''
+  llvm-version:
+    description: 'LLVM version to install'
+    required: false
+    default: '21'
+
+outputs:
+  llvm-version:
+    description: 'Installed LLVM version'
+    value: ${{ steps.configure.outputs.version }}
+
+runs:
+  using: composite
+  steps:
+    - name: Detect runner OS
+      id: runner-os
+      uses: https://git.tomfos.tr/actions/detect-versions@v1
+
+    - name: Configure cross-compilation architecture
+      if: inputs.dpkg-arch != ''
+      shell: bash
+      run: |
+        echo "🏗️ Adding ${{ inputs.dpkg-arch }} architecture"
+        sudo dpkg --add-architecture ${{ inputs.dpkg-arch }}
+
+        # Restrict default sources to amd64
+        sudo sed -i 's/^deb http/deb [arch=amd64] http/g' /etc/apt/sources.list
+        sudo sed -i 's/^deb https/deb [arch=amd64] https/g' /etc/apt/sources.list
+
+        # Add ports sources for foreign architecture
+        sudo tee /etc/apt/sources.list.d/${{ inputs.dpkg-arch }}.list > /dev/null <<EOF
+        deb [arch=${{ inputs.dpkg-arch }}] http://ports.ubuntu.com/ubuntu-ports/ jammy main restricted universe multiverse
+        deb [arch=${{ inputs.dpkg-arch }}] http://ports.ubuntu.com/ubuntu-ports/ jammy-updates main restricted universe multiverse
+        deb [arch=${{ inputs.dpkg-arch }}] http://ports.ubuntu.com/ubuntu-ports/ jammy-security main restricted universe multiverse
+        EOF
+
+        echo "✅ Architecture ${{ inputs.dpkg-arch }} configured"
+
+    - name: Start LLVM cache group
+      shell: bash
+      run: echo "::group::📦 Restoring LLVM cache"
+
+    - name: Check for LLVM cache
+      id: cache
+      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+      with:
+        path: |
+          /usr/bin/clang-*
+          /usr/bin/clang++-*
+          /usr/bin/lld-*
+          /usr/bin/llvm-*
+          /usr/lib/llvm-*/
+          /usr/lib/x86_64-linux-gnu/libLLVM*.so*
+          /usr/lib/x86_64-linux-gnu/libclang*.so*
+          /etc/apt/sources.list.d/archive_uri-*
+          /etc/apt/trusted.gpg.d/apt.llvm.org.asc
+        key: continuwuity-llvm-${{ steps.runner-os.outputs.slug }}-${{ steps.runner-os.outputs.arch }}-v${{ inputs.llvm-version }}-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}
+
+    - name: End LLVM cache group
+      shell: bash
+      run: echo "::endgroup::"
+
+    - name: Check and install LLVM if needed
+      id: llvm-setup
+      shell: bash
+      run: |
+        echo "🔍 Checking for LLVM ${{ inputs.llvm-version }}..."
+
+        # Check both binaries and libraries exist
+        if [ -f "/usr/bin/clang-${{ inputs.llvm-version }}" ] && \
+           [ -f "/usr/bin/clang++-${{ inputs.llvm-version }}" ] && \
+           [ -f "/usr/bin/lld-${{ inputs.llvm-version }}" ] && \
+           ([ -f "/usr/lib/x86_64-linux-gnu/libLLVM.so.${{ inputs.llvm-version }}.1" ] || \
+            [ -f "/usr/lib/x86_64-linux-gnu/libLLVM-${{ inputs.llvm-version }}.so.1" ] || \
+            [ -f "/usr/lib/llvm-${{ inputs.llvm-version }}/lib/libLLVM.so" ]); then
+          echo "✅ LLVM ${{ inputs.llvm-version }} found and verified"
+          echo "needs-install=false" >> $GITHUB_OUTPUT
+        else
+          echo "📦 LLVM ${{ inputs.llvm-version }} not found or incomplete - installing..."
+
+          echo "::group::🔧 Installing LLVM ${{ inputs.llvm-version }}"
+          wget -O - https://apt.llvm.org/llvm.sh | bash -s -- ${{ inputs.llvm-version }}
+          echo "::endgroup::"
+
+          if [ ! -f "/usr/bin/clang-${{ inputs.llvm-version }}" ]; then
+            echo "❌ Failed to install LLVM ${{ inputs.llvm-version }}"
+            exit 1
+          fi
+
+          echo "✅ Installed LLVM ${{ inputs.llvm-version }}"
+          echo "needs-install=true" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Prepare for additional packages
+      if: inputs.extra-packages != ''
+      shell: bash
+      run: |
+        # Update APT if LLVM was cached (installer script already does apt-get update)
+        if [[ "${{ steps.llvm-setup.outputs.needs-install }}" != "true" ]]; then
+          echo "::group::📦 Running apt-get update (LLVM cached, extra packages needed)"
+          sudo apt-get update
+          echo "::endgroup::"
+        fi
+        echo "::group::📦 Installing additional packages"
+
+    - name: Install additional packages
+      if: inputs.extra-packages != ''
+      uses: https://github.com/awalsh128/cache-apt-pkgs-action@2c09a5e66da6c8016428a2172bd76e5e4f14bb17 # latest
+      with:
+        packages: ${{ inputs.extra-packages }}
+        version: 1.0
+
+    - name: End package installation group
+      if: inputs.extra-packages != ''
+      shell: bash
+      run: echo "::endgroup::"
+
+    - name: Configure LLVM environment
+      id: configure
+      shell: bash
+      run: |
+        echo "::group::🔧 Configuring LLVM ${{ inputs.llvm-version }} environment"
+
+        # Create symlinks
+        sudo ln -sf "/usr/bin/clang-${{ inputs.llvm-version }}" /usr/bin/clang
+        sudo ln -sf "/usr/bin/clang++-${{ inputs.llvm-version }}" /usr/bin/clang++
+        sudo ln -sf "/usr/bin/lld-${{ inputs.llvm-version }}" /usr/bin/lld
+        sudo ln -sf "/usr/bin/llvm-ar-${{ inputs.llvm-version }}" /usr/bin/llvm-ar
+        sudo ln -sf "/usr/bin/llvm-ranlib-${{ inputs.llvm-version }}" /usr/bin/llvm-ranlib
+        echo "  ✓ Created symlinks"
+
+        # Setup library paths
+        LLVM_LIB_PATH="/usr/lib/llvm-${{ inputs.llvm-version }}/lib"
+        if [ -d "$LLVM_LIB_PATH" ]; then
+          echo "LD_LIBRARY_PATH=${LLVM_LIB_PATH}:${LD_LIBRARY_PATH:-}" >> $GITHUB_ENV
+          echo "LIBCLANG_PATH=${LLVM_LIB_PATH}" >> $GITHUB_ENV
+
+          echo "$LLVM_LIB_PATH" | sudo tee "/etc/ld.so.conf.d/llvm-${{ inputs.llvm-version }}.conf" > /dev/null
+          sudo ldconfig
+          echo "  ✓ Configured library paths"
+        else
+          # Fallback to standard library location
+          if [ -d "/usr/lib/x86_64-linux-gnu" ]; then
+            echo "LIBCLANG_PATH=/usr/lib/x86_64-linux-gnu" >> $GITHUB_ENV
+            echo "  ✓ Using fallback library path"
+          fi
+        fi
+
+        # Set output
+        echo "version=${{ inputs.llvm-version }}" >> $GITHUB_OUTPUT
+        echo "::endgroup::"
+        echo "✅ LLVM ready: $(clang --version | head -1)"

@@ -1,0 +1,28 @@
+# Local build and dev artifacts
+target/
+!target/debug/conduwuit
+
+# Docker files
+Dockerfile*
+
+# IDE files
+.vscode
+.idea
+*.iml
+
+# Git folder
+# .git
+.gitea
+.gitlab
+.github
+.forgejo
+
+# Dot files
+.env
+.gitignore
+
+# Toml files
+rustfmt.toml
+
+# Documentation
+#*.md

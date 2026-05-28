@@ -1,0 +1,61 @@
+use std::collections::BTreeMap;
+
+use axum::extract::State;
+use conduwuit::{Result, Server};
+use ruma::{
+	RoomVersionId,
+	api::client::discovery::get_capabilities::{
+		self,
+		v3::{
+			Capabilities, GetLoginTokenCapability, RoomVersionStability, RoomVersionsCapability,
+			ThirdPartyIdChangesCapability,
+		},
+	},
+};
+use serde_json::json;
+
+use crate::Ruma;
+
+/// # `GET /_matrix/client/v3/capabilities`
+///
+/// Get information on the supported feature set and other relevant capabilities
+/// of this server.
+pub(crate) async fn get_capabilities_route(
+	State(services): State<crate::State>,
+	body: Ruma<get_capabilities::v3::Request>,
+) -> Result<get_capabilities::v3::Response> {
+	let available: BTreeMap<RoomVersionId, RoomVersionStability> =
+		Server::available_room_versions().collect();
+
+	let mut capabilities = Capabilities::default();
+	capabilities.room_versions = RoomVersionsCapability::new(
+		services.server.config.default_room_version.clone(),
+		available,
+	);
+
+	// Only allow 3pid changes if SMTP is configured
+	capabilities.thirdparty_id_changes =
+		ThirdPartyIdChangesCapability::new(services.threepid.email_requirement().may_change());
+
+	capabilities.get_login_token =
+		GetLoginTokenCapability::new(services.server.config.login_via_existing_session);
+
+	// MSC4133 capability
+	capabilities.set("uk.tcpip.msc4133.profile_fields", json!({"enabled": true}))?;
+
+	capabilities.set(
+		"org.matrix.msc4267.forget_forced_upon_leave",
+		json!({"enabled": services.config.forget_forced_upon_leave}),
+	)?;
+
+	if services
+		.users
+		.is_admin(body.identity.expect_sender_user()?)
+		.await
+	{
+		// Advertise suspension API
+		capabilities.set("uk.timedout.msc4323", json!({"suspend": true, "lock": false}))?;
+	}
+
+	Ok(get_capabilities::v3::Response::new(capabilities))
+}

@@ -1,0 +1,316 @@
+use std::time::Duration;
+
+use axum::extract::State;
+use axum_client_ip::ClientIp;
+use conduwuit::{
+	Err, Result, err,
+	utils::{self, content_disposition::make_content_disposition, math::ruma_from_usize},
+};
+use conduwuit_core::error;
+use conduwuit_service::{
+	Services,
+	media::{Dim, FileMeta, MXC_LENGTH},
+};
+use reqwest::Url;
+use ruma::{
+	UserId,
+	api::client::{
+		authenticated_media::{
+			get_content, get_content_as_filename, get_content_thumbnail, get_media_config,
+			get_media_preview,
+		},
+		media::create_content,
+	},
+};
+use service::media::mxc::Mxc;
+
+use crate::Ruma;
+
+/// # `GET /_matrix/client/v1/media/config`
+pub(crate) async fn get_media_config_route(
+	State(services): State<crate::State>,
+	_body: Ruma<get_media_config::v1::Request>,
+) -> Result<get_media_config::v1::Response> {
+	Ok(get_media_config::v1::Response::new(ruma_from_usize(
+		services.server.config.max_request_size,
+	)))
+}
+
+/// # `POST /_matrix/media/v3/upload`
+///
+/// Permanently save media in the server.
+///
+/// - Some metadata will be saved in the database
+/// - Media will be saved in the media/ directory
+#[tracing::instrument(
+	name = "media_upload",
+	level = "debug",
+	skip_all,
+	fields(%client),
+)]
+pub(crate) async fn create_content_route(
+	State(services): State<crate::State>,
+	ClientIp(client): ClientIp,
+	body: Ruma<create_content::v3::Request>,
+) -> Result<create_content::v3::Response> {
+	let user = body.identity.expect_sender_user()?;
+	if services.users.is_suspended(user).await? {
+		return Err!(Request(UserSuspended("You cannot perform this action while suspended.")));
+	}
+
+	let filename = body.filename.as_deref();
+	let content_type = body.content_type.as_deref();
+	let content_disposition = make_content_disposition(None, content_type, filename);
+	let ref mxc = Mxc {
+		server_name: services.globals.server_name(),
+		media_id: &utils::random_string(MXC_LENGTH),
+	};
+
+	if let Err(e) = services
+		.media
+		.create(mxc, Some(user), Some(&content_disposition), content_type, &body.file)
+		.await
+	{
+		err!("Failed to save uploaded media: {e}");
+		return Err!(Request(Unknown("Failed to save uploaded media")));
+	}
+
+	Ok(create_content::v3::Response::new(mxc.to_string().into()))
+}
+
+/// # `GET /_matrix/client/v1/media/thumbnail/{serverName}/{mediaId}`
+///
+/// Load media thumbnail from our server or over federation.
+#[tracing::instrument(
+	name = "media_thumbnail_get",
+	level = "debug",
+	skip_all,
+	fields(%client),
+)]
+pub(crate) async fn get_content_thumbnail_route(
+	State(services): State<crate::State>,
+	ClientIp(client): ClientIp,
+	body: Ruma<get_content_thumbnail::v1::Request>,
+) -> Result<get_content_thumbnail::v1::Response> {
+	let user = body.identity.expect_sender_user()?;
+
+	let dim = Dim::from_ruma(body.width, body.height, body.method.clone())?;
+	let mxc = Mxc {
+		server_name: &body.server_name,
+		media_id: &body.media_id,
+	};
+
+	let FileMeta {
+		content,
+		content_type,
+		content_disposition,
+	} = match fetch_thumbnail_meta(&services, &mxc, user, body.timeout_ms, &dim).await {
+		| Ok(meta) => meta,
+		| Err(conduwuit::Error::Io(e)) => match e.kind() {
+			| std::io::ErrorKind::NotFound =>
+				return Err!(Request(NotFound("Thumbnail not found."))),
+			| std::io::ErrorKind::PermissionDenied => {
+				error!("Permission denied when trying to read file: {e:?}");
+				return Err!(Request(Unknown("Unknown error when fetching thumbnail.")));
+			},
+			| _ => return Err!(Request(Unknown("Unknown error when fetching thumbnail."))),
+		},
+		| Err(_) => return Err!(Request(Unknown("Unknown error when fetching thumbnail."))),
+	};
+
+	let content_disposition =
+		make_content_disposition(content_disposition.as_ref(), content_type.as_deref(), None);
+
+	Ok(get_content_thumbnail::v1::Response::new(
+		content.expect("entire file contents"),
+		content_type.unwrap_or_default(),
+		content_disposition,
+	))
+}
+
+/// # `GET /_matrix/client/v1/media/download/{serverName}/{mediaId}`
+///
+/// Load media from our server or over federation.
+#[tracing::instrument(
+	name = "media_get",
+	level = "debug",
+	skip_all,
+	fields(%client),
+)]
+pub(crate) async fn get_content_route(
+	State(services): State<crate::State>,
+	ClientIp(client): ClientIp,
+	body: Ruma<get_content::v1::Request>,
+) -> Result<get_content::v1::Response> {
+	let user = body.identity.expect_sender_user()?;
+
+	let mxc = Mxc {
+		server_name: &body.server_name,
+		media_id: &body.media_id,
+	};
+	let FileMeta {
+		content,
+		content_type,
+		content_disposition,
+	} = match fetch_file_meta(&services, &mxc, user, body.timeout_ms).await {
+		| Ok(meta) => meta,
+		| Err(conduwuit::Error::Io(e)) => match e.kind() {
+			| std::io::ErrorKind::NotFound => return Err!(Request(NotFound("Media not found."))),
+			| std::io::ErrorKind::PermissionDenied => {
+				error!("Permission denied when trying to read file: {e:?}");
+				return Err!(Request(Unknown("Unknown error when fetching file.")));
+			},
+			| _ => return Err!(Request(Unknown("Unknown error when fetching file."))),
+		},
+		| Err(_) => return Err!(Request(Unknown("Unknown error when fetching file."))),
+	};
+
+	let content_disposition =
+		make_content_disposition(content_disposition.as_ref(), content_type.as_deref(), None);
+
+	Ok(get_content::v1::Response::new(
+		content.expect("entire file contents"),
+		content_type.unwrap_or_default(),
+		content_disposition,
+	))
+}
+
+/// # `GET /_matrix/client/v1/media/download/{serverName}/{mediaId}/{fileName}`
+///
+/// Load media from our server or over federation as fileName.
+#[tracing::instrument(
+	name = "media_get_af",
+	level = "debug",
+	skip_all,
+	fields(%client),
+)]
+pub(crate) async fn get_content_as_filename_route(
+	State(services): State<crate::State>,
+	ClientIp(client): ClientIp,
+	body: Ruma<get_content_as_filename::v1::Request>,
+) -> Result<get_content_as_filename::v1::Response> {
+	let user = body.identity.expect_sender_user()?;
+
+	let mxc = Mxc {
+		server_name: &body.server_name,
+		media_id: &body.media_id,
+	};
+
+	let FileMeta {
+		content,
+		content_type,
+		content_disposition,
+	} = match fetch_file_meta(&services, &mxc, user, body.timeout_ms).await {
+		| Ok(meta) => meta,
+		| Err(conduwuit::Error::Io(e)) => match e.kind() {
+			| std::io::ErrorKind::NotFound => return Err!(Request(NotFound("Media not found."))),
+			| std::io::ErrorKind::PermissionDenied => {
+				error!("Permission denied when trying to read file: {e:?}");
+				return Err!(Request(Unknown("Unknown error when fetching file.")));
+			},
+			| _ => return Err!(Request(Unknown("Unknown error when fetching file."))),
+		},
+		| Err(_) => return Err!(Request(Unknown("Unknown error when fetching file."))),
+	};
+
+	let content_disposition = make_content_disposition(
+		content_disposition.as_ref(),
+		content_type.as_deref(),
+		Some(&body.filename),
+	);
+
+	Ok(get_content_as_filename::v1::Response::new(
+		content.expect("entire file contents"),
+		content_type.unwrap_or_default(),
+		content_disposition,
+	))
+}
+
+/// # `GET /_matrix/client/v1/media/preview_url`
+///
+/// Returns URL preview.
+#[tracing::instrument(
+	name = "url_preview",
+	level = "debug",
+	skip_all,
+	fields(%client),
+)]
+pub(crate) async fn get_media_preview_route(
+	State(services): State<crate::State>,
+	ClientIp(client): ClientIp,
+	body: Ruma<get_media_preview::v1::Request>,
+) -> Result<get_media_preview::v1::Response> {
+	let sender_user = body.identity.expect_sender_user()?;
+
+	let url = &body.url;
+	let url = Url::parse(&body.url).map_err(|e| {
+		err!(Request(InvalidParam(
+			debug_warn!(%sender_user, %url, "Requested URL is not valid: {e}")
+		)))
+	})?;
+
+	if !services.media.url_preview_allowed(&url) {
+		return Err!(Request(Forbidden(
+			debug_warn!(%sender_user, %url, "URL is not allowed to be previewed")
+		)));
+	}
+
+	let preview = services
+		.media
+		.get_url_preview(&url)
+		.await
+		.map_err(|error| {
+			err!(Request(Unknown(
+				debug_error!(%sender_user, %url, "Failed to fetch URL preview: {error}")
+			)))
+		})?;
+
+	serde_json::value::to_raw_value(&preview)
+		.map(get_media_preview::v1::Response::from_raw_value)
+		.map_err(|error| {
+			err!(Request(Unknown(
+				debug_error!(%sender_user, %url, "Failed to parse URL preview: {error}")
+			)))
+		})
+}
+
+async fn fetch_thumbnail_meta(
+	services: &Services,
+	mxc: &Mxc<'_>,
+	user: &UserId,
+	timeout_ms: Duration,
+	dim: &Dim,
+) -> Result<FileMeta> {
+	if let Some(filemeta) = services.media.get_thumbnail(mxc, dim).await? {
+		return Ok(filemeta);
+	}
+
+	if services.globals.server_is_ours(mxc.server_name) {
+		return Err!(Request(NotFound("Local thumbnail not found.")));
+	}
+
+	services
+		.media
+		.fetch_remote_thumbnail(mxc, Some(user), None, timeout_ms, dim)
+		.await
+}
+
+async fn fetch_file_meta(
+	services: &Services,
+	mxc: &Mxc<'_>,
+	user: &UserId,
+	timeout_ms: Duration,
+) -> Result<FileMeta> {
+	if let Some(filemeta) = services.media.get(mxc).await? {
+		return Ok(filemeta);
+	}
+
+	if services.globals.server_is_ours(mxc.server_name) {
+		return Err!(Request(NotFound("Local media not found.")));
+	}
+
+	services
+		.media
+		.fetch_remote_content(mxc, Some(user), None, timeout_ms)
+		.await
+}

@@ -1,0 +1,72 @@
+use std::collections::BTreeMap;
+
+use ruma::{
+	MilliSecondsSinceUnixEpoch, OwnedEventId,
+	events::{MessageLikeEventContent, StateEventContent, TimelineEventType},
+};
+use serde::Deserialize;
+use serde_json::value::{RawValue as RawJsonValue, to_raw_value};
+
+use super::StateKey;
+
+/// An event and its associated metadata, without an ID, signatures, or hashes.
+#[derive(Debug, Deserialize)]
+pub struct PartialPdu {
+	#[serde(rename = "type")]
+	pub event_type: TimelineEventType,
+
+	pub content: Box<RawJsonValue>,
+
+	pub unsigned: Option<Unsigned>,
+
+	pub state_key: Option<StateKey>,
+
+	pub redacts: Option<OwnedEventId>,
+
+	/// For timestamped messaging, should only be used for appservices.
+	/// Will be set to current time if None
+	pub timestamp: Option<MilliSecondsSinceUnixEpoch>,
+}
+
+type Unsigned = BTreeMap<String, serde_json::Value>;
+
+impl PartialPdu {
+	pub fn state<S, T>(state_key: S, content: &T) -> Self
+	where
+		T: StateEventContent,
+		S: Into<StateKey>,
+	{
+		Self {
+			event_type: content.event_type().into(),
+			content: to_raw_value(content)
+				.expect("Builder failed to serialize state event content to RawValue"),
+			state_key: Some(state_key.into()),
+			..Self::default()
+		}
+	}
+
+	pub fn timeline<T>(content: &T) -> Self
+	where
+		T: MessageLikeEventContent,
+	{
+		Self {
+			event_type: content.event_type().into(),
+			content: to_raw_value(content)
+				.expect("Builder failed to serialize timeline event content to RawValue"),
+			..Self::default()
+		}
+	}
+}
+
+impl Default for PartialPdu {
+	fn default() -> Self {
+		Self {
+			event_type: "m.room.message".into(),
+			content: Box::<RawJsonValue>::default(),
+			unsigned: None,
+			state_key: None,
+			redacts: None,
+			timestamp: None,
+		}
+	}
+}

@@ -1,0 +1,74 @@
+# Continuwuity for NixOS
+
+## Nix package
+
+You can get a Nix package for Continuwuity from the following sources:
+
+- Directly from Nixpkgs: `pkgs.matrix-continuwuity`
+- Or, using `continuwuity.packages.${system}.default` from:
+    - The `flake.nix` at the root of the Continuwuity repo, by adding Continuwuity to your flake inputs:
+
+    ```nix
+    inputs.continuwuity.url = "git+https://forgejo.ellis.link/continuwuation/continuwuity";
+    ```
+
+    - The `default.nix` at the root of the Continuwuity repo
+
+## NixOS module
+
+Continuwuity has an official NixOS module that simplifies configuration and deployment. The module is available in Nixpkgs as `services.matrix-continuwuity`.
+
+Here's a basic example of how to use the module:
+
+```nix
+services.matrix-continuwuity = {
+  enable = true;
+  settings = {
+    global = {
+      server_name = "example.com";
+
+      # Continuwuity listens on localhost by default,
+      # address and port are handled automatically
+
+      # You can add any further configuration here, e.g.
+	  # trusted_servers = [ "matrix.org" ];
+    };
+  };
+};
+```
+
+### Available options
+
+The NixOS module provides these configuration options:
+
+- `enable`: Enable the Continuwuity service
+- `user`: The user to run Continuwuity as (defaults to "continuwuity")
+- `group`: The group to run Continuwuity as (defaults to "continuwuity")
+- `extraEnvironment`: Extra environment variables to pass to the Continuwuity server
+- `package`: The Continuwuity package to use, defaults to `pkgs.matrix-continuwuity`
+    - You may want to override this to be from our flake, for faster updates and unstable versions:
+    ```nix
+    package = inputs.continuwuity.packages.${pkgs.stdenv.hostPlatform.system}.default;
+    ```
+- `admin.enable`: Whether to add the `conduwuit` binary to `PATH` for administration (enabled by default)
+- `settings`: The Continuwuity configuration
+
+Use the `settings` option to configure Continuwuity itself. See the [example configuration file](../reference/config.mdx) for all available options.
+
+Settings are automatically translated from Nix to TOML. For example, the following line of Nix:
+
+```nix
+settings.global.well_known.client = "https://matrix.example.com";
+```
+
+Would become this equivalent TOML configuration:
+
+```toml
+[global.well_known]
+client = "https://matrix.example.com"
+```
+
+## Reverse proxy configuration
+
+You'll need to set up a reverse proxy (like NGINX or Caddy) to expose Continuwuity to the internet. You can configure your reverse proxy using NixOS options (e.g. `services.caddy`).
+See the [reverse proxy setup guide](./generic.mdx#setting-up-the-reverse-proxy) for information on correct reverse proxy configuration.

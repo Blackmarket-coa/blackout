@@ -27,6 +27,8 @@ electron/pub
 .vscode/
 .env
 /coverage
+# Continuwuity build artifacts (committed as source, built locally)
+/services/continuwuity/target/
 # Auto-generated file
 /src/modules.js
 /build_config.yaml

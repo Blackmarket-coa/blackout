@@ -1,0 +1,12 @@
+[
+    {
+        "type": "file",
+        "name": "config",
+        "label": "Configuration"
+    },
+    {
+        "type": "file",
+        "name": "admin",
+        "label": "Admin Commands"
+    }
+]

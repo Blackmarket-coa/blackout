@@ -1,0 +1,32 @@
+array-size-threshold = 4096
+cognitive-complexity-threshold = 94         # TODO reduce me ALARA
+excessive-nesting-threshold = 11            # TODO reduce me to 4 or 5
+future-size-threshold = 7745                # TODO reduce me ALARA
+stack-size-threshold = 196608               # TODO reduce me ALARA
+too-many-lines-threshold = 780              # TODO reduce me to <= 100
+type-complexity-threshold = 250             # reduce me to ~200
+large-error-threshold = 256                 # TODO reduce me ALARA
+
+disallowed-macros = [
+	{ path = "log::error", reason = "use conduwuit_core::error" },
+	{ path = "log::warn", reason = "use conduwuit_core::warn" },
+	{ path = "log::info", reason = "use conduwuit_core::info" },
+	{ path = "log::debug", reason = "use conduwuit_core::debug" },
+	{ path = "log::trace", reason = "use conduwuit_core::trace" },
+]
+
+[[disallowed-methods]]
+path = "tokio::spawn"
+reason = "use and pass conduwuit_core::server::Server::runtime() to spawn from"
+
+[[disallowed-methods]]
+path = "reqwest::Response::bytes"
+reason = "bytes is unsafe, use limit_read via the conduwuit_core::utils::LimitReadExt trait instead"
+
+[[disallowed-methods]]
+path = "reqwest::Response::text"
+reason = "text is unsafe, use limit_read_text via the conduwuit_core::utils::LimitReadExt trait instead"
+
+[[disallowed-methods]]
+path = "reqwest::Response::json"
+reason = "json is unsafe, use limit_read_text via the conduwuit_core::utils::LimitReadExt trait instead"

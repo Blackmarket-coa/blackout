@@ -1,0 +1,32 @@
+# EditorConfig is awesome: https://EditorConfig.org
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+tab_width = 4
+indent_size = 4
+indent_style = space
+insert_final_newline = true
+max_line_length = 120
+
+[*.{md,txt}]
+indent_style = space
+indent_size = 4
+max_line_length = 80
+
+[*.nix]
+indent_size = 2
+
+[*.rs]
+indent_style = tab
+max_line_length = 98
+
+[*.yml]
+indent_size = 2
+indent_style = space
+
+[*.json]
+indent_size = 4
+indent_style = space

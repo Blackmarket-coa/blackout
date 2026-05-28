@@ -1,0 +1,104 @@
+# Local environment overrides
+/.env
+
+# CMake
+cmake-build-*/
+
+# IntelliJ
+.idea/
+out/
+*.iml
+modules.xml
+*.ipr
+
+# mpeltonen/sbt-idea plugin
+.idea_modules/
+
+# Linux backup files
+*~
+
+# temporary files which can be created if a process still has a handle open of a deleted file
+.fuse_hidden*
+
+# KDE directory preferences
+.directory
+
+# Linux trash folder which might appear on any partition or disk
+.Trash-*
+
+# .nfs files are created when an open file is removed but is still being accessed
+.nfs*
+
+# Rust
+/target
+
+### vscode ###
+.vscode/*
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+### Windows ###
+# Windows thumbnail cache files
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+
+# Dump file
+*.stackdump
+
+# Folder config file
+[Dd]esktop.ini
+
+# Recycle Bin used on file shares
+$RECYCLE.BIN/
+
+# Windows shortcuts
+*.lnk
+
+# Conduit
+conduit.toml
+conduit.db
+
+# Etc.
+**/*.rs.bk
+cached_target
+
+# Nix artifacts
+/result*
+
+# Direnv cache
+/.direnv
+
+test-conduit/
+test-conduit.toml
+
+# Gitlab CI cache
+/.gitlab-ci.d
+
+# mdbook output
+/public/
+
+# macOS
+.DS_Store
+
+# VS Code
+.vscode/
+
+# Zed
+.zed/
+
+# idk where you're coming from, but i'm tired of you
+rustc-ice-*
+
+# complement test logs are huge
+tests/test_results/complement/test_logs.jsonl
+
+# Node
+node_modules/
+
+# Rspress
+doc_build/
+.rspress/

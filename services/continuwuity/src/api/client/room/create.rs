@@ -1,0 +1,736 @@
+use std::collections::{BTreeMap, BTreeSet};
+
+use axum::extract::State;
+use conduwuit::{
+	Err, Result, debug, debug_info, err, info,
+	matrix::{StateKey, pdu::PartialPdu},
+	trace, warn,
+};
+use conduwuit_service::{Services, appservice::RegistrationInfo};
+use futures::FutureExt;
+use ruma::{
+	CanonicalJsonObject, CanonicalJsonValue, Int, MilliSecondsSinceUnixEpoch, OwnedRoomAliasId,
+	OwnedUserId, RoomAliasId, RoomId, RoomVersionId, UserId,
+	api::client::room::{self, create_room},
+	assign,
+	events::{
+		TimelineEventType,
+		room::{
+			canonical_alias::RoomCanonicalAliasEventContent,
+			create::RoomCreateEventContent,
+			guest_access::{GuestAccess, RoomGuestAccessEventContent},
+			history_visibility::{HistoryVisibility, RoomHistoryVisibilityEventContent},
+			join_rules::{JoinRule, RoomJoinRulesEventContent},
+			member::{MembershipState, RoomMemberEventContent},
+			name::RoomNameEventContent,
+			power_levels::RoomPowerLevelsEventContent,
+			server_acl::RoomServerAclEventContent,
+			topic::RoomTopicEventContent,
+		},
+	},
+	int,
+	room_version_rules::{AuthorizationRules, RoomIdFormatVersion},
+	serde::{JsonObject, Raw},
+};
+use ruminuwuity::invite_permission_config::FilterLevel;
+use serde_json::{json, value::to_raw_value};
+
+use crate::{Ruma, client::invite_helper};
+
+/// # `POST /_matrix/client/v3/createRoom`
+///
+/// Creates a new room.
+///
+/// - Room ID is randomly generated
+/// - Create alias if `room_alias_name` is set
+/// - Send create event
+/// - Join sender user
+/// - Send power levels event
+/// - Send canonical room alias
+/// - Send join rules
+/// - Send history visibility
+/// - Send guest access
+/// - Send events listed in initial state
+/// - Send events implied by `name` and `topic`
+/// - Send invite events
+#[allow(clippy::large_stack_frames)]
+#[allow(clippy::cognitive_complexity)]
+pub(crate) async fn create_room_route(
+	State(services): State<crate::State>,
+	body: Ruma<create_room::v3::Request>,
+) -> Result<create_room::v3::Response> {
+	use create_room::v3::RoomPreset;
+
+	let sender_user = body.identity.expect_sender_user()?;
+
+	if !services.globals.allow_room_creation()
+		&& !body.identity.is_appservice()
+		&& !services.users.is_admin(sender_user).await
+	{
+		return Err!(Request(Forbidden("Room creation has been disabled.",)));
+	}
+
+	if services.users.is_suspended(sender_user).await? {
+		return Err!(Request(UserSuspended("You cannot perform this action while suspended.")));
+	}
+
+	let room_version = match body.room_version.clone() {
+		| Some(room_version) =>
+			if services.server.supported_room_version(&room_version) {
+				room_version
+			} else {
+				return Err!(Request(UnsupportedRoomVersion(
+					"This server does not support that room version."
+				)));
+			},
+		| None => services.server.config.default_room_version.clone(),
+	};
+	let room_version_rules = room_version.rules().unwrap();
+
+	// For custom room IDs, if the user is creating a room with a v1 room ID format,
+	// we can just use that ID directly. However, if it's a custom *v2* room ID, we
+	// need to make sure that we don't generate one, which would in turn trick us
+	// into generating invalid v2 room events.
+	//
+	// expect_room_id is the custom room ID that the user is expecting - for v2
+	// formatted rooms, we check that the m.room.create event's generated room ID
+	// exactly matches this, and abort if it doesn't. Otherwise, we use it as the
+	// room ID itself.
+	let expect_room_id = {
+		let body_ref = body.json_body.as_ref().unwrap();
+		if let Some(CanonicalJsonValue::String(room_id)) = body_ref
+			.get("fi.mau.room_id")
+			.or_else(|| body_ref.get("room_id"))
+		{
+			Some(
+				RoomId::parse(room_id)
+					.map_err(|e| err!(Request(BadJson("Malformed custom room ID: {e}"))))?,
+			)
+		} else {
+			None
+		}
+	};
+
+	let room_id = match room_version_rules.room_id_format {
+		| RoomIdFormatVersion::V1 => Some(
+			expect_room_id
+				.clone()
+				.unwrap_or_else(|| RoomId::new_v1(services.globals.server_name())),
+		),
+		| _ => None,
+	};
+
+	// check if room ID doesn't already exist instead of erroring on auth check
+	if let Some(room_id) = room_id.as_ref().or(expect_room_id.as_ref()) {
+		if services.rooms.short.get_shortroomid(room_id).await.is_ok() {
+			return Err!(Request(RoomInUse("Room with that custom room ID already exists",)));
+		}
+	}
+
+	if body.visibility == room::Visibility::Public
+		&& services.server.config.lockdown_public_room_directory
+		&& !services.users.is_admin(sender_user).await
+		&& !body.identity.is_appservice()
+	{
+		warn!(
+			"Non-admin user {sender_user} tried to publish {room_id:?} to the room directory \
+			 while \"lockdown_public_room_directory\" is enabled"
+		);
+
+		if services.server.config.admin_room_notices {
+			services
+				.admin
+				.notice(&format!(
+					"Non-admin user {sender_user} tried to publish {room_id:?} to the room \
+					 directory while \"lockdown_public_room_directory\" is enabled"
+				))
+				.await;
+		}
+
+		return Err!(Request(Forbidden("Publishing rooms to the room directory is not allowed")));
+	}
+
+	let mut invitees = BTreeSet::new();
+
+	for recipient_user in &body.invite {
+		if !matches!(
+			services
+				.users
+				.invite_filter_level(recipient_user, sender_user)
+				.await,
+			FilterLevel::Allow
+		) {
+			// drop invites if the creator has them blocked
+			continue;
+		}
+
+		// if the recipient of the invite is local and has the sender blocked, error
+		// out. if the recipient is remote we can't tell yet, and if they're local and
+		// have the sender _ignored_ their invite will be filtered out in
+		// the handlers for the individual /sync endpoints
+		if services.globals.user_is_local(recipient_user)
+			&& matches!(
+				services
+					.users
+					.invite_filter_level(sender_user, recipient_user)
+					.await,
+				FilterLevel::Block
+			) {
+			return Err!(Request(InviteBlocked(
+				"{recipient_user} has blocked invites from you."
+			)));
+		}
+
+		invitees.insert(recipient_user.clone());
+	}
+
+	let alias: Option<OwnedRoomAliasId> = match body.room_alias_name.as_ref() {
+		| Some(alias) =>
+			Some(room_alias_check(&services, alias, body.identity.appservice_info()).await?),
+		| _ => None,
+	};
+
+	let create_content = match &body.creation_content {
+		| Some(content) => {
+			use RoomVersionId::*;
+
+			let mut content = content
+				.deserialize_as_unchecked::<CanonicalJsonObject>()
+				.map_err(|e| {
+					err!(Request(BadJson(error!(
+						"Failed to deserialise content as canonical JSON: {e}"
+					))))
+				})?;
+
+			match room_version {
+				| V1 | V2 | V3 | V4 | V5 | V6 | V7 | V8 | V9 | V10 => {
+					content.insert(
+						"creator".into(),
+						json!(&sender_user).try_into().map_err(|e| {
+							err!(Request(BadJson(debug_error!("Invalid creation content: {e}"))))
+						})?,
+					);
+				},
+				| _ => {
+					// V11+ removed the "creator" key
+				},
+			}
+			content.insert(
+				"room_version".into(),
+				json!(room_version.as_str())
+					.try_into()
+					.map_err(|e| err!(Request(BadJson("Invalid creation content: {e}"))))?,
+			);
+			content
+		},
+		| None => {
+			use RoomVersionId::*;
+
+			let content = match room_version {
+				| V1 | V2 | V3 | V4 | V5 | V6 | V7 | V8 | V9 | V10 =>
+					RoomCreateEventContent::new_v1(sender_user.to_owned()),
+				| _ => RoomCreateEventContent::new_v11(),
+			};
+			let mut content =
+				serde_json::from_str::<CanonicalJsonObject>(to_raw_value(&content)?.get())?;
+			content.insert("room_version".into(), json!(room_version.as_str()).try_into()?);
+			content
+		},
+	};
+
+	let state_lock = match room_id.clone() {
+		| Some(room_id) => {
+			let _short_id = services
+				.rooms
+				.short
+				.get_or_create_shortroomid(&room_id)
+				.await;
+			services.rooms.state.mutex.lock(room_id.as_str()).await
+		},
+		| None => {
+			let temp_room_id = RoomId::new_v1(services.globals.server_name());
+			trace!("Locking temporary room state mutex for {temp_room_id}");
+			services.rooms.state.mutex.lock(temp_room_id.as_str()).await
+		},
+	};
+
+	// 1. The room create event
+	debug!("Creating room create event for {sender_user} in room {room_id:?}");
+	let tmp_id = room_id.as_deref();
+
+	// Allow requesters to override the `origin_server_ts` to customize room ids
+	// from v12 onwards
+	let custom_origin_server_ts = {
+		let body_ref = body.json_body.as_ref().unwrap();
+		body_ref
+			.get("origin_server_ts")
+			.or_else(|| body_ref.get("fi.mau.origin_server_ts"))
+			.and_then(CanonicalJsonValue::as_integer)
+			.map(Into::into)
+			.and_then(|value: i64| value.try_into().ok())
+			.map(MilliSecondsSinceUnixEpoch)
+	};
+
+	let create_event_id = services
+		.rooms
+		.timeline
+		.build_and_append_pdu(
+			PartialPdu {
+				event_type: TimelineEventType::RoomCreate,
+				content: to_raw_value(&create_content)?,
+				state_key: Some(StateKey::new()),
+				timestamp: custom_origin_server_ts,
+				..Default::default()
+			},
+			sender_user,
+			tmp_id,
+			&state_lock,
+		)
+		.boxed()
+		.await?;
+	trace!("Created room create event with ID {}", &create_event_id);
+	let room_id = match room_id.clone() {
+		| Some(room_id) => room_id,
+		| None => {
+			let as_room_id = create_event_id.as_str().replace('$', "!");
+			trace!("Creating room with v12 room ID {as_room_id}");
+			RoomId::parse(&as_room_id)?.clone()
+		},
+	};
+	drop(state_lock);
+	debug!("Room created with ID {room_id}");
+	if let Some(expected_room_id) = expect_room_id
+		&& expected_room_id != room_id
+	{
+		return Err!(BadServerResponse(
+			"Room's final room ID was {room_id}, but expected {expected_room_id}"
+		));
+	}
+	let state_lock = services.rooms.state.mutex.lock(room_id.as_str()).await;
+
+	// 2. Let the room creator join
+
+	let mut join_event = RoomMemberEventContent::new(MembershipState::Join);
+	join_event.displayname = services.users.displayname(sender_user).await.ok();
+	join_event.avatar_url = services.users.avatar_url(sender_user).await.ok();
+	join_event.is_direct = Some(body.is_direct);
+
+	debug_info!("Joining {sender_user} to room {room_id}");
+	services
+		.rooms
+		.timeline
+		.build_and_append_pdu(
+			PartialPdu::state(sender_user.to_string(), &join_event),
+			sender_user,
+			Some(&room_id),
+			&state_lock,
+		)
+		.boxed()
+		.await?;
+
+	// 3. Power levels
+
+	// Figure out preset. We need it for preset specific events
+	let preset = body.preset.clone().unwrap_or(match &body.visibility {
+		| room::Visibility::Public => RoomPreset::PublicChat,
+		| _ => RoomPreset::PrivateChat, // Room visibility should not be custom
+	});
+
+	let mut power_levels_to_grant = BTreeMap::from_iter([(sender_user.to_owned(), int!(100))]);
+
+	if preset == RoomPreset::TrustedPrivateChat {
+		for recipient_user in &invitees {
+			power_levels_to_grant.insert(recipient_user.clone(), int!(100));
+		}
+	}
+
+	let mut creators: Vec<OwnedUserId> = vec![sender_user.to_owned()];
+	// Do we care about additional_creators?
+	if room_version_rules
+		.authorization
+		.explicitly_privilege_room_creators
+	{
+		// Have they been specified?
+		if let Some(additional_creators) = create_content.get("additional_creators") {
+			// Are they a real array?
+			if let Some(additional_creators) = additional_creators.as_array() {
+				// Iterate through them
+				for creator in additional_creators {
+					// Are they a string?
+					if let Some(creator) = creator.as_str() {
+						// Do they parse into a real user ID?
+						if let Ok(creator) = UserId::parse(creator) {
+							// Add them to the power levels and creators
+							creators.push(creator);
+						}
+					}
+				}
+			}
+		}
+	} else {
+		power_levels_to_grant.insert(sender_user.to_owned(), int!(100));
+		creators.clear(); // If this vec is not empty, default_power_levels_content will
+		// treat this as a v12 room
+	}
+
+	let power_levels_content = default_power_levels_content(
+		body.power_level_content_override
+			.as_ref()
+			.map(Raw::cast_ref),
+		&body.visibility,
+		power_levels_to_grant,
+		creators,
+		&room_version_rules.authorization,
+	)?;
+
+	services
+		.rooms
+		.timeline
+		.build_and_append_pdu(
+			PartialPdu {
+				event_type: TimelineEventType::RoomPowerLevels,
+				content: to_raw_value(&power_levels_content)?,
+				state_key: Some(StateKey::new()),
+				..Default::default()
+			},
+			sender_user,
+			Some(&room_id),
+			&state_lock,
+		)
+		.boxed()
+		.await?;
+
+	// 4. Canonical room alias
+	if let Some(room_alias_id) = &alias {
+		services
+			.rooms
+			.timeline
+			.build_and_append_pdu(
+				PartialPdu::state(
+					String::new(),
+					&assign!(RoomCanonicalAliasEventContent::new(), {
+						alias: Some(room_alias_id.to_owned()),
+						alt_aliases: vec![],
+					}),
+				),
+				sender_user,
+				Some(&room_id),
+				&state_lock,
+			)
+			.boxed()
+			.await?;
+	}
+
+	// 5. Events set by preset
+
+	// 5.1 Join Rules
+	services
+		.rooms
+		.timeline
+		.build_and_append_pdu(
+			PartialPdu::state(
+				String::new(),
+				&RoomJoinRulesEventContent::new(match preset {
+					| RoomPreset::PublicChat => JoinRule::Public,
+					// according to spec "invite" is the default
+					| _ => JoinRule::Invite,
+				}),
+			),
+			sender_user,
+			Some(&room_id),
+			&state_lock,
+		)
+		.boxed()
+		.await?;
+
+	// 5.2 History Visibility
+	services
+		.rooms
+		.timeline
+		.build_and_append_pdu(
+			PartialPdu::state(
+				String::new(),
+				&RoomHistoryVisibilityEventContent::new(HistoryVisibility::Shared),
+			),
+			sender_user,
+			Some(&room_id),
+			&state_lock,
+		)
+		.boxed()
+		.await?;
+
+	// 5.3 Guest Access
+	services
+		.rooms
+		.timeline
+		.build_and_append_pdu(
+			PartialPdu::state(
+				String::new(),
+				&RoomGuestAccessEventContent::new(match preset {
+					| RoomPreset::PublicChat => GuestAccess::Forbidden,
+					| _ => GuestAccess::CanJoin,
+				}),
+			),
+			sender_user,
+			Some(&room_id),
+			&state_lock,
+		)
+		.boxed()
+		.await?;
+
+	// 6. Initial state events provided by the homeserver
+
+	let mut server_initial_state: Vec<PartialPdu> = Vec::new();
+
+	if let Some(allow_list) = services.server.config.default_room_acl_allow.clone() {
+		server_initial_state.push(PartialPdu::state(
+			String::new(),
+			&RoomServerAclEventContent::new(true, allow_list, vec![]),
+		));
+	} else if let Some(deny_list) = services.server.config.default_room_acl_deny.clone() {
+		server_initial_state.push(PartialPdu::state(
+			String::new(),
+			&RoomServerAclEventContent::new(true, vec!["*".to_owned()], deny_list),
+		));
+	}
+
+	for pdu in server_initial_state {
+		services
+			.rooms
+			.timeline
+			.build_and_append_pdu(pdu, sender_user, Some(&room_id), &state_lock)
+			.boxed()
+			.await?;
+	}
+
+	// 7. Events listed in initial_state
+	for event in &body.initial_state {
+		let mut partial_pdu = event
+			.deserialize_as_unchecked::<PartialPdu>()
+			.map_err(|e| {
+				err!(Request(InvalidParam(warn!("Invalid initial state event: {e:?}"))))
+			})?;
+
+		debug_info!("Room creation initial state event: {event:?}");
+
+		// Implicit state key defaults to ""
+		partial_pdu.state_key.get_or_insert_with(StateKey::new);
+
+		// Silently skip encryption events if they are not allowed
+		if partial_pdu.event_type == TimelineEventType::RoomEncryption
+			&& !services.config.allow_encryption
+		{
+			continue;
+		}
+
+		services
+			.rooms
+			.timeline
+			.build_and_append_pdu(partial_pdu, sender_user, Some(&room_id), &state_lock)
+			.boxed()
+			.await?;
+	}
+
+	// 8. Events implied by name and topic
+	if let Some(name) = &body.name {
+		services
+			.rooms
+			.timeline
+			.build_and_append_pdu(
+				PartialPdu::state(String::new(), &RoomNameEventContent::new(name.clone())),
+				sender_user,
+				Some(&room_id),
+				&state_lock,
+			)
+			.boxed()
+			.await?;
+	}
+
+	if let Some(topic) = &body.topic {
+		services
+			.rooms
+			.timeline
+			.build_and_append_pdu(
+				PartialPdu::state(String::new(), &RoomTopicEventContent::new(topic.clone())),
+				sender_user,
+				Some(&room_id),
+				&state_lock,
+			)
+			.boxed()
+			.await?;
+	}
+
+	// 9. Events implied by invite (and TODO: invite_3pid)
+	drop(state_lock);
+	for recipient_user in &invitees {
+		if let Err(e) =
+			invite_helper(&services, sender_user, recipient_user, &room_id, None, body.is_direct)
+				.boxed()
+				.await
+		{
+			warn!(?e, "Failed to send invite");
+		}
+	}
+
+	// Homeserver specific stuff
+	if let Some(alias) = alias {
+		services
+			.rooms
+			.alias
+			.set_alias(&alias, &room_id, sender_user)?;
+	}
+
+	if body.visibility == room::Visibility::Public {
+		services.rooms.directory.set_public(&room_id);
+
+		if services.server.config.admin_room_notices {
+			services
+				.admin
+				.send_text(&format!("{sender_user} made {room_id} public to the room directory"))
+				.await;
+		}
+		info!("{sender_user} made {0} public to the room directory", &room_id);
+	}
+
+	info!("{sender_user} created a room with room ID {room_id}");
+
+	Ok(create_room::v3::Response::new(room_id))
+}
+
+/// creates the power_levels_content for the PDU builder
+fn default_power_levels_content(
+	power_level_content_override: Option<&Raw<RoomPowerLevelsEventContent>>,
+	visibility: &room::Visibility,
+	users: BTreeMap<OwnedUserId, Int>,
+	creators: Vec<OwnedUserId>,
+	authorization_rules: &AuthorizationRules,
+) -> Result<serde_json::Value> {
+	let mut power_levels_content =
+		serde_json::to_value(assign!(RoomPowerLevelsEventContent::new(authorization_rules), {
+			users
+		}))
+		.unwrap();
+
+	// secure proper defaults of sensitive/dangerous permissions that moderators
+	// (power level 50) should not have easy access to
+	power_levels_content["events"]["m.room.power_levels"] =
+		serde_json::to_value(100).expect("100 is valid Value");
+	power_levels_content["events"]["m.room.server_acl"] =
+		serde_json::to_value(100).expect("100 is valid Value");
+	power_levels_content["events"]["m.room.tombstone"] =
+		serde_json::to_value(100).expect("100 is valid Value");
+	power_levels_content["events"]["m.room.encryption"] =
+		serde_json::to_value(100).expect("100 is valid Value");
+	power_levels_content["events"]["m.room.history_visibility"] =
+		serde_json::to_value(100).expect("100 is valid Value");
+
+	// always allow users to respond (not post new) to polls. this is primarily
+	// useful in read-only announcement rooms that post a public poll.
+	power_levels_content["events"]["org.matrix.msc3381.poll.response"] =
+		serde_json::to_value(0).expect("0 is valid Value");
+	power_levels_content["events"]["m.poll.response"] =
+		serde_json::to_value(0).expect("0 is valid Value");
+
+	// synapse does this too. clients do not expose these permissions. it prevents
+	// default users from calling public rooms, for obvious reasons.
+	if *visibility == room::Visibility::Public {
+		power_levels_content["events"]["m.call.invite"] =
+			serde_json::to_value(50).expect("50 is valid Value");
+		power_levels_content["events"]["m.call"] =
+			serde_json::to_value(50).expect("50 is valid Value");
+		power_levels_content["events"]["m.call.member"] =
+			serde_json::to_value(50).expect("50 is valid Value");
+		power_levels_content["events"]["org.matrix.msc3401.call"] =
+			serde_json::to_value(50).expect("50 is valid Value");
+		power_levels_content["events"]["org.matrix.msc3401.call.member"] =
+			serde_json::to_value(50).expect("50 is valid Value");
+	}
+
+	if let Some(power_level_content_override) = power_level_content_override {
+		let json: JsonObject = serde_json::from_str(power_level_content_override.json().get())
+			.map_err(|e| err!(Request(BadJson("Invalid power_level_content_override: {e:?}"))))?;
+
+		for (key, value) in json {
+			power_levels_content[key] = value;
+		}
+	}
+
+	if !creators.is_empty() {
+		// Raise the default power level of tombstone to 150
+		power_levels_content["events"]["m.room.tombstone"] =
+			serde_json::to_value(150).expect("150 is valid Value");
+		for creator in creators {
+			// Omit creators from the power level list altogether
+			power_levels_content["users"]
+				.as_object_mut()
+				.expect("users is an object")
+				.remove(creator.as_str());
+		}
+	}
+
+	Ok(power_levels_content)
+}
+
+/// if a room is being created with a room alias, run our checks
+async fn room_alias_check(
+	services: &Services,
+	room_alias_name: &str,
+	appservice_info: Option<&RegistrationInfo>,
+) -> Result<OwnedRoomAliasId> {
+	// Basic checks on the room alias validity
+	if room_alias_name.contains(':') {
+		return Err!(Request(InvalidParam(
+			"Room alias contained `:` which is not allowed. Please note that this expects a \
+			 localpart, not the full room alias.",
+		)));
+	} else if room_alias_name.contains(char::is_whitespace) {
+		return Err!(Request(InvalidParam(
+			"Room alias contained spaces which is not a valid room alias.",
+		)));
+	}
+
+	// check if room alias is forbidden
+	if services
+		.globals
+		.forbidden_alias_names()
+		.is_match(room_alias_name)
+	{
+		return Err!(Request(Unknown("Room alias name is forbidden.")));
+	}
+
+	let server_name = services.globals.server_name();
+	let full_room_alias = RoomAliasId::parse(format!("#{room_alias_name}:{server_name}"))
+		.map_err(|e| {
+			err!(Request(InvalidParam(debug_error!(
+				?e,
+				%room_alias_name,
+				"Failed to parse room alias.",
+			))))
+		})?;
+
+	if services
+		.rooms
+		.alias
+		.resolve_local_alias(&full_room_alias)
+		.await
+		.is_ok()
+	{
+		return Err!(Request(RoomInUse("Room alias already exists.")));
+	}
+
+	if let Some(info) = appservice_info {
+		if !info.aliases.is_match(full_room_alias.as_str()) {
+			return Err!(Request(Exclusive("Room alias is not in namespace.")));
+		}
+	} else if services
+		.appservice
+		.is_exclusive_alias(&full_room_alias)
+		.await
+	{
+		return Err!(Request(Exclusive("Room alias reserved by appservice.",)));
+	}
+
+	debug_info!("Full room alias: {full_room_alias}");
+
+	Ok(full_room_alias)
+}

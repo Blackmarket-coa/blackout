@@ -1,0 +1,216 @@
+name: setup-rust
+description: |
+  Set up Rust toolchain with sccache for compilation caching.
+  Respects rust-toolchain.toml by default or accepts explicit version override.
+
+inputs:
+  cache-key-suffix:
+    description: 'Optional suffix for cache keys (e.g. platform identifier)'
+    required: false
+    default: ''
+  rust-components:
+    description: 'Additional Rust components to install (space-separated)'
+    required: false
+    default: ''
+  rust-target:
+    description: 'Rust target triple (e.g. x86_64-unknown-linux-gnu)'
+    required: false
+    default: ''
+  rust-version:
+    description: 'Rust version to install (e.g. nightly). Defaults to the version specified in rust-toolchain.toml'
+    required: false
+    default: ''
+  sccache-cache-limit:
+    description: 'Maximum size limit for sccache local cache (e.g. 2G, 500M)'
+    required: false
+    default: '2G'
+  github-token:
+    description: 'GitHub token for downloading sccache from GitHub releases'
+    required: false
+    default: ''
+
+outputs:
+  rust-version:
+    description: 'Installed Rust version'
+    value: ${{ steps.rust-setup.outputs.version }}
+
+runs:
+  using: composite
+  steps:
+    - name: Detect runner OS
+      id: runner-os
+      uses: https://git.tomfos.tr/actions/detect-versions@v1
+
+    - name: Configure Cargo environment
+      shell: bash
+      run: |
+        # Use workspace-relative paths for better control and consistency
+        echo "CARGO_HOME=${{ github.workspace }}/.cargo" >> $GITHUB_ENV
+        echo "CARGO_TARGET_DIR=${{ github.workspace }}/target" >> $GITHUB_ENV
+        echo "SCCACHE_DIR=${{ github.workspace }}/.sccache" >> $GITHUB_ENV
+        echo "RUSTUP_HOME=${{ github.workspace }}/.rustup" >> $GITHUB_ENV
+
+        # Limit binstall resolution timeout to avoid GitHub rate limit delays
+        echo "BINSTALL_MAXIMUM_RESOLUTION_TIMEOUT=10" >> $GITHUB_ENV
+
+        # Ensure directories exist for first run
+        mkdir -p "${{ github.workspace }}/.cargo"
+        mkdir -p "${{ github.workspace }}/.sccache"
+        mkdir -p "${{ github.workspace }}/target"
+        mkdir -p "${{ github.workspace }}/.rustup"
+
+    - name: Start registry/toolchain restore group
+      shell: bash
+      run: echo "::group::📦 Restoring registry and toolchain caches"
+
+    - name: Cache toolchain binaries
+      id: toolchain-cache
+      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+      with:
+        path: |
+          .cargo/bin
+          .rustup/toolchains
+          .rustup/update-hashes
+        # Shared toolchain cache across all Rust versions
+        key: continuwuity-toolchain-${{ steps.runner-os.outputs.slug }}-${{ steps.runner-os.outputs.arch }}
+
+    - name: Cache Cargo registry and git
+      id: registry-cache
+      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+      with:
+        path: |
+          .cargo/registry/index
+          .cargo/registry/cache
+          .cargo/git/db
+        # Registry cache saved per workflow, restored from any workflow's cache
+        # Each workflow maintains its own registry that accumulates its needed crates
+        key: continuwuity-cargo-registry-${{ steps.runner-os.outputs.slug }}-${{ steps.runner-os.outputs.arch }}-${{ github.workflow }}
+        restore-keys: |
+          continuwuity-cargo-registry-${{ steps.runner-os.outputs.slug }}-${{ steps.runner-os.outputs.arch }}-
+
+    - name: End registry/toolchain restore group
+      shell: bash
+      run: echo "::endgroup::"
+
+    - name: Setup Rust toolchain
+      shell: bash
+      id: rust-setup
+      run: |
+        # Install rustup if not already cached
+        if ! command -v rustup &> /dev/null; then
+          echo "::group::📦 Installing rustup"
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path --default-toolchain none
+          source "$CARGO_HOME/env"
+          echo "::endgroup::"
+        else
+          echo "✅ rustup already available"
+        fi
+
+        # Setup the appropriate Rust version
+        if [[ -n "${{ inputs.rust-version }}" ]]; then
+          echo "::group::📦 Setting up Rust ${{ inputs.rust-version }}"
+          # Set override first to prevent rust-toolchain.toml from auto-installing
+          rustup override set ${{ inputs.rust-version }} 2>/dev/null || true
+
+          # Check if we need to install/update the toolchain
+          if rustup toolchain list | grep -q "^${{ inputs.rust-version }}-"; then
+            rustup update ${{ inputs.rust-version }}
+          else
+            rustup toolchain install ${{ inputs.rust-version }} --profile minimal -c cargo,clippy,rustfmt
+          fi
+        else
+          echo "::group::📦 Setting up Rust from rust-toolchain.toml"
+          rustup show
+        fi
+
+        RUST_VERSION=$(rustc --version | cut -d' ' -f2)
+        echo "version=$RUST_VERSION" >> $GITHUB_OUTPUT
+
+        echo "::endgroup::"
+
+    - name: Install Rust components
+      if: inputs.rust-components != ''
+      shell: bash
+      run: |
+        echo "📦 Installing components: ${{ inputs.rust-components }}"
+        rustup component add ${{ inputs.rust-components }}
+
+    - name: Install Rust target
+      if: inputs.rust-target != ''
+      shell: bash
+      run: |
+        echo "📦 Installing target: ${{ inputs.rust-target }}"
+        rustup target add ${{ inputs.rust-target }}
+
+    - name: Start build cache restore group
+      shell: bash
+      run: echo "::group::📦 Restoring build cache"
+
+    - name: Setup sccache
+      uses: https://git.tomfos.tr/tom/sccache-action@v1
+
+    - name: End build cache restore group
+      shell: bash
+      run: echo "::endgroup::"
+
+    - name: Configure PATH and install tools
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+      run: |
+        # Add .cargo/bin to PATH permanently for all subsequent steps
+        echo "${{ github.workspace }}/.cargo/bin" >> $GITHUB_PATH
+
+        # For this step only, we need to add it to PATH since GITHUB_PATH takes effect in the next step
+        export PATH="${{ github.workspace }}/.cargo/bin:$PATH"
+
+        # Install cargo-binstall for fast binary installations
+        if command -v cargo-binstall &> /dev/null; then
+          echo "✅ cargo-binstall already available"
+        else
+          echo "::group::📦 Installing cargo-binstall"
+          curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
+          echo "::endgroup::"
+        fi
+
+        if command -v prek &> /dev/null; then
+          echo "✅ prek already available"
+        else
+          echo "::group::📦 Installing prek"
+          # prek isn't regularly published to crates.io, so we use git source
+          cargo-binstall -y --no-symlinks --git https://github.com/j178/prek prek
+          echo "::endgroup::"
+        fi
+
+        if command -v timelord &> /dev/null; then
+          echo "✅ timelord already available"
+        else
+          echo "::group::📦 Installing timelord"
+          cargo-binstall -y --no-symlinks timelord-cli
+          echo "::endgroup::"
+        fi
+
+    - name: Configure sccache environment
+      shell: bash
+      run: |
+        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+        echo "CMAKE_C_COMPILER_LAUNCHER=sccache" >> $GITHUB_ENV
+        echo "CMAKE_CXX_COMPILER_LAUNCHER=sccache" >> $GITHUB_ENV
+        echo "CMAKE_CUDA_COMPILER_LAUNCHER=sccache" >> $GITHUB_ENV
+        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+
+        # Configure incremental compilation GC
+        # If we restored from old cache (partial hit), clean up aggressively
+        if [[ "${{ steps.build-cache.outputs.cache-hit }}" != "true" ]]; then
+          echo "♻️ Partial cache hit - enabling cache cleanup"
+          echo "CARGO_INCREMENTAL_GC_THRESHOLD=5" >> $GITHUB_ENV
+        fi
+
+    - name: Output version and summary
+      shell: bash
+      run: |
+        echo "📋 Setup complete:"
+        echo "  Rust: $(rustc --version)"
+        echo "  Cargo: $(cargo --version)"
+        echo "  prek: $(prek --version 2>/dev/null || echo 'installed')"
+        echo "  timelord: $(timelord --version 2>/dev/null || echo 'installed')"

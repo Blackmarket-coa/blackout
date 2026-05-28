@@ -1,0 +1,42 @@
+[
+    {
+        "text": "Guide",
+        "link": "/introduction",
+        "activeMatch": "^/(introduction|configuration|deploying|calls|appservices|maintenance|troubleshooting|advanced)"
+    },
+    {
+        "text": "Development",
+        "link": "/development/index",
+        "activeMatch": "^/development/"
+    },
+    {
+        "text": "Reference",
+        "items": [
+            {
+                "text": "Configuration Reference",
+                "link": "/reference/config"
+            },
+            {
+                "text": "Admin Command Reference",
+                "link": "/reference/admin/"
+            }
+        ]
+    },
+    {
+        "text": "Community",
+        "items": [
+            {
+                "text": "Community Guidelines",
+                "link": "/community/guidelines"
+            },
+            {
+                "text": "Become a Partnered Homeserver!",
+                "link": "/community/ops-guidelines"
+            }
+        ]
+    },
+    {
+        "text": "Security",
+        "link": "/security"
+    }
+]

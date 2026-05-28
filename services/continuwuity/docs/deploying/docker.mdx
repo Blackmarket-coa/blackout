@@ -1,0 +1,275 @@
+# Continuwuity for Docker
+
+## Preparation
+
+### Choose an image
+
+The following OCI images are available for Continuwuity:
+
+| Image                                                                                        | Notes                                                                                                     |
+| ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| [https://forgejo.ellis.link/continuwuation/continuwuity:**latest**][latest]                 | Latest tagged release. (recommended)                                                                      |
+| [https://forgejo.ellis.link/continuwuation/continuwuity:**main**][main]                     | Latest `main` branch commit.                                                                              |
+| [https://forgejo.ellis.link/continuwuation/continuwuity:**latest-maxperf**][latest-maxperf] | Latest tagged release, [performance optimised version](./generic.mdx#performance-optimised-builds).       |
+| [https://forgejo.ellis.link/continuwuation/continuwuity:**main-maxperf**][main-maxperf]     | Latest `main` branch commit, [performance optimised version](./generic.mdx#performance-optimised-builds). |
+
+[latest]: https://forgejo.ellis.link/continuwuation/-/packages/container/continuwuity/latest
+[main]: https://forgejo.ellis.link/continuwuation/-/packages/container/continuwuity/main
+[latest-maxperf]: https://forgejo.ellis.link/continuwuation/-/packages/container/continuwuity/latest-maxperf
+[main-maxperf]: https://forgejo.ellis.link/continuwuation/-/packages/container/continuwuity/main-maxperf
+
+If you want a specific version or commit hash, you can browse for them [here][oci-all-versions].
+
+Images are also mirrored to these locations automatically, on a schedule:
+
+- `ghcr.io/continuwuity/continuwuity` ([Github Registry][ghcr-io])
+- `docker.io/jadedblueeyes/continuwuity` ([Docker Hub][docker-hub])
+- `registry.gitlab.com/continuwuity/continuwuity` ([Gitlab Registry][gitlab-registry])
+- `git.nexy7574.co.uk/mirrored/continuwuity` ([Nexy's forge][nexy-forge]. Releases only, no `main` tags)
+
+[oci-all-versions]: https://forgejo.ellis.link/continuwuation/-/packages/container/continuwuity/versions
+[ghcr-io]: https://github.com/continuwuity/continuwuity/pkgs/container/continuwuity/versions?filters%5Bversion_type%5D=tagged
+[docker-hub]: https://hub.docker.com/r/jadedblueeyes/continuwuity/
+[gitlab-registry]: https://gitlab.com/continuwuity/continuwuity/container_registry/8871720
+[nexy-forge]: https://git.nexy7574.co.uk/mirrored/-/packages/container/continuwuity/versions
+
+### Prerequisites
+
+Continuwuity requires HTTPS for Matrix federation. You'll need:
+
+- A domain name pointing to your server's IP address - we will be using `example.com` in this guide.
+- A reverse proxy with SSL/TLS certificates (Traefik, Caddy, nginx, etc.) - see [Docker Compose](#docker-compose) for complete examples.
+- Port `:443` (for Client-Server traffic) and `:8448` (for federation traffic) opened on your server's firewall.
+
+    - Alternatively, if you want both client and federation traffic on `:443`, you can configure `CONTINUWUITY_WELL_KNOWN` following some of the [examples](#choose-your-reverse-proxy) below.
+
+:::tip Split-domain setups
+For more setups with `.well-known` delegation and split-domain deployments, consult the [Delegation/Split-domain](../advanced/delegation) page.
+:::
+
+## Docker Compose
+
+Docker Compose is the recommended deployment method for Continuwuity containers. The following environment variables will be set:
+
+- `CONTINUWUITY_SERVER_NAME` - Your Matrix server's domain name. **This CANNOT be changed later without a data wipe.**
+- `CONTINUWUITY_DATABASE_PATH` - Where to store your database. This must match the docker volume mount.
+- `CONTINUWUITY_ADDRESS` - Bind address (for Docker, use `0.0.0.0` to listen on all interfaces).
+
+Alternatively, you can specify a path to mount the configuration file using the `CONTINUWUITY_CONFIG` environment variable.
+
+See the [reference configuration](../reference/config) page for all config options, and the [Configuration page](../configuration#environment-variables) on how to convert them into Environment Variables.
+
+### Choose Your Reverse Proxy
+
+These examples include reverse proxy configurations for Matrix federation, which will route your Matrix domain (and optionally .well-known paths) to Continuwuity.
+
+:::note Docker DNS Performance
+Docker's default DNS resolver are known to [cause timeout issues](../troubleshooting#dns-issues) for Matrix federation. To bypass it and use a more performant resolver, mount a custom `/etc/resolv.conf` config file into the Continuwuity container.
+
+```yaml title='docker-compose.yml'
+services:
+  homeserver:
+    # ...
+    volumes:
+      - ./continuwuity-resolv.conf:/etc/resolv.conf
+```
+
+```txt title='continuwuity-resolv.conf'
+nameserver 1.0.0.1
+nameserver 1.1.1.1
+```
+
+Consult the [**DNS tuning guide (recommended)**](../advanced/dns.mdx) for full solutions to this issue.
+:::
+
+#### Caddy (using Caddyfile)
+
+<details>
+<summary>docker-compose.with-caddy.yml ([view raw](/deploying/docker-compose.with-caddy.yml))</summary>
+
+```yaml file="../public/deploying/docker-compose.with-caddy.yml"
+
+```
+
+</details>
+
+#### Caddy (using labels)
+
+<details>
+<summary>docker-compose.with-caddy-labels.yml ([view raw](/deploying/docker-compose.with-caddy-labels.yml))</summary>
+
+```yaml file="../public/deploying/docker-compose.with-caddy-labels.yml"
+
+```
+
+</details>
+
+#### Traefik (for existing setup)
+
+<details>
+<summary>docker-compose.for-traefik.yml ([view raw](/deploying/docker-compose.for-traefik.yml))</summary>
+
+```yaml file="../public/deploying/docker-compose.for-traefik.yml"
+
+```
+
+</details>
+
+#### Traefik included
+
+<details>
+<summary>docker-compose.with-traefik.yml ([view raw](/deploying/docker-compose.with-traefik.yml))</summary>
+
+```yaml file="../public/deploying/docker-compose.with-traefik.yml"
+
+```
+
+</details>
+
+#### Traefik (as override file)
+
+<details>
+<summary>docker-compose.override.yml ([view raw](/deploying/docker-compose.override.yml))</summary>
+
+```yaml file="../public/deploying/docker-compose.override.yml"
+
+```
+
+</details>
+
+#### For other reverse proxies
+
+<details>
+<summary>docker-compose.yml ([view raw](/deploying/docker-compose.yml))</summary>
+
+```yaml file="../public/deploying/docker-compose.yml"
+
+```
+
+</details>
+
+See the [Other reverse proxies](generic.mdx#setting-up-the-reverse-proxy) section of the Generic page for further routing details.
+
+### Starting Your Server
+
+1. Choose your compose file from the above, and rename it to `docker-compose.yml`. Replace `example.com` with your homeserver's domain name, and edit other values as you see fit.
+2. If using the override file, rename it to `docker-compose.override.yml` and
+   edit your values.
+3. Start the server:
+
+    ```bash
+    docker compose up -d
+    ```
+
+4. Check your server logs for a registration token:
+
+    ```bash
+    docker-compose logs continuwuity 2>&1
+    ```
+
+    You'll see output as below.
+
+    ```
+    In order to use your new homeserver, you need to create its
+    first user account.
+    Open your Matrix client of choice and register an account
+    on example.com using registration token x5keUZ811RqvLsNa .
+    Pick your own username and password!
+    ```
+
+5. Log in to your server with any Matrix client, and register for an account with the registration token from step 4. You'll automatically be invited to the admin room where you can [manage your server](../reference/admin).
+
+See the [generic deployment guide](generic.mdx) for more deployment options.
+
+## Testing
+
+Test that your setup works by following these [instructions](./generic.mdx#how-do-i-know-it-works)
+
+Check your container logs using `docker-compose logs --follow` to debug any issues. See the [Troubleshooting](../troubleshooting.mdx) page for common errors and how to fix them.
+
+## Other deployment methods
+
+### Docker - Quick Run
+
+:::warning For testing only
+The instructions below are only meant for a quick demo of Continuwuity with **federation disabled**.
+For production deployment, we recommend using [Docker Compose](#docker-compose).
+:::
+
+Get a working Continuwuity server with an admin user in four steps:
+
+1. Pull the image
+
+    ```bash
+    docker pull forgejo.ellis.link/continuwuation/continuwuity:latest
+    ```
+
+2. Start the server for the first time. Replace `example.com` with your actual server name.
+
+    ```bash
+    docker run -d \
+      -p 8008:8008 \
+      -v continuwuity_db:/var/lib/continuwuity \
+      -e CONTINUWUITY_SERVER_NAME="example.com" \
+      -e CONTINUWUITY_DATABASE_PATH="/var/lib/continuwuity" \
+      -e CONTINUWUITY_ADDRESS="0.0.0.0" \
+      -e CONTINUWUITY_ALLOW_FEDERATION="false" \
+      --name continuwuity \
+      forgejo.ellis.link/continuwuation/continuwuity:latest \
+      /sbin/conduwuit
+    ```
+
+3. Fetch the one-time initial registration token
+
+    ```bash
+    docker logs continuwuity 2>&1
+    ```
+
+    You'll see output as below.
+
+    ```
+    In order to use your new homeserver, you need to create its
+    first user account.
+    Open your Matrix client of choice and register an account
+    on example.com using registration token x5keUZ811RqvLsNa .
+    Pick your own username and password!
+    ```
+
+4. Configure your reverse proxy to forward HTTPS traffic to Continuwuity at port 8008. See [Docker Compose](#docker-compose) or the [Generic instructions](./generic.mdx#setting-up-the-reverse-proxy) for examples.
+
+Once configured, log in to your server with any Matrix client, and register for an account with the registration token from step 3. If you did not configure step 4., log in via the `http://<your_server_ip>:8008` address. You will be automatically invited to the admin room where you can [manage your server](../reference/admin).
+
+### (Optional) Building Custom Images
+
+For information on building your own Continuwuity Docker images, see the
+[Building Docker Images](../development/index.mdx#building-docker-images)
+section in the development documentation.
+
+### Accessing the Server's Console
+
+Before you can access the server's console and [send admin commands](../reference/admin/index.md) from the CLI, you will need to make the container interactive and allocate a pseudo-tty. Make sure you set `admin_console_automatic` to `true` in [the config](../reference/config.mdx) as well for Continuwuity to activate the CLI on startup.
+
+For Docker Compose deployments this means adding `stdin_open: true` and `tty: true` to the container's declaration:
+
+```yaml
+services:
+    homeserver:
+        stdin_open: true
+        tty: true
+        # ...
+```
+
+If you choose to deploy via `docker run`, add the flags `-i`/`--interactive` and `-t`/`--tty` to the command.
+
+From there you can access the server's console by running `docker attach <container-name>`, which will show the server's prompt `uwu> `. To exit `docker attach`, press `CTRL+p` then `CTRL+q`.
+
+Note that using `CTRL+c` within `docker attach`'s context will forward the signal to the server, stopping it. See [Docker's reference][docker-attach-reference] for more information.
+
+[docker-attach-reference]: https://docs.docker.com/reference/cli/docker/container/attach/
+
+## Next steps
+
+- For smooth federation, set up a caching resolver according to the [**DNS tuning guide**](../advanced/dns.mdx) (recommended)
+- To set up Audio/Video communication, see the [**Calls**](../calls.mdx) page.
+- Consult the [Maintenance](../maintenance.mdx) page for guidance on maintaining your homeserver.
+- If you want to set up an appservice, take a look at the [**Appservice Guide**](../appservices.mdx).

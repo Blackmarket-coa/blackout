@@ -1,0 +1,69 @@
+name: Mirror Container Images
+
+on:
+  schedule:
+    # Run nightly
+    - cron: "25 2 * * *"
+
+  workflow_call:
+
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (check only, no actual mirroring)'
+        required: false
+        default: false
+        type: boolean
+  push:
+    branches:
+      - main
+    paths:
+      # Re-run when config changes
+      - '.forgejo/regsync/regsync.yml'
+      - '.forgejo/workflows/mirror-images.yml'
+concurrency:
+  group: "mirror-images"
+  cancel-in-progress: true
+
+jobs:
+  mirror-images:
+    runs-on: ubuntu-latest
+    env:
+      BUILTIN_REGISTRY_USER: ${{ vars.BUILTIN_REGISTRY_USER }}
+      BUILTIN_REGISTRY_PASSWORD: ${{ secrets.BUILTIN_REGISTRY_PASSWORD }}
+      GITLAB_USERNAME: ${{ vars.GITLAB_USERNAME }}
+      GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+      N7574_GIT_USERNAME: ${{ vars.N7574_GIT_USERNAME }}
+      N7574_GIT_TOKEN: ${{ secrets.N7574_GIT_TOKEN }}
+      GH_PACKAGES_USER: ${{ vars.GH_PACKAGES_USER }}
+      GH_PACKAGES_TOKEN: ${{ secrets.GH_PACKAGES_TOKEN }}
+      DOCKER_MIRROR_USER: ${{ vars.DOCKER_MIRROR_USER }}
+      DOCKER_MIRROR_TOKEN: ${{ secrets.DOCKER_MIRROR_TOKEN }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+
+      # - uses: https://github.com/actions/create-github-app-token@v2
+      #   id: app-token
+      #   with:
+      #     app-id: ${{ vars.GH_APP_ID }}
+      #     private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+      #     github-api-url: https://api.github.com
+      #     owner: continuwuity
+      #     repositories: continuwuity
+
+      - name: Install regsync
+        uses: https://github.com/regclient/actions/regsync-installer@c70ad64367908075211b10dcd2ab9fad4bfa1816 # main
+
+      - name: Check what images need mirroring
+        run: |
+          echo "Checking images that need mirroring..."
+          regsync check -c .forgejo/regsync/regsync.yml -v info
+
+      - name: Mirror images
+        if: ${{ !inputs.dry_run }}
+        run: |
+          echo "Starting image mirroring..."
+          regsync once -c .forgejo/regsync/regsync.yml -v info

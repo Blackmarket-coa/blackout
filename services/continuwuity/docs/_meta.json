@@ -1,0 +1,80 @@
+[
+    {
+        "type": "file",
+        "name": "introduction",
+        "label": "Continuwuity"
+    },
+    {
+        "type": "file",
+        "name": "configuration",
+        "label": "Configuration"
+    },
+    {
+        "type": "dir",
+        "name": "deploying",
+        "label": "Deploying"
+    },
+    {
+        "type": "dir",
+        "name": "calls",
+        "label": "Calls"
+    },
+    {
+        "type": "file",
+        "name": "appservices",
+        "label": "Appservices"
+    },
+    {
+        "type": "file",
+        "name": "maintenance",
+        "label": "Maintenance"
+    },
+    {
+        "type": "file",
+        "name": "troubleshooting",
+        "label": "Troubleshooting"
+    },
+    {
+        "type": "dir",
+        "name": "advanced",
+        "label": "Advanced"
+    },
+    "security",
+    {
+        "type": "dir-section-header",
+        "name": "community",
+        "label": "Community",
+        "collapsible": true,
+        "collapsed": false
+    },
+    {
+        "type": "divider"
+    },
+    {
+        "type": "dir-section-header",
+        "name": "development",
+        "label": "Development",
+        "collapsible": true,
+        "collapsed": false
+    },
+    {
+        "type": "divider"
+    },
+    {
+        "type": "section-header",
+        "label": "Reference"
+    },
+    {
+        "type": "file",
+        "label": "Configuration Reference",
+        "name": "/reference/config"
+    },
+    {
+        "type": "dir",
+        "label": "Admin Command Reference",
+        "name": "/reference/admin/"
+    },
+    {
+        "type": "divider"
+    }
+]

@@ -1,0 +1,73 @@
+name: Update flake hashes
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - "rust-toolchain.toml"
+      - "nix/**/*"
+      - ".forgejo/workflows/update-flake-hashes.yml"
+
+jobs:
+  update-flake-hashes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: true
+          token: ${{ secrets.FORGEJO_TOKEN }}
+
+      - name: Install Lix
+        uses: https://github.com/samueldr/lix-gha-installer-action@f5e94192f565f53d84f41a056956dc0d3183b343
+        with:
+          extra_nix_config: experimental-features = nix-command flakes flake-self-attrs
+
+      - name: Get new toolchain hash
+        run: |
+          # Set the current sha256 to an empty hash to make `nix build` calculate a new one
+          awk '/fromToolchainFile *\{/{found=1; print; next} found && /sha256 =/{sub(/sha256 = .*/, "sha256 = lib.fakeSha256;"); found=0} 1' nix/rust.nix > temp.nix
+          mv temp.nix nix/rust.nix
+
+          # Build continuwuity and filter for the new hash
+          # We do `|| true` because we want this to fail without stopping the workflow
+          nix build .#default 2>&1 | tee >(grep 'got:' | awk '{print $2}' > new_toolchain_hash.txt) || true
+
+          # Place the new hash in place of the empty hash
+          new_hash=$(cat new_toolchain_hash.txt)
+          sed -i "s|lib.fakeSha256|\"$new_hash\"|" nix/rust.nix
+
+          echo "New hash:"
+          awk -F'"' '/fromToolchainFile/{found=1; next} found && /sha256 =/{print $2; found=0}' nix/rust.nix
+          echo "Expected new hash:"
+          cat new_toolchain_hash.txt
+
+          rm new_toolchain_hash.txt
+
+      - name: Update rocksdb
+        run: nix run .#update-rocksdb
+
+      - name: Show diff
+        run: git diff flake.nix nix
+
+      - name: Push changes
+        run: |
+          set -euo pipefail
+
+          if git diff --quiet --exit-code; then
+            echo "No changes to commit."
+            exit 0
+          fi
+
+          git config user.email "renovate@mail.ellis.link"
+          git config user.name "renovate"
+
+          REF="${{ github.head_ref }}"
+
+          git fetch origin "$REF"
+          git checkout "$REF"
+
+          git commit -a -m "chore(Nix): Updated flake hashes"
+
+          git push origin HEAD:refs/heads/"$REF"

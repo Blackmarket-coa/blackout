@@ -1,0 +1,58 @@
+#![type_length_limit = "8192"]
+#![allow(refining_impl_trait)]
+
+extern crate conduwuit_core as conduwuit;
+extern crate conduwuit_database as database;
+
+conduwuit_macros::introspect_crate! {}
+
+mod manager;
+mod migrations;
+mod service;
+pub mod services;
+pub mod state;
+
+pub mod account_data;
+pub mod admin;
+pub mod announcements;
+pub mod antispam;
+pub mod appservice;
+pub mod client;
+pub mod config;
+pub mod emergency;
+pub mod federation;
+pub mod firstrun;
+pub mod globals;
+pub mod key_backups;
+pub mod login_security;
+pub mod mailer;
+pub mod media;
+pub mod moderation;
+pub mod password_reset;
+pub mod presence;
+pub mod pusher;
+pub mod registration_tokens;
+pub mod resolver;
+pub mod rooms;
+pub mod sending;
+pub mod server_keys;
+pub mod sync;
+pub mod threepid;
+pub mod transactions;
+pub mod uiaa;
+pub mod users;
+
+pub(crate) use service::{Args, Dep, Service};
+
+pub use crate::services::Services;
+
+conduwuit::mod_ctor! {}
+conduwuit::mod_dtor! {}
+
+use std::sync::LazyLock;
+
+use conduwuit::matrix::versions::{unstable_features, versions};
+use ruma::api::SupportedVersions;
+
+pub static SUPPORTED_VERSIONS: LazyLock<SupportedVersions> =
+	LazyLock::new(|| SupportedVersions::from_parts(&versions(), &unstable_features()));

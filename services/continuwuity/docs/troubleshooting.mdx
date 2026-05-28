@@ -1,0 +1,198 @@
+# Troubleshooting Continuwuity
+
+:::warning{title="Docker users:"}
+Docker can be difficult to use and debug. It's common for Docker
+misconfigurations to cause issues, particularly with networking and permissions.
+Please check that your issues are not due to problems with your Docker setup.
+:::
+
+## Continuwuity issues
+
+### Slow joins to rooms
+
+Some slowness is to be expected if you're the first person on your homserver to join a room (which will
+always be the case for single-user homeservers). In this situation, your homeserver has to verify the signatures of
+all of the state events sent by other servers before your join. To make this process as fast as possible, make sure you have
+multiple fast, trusted servers listed in `trusted_servers` in your configuration, and ensure
+`query_trusted_key_servers_first_on_join` is set to true (the default).
+If you need suggestions for trusted servers, ask in the Continuwuity main room.
+
+However, _very_ slow joins, especially to rooms with only a few users in them or rooms created by another user
+on your homeserver, may be caused by [issue !779](https://forgejo.ellis.link/continuwuation/continuwuity/issues/779),
+which is a longstanding bug with synchronizing room joins to clients. In this situation, you did succeed in joining the room, but
+the bug caused your homeserver to forget to tell your client. **To fix this, clear your client's cache.** Both Element and Cinny
+have a button to clear their cache in the "About" section of their settings.
+
+### Configuration not working as expected
+
+Sometimes you can make a mistake in your configuration that
+means things don't get passed to Continuwuity correctly.
+This is particularly easy to do with environment variables.
+To check what configuration Continuwuity actually sees, you can
+use the `!admin server show-config` command in your admin room.
+Beware that this prints out any secrets in your configuration,
+so you might want to delete the result afterwards!
+
+### Lost access to admin room
+
+You can reinvite yourself to the admin room through the following methods:
+
+- Use the `--execute "users make_user_admin <username>"` Continuwuity binary
+argument once to invite yourslf to the admin room on startup
+- Use the Continuwuity console/CLI to run the `users make_user_admin` command
+- Or specify the `emergency_password` config option to allow you to temporarily
+log into the server account (`@conduit`) from a web client
+
+## DNS issues
+
+### DNS server overload
+
+If your server experience any of the following symptoms:
+
+- Spurious server log entries with "DNS No connections available", "mismatching responding nameservers", or "error sending request"
+- Excessively long room joins (30+ minutes) as seen from server logs
+- Partial or non-functional outbound federation
+
+This is likely due to your DNS server being overloaded. Most likely, these problems are encountered in the following scenarios:
+
+- Homeservers hosted on a machine that uses `systemd-resolved`.
+- Docker deployments which use the bridge network's forwarding resolver.
+
+Matrix federation is extremely heavy and sends wild amounts of DNS requests. This makes normal resolvers like the ones above unsuitable for its activity. Ultimately, the best solution/fix for this is to selfhost a high quality caching DNS resolver such as Unbound, and configure Continuwuity to use it.
+
+Follow the [**DNS tuning guide**](./advanced/dns) for details on setting it up.
+
+### Intermittent federation failures to a specific server
+
+There may be circumstances where servers fail to connect to each other, probably due to a bad DNS cache. In such cases, issuing `!admin debug ping <SERVER_NAME>` would return some errors.
+
+To fix this, you can run `!admin query resolver flush-cache <SERVER_NAME>` to clear the bad cache for that domain, and outbound requests should work again.
+
+You may also use `!admin server clear-caches` or `!admin query resolver flush-cache -a` to clear all server/resolver caches, in case of failures with many domains. However, note that this significantly increases your server load for a short period.
+
+## RocksDB / database issues
+
+### Database corruption
+
+If your database is corrupted *and* is failing to start (e.g. checksum
+mismatch), it may be recoverable but careful steps must be taken, and there is
+no guarantee it may be recoverable.
+
+The first thing that can be done is launching Continuwuity with the
+`rocksdb_repair` config option set to true. This will tell RocksDB to attempt to
+repair itself at launch. If this does not work, disable the option and continue
+reading.
+
+RocksDB has the following recovery modes:
+
+- `TolerateCorruptedTailRecords`
+- `AbsoluteConsistency`
+- `PointInTime`
+- `SkipAnyCorruptedRecord`
+
+By default, Continuwuity uses `TolerateCorruptedTailRecords` as generally these may
+be due to bad federation and we can re-fetch the correct data over federation.
+The RocksDB default is `PointInTime` which will attempt to restore a "snapshot"
+of the data when it was last known to be good. This data can be either a few
+seconds old, or multiple minutes prior. `PointInTime` may not be suitable for
+default usage due to clients and servers possibly not being able to handle
+sudden "backwards time travels", and `AbsoluteConsistency` may be too strict.
+
+`AbsoluteConsistency` will fail to start the database if any sign of corruption
+is detected. `SkipAnyCorruptedRecord` will skip all forms of corruption unless
+it forbids the database from opening (e.g. too severe). Usage of
+`SkipAnyCorruptedRecord` voids any support as this may cause more damage and/or
+leave your database in a permanently inconsistent state, but it may do something
+if `PointInTime` does not work as a last ditch effort.
+
+With this in mind:
+
+- First start Continuwuity with the `PointInTime` recovery method. See the [example
+config](./reference/config.mdx) for how to do this using
+`rocksdb_recovery_mode`
+- If your database successfully opens, clients are recommended to clear their
+client cache to account for the rollback
+- Leave your Continuwuity running in `PointInTime` for at least 30-60 minutes so as
+much possible corruption is restored
+- If all goes will, you should be able to restore back to using
+`TolerateCorruptedTailRecords` and you have successfully recovered your database
+
+## Debugging
+
+Note that users should not really need to debug things. If you find yourself
+debugging and find the issue, please let us know and/or how we can fix it.
+Various debug commands can be found in `!admin debug`.
+
+### Debug/Trace log level
+
+Continuwuity builds without debug or trace log levels at compile time by default
+for substantial performance gains in CPU usage and improved compile times. If
+you need to access debug/trace log levels, you will need to build without the
+`release_max_log_level` feature or use our provided static debug binaries.
+
+### Changing log level dynamically
+
+Continuwuity supports changing the tracing log environment filter on-the-fly using
+the admin command `!admin debug change-log-level <log env filter>`. This accepts
+a string **without quotes** the same format as the `log` config option.
+
+Example: `!admin debug change-log-level debug`
+
+This can also accept complex filters such as:
+`!admin debug change-log-level info,conduit_service[{dest="example.com"}]=trace,ruma_state_res=trace`
+`!admin debug change-log-level info,conduit_service[{dest="example.com"}]=trace,conduit_service[send{dest="example.org"}]=trace`
+
+And to reset the log level to the one that was set at startup / last config
+load, simply pass the `--reset` flag.
+
+`!admin debug change-log-level --reset`
+
+### Pinging servers
+
+Continuwuity can ping other servers using `!admin debug ping <server>`. This takes
+a server name and goes through the server discovery process and queries
+`/_matrix/federation/v1/version`. Errors are outputted.
+
+While it does measure the latency of the request, it is not indicative of
+server performance on either side as that endpoint is completely unauthenticated
+and simply fetches a string on a static JSON endpoint. It is very low cost both
+bandwidth and computationally.
+
+### Enabling backtraces for errors
+
+Continuwuity can capture backtraces (stack traces) for errors to help diagnose
+issues. Backtraces show the exact sequence of function calls that led to an
+error, which is invaluable for debugging.
+
+To enable backtraces, set the `RUST_BACKTRACE` environment variable before starting Continuwuity:
+
+```bash
+# For both panics and errors
+RUST_BACKTRACE=1 ./conduwuit
+
+```
+
+For systemd deployments, add this to your service file:
+
+```ini
+[Service]
+Environment="RUST_BACKTRACE=1"
+```
+
+Backtrace capture has a performance cost. Avoid leaving it on.
+You can also enable it only for panics by setting
+`RUST_BACKTRACE=1` and `RUST_LIB_BACKTRACE=0`.
+
+### Allocator memory stats
+
+When using jemalloc with jemallocator's `stats` feature (`--enable-stats`), you
+can see Continuwuity's high-level allocator stats by using
+`!admin server memory-usage` at the bottom.
+
+If you are a developer, you can also view the raw jemalloc statistics with
+`!admin debug memory-stats`. Please note that this output is extremely large
+which may only be visible in the Continuwuity console CLI due to PDU size limits,
+and is not easy for non-developers to understand.
+
+[unbound-tuning]: https://unbound.docs.nlnetlabs.nl/en/latest/topics/core/performance.html
+[unbound-arch]: https://wiki.archlinux.org/title/Unbound

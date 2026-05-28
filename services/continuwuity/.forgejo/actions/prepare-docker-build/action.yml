@@ -1,0 +1,113 @@
+name: prepare-docker-build
+description: |
+  Prepare the Docker build environment for Continuwuity builds.
+  Sets up Rust toolchain, Docker Buildx, caching, and extracts metadata for Docker builds.
+
+inputs:
+  platform:
+    description: Target platform (e.g. linux/amd64, linux/arm64)
+    required: true
+  slug:
+    description: Platform slug for artifact naming (e.g. linux-amd64, linux-arm64)
+    required: true
+  target_cpu:
+    description: Target CPU architecture (e.g. haswell, empty for base)
+    required: false
+    default: ""
+  profile:
+    description: Cargo build profile (release or release-max-perf)
+    required: true
+  images:
+    description: Container registry images (newline-separated)
+    required: true
+  registry_user:
+    description: Registry username for authentication
+    required: false
+  registry_password:
+    description: Registry password for authentication
+    required: false
+
+outputs:
+  cpu_suffix:
+    description: CPU suffix for artifact naming
+    value: ${{ steps.cpu-suffix.outputs.suffix }}
+  metadata_labels:
+    description: Docker labels for the image
+    value: ${{ steps.meta.outputs.labels }}
+  metadata_annotations:
+    description: Docker annotations for the image
+    value: ${{ steps.meta.outputs.annotations }}
+
+runs:
+  using: composite
+  steps:
+    - name: Set CPU suffix variable
+      id: cpu-suffix
+      shell: bash
+      run: |
+        if [[ -n "${{ inputs.target_cpu }}" ]]; then
+          echo "suffix=-${{ inputs.target_cpu }}" >> $GITHUB_OUTPUT
+          echo "CPU_SUFFIX=-${{ inputs.target_cpu }}" >> $GITHUB_ENV
+        else
+          echo "suffix=" >> $GITHUB_OUTPUT
+          echo "CPU_SUFFIX=" >> $GITHUB_ENV
+        fi
+
+    - name: Echo matrix configuration
+      shell: bash
+      run: |
+        echo "Platform: ${{ inputs.platform }}"
+        echo "Slug: ${{ inputs.slug }}"
+        echo "Target CPU: ${{ inputs.target_cpu }}"
+        echo "Profile: ${{ inputs.profile }}"
+
+    - name: Install rust
+      if: ${{ env.BUILDKIT_ENDPOINT == '' }}
+      id: rust-toolchain
+      uses: ./.forgejo/actions/rust-toolchain
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4
+      with:
+        # Use persistent BuildKit if BUILDKIT_ENDPOINT is set (e.g. tcp://buildkit:8125)
+        driver: ${{ env.BUILDKIT_ENDPOINT != '' && 'remote' || 'docker-container' }}
+        endpoint: ${{ env.BUILDKIT_ENDPOINT || '' }}
+
+    - name: Set up QEMU
+      if: ${{ env.BUILDKIT_ENDPOINT == '' }}
+      uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4
+
+    - name: Login to builtin registry
+      if: ${{ env.BUILTIN_REGISTRY_ENABLED == 'true' }}
+      uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4
+      with:
+        registry: ${{ env.BUILTIN_REGISTRY }}
+        username: ${{ inputs.registry_user }}
+        password: ${{ inputs.registry_password }}
+
+    - name: Extract metadata (labels, annotations) for Docker
+      id: meta
+      uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6
+      with:
+        images: ${{ inputs.images }}
+        # default labels & annotations: https://github.com/docker/metadata-action/blob/master/src/meta.ts#L509
+      env:
+        DOCKER_METADATA_ANNOTATIONS_LEVELS: manifest,index
+
+    - name: Get short git commit SHA
+      id: sha
+      shell: bash
+      run: |
+        calculatedSha=$(git rev-parse --short ${{ github.sha }})
+        echo "COMMIT_SHORT_SHA=$calculatedSha" >> $GITHUB_ENV
+        echo "Short SHA: $calculatedSha"
+
+    - name: Get Git commit timestamps
+      shell: bash
+      run: |
+        timestamp=$(git log -1 --pretty=%ct)
+        echo "TIMESTAMP=$timestamp" >> $GITHUB_ENV
+        echo "Commit timestamp: $timestamp"
+
+    - uses: ./.forgejo/actions/timelord
+      id: timelord
