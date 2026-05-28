@@ -10,9 +10,11 @@ import {
     useState,
 } from 'react';
 import type { MatrixEvent, Room, RoomMember } from 'matrix-js-sdk';
+import { ReceiptType } from 'matrix-js-sdk';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useAtom, useSetAtom } from 'jotai';
 import { VirtualTile } from '../../components/virtualizer';
+import { shouldSendReadReceipts } from '../metadata-privacy/outboundPrivacy';
 import { evaluateEphemeral, parseEphemeralPolicy } from '../ephemeral/ephemeralPolicy';
 import { ephemeralViewsAtom } from '../ephemeral/ephemeralViewsAtom';
 import { activeThreadRootIdAtom, rightPanelAtom } from '../../state/navigation';
@@ -835,7 +837,13 @@ export const RoomTimeline = ({
         const eventId = latest.getId();
         if (!eventId || lastReceiptRef.current === eventId) return;
         const handle = window.setTimeout(() => {
-            client.sendReadReceipt(latest).catch(() => {
+            // When the user opts out of public read receipts, downgrade to a
+            // private one: their unread state still syncs, but other users don't
+            // see that they read the message. Default call shape is unchanged.
+            const receipt = shouldSendReadReceipts()
+                ? client.sendReadReceipt(latest)
+                : client.sendReadReceipt(latest, ReceiptType.ReadPrivate);
+            receipt.catch(() => {
                 lastReceiptRef.current = null;
             });
             lastReceiptRef.current = eventId;

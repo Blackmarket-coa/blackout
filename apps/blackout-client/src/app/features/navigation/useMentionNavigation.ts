@@ -1,9 +1,11 @@
 import { useAtomValue, useSetAtom } from 'jotai';
 import { useCallback } from 'react';
 import type { Room } from 'matrix-js-sdk';
+import { ReceiptType } from 'matrix-js-sdk';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { joinedRoomsAtom } from '../../state/rooms';
 import { roomToParentsAtom } from '../../state/room/roomToParents';
+import { shouldSendReadReceipts } from '../metadata-privacy/outboundPrivacy';
 import {
     selectedRoomIdAtom,
     selectedSpaceIdAtom,
@@ -60,10 +62,16 @@ export const useMentionNavigation = () => {
             if (!event) return;
 
             const receiptClient = client as typeof client & {
-                sendReadReceipt?: (event: unknown) => Promise<unknown>;
+                sendReadReceipt?: (event: unknown, receiptType?: ReceiptType) => Promise<unknown>;
             };
             if (receiptClient.sendReadReceipt) {
-                await receiptClient.sendReadReceipt(event);
+                // Default (public) call shape preserved; downgrade to a private
+                // receipt only when the user opted out of public ones.
+                if (shouldSendReadReceipts()) {
+                    await receiptClient.sendReadReceipt(event);
+                } else {
+                    await receiptClient.sendReadReceipt(event, ReceiptType.ReadPrivate);
+                }
             }
         },
         [client, rooms],

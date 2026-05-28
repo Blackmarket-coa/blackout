@@ -114,6 +114,27 @@ export const PrivacySettings = () => {
                 Typing indicator visibility
             </label>
 
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <input
+                    type="checkbox"
+                    checked={settings.sendReadReceipts !== false}
+                    onChange={(event) => updateSettings('sendReadReceipts', event.target.checked)}
+                />
+                Send read receipts (off = others can&apos;t see when you&apos;ve read; your unread
+                counts still work)
+            </label>
+
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <input
+                    type="checkbox"
+                    checked={settings.sendTypingNotifications !== false}
+                    onChange={(event) =>
+                        updateSettings('sendTypingNotifications', event.target.checked)
+                    }
+                />
+                Send typing notifications (off = others can&apos;t see when you&apos;re typing)
+            </label>
+
             <DataRetentionSection />
         </div>
     );
