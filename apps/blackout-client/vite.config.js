@@ -124,7 +124,8 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
-    sourcemap: true,
+    sourcemap: false,
+    target: 'es2022',
     copyPublicDir: false,
     chunkSizeWarningLimit: 2900,
     rollupOptions: {

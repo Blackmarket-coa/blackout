@@ -4,6 +4,7 @@
   "private": true,
   "description": "Typed client SDK for Blackout feature APIs",
   "type": "module",
+  "sideEffects": false,
   "main": "src/index.ts",
   "types": "src/index.ts",
   "scripts": {
