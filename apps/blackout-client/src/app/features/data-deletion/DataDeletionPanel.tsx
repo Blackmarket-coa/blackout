@@ -14,7 +14,9 @@ import { privacyToolsEntitledAtom } from '../privacy-tools/privacyToolsAtoms';
 const STATUSES: RequestStatus[] = ['pending', 'sent', 'confirmed', 'skipped'];
 
 const copyText = (text: string): void => {
-    void navigator.clipboard?.writeText(text);
+    navigator.clipboard?.writeText(text)?.catch(() => {
+        /* clipboard unavailable — user can still copy manually from the text area */
+    });
 };
 
 export function DataDeletionPanel() {
@@ -53,7 +55,7 @@ export function DataDeletionPanel() {
         const form = formTarget(broker);
         if (mailto) {
             copyText(request.body);
-            window.open(mailto, '_blank');
+            window.open(mailto, '_blank', 'noopener,noreferrer');
         } else if (form) {
             copyText(request.body);
             window.open(form, '_blank', 'noopener,noreferrer');
@@ -118,6 +120,10 @@ export function DataDeletionPanel() {
                         Enter at least your name and a valid email to generate requests.
                     </small>
                 ) : null}
+                <small style={{ color: 'var(--warning, #c96)' }}>
+                    This data is stored locally on your device and never sent to Blackout.
+                    Consider using the panic wipe to clear it when finished.
+                </small>
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>

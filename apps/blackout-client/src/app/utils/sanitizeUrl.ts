@@ -9,27 +9,19 @@
 
 /** Exact-match tracking params (case-insensitive). */
 const TRACKING_PARAMS = new Set<string>([
-    'fbclid',
-    'gclid',
-    'gclsrc',
-    'dclid',
-    'msclkid',
-    'mc_eid',
-    'mc_cid',
-    'igshid',
-    'igsh',
-    'yclid',
-    'vero_id',
-    '_hsenc',
-    '_hsmi',
-    'twclid',
-    'wickedid',
-    's_kwcid',
-    'ref_src',
+    'fbclid', 'gclid', 'gclsrc', 'dclid', 'msclkid',
+    'mc_eid', 'mc_cid', 'igshid', 'igsh', 'yclid',
+    'vero_id', '_hsenc', '_hsmi', 'twclid', 'wickedid',
+    's_kwcid', 'ref_src',
+    'gbraid', 'wbraid', 'fbp', 'fbc',
+    '_ga', '_gl', 'mkt_tok',
+    'sc_campaign', 'sc_cid',
+    'sscid', 'elqTrackId', 'ncid',
+    'oly_enc_id', 'oly_anon_id',
 ]);
 
-/** Prefix-matched tracking params (e.g. all `utm_*`). */
-const TRACKING_PREFIXES = ['utm_'];
+/** Prefix-matched tracking params (e.g. all `utm_*`, `mtm_*`, `pk_*`). */
+const TRACKING_PREFIXES = ['utm_', 'mtm_', 'pk_', 'trk_', 'wt_', 'sfmc_'];
 
 const isTrackingParam = (key: string): boolean => {
     const lower = key.toLowerCase();
@@ -80,8 +72,8 @@ export const sanitizeUrlsInText = (text: string): string =>
         return sanitizeUrl(core) + trailing;
     });
 
-const HREF_PATTERN = /href="([^"]*)"/g;
+const HREF_PATTERN = /href\s*=\s*(["'])([^"']*)\1/g;
 
-/** Strip tracking params from `href="..."` values inside an HTML formatted body. */
+/** Strip tracking params from `href="..."` and `href='...'` values inside an HTML formatted body. */
 export const sanitizeFormattedBody = (html: string): string =>
-    html.replace(HREF_PATTERN, (_match, href: string) => `href="${sanitizeUrl(href)}"`);
+    html.replace(HREF_PATTERN, (_match, _quote: string, href: string) => `href="${sanitizeUrl(href)}"`);

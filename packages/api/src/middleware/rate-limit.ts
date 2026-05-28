@@ -165,3 +165,10 @@ export const webhookRateLimit = createRateLimit({
   windowMs: 60_000,
   maxRequests: Number.isFinite(webhookMax) && webhookMax > 0 ? webhookMax : 60,
 });
+
+const perturbMax = Number.parseInt(process.env.PERTURBATION_RATE_LIMIT_MAX ?? '', 10);
+export const perturbRateLimit = createRateLimit({
+  bucket: 'perturb',
+  windowMs: 60_000,
+  maxRequests: Number.isFinite(perturbMax) && perturbMax > 0 ? perturbMax : 10,
+});

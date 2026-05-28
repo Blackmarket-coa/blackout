@@ -4,6 +4,11 @@
 -- tiers of EXIF metadata stripping and message link sanitization). Widens the
 -- CHECK constraints introduced in migration 038 so these listings can be
 -- persisted alongside the existing item families.
+--
+-- SAFETY: The migration runner (migrate.ts) wraps each migration in a
+-- BEGIN...COMMIT transaction, so the DROP CONSTRAINT → ADD CONSTRAINT pattern
+-- is atomic — there is no window where rows could be inserted with invalid
+-- artifact_kind/entitlement_kind values.
 
 ALTER TABLE creator_listings DROP CONSTRAINT creator_listings_artifact_kind_check;
 ALTER TABLE creator_listings ADD CONSTRAINT creator_listings_artifact_kind_check CHECK (artifact_kind IN (

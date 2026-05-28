@@ -4,6 +4,7 @@ import type { Context } from 'hono';
 import { matrixClient } from '../integrations/matrix-client';
 import { requireUser } from '../middleware/require-user';
 import { isAdminUser } from '../services/auth';
+import { requireDestructiveConfirm, type DestructiveAction } from '../middleware/require-destructive-confirm';
 import { log } from '../telemetry/logger';
 
 /**
@@ -83,10 +84,13 @@ const deactivateSchema = z.object({ erase: z.boolean().optional() });
 admin.post('/users/:userId/deactivate', async (c) => {
   const user = requireAdmin(c);
   if (user instanceof Response) return user;
+  const userId = c.req.param('userId');
+
+  const confirm = requireDestructiveConfirm(c, 'deactivate_user', userId);
+  if (confirm !== true) return confirm;
 
   const parsed = await readOptionalBody(c, deactivateSchema);
   if (parsed instanceof Response) return parsed;
-  const userId = c.req.param('userId');
 
   const result = await matrixClient.deactivateUser(userId, parsed.erase ?? false);
   if (!result.ok) return matrixUnavailable(c, result);
@@ -99,10 +103,13 @@ const purgeSchema = z.object({ block: z.boolean().optional(), purge: z.boolean()
 admin.post('/rooms/:roomId/purge', async (c) => {
   const user = requireAdmin(c);
   if (user instanceof Response) return user;
+  const roomId = c.req.param('roomId');
+
+  const confirm = requireDestructiveConfirm(c, 'purge_room', roomId);
+  if (confirm !== true) return confirm;
 
   const parsed = await readOptionalBody(c, purgeSchema);
   if (parsed instanceof Response) return parsed;
-  const roomId = c.req.param('roomId');
 
   const result = await matrixClient.purgeRoom(roomId, {
     block: parsed.block ?? false,
@@ -111,6 +118,69 @@ admin.post('/rooms/:roomId/purge', async (c) => {
   if (!result.ok) return matrixUnavailable(c, result);
   log.info('admin.room_purged', { actor: user.username, roomId, deleteId: result.deleteId });
   return c.json({ ok: true, deleteId: result.deleteId });
+});
+
+const confirmRequestSchema = z.object({
+  action: z.enum(['deactivate_user', 'purge_room'] as const),
+  targetId: z.string().min(1),
+  ttlSeconds: z.number().int().min(10).max(300).optional(),
+});
+
+/**
+ * Request a short-lived confirmation token for a destructive action.
+ * The token must be passed as `X-Destructive-Confirm` header to the
+ * corresponding destructive endpoint within the TTL window.
+ */
+admin.post('/destructive-action/request', async (c) => {
+  const user = requireAdmin(c);
+  if (user instanceof Response) return user;
+
+  const parsed = await readOptionalBody(c, confirmRequestSchema);
+  if (parsed instanceof Response) return parsed;
+
+  const ttl = parsed.ttlSeconds ?? 60;
+  const { createHmac } = await import('node:crypto');
+  const { randomBytes } = await import('node:crypto');
+  const { readAuthRuntimeConfig } = await import('../services/auth');
+
+  const config = readAuthRuntimeConfig();
+  const iat = Math.floor(Date.now() / 1000);
+  const exp = iat + ttl;
+  const jti = randomBytes(16).toString('base64url');
+
+  const payload = {
+    sub: user.sub,
+    username: user.username,
+    purpose: 'destructive-confirm',
+    action: parsed.action,
+    targetId: parsed.targetId,
+    iat,
+    exp,
+    jti,
+    iss: config.issuer,
+    aud: config.audience,
+  };
+
+  const base64Url = (input: Buffer | string) => Buffer.from(input).toString('base64url');
+  const encodedHeader = base64Url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
+  const encodedPayload = base64Url(JSON.stringify(payload));
+  const signingInput = `${encodedHeader}.${encodedPayload}`;
+  const signature = createHmac('sha256', config.signingSecret).update(signingInput).digest('base64url');
+  const token = `${signingInput}.${signature}`;
+
+  log.warn('destructive_confirm_issued', {
+    action: parsed.action,
+    targetId: parsed.targetId,
+    adminUser: user.username,
+    ttlSeconds: ttl,
+  });
+
+  return c.json({
+    confirmToken: token,
+    action: parsed.action,
+    targetId: parsed.targetId,
+    expiresAt: new Date(exp * 1000).toISOString(),
+  });
 });
 
 export default admin;

@@ -74,7 +74,7 @@ export const generateBrokerRequest = (
         ...(identity.addresses?.length
             ? identity.addresses.map((a, i) => `Address ${i + 1}: ${a}`)
             : []),
-        ...(identity.notes ? [`Additional details: ${identity.notes}`] : []),
+        ...(identity.notes ? [`Additional details: ${identity.notes.replace(/[<>]/g, '')}`] : []),
     ];
 
     const body = [

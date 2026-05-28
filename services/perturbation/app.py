@@ -18,13 +18,18 @@ container (nvidia runtime) and pin the model weights at build time.
 
 import base64
 import io
+import os
 
 import numpy as np
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, Header, HTTPException
 from PIL import Image
 from pydantic import BaseModel
 
 app = FastAPI(title="blackout-perturbation", version="0.1.0")
+
+# Shared secret required in the X-Perturbation-Token header when set.
+# If the env var is empty/unset the auth check is skipped (dev mode).
+_PERTURBATION_TOKEN = os.environ.get("PERTURBATION_TOKEN", "").strip()
 
 # Pillow format <-> mimetype mapping for the formats the client sends.
 _MIME_TO_FORMAT = {
@@ -35,7 +40,20 @@ _MIME_TO_FORMAT = {
 
 # Max decoded image bytes; mirrors MAX_PERTURBATION_BYTES on the API side.
 _MAX_BYTES = 8 * 1024 * 1024
+
+# Prevent decompression bombs: reject images whose pixel count exceeds this.
+# ~89 million pixels at 3 bytes/pixel ≈ 267 MB — keeps numpy memory bounded.
+_MAX_PIXELS = 50_000_000
+
 _PERTURBATION_AMPLITUDE = 6  # max per-channel delta on the 0-255 scale
+
+# Set before any Image.open() to guard against decompression bombs.
+Image.MAX_IMAGE_PIXELS = _MAX_PIXELS
+
+
+def _check_auth(token: str | None) -> None:
+    if _PERTURBATION_TOKEN and token != _PERTURBATION_TOKEN:
+        raise HTTPException(status_code=401, detail="unauthorized")
 
 
 class PerturbRequest(BaseModel):
@@ -74,7 +92,9 @@ def health() -> dict:
 
 
 @app.post("/perturb")
-def perturb(req: PerturbRequest) -> dict:
+def perturb(req: PerturbRequest, x_perturbation_token: str | None = Header(default=None)) -> dict:
+    _check_auth(x_perturbation_token)
+
     fmt = _MIME_TO_FORMAT.get(req.mimetype)
     if fmt is None:
         raise HTTPException(status_code=415, detail=f"unsupported mimetype {req.mimetype}")

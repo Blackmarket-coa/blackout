@@ -41,6 +41,28 @@ Out of scope:
 
 See [`THREAT_MODEL.md`](THREAT_MODEL.md) for the authoritative adversary model, trust boundaries, and protected assets.
 
+## Bot token scope (Synapse admin API)
+
+The Blackout API uses a Matrix bot token (`MATRIX_BOT_TOKEN`) to provision and manage user accounts via the Synapse admin API. This token has full admin privileges over the homeserver.
+
+**If compromised, an attacker can:**
+- Create unlimited user accounts
+- Deactivate (erase) any user account
+- Force-join any user to any room
+- Purge rooms and their message history
+- List all users and room memberships
+- Mint registration tokens
+
+**Mitigations in place:**
+- Destructive actions (user deactivation, room purge) require a time-limited confirmation token from `POST /v1/admin/destructive-action/request` — see `packages/api/src/middleware/require-destructive-confirm.ts`.
+- All destructive actions are logged with admin username, target ID, and confirmation JTI to the structured logger for audit review.
+- The token is passed via environment variable only, never checked into version control.
+
+**Operator recommendations:**
+- Restrict which services can connect to Synapse's admin port (firewall/network policy).
+- Set up alerting for unusual admin API patterns (e.g., rapid user deactivation).
+- Rotate the bot token periodically and use a dedicated, limited-scope bot account (not a personal admin account).
+
 ## Safe-harbor
 
 Good-faith security research conducted in accordance with this policy will not result in legal action by the project. We ask that you:

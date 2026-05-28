@@ -1,8 +1,22 @@
-import { randomBytes } from 'node:crypto';
+import { createHmac, randomBytes } from 'node:crypto';
+
+const DEFAULT_FETCH_TIMEOUT_MS = 30_000;
+const SHORT_FETCH_TIMEOUT_MS = 10_000;
+
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs = DEFAULT_FETCH_TIMEOUT_MS): Promise<Response> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+        return await fetch(url, { ...init, signal: controller.signal });
+    } finally {
+        clearTimeout(timer);
+    }
+}
 
 const homeserver = () =>
   process.env.MATRIX_HOMESERVER ?? process.env.MATRIX_HOMESERVER_URL;
 const botToken = () => process.env.MATRIX_BOT_TOKEN;
+const registrationSecret = () => process.env.MATRIX_REGISTRATION_SHARED_SECRET?.trim();
 const homeserverDomain = () =>
   (process.env.MATRIX_HOMESERVER_DOMAIN ?? 'blackout.local').replace(/^@+/, '');
 
@@ -12,6 +26,17 @@ let botUserIdCache: string | undefined;
 
 // Alias → room id cache. Room aliases are stable for the process lifetime.
 const roomAliasCache = new Map<string, string>();
+
+/** Read a response body as text, truncating to a safe length to prevent
+ *  internal error details from leaking to API consumers. */
+async function readSafeErrorDetail(response: Response): Promise<string | undefined> {
+    try {
+        const text = await response.text();
+        return text.length > 256 ? `${text.slice(0, 253)}...` : text;
+    } catch {
+        return undefined;
+    }
+}
 
 export const matrixClient = {
   /**
@@ -43,7 +68,7 @@ export const matrixClient = {
       return { ok: false as const, reason: 'matrix_not_configured' as const };
     }
 
-    const response = await fetch(`${hs}/_synapse/admin/v2/users/@${encodeURIComponent(username)}:${homeserverDomain()}`, {
+    const response = await fetchWithTimeout(`${hs}/_synapse/admin/v2/users/@${encodeURIComponent(username)}:${homeserverDomain()}`, {
       method: 'PUT',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -58,6 +83,46 @@ export const matrixClient = {
     return {
       ok: response.ok,
       status: response.status,
+    };
+  },
+
+  /**
+   * Register a user via Synapse's shared-secret admin API. This endpoint
+   * only allows user creation (no deactivation, purge, or listing) — much
+   * smaller blast radius than the full admin bot token. Preferred for
+   * flows that only need to provision accounts (account-number signup).
+   *
+   * Falls back to `registerUser` if no shared secret is configured.
+   */
+  async registerWithSharedSecret(username: string, password: string) {
+    const hs = homeserver();
+    const secret = registrationSecret();
+
+    if (!hs || !secret) {
+      return { ok: false as const, reason: 'registration_secret_not_configured' as const };
+    }
+
+    const nonce = randomBytes(16).toString('hex');
+    const admin = false;
+    const macInput = [nonce, username, password, admin ? 'admin' : 'notadmin'].join('\x00');
+    const mac = createHmac('sha1', secret).update(macInput).digest('hex');
+
+    let response: Response;
+    try {
+      response = await fetchWithTimeout(`${hs}/_synapse/admin/v1/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nonce, username, password, admin, mac }),
+      }, SHORT_FETCH_TIMEOUT_MS);
+    } catch {
+      return { ok: false as const, reason: 'network_error' as const };
+    }
+
+    const detail = await readSafeErrorDetail(response);
+    return {
+      ok: response.ok,
+      status: response.status,
+      detail,
     };
   },
 
@@ -77,14 +142,14 @@ export const matrixClient = {
       return { ok: false as const, reason: 'matrix_not_configured' as const };
     }
 
-    const localpart = `burn-${randomBytes(5).toString('hex')}`;
+    const localpart = `burn-${randomBytes(8).toString('hex')}`;
     const password = randomBytes(24).toString('base64url');
     const userId = `@${localpart}:${homeserverDomain()}`;
-    const displayname = label.slice(0, 80) || 'Burner';
+    const displayname = label.replace(/[<>]/g, '').replace(/[\x00-\x1f]/g, '').slice(0, 80) || 'Burner';
 
     let response: Response;
     try {
-      response = await fetch(`${hs}/_synapse/admin/v2/users/${encodeURIComponent(userId)}`, {
+      response = await fetchWithTimeout(`${hs}/_synapse/admin/v2/users/${encodeURIComponent(userId)}`, {
         method: 'PUT',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ password, displayname }),
@@ -94,12 +159,7 @@ export const matrixClient = {
     }
 
     if (!response.ok) {
-      let detail: string | undefined;
-      try {
-        detail = await response.text();
-      } catch {
-        /* ignore body-read failure */
-      }
+      const detail = await readSafeErrorDetail(response);
       return { ok: false as const, status: response.status, reason: 'synapse_rejected' as const, detail };
     }
 
@@ -125,7 +185,7 @@ export const matrixClient = {
 
     let response: Response;
     try {
-      response = await fetch(`${hs}/_matrix/client/v3/account/whoami`, {
+      response = await fetchWithTimeout(`${hs}/_matrix/client/v3/account/whoami`, {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
     } catch (error) {
@@ -169,7 +229,7 @@ export const matrixClient = {
     if (cached) return { ok: true as const, roomId: cached };
     let response: Response;
     try {
-      response = await fetch(
+      response = await fetchWithTimeout(
         `${hs}/_matrix/client/v3/directory/room/${encodeURIComponent(alias)}`,
         { headers: { Authorization: `Bearer ${token}` } },
       );
@@ -222,7 +282,7 @@ export const matrixClient = {
 
     let response: Response;
     try {
-      response = await fetch(`${hs}/_matrix/client/v3/createRoom`, {
+      response = await fetchWithTimeout(`${hs}/_matrix/client/v3/createRoom`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -234,12 +294,7 @@ export const matrixClient = {
       return { ok: false as const, reason: 'network_error' as const, detail: (error as Error).message };
     }
     if (!response.ok) {
-      let detail: string | undefined;
-      try {
-        detail = await response.text();
-      } catch {
-        /* ignore body-read failure */
-      }
+      const detail = await readSafeErrorDetail(response);
       return { ok: false as const, status: response.status, reason: 'create_rejected' as const, detail };
     }
     const json = (await response.json()) as { room_id?: string };
@@ -263,7 +318,7 @@ export const matrixClient = {
     const qs = filename ? `?filename=${encodeURIComponent(filename)}` : '';
     let response: Response;
     try {
-      response = await fetch(`${hs}/_matrix/media/v3/upload${qs}`, {
+      response = await fetchWithTimeout(`${hs}/_matrix/media/v3/upload${qs}`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -277,12 +332,7 @@ export const matrixClient = {
       return { ok: false as const, reason: 'network_error' as const, detail: (error as Error).message };
     }
     if (!response.ok) {
-      let detail: string | undefined;
-      try {
-        detail = await response.text();
-      } catch {
-        /* ignore body-read failure */
-      }
+      const detail = await readSafeErrorDetail(response);
       return { ok: false as const, status: response.status, reason: 'upload_rejected' as const, detail };
     }
     const json = (await response.json()) as { content_uri?: string };
@@ -318,7 +368,7 @@ export const matrixClient = {
       expiry_time: input.expiresAtMs ?? null,
     };
     if (input.length && input.length > 0) body.length = input.length;
-    const response = await fetch(
+    const response = await fetchWithTimeout(
       `${hs}/_synapse/admin/v1/registration_tokens/new`,
       {
         method: 'POST',
@@ -330,12 +380,7 @@ export const matrixClient = {
       },
     );
     if (!response.ok) {
-      let detail: string | undefined;
-      try {
-        detail = await response.text();
-      } catch {
-        /* ignore body-read failure */
-      }
+      const detail = await readSafeErrorDetail(response);
       return { ok: false as const, status: response.status, reason: 'synapse_rejected' as const, detail };
     }
     const json = (await response.json()) as { token?: string; expiry_time?: number | null };
@@ -362,7 +407,7 @@ export const matrixClient = {
     if (!hs || !adminToken) {
       return { ok: false as const, reason: 'matrix_not_configured' as const };
     }
-    const response = await fetch(
+    const response = await fetchWithTimeout(
       `${hs}/_synapse/admin/v1/registration_tokens/${encodeURIComponent(token)}`,
       {
         method: 'DELETE',
@@ -386,7 +431,7 @@ export const matrixClient = {
     if (!hs || !token) {
       return { ok: false as const, reason: 'matrix_not_configured' as const };
     }
-    const response = await fetch(
+    const response = await fetchWithTimeout(
       `${hs}/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/invite`,
       {
         method: 'POST',
@@ -399,11 +444,7 @@ export const matrixClient = {
     );
     let detail: string | undefined;
     if (!response.ok) {
-      try {
-        detail = await response.text();
-      } catch {
-        /* ignore body-read failure */
-      }
+      detail = await readSafeErrorDetail(response);
     }
     return { ok: response.ok, status: response.status, detail };
   },
@@ -428,7 +469,7 @@ export const matrixClient = {
     }
     let response: Response;
     try {
-      response = await fetch(
+      response = await fetchWithTimeout(
         `${hs}/_synapse/admin/v1/join/${encodeURIComponent(roomId)}`,
         {
           method: 'POST',
@@ -476,7 +517,7 @@ export const matrixClient = {
     }
     let response: Response;
     try {
-      response = await fetch(
+      response = await fetchWithTimeout(
         `${hs}/_synapse/admin/v1/rooms/${encodeURIComponent(roomId)}/state`,
         { headers: { Authorization: `Bearer ${token}` } },
       );
@@ -527,7 +568,7 @@ export const matrixClient = {
     }
     let response: Response;
     try {
-      response = await fetch(
+      response = await fetchWithTimeout(
         `${hs}/_synapse/admin/v1/rooms/${encodeURIComponent(roomId)}/members`,
         { headers: { Authorization: `Bearer ${token}` } },
       );
@@ -535,12 +576,7 @@ export const matrixClient = {
       return { ok: false as const, reason: 'network_error' as const, detail: (error as Error).message };
     }
     if (!response.ok) {
-      let detail: string | undefined;
-      try {
-        detail = await response.text();
-      } catch {
-        /* ignore body-read failure */
-      }
+      const detail = await readSafeErrorDetail(response);
       return { ok: false as const, status: response.status, reason: 'synapse_rejected' as const, detail };
     }
     const body = (await response.json()) as { members?: unknown };
@@ -569,7 +605,7 @@ export const matrixClient = {
     if (input.search?.trim()) params.set('name', input.search.trim());
     let response: Response;
     try {
-      response = await fetch(`${hs}/_synapse/admin/v2/users?${params.toString()}`, {
+      response = await fetchWithTimeout(`${hs}/_synapse/admin/v2/users?${params.toString()}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
     } catch (error) {
@@ -640,7 +676,7 @@ export const matrixClient = {
     }
     let response: Response;
     try {
-      response = await fetch(`${hs}/_synapse/admin/v1/deactivate/${encodeURIComponent(userId)}`, {
+      response = await fetchWithTimeout(`${hs}/_synapse/admin/v1/deactivate/${encodeURIComponent(userId)}`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ erase }),
@@ -649,12 +685,7 @@ export const matrixClient = {
       return { ok: false as const, reason: 'network_error' as const, detail: (error as Error).message };
     }
     if (!response.ok) {
-      let detail: string | undefined;
-      try {
-        detail = await response.text();
-      } catch {
-        /* ignore body-read failure */
-      }
+      const detail = await readSafeErrorDetail(response);
       return { ok: false as const, status: response.status, reason: 'synapse_rejected' as const, detail };
     }
     return { ok: true as const, status: response.status };
@@ -674,7 +705,7 @@ export const matrixClient = {
     }
     let response: Response;
     try {
-      response = await fetch(`${hs}/_synapse/admin/v2/rooms/${encodeURIComponent(roomId)}`, {
+      response = await fetchWithTimeout(`${hs}/_synapse/admin/v2/rooms/${encodeURIComponent(roomId)}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ block: opts.block ?? false, purge: opts.purge ?? true }),
@@ -683,12 +714,7 @@ export const matrixClient = {
       return { ok: false as const, reason: 'network_error' as const, detail: (error as Error).message };
     }
     if (!response.ok) {
-      let detail: string | undefined;
-      try {
-        detail = await response.text();
-      } catch {
-        /* ignore body-read failure */
-      }
+      const detail = await readSafeErrorDetail(response);
       return { ok: false as const, status: response.status, reason: 'synapse_rejected' as const, detail };
     }
     const json = (await response.json().catch(() => ({}))) as { delete_id?: string };
@@ -723,7 +749,7 @@ export const matrixClient = {
     }
     let response: Response;
     try {
-      response = await fetch(
+      response = await fetchWithTimeout(
         `${hs}/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/state/${encodeURIComponent(eventType)}/${encodeURIComponent(stateKey)}`,
         { headers: { Authorization: `Bearer ${token}` } },
       );
@@ -748,7 +774,7 @@ export const matrixClient = {
     if (!hs || !token || !roomId) {
       return { ok: false as const, reason: 'matrix_not_configured' as const };
     }
-    const response = await fetch(
+    const response = await fetchWithTimeout(
       `${hs}/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/state/${encodeURIComponent(eventType)}/${encodeURIComponent(stateKey)}`,
       {
         method: 'PUT',
@@ -785,7 +811,7 @@ export const matrixClient = {
     }
     const eventType = options.eventType ?? 'm.room.message';
     const txnId = options.txnId ?? crypto.randomUUID();
-    const response = await fetch(
+    const response = await fetchWithTimeout(
       `${hs}/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/send/${encodeURIComponent(eventType)}/${encodeURIComponent(txnId)}`,
       {
         method: 'PUT',
