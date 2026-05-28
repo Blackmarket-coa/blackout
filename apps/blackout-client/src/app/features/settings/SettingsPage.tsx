@@ -22,6 +22,7 @@ const NotificationSettings = lazy(() => import('./NotificationSettings'));
 const PrivacySettings = lazy(() => import('./PrivacySettings'));
 const PrivacyToolsSettings = lazy(() => import('../privacy-tools/PrivacyToolsSettings'));
 const DataTransparencySettings = lazy(() => import('../data-transparency/DataTransparencySettings'));
+const DataDeletionPanel = lazy(() => import('../data-deletion/DataDeletionPanel'));
 const BurnerIdentitiesPanel = lazy(() => import('../burner-identity/BurnerIdentitiesPanel'));
 const VoiceVideoSettings = lazy(() => import('./VoiceVideoSettings'));
 const AccessibilitySettings = lazy(() => import('./AccessibilitySettings'));
@@ -60,7 +61,14 @@ const groups: SettingsGroup[] = [
     {
         id: 'privacy-notifications',
         label: 'Privacy & notifications',
-        sectionIds: ['privacy', 'privacy-tools', 'data-transparency', 'notifications', 'voice-video'],
+        sectionIds: [
+            'privacy',
+            'privacy-tools',
+            'data-transparency',
+            'data-deletion',
+            'notifications',
+            'voice-video',
+        ],
     },
     {
         id: 'help-advanced',
@@ -105,6 +113,12 @@ const sections: SettingsSection[] = [
         label: 'Your data',
         summary: "What's stored about you on this homeserver",
         component: DataTransparencySettings,
+    },
+    {
+        id: 'data-deletion',
+        label: 'Data broker deletion',
+        summary: 'Generate GDPR/CCPA deletion + access requests for data brokers',
+        component: DataDeletionPanel,
     },
     {
         id: 'identities',

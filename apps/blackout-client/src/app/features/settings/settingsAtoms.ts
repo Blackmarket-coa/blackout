@@ -10,6 +10,7 @@ export type SettingsSectionId =
     | 'privacy'
     | 'privacy-tools'
     | 'data-transparency'
+    | 'data-deletion'
     | 'identities'
     | 'voice-video'
     | 'accessibility'
