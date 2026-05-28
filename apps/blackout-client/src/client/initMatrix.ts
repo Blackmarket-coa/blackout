@@ -293,6 +293,18 @@ export const stopMatrixClient = (client: MatrixClient | null): void => {
     client?.stopClient();
 };
 
+/**
+ * Delete the IndexedDB sync + crypto stores for a (userId, deviceId) pair.
+ * Used to purge a burner identity's local data when it's burned without having
+ * to log that client in first (it may not be the active session).
+ */
+export const deleteSessionStores = async (userId: string, deviceId: string): Promise<void> => {
+    await Promise.all([
+        deleteIndexedDb(cryptoStoreDbName(userId, deviceId)),
+        deleteIndexedDb(syncStoreDbName(userId, deviceId)),
+    ]);
+};
+
 export const initClient = (session: StoredSession): Promise<MatrixClient> =>
     initClientForSession(session);
 

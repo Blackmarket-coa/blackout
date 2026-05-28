@@ -14,6 +14,11 @@ import {
   verifyPasswordConstantTime,
 } from '../services/auth';
 import { matrixClient } from '../integrations/matrix-client';
+import {
+  accountNumberToLocalpart,
+  formatAccountNumber,
+  generateAccountNumber,
+} from '@blackout/core';
 import { authRateLimit } from '../middleware/rate-limit';
 import { readJsonBody } from '../middleware/validate';
 import { requireUser } from '../middleware/require-user';
@@ -43,6 +48,7 @@ const auth = new Hono();
 
 auth.use('/login', authRateLimit);
 auth.use('/register', authRateLimit);
+auth.use('/account-number', authRateLimit);
 auth.use('/matrix/exchange', authRateLimit);
 auth.use('/password/reset/request', authRateLimit);
 auth.use('/password/reset/confirm', authRateLimit);
@@ -296,6 +302,55 @@ auth.post('/register', async (c) => {
       invite: inviteRedemption,
     },
     201,
+  );
+});
+
+/**
+ * Mint a no-PII "account number" account (Mullvad-style). The server generates
+ * a high-entropy number, derives a one-way Matrix localpart from it, and
+ * provisions the Matrix account with the number as its password — no email,
+ * username, or other PII. The number is returned exactly once and is the sole
+ * credential; there is no recovery. The client derives the same localpart and
+ * logs in with the number via the standard Matrix password flow; the local
+ * Blackout user is auto-provisioned lazily on the first token exchange.
+ */
+auth.post('/account-number', async (c) => {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const accountNumber = generateAccountNumber();
+    const localpart = await accountNumberToLocalpart(accountNumber);
+
+    let matrix: Awaited<ReturnType<typeof matrixClient.registerUser>>;
+    try {
+      matrix = await matrixClient.registerUser(localpart, accountNumber);
+    } catch (error) {
+      return c.json(
+        {
+          code: 'matrix_provisioning_failed',
+          message: 'Failed to provision Matrix account',
+          detail: (error as Error).message,
+        },
+        502,
+      );
+    }
+
+    // matrix_not_configured is expected in local/dev — return the number so the
+    // flow is exercisable; real login still needs a configured homeserver.
+    if (matrix.ok || ('reason' in matrix && matrix.reason === 'matrix_not_configured')) {
+      return c.json({ accountNumber: formatAccountNumber(accountNumber) }, 201);
+    }
+
+    // Collision / rejection on this localpart → mint a fresh number and retry.
+    if (matrix.status === 400 || matrix.status === 409) continue;
+
+    return c.json(
+      { code: 'matrix_provisioning_failed', message: 'Failed to provision Matrix account', matrix },
+      502,
+    );
+  }
+
+  return c.json(
+    { code: 'provisioning_failed', message: 'Could not allocate an account, please try again.' },
+    503,
   );
 });
 

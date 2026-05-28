@@ -20,7 +20,7 @@ import {
 } from 'slate';
 import { withHistory } from 'slate-history';
 import { Editable, ReactEditor, Slate, useSlate, withReact } from 'slate-react';
-import { useAtom } from 'jotai';
+import { useAtom, useAtomValue } from 'jotai';
 import { useLegacyRoomMembersAdapter as useRoomMembers } from '../../plugins/matrix-adapters/hooks/useLegacyRoomAdapter';
 import { useNavigationSpaceTree } from '../../plugins/navigation';
 import {
@@ -41,6 +41,9 @@ import { resetEditor } from '../../components/editor/utils';
 import { emojis } from '../../plugins/emoji';
 import { EmojiPicker } from './EmojiPicker';
 import { createScheduledMessage } from './scheduledMessagesClient';
+import { sanitizeFormattedBody, sanitizeUrlsInText } from '../../utils/sanitizeUrl';
+import { stripImageMetadata } from '../../utils/stripImageMetadata';
+import { privacyToolsSettingsAtom } from '../privacy-tools/privacyToolsAtoms';
 import {
     SLOWMODE_STATE_EVENT_TYPE,
     evaluateSlowmode,
@@ -620,10 +623,13 @@ export const MessageComposer = ({
     const [scheduledEnabled, setScheduledEnabled] = useState(false);
     const [scheduleDelayHours, setScheduleDelayHours] = useState(1);
     const [encryptionPresetEnabled, setEncryptionPresetEnabled] = useState(false);
+    // Ephemeral drops: attached media expires (view-once, 24h) for the recipient.
+    const [ephemeralEnabled, setEphemeralEnabled] = useState(false);
     const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
     const [slowmodeNotice, setSlowmodeNotice] = useState<string | null>(null);
     const lastSentTsRef = useRef<number | null>(null);
     const [commandPayload, setCommandPayload] = useAtom(composerCommandPayloadAtom);
+    const privacyToolsSettings = useAtomValue(privacyToolsSettingsAtom);
 
     const menuRef = useRef<HTMLDivElement | null>(null);
     const emojiPickerRef = useRef<HTMLDivElement | null>(null);
@@ -930,8 +936,12 @@ export const MessageComposer = ({
                 commandEnabled && selectedCommand
                     ? executeCommandTemplate(selectedCommand, plainBody)
                     : plainBody;
-            const bodyToSend = `${commandProcessedBody}${signatureSuffix}`.trim();
-            const formattedBody = htmlBody;
+            let bodyToSend = `${commandProcessedBody}${signatureSuffix}`.trim();
+            let formattedBody = htmlBody;
+            if (privacyToolsSettings.linkSanitizeEnabled) {
+                bodyToSend = sanitizeUrlsInText(bodyToSend);
+                formattedBody = sanitizeFormattedBody(formattedBody);
+            }
 
             if (target?.mode === 'edit' && target.eventId) {
                 await editMessage(target.eventId, bodyToSend);
@@ -1009,11 +1019,14 @@ export const MessageComposer = ({
                 await sendRichText(content);
             }
 
+            const ephemeralPolicy = ephemeralEnabled
+                ? { expiresAtMs: Date.now() + 24 * 60 * 60 * 1000, maxViews: 1 }
+                : null;
             for (const file of attachments) {
-                await sendMedia(file);
+                await sendMedia(file, { ephemeral: ephemeralPolicy });
             }
             if (voiceAttachment) {
-                await sendMedia(voiceAttachment);
+                await sendMedia(voiceAttachment, { ephemeral: ephemeralPolicy });
             }
 
             if (stegoAttachment) {
@@ -1049,6 +1062,7 @@ export const MessageComposer = ({
             setAttachments([]);
             setVoiceAttachment(null);
             setStegoAttachment(null);
+            setEphemeralEnabled(false);
             onSent?.();
             await sendTyping(false);
         } finally {
@@ -1060,8 +1074,10 @@ export const MessageComposer = ({
         commandEnabled,
         editMessage,
         encryptionPresetEnabled,
+        ephemeralEnabled,
         matrixClient,
         onSent,
+        privacyToolsSettings.linkSanitizeEnabled,
         room,
         roomId,
         scheduleDelayHours,
@@ -1126,6 +1142,9 @@ export const MessageComposer = ({
             if (actionLabel === 'Encryption preset') {
                 setEncryptionPresetEnabled((active) => !active);
             }
+            if (actionLabel === 'Ephemeral drop') {
+                setEphemeralEnabled((active) => !active);
+            }
         },
         [
             attachPhoto,
@@ -1179,16 +1198,32 @@ export const MessageComposer = ({
         [activeIndex, selectSuggestion, sendCurrentMessage, suggestions]
     );
 
-    const onDropFiles = useCallback((event: DragEvent<HTMLDivElement>) => {
-        event.preventDefault();
-        if (!event.dataTransfer.files.length) return;
-        setAttachments((prev) => [...prev, ...Array.from(event.dataTransfer.files)]);
-    }, []);
+    const prepareAttachments = useCallback(
+        async (files: File[]): Promise<File[]> => {
+            if (!privacyToolsSettings.exifStripEnabled) return files;
+            return Promise.all(files.map((file) => stripImageMetadata(file)));
+        },
+        [privacyToolsSettings.exifStripEnabled]
+    );
 
-    const onPaste = useCallback((event: ClipboardEvent<HTMLDivElement>) => {
-        if (!event.clipboardData.files.length) return;
-        setAttachments((prev) => [...prev, ...Array.from(event.clipboardData.files)]);
-    }, []);
+    const onDropFiles = useCallback(
+        async (event: DragEvent<HTMLDivElement>) => {
+            event.preventDefault();
+            if (!event.dataTransfer.files.length) return;
+            const prepared = await prepareAttachments(Array.from(event.dataTransfer.files));
+            setAttachments((prev) => [...prev, ...prepared]);
+        },
+        [prepareAttachments]
+    );
+
+    const onPaste = useCallback(
+        async (event: ClipboardEvent<HTMLDivElement>) => {
+            if (!event.clipboardData.files.length) return;
+            const prepared = await prepareAttachments(Array.from(event.clipboardData.files));
+            setAttachments((prev) => [...prev, ...prepared]);
+        },
+        [prepareAttachments]
+    );
 
     const menuPosition = useMemo(() => {
         if (!triggerRange) return null;
@@ -1255,11 +1290,13 @@ export const MessageComposer = ({
                         type="file"
                         multiple
                         style={{ display: 'none' }}
-                        onChange={(event) => {
-                            const files = event.currentTarget.files;
-                            if (!files) return;
-                            setAttachments((prev) => [...prev, ...Array.from(files)]);
-                            event.currentTarget.value = '';
+                        onChange={async (event) => {
+                            const input = event.currentTarget;
+                            if (!input.files) return;
+                            const files = Array.from(input.files);
+                            input.value = '';
+                            const prepared = await prepareAttachments(files);
+                            setAttachments((prev) => [...prev, ...prepared]);
                         }}
                     />
                     <input
@@ -1396,6 +1433,15 @@ export const MessageComposer = ({
                                     onClick={() => applyFeatureAction('Encryption preset')}
                                 >
                                     Encryption preset
+                                </button>
+                                <button
+                                    type="button"
+                                    aria-pressed={ephemeralEnabled}
+                                    onClick={() => applyFeatureAction('Ephemeral drop')}
+                                >
+                                    {ephemeralEnabled
+                                        ? 'Ephemeral drop: on (view-once, 24h)'
+                                        : 'Ephemeral drop'}
                                 </button>
                             </div>
                             {recentActions.length > 0 ? (

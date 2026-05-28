@@ -123,6 +123,9 @@ services:
       # Legacy file-store path. Unused in postgres mode (kept for the named
       # volume + an easy rollback to file mode by removing BLACKOUT_DB_MODE).
       - BLACKOUT_DB_FILE=/var/lib/blackout/store.json
+      # Internal image-perturbation sidecar (anti–facial-recognition). When
+      # unset the client falls back to its best-effort client-side transform.
+      - PERTURBATION_SERVICE_URL=http://perturbation:8000
     volumes:
       - blackout-api-data:/var/lib/blackout
     depends_on:
@@ -275,6 +278,33 @@ services:
     security_opt:
       - no-new-privileges:true
     read_only: true
+    <<: *common-logging
+
+  perturbation:
+    # Blackout image-perturbation sidecar (anti–facial-recognition).
+    # Source: ../../services/perturbation. Internal-only (app network, no edge
+    # exposure); only the API reaches it. CPU-only scaffold by default — see
+    # services/perturbation/README.md for the Fawkes/Glaze (GPU) upgrade.
+    build:
+      context: ../../services/perturbation
+    container_name: blackout-perturbation
+    restart: unless-stopped
+    expose:
+      - "8000"
+    healthcheck:
+      test:
+        - "CMD"
+        - "python"
+        - "-c"
+        - "import sys, urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=4).status == 200 else 1)"
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - app
+    security_opt:
+      - no-new-privileges:true
     <<: *common-logging
 
   postgres-exporter:

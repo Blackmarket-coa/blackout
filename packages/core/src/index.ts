@@ -1,5 +1,7 @@
 export * from './types';
 export * from './crypto';
+export * from './auth';
+export * from './data-brokers';
 export * from './governance';
 export * from './federation';
 export * from './quick-actions';

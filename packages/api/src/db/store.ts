@@ -47,6 +47,7 @@ import type {
   AccountDeletionTokenRecord,
   InvitationTokenRecord,
   InvitationRedemptionRecord,
+  BurnerIdentityRecord,
   RefreshTokenRecord,
   RevokedSessionRecord,
   LinkedAccountRecord,
@@ -152,6 +153,7 @@ type PersistedState = {
   accountDeletionTokens: AccountDeletionTokenRecord[];
   invitationTokens: InvitationTokenRecord[];
   invitationRedemptions: InvitationRedemptionRecord[];
+  burnerIdentities: BurnerIdentityRecord[];
   refreshTokens: RefreshTokenRecord[];
   revokedSessions: RevokedSessionRecord[];
   linkedAccounts: LinkedAccountRecord[];
@@ -239,6 +241,8 @@ class InMemoryDb {
   invitationTokens = new Map<string, InvitationTokenRecord>();
   /** Keyed by redemption id. */
   invitationRedemptions = new Map<string, InvitationRedemptionRecord>();
+  /** Burner identities, keyed by row id. */
+  burnerIdentities = new Map<string, BurnerIdentityRecord>();
   refreshTokens = new Map<string, RefreshTokenRecord>();
   revokedSessions = new Map<string, RevokedSessionRecord>();
   mfaConfigs = new Map<string, MFAConfigRecord>();
@@ -590,6 +594,46 @@ class InMemoryDb {
     const record: InvitationRedemptionRecord = { ...input, createdAt: nowIso() };
     this.invitationRedemptions.set(record.id, record);
     return record;
+  }
+
+  createBurnerIdentity(
+    input: Omit<BurnerIdentityRecord, 'createdAt' | 'burnedAt'> & { burnedAt?: string | null },
+  ): BurnerIdentityRecord {
+    const record: BurnerIdentityRecord = {
+      ...input,
+      burnedAt: input.burnedAt ?? null,
+      createdAt: nowIso(),
+    };
+    this.burnerIdentities.set(record.id, record);
+    return record;
+  }
+
+  /** Active = not yet burned. Used to enforce the per-owner active-burner cap. */
+  listBurnerIdentitiesForOwner(
+    ownerUserId: string,
+    opts: { includeBurned?: boolean } = {},
+  ): BurnerIdentityRecord[] {
+    return [...this.burnerIdentities.values()]
+      .filter((b) => b.ownerUserId === ownerUserId && (opts.includeBurned || !b.burnedAt))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  findBurnerIdentity(
+    ownerUserId: string,
+    burnerUserId: string,
+  ): BurnerIdentityRecord | undefined {
+    return [...this.burnerIdentities.values()].find(
+      (b) => b.ownerUserId === ownerUserId && b.burnerUserId === burnerUserId,
+    );
+  }
+
+  markBurnerIdentityBurned(id: string): BurnerIdentityRecord | undefined {
+    const existing = this.burnerIdentities.get(id);
+    if (!existing) return undefined;
+    if (existing.burnedAt) return existing;
+    const updated: BurnerIdentityRecord = { ...existing, burnedAt: nowIso() };
+    this.burnerIdentities.set(id, updated);
+    return updated;
   }
 
   listInvitationRedemptionsByToken(invitationTokenId: string): InvitationRedemptionRecord[] {
@@ -3023,6 +3067,9 @@ export class FileBackedDb extends InMemoryDb {
     this.invitationRedemptions = new Map(
       (parsed.invitationRedemptions ?? []).map((row) => [row.id, row])
     );
+    this.burnerIdentities = new Map(
+      (parsed.burnerIdentities ?? []).map((row) => [row.id, row])
+    );
     this.refreshTokens = new Map((parsed.refreshTokens ?? []).map((row) => [row.id, row]));
     this.revokedSessions = new Map(
       (parsed.revokedSessions ?? []).map((row) => [row.jti, row])
@@ -3207,6 +3254,7 @@ export class FileBackedDb extends InMemoryDb {
       accountDeletionTokens: [...this.accountDeletionTokens.values()],
       invitationTokens: [...this.invitationTokens.values()],
       invitationRedemptions: [...this.invitationRedemptions.values()],
+      burnerIdentities: [...this.burnerIdentities.values()],
       refreshTokens: [...this.refreshTokens.values()],
       revokedSessions: [...this.revokedSessions.values()],
       linkedAccounts: [...this.linkedAccounts.values()],

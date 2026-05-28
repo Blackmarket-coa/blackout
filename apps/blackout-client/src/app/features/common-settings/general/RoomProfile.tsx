@@ -37,6 +37,7 @@ import { CompactUploadCardRenderer } from '../../../components/upload-card';
 import { useObjectURL } from '../../../hooks/useObjectURL';
 import { createUploadAtom, UploadSuccess } from '../../../state/upload';
 import { useFilePicker } from '../../../hooks/useFilePicker';
+import { useHardenAvatarImage } from '../../privacy-tools/useHardenAvatarImage';
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
 import { useAlive } from '../../../hooks/useAlive';
 import { RoomPermissionsAPI } from '../../../hooks/useRoomPermissions';
@@ -78,7 +79,10 @@ export function RoomProfileEdit({
     return undefined;
   }, [imageFile]);
 
-  const pickFile = useFilePicker(setImageFile, false);
+  const hardenImage = useHardenAvatarImage();
+  const pickFile = useFilePicker((file) => {
+    void hardenImage(file).then(setImageFile);
+  }, false);
 
   const handleRemoveUpload = useCallback(() => {
     setImageFile(undefined);

@@ -20,7 +20,8 @@ export type CreatorArtifactKind =
     | 'stream_asset'
     | 'vault_item'
     | 'ai_persona'
-    | 'automation_recipe';
+    | 'automation_recipe'
+    | 'privacy_tool';
 
 export interface CreatorListingDraft {
     artifactKind: CreatorArtifactKind;
@@ -53,6 +54,7 @@ export interface CreatorListingDraft {
      * - vault_item: { vaultKind: 'slot'|'template', ... }
      * - ai_persona: { persona: {...} }
      * - automation_recipe: { triggers: [...], actions: [...] }
+     * - privacy_tool: { tier: 'advanced', features: ('exif_strip'|'link_sanitize')[], options?: {...} }
      */
     artifactPayload: unknown;
     /**
@@ -109,6 +111,7 @@ const artifactKinds: CreatorArtifactKind[] = [
     'vault_item',
     'ai_persona',
     'automation_recipe',
+    'privacy_tool',
 ];
 
 const listingStatuses: CreatorListingStatus[] = [
@@ -167,6 +170,7 @@ const entitlementKinds: EntitlementKind[] = [
     'community_template',
     'stream_asset',
     'vault_item',
+    'privacy_tool',
 ];
 
 /**
@@ -179,6 +183,7 @@ const cosmeticTypes = ['avatar_decoration', 'nameplate', 'profile_effect', 'badg
 const soundKinds = ['soundboard', 'notification', 'voice_filter'] as const;
 const streamAssetTypes = ['overlay', 'alert', 'channel_point_kit', 'badge_set'] as const;
 const vaultKinds = ['slot', 'template'] as const;
+const privacyTiers = ['advanced'] as const;
 
 function discriminant<T extends string>(
     payload: Record<string, unknown>,
@@ -206,6 +211,9 @@ export function validateArtifactPayload(kind: CreatorArtifactKind, payload: unkn
             break;
         case 'vault_item':
             discriminant(payload, 'vaultKind', vaultKinds);
+            break;
+        case 'privacy_tool':
+            discriminant(payload, 'tier', privacyTiers);
             break;
         default:
             break;

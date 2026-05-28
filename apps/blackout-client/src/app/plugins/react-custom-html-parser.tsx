@@ -22,6 +22,7 @@ import Linkify from 'linkify-react';
 import { ErrorBoundary } from 'react-error-boundary';
 import { ChildNode } from 'domhandler';
 import * as css from '../styles/CustomHtml.css';
+import { sanitizeUrl } from '../utils/sanitizeUrl';
 import {
   getMxIdLocalPart,
   getCanonicalAliasRoomId,
@@ -160,7 +161,11 @@ export const factoryRenderLinkifyWithMention = (
       if (mention) return mention;
     }
 
-    return <a {...attributes}>{content}</a>;
+    // Strip tracking params from auto-linked plaintext URLs so clicking a link
+    // someone sent doesn't leak utm_/fbclid/etc. matrix.to links are untouched
+    // (no tracking params) and handled above.
+    const href = attributes.href ? sanitizeUrl(attributes.href) : attributes.href;
+    return <a {...attributes} href={href}>{content}</a>;
   };
   return render;
 };
@@ -453,6 +458,20 @@ export const getReactCustomHtmlParser = (
           );
 
           if (mention) return mention;
+        }
+
+        // Strip tracking params from links in formatted (HTML) message bodies.
+        // Only intervene when sanitization actually changes the href, so all
+        // other anchor behavior/attributes are preserved untouched.
+        if (name === 'a' && typeof props.href === 'string') {
+          const sanitized = sanitizeUrl(props.href);
+          if (sanitized !== props.href) {
+            return (
+              <a {...props} href={sanitized}>
+                {domToReact(children, opts)}
+              </a>
+            );
+          }
         }
 
         if (name === 'span' && 'data-mx-spoiler' in props) {

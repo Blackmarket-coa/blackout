@@ -27,6 +27,7 @@ import {
 import MessageComposer from '../../features/room/MessageComposer';
 import RoomTimeline from '../../features/room/RoomTimeline';
 import { RoomInviteAcceptGate } from '../../features/room/RoomInviteAcceptGate';
+import { BurnerModeIndicator } from '../../features/burner-identity/BurnerModeIndicator';
 import ForumView from '../../features/forum/ForumView';
 import CoalitionView from '../../features/coalition/CoalitionView';
 import { useCoalitionStateForRoom } from '../../features/coalition/useCoalitionState';
@@ -770,6 +771,7 @@ export const ClientLayout = () => {
                 color: 'var(--text-primary)',
             }}
         >
+            <BurnerModeIndicator />
             <NavigationQuickSwitcher
                 open={quickOpen}
                 onClose={() => setQuickOpen(false)}

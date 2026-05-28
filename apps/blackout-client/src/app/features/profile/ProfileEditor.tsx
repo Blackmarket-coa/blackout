@@ -12,6 +12,7 @@ import {
 import { saveProfile as saveProfileDefault, type SaveProfileInput } from './profileClient';
 import { syncStatusToPresence } from './customStatus';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { useHardenAvatarImage } from '../privacy-tools/useHardenAvatarImage';
 import type {
     ConnectionType,
     ProfileConnection,
@@ -86,6 +87,7 @@ export const ProfileEditor = ({ saveProfile = saveProfileDefault }: ProfileEdito
     const [avatarCrop, setAvatarCrop] = useState(50);
     const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
     const [saveError, setSaveError] = useState<string | null>(null);
+    const hardenImage = useHardenAvatarImage();
 
     const bioLength = useMemo(() => profile.profile.bio?.length ?? 0, [profile.profile.bio]);
 
@@ -111,9 +113,12 @@ export const ProfileEditor = ({ saveProfile = saveProfileDefault }: ProfileEdito
         }
     }, [mx, profile, saveProfile]);
 
-    const onImageUpload = (field: 'banner' | 'avatarUrl', file?: File) => {
+    const onImageUpload = async (field: 'banner' | 'avatarUrl', file?: File) => {
         if (!file) return;
-        const objectUrl = fileToObjectUrl(file);
+        // Avatars carry faces — harden them (EXIF strip + optional perturbation)
+        // before they become the preview/upload source.
+        const prepared = field === 'avatarUrl' ? await hardenImage(file) : file;
+        const objectUrl = fileToObjectUrl(prepared);
         setProfile((prev) =>
             field === 'banner'
                 ? { ...prev, profile: { ...prev.profile, banner: objectUrl } }

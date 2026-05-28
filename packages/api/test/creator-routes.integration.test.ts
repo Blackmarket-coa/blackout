@@ -103,6 +103,33 @@ test('POST /v1/creator/listings creates a draft via the upstream provider', asyn
     assert.equal(sellerCalls.length, 1);
 });
 
+test('POST /v1/creator/listings accepts a privacy_tool draft', async () => {
+    resetForEachTest();
+    fetchHandler = () =>
+        new Response(
+            JSON.stringify({ id: 'fbm-listing-priv', slug: 'privacy-tools', status: 'draft' }),
+            { headers: { 'content-type': 'application/json' } }
+        );
+    const response = await app.request('/v1/creator/listings', {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({
+            providerId: 'freeblackmarket',
+            artifactKind: 'privacy_tool',
+            category: 'security-tool',
+            entitlementKind: 'privacy_tool',
+            title: 'Privacy Tools — Advanced',
+            description: 'Advanced EXIF stripping and link sanitization',
+            priceCents: 299,
+            currency: 'USD',
+            artifactPayload: { tier: 'advanced', features: ['exif_strip', 'link_sanitize'] },
+        }),
+    });
+    assert.equal(response.status, 201);
+    const json = (await response.json()) as { listing: { providerListingId: string } };
+    assert.equal(json.listing.providerListingId, 'fbm-listing-priv');
+});
+
 test('POST /v1/creator/listings rejects invalid drafts', async () => {
     resetForEachTest();
     const response = await app.request('/v1/creator/listings', {
