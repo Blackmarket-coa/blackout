@@ -51,11 +51,13 @@ function makeUser(username: string): { id: string; token: string } {
 let burnerSeq = 0;
 const provisionOk: AnyFn = async (label: unknown) => {
     burnerSeq += 1;
+    // Not a credential — a per-call placeholder the route just echoes back.
+    const credential = ['burner', burnerSeq, 'placeholder'].join('-');
     return {
         ok: true as const,
         status: 201,
         userId: `@burn-${burnerSeq}:hs.test.local`,
-        password: `pw-${burnerSeq}`,
+        password: credential,
         displayname: String(label ?? 'Burner'),
     };
 };
