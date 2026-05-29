@@ -15,6 +15,8 @@ import {
     questsService,
     referralService,
 } from './growth';
+import { dispatchFbmMatrixEvent, parseFbmMatrixEvent } from './fbmMatrixBridge';
+import { maybeDeliverDigitalDeadDrop } from './fbmMatrixBridge/deadDropDelivery';
 
 const GROWTH_ATTRIBUTION_EVENT_TYPES: ReadonlySet<LifecycleEventType> = new Set([
     'referral.attributed',
@@ -64,6 +66,18 @@ export async function dispatchMarketplaceWebhook(
     }
 
     const payload = safeParse(rawBody);
+
+    // FBM → Matrix bridge events (order.*, inventory.*, ledger.*, subscription.*,
+    // dispute.*) are not part of the closed entitlement lifecycle enum, so they
+    // are routed here BEFORE provider.parseEvent (which would reject them as
+    // invalid). parseFbmMatrixEvent returns null for any non-bridge payload
+    // (incl. purchase.*), leaving the entitlement path below untouched.
+    const bridgeEvent = parseFbmMatrixEvent(payload);
+    if (bridgeEvent) {
+        recordWebhookReceipt(provider.id, bridgeEvent.eventId, true, payload);
+        return dispatchFbmMatrixEvent(provider, bridgeEvent);
+    }
+
     const event = provider.parseEvent(payload);
     if (!event) {
         incrementCounter('marketplace_webhook_rejected_total', {
@@ -108,6 +122,10 @@ export async function dispatchMarketplaceWebhook(
     }
 
     const applied = applyLifecycleEvent(event);
+    // Best-effort digital-product dead-drop delivery (AOG §4.1). Fire-and-forget
+    // so a Matrix outage can never block or fail the entitlement grant; no-ops
+    // unless the bridge is enabled and the purchase is flagged digitalDelivery.
+    void maybeDeliverDigitalDeadDrop(event, applied);
     logEvent('marketplace.webhook.applied', {
         providerId: provider.id,
         eventId: event.eventId,

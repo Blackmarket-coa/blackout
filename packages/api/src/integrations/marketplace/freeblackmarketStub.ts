@@ -27,6 +27,8 @@ interface StubListing {
     publicSlug: string;
     status: 'draft' | 'pending_review' | 'published' | 'rejected' | 'archived';
     createdAt: string;
+    /** Marks a digital product that should be delivered via a Matrix dead-drop. */
+    digitalDelivery?: boolean;
 }
 
 interface StubSession {
@@ -275,6 +277,30 @@ const SEEDED_LISTINGS: StubListing[] = [
         status: 'published',
         createdAt: '2026-05-01T00:00:00.000Z',
     },
+    {
+        listing: {
+            providerId: PROVIDER_ID,
+            providerListingId: 'stub-digital-ebook',
+            category: 'creator-asset',
+            title: 'Seed Saving Field Guide (PDF)',
+            description:
+                'Digital download delivered via an encrypted Matrix dead-drop. Exercises the §4.1 digital-delivery path.',
+            priceCents: 499,
+            currency: 'USD',
+            sellerId: 'stub-seller',
+            sellerDisplayName: 'Stub Seller',
+            mediaUrls: [],
+            entitlementKind: 'vault_item',
+            tags: ['guide', 'digital', 'demo'],
+        },
+        sellerUserId: null,
+        artifactKind: 'vault_item',
+        artifactPayload: { files: [{ name: 'guide.pdf', mime: 'application/pdf', base64: '' }] },
+        publicSlug: 'seed-saving-field-guide',
+        status: 'published',
+        createdAt: '2026-05-01T00:00:00.000Z',
+        digitalDelivery: true,
+    },
 ];
 
 function envBool(key: string, fallback: boolean, env = process.env): boolean {
@@ -318,6 +344,17 @@ export interface FreeblackmarketStubInternals {
      * Used by the stub embed action to drive the canonical webhook flow.
      */
     materializeWebhook(sessionId: string): { body: string; signature: string; eventId: string } | null;
+    /**
+     * Synthesize a signed FBM → Matrix bridge event (order.*, inventory.*,
+     * ledger.*, subscription.*, dispute.*) so the canonical webhook path can be
+     * driven end-to-end without a live FBM. `eventBody` is the event minus its
+     * envelope id/timestamp/signature, which this fills in.
+     */
+    materializeEvent(eventBody: Record<string, unknown>): {
+        body: string;
+        signature: string;
+        eventId: string;
+    };
     /** Test-only: clear in-memory state. */
     reset(): void;
 }
@@ -576,7 +613,25 @@ export function createFreeblackmarketStubProvider(): MarketplaceProvider {
                 metadata: {
                     sessionId,
                     artifactKind: entry.artifactKind,
+                    digitalDelivery: entry.digitalDelivery === true,
                 },
+            });
+            const signature = crypto
+                .createHmac('sha256', webhookSecret)
+                .update(body)
+                .digest('hex');
+            return { body, signature, eventId };
+        },
+        materializeEvent(eventBody: Record<string, unknown>) {
+            const eventId =
+                typeof eventBody.eventId === 'string'
+                    ? eventBody.eventId
+                    : `stub-evt-${crypto.randomUUID()}`;
+            const body = JSON.stringify({
+                occurredAt: nowIso(),
+                metadata: {},
+                ...eventBody,
+                eventId,
             });
             const signature = crypto
                 .createHmac('sha256', webhookSecret)

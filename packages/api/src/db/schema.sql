@@ -107,3 +107,55 @@ CREATE TABLE IF NOT EXISTS marketplace_provider_config (
   public_key TEXT,
   last_synced_at TIMESTAMPTZ
 );
+
+-- FBM → Matrix bridge (migrations 042–044).
+CREATE TABLE IF NOT EXISTS fbm_vendor_rooms (
+  vendor_id TEXT PRIMARY KEY,
+  space_room_id TEXT NOT NULL,
+  orders_room_id TEXT NOT NULL,
+  inventory_room_id TEXT NOT NULL,
+  ledger_room_id TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS fbm_buyer_order_rooms (
+  id UUID PRIMARY KEY,
+  vendor_id TEXT NOT NULL,
+  buyer_user_id TEXT NOT NULL,
+  order_id TEXT NOT NULL,
+  room_id TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_fbm_buyer_order_rooms_order ON fbm_buyer_order_rooms (order_id);
+CREATE INDEX IF NOT EXISTS idx_fbm_buyer_order_rooms_buyer ON fbm_buyer_order_rooms (buyer_user_id);
+
+CREATE TABLE IF NOT EXISTS fbm_deaddrop_deliveries (
+  id UUID PRIMARY KEY,
+  source_event_id TEXT NOT NULL UNIQUE,
+  buyer_user_id TEXT NOT NULL,
+  entitlement_id UUID,
+  room_id TEXT NOT NULL,
+  drop_id TEXT,
+  clue TEXT,
+  expires_at TIMESTAMPTZ NOT NULL,
+  downloaded_at TIMESTAMPTZ,
+  tombstoned_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_fbm_deaddrop_deliveries_sweep ON fbm_deaddrop_deliveries (tombstoned_at, expires_at);
+
+CREATE TABLE IF NOT EXISTS fbm_dispute_rooms (
+  dispute_id TEXT PRIMARY KEY,
+  order_id TEXT,
+  vendor_id TEXT NOT NULL,
+  buyer_user_id TEXT NOT NULL,
+  mediator_user_id TEXT,
+  room_id TEXT NOT NULL,
+  status TEXT NOT NULL,
+  opened_at TIMESTAMPTZ NOT NULL,
+  resolved_at TIMESTAMPTZ,
+  purge_after TIMESTAMPTZ,
+  purged_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_fbm_dispute_rooms_purge ON fbm_dispute_rooms (status, purge_after);
