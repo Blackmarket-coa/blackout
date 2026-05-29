@@ -53,6 +53,13 @@ test('stub provider: catalog returns seeded listings', async () => {
     assert.ok(ids.includes('stub-stickers-cats'));
     assert.ok(ids.includes('stub-plugin-todo'));
     assert.ok(ids.includes('stub-privacy-tools-advanced'));
+    // Black Market privacy SKUs added in PR (Burner Pro / Ephemeral Pro / Data-Deletion Pro /
+    // Stego Advanced / Sovereignty Bundle).
+    assert.ok(ids.includes('stub-burner-pro'));
+    assert.ok(ids.includes('stub-ephemeral-pro'));
+    assert.ok(ids.includes('stub-data-deletion-pro'));
+    assert.ok(ids.includes('stub-stego-advanced'));
+    assert.ok(ids.includes('stub-sovereignty-bundle'));
 });
 
 test('stub provider: full checkout round-trip grants entitlement and serves signed bundle', async () => {

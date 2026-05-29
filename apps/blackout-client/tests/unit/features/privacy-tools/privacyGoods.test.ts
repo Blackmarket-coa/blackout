@@ -2,7 +2,13 @@
 import { describe, expect, it } from 'vitest';
 import { createStore } from 'jotai';
 import { parseOwnedPrivacyTier } from '../../../../src/app/features/privacy-tools/privacyGoods';
-import { privacyToolsEntitledAtom } from '../../../../src/app/features/privacy-tools/privacyToolsAtoms';
+import {
+    bulkDeletionEntitledAtom,
+    burnerProEntitledAtom,
+    ephemeralProEntitledAtom,
+    perturbationEntitledAtom,
+    privacyToolsEntitledAtom,
+} from '../../../../src/app/features/privacy-tools/privacyToolsAtoms';
 import {
     installedPluginsAtom,
     type InstalledPluginRecord,
@@ -59,5 +65,50 @@ describe('privacyToolsEntitledAtom', () => {
         const store = createStore();
         store.set(installedPluginsAtom, [record({ tier: 'advanced', features: ['exif_strip'] })]);
         expect(store.get(privacyToolsEntitledAtom)).toBe(true);
+    });
+});
+
+describe('per-feature entitlement atoms', () => {
+    const record = (privacyTier?: InstalledPluginRecord['privacyTier']): InstalledPluginRecord =>
+        ({
+            entitlementId: 'e1',
+            manifest: { id: 'p1' } as InstalledPluginRecord['manifest'],
+            status: 'enabled',
+            installedAt: new Date().toISOString(),
+            grantedCapabilities: [],
+            privacyTier,
+        } as InstalledPluginRecord);
+
+    it('Burner Pro SKU unlocks only burner_pro', () => {
+        const store = createStore();
+        store.set(installedPluginsAtom, [record({ tier: 'advanced', features: ['burner_pro'] })]);
+        expect(store.get(burnerProEntitledAtom)).toBe(true);
+        expect(store.get(ephemeralProEntitledAtom)).toBe(false);
+        expect(store.get(bulkDeletionEntitledAtom)).toBe(false);
+    });
+
+    it('Sovereignty Bundle unlocks every Pro tier and perturbation', () => {
+        const store = createStore();
+        store.set(installedPluginsAtom, [
+            record({
+                tier: 'advanced',
+                features: ['burner_pro', 'ephemeral_pro', 'bulk_deletion', 'perturbation'],
+            }),
+        ]);
+        expect(store.get(burnerProEntitledAtom)).toBe(true);
+        expect(store.get(ephemeralProEntitledAtom)).toBe(true);
+        expect(store.get(bulkDeletionEntitledAtom)).toBe(true);
+        expect(store.get(perturbationEntitledAtom)).toBe(true);
+    });
+
+    it('multiple entitlements stack — any record carrying a feature unlocks it', () => {
+        const store = createStore();
+        store.set(installedPluginsAtom, [
+            record({ tier: 'advanced', features: ['burner_pro'] }),
+            record({ tier: 'advanced', features: ['ephemeral_pro'] }),
+        ]);
+        expect(store.get(burnerProEntitledAtom)).toBe(true);
+        expect(store.get(ephemeralProEntitledAtom)).toBe(true);
+        expect(store.get(bulkDeletionEntitledAtom)).toBe(false);
     });
 });
