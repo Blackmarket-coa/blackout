@@ -119,6 +119,42 @@ test('POST /v1/identities enforces the free-tier active-burner cap', async () =>
     });
 });
 
+test('POST /v1/identities raises the cap when burner_pro is granted', async () => {
+    const owner = makeUser(`owner_${randomUUID().slice(0, 8)}`);
+    const now = new Date().toISOString();
+    db.upsertMarketplaceEntitlement({
+        id: randomUUID(),
+        userId: owner.id,
+        providerId: 'freeblackmarket',
+        providerListingId: 'stub-burner-pro',
+        sku: null,
+        kind: 'privacy_tool',
+        status: 'granted',
+        grantedAt: now,
+        expiresAt: null,
+        sourceEventId: `seed-${randomUUID()}`,
+        metadata: { features: ['burner_pro'] },
+        createdAt: now,
+        updatedAt: now,
+    });
+
+    await withMatrix({ provisionBurner: provisionOk }, async () => {
+        // Free tier was capped at 1; with the entitlement we expect at least
+        // two consecutive creates to succeed.
+        for (let i = 0; i < 2; i += 1) {
+            const res = await app.request('/v1/identities', {
+                method: 'POST',
+                headers: {
+                    authorization: `Bearer ${owner.token}`,
+                    'content-type': 'application/json',
+                },
+                body: JSON.stringify({ label: `pro-${i}` }),
+            });
+            assert.equal(res.status, 201, `create ${i} should succeed`);
+        }
+    });
+});
+
 test('POST /v1/identities returns 503 when Synapse is unconfigured', async () => {
     const owner = makeUser(`owner_${randomUUID().slice(0, 8)}`);
     await withMatrix({ provisionBurner: provisionNotConfigured }, async () => {
