@@ -602,6 +602,11 @@ export function createFreeblackmarketStubProvider(): MarketplaceProvider {
             const entry = listings.get(session.listingId);
             if (!entry) return null;
             const eventId = `stub-evt-${sessionId}`;
+            const payload = entry.artifactPayload as { features?: unknown } | undefined;
+            const features =
+                entry.listing.entitlementKind === 'privacy_tool' && Array.isArray(payload?.features)
+                    ? (payload.features as unknown[]).filter((f) => typeof f === 'string')
+                    : undefined;
             const body = JSON.stringify({
                 eventId,
                 type: 'purchase.succeeded',
@@ -614,6 +619,7 @@ export function createFreeblackmarketStubProvider(): MarketplaceProvider {
                     sessionId,
                     artifactKind: entry.artifactKind,
                     digitalDelivery: entry.digitalDelivery === true,
+                    ...(features ? { features } : {}),
                 },
             });
             const signature = crypto
