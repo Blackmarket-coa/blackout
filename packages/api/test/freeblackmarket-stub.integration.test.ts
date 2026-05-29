@@ -53,6 +53,32 @@ test('stub provider: catalog returns seeded listings', async () => {
     assert.ok(ids.includes('stub-stickers-cats'));
     assert.ok(ids.includes('stub-plugin-todo'));
     assert.ok(ids.includes('stub-privacy-tools-advanced'));
+    // New plugin-shelf demo listings.
+    assert.ok(ids.includes('stub-plugin-uptime-monitor'));
+    assert.ok(ids.includes('stub-plugin-poll-helper'));
+    assert.ok(ids.includes('stub-automation-welcome-bot'));
+});
+
+test('stub provider: artifactKind filter returns only listings of that kind', async () => {
+    resetAll();
+    const response = await app.request(
+        '/v1/marketplace/listings?providerId=freeblackmarket&artifactKind=manifest_plugin',
+        { headers: authHeaders() },
+    );
+    assert.equal(response.status, 200);
+    const json = (await response.json()) as {
+        listings: Array<{ providerListingId: string; artifactKind?: string }>;
+    };
+    assert.ok(json.listings.length > 0);
+    for (const listing of json.listings) {
+        assert.equal(listing.artifactKind, 'manifest_plugin');
+    }
+    const ids = json.listings.map((l) => l.providerListingId);
+    assert.ok(ids.includes('stub-plugin-todo'));
+    assert.ok(ids.includes('stub-plugin-poll-helper'));
+    // Listings of other kinds are excluded.
+    assert.ok(!ids.includes('stub-theme-noir'));
+    assert.ok(!ids.includes('stub-plugin-uptime-monitor'));
 });
 
 test('stub provider: full checkout round-trip grants entitlement and serves signed bundle', async () => {

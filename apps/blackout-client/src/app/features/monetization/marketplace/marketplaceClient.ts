@@ -1,4 +1,5 @@
 import type {
+    CreatorArtifactKind,
     MarketplaceCategory,
     MarketplaceProviderFeeSchedule,
     MarketplaceProviderId,
@@ -75,6 +76,8 @@ export async function fetchProviders(token: string | null): Promise<MarketplaceP
 export interface ListingsQuery {
     providerId?: MarketplaceProviderId;
     category?: MarketplaceCategory;
+    /** Filter to a single artifact kind (powers the "Plugins" shelf). */
+    artifactKind?: CreatorArtifactKind;
     q?: string;
 }
 
@@ -85,11 +88,9 @@ export async function fetchListings(
     const url = new URL(`${MARKETPLACE_BASE}/listings`, 'https://blackout.local');
     if (query.providerId) url.searchParams.set('providerId', query.providerId);
     if (query.category) url.searchParams.set('category', query.category);
+    if (query.artifactKind) url.searchParams.set('artifactKind', query.artifactKind);
     if (query.q) url.searchParams.set('q', query.q);
-    const data = await getJson<{ listings: NormalizedListing[] }>(
-        url.pathname + url.search,
-        token
-    );
+    const data = await getJson<{ listings: NormalizedListing[] }>(url.pathname + url.search, token);
     return data.listings;
 }
 

@@ -28,6 +28,7 @@ function envBool(
 function buildCatalogUrl(base: string, query: CatalogQuery): string {
     const url = new URL('/v1/catalog/listings', base);
     if (query.category) url.searchParams.set('category', query.category);
+    if (query.artifactKind) url.searchParams.set('artifactKind', query.artifactKind);
     if (query.q) url.searchParams.set('q', query.q);
     if (query.cursor) url.searchParams.set('cursor', query.cursor);
     if (query.limit) url.searchParams.set('limit', String(query.limit));
@@ -52,6 +53,7 @@ function toNormalized(raw: UpstreamListing): NormalizedListing {
         sellerDisplayName: raw.sellerDisplayName ?? raw.seller_display_name,
         mediaUrls: raw.mediaUrls ?? raw.media_urls ?? [],
         entitlementKind: raw.entitlementKind ?? raw.entitlement_kind,
+        artifactKind: raw.artifactKind ?? raw.artifact_kind,
         tags: raw.tags,
         availableSkus: raw.availableSkus ?? raw.available_skus,
     });
@@ -115,7 +117,25 @@ export function createFreeblackmarketProvider(): MarketplaceProvider {
             const data = await call<{ listings: UpstreamListing[] }>(
                 buildCatalogUrl(baseUrl, query).replace(baseUrl, '')
             );
-            return data.listings.map(toNormalized);
+            return (
+                data.listings
+                    // Match the stub: never surface drafts / pending review / rejected /
+                    // archived listings in the public catalog, even if the upstream API
+                    // mistakenly returns them.
+                    .filter(
+                        (raw) =>
+                            raw.status === undefined ||
+                            raw.status === 'published',
+                    )
+                    .map(toNormalized)
+                    // Apply the artifact-kind filter once we've normalized (the upstream
+                    // call may not support it yet).
+                    .filter(
+                        (listing) =>
+                            !query.artifactKind ||
+                            listing.artifactKind === query.artifactKind,
+                    )
+            );
         },
 
         async getListing(listingId: string): Promise<NormalizedListing | null> {
