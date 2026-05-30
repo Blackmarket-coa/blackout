@@ -217,14 +217,47 @@ For the embedded-checkout flow, the `url` should host an FBM checkout page that 
 
 ---
 
-## 6. Phase 2+ event families (plan now; not required for first cutover)
+## 6. Phase 2 event families — **implemented in Blackout** (same envelope/signing as §3)
 
-Same envelope/signing. Adding these later unlocks the remaining Blackout features:
+These three families are live on the Blackout side. Emitting them lights up the
+corresponding rooms. `vendorMxid` is optional (sent when known).
 
-- **Order Cycles (§1.2):** `cycle.open` / `cycle.close` / `sold_out`
-  `{ vendorId, cycleId, name, items?, closingAt?, listingDeepLink?, soldOutSku? }` → public vendor room.
-- **Customer messages (§1.1):** `message.sent` `{ vendorId, userId, body, threadId? }` → vendor "customer messages" room.
-- **Vendor trust (§2.2):** `vendor.trust_changed` `{ vendorId, vendorMxid?, verified, completionRate, disputeRate, coopStatus, tier }`.
+**Order Cycles (§1.2) → public per-vendor announcement room.** `type` ∈
+`cycle.open | cycle.close | sold_out`:
+```json
+{ "eventId":"...", "type":"cycle.open", "occurredAt":"...",
+  "vendorId":"vendor-1", "cycleId":"cyc_1", "name":"Spring Harvest",
+  "items":[{"sku":"kale","title":"Kale"}], "closingAt":"2026-06-01T00:00:00Z",
+  "listingDeepLink":"https://freeblackmarket.com/c/cyc_1" }
+```
+```json
+{ "eventId":"...", "type":"cycle.close", "occurredAt":"...",
+  "vendorId":"vendor-1", "cycleId":"cyc_1", "name":"Spring Harvest",
+  "ordersPlaced":42, "nextCycleAt":"2026-06-08T00:00:00Z" }
+```
+```json
+{ "eventId":"...", "type":"sold_out", "occurredAt":"...",
+  "vendorId":"vendor-1", "cycleId":"cyc_1", "name":"Spring Harvest", "soldOutSku":"kale" }
+```
+
+**Customer messages (§1.1) → private vendor "customer messages" room.** Buyer is
+shown by pseudonymous alias only:
+```json
+{ "eventId":"...", "type":"message.sent", "occurredAt":"...",
+  "vendorId":"vendor-1", "userId":"buyer-blackout-id", "body":"is this gluten free?", "threadId":"optional" }
+```
+
+**Vendor trust badge (§2.2) → `co.bmc.vendor.trust` room state event (state key = vendorId)
+on the vendor's space + orders room.** `tier` ∈ `unverified | verified | trusted | flagged`:
+```json
+{ "eventId":"...", "type":"vendor.trust_changed", "occurredAt":"...",
+  "vendorId":"vendor-1", "verified":true, "tier":"trusted",
+  "completionRate":0.98, "disputeRate":0.01, "coopStatus":"member",
+  "vendorMxid":"@vendor:theblackout.app" }
+```
+
+## 6b. Later event families (plan now; not yet implemented)
+
 - **Logistics / Blackstar (§7):** `blackstar.driver_assigned | pickup_confirmed | delivered | failed`
   `{ vendorId, userId, orderId, driver?, etaPickup?, etaDelivery?, trackingUrl?, proof? }`.
 - **Flash sale (§6):** `flash_sale.start` `{ vendorId, items, discount, durationSeconds, listingDeepLink, location? }`.

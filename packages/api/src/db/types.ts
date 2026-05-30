@@ -857,6 +857,10 @@ export interface FbmVendorRoomRecord {
   ordersRoomId: string;
   inventoryRoomId: string;
   ledgerRoomId: string;
+  /** Public Order Cycle announcement room (§1.2). Lazily provisioned. */
+  announceRoomId?: string;
+  /** Private customer-messages room (§1.1) for bridged buyer inquiries. */
+  customerMessagesRoomId?: string;
   createdAt: string;
 }
 

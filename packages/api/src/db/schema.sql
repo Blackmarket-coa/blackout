@@ -115,6 +115,8 @@ CREATE TABLE IF NOT EXISTS fbm_vendor_rooms (
   orders_room_id TEXT NOT NULL,
   inventory_room_id TEXT NOT NULL,
   ledger_room_id TEXT NOT NULL,
+  announce_room_id TEXT,
+  customer_messages_room_id TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

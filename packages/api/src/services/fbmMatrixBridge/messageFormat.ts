@@ -6,24 +6,36 @@
 // mirroring how scheduledMessageDispatcher embeds `co.blackout.scheduled`.
 
 import {
+    FBM_CUSTOMER_MESSAGE_EVENT_TYPE,
+    FBM_CYCLE_EVENT_TYPE,
     FBM_DISPUTE_EVENT_TYPE,
     FBM_INVENTORY_EVENT_TYPE,
     FBM_LEDGER_EVENT_TYPE,
     FBM_MARKETPLACE_SCHEMA_VERSION,
     FBM_ORDER_EVENT_TYPE,
+    FBM_VENDOR_TRUST_EVENT_TYPE,
+    type FbmCustomerMessageContent,
+    type FbmCycleEventContent,
     type FbmDisputeEventContent,
     type FbmInventoryEventContent,
     type FbmLedgerEventContent,
     type FbmOrderEventContent,
+    type FbmVendorTrustContent,
 } from '@blackout/protocol';
 import type {
+    FbmCustomerMessageEvent,
+    FbmCycleEvent,
     FbmInventoryLowEvent,
     FbmLedgerEvent,
     FbmOrderCancelledEvent,
     FbmOrderCreatedEvent,
     FbmOrderUpdatedEvent,
+    FbmVendorTrustChangedEvent,
 } from './events';
 import { ledgerKindFromType } from './events';
+
+const cycleKindFromType = (type: FbmCycleEvent['type']): FbmCycleEventContent['kind'] =>
+    type === 'cycle.open' ? 'open' : type === 'cycle.close' ? 'close' : 'sold_out';
 
 const CURRENCY_SYMBOLS: Record<string, string> = { USD: '$', EUR: '€', GBP: '£' };
 
@@ -212,4 +224,83 @@ export function disputeStateContent(
     };
 }
 
-export { FBM_DISPUTE_EVENT_TYPE };
+export function formatCycle(event: FbmCycleEvent): FormattedMessage {
+    let body: string;
+    if (event.type === 'cycle.open') {
+        const itemSummary = event.items?.length
+            ? ` ${event.items.length} item${event.items.length === 1 ? '' : 's'} available.`
+            : '';
+        const closing = event.closingAt ? ` Closes ${event.closingAt}.` : '';
+        const link = event.listingDeepLink ? ` ${event.listingDeepLink}` : '';
+        body = `Order cycle "${event.name}" is open.${itemSummary}${closing}${link}`;
+    } else if (event.type === 'cycle.close') {
+        const placed =
+            event.ordersPlaced !== undefined ? ` ${event.ordersPlaced} order(s) placed.` : '';
+        const next = event.nextCycleAt ? ` Next cycle ${event.nextCycleAt}.` : '';
+        body = `Order cycle "${event.name}" has closed.${placed}${next}`;
+    } else {
+        const sku = event.soldOutSku ? ` ${event.soldOutSku}` : '';
+        body = `Sold out:${sku} in "${event.name}".`;
+    }
+    return {
+        body,
+        content: {
+            msgtype: 'm.notice',
+            body,
+            [FBM_CYCLE_EVENT_TYPE]: {
+                schemaVersion: FBM_MARKETPLACE_SCHEMA_VERSION,
+                kind: cycleKindFromType(event.type),
+                vendorId: event.vendorId,
+                cycleId: event.cycleId,
+                name: event.name,
+                items: event.items,
+                closingAt: event.closingAt,
+                listingDeepLink: event.listingDeepLink,
+                nextCycleAt: event.nextCycleAt,
+                ordersPlaced: event.ordersPlaced,
+                soldOutSku: event.soldOutSku,
+                occurredAt: event.occurredAt,
+            } satisfies FbmCycleEventContent,
+        },
+    };
+}
+
+export function formatCustomerMessage(
+    event: FbmCustomerMessageEvent,
+    buyerAlias: string
+): FormattedMessage {
+    const body = `${buyerAlias}: ${event.body}`;
+    return {
+        body,
+        content: {
+            msgtype: 'm.text',
+            body,
+            [FBM_CUSTOMER_MESSAGE_EVENT_TYPE]: {
+                schemaVersion: FBM_MARKETPLACE_SCHEMA_VERSION,
+                vendorId: event.vendorId,
+                buyerAlias,
+                body: event.body,
+                threadId: event.threadId,
+                occurredAt: event.occurredAt,
+            } satisfies FbmCustomerMessageContent,
+        },
+    };
+}
+
+/** Structured vendor-trust state-event content (`co.bmc.vendor.trust`). */
+export function vendorTrustStateContent(
+    event: FbmVendorTrustChangedEvent
+): FbmVendorTrustContent {
+    return {
+        schemaVersion: FBM_MARKETPLACE_SCHEMA_VERSION,
+        vendorId: event.vendorId,
+        verified: event.verified,
+        tier: event.tier,
+        completionRate: event.completionRate,
+        disputeRate: event.disputeRate,
+        coopStatus: event.coopStatus,
+        occurredAt: event.occurredAt,
+    };
+}
+
+export { FBM_DISPUTE_EVENT_TYPE, FBM_VENDOR_TRUST_EVENT_TYPE };
