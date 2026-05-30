@@ -176,11 +176,20 @@ test('syncMxidAcls: applies highest power level per room, idempotent, drift-corr
 
 test('syncMxidAcls: no entitlements client configured → unavailable no-op', async () => {
     db.resetFbmAclStateForTest();
-    const matrix = fakeMatrix();
-    const res = await syncMxidAcls('@a:srv', { entitlements: undefined, matrix });
-    assert.equal(res.unavailable, true);
-    assert.equal(res.applied, 0);
-    assert.equal(matrix.writes.length, 0);
+    // Force the factory to resolve to "unconfigured": stub off, no base URL.
+    const prevStub = process.env.FBM_ENTITLEMENTS_STUB;
+    delete process.env.FBM_ENTITLEMENTS_STUB;
+    resetEntitlementsClientForTest();
+    try {
+        const matrix = fakeMatrix();
+        const res = await syncMxidAcls('@a:srv', { matrix }); // no dep → factory returns undefined
+        assert.equal(res.unavailable, true);
+        assert.equal(res.applied, 0);
+        assert.equal(matrix.writes.length, 0);
+    } finally {
+        if (prevStub !== undefined) process.env.FBM_ENTITLEMENTS_STUB = prevStub;
+        resetEntitlementsClientForTest();
+    }
 });
 
 // --- factory + stub selection ------------------------------------------------
