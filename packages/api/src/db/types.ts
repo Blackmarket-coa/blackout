@@ -336,7 +336,8 @@ export type OutboundEventType =
   | 'streamgoal.reached'
   | 'channelpoints.redeemed'
   | 'hypetrain.started'
-  | 'hypetrain.ended';
+  | 'hypetrain.ended'
+  | 'governance.proposal.resolved';
 
 /**
  * A creator-defined channel-points reward viewers redeem with points earned on

@@ -28,6 +28,8 @@ import {
 } from './vendorRooms';
 import { applySubscriptionActivated, applySubscriptionLapsed } from './subscriptionRooms';
 import { openDisputeRoom, resolveDisputeRoom } from './disputeRooms';
+import { postLogistics } from './logisticsRooms';
+import { startFlashSale } from './flashMob';
 
 export interface FbmBridgeDeps {
     matrixClient?: FbmBridgeMatrixClient;
@@ -78,6 +80,13 @@ async function route(event: FbmMatrixEvent, matrix: FbmBridgeMatrixClient): Prom
             return postCustomerMessage(event, matrix);
         case 'vendor.trust_changed':
             return applyVendorTrust(event, matrix);
+        case 'blackstar.driver_assigned':
+        case 'blackstar.pickup_confirmed':
+        case 'blackstar.delivered':
+        case 'blackstar.failed':
+            return postLogistics(event, matrix);
+        case 'flash_sale.start':
+            return startFlashSale(event, matrix);
     }
 }
 

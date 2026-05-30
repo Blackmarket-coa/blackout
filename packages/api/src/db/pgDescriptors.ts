@@ -500,6 +500,7 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
   deleteChannelPointsReward: resync('channelPointsRewards'),
   appendChannelPointsLedger: upsert('channelPointsLedger'),
   upsertCoalitionSpatialItem: upsert('coalitionSpatialItems'),
+  deleteCoalitionSpatialItem: resync('coalitionSpatialItems'),
   createCoalitionAidPost: upsert('coalitionAidPosts'),
   upsertCoalitionEvent: upsert('coalitionEvents'),
   upsertEventRsvp: upsert('eventRsvps'),

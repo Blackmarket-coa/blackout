@@ -256,14 +256,48 @@ on the vendor's space + orders room.** `tier` ∈ `unverified | verified | trust
   "vendorMxid":"@vendor:theblackout.app" }
 ```
 
-## 6b. Later event families (plan now; not yet implemented)
+## 6c. Phase 3 event families — **implemented in Blackout** (same envelope/signing as §3)
 
-- **Logistics / Blackstar (§7):** `blackstar.driver_assigned | pickup_confirmed | delivered | failed`
-  `{ vendorId, userId, orderId, driver?, etaPickup?, etaDelivery?, trackingUrl?, proof? }`.
-- **Flash sale (§6):** `flash_sale.start` `{ vendorId, items, discount, durationSeconds, listingDeepLink, location? }`.
-- **Governance round-trip (§3.2):** FBM may POST a proposal to be created in a governance room,
-  and will receive a Blackout outbound webhook `governance.proposal.resolved`
-  `{ proposalId, result, tally }` to apply a price / close a cycle / adjust stock.
+**Logistics / Blackstar (§7) → vendor orders room + buyer order room (+ escalation room on failure).**
+`type` ∈ `blackstar.driver_assigned | blackstar.pickup_confirmed | blackstar.delivered | blackstar.failed`:
+```json
+{ "eventId":"...", "type":"blackstar.driver_assigned", "occurredAt":"...",
+  "vendorId":"vendor-1", "userId":"buyer-blackout-id", "orderId":"ord_1",
+  "driverName":"Sam", "vehicleType":"cargo e-bike", "etaPickup":"12:05",
+  "etaDelivery":"12:40", "trackingUrl":"https://track/abc" }
+```
+```json
+{ "eventId":"...", "type":"blackstar.delivered", "occurredAt":"...",
+  "vendorId":"vendor-1", "userId":"buyer-blackout-id", "orderId":"ord_1", "proof":"mxc://..." }
+```
+```json
+{ "eventId":"...", "type":"blackstar.failed", "occurredAt":"...",
+  "vendorId":"vendor-1", "userId":"buyer-blackout-id", "orderId":"ord_1", "failureReason":"no answer" }
+```
+(Operator sets `FBM_LOGISTICS_ESCALATION_ROOM` to a Matrix room id/alias for failure escalation.)
+
+**Flash sale (§6) → public announce-room burst + ephemeral spatial heat pin (purged ≤1h).**
+```json
+{ "eventId":"...", "type":"flash_sale.start", "occurredAt":"...",
+  "vendorId":"vendor-1", "saleId":"sale_1", "name":"Tomato blowout", "discount":"30%",
+  "durationSeconds":1800, "listingDeepLink":"https://fbm/sale_1",
+  "latitude":40.1, "longitude":-74.2 }
+```
+The room burst reaches subscribers via their existing Matrix pushers (no extra push infra). The
+heat pin is capped to the heatmap's [0,1] range with the raw `heatMultiplier:8` carried in `meta`;
+pin TTL is `FBM_FLASH_SALE_PIN_TTL_SECONDS` (default 3600).
+
+**Governance round-trip (§3.2).** Blackout side is implemented: resolving a proposal
+(`POST /v1/governance/proposals/:id/resolve`) tallies it and fires an **outbound** webhook
+`governance.proposal.resolved` `{ proposalId, communityId, title, result, tally }` to the
+proposer's registered outbound-webhook subscriptions. **FBM** should register an outbound-webhook
+receiver (per §1-style signed delivery, `x-blackout-signature`) and apply the decision (update a
+price, close an Order Cycle, adjust stock). Inbound FBM-initiated proposal creation can use the
+existing `POST /v1/governance/proposals`.
+
+## 6d. Later event families (plan now; not yet implemented)
+
+- **§3.1 Barter Board**, **§3.3 Coalition Credits / participation-XP loop.**
 
 ---
 

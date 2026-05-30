@@ -32,6 +32,7 @@ const eventTypeSchema = z.enum([
   'channelpoints.redeemed',
   'hypetrain.started',
   'hypetrain.ended',
+  'governance.proposal.resolved',
 ] as const);
 
 const registerSchema = z.object({
