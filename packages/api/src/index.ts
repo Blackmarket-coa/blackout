@@ -432,6 +432,21 @@ if (shouldListen) {
     );
   }
 
+  // FBM → Matrix bridge tombstone sweeper. Purges expired digital-product
+  // dead-drop rooms (72h / on download) and resolved dispute rooms past their
+  // retention window (90d). Only runs when the bridge is enabled.
+  if (
+    process.env.FBM_MATRIX_BRIDGE_ENABLED === '1' ||
+    process.env.FBM_MATRIX_BRIDGE_ENABLED?.toLowerCase() === 'true'
+  ) {
+    void import('./services/fbmMatrixBridge/tombstoneDispatcher').then(
+      ({ startFbmTombstoneDispatcher }) => {
+        startFbmTombstoneDispatcher();
+        log.info('fbm_matrix_tombstone_dispatcher_started', {});
+      },
+    );
+  }
+
   const httpServer = serve({ fetch: app.fetch, port: PORT }, (info) => {
     log.info('blackout-server listening', { port: info.port });
   });

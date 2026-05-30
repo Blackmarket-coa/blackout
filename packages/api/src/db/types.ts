@@ -843,6 +843,69 @@ export interface MarketplaceListingsCacheRecord {
   refreshedAt: string;
 }
 
+// --- FBM → Matrix bridge ------------------------------------------------------
+// Persistent mappings the `fbmMatrixBridge` service maintains when translating
+// FreeBlackMarket webhook events into Matrix room activity. Column names are the
+// snake_case of these fields (the pg writer maps camelCase ↔ snake_case by
+// reflection); see migrations 042–044.
+
+/** One per FBM vendor: the bot-provisioned space + its orders/inventory/ledger rooms. */
+export interface FbmVendorRoomRecord {
+  /** FBM vendor id (primary key). */
+  vendorId: string;
+  spaceRoomId: string;
+  ordersRoomId: string;
+  inventoryRoomId: string;
+  ledgerRoomId: string;
+  createdAt: string;
+}
+
+/** A buyer-facing per-order room where order-status updates are pushed. */
+export interface FbmBuyerOrderRoomRecord {
+  id: UUID;
+  vendorId: string;
+  /** FBM userId (Blackout `sub`) of the buyer. */
+  buyerUserId: string;
+  /** FBM order id (unique). */
+  orderId: string;
+  roomId: string;
+  createdAt: string;
+}
+
+/** A digital-product dead-drop delivery: a temporary room tombstoned after 72h / download. */
+export interface FbmDeaddropDeliveryRecord {
+  id: UUID;
+  /** Originating webhook event id (unique) — DB-level replay idempotency. */
+  sourceEventId: string;
+  buyerUserId: string;
+  entitlementId: string | null;
+  roomId: string;
+  dropId: string | null;
+  clue: string | null;
+  expiresAt: string;
+  downloadedAt: string | null;
+  tombstonedAt: string | null;
+  createdAt: string;
+}
+
+/** A three-party encrypted dispute room; persists read-only for 90 days post-resolution. */
+export interface FbmDisputeRoomRecord {
+  /** FBM dispute id (primary key). */
+  disputeId: string;
+  orderId: string | null;
+  vendorId: string;
+  buyerUserId: string;
+  mediatorUserId: string | null;
+  roomId: string;
+  status: 'open' | 'resolved';
+  openedAt: string;
+  resolvedAt: string | null;
+  /** resolvedAt + retention window; the sweeper purges the room after this. */
+  purgeAfter: string | null;
+  purgedAt: string | null;
+  createdAt: string;
+}
+
 export type PluginInstallScopeType = 'user' | 'den' | 'coalition' | 'creator';
 
 export type PluginInstallStatus =

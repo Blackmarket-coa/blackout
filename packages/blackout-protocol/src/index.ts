@@ -1,5 +1,6 @@
 export * from './common/types';
 export * from './governance/events';
+export * from './marketplace/events';
 export * from './forum/events';
 export * from './deaddrop';
 export * from './moderation/events';

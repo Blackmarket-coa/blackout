@@ -86,6 +86,10 @@ import type {
   ColiseumVoteRecord,
   ColiseumLiveSessionRecord,
   ReputationEventRecord,
+  FbmVendorRoomRecord,
+  FbmBuyerOrderRoomRecord,
+  FbmDeaddropDeliveryRecord,
+  FbmDisputeRoomRecord,
 } from './types';
 import {
   COALITION_SPATIAL_SEED,
@@ -130,6 +134,10 @@ type PersistedState = {
   marketplaceWebhookAudit: MarketplaceWebhookAuditRecord[];
   marketplaceLicenseKeys: MarketplaceLicenseKeyRecord[];
   marketplaceListingsCache: MarketplaceListingsCacheRecord[];
+  fbmVendorRooms: FbmVendorRoomRecord[];
+  fbmBuyerOrderRooms: FbmBuyerOrderRoomRecord[];
+  fbmDeaddropDeliveries: FbmDeaddropDeliveryRecord[];
+  fbmDisputeRooms: FbmDisputeRoomRecord[];
   tips: TipRecord[];
   creatorSubscriptionTiers: CreatorSubscriptionTierRecord[];
   creatorSubscriptions: CreatorSubscriptionRecord[];
@@ -216,6 +224,10 @@ class InMemoryDb {
   marketplaceWebhookAudit = new Map<string, MarketplaceWebhookAuditRecord>();
   marketplaceLicenseKeys = new Map<string, MarketplaceLicenseKeyRecord>();
   marketplaceListingsCache = new Map<string, MarketplaceListingsCacheRecord>();
+  fbmVendorRooms = new Map<string, FbmVendorRoomRecord>();
+  fbmBuyerOrderRooms = new Map<string, FbmBuyerOrderRoomRecord>();
+  fbmDeaddropDeliveries = new Map<string, FbmDeaddropDeliveryRecord>();
+  fbmDisputeRooms = new Map<string, FbmDisputeRoomRecord>();
   tips = new Map<string, TipRecord>();
   creatorSubscriptionTiers = new Map<string, CreatorSubscriptionTierRecord>();
   creatorSubscriptions = new Map<string, CreatorSubscriptionRecord>();
@@ -2018,6 +2030,77 @@ class InMemoryDb {
     this.marketplaceListingsCache.clear();
   }
 
+  // --- FBM → Matrix bridge ---------------------------------------------------
+
+  getFbmVendorRooms(vendorId: string): FbmVendorRoomRecord | undefined {
+    return this.fbmVendorRooms.get(vendorId);
+  }
+
+  upsertFbmVendorRooms(record: FbmVendorRoomRecord): FbmVendorRoomRecord {
+    this.fbmVendorRooms.set(record.vendorId, record);
+    return record;
+  }
+
+  getFbmBuyerOrderRoom(orderId: string): FbmBuyerOrderRoomRecord | undefined {
+    return [...this.fbmBuyerOrderRooms.values()].find((r) => r.orderId === orderId);
+  }
+
+  upsertFbmBuyerOrderRoom(record: FbmBuyerOrderRoomRecord): FbmBuyerOrderRoomRecord {
+    this.fbmBuyerOrderRooms.set(record.id, record);
+    return record;
+  }
+
+  getFbmDeaddropDeliveryBySourceEvent(
+    sourceEventId: string
+  ): FbmDeaddropDeliveryRecord | undefined {
+    return [...this.fbmDeaddropDeliveries.values()].find(
+      (r) => r.sourceEventId === sourceEventId
+    );
+  }
+
+  upsertFbmDeaddropDelivery(
+    record: FbmDeaddropDeliveryRecord
+  ): FbmDeaddropDeliveryRecord {
+    this.fbmDeaddropDeliveries.set(record.id, record);
+    return record;
+  }
+
+  /** Deliveries past their TTL (or already downloaded) that have not been tombstoned. */
+  listFbmDeaddropDeliveriesToTombstone(nowIso: string): FbmDeaddropDeliveryRecord[] {
+    return [...this.fbmDeaddropDeliveries.values()].filter(
+      (r) =>
+        !r.tombstonedAt &&
+        (r.downloadedAt !== null || r.expiresAt <= nowIso)
+    );
+  }
+
+  getFbmDisputeRoom(disputeId: string): FbmDisputeRoomRecord | undefined {
+    return this.fbmDisputeRooms.get(disputeId);
+  }
+
+  upsertFbmDisputeRoom(record: FbmDisputeRoomRecord): FbmDisputeRoomRecord {
+    this.fbmDisputeRooms.set(record.disputeId, record);
+    return record;
+  }
+
+  /** Resolved dispute rooms whose retention window has elapsed and not yet purged. */
+  listFbmDisputeRoomsToPurge(nowIso: string): FbmDisputeRoomRecord[] {
+    return [...this.fbmDisputeRooms.values()].filter(
+      (r) =>
+        r.status === 'resolved' &&
+        !r.purgedAt &&
+        r.purgeAfter !== null &&
+        r.purgeAfter <= nowIso
+    );
+  }
+
+  resetFbmMatrixBridgeForTest(): void {
+    this.fbmVendorRooms.clear();
+    this.fbmBuyerOrderRooms.clear();
+    this.fbmDeaddropDeliveries.clear();
+    this.fbmDisputeRooms.clear();
+  }
+
   insertTip(record: TipRecord): TipRecord {
     this.tips.set(record.id, record);
     return record;
@@ -2913,6 +2996,18 @@ export class FileBackedDb extends InMemoryDb {
     this.marketplaceListingsCache = new Map(
       (parsed.marketplaceListingsCache ?? []).map((row) => [row.cacheKey, row])
     );
+    this.fbmVendorRooms = new Map(
+      (parsed.fbmVendorRooms ?? []).map((row) => [row.vendorId, row])
+    );
+    this.fbmBuyerOrderRooms = new Map(
+      (parsed.fbmBuyerOrderRooms ?? []).map((row) => [row.id, row])
+    );
+    this.fbmDeaddropDeliveries = new Map(
+      (parsed.fbmDeaddropDeliveries ?? []).map((row) => [row.id, row])
+    );
+    this.fbmDisputeRooms = new Map(
+      (parsed.fbmDisputeRooms ?? []).map((row) => [row.disputeId, row])
+    );
     this.tips = new Map((parsed.tips ?? []).map((row) => [row.id, row]));
     this.creatorSubscriptionTiers = new Map(
       (parsed.creatorSubscriptionTiers ?? []).map((row) => [row.id, row])
@@ -3120,6 +3215,10 @@ export class FileBackedDb extends InMemoryDb {
       marketplaceWebhookAudit: [...this.marketplaceWebhookAudit.values()],
       marketplaceLicenseKeys: [...this.marketplaceLicenseKeys.values()],
       marketplaceListingsCache: [...this.marketplaceListingsCache.values()],
+      fbmVendorRooms: [...this.fbmVendorRooms.values()],
+      fbmBuyerOrderRooms: [...this.fbmBuyerOrderRooms.values()],
+      fbmDeaddropDeliveries: [...this.fbmDeaddropDeliveries.values()],
+      fbmDisputeRooms: [...this.fbmDisputeRooms.values()],
       tips: [...this.tips.values()],
       creatorSubscriptionTiers: [...this.creatorSubscriptionTiers.values()],
       creatorSubscriptions: [...this.creatorSubscriptions.values()],
@@ -3562,6 +3661,39 @@ export class FileBackedDb extends InMemoryDb {
 
   override resetMarketplaceForTest(): void {
     super.resetMarketplaceForTest();
+    this.persist();
+  }
+
+  override upsertFbmVendorRooms(record: FbmVendorRoomRecord): FbmVendorRoomRecord {
+    const created = super.upsertFbmVendorRooms(record);
+    this.persist();
+    return created;
+  }
+
+  override upsertFbmBuyerOrderRoom(
+    record: FbmBuyerOrderRoomRecord
+  ): FbmBuyerOrderRoomRecord {
+    const created = super.upsertFbmBuyerOrderRoom(record);
+    this.persist();
+    return created;
+  }
+
+  override upsertFbmDeaddropDelivery(
+    record: FbmDeaddropDeliveryRecord
+  ): FbmDeaddropDeliveryRecord {
+    const created = super.upsertFbmDeaddropDelivery(record);
+    this.persist();
+    return created;
+  }
+
+  override upsertFbmDisputeRoom(record: FbmDisputeRoomRecord): FbmDisputeRoomRecord {
+    const created = super.upsertFbmDisputeRoom(record);
+    this.persist();
+    return created;
+  }
+
+  override resetFbmMatrixBridgeForTest(): void {
+    super.resetFbmMatrixBridgeForTest();
     this.persist();
   }
 
