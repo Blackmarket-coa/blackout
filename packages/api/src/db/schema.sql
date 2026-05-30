@@ -159,3 +159,13 @@ CREATE TABLE IF NOT EXISTS fbm_dispute_rooms (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_fbm_dispute_rooms_purge ON fbm_dispute_rooms (status, purge_after);
+
+CREATE TABLE IF NOT EXISTS fbm_acl_state (
+  mxid TEXT NOT NULL,
+  room_id TEXT NOT NULL,
+  power_level INTEGER NOT NULL,
+  applied_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (mxid, room_id)
+);
+CREATE INDEX IF NOT EXISTS idx_fbm_acl_state_mxid ON fbm_acl_state (mxid);
