@@ -23,6 +23,7 @@ export const featureModuleManifest = [
     'education',
     'coalition',
     'coliseum',
+    'migration-hub',
     'profile',
     'home',
     'communities',
