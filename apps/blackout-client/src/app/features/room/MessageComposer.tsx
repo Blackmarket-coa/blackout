@@ -20,7 +20,7 @@ import {
 } from 'slate';
 import { withHistory } from 'slate-history';
 import { Editable, ReactEditor, Slate, useSlate, withReact } from 'slate-react';
-import { useAtom, useAtomValue } from 'jotai';
+import { useAtom } from 'jotai';
 import { useLegacyRoomMembersAdapter as useRoomMembers } from '../../plugins/matrix-adapters/hooks/useLegacyRoomAdapter';
 import { useNavigationSpaceTree } from '../../plugins/navigation';
 import {
@@ -43,7 +43,6 @@ import { EmojiPicker } from './EmojiPicker';
 import { createScheduledMessage } from './scheduledMessagesClient';
 import { sanitizeFormattedBody, sanitizeUrlsInText } from '../../utils/sanitizeUrl';
 import { stripImageMetadata } from '../../utils/stripImageMetadata';
-import { privacyToolsSettingsAtom } from '../privacy-tools/privacyToolsAtoms';
 import {
     SLOWMODE_STATE_EVENT_TYPE,
     evaluateSlowmode,
@@ -629,7 +628,6 @@ export const MessageComposer = ({
     const [slowmodeNotice, setSlowmodeNotice] = useState<string | null>(null);
     const lastSentTsRef = useRef<number | null>(null);
     const [commandPayload, setCommandPayload] = useAtom(composerCommandPayloadAtom);
-    const privacyToolsSettings = useAtomValue(privacyToolsSettingsAtom);
 
     const menuRef = useRef<HTMLDivElement | null>(null);
     const emojiPickerRef = useRef<HTMLDivElement | null>(null);
@@ -936,12 +934,11 @@ export const MessageComposer = ({
                 commandEnabled && selectedCommand
                     ? executeCommandTemplate(selectedCommand, plainBody)
                     : plainBody;
-            let bodyToSend = `${commandProcessedBody}${signatureSuffix}`.trim();
-            let formattedBody = htmlBody;
-            if (privacyToolsSettings.linkSanitizeEnabled) {
-                bodyToSend = sanitizeUrlsInText(bodyToSend);
-                formattedBody = sanitizeFormattedBody(formattedBody);
-            }
+            // Link sanitization is native — always strip tracking params before send.
+            const bodyToSend = sanitizeUrlsInText(
+                `${commandProcessedBody}${signatureSuffix}`.trim(),
+            );
+            const formattedBody = sanitizeFormattedBody(htmlBody);
 
             if (target?.mode === 'edit' && target.eventId) {
                 await editMessage(target.eventId, bodyToSend);
@@ -1077,7 +1074,6 @@ export const MessageComposer = ({
         ephemeralEnabled,
         matrixClient,
         onSent,
-        privacyToolsSettings.linkSanitizeEnabled,
         room,
         roomId,
         scheduleDelayHours,
@@ -1199,11 +1195,9 @@ export const MessageComposer = ({
     );
 
     const prepareAttachments = useCallback(
-        async (files: File[]): Promise<File[]> => {
-            if (!privacyToolsSettings.exifStripEnabled) return files;
-            return Promise.all(files.map((file) => stripImageMetadata(file)));
-        },
-        [privacyToolsSettings.exifStripEnabled]
+        // EXIF stripping is native — always strip metadata from outgoing files.
+        async (files: File[]): Promise<File[]> => Promise.all(files.map(stripImageMetadata)),
+        []
     );
 
     const onDropFiles = useCallback(

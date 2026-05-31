@@ -409,6 +409,46 @@ export const matrixClient = {
   },
 
   /**
+   * Remove a user from a room as the bot (`POST .../rooms/{roomId}/kick`). Used
+   * by the subscription-gated room sync when an FBM subscription lapses. Requires
+   * the bot to hold sufficient power in the target room (it does for bot-created
+   * rooms; operator-provisioned standing tier rooms must grant the bot the kick
+   * power level). Best-effort: returns `{ ok, status, detail }` and never throws.
+   */
+  async kickFromRoom(roomId: string, userId: string, reason?: string) {
+    const hs = homeserver();
+    const token = botToken();
+    if (!hs || !token) {
+      return { ok: false as const, reason: 'matrix_not_configured' as const };
+    }
+    let response: Response;
+    try {
+      response = await fetch(
+        `${hs}/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/kick`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(reason ? { user_id: userId, reason } : { user_id: userId }),
+        },
+      );
+    } catch (error) {
+      return { ok: false as const, reason: 'network_error' as const, detail: (error as Error).message };
+    }
+    let detail: string | undefined;
+    if (!response.ok) {
+      try {
+        detail = await response.text();
+      } catch {
+        /* ignore body-read failure */
+      }
+    }
+    return { ok: response.ok, status: response.status, detail };
+  },
+
+  /**
    * Force-join a local user into a room via the Synapse admin API
    * (`POST /_synapse/admin/v1/join/{roomId}`). Unlike `inviteToRoom`, this
    * does NOT require the bot to be a member of the room — it leverages the

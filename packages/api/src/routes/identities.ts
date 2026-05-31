@@ -9,6 +9,7 @@ import {
   createBurnerForOwner,
   listBurnersForOwner,
 } from '../services/burnerIdentities';
+import { userHasPrivacyFeature } from '../services/privacyEntitlements';
 import type { BurnerIdentityRecord } from '../db/types';
 
 const identities = new Hono();
@@ -41,6 +42,7 @@ identities.post('/', async (c) => {
     ownerUserId: user.sub,
     label: parsed.label,
     ttlHours: parsed.ttlHours,
+    advancedEntitled: userHasPrivacyFeature(user.sub, 'burner_pro'),
   });
 
   switch (outcome.kind) {

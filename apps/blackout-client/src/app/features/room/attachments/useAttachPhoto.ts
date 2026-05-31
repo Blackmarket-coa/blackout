@@ -1,9 +1,7 @@
 import { useCallback, type Dispatch, type RefObject, type SetStateAction } from 'react';
-import { useAtomValue } from 'jotai';
 import { isNativePlatform } from '../../../../platform/nativeMediaBridge';
 import { pickPhotoAttachment } from './pickPhotoAttachment';
 import { trackAttachPhoto } from './attachmentsTelemetry';
-import { privacyToolsSettingsAtom } from '../../privacy-tools/privacyToolsAtoms';
 import { stripImageMetadata } from '../../../utils/stripImageMetadata';
 
 export interface UseAttachPhotoOptions {
@@ -35,15 +33,13 @@ export const useAttachPhoto = ({
     pickPhoto = pickPhotoAttachment,
     isNative = isNativePlatform,
     track = trackAttachPhoto,
-}: UseAttachPhotoOptions) => {
-    const { exifStripEnabled } = useAtomValue(privacyToolsSettingsAtom);
-    return useCallback(async () => {
+}: UseAttachPhotoOptions) =>
+    useCallback(async () => {
         if (isNative()) {
             const result = await pickPhoto({ source: 'auto' });
             if (result) {
-                const file = exifStripEnabled
-                    ? await stripImageMetadata(result.file)
-                    : result.file;
+                // EXIF stripping is native — always strip on the native picker path too.
+                const file = await stripImageMetadata(result.file);
                 setAttachments((prev) => [...prev, file]);
                 track(result.source);
             }
@@ -51,5 +47,4 @@ export const useAttachPhoto = ({
         }
         attachmentInputRef.current?.click();
         track('web');
-    }, [setAttachments, attachmentInputRef, pickPhoto, isNative, track, exifStripEnabled]);
-};
+    }, [setAttachments, attachmentInputRef, pickPhoto, isNative, track]);

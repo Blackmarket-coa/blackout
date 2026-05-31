@@ -207,6 +207,33 @@ test('stub provider: creator listing flow seeds a new draft into the catalog', a
     );
 });
 
+test('stub provider: privacy_tool purchase carries the features array onto the entitlement', async () => {
+    resetAll();
+    const checkoutResponse = await app.request('/v1/marketplace/checkout', {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({
+            providerId: 'freeblackmarket',
+            listingId: 'stub-privacy-tools-advanced',
+            embed: true,
+        }),
+    });
+    assert.equal(checkoutResponse.status, 200);
+    const { sessionId } = (await checkoutResponse.json()) as { sessionId: string };
+
+    const completeResponse = await app.request(
+        `/v1/marketplace/stub/checkout/${sessionId}/complete`,
+        { method: 'POST' }
+    );
+    assert.equal(completeResponse.status, 200);
+
+    const entitlements = listEntitlementsForUser(USER_ID);
+    assert.equal(entitlements.length, 1);
+    const ent = entitlements[0]!;
+    assert.equal(ent.kind, 'privacy_tool');
+    assert.deepEqual(ent.metadata['features'], ['exif_strip', 'link_sanitize']);
+});
+
 test('stub provider: completes only when the session exists', async () => {
     resetAll();
     const response = await app.request(

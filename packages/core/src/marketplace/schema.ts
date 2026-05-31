@@ -27,6 +27,7 @@ const entitlementKinds: EntitlementKind[] = [
     'community_template',
     'stream_asset',
     'vault_item',
+    'privacy_tool',
 ];
 
 const entitlementStatuses: EntitlementStatus[] = [

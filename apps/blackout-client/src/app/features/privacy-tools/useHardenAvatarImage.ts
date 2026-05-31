@@ -4,11 +4,9 @@ import { privacyToolsEntitledAtom, privacyToolsSettingsAtom } from './privacyToo
 import { hardenAvatarImage } from './hardenAvatarImage';
 
 /**
- * Returns a function that hardens a picked avatar/image per the user's current
- * privacy settings: EXIF stripping when enabled, plus anti-facial-recognition
- * perturbation when the advanced toggle is on AND the advanced entitlement is
- * held. Avatar upload flows bypass the composer's hardening, so they call this
- * before handing the file to the upload atom.
+ * Returns a function that hardens a picked avatar/image: EXIF stripping always
+ * runs (native hygiene), plus anti-facial-recognition perturbation when the
+ * user has enabled it AND holds the advanced `privacy_tool` entitlement.
  */
 export const useHardenAvatarImage = (): ((file: File) => Promise<File>) => {
     const settings = useAtomValue(privacyToolsSettingsAtom);
@@ -16,9 +14,9 @@ export const useHardenAvatarImage = (): ((file: File) => Promise<File>) => {
     return useCallback(
         (file: File) =>
             hardenAvatarImage(file, {
-                stripMetadata: settings.exifStripEnabled,
+                stripMetadata: true,
                 perturb: settings.avatarPerturbationEnabled && entitled,
             }),
-        [settings.exifStripEnabled, settings.avatarPerturbationEnabled, entitled]
+        [settings.avatarPerturbationEnabled, entitled]
     );
 };
