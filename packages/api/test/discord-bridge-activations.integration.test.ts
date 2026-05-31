@@ -31,12 +31,18 @@ const makeProvisioner = (result: ProvisionResult = { ok: true }) => {
   return { provisioner, calls };
 };
 
-const ROOM = '!den:test';
 const GUILD = '111111111111111111';
-const CHANNEL = '222222222222222222';
+// Unique ids per test: the in-memory db is a process-wide singleton shared by
+// every integration test file, so fixed room/channel ids would collide.
+let seq = 0;
+const uniqRoom = () => `!den-${Date.now()}-${seq++}:test`;
+// 18-digit snowflake-shaped string; adding seq keeps it 18 digits and unique.
+const uniqChannel = () => String(100_000_000_000_000_000n + BigInt(seq++));
 
 test('createActivation: provisions the bridge and persists an active record', async () => {
   const userId = randomUUID();
+  const ROOM = uniqRoom();
+  const CHANNEL = uniqChannel();
   const { provisioner, calls } = makeProvisioner();
   const out = await createActivation(
     { blackoutUserId: userId, matrixRoomId: ROOM, discordGuildId: GUILD, discordChannelId: CHANNEL, mode: 'two-way' },
@@ -54,7 +60,7 @@ test('createActivation: provisions the bridge and persists an active record', as
 test('createActivation: rejects a bad matrix room id', async () => {
   const { provisioner } = makeProvisioner();
   const out = await createActivation(
-    { blackoutUserId: randomUUID(), matrixRoomId: 'not-a-room', discordGuildId: GUILD, discordChannelId: CHANNEL, mode: 'two-way' },
+    { blackoutUserId: randomUUID(), matrixRoomId: 'not-a-room', discordGuildId: GUILD, discordChannelId: uniqChannel(), mode: 'two-way' },
     { provisioner },
   );
   assert.equal(out.kind, 'invalid_input');
@@ -63,7 +69,7 @@ test('createActivation: rejects a bad matrix room id', async () => {
 test('createActivation: surfaces bridge_unavailable when provisioning is not configured', async () => {
   const { provisioner } = makeProvisioner({ ok: false, reason: 'not_configured' });
   const out = await createActivation(
-    { blackoutUserId: randomUUID(), matrixRoomId: ROOM, discordGuildId: GUILD, discordChannelId: '999999999999999999', mode: 'two-way' },
+    { blackoutUserId: randomUUID(), matrixRoomId: uniqRoom(), discordGuildId: GUILD, discordChannelId: uniqChannel(), mode: 'two-way' },
     { provisioner },
   );
   assert.equal(out.kind, 'bridge_unavailable');
@@ -71,8 +77,8 @@ test('createActivation: surfaces bridge_unavailable when provisioning is not con
 
 test('createActivation: duplicate active link returns already_bridged', async () => {
   const userId = randomUUID();
-  const room = '!dup:test';
-  const channel = '333333333333333333';
+  const room = uniqRoom();
+  const channel = uniqChannel();
   const { provisioner } = makeProvisioner();
   const first = await createActivation(
     { blackoutUserId: userId, matrixRoomId: room, discordGuildId: GUILD, discordChannelId: channel, mode: 'two-way' },
@@ -89,8 +95,8 @@ test('createActivation: duplicate active link returns already_bridged', async ()
 test('setMode: changes direction and re-provisions; rejects a stranger', async () => {
   const owner = randomUUID();
   const stranger = randomUUID();
-  const room = '!mode:test';
-  const channel = '444444444444444444';
+  const room = uniqRoom();
+  const channel = uniqChannel();
   const { provisioner, calls } = makeProvisioner();
   const created = await createActivation(
     { blackoutUserId: owner, matrixRoomId: room, discordGuildId: GUILD, discordChannelId: channel, mode: 'two-way' },
@@ -111,8 +117,8 @@ test('setMode: changes direction and re-provisions; rejects a stranger', async (
 
 test('deleteActivation: unbridges and removes the record', async () => {
   const userId = randomUUID();
-  const room = '!del:test';
-  const channel = '555555555555555555';
+  const room = uniqRoom();
+  const channel = uniqChannel();
   const { provisioner, calls } = makeProvisioner();
   const created = await createActivation(
     { blackoutUserId: userId, matrixRoomId: room, discordGuildId: GUILD, discordChannelId: channel, mode: 'one-way' },
