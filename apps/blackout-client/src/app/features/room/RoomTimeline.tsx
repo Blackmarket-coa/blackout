@@ -41,6 +41,8 @@ import {
     type RoundOpenedPayload,
 } from '@blackout/protocol';
 import { RoundCard } from '../rounds/RoundCard';
+import { normalizeMarketplaceEventContent } from '../marketplace/marketplaceEventSchemas';
+import { MarketplaceEventCard } from '../marketplace/MarketplaceEventCard';
 
 const ROW_ESTIMATE = 88;
 const OVERSCAN = 10;
@@ -531,6 +533,13 @@ const renderMessageType = (event: MatrixEvent): ReactNode => {
     }
 
     if (event.getType() === 'm.sticker') return <TimelineStickerMessage event={event} />;
+
+    // FBM marketplace bridge events arrive as m.notice with an embedded
+    // `co.bmc.marketplace.*` block — render a rich card instead of the plain body.
+    const marketplace = normalizeMarketplaceEventContent(
+        event.getContent<Record<string, unknown>>()
+    );
+    if (marketplace) return <MarketplaceEventCard normalized={marketplace} />;
 
     switch (getMsgType(event)) {
         case 'm.image':
