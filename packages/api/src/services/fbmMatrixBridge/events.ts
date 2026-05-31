@@ -13,6 +13,9 @@ import type {
     FbmLedgerEventKind,
     FbmOrderStatus,
     FbmOrderLineItem,
+    FbmCycleEventKind,
+    FbmCycleAvailableItem,
+    FbmVendorTrustTier,
 } from '@blackout/protocol';
 
 export type FbmSubscriptionTier = 'signal' | 'signal_plus' | 'community';
@@ -109,6 +112,40 @@ export interface FbmDisputeResolvedEvent extends FbmMatrixEventBase {
     outcome?: string;
 }
 
+export interface FbmCycleEvent extends FbmMatrixEventBase {
+    type: 'cycle.open' | 'cycle.close' | 'sold_out';
+    vendorId: string;
+    cycleId: string;
+    name: string;
+    items?: FbmCycleAvailableItem[];
+    closingAt?: string;
+    listingDeepLink?: string;
+    nextCycleAt?: string;
+    ordersPlaced?: number;
+    soldOutSku?: string;
+    vendorMxid?: string;
+}
+
+export interface FbmCustomerMessageEvent extends FbmMatrixEventBase {
+    type: 'message.sent';
+    vendorId: string;
+    userId: string;
+    body: string;
+    threadId?: string;
+    vendorMxid?: string;
+}
+
+export interface FbmVendorTrustChangedEvent extends FbmMatrixEventBase {
+    type: 'vendor.trust_changed';
+    vendorId: string;
+    verified: boolean;
+    tier: FbmVendorTrustTier;
+    completionRate?: number;
+    disputeRate?: number;
+    coopStatus?: string;
+    vendorMxid?: string;
+}
+
 export type FbmMatrixEvent =
     | FbmOrderCreatedEvent
     | FbmOrderUpdatedEvent
@@ -118,7 +155,10 @@ export type FbmMatrixEvent =
     | FbmSubscriptionActivatedEvent
     | FbmSubscriptionLapsedEvent
     | FbmDisputeOpenedEvent
-    | FbmDisputeResolvedEvent;
+    | FbmDisputeResolvedEvent
+    | FbmCycleEvent
+    | FbmCustomerMessageEvent
+    | FbmVendorTrustChangedEvent;
 
 export type FbmMatrixEventType = FbmMatrixEvent['type'];
 
@@ -135,6 +175,11 @@ const FBM_MATRIX_EVENT_TYPES: ReadonlySet<string> = new Set<FbmMatrixEventType>(
     'subscription.lapsed',
     'dispute.opened',
     'dispute.resolved',
+    'cycle.open',
+    'cycle.close',
+    'sold_out',
+    'message.sent',
+    'vendor.trust_changed',
 ]);
 
 const ORDER_STATUSES: ReadonlySet<string> = new Set<FbmOrderStatus>([
@@ -143,6 +188,26 @@ const ORDER_STATUSES: ReadonlySet<string> = new Set<FbmOrderStatus>([
     'dispatched',
     'delivered',
 ]);
+
+const TRUST_TIERS: ReadonlySet<string> = new Set<FbmVendorTrustTier>([
+    'unverified',
+    'verified',
+    'trusted',
+    'flagged',
+]);
+
+function parseCycleItems(raw: unknown): FbmCycleAvailableItem[] {
+    if (!Array.isArray(raw)) return [];
+    const items: FbmCycleAvailableItem[] = [];
+    for (const entry of raw) {
+        if (typeof entry !== 'object' || entry === null) continue;
+        const rec = entry as Record<string, unknown>;
+        const sku = typeof rec.sku === 'string' ? rec.sku : undefined;
+        const title = typeof rec.title === 'string' ? rec.title : undefined;
+        if (sku && title) items.push({ sku, title });
+    }
+    return items;
+}
 
 const SUBSCRIPTION_TIERS: ReadonlySet<string> = new Set<FbmSubscriptionTier>([
     'signal',
@@ -337,6 +402,62 @@ export function parseFbmMatrixEvent(payload: unknown): FbmMatrixEvent | null {
                 disputeId,
                 resolution: str(payload, 'resolution'),
                 outcome: str(payload, 'outcome'),
+            };
+        }
+        case 'cycle.open':
+        case 'cycle.close':
+        case 'sold_out': {
+            const vendorId = str(payload, 'vendorId');
+            const cycleId = str(payload, 'cycleId');
+            const name = str(payload, 'name');
+            if (!vendorId || !cycleId || !name) return null;
+            return {
+                ...base,
+                type: type as FbmCycleEvent['type'],
+                vendorId,
+                cycleId,
+                name,
+                items: parseCycleItems(payload.items),
+                closingAt: str(payload, 'closingAt'),
+                listingDeepLink: str(payload, 'listingDeepLink'),
+                nextCycleAt: str(payload, 'nextCycleAt'),
+                ordersPlaced: num(payload, 'ordersPlaced'),
+                soldOutSku: str(payload, 'soldOutSku'),
+                vendorMxid,
+            };
+        }
+        case 'message.sent': {
+            const vendorId = str(payload, 'vendorId');
+            const userId = str(payload, 'userId');
+            const body = str(payload, 'body');
+            if (!vendorId || !userId || !body) return null;
+            return {
+                ...base,
+                type,
+                vendorId,
+                userId,
+                body,
+                threadId: str(payload, 'threadId'),
+                vendorMxid,
+            };
+        }
+        case 'vendor.trust_changed': {
+            const vendorId = str(payload, 'vendorId');
+            const tier = str(payload, 'tier');
+            const verifiedRaw = payload.verified;
+            if (!vendorId || !tier || !TRUST_TIERS.has(tier) || typeof verifiedRaw !== 'boolean') {
+                return null;
+            }
+            return {
+                ...base,
+                type,
+                vendorId,
+                verified: verifiedRaw,
+                tier: tier as FbmVendorTrustTier,
+                completionRate: num(payload, 'completionRate'),
+                disputeRate: num(payload, 'disputeRate'),
+                coopStatus: str(payload, 'coopStatus'),
+                vendorMxid,
             };
         }
         default:

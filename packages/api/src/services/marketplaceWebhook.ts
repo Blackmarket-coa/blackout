@@ -17,6 +17,7 @@ import {
 } from './growth';
 import { dispatchFbmMatrixEvent, parseFbmMatrixEvent } from './fbmMatrixBridge';
 import { maybeDeliverDigitalDeadDrop } from './fbmMatrixBridge/deadDropDelivery';
+import { tryHandleEntitlementsChanged } from './fbmAclSync/webhookTrigger';
 
 const GROWTH_ATTRIBUTION_EVENT_TYPES: ReadonlySet<LifecycleEventType> = new Set([
     'referral.attributed',
@@ -66,6 +67,11 @@ export async function dispatchMarketplaceWebhook(
     }
 
     const payload = safeParse(rawBody);
+
+    // entitlements.changed → ACL sync (independent of the bridge gate). Returns
+    // null for any other payload so the bridge/lifecycle branches below run.
+    const aclAck = tryHandleEntitlementsChanged(provider, payload);
+    if (aclAck) return aclAck;
 
     // FBM → Matrix bridge events (order.*, inventory.*, ledger.*, subscription.*,
     // dispute.*) are not part of the closed entitlement lifecycle enum, so they

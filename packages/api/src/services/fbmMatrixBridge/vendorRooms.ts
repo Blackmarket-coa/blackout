@@ -10,19 +10,26 @@ import { incrementCounter, logEvent } from '../marketplaceObservability';
 import type { FbmBridgeMatrixClient } from './client';
 import { buyerAliasForUserId, resolveBuyerMxid, resolveVendorMxid } from './identity';
 import {
+    FBM_VENDOR_TRUST_EVENT_TYPE,
     formatBuyerOrderStatus,
+    formatCustomerMessage,
+    formatCycle,
     formatInventoryLow,
     formatLedger,
     formatOrderCancelled,
     formatOrderCreated,
     formatOrderUpdated,
+    vendorTrustStateContent,
 } from './messageFormat';
 import type {
+    FbmCustomerMessageEvent,
+    FbmCycleEvent,
     FbmInventoryLowEvent,
     FbmLedgerEvent,
     FbmOrderCancelledEvent,
     FbmOrderCreatedEvent,
     FbmOrderUpdatedEvent,
+    FbmVendorTrustChangedEvent,
 } from './events';
 
 const nowIso = (): string => new Date().toISOString();
@@ -231,4 +238,117 @@ export async function postLedger(
     if (!rooms) return;
     const sent = await matrix.sendEvent(rooms.ledgerRoomId, formatLedger(event).content);
     if (!sent.ok) failed('vendor_rooms', 'post_ledger', 'reason' in sent ? sent.reason : sent.status);
+}
+
+// --- Phase 2: lazily-provisioned extra rooms -------------------------------
+
+/** Provision (once) and return a vendor child room id stored on the mapping. */
+async function ensureVendorChildRoom(
+    vendorId: string,
+    matrix: FbmBridgeMatrixClient,
+    field: 'announceRoomId' | 'customerMessagesRoomId',
+    create: () => Parameters<FbmBridgeMatrixClient['createRoom']>[0],
+    vendorMxid?: string
+): Promise<{ rooms: FbmVendorRoomRecord; roomId: string } | null> {
+    const rooms = await ensureVendorSpace(vendorId, matrix, { vendorMxid });
+    if (!rooms) return null;
+    const existing = rooms[field];
+    if (existing) return { rooms, roomId: existing };
+
+    const room = await matrix.createRoom(create());
+    if (!room.ok || !('roomId' in room) || !room.roomId) {
+        failed('vendor_rooms', `create_${field}`, 'reason' in room ? room.reason : room.status);
+        return null;
+    }
+    // Link into the vendor's space (best-effort).
+    await matrix.sendStateEvent(
+        rooms.spaceRoomId,
+        'm.space.child',
+        { via: [homeserverDomain()] },
+        room.roomId
+    );
+    await matrix.sendStateEvent(
+        room.roomId,
+        'm.space.parent',
+        { via: [homeserverDomain()], canonical: true },
+        rooms.spaceRoomId
+    );
+    const updated: FbmVendorRoomRecord = { ...rooms, [field]: room.roomId };
+    db.upsertFbmVendorRooms(updated);
+    return { rooms: updated, roomId: room.roomId };
+}
+
+/** §1.2 — broadcast Order Cycle open/close/sold-out to the public announce room. */
+export async function postCycle(
+    event: FbmCycleEvent,
+    matrix: FbmBridgeMatrixClient
+): Promise<void> {
+    const provisioned = await ensureVendorChildRoom(
+        event.vendorId,
+        matrix,
+        'announceRoomId',
+        () => ({
+            name: `${event.vendorId} — order cycles`,
+            topic: `FBM Order Cycle announcements for ${event.vendorId}`,
+            // Public so customers can self-join for real-time cycle notifications.
+            visibility: 'public',
+            preset: 'public_chat',
+        }),
+        event.vendorMxid
+    );
+    if (!provisioned) return;
+    const sent = await matrix.sendEvent(provisioned.roomId, formatCycle(event).content);
+    if (!sent.ok) failed('vendor_rooms', 'post_cycle', 'reason' in sent ? sent.reason : sent.status);
+}
+
+/** §1.1 — bridge a buyer storefront inquiry into the vendor's customer-messages room. */
+export async function postCustomerMessage(
+    event: FbmCustomerMessageEvent,
+    matrix: FbmBridgeMatrixClient
+): Promise<void> {
+    const provisioned = await ensureVendorChildRoom(
+        event.vendorId,
+        matrix,
+        'customerMessagesRoomId',
+        () => ({
+            name: `${event.vendorId} — customer messages`,
+            topic: `FBM storefront inquiries for ${event.vendorId}`,
+            visibility: 'private',
+            preset: 'private_chat',
+        }),
+        event.vendorMxid
+    );
+    if (!provisioned) return;
+    const alias = buyerAliasForUserId(event.userId, event.vendorId);
+    const sent = await matrix.sendEvent(
+        provisioned.roomId,
+        formatCustomerMessage(event, alias).content
+    );
+    if (!sent.ok) {
+        failed('vendor_rooms', 'post_customer_message', 'reason' in sent ? sent.reason : sent.status);
+    }
+}
+
+/** §2.2 — stamp the vendor trust badge as a state event on the vendor's space + rooms. */
+export async function applyVendorTrust(
+    event: FbmVendorTrustChangedEvent,
+    matrix: FbmBridgeMatrixClient
+): Promise<void> {
+    const rooms = await ensureVendorSpace(event.vendorId, matrix, { vendorMxid: event.vendorMxid });
+    if (!rooms) return;
+    const content = { ...vendorTrustStateContent(event) };
+    // State key = vendorId so a buyer can look the badge up by vendor; written to
+    // the space (discoverable) and the orders room (where buyers interact).
+    for (const roomId of [rooms.spaceRoomId, rooms.ordersRoomId]) {
+        const written = await matrix.sendStateEvent(
+            roomId,
+            FBM_VENDOR_TRUST_EVENT_TYPE,
+            content,
+            event.vendorId
+        );
+        if (!written.ok) {
+            failed('vendor_rooms', 'apply_vendor_trust', 'reason' in written ? written.reason : written.status);
+        }
+    }
+    incrementCounter('fbm_matrix_vendor_trust_applied_total', { tier: event.tier });
 }
