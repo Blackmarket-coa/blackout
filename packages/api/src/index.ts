@@ -445,6 +445,14 @@ if (shouldListen) {
         log.info('fbm_matrix_tombstone_dispatcher_started', {});
       },
     );
+    // Flash-mob ephemeral spatial-pin sweeper (§6): purge expired heat pins so
+    // location data never outlives the operational window (§8.3).
+    void import('./services/fbmMatrixBridge/flashMobDispatcher').then(
+      ({ startFlashMobPinSweeper }) => {
+        startFlashMobPinSweeper();
+        log.info('fbm_flash_mob_pin_sweeper_started', {});
+      },
+    );
   }
 
   // FBM entitlements → Matrix ACL drift-correction reconcile loop. Re-asserts

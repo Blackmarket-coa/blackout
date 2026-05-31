@@ -5,6 +5,7 @@ import { db } from '../db/store';
 import { readJsonBody } from '../middleware/validate';
 import { emitDomainEvent, listDomainEvents } from './domain-events';
 import { requireDomainCapability } from './authz';
+import { resolveProposalAndNotifyFbm } from '../services/governanceFbmBridge';
 import {
     cancelMeeting,
     getLatestTreasurySnapshot,
@@ -136,6 +137,21 @@ function createGovernanceRouter() {
     if (!vote) return c.json({ code: 'proposal_not_found', message: 'Proposal not found' }, 404);
 
     return c.json({ ...vote, results: tallyVotes(db.getVoteEntries(proposalId)) });
+  });
+
+  // §3.2 — resolve a proposal and fire the decision back to FBM as an outbound
+  // `governance.proposal.resolved` webhook (apply a price / close a cycle / adjust
+  // stock on the FBM side). The webhook dispatch is best-effort.
+  governance.post('/proposals/:proposalId/resolve', (c) => {
+    const denied = requireDomainCapability(c, 'governance', 'write');
+    if (denied) return denied;
+
+    const { proposalId } = c.req.param();
+    const resolution = resolveProposalAndNotifyFbm(proposalId);
+    if (!resolution) {
+      return c.json({ code: 'proposal_not_found', message: 'Proposal not found' }, 404);
+    }
+    return c.json(resolution);
   });
 
   governance.get('/events', (c) => {

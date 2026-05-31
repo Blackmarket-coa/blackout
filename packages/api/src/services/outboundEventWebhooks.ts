@@ -216,6 +216,7 @@ export const renderEvent = (event: BlackoutEvent): OutboundDeliveryPayload => {
     'channelpoints.redeemed': 'Channel points redeemed',
     'hypetrain.started': 'Hype Train started',
     'hypetrain.ended': 'Hype Train ended',
+    'governance.proposal.resolved': 'Governance proposal resolved',
   };
   const colorByType: Record<OutboundEventType, number> = {
     'tip.created': 0xf2c94c,
@@ -231,6 +232,7 @@ export const renderEvent = (event: BlackoutEvent): OutboundDeliveryPayload => {
     'channelpoints.redeemed': 0x9146ff,
     'hypetrain.started': 0xff6905,
     'hypetrain.ended': 0xb35704,
+    'governance.proposal.resolved': 0x9d8df1,
   };
   return {
     username: 'Blackout',

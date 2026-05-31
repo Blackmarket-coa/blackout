@@ -118,7 +118,7 @@ export async function ensureVendorSpace(
     return record;
 }
 
-async function ensureBuyerOrderRoom(
+export async function ensureBuyerOrderRoom(
     orderId: string,
     vendorId: string,
     buyerUserId: string,
@@ -299,6 +299,34 @@ export async function postCycle(
     if (!provisioned) return;
     const sent = await matrix.sendEvent(provisioned.roomId, formatCycle(event).content);
     if (!sent.ok) failed('vendor_rooms', 'post_cycle', 'reason' in sent ? sent.reason : sent.status);
+}
+
+/** §6 — broadcast an already-formatted flash-sale notice to the public announce room. */
+export async function postFlashSaleAnnouncement(
+    vendorId: string,
+    matrix: FbmBridgeMatrixClient,
+    content: Record<string, unknown>,
+    vendorMxid?: string
+): Promise<boolean> {
+    const provisioned = await ensureVendorChildRoom(
+        vendorId,
+        matrix,
+        'announceRoomId',
+        () => ({
+            name: `${vendorId} — order cycles`,
+            topic: `FBM announcements for ${vendorId}`,
+            visibility: 'public',
+            preset: 'public_chat',
+        }),
+        vendorMxid
+    );
+    if (!provisioned) return false;
+    const sent = await matrix.sendEvent(provisioned.roomId, content);
+    if (!sent.ok) {
+        failed('vendor_rooms', 'post_flash_sale', 'reason' in sent ? sent.reason : sent.status);
+        return false;
+    }
+    return true;
 }
 
 /** §1.1 — bridge a buyer storefront inquiry into the vendor's customer-messages room. */

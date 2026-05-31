@@ -16,6 +16,7 @@ import type {
     FbmCycleEventKind,
     FbmCycleAvailableItem,
     FbmVendorTrustTier,
+    FbmLogisticsEventKind,
 } from '@blackout/protocol';
 
 export type FbmSubscriptionTier = 'signal' | 'signal_plus' | 'community';
@@ -146,6 +147,39 @@ export interface FbmVendorTrustChangedEvent extends FbmMatrixEventBase {
     vendorMxid?: string;
 }
 
+export interface FbmLogisticsEvent extends FbmMatrixEventBase {
+    type:
+        | 'blackstar.driver_assigned'
+        | 'blackstar.pickup_confirmed'
+        | 'blackstar.delivered'
+        | 'blackstar.failed';
+    vendorId: string;
+    userId: string;
+    orderId: string;
+    driverName?: string;
+    vehicleType?: string;
+    etaPickup?: string;
+    etaDelivery?: string;
+    trackingUrl?: string;
+    proof?: string;
+    failureReason?: string;
+    vendorMxid?: string;
+}
+
+export interface FbmFlashSaleEvent extends FbmMatrixEventBase {
+    type: 'flash_sale.start';
+    vendorId: string;
+    saleId: string;
+    name: string;
+    discount: string;
+    durationSeconds: number;
+    listingDeepLink?: string;
+    /** Optional pin coordinates for the heatmap spike. */
+    latitude?: number;
+    longitude?: number;
+    vendorMxid?: string;
+}
+
 export type FbmMatrixEvent =
     | FbmOrderCreatedEvent
     | FbmOrderUpdatedEvent
@@ -158,7 +192,13 @@ export type FbmMatrixEvent =
     | FbmDisputeResolvedEvent
     | FbmCycleEvent
     | FbmCustomerMessageEvent
-    | FbmVendorTrustChangedEvent;
+    | FbmVendorTrustChangedEvent
+    | FbmLogisticsEvent
+    | FbmFlashSaleEvent;
+
+export const logisticsKindFromType = (
+    type: FbmLogisticsEvent['type']
+): FbmLogisticsEventKind => type.slice('blackstar.'.length) as FbmLogisticsEventKind;
 
 export type FbmMatrixEventType = FbmMatrixEvent['type'];
 
@@ -180,6 +220,11 @@ const FBM_MATRIX_EVENT_TYPES: ReadonlySet<string> = new Set<FbmMatrixEventType>(
     'sold_out',
     'message.sent',
     'vendor.trust_changed',
+    'blackstar.driver_assigned',
+    'blackstar.pickup_confirmed',
+    'blackstar.delivered',
+    'blackstar.failed',
+    'flash_sale.start',
 ]);
 
 const ORDER_STATUSES: ReadonlySet<string> = new Set<FbmOrderStatus>([
@@ -457,6 +502,53 @@ export function parseFbmMatrixEvent(payload: unknown): FbmMatrixEvent | null {
                 completionRate: num(payload, 'completionRate'),
                 disputeRate: num(payload, 'disputeRate'),
                 coopStatus: str(payload, 'coopStatus'),
+                vendorMxid,
+            };
+        }
+        case 'blackstar.driver_assigned':
+        case 'blackstar.pickup_confirmed':
+        case 'blackstar.delivered':
+        case 'blackstar.failed': {
+            const vendorId = str(payload, 'vendorId');
+            const userId = str(payload, 'userId');
+            const orderId = str(payload, 'orderId');
+            if (!vendorId || !userId || !orderId) return null;
+            return {
+                ...base,
+                type: type as FbmLogisticsEvent['type'],
+                vendorId,
+                userId,
+                orderId,
+                driverName: str(payload, 'driverName'),
+                vehicleType: str(payload, 'vehicleType'),
+                etaPickup: str(payload, 'etaPickup'),
+                etaDelivery: str(payload, 'etaDelivery'),
+                trackingUrl: str(payload, 'trackingUrl'),
+                proof: str(payload, 'proof'),
+                failureReason: str(payload, 'failureReason'),
+                vendorMxid,
+            };
+        }
+        case 'flash_sale.start': {
+            const vendorId = str(payload, 'vendorId');
+            const saleId = str(payload, 'saleId');
+            const name = str(payload, 'name');
+            const discount = str(payload, 'discount');
+            const durationSeconds = num(payload, 'durationSeconds');
+            if (!vendorId || !saleId || !name || !discount || durationSeconds === undefined) {
+                return null;
+            }
+            return {
+                ...base,
+                type,
+                vendorId,
+                saleId,
+                name,
+                discount,
+                durationSeconds,
+                listingDeepLink: str(payload, 'listingDeepLink'),
+                latitude: num(payload, 'latitude'),
+                longitude: num(payload, 'longitude'),
                 vendorMxid,
             };
         }

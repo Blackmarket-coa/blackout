@@ -2377,6 +2377,11 @@ class InMemoryDb {
     return record;
   }
 
+  /** Remove a spatial pin (used by the flash-mob ephemeral-pin sweeper). */
+  deleteCoalitionSpatialItem(id: string): boolean {
+    return this.coalitionSpatialItems.delete(id);
+  }
+
   listCoalitionAidPosts(): CoalitionAidPostRecord[] {
     return [...this.coalitionAidPosts.values()];
   }
@@ -4139,6 +4144,12 @@ export class FileBackedDb extends InMemoryDb {
     const created = super.upsertCoalitionSpatialItem(input);
     this.persist();
     return created;
+  }
+
+  override deleteCoalitionSpatialItem(id: string): boolean {
+    const deleted = super.deleteCoalitionSpatialItem(id);
+    this.persist();
+    return deleted;
   }
 
   override createCoalitionAidPost(

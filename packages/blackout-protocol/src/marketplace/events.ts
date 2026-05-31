@@ -22,6 +22,8 @@ export const FBM_CYCLE_EVENT_TYPE = 'co.bmc.marketplace.cycle';
 export const FBM_CUSTOMER_MESSAGE_EVENT_TYPE = 'co.bmc.marketplace.customer_message';
 /** Vendor trust badge — written as a room *state* event (state key = vendorId). */
 export const FBM_VENDOR_TRUST_EVENT_TYPE = 'co.bmc.vendor.trust';
+export const FBM_LOGISTICS_EVENT_TYPE = 'co.bmc.marketplace.logistics';
+export const FBM_FLASH_SALE_EVENT_TYPE = 'co.bmc.marketplace.flash_sale';
 
 /** Bumped when any `co.bmc.marketplace.*` content shape changes incompatibly. */
 export const FBM_MARKETPLACE_SCHEMA_VERSION = 1;
@@ -142,6 +144,43 @@ export interface FbmVendorTrustContent {
     occurredAt: string;
 }
 
+export type FbmLogisticsEventKind =
+    | 'driver_assigned'
+    | 'pickup_confirmed'
+    | 'delivered'
+    | 'failed';
+
+export interface FbmLogisticsEventContent {
+    schemaVersion: number;
+    kind: FbmLogisticsEventKind;
+    vendorId: string;
+    orderId: string;
+    /** Pseudonymous buyer alias for the vendor-facing copy; omitted in the buyer's room. */
+    buyerAlias?: string;
+    driverName?: string;
+    vehicleType?: string;
+    etaPickup?: string;
+    etaDelivery?: string;
+    trackingUrl?: string;
+    /** Recipient signature or delivery-photo reference (mxc/URL). */
+    proof?: string;
+    failureReason?: string;
+    occurredAt: string;
+}
+
+export interface FbmFlashSaleContent {
+    schemaVersion: number;
+    vendorId: string;
+    saleId: string;
+    name: string;
+    discount: string;
+    durationSeconds: number;
+    listingDeepLink?: string;
+    /** Sale end timestamp (start + duration). */
+    endsAt: string;
+    occurredAt: string;
+}
+
 const isContent = (value: unknown): value is Record<string, unknown> =>
     typeof value === 'object' && value !== null && !Array.isArray(value);
 
@@ -200,3 +239,22 @@ export const isFbmVendorTrustContent = (
     isContent(value) &&
     typeof value.vendorId === 'string' &&
     typeof value.verified === 'boolean';
+
+export const isFbmLogisticsEventContent = (
+    value: unknown
+): value is FbmLogisticsEventContent =>
+    isContent(value) &&
+    typeof value.vendorId === 'string' &&
+    typeof value.orderId === 'string' &&
+    (value.kind === 'driver_assigned' ||
+        value.kind === 'pickup_confirmed' ||
+        value.kind === 'delivered' ||
+        value.kind === 'failed');
+
+export const isFbmFlashSaleContent = (
+    value: unknown
+): value is FbmFlashSaleContent =>
+    isContent(value) &&
+    typeof value.vendorId === 'string' &&
+    typeof value.saleId === 'string' &&
+    typeof value.discount === 'string';
