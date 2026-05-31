@@ -189,3 +189,21 @@ CREATE TABLE IF NOT EXISTS discord_import_mappings (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_discord_import_mappings_obj ON discord_import_mappings (import_id, discord_object_id);
+
+-- Migration Hub (Phase 2): den ↔ Discord channel bridge activations.
+CREATE TABLE IF NOT EXISTS discord_bridge_activations (
+  id TEXT PRIMARY KEY,
+  blackout_user_id TEXT NOT NULL,
+  matrix_room_id TEXT NOT NULL,
+  discord_guild_id TEXT NOT NULL,
+  discord_channel_id TEXT NOT NULL,
+  mode TEXT NOT NULL,
+  status TEXT NOT NULL,
+  last_error TEXT,
+  last_synced_at TIMESTAMPTZ,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_discord_bridge_activations_user ON discord_bridge_activations (blackout_user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_discord_bridge_activations_link ON discord_bridge_activations (matrix_room_id, discord_channel_id);

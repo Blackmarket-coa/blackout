@@ -360,6 +360,37 @@ export interface DiscordImportMappingRecord {
   createdAt: string;
 }
 
+/** Bridge direction for a den ↔ Discord channel link. */
+export type DiscordBridgeMode = 'one-way' | 'two-way' | 'read-only';
+
+/**
+ * Migration Hub — product-level activation of the mautrix-discord appservice
+ * for a single den ↔ Discord channel pair. The appservice does the actual
+ * relaying; this row is the Blackout-side toggle + status mirror so the link
+ * shows up in the Migration Hub and can be paused/torn down from the product.
+ */
+export interface DiscordBridgeActivationRecord {
+  id: UUID;
+  blackoutUserId: UUID;
+  /** The Blackout den (Matrix room) being bridged. */
+  matrixRoomId: string;
+  discordGuildId: string;
+  discordChannelId: string;
+  /**
+   * 'two-way' = full relay. 'read-only' = Discord→Matrix only. 'one-way' =
+   * Matrix→Discord only. The mautrix link is the same; one-way/read-only are
+   * additionally enforced by the outbound router's loop-prevention.
+   */
+  mode: DiscordBridgeMode;
+  /** 'active' | 'paused' | 'error'. */
+  status: string;
+  lastError?: string;
+  lastSyncedAt?: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 /**
  * Outbound Discord-shape webhook subscription. Creator registers a URL
  * (Discord's own webhook URL, Zapier, IFTTT, custom backend) and we POST

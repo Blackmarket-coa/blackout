@@ -53,6 +53,7 @@ import type {
   DiscordCompatWebhookRecord,
   DiscordServerImportRecord,
   DiscordImportMappingRecord,
+  DiscordBridgeActivationRecord,
   OutboundEventWebhookRecord,
   TwitchIrcBotTokenRecord,
   TwitchExtensionPanelRecord,
@@ -166,6 +167,7 @@ type PersistedState = {
   discordCompatWebhooks: DiscordCompatWebhookRecord[];
   discordServerImports: DiscordServerImportRecord[];
   discordImportMappings: DiscordImportMappingRecord[];
+  discordBridgeActivations: DiscordBridgeActivationRecord[];
   outboundEventWebhooks: OutboundEventWebhookRecord[];
   twitchIrcBotTokens: TwitchIrcBotTokenRecord[];
   obsWsPasswords: ObsWsPasswordRecord[];
@@ -272,6 +274,8 @@ class InMemoryDb {
   discordServerImports = new Map<string, DiscordServerImportRecord>();
   /** Migration Hub: Discord-object → Blackout-target mappings, keyed by row id. */
   discordImportMappings = new Map<string, DiscordImportMappingRecord>();
+  /** Migration Hub: den ↔ Discord channel bridge activations, keyed by row id. */
+  discordBridgeActivations = new Map<string, DiscordBridgeActivationRecord>();
   /** Keyed by subscription id. */
   outboundEventWebhooks = new Map<string, OutboundEventWebhookRecord>();
   /** Keyed by token id. */
@@ -1148,6 +1152,51 @@ class InMemoryDb {
     return [...this.discordImportMappings.values()].find(
       (row) => row.importId === importId && row.discordObjectId === discordObjectId,
     );
+  }
+
+  // --- migration hub: discord bridge activations ---
+
+  createDiscordBridgeActivation(
+    input: Omit<DiscordBridgeActivationRecord, 'createdAt' | 'updatedAt'>,
+  ): DiscordBridgeActivationRecord {
+    const now = nowIso();
+    const record: DiscordBridgeActivationRecord = { ...input, createdAt: now, updatedAt: now };
+    this.discordBridgeActivations.set(record.id, record);
+    return record;
+  }
+
+  getDiscordBridgeActivation(id: string): DiscordBridgeActivationRecord | undefined {
+    return this.discordBridgeActivations.get(id);
+  }
+
+  findDiscordBridgeActivation(
+    matrixRoomId: string,
+    discordChannelId: string,
+  ): DiscordBridgeActivationRecord | undefined {
+    return [...this.discordBridgeActivations.values()].find(
+      (row) => row.matrixRoomId === matrixRoomId && row.discordChannelId === discordChannelId,
+    );
+  }
+
+  listDiscordBridgeActivationsForUser(blackoutUserId: string): DiscordBridgeActivationRecord[] {
+    return [...this.discordBridgeActivations.values()].filter(
+      (row) => row.blackoutUserId === blackoutUserId,
+    );
+  }
+
+  updateDiscordBridgeActivation(
+    id: string,
+    patch: Partial<Omit<DiscordBridgeActivationRecord, 'id' | 'createdAt'>>,
+  ): DiscordBridgeActivationRecord | undefined {
+    const existing = this.discordBridgeActivations.get(id);
+    if (!existing) return undefined;
+    const updated: DiscordBridgeActivationRecord = { ...existing, ...patch, updatedAt: nowIso() };
+    this.discordBridgeActivations.set(id, updated);
+    return updated;
+  }
+
+  deleteDiscordBridgeActivation(id: string): boolean {
+    return this.discordBridgeActivations.delete(id);
   }
 
   // --- discord-compatible incoming webhooks (Phase 2 / Track B) ---
@@ -3150,6 +3199,9 @@ export class FileBackedDb extends InMemoryDb {
     this.discordImportMappings = new Map(
       (parsed.discordImportMappings ?? []).map((row) => [row.id, row]),
     );
+    this.discordBridgeActivations = new Map(
+      (parsed.discordBridgeActivations ?? []).map((row) => [row.id, row]),
+    );
     this.outboundEventWebhooks = new Map(
       (parsed.outboundEventWebhooks ?? []).map((row) => [row.id, row]),
     );
@@ -3321,6 +3373,7 @@ export class FileBackedDb extends InMemoryDb {
       discordCompatWebhooks: [...this.discordCompatWebhooks.values()],
       discordServerImports: [...this.discordServerImports.values()],
       discordImportMappings: [...this.discordImportMappings.values()],
+      discordBridgeActivations: [...this.discordBridgeActivations.values()],
       outboundEventWebhooks: [...this.outboundEventWebhooks.values()],
       twitchIrcBotTokens: [...this.twitchIrcBotTokens.values()],
       obsWsPasswords: [...this.obsWsPasswords.values()],
@@ -4076,6 +4129,29 @@ export class FileBackedDb extends InMemoryDb {
     const record = super.createDiscordImportMapping(input);
     this.persist();
     return record;
+  }
+
+  override createDiscordBridgeActivation(
+    input: Omit<DiscordBridgeActivationRecord, 'createdAt' | 'updatedAt'>,
+  ): DiscordBridgeActivationRecord {
+    const record = super.createDiscordBridgeActivation(input);
+    this.persist();
+    return record;
+  }
+
+  override updateDiscordBridgeActivation(
+    id: string,
+    patch: Partial<Omit<DiscordBridgeActivationRecord, 'id' | 'createdAt'>>,
+  ): DiscordBridgeActivationRecord | undefined {
+    const updated = super.updateDiscordBridgeActivation(id, patch);
+    if (updated) this.persist();
+    return updated;
+  }
+
+  override deleteDiscordBridgeActivation(id: string): boolean {
+    const removed = super.deleteDiscordBridgeActivation(id);
+    if (removed) this.persist();
+    return removed;
   }
 
   override createSimulcastDestination(
