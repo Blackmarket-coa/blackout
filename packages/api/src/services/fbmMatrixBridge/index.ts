@@ -17,6 +17,9 @@ import { bridgeEnabled } from './config';
 import { defaultMatrixClient, type FbmBridgeMatrixClient } from './client';
 import type { FbmMatrixEvent } from './events';
 import {
+    applyVendorTrust,
+    postCustomerMessage,
+    postCycle,
     postInventoryLow,
     postLedger,
     postOrderCancelled,
@@ -67,6 +70,14 @@ async function route(event: FbmMatrixEvent, matrix: FbmBridgeMatrixClient): Prom
             return openDisputeRoom(event, matrix);
         case 'dispute.resolved':
             return resolveDisputeRoom(event, matrix);
+        case 'cycle.open':
+        case 'cycle.close':
+        case 'sold_out':
+            return postCycle(event, matrix);
+        case 'message.sent':
+            return postCustomerMessage(event, matrix);
+        case 'vendor.trust_changed':
+            return applyVendorTrust(event, matrix);
     }
 }
 

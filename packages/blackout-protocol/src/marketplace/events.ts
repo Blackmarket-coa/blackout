@@ -18,6 +18,10 @@ export const FBM_INVENTORY_EVENT_TYPE = 'co.bmc.marketplace.inventory';
 export const FBM_LEDGER_EVENT_TYPE = 'co.bmc.marketplace.ledger';
 export const FBM_DISPUTE_EVENT_TYPE = 'co.bmc.marketplace.dispute';
 export const FBM_DEADDROP_POINTER_EVENT_TYPE = 'co.bmc.marketplace.deaddrop';
+export const FBM_CYCLE_EVENT_TYPE = 'co.bmc.marketplace.cycle';
+export const FBM_CUSTOMER_MESSAGE_EVENT_TYPE = 'co.bmc.marketplace.customer_message';
+/** Vendor trust badge — written as a room *state* event (state key = vendorId). */
+export const FBM_VENDOR_TRUST_EVENT_TYPE = 'co.bmc.vendor.trust';
 
 /** Bumped when any `co.bmc.marketplace.*` content shape changes incompatibly. */
 export const FBM_MARKETPLACE_SCHEMA_VERSION = 1;
@@ -91,6 +95,53 @@ export interface FbmDisputeEventContent {
     occurredAt: string;
 }
 
+export type FbmCycleEventKind = 'open' | 'close' | 'sold_out';
+
+export interface FbmCycleAvailableItem {
+    sku: string;
+    title: string;
+}
+
+export interface FbmCycleEventContent {
+    schemaVersion: number;
+    kind: FbmCycleEventKind;
+    vendorId: string;
+    cycleId: string;
+    name: string;
+    items?: FbmCycleAvailableItem[];
+    closingAt?: string;
+    listingDeepLink?: string;
+    nextCycleAt?: string;
+    ordersPlaced?: number;
+    soldOutSku?: string;
+    occurredAt: string;
+}
+
+export interface FbmCustomerMessageContent {
+    schemaVersion: number;
+    vendorId: string;
+    /** Pseudonymous buyer alias — never the buyer's real MXID. */
+    buyerAlias: string;
+    body: string;
+    threadId?: string;
+    occurredAt: string;
+}
+
+export type FbmVendorTrustTier = 'unverified' | 'verified' | 'trusted' | 'flagged';
+
+export interface FbmVendorTrustContent {
+    schemaVersion: number;
+    vendorId: string;
+    verified: boolean;
+    tier: FbmVendorTrustTier;
+    /** 0..1 fraction; e.g. 0.98. */
+    completionRate?: number;
+    /** 0..1 fraction; e.g. 0.01. */
+    disputeRate?: number;
+    coopStatus?: string;
+    occurredAt: string;
+}
+
 const isContent = (value: unknown): value is Record<string, unknown> =>
     typeof value === 'object' && value !== null && !Array.isArray(value);
 
@@ -126,3 +177,26 @@ export const isFbmDisputeEventContent = (
     typeof value.disputeId === 'string' &&
     typeof value.vendorId === 'string' &&
     (value.status === 'open' || value.status === 'resolved');
+
+export const isFbmCycleEventContent = (
+    value: unknown
+): value is FbmCycleEventContent =>
+    isContent(value) &&
+    typeof value.vendorId === 'string' &&
+    typeof value.cycleId === 'string' &&
+    (value.kind === 'open' || value.kind === 'close' || value.kind === 'sold_out');
+
+export const isFbmCustomerMessageContent = (
+    value: unknown
+): value is FbmCustomerMessageContent =>
+    isContent(value) &&
+    typeof value.vendorId === 'string' &&
+    typeof value.buyerAlias === 'string' &&
+    typeof value.body === 'string';
+
+export const isFbmVendorTrustContent = (
+    value: unknown
+): value is FbmVendorTrustContent =>
+    isContent(value) &&
+    typeof value.vendorId === 'string' &&
+    typeof value.verified === 'boolean';
