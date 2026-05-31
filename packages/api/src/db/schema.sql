@@ -162,6 +162,54 @@ CREATE TABLE IF NOT EXISTS fbm_dispute_rooms (
 );
 CREATE INDEX IF NOT EXISTS idx_fbm_dispute_rooms_purge ON fbm_dispute_rooms (status, purge_after);
 
+-- Migration Hub (Phase 1): Discord server-import jobs + object→target mappings.
+CREATE TABLE IF NOT EXISTS discord_server_imports (
+  id TEXT PRIMARY KEY,
+  blackout_user_id TEXT NOT NULL,
+  discord_guild_id TEXT NOT NULL,
+  guild_name TEXT NOT NULL,
+  status TEXT NOT NULL,
+  mode TEXT NOT NULL,
+  degraded BOOLEAN NOT NULL DEFAULT FALSE,
+  reason TEXT,
+  summary JSONB,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_discord_server_imports_user ON discord_server_imports (blackout_user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_discord_server_imports_user_guild ON discord_server_imports (blackout_user_id, discord_guild_id);
+
+CREATE TABLE IF NOT EXISTS discord_import_mappings (
+  id TEXT PRIMARY KEY,
+  import_id TEXT NOT NULL REFERENCES discord_server_imports(id) ON DELETE CASCADE,
+  discord_object_type TEXT NOT NULL,
+  discord_object_id TEXT NOT NULL,
+  discord_name TEXT NOT NULL,
+  blackout_target_type TEXT NOT NULL,
+  blackout_target_id TEXT NOT NULL DEFAULT '',
+  power_level INT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_discord_import_mappings_obj ON discord_import_mappings (import_id, discord_object_id);
+
+-- Migration Hub (Phase 2): den ↔ Discord channel bridge activations.
+CREATE TABLE IF NOT EXISTS discord_bridge_activations (
+  id TEXT PRIMARY KEY,
+  blackout_user_id TEXT NOT NULL,
+  matrix_room_id TEXT NOT NULL,
+  discord_guild_id TEXT NOT NULL,
+  discord_channel_id TEXT NOT NULL,
+  mode TEXT NOT NULL,
+  status TEXT NOT NULL,
+  last_error TEXT,
+  last_synced_at TIMESTAMPTZ,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_discord_bridge_activations_user ON discord_bridge_activations (blackout_user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_discord_bridge_activations_link ON discord_bridge_activations (matrix_room_id, discord_channel_id);
+
 CREATE TABLE IF NOT EXISTS fbm_acl_state (
   mxid TEXT NOT NULL,
   room_id TEXT NOT NULL,
