@@ -318,6 +318,49 @@ export interface DiscordCompatWebhookRecord {
 }
 
 /**
+ * Migration Hub — Discord server-import job. One row per (user, guild) import
+ * attempt. The matching {@link DiscordImportMappingRecord} rows record what was
+ * created on the Blackout side so an import is idempotent and re-runnable.
+ */
+export interface DiscordServerImportRecord {
+  id: UUID;
+  blackoutUserId: UUID;
+  discordGuildId: string;
+  guildName: string;
+  /** 'pending' = snapshot captured but not applied; 'applied'; 'failed'. */
+  status: 'pending' | 'applied' | 'failed';
+  /**
+   * 'full' when channels + roles were readable (a bot token in the guild);
+   * 'preview' when only the user's guild list was available (OAuth-only).
+   */
+  mode: 'preview' | 'full';
+  /** True when channels/roles could not be read (honest about the OAuth limit). */
+  degraded: boolean;
+  /** Human-readable reason for a degraded / failed import. */
+  reason?: string;
+  /** Free-form counts captured at apply time (spaces/dens created, roles mapped). */
+  summary?: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** One Discord object → Blackout target mapping row; keeps imports idempotent. */
+export interface DiscordImportMappingRecord {
+  id: UUID;
+  importId: UUID;
+  discordObjectType: 'guild' | 'category' | 'channel' | 'role';
+  discordObjectId: string;
+  discordName: string;
+  /** What we created on the Blackout side: 'space' | 'den' | 'role-intent'. */
+  blackoutTargetType: string;
+  /** Matrix room/space id, or a synthetic id for role-intents. '' if not materialized. */
+  blackoutTargetId: string;
+  /** For role mappings: the Matrix power level (0–100) derived from Discord perms. */
+  powerLevel?: number;
+  createdAt: string;
+}
+
+/**
  * Outbound Discord-shape webhook subscription. Creator registers a URL
  * (Discord's own webhook URL, Zapier, IFTTT, custom backend) and we POST
  * Blackout events to it in Discord embed shape, signed with a shared HMAC

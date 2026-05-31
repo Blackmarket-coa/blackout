@@ -49,6 +49,7 @@ import {
   publicExecuteRouter as discordCompatWebhookExecuteRoutes,
 } from './routes/discordCompatWebhooks';
 import outboundEventWebhookRoutes from './routes/outboundEventWebhooks';
+import discordServerImportRoutes from './routes/discordServerImport';
 import twitchIrcBotTokenRoutes from './routes/twitchIrcBotTokens';
 import twitchHelixProxyRoutes from './routes/twitchHelixProxy';
 import channelPointsRoutes from './routes/channelPoints';
@@ -192,6 +193,7 @@ for (const root of legacyAliasEnabled ? [API_ROOTS.v1, API_ROOTS.legacyApiAlias]
   app.route(`${root}/integrations/kick/chat-bridges`, kickChatBridgeRoutes);
   app.route(`${root}/integrations/tenor`, tenorRoutes);
   app.route(`${root}/integrations/discord-compat/webhooks`, discordCompatWebhookRoutes);
+  app.route(`${root}/integrations/discord/import`, discordServerImportRoutes);
   app.route(`${root}/integrations/outbound-webhooks`, outboundEventWebhookRoutes);
   app.route(`${root}/integrations/twitch-compat/bot-tokens`, twitchIrcBotTokenRoutes);
   app.route(`${root}/integrations/twitch/helix-proxy`, twitchHelixProxyRoutes);
