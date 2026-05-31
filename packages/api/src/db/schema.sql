@@ -115,6 +115,8 @@ CREATE TABLE IF NOT EXISTS fbm_vendor_rooms (
   orders_room_id TEXT NOT NULL,
   inventory_room_id TEXT NOT NULL,
   ledger_room_id TEXT NOT NULL,
+  announce_room_id TEXT,
+  customer_messages_room_id TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -207,3 +209,13 @@ CREATE TABLE IF NOT EXISTS discord_bridge_activations (
 );
 CREATE INDEX IF NOT EXISTS idx_discord_bridge_activations_user ON discord_bridge_activations (blackout_user_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_discord_bridge_activations_link ON discord_bridge_activations (matrix_room_id, discord_channel_id);
+
+CREATE TABLE IF NOT EXISTS fbm_acl_state (
+  mxid TEXT NOT NULL,
+  room_id TEXT NOT NULL,
+  power_level INTEGER NOT NULL,
+  applied_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (mxid, room_id)
+);
+CREATE INDEX IF NOT EXISTS idx_fbm_acl_state_mxid ON fbm_acl_state (mxid);

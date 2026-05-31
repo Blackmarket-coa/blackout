@@ -34,6 +34,10 @@ const OVERRIDES: Record<string, DescriptorOverride> = {
   marketplaceListingsCache: { keyOf: (r) => String(r.cacheKey), conflictColumns: ['cache_key'] },
   fbmVendorRooms: { keyOf: (r) => String(r.vendorId), conflictColumns: ['vendor_id'] },
   fbmDisputeRooms: { keyOf: (r) => String(r.disputeId), conflictColumns: ['dispute_id'] },
+  fbmAclState: {
+    keyOf: (r) => `${r.mxid}::${r.roomId}`,
+    conflictColumns: ['mxid', 'room_id'],
+  },
   revokedSessions: { keyOf: (r) => String(r.jti), conflictColumns: ['jti'] },
   linkedAccounts: {
     keyOf: (r) => `${r.blackoutUserId}:${r.provider}`,
@@ -281,6 +285,7 @@ const ALL_MAP_NAMES = [
   'fbmBuyerOrderRooms',
   'fbmDeaddropDeliveries',
   'fbmDisputeRooms',
+  'fbmAclState',
   'tips',
   'creatorSubscriptionTiers',
   'creatorSubscriptions',
@@ -434,6 +439,7 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
   upsertFbmBuyerOrderRoom: upsert('fbmBuyerOrderRooms'),
   upsertFbmDeaddropDelivery: upsert('fbmDeaddropDeliveries'),
   upsertFbmDisputeRoom: upsert('fbmDisputeRooms'),
+  upsertFbmAclState: upsert('fbmAclState'),
   insertTip: upsert('tips'),
   updateTip: upsert('tips'),
   insertCreatorSubscriptionTier: upsert('creatorSubscriptionTiers'),

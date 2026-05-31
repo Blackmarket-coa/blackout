@@ -453,6 +453,21 @@ if (shouldListen) {
     );
   }
 
+  // FBM entitlements → Matrix ACL drift-correction reconcile loop. Re-asserts
+  // power levels for every MXID the ACL sync worker has touched. Only runs when
+  // ACL sync is enabled.
+  if (
+    process.env.FBM_ACL_SYNC_ENABLED === '1' ||
+    process.env.FBM_ACL_SYNC_ENABLED?.toLowerCase() === 'true'
+  ) {
+    void import('./services/fbmAclSync/dispatcher').then(
+      ({ startFbmAclReconcileLoop }) => {
+        startFbmAclReconcileLoop();
+        log.info('fbm_acl_reconcile_loop_started', {});
+      },
+    );
+  }
+
   const httpServer = serve({ fetch: app.fetch, port: PORT }, (info) => {
     log.info('blackout-server listening', { port: info.port });
   });

@@ -931,6 +931,10 @@ export interface FbmVendorRoomRecord {
   ordersRoomId: string;
   inventoryRoomId: string;
   ledgerRoomId: string;
+  /** Public Order Cycle announcement room (§1.2). Lazily provisioned. */
+  announceRoomId?: string;
+  /** Private customer-messages room (§1.1) for bridged buyer inquiries. */
+  customerMessagesRoomId?: string;
   createdAt: string;
 }
 
@@ -964,7 +968,6 @@ export interface FbmDeaddropDeliveryRecord {
 
 /** A three-party encrypted dispute room; persists read-only for 90 days post-resolution. */
 export interface FbmDisputeRoomRecord {
-  /** FBM dispute id (primary key). */
   disputeId: string;
   orderId: string | null;
   vendorId: string;
@@ -977,6 +980,20 @@ export interface FbmDisputeRoomRecord {
   /** resolvedAt + retention window; the sweeper purges the room after this. */
   purgeAfter: string | null;
   purgedAt: string | null;
+  createdAt: string;
+}
+
+/**
+ * Last-applied Matrix power level the ACL sync worker wrote for an (mxid, room)
+ * pair, derived from the FBM entitlements service's governance-role `matrixAcls`.
+ * Keyed `${mxid}::${roomId}` in memory; PK (mxid, room_id) in Postgres. Lets the
+ * worker skip no-op writes and drives the periodic drift-correction reconcile.
+ */
+export interface FbmAclStateRecord {
+  mxid: string;
+  roomId: string;
+  powerLevel: number;
+  appliedAt: string;
   createdAt: string;
 }
 

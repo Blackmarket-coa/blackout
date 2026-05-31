@@ -93,6 +93,7 @@ import type {
   FbmBuyerOrderRoomRecord,
   FbmDeaddropDeliveryRecord,
   FbmDisputeRoomRecord,
+  FbmAclStateRecord,
 } from './types';
 import {
   COALITION_SPATIAL_SEED,
@@ -141,6 +142,7 @@ type PersistedState = {
   fbmBuyerOrderRooms: FbmBuyerOrderRoomRecord[];
   fbmDeaddropDeliveries: FbmDeaddropDeliveryRecord[];
   fbmDisputeRooms: FbmDisputeRoomRecord[];
+  fbmAclState: FbmAclStateRecord[];
   tips: TipRecord[];
   creatorSubscriptionTiers: CreatorSubscriptionTierRecord[];
   creatorSubscriptions: CreatorSubscriptionRecord[];
@@ -234,6 +236,7 @@ class InMemoryDb {
   fbmBuyerOrderRooms = new Map<string, FbmBuyerOrderRoomRecord>();
   fbmDeaddropDeliveries = new Map<string, FbmDeaddropDeliveryRecord>();
   fbmDisputeRooms = new Map<string, FbmDisputeRoomRecord>();
+  fbmAclState = new Map<string, FbmAclStateRecord>();
   tips = new Map<string, TipRecord>();
   creatorSubscriptionTiers = new Map<string, CreatorSubscriptionTierRecord>();
   creatorSubscriptions = new Map<string, CreatorSubscriptionRecord>();
@@ -2220,6 +2223,30 @@ class InMemoryDb {
     this.fbmDisputeRooms.clear();
   }
 
+  // --- FBM entitlements ACL sync state ---------------------------------------
+
+  private fbmAclKey(mxid: string, roomId: string): string {
+    return `${mxid}::${roomId}`;
+  }
+
+  getFbmAclState(mxid: string, roomId: string): FbmAclStateRecord | undefined {
+    return this.fbmAclState.get(this.fbmAclKey(mxid, roomId));
+  }
+
+  upsertFbmAclState(record: FbmAclStateRecord): FbmAclStateRecord {
+    this.fbmAclState.set(this.fbmAclKey(record.mxid, record.roomId), record);
+    return record;
+  }
+
+  /** Distinct MXIDs with applied ACL state — drives the drift-correction reconcile. */
+  listFbmAclMxids(): string[] {
+    return [...new Set([...this.fbmAclState.values()].map((r) => r.mxid))];
+  }
+
+  resetFbmAclStateForTest(): void {
+    this.fbmAclState.clear();
+  }
+
   insertTip(record: TipRecord): TipRecord {
     this.tips.set(record.id, record);
     return record;
@@ -3127,6 +3154,9 @@ export class FileBackedDb extends InMemoryDb {
     this.fbmDisputeRooms = new Map(
       (parsed.fbmDisputeRooms ?? []).map((row) => [row.disputeId, row])
     );
+    this.fbmAclState = new Map(
+      (parsed.fbmAclState ?? []).map((row) => [`${row.mxid}::${row.roomId}`, row])
+    );
     this.tips = new Map((parsed.tips ?? []).map((row) => [row.id, row]));
     this.creatorSubscriptionTiers = new Map(
       (parsed.creatorSubscriptionTiers ?? []).map((row) => [row.id, row])
@@ -3347,6 +3377,7 @@ export class FileBackedDb extends InMemoryDb {
       fbmBuyerOrderRooms: [...this.fbmBuyerOrderRooms.values()],
       fbmDeaddropDeliveries: [...this.fbmDeaddropDeliveries.values()],
       fbmDisputeRooms: [...this.fbmDisputeRooms.values()],
+      fbmAclState: [...this.fbmAclState.values()],
       tips: [...this.tips.values()],
       creatorSubscriptionTiers: [...this.creatorSubscriptionTiers.values()],
       creatorSubscriptions: [...this.creatorSubscriptions.values()],
@@ -3825,6 +3856,17 @@ export class FileBackedDb extends InMemoryDb {
 
   override resetFbmMatrixBridgeForTest(): void {
     super.resetFbmMatrixBridgeForTest();
+    this.persist();
+  }
+
+  override upsertFbmAclState(record: FbmAclStateRecord): FbmAclStateRecord {
+    const created = super.upsertFbmAclState(record);
+    this.persist();
+    return created;
+  }
+
+  override resetFbmAclStateForTest(): void {
+    super.resetFbmAclStateForTest();
     this.persist();
   }
 
