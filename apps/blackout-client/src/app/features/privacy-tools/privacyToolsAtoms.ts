@@ -3,11 +3,11 @@ import { atomWithStorage } from 'jotai/utils';
 import { installedPluginsAtom } from '../monetization/install/installedPluginsAtom';
 
 /**
- * Persisted client settings for the Privacy Tools feature. Both protections
- * default ON — they're privacy hygiene, not opt-in. The "advanced" options are
- * gated behind a purchased `privacy_tool` entitlement (see
- * `privacyToolsEntitledAtom`), not a stored flag, so they can't be toggled on
- * without the entitlement actually being granted.
+ * Persisted client settings for the Privacy Tools feature. EXIF stripping and
+ * link sanitization are now native (always on, no toggle) — they're privacy
+ * hygiene, not preferences. Only the "advanced" tier (perturbation + advanced
+ * options) is settable here, and it's gated behind a purchased `privacy_tool`
+ * entitlement (see `privacyToolsEntitledAtom`).
  */
 export interface PrivacyToolsAdvancedOptions {
     /** Warn (instead of silently passing through) when a file type can't be stripped. */
@@ -15,8 +15,6 @@ export interface PrivacyToolsAdvancedOptions {
 }
 
 export interface PrivacyToolsSettingsState {
-    exifStripEnabled: boolean;
-    linkSanitizeEnabled: boolean;
     /** Anti-facial-recognition perturbation on avatar/image uploads (advanced). */
     avatarPerturbationEnabled: boolean;
     advancedOptions: PrivacyToolsAdvancedOptions;
@@ -25,8 +23,6 @@ export interface PrivacyToolsSettingsState {
 export const privacyToolsSettingsAtom = atomWithStorage<PrivacyToolsSettingsState>(
     'blackout.settings.privacy-tools.v1',
     {
-        exifStripEnabled: true,
-        linkSanitizeEnabled: true,
         avatarPerturbationEnabled: false,
         advancedOptions: {
             nonStrippableWarning: false,

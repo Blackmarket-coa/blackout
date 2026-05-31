@@ -336,7 +336,8 @@ export type OutboundEventType =
   | 'streamgoal.reached'
   | 'channelpoints.redeemed'
   | 'hypetrain.started'
-  | 'hypetrain.ended';
+  | 'hypetrain.ended'
+  | 'governance.proposal.resolved';
 
 /**
  * A creator-defined channel-points reward viewers redeem with points earned on
@@ -841,6 +842,86 @@ export interface MarketplaceListingsCacheRecord {
   providerId: MarketplaceProviderIdString;
   listings: unknown[];
   refreshedAt: string;
+}
+
+// --- FBM → Matrix bridge ------------------------------------------------------
+// Persistent mappings the `fbmMatrixBridge` service maintains when translating
+// FreeBlackMarket webhook events into Matrix room activity. Column names are the
+// snake_case of these fields (the pg writer maps camelCase ↔ snake_case by
+// reflection); see migrations 042–044.
+
+/** One per FBM vendor: the bot-provisioned space + its orders/inventory/ledger rooms. */
+export interface FbmVendorRoomRecord {
+  /** FBM vendor id (primary key). */
+  vendorId: string;
+  spaceRoomId: string;
+  ordersRoomId: string;
+  inventoryRoomId: string;
+  ledgerRoomId: string;
+  /** Public Order Cycle announcement room (§1.2). Lazily provisioned. */
+  announceRoomId?: string;
+  /** Private customer-messages room (§1.1) for bridged buyer inquiries. */
+  customerMessagesRoomId?: string;
+  createdAt: string;
+}
+
+/** A buyer-facing per-order room where order-status updates are pushed. */
+export interface FbmBuyerOrderRoomRecord {
+  id: UUID;
+  vendorId: string;
+  /** FBM userId (Blackout `sub`) of the buyer. */
+  buyerUserId: string;
+  /** FBM order id (unique). */
+  orderId: string;
+  roomId: string;
+  createdAt: string;
+}
+
+/** A digital-product dead-drop delivery: a temporary room tombstoned after 72h / download. */
+export interface FbmDeaddropDeliveryRecord {
+  id: UUID;
+  /** Originating webhook event id (unique) — DB-level replay idempotency. */
+  sourceEventId: string;
+  buyerUserId: string;
+  entitlementId: string | null;
+  roomId: string;
+  dropId: string | null;
+  clue: string | null;
+  expiresAt: string;
+  downloadedAt: string | null;
+  tombstonedAt: string | null;
+  createdAt: string;
+}
+
+/** A three-party encrypted dispute room; persists read-only for 90 days post-resolution. */
+export interface FbmDisputeRoomRecord {
+  disputeId: string;
+  orderId: string | null;
+  vendorId: string;
+  buyerUserId: string;
+  mediatorUserId: string | null;
+  roomId: string;
+  status: 'open' | 'resolved';
+  openedAt: string;
+  resolvedAt: string | null;
+  /** resolvedAt + retention window; the sweeper purges the room after this. */
+  purgeAfter: string | null;
+  purgedAt: string | null;
+  createdAt: string;
+}
+
+/**
+ * Last-applied Matrix power level the ACL sync worker wrote for an (mxid, room)
+ * pair, derived from the FBM entitlements service's governance-role `matrixAcls`.
+ * Keyed `${mxid}::${roomId}` in memory; PK (mxid, room_id) in Postgres. Lets the
+ * worker skip no-op writes and drives the periodic drift-correction reconcile.
+ */
+export interface FbmAclStateRecord {
+  mxid: string;
+  roomId: string;
+  powerLevel: number;
+  appliedAt: string;
+  createdAt: string;
 }
 
 export type PluginInstallScopeType = 'user' | 'den' | 'coalition' | 'creator';

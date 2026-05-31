@@ -86,6 +86,11 @@ import type {
   ColiseumVoteRecord,
   ColiseumLiveSessionRecord,
   ReputationEventRecord,
+  FbmVendorRoomRecord,
+  FbmBuyerOrderRoomRecord,
+  FbmDeaddropDeliveryRecord,
+  FbmDisputeRoomRecord,
+  FbmAclStateRecord,
 } from './types';
 import {
   COALITION_SPATIAL_SEED,
@@ -130,6 +135,11 @@ type PersistedState = {
   marketplaceWebhookAudit: MarketplaceWebhookAuditRecord[];
   marketplaceLicenseKeys: MarketplaceLicenseKeyRecord[];
   marketplaceListingsCache: MarketplaceListingsCacheRecord[];
+  fbmVendorRooms: FbmVendorRoomRecord[];
+  fbmBuyerOrderRooms: FbmBuyerOrderRoomRecord[];
+  fbmDeaddropDeliveries: FbmDeaddropDeliveryRecord[];
+  fbmDisputeRooms: FbmDisputeRoomRecord[];
+  fbmAclState: FbmAclStateRecord[];
   tips: TipRecord[];
   creatorSubscriptionTiers: CreatorSubscriptionTierRecord[];
   creatorSubscriptions: CreatorSubscriptionRecord[];
@@ -216,6 +226,11 @@ class InMemoryDb {
   marketplaceWebhookAudit = new Map<string, MarketplaceWebhookAuditRecord>();
   marketplaceLicenseKeys = new Map<string, MarketplaceLicenseKeyRecord>();
   marketplaceListingsCache = new Map<string, MarketplaceListingsCacheRecord>();
+  fbmVendorRooms = new Map<string, FbmVendorRoomRecord>();
+  fbmBuyerOrderRooms = new Map<string, FbmBuyerOrderRoomRecord>();
+  fbmDeaddropDeliveries = new Map<string, FbmDeaddropDeliveryRecord>();
+  fbmDisputeRooms = new Map<string, FbmDisputeRoomRecord>();
+  fbmAclState = new Map<string, FbmAclStateRecord>();
   tips = new Map<string, TipRecord>();
   creatorSubscriptionTiers = new Map<string, CreatorSubscriptionTierRecord>();
   creatorSubscriptions = new Map<string, CreatorSubscriptionRecord>();
@@ -2018,6 +2033,101 @@ class InMemoryDb {
     this.marketplaceListingsCache.clear();
   }
 
+  // --- FBM → Matrix bridge ---------------------------------------------------
+
+  getFbmVendorRooms(vendorId: string): FbmVendorRoomRecord | undefined {
+    return this.fbmVendorRooms.get(vendorId);
+  }
+
+  upsertFbmVendorRooms(record: FbmVendorRoomRecord): FbmVendorRoomRecord {
+    this.fbmVendorRooms.set(record.vendorId, record);
+    return record;
+  }
+
+  getFbmBuyerOrderRoom(orderId: string): FbmBuyerOrderRoomRecord | undefined {
+    return [...this.fbmBuyerOrderRooms.values()].find((r) => r.orderId === orderId);
+  }
+
+  upsertFbmBuyerOrderRoom(record: FbmBuyerOrderRoomRecord): FbmBuyerOrderRoomRecord {
+    this.fbmBuyerOrderRooms.set(record.id, record);
+    return record;
+  }
+
+  getFbmDeaddropDeliveryBySourceEvent(
+    sourceEventId: string
+  ): FbmDeaddropDeliveryRecord | undefined {
+    return [...this.fbmDeaddropDeliveries.values()].find(
+      (r) => r.sourceEventId === sourceEventId
+    );
+  }
+
+  upsertFbmDeaddropDelivery(
+    record: FbmDeaddropDeliveryRecord
+  ): FbmDeaddropDeliveryRecord {
+    this.fbmDeaddropDeliveries.set(record.id, record);
+    return record;
+  }
+
+  /** Deliveries past their TTL (or already downloaded) that have not been tombstoned. */
+  listFbmDeaddropDeliveriesToTombstone(nowIso: string): FbmDeaddropDeliveryRecord[] {
+    return [...this.fbmDeaddropDeliveries.values()].filter(
+      (r) =>
+        !r.tombstonedAt &&
+        (r.downloadedAt !== null || r.expiresAt <= nowIso)
+    );
+  }
+
+  getFbmDisputeRoom(disputeId: string): FbmDisputeRoomRecord | undefined {
+    return this.fbmDisputeRooms.get(disputeId);
+  }
+
+  upsertFbmDisputeRoom(record: FbmDisputeRoomRecord): FbmDisputeRoomRecord {
+    this.fbmDisputeRooms.set(record.disputeId, record);
+    return record;
+  }
+
+  /** Resolved dispute rooms whose retention window has elapsed and not yet purged. */
+  listFbmDisputeRoomsToPurge(nowIso: string): FbmDisputeRoomRecord[] {
+    return [...this.fbmDisputeRooms.values()].filter(
+      (r) =>
+        r.status === 'resolved' &&
+        !r.purgedAt &&
+        r.purgeAfter !== null &&
+        r.purgeAfter <= nowIso
+    );
+  }
+
+  resetFbmMatrixBridgeForTest(): void {
+    this.fbmVendorRooms.clear();
+    this.fbmBuyerOrderRooms.clear();
+    this.fbmDeaddropDeliveries.clear();
+    this.fbmDisputeRooms.clear();
+  }
+
+  // --- FBM entitlements ACL sync state ---------------------------------------
+
+  private fbmAclKey(mxid: string, roomId: string): string {
+    return `${mxid}::${roomId}`;
+  }
+
+  getFbmAclState(mxid: string, roomId: string): FbmAclStateRecord | undefined {
+    return this.fbmAclState.get(this.fbmAclKey(mxid, roomId));
+  }
+
+  upsertFbmAclState(record: FbmAclStateRecord): FbmAclStateRecord {
+    this.fbmAclState.set(this.fbmAclKey(record.mxid, record.roomId), record);
+    return record;
+  }
+
+  /** Distinct MXIDs with applied ACL state — drives the drift-correction reconcile. */
+  listFbmAclMxids(): string[] {
+    return [...new Set([...this.fbmAclState.values()].map((r) => r.mxid))];
+  }
+
+  resetFbmAclStateForTest(): void {
+    this.fbmAclState.clear();
+  }
+
   insertTip(record: TipRecord): TipRecord {
     this.tips.set(record.id, record);
     return record;
@@ -2265,6 +2375,11 @@ class InMemoryDb {
     };
     this.coalitionSpatialItems.set(record.id, record);
     return record;
+  }
+
+  /** Remove a spatial pin (used by the flash-mob ephemeral-pin sweeper). */
+  deleteCoalitionSpatialItem(id: string): boolean {
+    return this.coalitionSpatialItems.delete(id);
   }
 
   listCoalitionAidPosts(): CoalitionAidPostRecord[] {
@@ -2913,6 +3028,21 @@ export class FileBackedDb extends InMemoryDb {
     this.marketplaceListingsCache = new Map(
       (parsed.marketplaceListingsCache ?? []).map((row) => [row.cacheKey, row])
     );
+    this.fbmVendorRooms = new Map(
+      (parsed.fbmVendorRooms ?? []).map((row) => [row.vendorId, row])
+    );
+    this.fbmBuyerOrderRooms = new Map(
+      (parsed.fbmBuyerOrderRooms ?? []).map((row) => [row.id, row])
+    );
+    this.fbmDeaddropDeliveries = new Map(
+      (parsed.fbmDeaddropDeliveries ?? []).map((row) => [row.id, row])
+    );
+    this.fbmDisputeRooms = new Map(
+      (parsed.fbmDisputeRooms ?? []).map((row) => [row.disputeId, row])
+    );
+    this.fbmAclState = new Map(
+      (parsed.fbmAclState ?? []).map((row) => [`${row.mxid}::${row.roomId}`, row])
+    );
     this.tips = new Map((parsed.tips ?? []).map((row) => [row.id, row]));
     this.creatorSubscriptionTiers = new Map(
       (parsed.creatorSubscriptionTiers ?? []).map((row) => [row.id, row])
@@ -3120,6 +3250,11 @@ export class FileBackedDb extends InMemoryDb {
       marketplaceWebhookAudit: [...this.marketplaceWebhookAudit.values()],
       marketplaceLicenseKeys: [...this.marketplaceLicenseKeys.values()],
       marketplaceListingsCache: [...this.marketplaceListingsCache.values()],
+      fbmVendorRooms: [...this.fbmVendorRooms.values()],
+      fbmBuyerOrderRooms: [...this.fbmBuyerOrderRooms.values()],
+      fbmDeaddropDeliveries: [...this.fbmDeaddropDeliveries.values()],
+      fbmDisputeRooms: [...this.fbmDisputeRooms.values()],
+      fbmAclState: [...this.fbmAclState.values()],
       tips: [...this.tips.values()],
       creatorSubscriptionTiers: [...this.creatorSubscriptionTiers.values()],
       creatorSubscriptions: [...this.creatorSubscriptions.values()],
@@ -3565,6 +3700,50 @@ export class FileBackedDb extends InMemoryDb {
     this.persist();
   }
 
+  override upsertFbmVendorRooms(record: FbmVendorRoomRecord): FbmVendorRoomRecord {
+    const created = super.upsertFbmVendorRooms(record);
+    this.persist();
+    return created;
+  }
+
+  override upsertFbmBuyerOrderRoom(
+    record: FbmBuyerOrderRoomRecord
+  ): FbmBuyerOrderRoomRecord {
+    const created = super.upsertFbmBuyerOrderRoom(record);
+    this.persist();
+    return created;
+  }
+
+  override upsertFbmDeaddropDelivery(
+    record: FbmDeaddropDeliveryRecord
+  ): FbmDeaddropDeliveryRecord {
+    const created = super.upsertFbmDeaddropDelivery(record);
+    this.persist();
+    return created;
+  }
+
+  override upsertFbmDisputeRoom(record: FbmDisputeRoomRecord): FbmDisputeRoomRecord {
+    const created = super.upsertFbmDisputeRoom(record);
+    this.persist();
+    return created;
+  }
+
+  override resetFbmMatrixBridgeForTest(): void {
+    super.resetFbmMatrixBridgeForTest();
+    this.persist();
+  }
+
+  override upsertFbmAclState(record: FbmAclStateRecord): FbmAclStateRecord {
+    const created = super.upsertFbmAclState(record);
+    this.persist();
+    return created;
+  }
+
+  override resetFbmAclStateForTest(): void {
+    super.resetFbmAclStateForTest();
+    this.persist();
+  }
+
   override insertTip(record: TipRecord): TipRecord {
     const created = super.insertTip(record);
     this.persist();
@@ -3965,6 +4144,12 @@ export class FileBackedDb extends InMemoryDb {
     const created = super.upsertCoalitionSpatialItem(input);
     this.persist();
     return created;
+  }
+
+  override deleteCoalitionSpatialItem(id: string): boolean {
+    const deleted = super.deleteCoalitionSpatialItem(id);
+    this.persist();
+    return deleted;
   }
 
   override createCoalitionAidPost(

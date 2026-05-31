@@ -371,6 +371,36 @@ marketplace.post('/stub/checkout/:sessionId/complete', async (c) => {
     );
 });
 
+// Stub-only driver for FBM → Matrix bridge events (order.*, inventory.*,
+// ledger.*, subscription.*, dispute.*). The `:kind` path segment is the event
+// `type`; the JSON body carries the event fields. Synthesizes a signed webhook
+// and runs it through the canonical dispatcher, so the whole bridge can be
+// exercised end-to-end locally without a live FBM. 404s when the stub is off.
+marketplace.post('/stub/fbm-event/:kind', async (c) => {
+    const provider = getMarketplaceProvider('freeblackmarket');
+    const internals = provider ? getFreeblackmarketStubInternals(provider) : undefined;
+    if (!provider || !internals) {
+        return c.json({ code: 'stub_disabled', message: 'FBM stub is not enabled' }, 404);
+    }
+    const kind = c.req.param('kind');
+    let params: Record<string, unknown> = {};
+    try {
+        const raw = await c.req.text();
+        params = raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
+    } catch {
+        return c.json({ code: 'invalid_json', message: 'Body must be JSON' }, 400);
+    }
+    const materialized = internals.materializeEvent({ ...params, type: kind });
+    const result = await dispatchMarketplaceWebhook(provider, materialized.body, {
+        'x-fbm-event-id': materialized.eventId,
+        'x-fbm-signature': materialized.signature,
+    });
+    return c.json(
+        { ok: result.ok, eventId: materialized.eventId, alreadyProcessed: result.applied?.alreadyProcessed ?? false },
+        result.status === 200 ? 200 : (result.status as 400 | 401 | 404 | 502)
+    );
+});
+
 marketplace.post('/webhooks/:providerId', async (c) => {
     const providerIdRaw = c.req.param('providerId');
     if (!isProviderId(providerIdRaw)) {

@@ -21,30 +21,10 @@ export function PrivacyToolsSettings({ requestClose }: PrivacyToolsSettingsProps
                 ) : null}
             </div>
 
-            <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <input
-                    type="checkbox"
-                    checked={settings.exifStripEnabled}
-                    onChange={(event) =>
-                        setSettings((prev) => ({ ...prev, exifStripEnabled: event.target.checked }))
-                    }
-                />
-                Strip metadata (EXIF/GPS) from images before upload
-            </label>
-
-            <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <input
-                    type="checkbox"
-                    checked={settings.linkSanitizeEnabled}
-                    onChange={(event) =>
-                        setSettings((prev) => ({
-                            ...prev,
-                            linkSanitizeEnabled: event.target.checked,
-                        }))
-                    }
-                />
-                Remove tracking parameters from links in messages
-            </label>
+            <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 13 }}>
+                Image metadata (EXIF/GPS) stripping and link tracking-parameter removal are now
+                always on — they&apos;re privacy hygiene, not a toggle.
+            </p>
 
             <div
                 style={{ border: '1px solid var(--border-default)', borderRadius: 10, padding: 10 }}
