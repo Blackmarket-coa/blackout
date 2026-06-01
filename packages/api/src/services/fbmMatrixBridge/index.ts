@@ -30,6 +30,7 @@ import { applySubscriptionActivated, applySubscriptionLapsed } from './subscript
 import { openDisputeRoom, resolveDisputeRoom } from './disputeRooms';
 import { postLogistics } from './logisticsRooms';
 import { startFlashSale } from './flashMob';
+import { postBarter, postCredits } from './rewardRooms';
 
 export interface FbmBridgeDeps {
     matrixClient?: FbmBridgeMatrixClient;
@@ -87,6 +88,16 @@ async function route(event: FbmMatrixEvent, matrix: FbmBridgeMatrixClient): Prom
             return postLogistics(event, matrix);
         case 'flash_sale.start':
             return startFlashSale(event, matrix);
+        case 'barter.offer_created':
+        case 'barter.offer_accepted':
+        case 'barter.offer_declined':
+        case 'barter.offer_cancelled':
+        case 'barter.offer_completed':
+            return postBarter(event, matrix);
+        case 'credits.earned':
+        case 'credits.spent':
+        case 'credits.adjusted':
+            return postCredits(event, matrix);
     }
 }
 

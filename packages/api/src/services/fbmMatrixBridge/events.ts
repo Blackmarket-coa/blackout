@@ -17,6 +17,10 @@ import type {
     FbmCycleAvailableItem,
     FbmVendorTrustTier,
     FbmLogisticsEventKind,
+    FbmBarterEventKind,
+    FbmBarterItem,
+    FbmCreditsEventKind,
+    FbmCreditsUnit,
 } from '@blackout/protocol';
 
 export type FbmSubscriptionTier = 'signal' | 'signal_plus' | 'community';
@@ -180,6 +184,34 @@ export interface FbmFlashSaleEvent extends FbmMatrixEventBase {
     vendorMxid?: string;
 }
 
+export interface FbmBarterEvent extends FbmMatrixEventBase {
+    type:
+        | 'barter.offer_created'
+        | 'barter.offer_accepted'
+        | 'barter.offer_declined'
+        | 'barter.offer_cancelled'
+        | 'barter.offer_completed';
+    barterId: string;
+    vendorId: string;
+    /** Resolved to a pseudonymous alias for the room content. */
+    counterpartyUserId?: string;
+    offered: FbmBarterItem[];
+    requested: FbmBarterItem[];
+    expiresAt?: string;
+    vendorMxid?: string;
+}
+
+export interface FbmCreditsEvent extends FbmMatrixEventBase {
+    type: 'credits.earned' | 'credits.spent' | 'credits.adjusted';
+    userId: string;
+    vendorId: string;
+    orderId: string;
+    unit: FbmCreditsUnit;
+    amount: number;
+    reason: string;
+    balance?: number;
+}
+
 export type FbmMatrixEvent =
     | FbmOrderCreatedEvent
     | FbmOrderUpdatedEvent
@@ -194,11 +226,21 @@ export type FbmMatrixEvent =
     | FbmCustomerMessageEvent
     | FbmVendorTrustChangedEvent
     | FbmLogisticsEvent
-    | FbmFlashSaleEvent;
+    | FbmFlashSaleEvent
+    | FbmBarterEvent
+    | FbmCreditsEvent;
 
 export const logisticsKindFromType = (
     type: FbmLogisticsEvent['type']
 ): FbmLogisticsEventKind => type.slice('blackstar.'.length) as FbmLogisticsEventKind;
+
+export const barterKindFromType = (
+    type: FbmBarterEvent['type']
+): FbmBarterEventKind => type.slice('barter.'.length) as FbmBarterEventKind;
+
+export const creditsKindFromType = (
+    type: FbmCreditsEvent['type']
+): FbmCreditsEventKind => type.slice('credits.'.length) as FbmCreditsEventKind;
 
 export type FbmMatrixEventType = FbmMatrixEvent['type'];
 
@@ -225,6 +267,14 @@ const FBM_MATRIX_EVENT_TYPES: ReadonlySet<string> = new Set<FbmMatrixEventType>(
     'blackstar.delivered',
     'blackstar.failed',
     'flash_sale.start',
+    'barter.offer_created',
+    'barter.offer_accepted',
+    'barter.offer_declined',
+    'barter.offer_cancelled',
+    'barter.offer_completed',
+    'credits.earned',
+    'credits.spent',
+    'credits.adjusted',
 ]);
 
 const ORDER_STATUSES: ReadonlySet<string> = new Set<FbmOrderStatus>([
@@ -285,6 +335,19 @@ function parseLineItems(raw: unknown): FbmOrderLineItem[] {
         const priceCents = num(entry, 'priceCents');
         if (!sku || !title || qty === undefined || priceCents === undefined) continue;
         items.push({ sku, title, qty, priceCents });
+    }
+    return items;
+}
+
+function parseBarterItems(raw: unknown): FbmBarterItem[] {
+    if (!Array.isArray(raw)) return [];
+    const items: FbmBarterItem[] = [];
+    for (const entry of raw) {
+        if (!isRecord(entry)) continue;
+        const title = str(entry, 'title');
+        const qty = num(entry, 'qty');
+        if (!title || qty === undefined) continue;
+        items.push({ sku: str(entry, 'sku'), title, qty });
     }
     return items;
 }
@@ -550,6 +613,52 @@ export function parseFbmMatrixEvent(payload: unknown): FbmMatrixEvent | null {
                 latitude: num(payload, 'latitude'),
                 longitude: num(payload, 'longitude'),
                 vendorMxid,
+            };
+        }
+        case 'barter.offer_created':
+        case 'barter.offer_accepted':
+        case 'barter.offer_declined':
+        case 'barter.offer_cancelled':
+        case 'barter.offer_completed': {
+            const barterId = str(payload, 'barterId');
+            const vendorId = str(payload, 'vendorId');
+            if (!barterId || !vendorId) return null;
+            return {
+                ...base,
+                type,
+                barterId,
+                vendorId,
+                counterpartyUserId: str(payload, 'counterpartyUserId'),
+                offered: parseBarterItems(payload.offered),
+                requested: parseBarterItems(payload.requested),
+                expiresAt: str(payload, 'expiresAt'),
+                vendorMxid,
+            };
+        }
+        case 'credits.earned':
+        case 'credits.spent':
+        case 'credits.adjusted': {
+            const userId = str(payload, 'userId');
+            const vendorId = str(payload, 'vendorId');
+            const orderId = str(payload, 'orderId');
+            const unitRaw = str(payload, 'unit');
+            const amount = num(payload, 'amount');
+            const reason = str(payload, 'reason');
+            const unit: FbmCreditsUnit | undefined =
+                unitRaw === 'credit' || unitRaw === 'xp' ? unitRaw : undefined;
+            if (!userId || !vendorId || !orderId || !unit || amount === undefined || !reason) {
+                return null;
+            }
+            return {
+                ...base,
+                type,
+                userId,
+                vendorId,
+                orderId,
+                unit,
+                amount,
+                reason,
+                balance: num(payload, 'balance'),
             };
         }
         default:

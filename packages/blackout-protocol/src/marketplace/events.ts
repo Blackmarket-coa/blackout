@@ -22,8 +22,19 @@ export const FBM_CYCLE_EVENT_TYPE = 'co.bmc.marketplace.cycle';
 export const FBM_CUSTOMER_MESSAGE_EVENT_TYPE = 'co.bmc.marketplace.customer_message';
 /** Vendor trust badge — written as a room *state* event (state key = vendorId). */
 export const FBM_VENDOR_TRUST_EVENT_TYPE = 'co.bmc.vendor.trust';
+/**
+ * Vendor room metadata — written as a room *state* event with an EMPTY state
+ * key. It binds a room to its `vendorId` so a client can discover which vendor a
+ * room belongs to (the trust event is keyed by `vendorId`, which is otherwise
+ * not derivable client-side).
+ */
+export const FBM_VENDOR_METADATA_EVENT_TYPE = 'co.bmc.vendor.metadata';
 export const FBM_LOGISTICS_EVENT_TYPE = 'co.bmc.marketplace.logistics';
 export const FBM_FLASH_SALE_EVENT_TYPE = 'co.bmc.marketplace.flash_sale';
+/** §3.1 Barter Board — trade-offer lifecycle between vendors. */
+export const FBM_BARTER_EVENT_TYPE = 'co.bmc.marketplace.barter';
+/** §3.3 Coalition Credits / participation-XP surfacing (order-linked). */
+export const FBM_CREDITS_EVENT_TYPE = 'co.bmc.marketplace.credits';
 
 /** Bumped when any `co.bmc.marketplace.*` content shape changes incompatibly. */
 export const FBM_MARKETPLACE_SCHEMA_VERSION = 1;
@@ -144,6 +155,12 @@ export interface FbmVendorTrustContent {
     occurredAt: string;
 }
 
+export interface FbmVendorMetadataContent {
+    schemaVersion: number;
+    vendorId: string;
+    displayName?: string;
+}
+
 export type FbmLogisticsEventKind =
     | 'driver_assigned'
     | 'pickup_confirmed'
@@ -178,6 +195,49 @@ export interface FbmFlashSaleContent {
     listingDeepLink?: string;
     /** Sale end timestamp (start + duration). */
     endsAt: string;
+    occurredAt: string;
+}
+
+export type FbmBarterEventKind =
+    | 'offer_created'
+    | 'offer_accepted'
+    | 'offer_declined'
+    | 'offer_cancelled'
+    | 'offer_completed';
+
+export interface FbmBarterItem {
+    sku?: string;
+    title: string;
+    qty: number;
+}
+
+export interface FbmBarterEventContent {
+    schemaVersion: number;
+    kind: FbmBarterEventKind;
+    barterId: string;
+    vendorId: string;
+    /** Pseudonymous alias of the other party (never a raw id). */
+    counterpartyAlias?: string;
+    offered: FbmBarterItem[];
+    requested: FbmBarterItem[];
+    expiresAt?: string;
+    occurredAt: string;
+}
+
+export type FbmCreditsEventKind = 'earned' | 'spent' | 'adjusted';
+export type FbmCreditsUnit = 'credit' | 'xp';
+
+export interface FbmCreditsEventContent {
+    schemaVersion: number;
+    kind: FbmCreditsEventKind;
+    unit: FbmCreditsUnit;
+    /** Positive magnitude; `kind` conveys the direction. */
+    amount: number;
+    reason: string;
+    /** The order this reward is linked to (bridge surfacing is order-scoped). */
+    orderId?: string;
+    /** Running balance after this event, if the source provides it. */
+    balance?: number;
     occurredAt: string;
 }
 
@@ -240,6 +300,11 @@ export const isFbmVendorTrustContent = (
     typeof value.vendorId === 'string' &&
     typeof value.verified === 'boolean';
 
+export const isFbmVendorMetadataContent = (
+    value: unknown
+): value is FbmVendorMetadataContent =>
+    isContent(value) && typeof value.vendorId === 'string';
+
 export const isFbmLogisticsEventContent = (
     value: unknown
 ): value is FbmLogisticsEventContent =>
@@ -258,3 +323,31 @@ export const isFbmFlashSaleContent = (
     typeof value.vendorId === 'string' &&
     typeof value.saleId === 'string' &&
     typeof value.discount === 'string';
+
+const BARTER_KINDS: ReadonlySet<string> = new Set<FbmBarterEventKind>([
+    'offer_created',
+    'offer_accepted',
+    'offer_declined',
+    'offer_cancelled',
+    'offer_completed',
+]);
+
+export const isFbmBarterEventContent = (
+    value: unknown
+): value is FbmBarterEventContent =>
+    isContent(value) &&
+    typeof value.barterId === 'string' &&
+    typeof value.vendorId === 'string' &&
+    typeof value.kind === 'string' &&
+    BARTER_KINDS.has(value.kind) &&
+    Array.isArray(value.offered) &&
+    Array.isArray(value.requested);
+
+export const isFbmCreditsEventContent = (
+    value: unknown
+): value is FbmCreditsEventContent =>
+    isContent(value) &&
+    (value.kind === 'earned' || value.kind === 'spent' || value.kind === 'adjusted') &&
+    (value.unit === 'credit' || value.unit === 'xp') &&
+    typeof value.amount === 'number' &&
+    typeof value.reason === 'string';

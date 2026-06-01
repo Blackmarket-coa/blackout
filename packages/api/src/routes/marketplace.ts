@@ -26,6 +26,7 @@ import {
     listEntitlementsForUser,
 } from '../services/marketplaceEntitlements';
 import { dispatchMarketplaceWebhook } from '../services/marketplaceWebhook';
+import { resolveVendorMxid } from '../services/fbmMatrixBridge/identity';
 import { incrementCounter, logEvent } from '../services/marketplaceObservability';
 import { db } from '../db/store';
 import type { MarketplaceProviderIdString } from '../db/types';
@@ -224,6 +225,18 @@ marketplace.get('/entitlements', (c) => {
     if (user instanceof Response) return user;
     const entitlements = listEntitlementsForUser(user.sub);
     return c.json({ entitlements });
+});
+
+// Resolve an opaque marketplace vendor id to a Matrix MXID so the client can
+// open a direct message with the seller. The vendor↔MXID mapping otherwise
+// lives only server-side (see fbmMatrixBridge/identity). Returns `mxid: null`
+// when the vendor cannot be addressed, so the client hides the entrypoint
+// rather than inviting a non-existent user.
+marketplace.get('/vendors/:vendorId/matrix', (c) => {
+    const user = requireUser(c, 'Sign in to contact vendors');
+    if (user instanceof Response) return user;
+    const vendorId = c.req.param('vendorId');
+    return c.json({ vendorId, mxid: resolveVendorMxid(vendorId) });
 });
 
 marketplace.get('/fulfillment/:entitlementId/asset', (c) => {

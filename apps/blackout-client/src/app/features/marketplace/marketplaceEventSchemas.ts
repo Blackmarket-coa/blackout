@@ -7,6 +7,8 @@
 // back to the normal notice/text render.
 
 import {
+    FBM_BARTER_EVENT_TYPE,
+    FBM_CREDITS_EVENT_TYPE,
     FBM_CUSTOMER_MESSAGE_EVENT_TYPE,
     FBM_CYCLE_EVENT_TYPE,
     FBM_DEADDROP_POINTER_EVENT_TYPE,
@@ -16,6 +18,8 @@ import {
     FBM_LEDGER_EVENT_TYPE,
     FBM_LOGISTICS_EVENT_TYPE,
     FBM_ORDER_EVENT_TYPE,
+    isFbmBarterEventContent,
+    isFbmCreditsEventContent,
     isFbmCustomerMessageContent,
     isFbmCycleEventContent,
     isFbmDisputeEventContent,
@@ -24,6 +28,8 @@ import {
     isFbmLedgerEventContent,
     isFbmLogisticsEventContent,
     isFbmOrderEventContent,
+    type FbmBarterEventContent,
+    type FbmCreditsEventContent,
     type FbmCustomerMessageContent,
     type FbmCycleEventContent,
     type FbmDisputeEventContent,
@@ -51,6 +57,8 @@ export type NormalizedMarketplaceEvent =
     | { kind: 'customer_message'; data: FbmCustomerMessageContent }
     | { kind: 'logistics'; data: FbmLogisticsEventContent }
     | { kind: 'flash_sale'; data: FbmFlashSaleContent }
+    | { kind: 'barter'; data: FbmBarterEventContent }
+    | { kind: 'credits'; data: FbmCreditsEventContent }
     | { kind: 'deaddrop'; data: FbmDeaddropPointerContent };
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
@@ -89,12 +97,19 @@ export const normalizeMarketplaceEventContent = (
     const flash = content[FBM_FLASH_SALE_EVENT_TYPE];
     if (isFbmFlashSaleContent(flash)) return { kind: 'flash_sale', data: flash };
 
+    const barter = content[FBM_BARTER_EVENT_TYPE];
+    if (isFbmBarterEventContent(barter)) return { kind: 'barter', data: barter };
+
+    const credits = content[FBM_CREDITS_EVENT_TYPE];
+    if (isFbmCreditsEventContent(credits)) return { kind: 'credits', data: credits };
+
     const drop = content[FBM_DEADDROP_POINTER_EVENT_TYPE];
     if (isRecord(drop)) {
         return {
             kind: 'deaddrop',
             data: {
-                schemaVersion: typeof drop.schemaVersion === 'number' ? drop.schemaVersion : undefined,
+                schemaVersion:
+                    typeof drop.schemaVersion === 'number' ? drop.schemaVersion : undefined,
                 entitlementId: typeof drop.entitlementId === 'string' ? drop.entitlementId : null,
                 providerListingId:
                     typeof drop.providerListingId === 'string' ? drop.providerListingId : undefined,

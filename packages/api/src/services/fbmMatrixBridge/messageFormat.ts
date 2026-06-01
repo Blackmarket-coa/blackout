@@ -6,6 +6,8 @@
 // mirroring how scheduledMessageDispatcher embeds `co.blackout.scheduled`.
 
 import {
+    FBM_BARTER_EVENT_TYPE,
+    FBM_CREDITS_EVENT_TYPE,
     FBM_CUSTOMER_MESSAGE_EVENT_TYPE,
     FBM_CYCLE_EVENT_TYPE,
     FBM_DISPUTE_EVENT_TYPE,
@@ -13,7 +15,10 @@ import {
     FBM_LEDGER_EVENT_TYPE,
     FBM_MARKETPLACE_SCHEMA_VERSION,
     FBM_ORDER_EVENT_TYPE,
+    FBM_VENDOR_METADATA_EVENT_TYPE,
     FBM_VENDOR_TRUST_EVENT_TYPE,
+    type FbmBarterEventContent,
+    type FbmCreditsEventContent,
     type FbmCustomerMessageContent,
     type FbmCycleEventContent,
     type FbmDisputeEventContent,
@@ -23,6 +28,8 @@ import {
     type FbmVendorTrustContent,
 } from '@blackout/protocol';
 import type {
+    FbmBarterEvent,
+    FbmCreditsEvent,
     FbmCustomerMessageEvent,
     FbmCycleEvent,
     FbmInventoryLowEvent,
@@ -32,7 +39,7 @@ import type {
     FbmOrderUpdatedEvent,
     FbmVendorTrustChangedEvent,
 } from './events';
-import { ledgerKindFromType } from './events';
+import { barterKindFromType, creditsKindFromType, ledgerKindFromType } from './events';
 
 const cycleKindFromType = (type: FbmCycleEvent['type']): FbmCycleEventContent['kind'] =>
     type === 'cycle.open' ? 'open' : type === 'cycle.close' ? 'close' : 'sold_out';
@@ -303,4 +310,77 @@ export function vendorTrustStateContent(
     };
 }
 
-export { FBM_DISPUTE_EVENT_TYPE, FBM_VENDOR_TRUST_EVENT_TYPE };
+const BARTER_LABELS: Record<FbmBarterEvent['type'], string> = {
+    'barter.offer_created': 'New barter offer',
+    'barter.offer_accepted': 'Barter offer accepted',
+    'barter.offer_declined': 'Barter offer declined',
+    'barter.offer_cancelled': 'Barter offer cancelled',
+    'barter.offer_completed': 'Barter completed',
+};
+
+function summarizeBarterItems(items: FbmBarterEvent['offered']): string {
+    if (items.length === 0) return '—';
+    return items.map((item) => `${item.qty}× ${item.title}`).join(', ');
+}
+
+/** §3.1 — a barter trade-offer for the vendor's room. `counterpartyAlias` is a
+ * pseudonym computed by the caller (the raw counterparty id never appears). */
+export function formatBarter(event: FbmBarterEvent, counterpartyAlias?: string): FormattedMessage {
+    const label = BARTER_LABELS[event.type];
+    const offered = summarizeBarterItems(event.offered);
+    const requested = summarizeBarterItems(event.requested);
+    const body = `${label} (#${shortRef(event.barterId)}): offering ${offered} for ${requested}.`;
+    return {
+        body,
+        content: {
+            msgtype: 'm.notice',
+            body,
+            [FBM_BARTER_EVENT_TYPE]: {
+                schemaVersion: FBM_MARKETPLACE_SCHEMA_VERSION,
+                kind: barterKindFromType(event.type),
+                barterId: event.barterId,
+                vendorId: event.vendorId,
+                counterpartyAlias,
+                offered: event.offered,
+                requested: event.requested,
+                expiresAt: event.expiresAt,
+                occurredAt: event.occurredAt,
+            } satisfies FbmBarterEventContent,
+        },
+    };
+}
+
+/** §3.3 — order-linked credits/XP surfacing for the buyer's own order room. */
+export function formatCredits(event: FbmCreditsEvent): FormattedMessage {
+    const kind = creditsKindFromType(event.type);
+    const unitLabel = event.unit === 'xp' ? 'XP' : 'credits';
+    const verb = kind === 'earned' ? 'earned' : kind === 'spent' ? 'spent' : 'adjusted by';
+    const balanceSuffix = event.balance !== undefined ? ` Balance: ${event.balance} ${unitLabel}.` : '';
+    const body = `You ${verb} ${event.amount} ${unitLabel} — ${event.reason}.${balanceSuffix}`;
+    return {
+        body,
+        content: {
+            msgtype: 'm.notice',
+            body,
+            [FBM_CREDITS_EVENT_TYPE]: {
+                schemaVersion: FBM_MARKETPLACE_SCHEMA_VERSION,
+                kind,
+                unit: event.unit,
+                amount: event.amount,
+                reason: event.reason,
+                orderId: event.orderId,
+                balance: event.balance,
+                occurredAt: event.occurredAt,
+            } satisfies FbmCreditsEventContent,
+        },
+    };
+}
+
+export {
+    FBM_BARTER_EVENT_TYPE,
+    FBM_CREDITS_EVENT_TYPE,
+    FBM_DISPUTE_EVENT_TYPE,
+    FBM_MARKETPLACE_SCHEMA_VERSION,
+    FBM_VENDOR_METADATA_EVENT_TYPE,
+    FBM_VENDOR_TRUST_EVENT_TYPE,
+};

@@ -33,6 +33,7 @@ import { RoomAvatar, RoomIcon } from '../../components/room-avatar';
 import { UseStateProvider } from '../../components/UseStateProvider';
 import { RoomTopicViewer } from '../../components/room-topic-viewer';
 import { StateEvent } from '../../../types/matrix/room';
+import { VendorTrustBadge } from '../marketplace/VendorTrustBadge';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { useRoom } from '../../hooks/useRoom';
 import { useSetting } from '../../state/hooks/settings';
@@ -390,6 +391,7 @@ export function RoomViewHeader() {
             <Text size={topic ? 'H5' : 'H3'} truncate>
               {name}
             </Text>
+            <VendorTrustBadge room={room} />
             {topic && (
               <UseStateProvider initial={false}>
                 {(viewTopic, setViewTopic) => (

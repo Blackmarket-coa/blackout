@@ -10,7 +10,9 @@ import { incrementCounter, logEvent } from '../marketplaceObservability';
 import type { FbmBridgeMatrixClient } from './client';
 import { buyerAliasForUserId, resolveBuyerMxid, resolveVendorMxid } from './identity';
 import {
+    FBM_VENDOR_METADATA_EVENT_TYPE,
     FBM_VENDOR_TRUST_EVENT_TYPE,
+    FBM_MARKETPLACE_SCHEMA_VERSION,
     formatBuyerOrderStatus,
     formatCustomerMessage,
     formatCycle,
@@ -367,6 +369,15 @@ export async function applyVendorTrust(
     const content = { ...vendorTrustStateContent(event) };
     // State key = vendorId so a buyer can look the badge up by vendor; written to
     // the space (discoverable) and the orders room (where buyers interact).
+    //
+    // The trust event is keyed by vendorId, which a client cannot otherwise
+    // derive from a roomId. We therefore also stamp a `co.bmc.vendor.metadata`
+    // state event with an EMPTY state key on the same rooms, binding room ->
+    // vendorId so the client can read metadata first, then the trust badge.
+    const metadata = {
+        schemaVersion: FBM_MARKETPLACE_SCHEMA_VERSION,
+        vendorId: event.vendorId,
+    };
     for (const roomId of [rooms.spaceRoomId, rooms.ordersRoomId]) {
         const written = await matrix.sendStateEvent(
             roomId,
@@ -376,6 +387,10 @@ export async function applyVendorTrust(
         );
         if (!written.ok) {
             failed('vendor_rooms', 'apply_vendor_trust', 'reason' in written ? written.reason : written.status);
+        }
+        const meta = await matrix.sendStateEvent(roomId, FBM_VENDOR_METADATA_EVENT_TYPE, metadata, '');
+        if (!meta.ok) {
+            failed('vendor_rooms', 'apply_vendor_metadata', 'reason' in meta ? meta.reason : meta.status);
         }
     }
     incrementCounter('fbm_matrix_vendor_trust_applied_total', { tier: event.tier });

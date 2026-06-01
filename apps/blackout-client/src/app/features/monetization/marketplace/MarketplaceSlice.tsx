@@ -7,15 +7,19 @@ import {
     type NormalizedEntitlement,
     type NormalizedListing,
 } from '@blackout/core';
+import { useNavigate } from 'react-router-dom';
 import {
     fetchEntitlements,
     fetchListings,
     fetchProviders,
+    fetchVendorMatrixId,
     startCheckout,
     type MarketplaceProviderSummary,
 } from './marketplaceClient';
 import { readBlackoutApiToken } from './useMarketplaceAuth';
 import { ensureBlackoutApiToken } from '../../../../client/blackoutApiSession';
+import { getDirectCreatePath, withSearchParam } from '../../../pages/pathUtils';
+import type { DirectCreateSearchParams } from '../../../pages/paths';
 import { ListingCard } from './ListingCard';
 import { LibraryView } from './LibraryView';
 import { resolveMarketplaceProvider } from './providerMetadata';
@@ -96,6 +100,7 @@ function listingKey(listing: NormalizedListing): string {
 }
 
 export function MarketplaceSlice() {
+    const navigate = useNavigate();
     const [view, setView] = useState<View>('catalog');
     const [providers, setProviders] = useState<MarketplaceProviderSummary[]>([]);
     const [providerFilter, setProviderFilter] = useState<MarketplaceProviderId | 'all'>('all');
@@ -234,6 +239,27 @@ export function MarketplaceSlice() {
         [providers, refreshEntitlements, token]
     );
 
+    const handleMessageVendor = useCallback(
+        async (listing: NormalizedListing) => {
+            if (!listing.sellerId) return;
+            setError(null);
+            try {
+                const activeToken = token ?? (await ensureBlackoutApiToken());
+                const { mxid } = await fetchVendorMatrixId(listing.sellerId, activeToken);
+                if (!mxid) {
+                    setError('This vendor cannot be messaged yet.');
+                    return;
+                }
+                const search: DirectCreateSearchParams = { userId: mxid };
+                navigate(withSearchParam(getDirectCreatePath(), search));
+            } catch (err) {
+                setError('Could not start a message with this vendor.');
+                console.warn('[marketplace] message vendor failed', err);
+            }
+        },
+        [navigate, token]
+    );
+
     const closeCheckout = useCallback(() => {
         setActiveCheckout(null);
     }, []);
@@ -358,6 +384,7 @@ export function MarketplaceSlice() {
                           listing,
                           providers,
                           onPurchase: handlePurchase,
+                          onMessageVendor: handleMessageVendor,
                           purchasing: purchasingId === listingKey(listing),
                           alreadyOwned: ownedKeys.has(listingKey(listing)),
                       })
