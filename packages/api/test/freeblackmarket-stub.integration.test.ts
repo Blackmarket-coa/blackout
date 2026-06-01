@@ -53,6 +53,13 @@ test('stub provider: catalog returns seeded listings', async () => {
     assert.ok(ids.includes('stub-stickers-cats'));
     assert.ok(ids.includes('stub-plugin-todo'));
     assert.ok(ids.includes('stub-privacy-tools-advanced'));
+    // Black Market privacy SKUs added in PR (Burner Pro / Ephemeral Pro / Data-Deletion Pro /
+    // Stego Advanced / Sovereignty Bundle).
+    assert.ok(ids.includes('stub-burner-pro'));
+    assert.ok(ids.includes('stub-ephemeral-pro'));
+    assert.ok(ids.includes('stub-data-deletion-pro'));
+    assert.ok(ids.includes('stub-stego-advanced'));
+    assert.ok(ids.includes('stub-sovereignty-bundle'));
     // New plugin-shelf demo listings.
     assert.ok(ids.includes('stub-plugin-uptime-monitor'));
     assert.ok(ids.includes('stub-plugin-poll-helper'));
@@ -231,7 +238,7 @@ test('stub provider: privacy_tool purchase carries the features array onto the e
     assert.equal(entitlements.length, 1);
     const ent = entitlements[0]!;
     assert.equal(ent.kind, 'privacy_tool');
-    assert.deepEqual(ent.metadata['features'], ['exif_strip', 'link_sanitize']);
+    assert.deepEqual(ent.metadata['features'], ['perturbation', 'exif_strip', 'link_sanitize']);
 });
 
 test('stub provider: completes only when the session exists', async () => {

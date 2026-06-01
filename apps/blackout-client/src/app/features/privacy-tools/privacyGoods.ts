@@ -7,14 +7,35 @@
  */
 
 export type PrivacyTierLevel = 'advanced';
-export type PrivacyFeature = 'exif_strip' | 'link_sanitize';
+
+/**
+ * Composable feature flags carried on a granted `privacy_tool` entitlement. One
+ * entitlement can unlock multiple features (used by the Sovereignty Bundle to
+ * unlock all the privacy "Pro" tiers in one purchase).
+ */
+export type PrivacyFeature =
+    | 'exif_strip'
+    | 'link_sanitize'
+    | 'perturbation'
+    | 'burner_pro'
+    | 'ephemeral_pro'
+    | 'bulk_deletion'
+    | 'stego_advanced';
 
 export interface OwnedPrivacyTier {
     tier: PrivacyTierLevel;
     features: PrivacyFeature[];
 }
 
-const PRIVACY_FEATURES: readonly PrivacyFeature[] = ['exif_strip', 'link_sanitize'];
+const PRIVACY_FEATURES: readonly PrivacyFeature[] = [
+    'exif_strip',
+    'link_sanitize',
+    'perturbation',
+    'burner_pro',
+    'ephemeral_pro',
+    'bulk_deletion',
+    'stego_advanced',
+];
 
 /** Parse + sanitize an untrusted privacy_tool payload. */
 export function parseOwnedPrivacyTier(payload: unknown): OwnedPrivacyTier | null {

@@ -38,3 +38,20 @@ export const privacyToolsSettingsAtom = atomWithStorage<PrivacyToolsSettingsStat
 export const privacyToolsEntitledAtom = atom((get) =>
     get(installedPluginsAtom).some((record) => record.privacyTier?.tier === 'advanced')
 );
+
+/**
+ * Composable per-feature gate. Multiple SKUs can grant overlapping features —
+ * e.g. the Sovereignty Bundle grants all of them in one purchase. Each derived
+ * atom checks whether ANY granted `privacy_tool` entitlement carries the given
+ * feature in its `features` array.
+ */
+const hasFeatureAtom = (feature: import('./privacyGoods').PrivacyFeature) =>
+    atom((get) =>
+        get(installedPluginsAtom).some((record) => record.privacyTier?.features?.includes(feature))
+    );
+
+export const perturbationEntitledAtom = hasFeatureAtom('perturbation');
+export const burnerProEntitledAtom = hasFeatureAtom('burner_pro');
+export const ephemeralProEntitledAtom = hasFeatureAtom('ephemeral_pro');
+export const bulkDeletionEntitledAtom = hasFeatureAtom('bulk_deletion');
+export const stegoAdvancedEntitledAtom = hasFeatureAtom('stego_advanced');

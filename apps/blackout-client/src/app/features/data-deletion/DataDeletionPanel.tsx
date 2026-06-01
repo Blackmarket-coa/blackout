@@ -9,7 +9,7 @@ import {
 } from '@blackout/core';
 import { dataDeletionAtom, isIdentityComplete, type RequestStatus } from './dataDeletionAtoms';
 import { buildMailto, formTarget } from './submissionLinks';
-import { privacyToolsEntitledAtom } from '../privacy-tools/privacyToolsAtoms';
+import { bulkDeletionEntitledAtom } from '../privacy-tools/privacyToolsAtoms';
 
 const STATUSES: RequestStatus[] = ['pending', 'sent', 'confirmed', 'skipped'];
 
@@ -19,7 +19,7 @@ const copyText = (text: string): void => {
 
 export function DataDeletionPanel() {
     const [state, setState] = useAtom(dataDeletionAtom);
-    const advancedEntitled = useAtomValue(privacyToolsEntitledAtom);
+    const advancedEntitled = useAtomValue(bulkDeletionEntitledAtom);
     const identityReady = isIdentityComplete(state.identity);
     const [copiedAll, setCopiedAll] = useState(false);
 
