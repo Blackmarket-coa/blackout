@@ -1,6 +1,7 @@
 import { createElement, useCallback, useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import {
     categoryLabel,
+    type CreatorArtifactKind,
     type MarketplaceCategory,
     type MarketplaceProviderId,
     type NormalizedEntitlement,
@@ -46,6 +47,36 @@ const categoryTabs: CategoryTab[] = [
     ...browseCategories.map((id) => ({ id, label: categoryLabel(id) })),
 ];
 
+/** Aggregate "Plugins" filter; surfaces manifest plugins, code plugins, and automation recipes. */
+const PLUGIN_KINDS = new Set<CreatorArtifactKind>([
+    'manifest_plugin',
+    'code_plugin',
+    'automation_recipe',
+]);
+
+type KindFilter = 'all' | 'plugins' | CreatorArtifactKind;
+
+const kindTabs: { id: KindFilter; label: string }[] = [
+    { id: 'all', label: 'All kinds' },
+    { id: 'plugins', label: 'Plugins' },
+    { id: 'theme', label: 'Themes' },
+    { id: 'sound_pack', label: 'Sound packs' },
+    { id: 'profile_cosmetic', label: 'Cosmetics' },
+    { id: 'ai_persona', label: 'AI personas' },
+    { id: 'stream_asset', label: 'Stream assets' },
+    { id: 'privacy_tool', label: 'Privacy tools' },
+];
+
+const matchesKindFilter = (
+    listing: { artifactKind?: CreatorArtifactKind },
+    filter: KindFilter
+): boolean => {
+    if (filter === 'all') return true;
+    if (filter === 'plugins')
+        return !!listing.artifactKind && PLUGIN_KINDS.has(listing.artifactKind);
+    return listing.artifactKind === filter;
+};
+
 const chipStyle = (active: boolean): Record<string, string | number> => ({
     padding: '4px 10px',
     borderRadius: 999,
@@ -69,6 +100,7 @@ export function MarketplaceSlice() {
     const [providers, setProviders] = useState<MarketplaceProviderSummary[]>([]);
     const [providerFilter, setProviderFilter] = useState<MarketplaceProviderId | 'all'>('all');
     const [categoryFilter, setCategoryFilter] = useState<MarketplaceCategory | 'all'>('all');
+    const [kindFilter, setKindFilter] = useState<KindFilter>('all');
     const [query, setQuery] = useState('');
     const [listings, setListings] = useState<NormalizedListing[]>([]);
     const [entitlements, setEntitlements] = useState<NormalizedEntitlement[]>([]);
@@ -104,7 +136,10 @@ export function MarketplaceSlice() {
         let cancelled = false;
         (async () => {
             try {
-                const [providerList] = await Promise.all([fetchProviders(token), refreshEntitlements()]);
+                const [providerList] = await Promise.all([
+                    fetchProviders(token),
+                    refreshEntitlements(),
+                ]);
                 if (cancelled) return;
                 setProviders(providerList);
             } catch (err) {
@@ -279,14 +314,34 @@ export function MarketplaceSlice() {
         )
     );
 
+    const visibleListings = useMemo(
+        () => listings.filter((listing) => matchesKindFilter(listing, kindFilter)),
+        [listings, kindFilter]
+    );
+
+    const kindChips = createElement(
+        'div',
+        { style: { display: 'flex', gap: 6, flexWrap: 'wrap' } },
+        ...kindTabs.map((tab) =>
+            createElement(
+                'button',
+                {
+                    key: tab.id,
+                    type: 'button',
+                    style: chipStyle(kindFilter === tab.id),
+                    onClick: () => setKindFilter(tab.id),
+                },
+                tab.label
+            )
+        )
+    );
+
     const catalog =
-        listings.length === 0
+        visibleListings.length === 0
             ? createElement(
                   'p',
                   { style: { margin: 0, color: 'var(--text-secondary)' } },
-                  loadingCatalog
-                      ? 'Loading listings…'
-                      : 'No listings match these filters.'
+                  loadingCatalog ? 'Loading listings…' : 'No listings match these filters.'
               )
             : createElement(
                   'div',
@@ -297,7 +352,7 @@ export function MarketplaceSlice() {
                           gap: 10,
                       },
                   },
-                  ...listings.map((listing) =>
+                  ...visibleListings.map((listing) =>
                       createElement(ListingCard, {
                           key: listingKey(listing),
                           listing,
@@ -361,11 +416,19 @@ export function MarketplaceSlice() {
                   { style: { display: 'grid', gap: 10 } },
                   createElement(
                       'div',
-                      { style: { display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' } },
+                      {
+                          style: {
+                              display: 'flex',
+                              gap: 8,
+                              flexWrap: 'wrap',
+                              alignItems: 'center',
+                          },
+                      },
                       searchInput
                   ),
                   providerChips,
                   categoryChips,
+                  kindChips,
                   catalog
               )
             : createElement(LibraryView, { entitlements, providers }),

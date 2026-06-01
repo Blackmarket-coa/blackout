@@ -425,6 +425,82 @@ const SEEDED_LISTINGS: StubListing[] = [
         status: 'published',
         createdAt: '2026-05-01T00:00:00.000Z',
     },
+    {
+        listing: {
+            providerId: PROVIDER_ID,
+            providerListingId: 'stub-plugin-uptime-monitor',
+            category: 'plugin-curated',
+            title: 'Uptime Monitor (code plugin)',
+            description:
+                'A demo code plugin that pings a host on an interval and posts a message when it’s down. Exercises the code_plugin sandbox path.',
+            priceCents: 199,
+            currency: 'USD',
+            sellerId: 'stub-seller',
+            sellerDisplayName: 'Stub Seller',
+            mediaUrls: [],
+            entitlementKind: 'plugin_flag',
+            tags: ['plugin', 'demo', 'monitoring'],
+        },
+        sellerUserId: null,
+        artifactKind: 'code_plugin',
+        artifactPayload: {
+            manifest: { id: 'stub.uptime-monitor' },
+            bundleBase64: '',
+            sha256: '',
+        },
+        publicSlug: 'uptime-monitor',
+        status: 'published',
+        createdAt: '2026-05-01T00:00:00.000Z',
+    },
+    {
+        listing: {
+            providerId: PROVIDER_ID,
+            providerListingId: 'stub-plugin-poll-helper',
+            category: 'plugin-curated',
+            title: 'Poll Helper (free manifest plugin)',
+            description:
+                'Adds a "/poll" slash command and a sidebar pinned-nav entry to vote on the active room. Free demo manifest_plugin.',
+            priceCents: 0,
+            currency: 'USD',
+            sellerId: 'stub-seller',
+            sellerDisplayName: 'Stub Seller',
+            mediaUrls: [],
+            entitlementKind: 'plugin_flag',
+            tags: ['plugin', 'demo', 'free'],
+        },
+        sellerUserId: null,
+        artifactKind: 'manifest_plugin',
+        artifactPayload: { id: 'stub.poll-helper', pinnedNav: { label: 'Polls', order: 1100 } },
+        publicSlug: 'poll-helper',
+        status: 'published',
+        createdAt: '2026-05-01T00:00:00.000Z',
+    },
+    {
+        listing: {
+            providerId: PROVIDER_ID,
+            providerListingId: 'stub-automation-welcome-bot',
+            category: 'ai-automation',
+            title: 'Welcome Bot (automation recipe)',
+            description:
+                'Triggers on member join and posts a configurable welcome message. Exercises the automation_recipe path.',
+            priceCents: 99,
+            currency: 'USD',
+            sellerId: 'stub-seller',
+            sellerDisplayName: 'Stub Seller',
+            mediaUrls: [],
+            entitlementKind: 'plugin_flag',
+            tags: ['automation', 'demo'],
+        },
+        sellerUserId: null,
+        artifactKind: 'automation_recipe',
+        artifactPayload: {
+            triggers: [{ type: 'member.joined' }],
+            actions: [{ type: 'post_message', body: 'Welcome to the den!' }],
+        },
+        publicSlug: 'welcome-bot',
+        status: 'published',
+        createdAt: '2026-05-01T00:00:00.000Z',
+    },
 ];
 
 function envBool(key: string, fallback: boolean, env = process.env): boolean {
@@ -511,6 +587,7 @@ export function createFreeblackmarketStubProvider(): MarketplaceProvider {
         const all = [...listings.values()].filter((l) => l.status === 'published');
         return all
             .filter((entry) => !query.category || entry.listing.category === query.category)
+            .filter((entry) => !query.artifactKind || entry.artifactKind === query.artifactKind)
             .filter((entry) => {
                 if (!query.q) return true;
                 const needle = query.q.toLowerCase();
@@ -519,7 +596,8 @@ export function createFreeblackmarketStubProvider(): MarketplaceProvider {
                     entry.listing.description.toLowerCase().includes(needle)
                 );
             })
-            .map((entry) => entry.listing);
+            // Surface the source artifact kind so the client UI can group plugins.
+            .map((entry) => ({ ...entry.listing, artifactKind: entry.artifactKind }));
     }
 
     function buildEmbedUrl(sessionId: string, embed: boolean): string {

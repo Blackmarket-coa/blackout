@@ -9,6 +9,7 @@ import {
 import { deaddropFeature } from '../../features/deaddrop';
 import { deadmanFeature } from '../../features/deadman';
 import { marketFeature } from '../../features/market';
+import { migrationHubFeature } from '../../features/migration-hub';
 import { pluginsFeature } from '../../features/plugins';
 import { profileFeature } from '../../features/profile';
 import { forumFeature } from '../../features/forum';
@@ -100,6 +101,10 @@ export const coreFeatureModules: FeatureModule[] = [
     {
         feature: coliseumFeature,
         flag: 'coliseum',
+    },
+    {
+        feature: migrationHubFeature,
+        flag: 'migrationHub',
     },
     {
         feature: profileFeature,

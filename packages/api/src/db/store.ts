@@ -51,6 +51,9 @@ import type {
   YoutubeChatBridgeRecord,
   KickChatBridgeRecord,
   DiscordCompatWebhookRecord,
+  DiscordServerImportRecord,
+  DiscordImportMappingRecord,
+  DiscordBridgeActivationRecord,
   OutboundEventWebhookRecord,
   TwitchIrcBotTokenRecord,
   TwitchExtensionPanelRecord,
@@ -164,6 +167,9 @@ type PersistedState = {
   kickChatBridges: KickChatBridgeRecord[];
   simulcastDestinations: SimulcastDestinationRecord[];
   discordCompatWebhooks: DiscordCompatWebhookRecord[];
+  discordServerImports: DiscordServerImportRecord[];
+  discordImportMappings: DiscordImportMappingRecord[];
+  discordBridgeActivations: DiscordBridgeActivationRecord[];
   outboundEventWebhooks: OutboundEventWebhookRecord[];
   twitchIrcBotTokens: TwitchIrcBotTokenRecord[];
   obsWsPasswords: ObsWsPasswordRecord[];
@@ -267,6 +273,12 @@ class InMemoryDb {
   simulcastDestinations = new Map<string, SimulcastDestinationRecord>();
   /** Keyed by webhook id (the public part of the URL). */
   discordCompatWebhooks = new Map<string, DiscordCompatWebhookRecord>();
+  /** Migration Hub: Discord server-import jobs, keyed by import id. */
+  discordServerImports = new Map<string, DiscordServerImportRecord>();
+  /** Migration Hub: Discord-object → Blackout-target mappings, keyed by row id. */
+  discordImportMappings = new Map<string, DiscordImportMappingRecord>();
+  /** Migration Hub: den ↔ Discord channel bridge activations, keyed by row id. */
+  discordBridgeActivations = new Map<string, DiscordBridgeActivationRecord>();
   /** Keyed by subscription id. */
   outboundEventWebhooks = new Map<string, OutboundEventWebhookRecord>();
   /** Keyed by token id. */
@@ -1081,6 +1093,113 @@ class InMemoryDb {
 
   deleteKickChatBridge(id: string): boolean {
     return this.kickChatBridges.delete(id);
+  }
+
+  // --- migration hub: discord server imports ---
+
+  createDiscordServerImport(
+    input: Omit<DiscordServerImportRecord, 'createdAt' | 'updatedAt'>,
+  ): DiscordServerImportRecord {
+    const now = nowIso();
+    const record: DiscordServerImportRecord = { ...input, createdAt: now, updatedAt: now };
+    this.discordServerImports.set(record.id, record);
+    return record;
+  }
+
+  getDiscordServerImport(id: string): DiscordServerImportRecord | undefined {
+    return this.discordServerImports.get(id);
+  }
+
+  findDiscordServerImport(
+    blackoutUserId: string,
+    discordGuildId: string,
+  ): DiscordServerImportRecord | undefined {
+    return [...this.discordServerImports.values()].find(
+      (row) => row.blackoutUserId === blackoutUserId && row.discordGuildId === discordGuildId,
+    );
+  }
+
+  listDiscordServerImportsForUser(blackoutUserId: string): DiscordServerImportRecord[] {
+    return [...this.discordServerImports.values()].filter(
+      (row) => row.blackoutUserId === blackoutUserId,
+    );
+  }
+
+  updateDiscordServerImport(
+    id: string,
+    patch: Partial<Omit<DiscordServerImportRecord, 'id' | 'createdAt'>>,
+  ): DiscordServerImportRecord | undefined {
+    const existing = this.discordServerImports.get(id);
+    if (!existing) return undefined;
+    const updated: DiscordServerImportRecord = { ...existing, ...patch, updatedAt: nowIso() };
+    this.discordServerImports.set(id, updated);
+    return updated;
+  }
+
+  createDiscordImportMapping(
+    input: Omit<DiscordImportMappingRecord, 'createdAt'>,
+  ): DiscordImportMappingRecord {
+    const record: DiscordImportMappingRecord = { ...input, createdAt: nowIso() };
+    this.discordImportMappings.set(record.id, record);
+    return record;
+  }
+
+  listDiscordImportMappings(importId: string): DiscordImportMappingRecord[] {
+    return [...this.discordImportMappings.values()].filter((row) => row.importId === importId);
+  }
+
+  findDiscordImportMapping(
+    importId: string,
+    discordObjectId: string,
+  ): DiscordImportMappingRecord | undefined {
+    return [...this.discordImportMappings.values()].find(
+      (row) => row.importId === importId && row.discordObjectId === discordObjectId,
+    );
+  }
+
+  // --- migration hub: discord bridge activations ---
+
+  createDiscordBridgeActivation(
+    input: Omit<DiscordBridgeActivationRecord, 'createdAt' | 'updatedAt'>,
+  ): DiscordBridgeActivationRecord {
+    const now = nowIso();
+    const record: DiscordBridgeActivationRecord = { ...input, createdAt: now, updatedAt: now };
+    this.discordBridgeActivations.set(record.id, record);
+    return record;
+  }
+
+  getDiscordBridgeActivation(id: string): DiscordBridgeActivationRecord | undefined {
+    return this.discordBridgeActivations.get(id);
+  }
+
+  findDiscordBridgeActivation(
+    matrixRoomId: string,
+    discordChannelId: string,
+  ): DiscordBridgeActivationRecord | undefined {
+    return [...this.discordBridgeActivations.values()].find(
+      (row) => row.matrixRoomId === matrixRoomId && row.discordChannelId === discordChannelId,
+    );
+  }
+
+  listDiscordBridgeActivationsForUser(blackoutUserId: string): DiscordBridgeActivationRecord[] {
+    return [...this.discordBridgeActivations.values()].filter(
+      (row) => row.blackoutUserId === blackoutUserId,
+    );
+  }
+
+  updateDiscordBridgeActivation(
+    id: string,
+    patch: Partial<Omit<DiscordBridgeActivationRecord, 'id' | 'createdAt'>>,
+  ): DiscordBridgeActivationRecord | undefined {
+    const existing = this.discordBridgeActivations.get(id);
+    if (!existing) return undefined;
+    const updated: DiscordBridgeActivationRecord = { ...existing, ...patch, updatedAt: nowIso() };
+    this.discordBridgeActivations.set(id, updated);
+    return updated;
+  }
+
+  deleteDiscordBridgeActivation(id: string): boolean {
+    return this.discordBridgeActivations.delete(id);
   }
 
   // --- discord-compatible incoming webhooks (Phase 2 / Track B) ---
@@ -3109,6 +3228,15 @@ export class FileBackedDb extends InMemoryDb {
     this.discordCompatWebhooks = new Map(
       (parsed.discordCompatWebhooks ?? []).map((row) => [row.id, row]),
     );
+    this.discordServerImports = new Map(
+      (parsed.discordServerImports ?? []).map((row) => [row.id, row]),
+    );
+    this.discordImportMappings = new Map(
+      (parsed.discordImportMappings ?? []).map((row) => [row.id, row]),
+    );
+    this.discordBridgeActivations = new Map(
+      (parsed.discordBridgeActivations ?? []).map((row) => [row.id, row]),
+    );
     this.outboundEventWebhooks = new Map(
       (parsed.outboundEventWebhooks ?? []).map((row) => [row.id, row]),
     );
@@ -3279,6 +3407,9 @@ export class FileBackedDb extends InMemoryDb {
       kickChatBridges: [...this.kickChatBridges.values()],
       simulcastDestinations: [...this.simulcastDestinations.values()],
       discordCompatWebhooks: [...this.discordCompatWebhooks.values()],
+      discordServerImports: [...this.discordServerImports.values()],
+      discordImportMappings: [...this.discordImportMappings.values()],
+      discordBridgeActivations: [...this.discordBridgeActivations.values()],
       outboundEventWebhooks: [...this.outboundEventWebhooks.values()],
       twitchIrcBotTokens: [...this.twitchIrcBotTokens.values()],
       obsWsPasswords: [...this.obsWsPasswords.values()],
@@ -4018,6 +4149,54 @@ export class FileBackedDb extends InMemoryDb {
 
   override deleteKickChatBridge(id: string): boolean {
     const removed = super.deleteKickChatBridge(id);
+    if (removed) this.persist();
+    return removed;
+  }
+
+  override createDiscordServerImport(
+    input: Omit<DiscordServerImportRecord, 'createdAt' | 'updatedAt'>,
+  ): DiscordServerImportRecord {
+    const record = super.createDiscordServerImport(input);
+    this.persist();
+    return record;
+  }
+
+  override updateDiscordServerImport(
+    id: string,
+    patch: Partial<Omit<DiscordServerImportRecord, 'id' | 'createdAt'>>,
+  ): DiscordServerImportRecord | undefined {
+    const updated = super.updateDiscordServerImport(id, patch);
+    if (updated) this.persist();
+    return updated;
+  }
+
+  override createDiscordImportMapping(
+    input: Omit<DiscordImportMappingRecord, 'createdAt'>,
+  ): DiscordImportMappingRecord {
+    const record = super.createDiscordImportMapping(input);
+    this.persist();
+    return record;
+  }
+
+  override createDiscordBridgeActivation(
+    input: Omit<DiscordBridgeActivationRecord, 'createdAt' | 'updatedAt'>,
+  ): DiscordBridgeActivationRecord {
+    const record = super.createDiscordBridgeActivation(input);
+    this.persist();
+    return record;
+  }
+
+  override updateDiscordBridgeActivation(
+    id: string,
+    patch: Partial<Omit<DiscordBridgeActivationRecord, 'id' | 'createdAt'>>,
+  ): DiscordBridgeActivationRecord | undefined {
+    const updated = super.updateDiscordBridgeActivation(id, patch);
+    if (updated) this.persist();
+    return updated;
+  }
+
+  override deleteDiscordBridgeActivation(id: string): boolean {
+    const removed = super.deleteDiscordBridgeActivation(id);
     if (removed) this.persist();
     return removed;
   }

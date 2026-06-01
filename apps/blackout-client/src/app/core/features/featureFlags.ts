@@ -39,6 +39,12 @@ export type FeatureFlags = {
     coalition: boolean;
     coliseum: boolean;
     /**
+     * Discord Migration Hub. Owns the `/migration-hub` destination: connect
+     * Discord, import a server (channels/roles → dens/governance), activate the
+     * mautrix-discord bridge per den, and watch adoption metrics.
+     */
+    migrationHub: boolean;
+    /**
      * Streaming hub flag. Owns the `/streaming` top-level destination — a
      * consolidated page (routed like coalition/coliseum) with tabs for the
      * livestream directory, broadcast tooling (simulcast / OBS-WS / IRC bot /
@@ -290,6 +296,7 @@ export const defaultFeatureFlags: FeatureFlags = {
     liveInteractionBundle: true,
     coalition: true,
     coliseum: true,
+    migrationHub: true,
     streaming: true,
     profile: true,
     home: true,

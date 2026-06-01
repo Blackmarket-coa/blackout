@@ -9,6 +9,7 @@ import type {
     NormalizedListing,
 } from './provider';
 import { marketplaceProviderIds } from './provider';
+import { artifactKinds } from './creator';
 import { isPluginDomain } from './domain';
 
 const entitlementKinds: EntitlementKind[] = [
@@ -109,6 +110,12 @@ export function parseNormalizedListing(input: unknown): NormalizedListing {
         throw new Error('priceCents must be a non-negative number');
     }
 
+    const artifactKind =
+        typeof input.artifactKind === 'string' &&
+        (artifactKinds as readonly string[]).includes(input.artifactKind)
+            ? (input.artifactKind as (typeof artifactKinds)[number])
+            : undefined;
+
     return {
         providerId,
         providerListingId: requireString(input, 'providerListingId'),
@@ -122,6 +129,7 @@ export function parseNormalizedListing(input: unknown): NormalizedListing {
         sellerDisplayName: optionalString(input, 'sellerDisplayName'),
         mediaUrls: media,
         entitlementKind,
+        artifactKind,
         tags,
         availableSkus,
     };
