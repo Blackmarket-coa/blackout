@@ -295,9 +295,56 @@ receiver (per §1-style signed delivery, `x-blackout-signature`) and apply the d
 price, close an Order Cycle, adjust stock). Inbound FBM-initiated proposal creation can use the
 existing `POST /v1/governance/proposals`.
 
-## 6d. Later event families (plan now; not yet implemented)
+## 6d. Barter Board (§3.1) and Credits/XP surfacing (§3.3) — implemented
 
-- **§3.1 Barter Board**, **§3.3 Coalition Credits / participation-XP loop.**
+Both families are now bridged (stub-testable; FBM must emit to match, like the
+other families). They are best-effort: a Matrix outage never fails the webhook.
+
+### §3.1 Barter Board — `co.bmc.marketplace.barter`
+
+Event types: `barter.offer_created | offer_accepted | offer_declined |
+offer_cancelled | offer_completed`. Posted into the **vendor's orders room**
+(lazily provisioned via the existing vendor space). The counterparty appears by a
+**pseudonymous alias** only (the raw counterparty id is never written to room
+content).
+
+```jsonc
+// POST /v1/marketplace/stub/fbm-event/barter.offer_created
+{
+  "eventId": "bt-evt-1", "type": "barter.offer_created",
+  "barterId": "bt_77", "vendorId": "vendor-a",
+  "counterpartyUserId": "rival-vendor",        // resolved to alias, never echoed
+  "offered":   [{ "sku": "tomato", "title": "Tomatoes", "qty": 5 }],
+  "requested": [{ "title": "Basil", "qty": 2 }],
+  "expiresAt": "2026-06-02T00:00:00Z"
+}
+```
+
+Content block: `{ schemaVersion, kind, barterId, vendorId, counterpartyAlias?,
+offered[], requested[], expiresAt?, occurredAt }`.
+
+### §3.3 Coalition Credits / participation-XP — `co.bmc.marketplace.credits`
+
+Event types: `credits.earned | spent | adjusted`. **Order-linked** surfacing,
+posted into the **buyer's own order room**. Persistent balances remain FBM's
+responsibility (Coalition Credits live in the entitlements service, §4); this
+family only renders reward activity. `amount` is a positive magnitude; `kind`
+conveys direction. `unit` is `credit` or `xp`.
+
+```jsonc
+// POST /v1/marketplace/stub/fbm-event/credits.earned
+{
+  "eventId": "cr-evt-1", "type": "credits.earned",
+  "userId": "buyer-7", "vendorId": "vendor-a", "orderId": "ord_5",
+  "unit": "xp", "amount": 50, "reason": "Order completed", "balance": 1250
+}
+```
+
+Content block: `{ schemaVersion, kind, unit, amount, reason, orderId?, balance?,
+occurredAt }`.
+
+**Follow-up:** non-order participation XP (rewards not tied to an order) needs a
+per-user "wallet/rewards" room + persistence, which is a separate slice.
 
 ---
 

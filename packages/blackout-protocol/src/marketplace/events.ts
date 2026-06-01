@@ -31,6 +31,10 @@ export const FBM_VENDOR_TRUST_EVENT_TYPE = 'co.bmc.vendor.trust';
 export const FBM_VENDOR_METADATA_EVENT_TYPE = 'co.bmc.vendor.metadata';
 export const FBM_LOGISTICS_EVENT_TYPE = 'co.bmc.marketplace.logistics';
 export const FBM_FLASH_SALE_EVENT_TYPE = 'co.bmc.marketplace.flash_sale';
+/** §3.1 Barter Board — trade-offer lifecycle between vendors. */
+export const FBM_BARTER_EVENT_TYPE = 'co.bmc.marketplace.barter';
+/** §3.3 Coalition Credits / participation-XP surfacing (order-linked). */
+export const FBM_CREDITS_EVENT_TYPE = 'co.bmc.marketplace.credits';
 
 /** Bumped when any `co.bmc.marketplace.*` content shape changes incompatibly. */
 export const FBM_MARKETPLACE_SCHEMA_VERSION = 1;
@@ -194,6 +198,49 @@ export interface FbmFlashSaleContent {
     occurredAt: string;
 }
 
+export type FbmBarterEventKind =
+    | 'offer_created'
+    | 'offer_accepted'
+    | 'offer_declined'
+    | 'offer_cancelled'
+    | 'offer_completed';
+
+export interface FbmBarterItem {
+    sku?: string;
+    title: string;
+    qty: number;
+}
+
+export interface FbmBarterEventContent {
+    schemaVersion: number;
+    kind: FbmBarterEventKind;
+    barterId: string;
+    vendorId: string;
+    /** Pseudonymous alias of the other party (never a raw id). */
+    counterpartyAlias?: string;
+    offered: FbmBarterItem[];
+    requested: FbmBarterItem[];
+    expiresAt?: string;
+    occurredAt: string;
+}
+
+export type FbmCreditsEventKind = 'earned' | 'spent' | 'adjusted';
+export type FbmCreditsUnit = 'credit' | 'xp';
+
+export interface FbmCreditsEventContent {
+    schemaVersion: number;
+    kind: FbmCreditsEventKind;
+    unit: FbmCreditsUnit;
+    /** Positive magnitude; `kind` conveys the direction. */
+    amount: number;
+    reason: string;
+    /** The order this reward is linked to (bridge surfacing is order-scoped). */
+    orderId?: string;
+    /** Running balance after this event, if the source provides it. */
+    balance?: number;
+    occurredAt: string;
+}
+
 const isContent = (value: unknown): value is Record<string, unknown> =>
     typeof value === 'object' && value !== null && !Array.isArray(value);
 
@@ -276,3 +323,31 @@ export const isFbmFlashSaleContent = (
     typeof value.vendorId === 'string' &&
     typeof value.saleId === 'string' &&
     typeof value.discount === 'string';
+
+const BARTER_KINDS: ReadonlySet<string> = new Set<FbmBarterEventKind>([
+    'offer_created',
+    'offer_accepted',
+    'offer_declined',
+    'offer_cancelled',
+    'offer_completed',
+]);
+
+export const isFbmBarterEventContent = (
+    value: unknown
+): value is FbmBarterEventContent =>
+    isContent(value) &&
+    typeof value.barterId === 'string' &&
+    typeof value.vendorId === 'string' &&
+    typeof value.kind === 'string' &&
+    BARTER_KINDS.has(value.kind) &&
+    Array.isArray(value.offered) &&
+    Array.isArray(value.requested);
+
+export const isFbmCreditsEventContent = (
+    value: unknown
+): value is FbmCreditsEventContent =>
+    isContent(value) &&
+    (value.kind === 'earned' || value.kind === 'spent' || value.kind === 'adjusted') &&
+    (value.unit === 'credit' || value.unit === 'xp') &&
+    typeof value.amount === 'number' &&
+    typeof value.reason === 'string';

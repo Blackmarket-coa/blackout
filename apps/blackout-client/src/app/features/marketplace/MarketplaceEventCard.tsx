@@ -200,6 +200,40 @@ export function MarketplaceEventCard({ normalized }: { normalized: NormalizedMar
                 </Shell>
             );
         }
+        case 'barter': {
+            const b = normalized.data;
+            const items = (list: typeof b.offered): string =>
+                list.length > 0 ? list.map((it) => `${it.qty}× ${it.title}`).join(', ') : '—';
+            return (
+                <Shell badge={`barter · ${b.kind.replace('offer_', '')}`}>
+                    <div style={styles.title}>Barter #{shortRef(b.barterId)}</div>
+                    <div style={styles.line}>Offering: {items(b.offered)}</div>
+                    <div style={styles.line}>For: {items(b.requested)}</div>
+                    {b.counterpartyAlias ? (
+                        <div style={styles.muted}>With {b.counterpartyAlias}</div>
+                    ) : null}
+                    {b.expiresAt ? <div style={styles.muted}>Expires {b.expiresAt}</div> : null}
+                </Shell>
+            );
+        }
+        case 'credits': {
+            const c = normalized.data;
+            const unit = c.unit === 'xp' ? 'XP' : 'credits';
+            const verb = c.kind === 'earned' ? 'Earned' : c.kind === 'spent' ? 'Spent' : 'Adjusted';
+            return (
+                <Shell badge={`${unit.toLowerCase()} · ${c.kind}`}>
+                    <div style={styles.title}>
+                        {verb} {c.amount} {unit}
+                    </div>
+                    <div style={styles.line}>{c.reason}</div>
+                    {typeof c.balance === 'number' ? (
+                        <div style={styles.muted}>
+                            Balance: {c.balance} {unit}
+                        </div>
+                    ) : null}
+                </Shell>
+            );
+        }
         case 'deaddrop': {
             const d = normalized.data;
             return (
