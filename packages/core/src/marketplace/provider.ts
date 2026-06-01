@@ -73,6 +73,8 @@ export type LifecycleEventType =
 
 export interface CatalogQuery {
     category?: MarketplaceCategory;
+    /** Optional artifact-kind filter; powers the marketplace "Plugins" shelf. */
+    artifactKind?: import('./creator').CreatorArtifactKind;
     q?: string;
     cursor?: string;
     limit?: number;
@@ -207,6 +209,10 @@ export interface NormalizedListing {
     sellerDisplayName?: string;
     mediaUrls: string[];
     entitlementKind: EntitlementKind;
+    /** Source artifact kind, when the provider can expose it; used by the UI to
+     *  group plugins (manifest_plugin/code_plugin/automation_recipe) onto a
+     *  dedicated shelf. Optional for legacy providers. */
+    artifactKind?: import('./creator').CreatorArtifactKind;
     tags?: string[];
     availableSkus?: string[];
 }

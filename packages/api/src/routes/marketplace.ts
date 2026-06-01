@@ -8,6 +8,7 @@ import {
     marketplaceProviderIds,
     type CatalogQuery,
     type MarketplaceCategory,
+    type CreatorArtifactKind,
     type MarketplaceProviderId,
     type NormalizedListing,
 } from '@blackout/core';
@@ -34,14 +35,16 @@ const marketplace = new Hono();
 const LISTING_TTL_MS = 60_000;
 
 function cacheKey(providerId: MarketplaceProviderId, query: CatalogQuery): string {
-    return `${providerId}|${query.category ?? ''}|${query.q ?? ''}|${query.cursor ?? ''}|${query.limit ?? ''}`;
+    return `${providerId}|${query.category ?? ''}|${query.artifactKind ?? ''}|${query.q ?? ''}|${query.cursor ?? ''}|${query.limit ?? ''}`;
 }
 
 function readQuery(c: Context): CatalogQuery {
     const params = c.req.query();
     const category = params['category'] as MarketplaceCategory | undefined;
+    const artifactKind = params['artifactKind'] as CreatorArtifactKind | undefined;
     return {
         category,
+        artifactKind,
         q: params['q'] ?? undefined,
         cursor: params['cursor'] ?? undefined,
         limit: params['limit'] ? Number.parseInt(params['limit'], 10) : undefined,

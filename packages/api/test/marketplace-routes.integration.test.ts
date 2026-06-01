@@ -272,7 +272,7 @@ test('catalog falls back to last known snapshot when freeblackmarket is unreacha
     assert.equal(okBody.listings[0]!.providerListingId, 'listing-cached');
 
     const cached = db.getMarketplaceListingsCache(
-        'freeblackmarket||||'
+        'freeblackmarket|||||'
     );
     assert.notEqual(cached, undefined);
     cached!.refreshedAt = new Date(Date.now() - 5 * 60_000).toISOString();
