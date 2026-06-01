@@ -13,6 +13,7 @@ import {
     FBM_LEDGER_EVENT_TYPE,
     FBM_MARKETPLACE_SCHEMA_VERSION,
     FBM_ORDER_EVENT_TYPE,
+    FBM_VENDOR_METADATA_EVENT_TYPE,
     FBM_VENDOR_TRUST_EVENT_TYPE,
     type FbmCustomerMessageContent,
     type FbmCycleEventContent,
@@ -303,4 +304,9 @@ export function vendorTrustStateContent(
     };
 }
 
-export { FBM_DISPUTE_EVENT_TYPE, FBM_VENDOR_TRUST_EVENT_TYPE };
+export {
+    FBM_DISPUTE_EVENT_TYPE,
+    FBM_MARKETPLACE_SCHEMA_VERSION,
+    FBM_VENDOR_METADATA_EVENT_TYPE,
+    FBM_VENDOR_TRUST_EVENT_TYPE,
+};

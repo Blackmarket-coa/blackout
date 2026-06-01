@@ -22,6 +22,13 @@ export const FBM_CYCLE_EVENT_TYPE = 'co.bmc.marketplace.cycle';
 export const FBM_CUSTOMER_MESSAGE_EVENT_TYPE = 'co.bmc.marketplace.customer_message';
 /** Vendor trust badge — written as a room *state* event (state key = vendorId). */
 export const FBM_VENDOR_TRUST_EVENT_TYPE = 'co.bmc.vendor.trust';
+/**
+ * Vendor room metadata — written as a room *state* event with an EMPTY state
+ * key. It binds a room to its `vendorId` so a client can discover which vendor a
+ * room belongs to (the trust event is keyed by `vendorId`, which is otherwise
+ * not derivable client-side).
+ */
+export const FBM_VENDOR_METADATA_EVENT_TYPE = 'co.bmc.vendor.metadata';
 export const FBM_LOGISTICS_EVENT_TYPE = 'co.bmc.marketplace.logistics';
 export const FBM_FLASH_SALE_EVENT_TYPE = 'co.bmc.marketplace.flash_sale';
 
@@ -144,6 +151,12 @@ export interface FbmVendorTrustContent {
     occurredAt: string;
 }
 
+export interface FbmVendorMetadataContent {
+    schemaVersion: number;
+    vendorId: string;
+    displayName?: string;
+}
+
 export type FbmLogisticsEventKind =
     | 'driver_assigned'
     | 'pickup_confirmed'
@@ -239,6 +252,11 @@ export const isFbmVendorTrustContent = (
     isContent(value) &&
     typeof value.vendorId === 'string' &&
     typeof value.verified === 'boolean';
+
+export const isFbmVendorMetadataContent = (
+    value: unknown
+): value is FbmVendorMetadataContent =>
+    isContent(value) && typeof value.vendorId === 'string';
 
 export const isFbmLogisticsEventContent = (
     value: unknown
