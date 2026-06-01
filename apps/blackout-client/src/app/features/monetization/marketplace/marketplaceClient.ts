@@ -86,10 +86,7 @@ export async function fetchListings(
     if (query.providerId) url.searchParams.set('providerId', query.providerId);
     if (query.category) url.searchParams.set('category', query.category);
     if (query.q) url.searchParams.set('q', query.q);
-    const data = await getJson<{ listings: NormalizedListing[] }>(
-        url.pathname + url.search,
-        token
-    );
+    const data = await getJson<{ listings: NormalizedListing[] }>(url.pathname + url.search, token);
     return data.listings;
 }
 
@@ -116,6 +113,23 @@ export async function startCheckout(
     token: string | null
 ): Promise<{ redirectUrl: string; sessionId: string; embed?: boolean }> {
     return postJson(`${MARKETPLACE_BASE}/checkout`, input, token);
+}
+
+export interface VendorMatrixIdentity {
+    vendorId: string;
+    mxid: string | null;
+}
+
+/**
+ * Resolve a marketplace vendor id to a Matrix MXID so the buyer can open a
+ * direct message with the seller. `mxid` is `null` when the vendor cannot be
+ * addressed (the caller should then hide the "Message vendor" entrypoint).
+ */
+export async function fetchVendorMatrixId(
+    vendorId: string,
+    token: string | null
+): Promise<VendorMatrixIdentity> {
+    return getJson(`${MARKETPLACE_BASE}/vendors/${encodeURIComponent(vendorId)}/matrix`, token);
 }
 
 export async function fetchEntitlements(token: string | null): Promise<NormalizedEntitlement[]> {

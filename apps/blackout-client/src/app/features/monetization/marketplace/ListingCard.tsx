@@ -37,6 +37,7 @@ interface ListingCardProps {
     listing: NormalizedListing;
     providers: MarketplaceProviderSummary[];
     onPurchase: (listing: NormalizedListing) => void;
+    onMessageVendor?: (listing: NormalizedListing) => void;
     purchasing?: boolean;
     alreadyOwned?: boolean;
 }
@@ -45,6 +46,7 @@ export function ListingCard({
     listing,
     providers,
     onPurchase,
+    onMessageVendor,
     purchasing,
     alreadyOwned,
 }: ListingCardProps): ReactNode {
@@ -63,7 +65,13 @@ export function ListingCard({
                 provider.verificationBadge
                     ? createElement(
                           'strong',
-                          { style: { fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.4 } },
+                          {
+                              style: {
+                                  fontSize: 10,
+                                  textTransform: 'uppercase',
+                                  letterSpacing: 0.4,
+                              },
+                          },
                           provider.verificationBadge
                       )
                     : null
@@ -95,7 +103,11 @@ export function ListingCard({
             { style: { margin: 0, fontSize: 12, color: 'var(--text-secondary)' } },
             `Support: ${provider.supportPolicy}`
         ),
-        createElement('div', { style: priceStyle }, formatPrice(listing.priceCents, listing.currency)),
+        createElement(
+            'div',
+            { style: priceStyle },
+            formatPrice(listing.priceCents, listing.currency)
+        ),
         createElement(
             'a',
             {
@@ -112,21 +124,45 @@ export function ListingCard({
             provider.checkoutDisclosure
         ),
         createElement(
-            'button',
-            {
-                type: 'button',
-                onClick: () => onPurchase(listing),
-                disabled: Boolean(purchasing) || Boolean(alreadyOwned),
-                style: {
-                    padding: '8px 12px',
-                    borderRadius: 8,
-                    border: '1px solid var(--border-default)',
-                    background: alreadyOwned ? 'var(--bg-input)' : 'var(--bg-accent)',
-                    color: alreadyOwned ? 'var(--text-secondary)' : 'var(--text-on-accent)',
-                    cursor: alreadyOwned || purchasing ? 'default' : 'pointer',
+            'div',
+            { style: { display: 'flex', gap: 8, flexWrap: 'wrap' } },
+            createElement(
+                'button',
+                {
+                    type: 'button',
+                    onClick: () => onPurchase(listing),
+                    disabled: Boolean(purchasing) || Boolean(alreadyOwned),
+                    style: {
+                        padding: '8px 12px',
+                        borderRadius: 8,
+                        border: '1px solid var(--border-default)',
+                        background: alreadyOwned ? 'var(--bg-input)' : 'var(--bg-accent)',
+                        color: alreadyOwned ? 'var(--text-secondary)' : 'var(--text-on-accent)',
+                        cursor: alreadyOwned || purchasing ? 'default' : 'pointer',
+                    },
                 },
-            },
-            alreadyOwned ? 'Owned' : purchasing ? 'Opening checkout…' : 'Purchase'
+                alreadyOwned ? 'Owned' : purchasing ? 'Opening checkout…' : 'Purchase'
+            ),
+            // Encrypted-DM entrypoint (§2.1). Only offered when the parent can
+            // resolve the seller and the listing carries a vendor id.
+            onMessageVendor && listing.sellerId
+                ? createElement(
+                      'button',
+                      {
+                          type: 'button',
+                          onClick: () => onMessageVendor(listing),
+                          style: {
+                              padding: '8px 12px',
+                              borderRadius: 8,
+                              border: '1px solid var(--border-default)',
+                              background: 'var(--bg-surface)',
+                              color: 'var(--text-default)',
+                              cursor: 'pointer',
+                          },
+                      },
+                      '💬 Message vendor'
+                  )
+                : null
         )
     );
 }
