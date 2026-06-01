@@ -27,6 +27,7 @@ describe('feature allowlist manifest', () => {
             'education',
             'coalition',
             'coliseum',
+            'migration-hub',
             'profile',
             'home',
             'communities',
