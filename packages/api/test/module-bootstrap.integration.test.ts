@@ -36,6 +36,7 @@ test('feature module registry contains canonical frontend domains', () => {
     featureModules.map((module) => module.id),
     [
       'governance',
+      'channels',
       'forum',
       'deaddrop',
       'deadman',

@@ -13,6 +13,7 @@ import type {
   MessageRecord,
   ScheduledMessageRecord,
   ModerationActionRecord,
+  ChannelRecord,
   DeadDropRecord,
   DeadmanSwitchRecord,
   DeadmanSwitchStatus,
@@ -123,6 +124,7 @@ type PersistedState = {
   voteEntries: VoteEntryRecord[];
   federationLinks: FederationLinkRecord[];
   forumPosts: ForumPostRecord[];
+  channels: ChannelRecord[];
   deadDrops: DeadDropRecord[];
   deadmanSwitches: DeadmanSwitchRecord[];
   moderationActions: ModerationActionRecord[];
@@ -217,6 +219,7 @@ class InMemoryDb {
   voteEntries = new Map<string, VoteEntryRecord>();
   federationLinks = new Map<string, FederationLinkRecord>();
   forumPosts = new Map<string, ForumPostRecord>();
+  channels = new Map<string, ChannelRecord>();
   deadDrops = new Map<string, DeadDropRecord>();
   deadmanSwitches = new Map<string, DeadmanSwitchRecord>();
   moderationActions = new Map<string, ModerationActionRecord>();
@@ -1767,6 +1770,17 @@ class InMemoryDb {
     return [...this.forumPosts.values()].filter((post) => post.communityId === communityId);
   }
 
+  createChannel(input: Omit<ChannelRecord, 'createdAt'>): ChannelRecord {
+    const record: ChannelRecord = { ...input, createdAt: nowIso() };
+    this.channels.set(record.id, record);
+    return record;
+  }
+
+  listChannels(communityId?: string): ChannelRecord[] {
+    const all = [...this.channels.values()];
+    return communityId ? all.filter((channel) => channel.communityId === communityId) : all;
+  }
+
   createDeadDrop(input: Omit<DeadDropRecord, 'createdAt' | 'openedAt'>): DeadDropRecord {
     const record: DeadDropRecord = { ...input, createdAt: nowIso() };
     this.deadDrops.set(record.id, record);
@@ -3119,6 +3133,7 @@ export class FileBackedDb extends InMemoryDb {
     this.voteEntries = new Map(parsed.voteEntries.map((row) => [row.id, row]));
     this.federationLinks = new Map(parsed.federationLinks.map((row) => [row.id, row]));
     this.forumPosts = new Map((parsed.forumPosts ?? []).map((row) => [row.id, row]));
+    this.channels = new Map((parsed.channels ?? []).map((row) => [row.id, row]));
     this.deadDrops = new Map((parsed.deadDrops ?? []).map((row) => [row.id, row]));
     this.deadmanSwitches = new Map(
       (parsed.deadmanSwitches ?? []).map((row) => [row.id, row])
@@ -3363,6 +3378,7 @@ export class FileBackedDb extends InMemoryDb {
       voteEntries: [...this.voteEntries.values()],
       federationLinks: [...this.federationLinks.values()],
       forumPosts: [...this.forumPosts.values()],
+      channels: [...this.channels.values()],
       deadDrops: [...this.deadDrops.values()],
       deadmanSwitches: [...this.deadmanSwitches.values()],
       moderationActions: [...this.moderationActions.values()],
