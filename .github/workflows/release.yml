@@ -169,6 +169,7 @@ jobs:
           sbom: true
           tags: |
             ghcr.io/blackmarket-coa/blackout:latest
+            ghcr.io/blackmarket-coa/blackout:stable
             ghcr.io/blackmarket-coa/blackout:${{ github.ref_name }}
 
       - name: Install cosign

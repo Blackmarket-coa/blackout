@@ -12,7 +12,7 @@ name: blackout-prod
 
 services:
   app_canary:
-    image: ghcr.io/blackout/app:${APP_CANARY_TAG:-stable}
+    image: ghcr.io/blackmarket-coa/blackout:${APP_CANARY_TAG:-stable}
     restart: unless-stopped
     env_file:
       - ./.env

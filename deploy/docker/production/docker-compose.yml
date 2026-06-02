@@ -14,7 +14,7 @@ x-common-logging: &common-logging
 
 services:
   app:
-    image: ghcr.io/blackout/app:${APP_IMAGE_TAG:-stable}
+    image: ghcr.io/blackmarket-coa/blackout:${APP_IMAGE_TAG:-stable}
     restart: unless-stopped
     <<: [*common-env, *common-logging]
     environment:
@@ -51,7 +51,7 @@ services:
       - edge
 
   worker:
-    image: ghcr.io/blackout/app:${APP_IMAGE_TAG:-stable}
+    image: ghcr.io/blackmarket-coa/blackout:${APP_IMAGE_TAG:-stable}
     restart: unless-stopped
     <<: [*common-env, *common-logging]
     environment:
