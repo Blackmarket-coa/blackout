@@ -21,8 +21,11 @@ services:
       APP_ENV: production
       NODE_ENV: production
       APP_PORT: 3000
+      # Job loops run only in the `worker` service (see docker-compose.yml).
+      BLACKOUT_BACKGROUND_WORKERS_DISABLED: "1"
       DB_HOST: db
       DB_PORT: 5432
+      DB_NAME: ${DB_NAME}
       DB_USER: ${DB_USER}
       DB_PASSWORD_FILE: /run/secrets/db_password
       CACHE_HOST: cache

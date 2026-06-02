@@ -38,7 +38,23 @@ jobs:
           fi
           echo "version_tag=${VERSION_TAG}" >> "$GITHUB_OUTPUT"
 
-      - name: Build and push multi-arch image
+      # Backend API runtime — the canonical `blackout` image the production
+      # compose stack (app/worker/app_canary) pulls. Built from the same
+      # Dockerfile release.yml signs, so :latest is always the backend.
+      - name: Build and push backend (API) image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/blackout-server/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ghcr.io/blackmarket-coa/blackout:latest
+            ghcr.io/blackmarket-coa/blackout:${{ steps.meta.outputs.version_tag }}
+
+      # Static web client served by nginx — published under a distinct name so
+      # it never collides with the backend `blackout` image above.
+      - name: Build and push web (nginx) image
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -46,14 +62,12 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ghcr.io/blackmarket-coa/blackout:latest
-            ghcr.io/blackmarket-coa/blackout:${{ steps.meta.outputs.version_tag }}
-          build-args: |
-            APP_TARGET=web
+            ghcr.io/blackmarket-coa/blackout-web:latest
+            ghcr.io/blackmarket-coa/blackout-web:${{ steps.meta.outputs.version_tag }}
 
       - name: Verify web client served by nginx
         run: |
-          docker run --rm -d --name blackout-nginx -p 8080:80 ghcr.io/blackmarket-coa/blackout:${{ steps.meta.outputs.version_tag }}
+          docker run --rm -d --name blackout-nginx -p 8080:80 ghcr.io/blackmarket-coa/blackout-web:${{ steps.meta.outputs.version_tag }}
           sleep 5
           curl --fail --show-error http://localhost:8080/
           docker stop blackout-nginx

@@ -1,0 +1,6 @@
+#!/bin/sh
+# Start the dedicated background-worker process (no HTTP server). Owns the
+# periodic job loops so the app/canary replicas don't double-process them.
+set -eu
+. "$(dirname "$0")/_entrypoint-env.sh"
+exec pnpm --filter @blackout/api worker

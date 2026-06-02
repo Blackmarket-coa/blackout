@@ -161,8 +161,13 @@ jobs:
         id: docker_build
         uses: docker/build-push-action@v6
         with:
+          # The canonical `blackout` image is the backend API runtime the
+          # production compose stack (app/worker/app_canary) pulls and runs via
+          # ./bin/start-app | ./bin/start-worker. The static web client ships as
+          # a release artifact (build-web job) and as the separate
+          # ghcr.io/blackmarket-coa/blackout-web image published by docker.yml.
           context: .
-          file: deploy/docker/Dockerfile
+          file: apps/blackout-server/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
           provenance: mode=max

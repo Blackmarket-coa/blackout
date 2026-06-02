@@ -1,0 +1,7 @@
+#!/bin/sh
+# Start the @blackout/api HTTP server. Honours APP_PORT (compose) by mapping it
+# to PORT, which the server reads (default 3000).
+set -eu
+. "$(dirname "$0")/_entrypoint-env.sh"
+export PORT="${PORT:-${APP_PORT:-3000}}"
+exec pnpm --filter @blackout/api start

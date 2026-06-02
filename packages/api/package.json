@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
+    "worker": "tsx src/worker.ts",
     "build": "node -e \"console.log('api build scaffold ok')\"",
     "lint": "node -e \"console.log('api lint scaffold ok')\"",
     "test": "node -e \"console.log('api test scaffold ok')\"",
