@@ -117,6 +117,30 @@ Evidence artifacts:
 - `docs/operations/evidence/2026-05-12-baseline-replay.md` (full replay output)
 - `docs/operations/evidence/2026-05-12-production-readiness-closeout.md` (workstream delta)
 
+## Baseline evidence refresh (2026-06-02)
+
+Re-ran the full gate suite at current HEAD (post May/June feature merges) and fixed two
+deploy-pipeline defects discovered while validating the production-compose rollout path.
+
+```bash
+node tools/ci/check-deployment-readiness.mjs   # PASS
+pnpm lint                                       # 19/19
+pnpm build                                      # 16/16
+pnpm test                                       # 20/20
+pnpm web:test                                   # 1422 passed, 3 skipped (247 files)
+pnpm guard:ops-artifacts                        # PASS
+pnpm audit --prod --audit-level moderate        # No known vulnerabilities found
+pnpm ci:parity && pnpm smoke:aligned            # PASS
+```
+
+Evidence artifact: `docs/operations/evidence/2026-06-02-rollout-readiness-replay.md`.
+
+Deploy-path note: the production compose stack previously pulled `ghcr.io/blackout/app`
+while the publish workflows push `ghcr.io/blackmarket-coa/blackout`; this mismatch was
+corrected. **Code is Go, but the production-compose canary path remains blocked** until a
+`v*` release is cut (no image has ever been published — `release.yml`/`docker.yml`/
+`deploy-compose-prod.yml` all have 0 runs) and the prod environment/secrets are confirmed.
+
 ## Go/No-Go status
 
 **Go** with clean current dependency audit results and canonical parity replay automation in place.
