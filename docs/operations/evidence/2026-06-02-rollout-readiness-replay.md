@@ -29,12 +29,36 @@ deploy/docker/production/scripts/check-no-latest-images.sh  # PASS
 
 ## Deploy-pipeline defects found (and fixed in this change)
 
-1. **Build target ≠ run target (fixed).** `release.yml` / `docker.yml` publish to
+1. **Image namespace mismatch (fixed).** `release.yml` / `docker.yml` publish to
    `ghcr.io/blackmarket-coa/blackout`, but the production compose stack pulled
    `ghcr.io/blackout/app` — a different org/name, so a published image would never be
    pulled. Aligned `docker-compose.yml` (`app`, `worker`) and `docker-compose.canary.yml`
    (`app_canary`) to `ghcr.io/blackmarket-coa/blackout`, and added a moving `:stable`
    tag to `release.yml` so the compose default `${APP_IMAGE_TAG:-stable}` resolves.
+
+2. **Published image was the wrong artifact (fixed).** The `blackout` image was built
+   from `deploy/docker/Dockerfile` — an **nginx static-web** image — but the compose
+   `app`/`worker` services run `./bin/migrate && ./bin/start-app` / `./bin/start-worker`,
+   entrypoints that do not exist in a web image, so the fleet would exit immediately and
+   never go healthy (raised as P1 on PR #791). The canonical `blackout` image is now the
+   **backend API runtime** built from `apps/blackout-server/Dockerfile` (release.yml +
+   docker.yml); the static web client moved to the separate `blackout-web` image.
+
+3. **Missing entrypoints + credential bridging (fixed).** Added
+   `deploy/docker/backend/bin/{migrate,start-app,start-worker,worker-healthcheck}` plus
+   `_entrypoint-env.sh`, which assembles `DATABASE_URL` (+ `BLACKOUT_DB_MODE=postgres`)
+   and a credentialed `REDIS_URL` from the compose `DB_*`/`CACHE_*` vars and the
+   `*_PASSWORD_FILE` docker secrets the app reads.
+
+4. **No worker process (fixed).** The API's periodic loops (scheduled-message dispatcher,
+   FBM sweepers, ACL reconcile) were extracted to `packages/api/src/backgroundLoops.ts`
+   and given a dedicated `packages/api/src/worker.ts` entrypoint (`pnpm … worker`). The
+   `app`/`app_canary` replicas set `BLACKOUT_BACKGROUND_WORKERS_DISABLED=1` so jobs run
+   once, in the `worker` service; liveness is a heartbeat checked by `worker-healthcheck`.
+
+5. **Image port (fixed).** `apps/blackout-server/Dockerfile` exposed 3001 while the app
+   listens on `PORT` (default 3000) and the compose healthchecks probe 3000; corrected to
+   `EXPOSE 3000` and `CMD ["./bin/start-app"]`.
 
 ## Open blockers for an actual rollout (NOT resolved by this change)
 

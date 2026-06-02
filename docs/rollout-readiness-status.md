@@ -136,9 +136,16 @@ pnpm ci:parity && pnpm smoke:aligned            # PASS
 Evidence artifact: `docs/operations/evidence/2026-06-02-rollout-readiness-replay.md`.
 
 Deploy-path note: the production compose stack previously pulled `ghcr.io/blackout/app`
-while the publish workflows push `ghcr.io/blackmarket-coa/blackout`; this mismatch was
-corrected. **Code is Go, but the production-compose canary path remains blocked** until a
-`v*` release is cut (no image has ever been published — `release.yml`/`docker.yml`/
+while the publish workflows push `ghcr.io/blackmarket-coa/blackout`; this namespace
+mismatch was corrected first. A deeper defect was then found and fixed: the published
+`blackout` image was the **nginx static-web** artifact, but the compose `app`/`worker`
+services run `./bin/migrate && ./bin/start-app` / `./bin/start-worker` — entrypoints absent
+from a web image. The canonical `blackout` image is now the **backend API runtime**
+(`apps/blackout-server/Dockerfile`), the static web client moved to `blackout-web`, the
+`bin/*` entrypoints (with `*_PASSWORD_FILE` → `DATABASE_URL`/`REDIS_URL` bridging) were
+added, a dedicated `worker` entrypoint was introduced, and the image port was corrected to
+3000. **Code is Go, but the production-compose canary path remains blocked** until a `v*`
+release is cut (no image has ever been published — `release.yml`/`docker.yml`/
 `deploy-compose-prod.yml` all have 0 runs) and the prod environment/secrets are confirmed.
 
 ## Go/No-Go status

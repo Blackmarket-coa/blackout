@@ -1,0 +1,6 @@
+#!/bin/sh
+# Run pending database migrations, then exit. Compose runs this before
+# start-app: `./bin/migrate && ./bin/start-app`.
+set -eu
+. "$(dirname "$0")/_entrypoint-env.sh"
+exec pnpm --filter @blackout/api migrate

@@ -1,0 +1,21 @@
+#!/bin/sh
+# Container healthcheck for the worker: fail if the heartbeat written by
+# src/worker.ts is missing or older than the stale threshold.
+set -eu
+HEARTBEAT_PATH="${WORKER_HEARTBEAT_PATH:-/tmp/blackout-worker.heartbeat}"
+STALE_AFTER="${WORKER_HEARTBEAT_STALE_SECONDS:-60}"
+
+if [ ! -f "$HEARTBEAT_PATH" ]; then
+  echo "worker heartbeat missing: $HEARTBEAT_PATH" >&2
+  exit 1
+fi
+
+now="$(date +%s)"
+# busybox (alpine) stat supports -c; fall back to BSD -f for portability.
+mtime="$(stat -c %Y "$HEARTBEAT_PATH" 2>/dev/null || stat -f %m "$HEARTBEAT_PATH")"
+age="$(( now - mtime ))"
+
+if [ "$age" -ge "$STALE_AFTER" ]; then
+  echo "worker heartbeat stale: ${age}s (>= ${STALE_AFTER}s)" >&2
+  exit 1
+fi
