@@ -2,6 +2,7 @@ import type { Hono } from 'hono';
 
 export type FeatureModuleId =
   | 'governance'
+  | 'channels'
   | 'forum'
   | 'deaddrop'
   | 'deadman'

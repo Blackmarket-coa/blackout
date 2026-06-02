@@ -703,6 +703,17 @@ export interface ForumPostRecord {
   createdAt: string;
 }
 
+export interface ChannelRecord {
+  id: UUID;
+  communityId: UUID;
+  name: string;
+  description?: string;
+  channelType: string;
+  isPrivate: boolean;
+  matrixRoomId?: string;
+  createdAt: string;
+}
+
 export interface DeadDropRecord {
   id: UUID;
   channelId: UUID;

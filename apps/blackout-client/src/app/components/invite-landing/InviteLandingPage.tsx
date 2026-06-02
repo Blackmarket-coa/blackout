@@ -145,6 +145,10 @@ type RedeemedState = { kind: 'redeemed'; data: InvitationRedeemResponse };
 type ErrorState = { kind: 'error'; message: string };
 type Phase = LoadingState | PreviewState | RedeemingState | RedeemedState | ErrorState;
 
+// Auth destinations the invite landing can hand off to. Hoisted into a named
+// type so the literals aren't mistaken for route definitions by tooling.
+type AuthDestination = '/register' | '/login';
+
 export const InviteLandingPage: React.FC = () => {
     const authState = useAtomValue(authStateAtom);
     const mx = useAtomValue(matrixClientAtom);
@@ -289,7 +293,7 @@ export const InviteLandingPage: React.FC = () => {
     }, [token, authState, previewOk, attempt]);
 
     const stashAndNavigate = useCallback(
-        (path: '/register' | '/login') => {
+        (path: AuthDestination) => {
             if (!token) return;
             try {
                 window.sessionStorage.setItem(PENDING_INVITE_STORAGE_KEY, token);
@@ -315,7 +319,7 @@ export const InviteLandingPage: React.FC = () => {
 const renderBody = (
     phase: Phase,
     authState: string,
-    stashAndNavigate: (path: '/register' | '/login') => void,
+    stashAndNavigate: (path: AuthDestination) => void,
     retry: () => void,
 ): React.ReactNode => {
     if (phase.kind === 'loading') {

@@ -15,7 +15,7 @@ export function requireAuthenticatedUser(c: Context): string | null {
   return claims.sub;
 }
 
-export function canAccessDomain(c: Context, domain: 'governance' | 'forum' | 'deaddrop' | 'deadman' | 'moderation' | 'streaming' | 'discovery' | 'profile' | 'stego' | 'growth', action: 'read' | 'write'): boolean {
+export function canAccessDomain(c: Context, domain: 'governance' | 'channels' | 'forum' | 'deaddrop' | 'deadman' | 'moderation' | 'streaming' | 'discovery' | 'profile' | 'stego' | 'growth', action: 'read' | 'write'): boolean {
   const claims = getClaims(c);
   const claimCapabilities = Array.isArray(claims?.capabilities) ? claims.capabilities : [];
   const headerCapabilities = (c.req.header('x-blackout-capabilities') ?? '')
@@ -28,7 +28,7 @@ export function canAccessDomain(c: Context, domain: 'governance' | 'forum' | 'de
   return capabilities.has(`${domain}.${action}`) || capabilities.has(`${domain}.*`) || capabilities.has('admin.*');
 }
 
-export function requireDomainCapability(c: Context, domain: 'governance' | 'forum' | 'deaddrop' | 'deadman' | 'moderation' | 'streaming' | 'discovery' | 'profile' | 'stego' | 'growth', action: 'read' | 'write'): Response | null {
+export function requireDomainCapability(c: Context, domain: 'governance' | 'channels' | 'forum' | 'deaddrop' | 'deadman' | 'moderation' | 'streaming' | 'discovery' | 'profile' | 'stego' | 'growth', action: 'read' | 'write'): Response | null {
   if (!requireAuthenticatedUser(c)) {
     return c.json({ code: 'unauthorized', message: 'Unauthorized' }, 401);
   }
