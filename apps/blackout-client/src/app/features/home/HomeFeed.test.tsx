@@ -26,6 +26,13 @@ vi.mock('../topics/TopicChipBar', () => ({
     TopicChipBar: () => null,
 }));
 
+// The Bounty Board fetches open bounties on mount. Stub the hook so the
+// existing feed tests exercise the bounty-free path; an empty board renders
+// nothing.
+vi.mock('./hooks/useBountyBoard', () => ({
+    useBountyBoard: () => ({ bounties: [], loading: false }),
+}));
+
 // The unified feed fetches livestreams / coalition / coliseum on mount.
 // Stub the network clients so tests exercise the den-only path without
 // hitting the API; each resolves empty so only Matrix room activity drives

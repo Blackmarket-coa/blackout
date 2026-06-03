@@ -61,6 +61,7 @@ import rtmpFanoutRoutes from './routes/rtmpFanout';
 import matrixAppserviceRoutes from './routes/matrixAppservice';
 import matrixRoutes from './routes/matrix';
 import coalitionRoutes from './routes/coalition';
+import bountyRoutes from './routes/bounties';
 import coliseumRoutes from './routes/coliseum';
 import reputationRoutes from './routes/reputation';
 import webauthnRoutes from './routes/webauthn';
@@ -206,6 +207,7 @@ for (const root of legacyAliasEnabled ? [API_ROOTS.v1, API_ROOTS.legacyApiAlias]
   app.route(`${root}/integrations/obs-ws/passwords`, obsWsPasswordRoutes);
   app.route(`${root}/integrations/simulcast/fanout`, rtmpFanoutRoutes);
   app.route(`${root}/coalition`, coalitionRoutes);
+  app.route(`${root}/bounties`, bountyRoutes);
   app.route(`${root}/coliseum`, coliseumRoutes);
   app.route(`${root}/reputation`, reputationRoutes);
   app.route(`${root}/auth/webauthn`, webauthnRoutes);

@@ -1,5 +1,7 @@
 import type {
   AidPost,
+  Bounty,
+  BountyApplication,
   CoalitionEvent,
   CoalitionFeedItem,
   CoalitionRing,
@@ -1312,6 +1314,12 @@ export interface CoalitionKitApplicationRecord {
 
 /** A Coalition den task. CoalitionTask already carries createdAt/updatedAt. */
 export type CoalitionTaskRecord = CoalitionTask;
+
+/** An ecosystem bounty. Bounty already carries createdAt/updatedAt. */
+export type BountyRecord = Bounty;
+
+/** A creator's application to a bounty. BountyApplication carries createdAt/updatedAt. */
+export type BountyApplicationRecord = BountyApplication;
 
 /** A seller's map location. Coordinates flatten to lat/lng columns in Postgres. */
 export interface SellerLocationRecord extends SellerLocation {

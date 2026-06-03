@@ -6,6 +6,7 @@ import {
     STREAMING_TAB_ORDER,
     type StreamingTabId,
 } from '../../state/streaming';
+import { runtimeFeatureFlags } from '../../core/features/featureFlags';
 import StreamingTabStrip from './StreamingTabStrip';
 import StaggeredMount from './StaggeredMount';
 import { LiveDirectory, ReplaysDirectory } from '../streams';
@@ -37,6 +38,17 @@ const CreatorKits = lazy(() =>
 );
 const RewardsSection = lazy(() =>
     import('./sections/RewardsSection').then((mod) => ({ default: mod.RewardsSection }))
+);
+const CreatorHubBounties = lazy(() =>
+    import('./sections/CreatorHubBounties').then((mod) => ({ default: mod.CreatorHubBounties }))
+);
+const CreatorHubPostBounty = lazy(() =>
+    import('./sections/CreatorHubPostBounty').then((mod) => ({ default: mod.CreatorHubPostBounty }))
+);
+const CreatorHubBountyRewards = lazy(() =>
+    import('./sections/CreatorHubBountyRewards').then((mod) => ({
+        default: mod.CreatorHubBountyRewards,
+    }))
 );
 
 const contentStyle: CSSProperties = { minHeight: 0, overflow: 'auto' };
@@ -81,6 +93,12 @@ export function StreamingView({ initialTab }: StreamingViewProps) {
                         <Suspense fallback={null}>
                             <CreatorHubOverview onSelectTab={handleSelect} />
                         </Suspense>
+                        {runtimeFeatureFlags.homeBountyBoard ? (
+                            <Suspense fallback={null}>
+                                <CreatorHubPostBounty />
+                                <CreatorHubBounties />
+                            </Suspense>
+                        ) : null}
                     </div>
                 ) : null}
                 {activeTab === 'live' ? (
@@ -112,6 +130,11 @@ export function StreamingView({ initialTab }: StreamingViewProps) {
                         <Suspense fallback={null}>
                             <RewardsSection />
                         </Suspense>
+                        {runtimeFeatureFlags.homeBountyBoard ? (
+                            <Suspense fallback={null}>
+                                <CreatorHubBountyRewards />
+                            </Suspense>
+                        ) : null}
                         <ChannelPointsRewards />
                     </div>
                 ) : null}

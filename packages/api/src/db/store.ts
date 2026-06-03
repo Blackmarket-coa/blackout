@@ -77,6 +77,8 @@ import type {
   RingInvitationRecord,
   CoalitionKitApplicationRecord,
   CoalitionTaskRecord,
+  BountyRecord,
+  BountyApplicationRecord,
   SellerLocationRecord,
   CoalitionFeedItemRecord,
   PluginInstallationRecord,
@@ -327,6 +329,10 @@ class InMemoryDb {
   coalitionTasks = new Map<string, CoalitionTaskRecord>(
     COALITION_TASK_SEED.map((row) => [row.id, row]),
   );
+  /** Ecosystem bounties, keyed by bounty id. */
+  bounties = new Map<string, BountyRecord>();
+  /** Bounty applications (producer↔creator matching), keyed by application id. */
+  bountyApplications = new Map<string, BountyApplicationRecord>();
   /** Seller map locations, keyed by location id. */
   sellerLocations = new Map<string, SellerLocationRecord>(
     COALITION_SELLER_SEED.map((row) => [row.id, row]),
@@ -2781,6 +2787,140 @@ class InMemoryDb {
     const record: CoalitionTaskRecord = { ...existing, status, updatedAt: nowIso() };
     this.coalitionTasks.set(id, record);
     return record;
+  }
+
+  // --- ecosystem bounties ---
+
+  listBounties(
+    filter: { category?: string; status?: string; coalitionId?: string } = {},
+  ): BountyRecord[] {
+    return [...this.bounties.values()].filter(
+      (bounty) =>
+        (filter.category ? bounty.category === filter.category : true) &&
+        (filter.status ? bounty.status === filter.status : true) &&
+        (filter.coalitionId ? bounty.coalitionId === filter.coalitionId : true),
+    );
+  }
+
+  createBounty(
+    input: Omit<
+      BountyRecord,
+      'status' | 'claimedBy' | 'createdAt' | 'updatedAt' | 'requirements' | 'deliverables'
+    > & { requirements?: string[]; deliverables?: string[] },
+  ): BountyRecord {
+    const now = nowIso();
+    const record: BountyRecord = {
+      ...input,
+      requirements: input.requirements ?? [],
+      deliverables: input.deliverables ?? [],
+      status: 'open',
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.bounties.set(record.id, record);
+    return record;
+  }
+
+  updateBountyStatus(id: string, status: BountyRecord['status']): BountyRecord | undefined {
+    const existing = this.bounties.get(id);
+    if (!existing) return undefined;
+    const record: BountyRecord = { ...existing, status, updatedAt: nowIso() };
+    this.bounties.set(id, record);
+    return record;
+  }
+
+  /** Claim an open bounty. Returns undefined when missing or not currently open. */
+  claimBounty(id: string, userId: string): BountyRecord | undefined {
+    const existing = this.bounties.get(id);
+    if (!existing || existing.status !== 'open') return undefined;
+    const record: BountyRecord = {
+      ...existing,
+      status: 'claimed',
+      claimedBy: userId,
+      updatedAt: nowIso(),
+    };
+    this.bounties.set(id, record);
+    return record;
+  }
+
+  // --- bounty applications (producer ↔ creator matching) ---
+
+  listBountyApplications(
+    filter: { bountyId?: string; applicantId?: string } = {},
+  ): BountyApplicationRecord[] {
+    return [...this.bountyApplications.values()].filter(
+      (app) =>
+        (filter.bountyId ? app.bountyId === filter.bountyId : true) &&
+        (filter.applicantId ? app.applicantId === filter.applicantId : true),
+    );
+  }
+
+  /**
+   * Apply to an open bounty. Returns `'not_open'` when the bounty is missing or
+   * not open, `'duplicate'` when the applicant already has a pending application,
+   * otherwise the created record.
+   */
+  createBountyApplication(input: {
+    id: string;
+    bountyId: string;
+    applicantId: string;
+    message?: string;
+  }): BountyApplicationRecord | 'not_open' | 'duplicate' {
+    const bounty = this.bounties.get(input.bountyId);
+    if (!bounty || bounty.status !== 'open') return 'not_open';
+    const already = [...this.bountyApplications.values()].some(
+      (app) =>
+        app.bountyId === input.bountyId &&
+        app.applicantId === input.applicantId &&
+        app.status === 'pending',
+    );
+    if (already) return 'duplicate';
+    const now = nowIso();
+    const record: BountyApplicationRecord = {
+      ...input,
+      status: 'pending',
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.bountyApplications.set(record.id, record);
+    return record;
+  }
+
+  /**
+   * Poster accepts an applicant: that application is accepted, the bounty is
+   * claimed by the applicant, and every other pending application for the same
+   * bounty is declined. Returns undefined when no matching pending application
+   * exists or the bounty is no longer open.
+   */
+  acceptBountyApplication(
+    bountyId: string,
+    applicantId: string,
+  ): { bounty: BountyRecord; application: BountyApplicationRecord } | undefined {
+    const bounty = this.bounties.get(bountyId);
+    if (!bounty || bounty.status !== 'open') return undefined;
+    const target = [...this.bountyApplications.values()].find(
+      (app) =>
+        app.bountyId === bountyId &&
+        app.applicantId === applicantId &&
+        app.status === 'pending',
+    );
+    if (!target) return undefined;
+    const now = nowIso();
+    const accepted: BountyApplicationRecord = { ...target, status: 'accepted', updatedAt: now };
+    this.bountyApplications.set(accepted.id, accepted);
+    for (const app of this.bountyApplications.values()) {
+      if (app.bountyId === bountyId && app.id !== accepted.id && app.status === 'pending') {
+        this.bountyApplications.set(app.id, { ...app, status: 'declined', updatedAt: now });
+      }
+    }
+    const claimed: BountyRecord = {
+      ...bounty,
+      status: 'claimed',
+      claimedBy: applicantId,
+      updatedAt: now,
+    };
+    this.bounties.set(claimed.id, claimed);
+    return { bounty: claimed, application: accepted };
   }
 
   // --- seller map locations ---
