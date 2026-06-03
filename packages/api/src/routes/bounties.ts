@@ -1,6 +1,11 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { BOUNTY_CATEGORIES, BOUNTY_REWARD_TYPES, BOUNTY_STATUSES } from '@blackout/core';
+import {
+    BOUNTY_CATEGORIES,
+    BOUNTY_REWARD_TYPES,
+    BOUNTY_STATUSES,
+    recommendBounties,
+} from '@blackout/core';
 import {
     acceptBountyApplication,
     applyToBounty,
@@ -30,6 +35,19 @@ bounties.get('/', (c) => {
         return c.json({ code: 'invalid_request', message: 'Invalid bounty query' }, 400);
     }
     return c.json({ bounties: listBounties(parsed.data) });
+});
+
+// Auto-matching: open bounties recommended to the signed-in creator. Declared
+// before the `/:id/...` routes so the static path is matched first.
+bounties.get('/recommended', (c) => {
+    const user = requireUser(c, 'Sign in to see recommended bounties');
+    if (user instanceof Response) return user;
+    const open = listBounties({ status: 'open' });
+    const appliedBountyIds = listBountyApplications({ applicantId: user.sub }).map(
+        (app) => app.bountyId,
+    );
+    const recommended = recommendBounties({ open, viewerId: user.sub, appliedBountyIds });
+    return c.json({ bounties: recommended });
 });
 
 const createBountySchema = z.object({

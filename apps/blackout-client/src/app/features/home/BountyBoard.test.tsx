@@ -6,8 +6,12 @@ import ReactDOM from 'react-dom/client';
 import type { Bounty } from '@blackout/core';
 
 const applyToBounty = vi.fn();
+const fetchBountyApplications = vi.fn();
+const acceptBountyApplication = vi.fn();
 vi.mock('../bounty/bountyClient', () => ({
     applyToBounty: (...args: unknown[]) => applyToBounty(...args),
+    fetchBountyApplications: (...args: unknown[]) => fetchBountyApplications(...args),
+    acceptBountyApplication: (...args: unknown[]) => acceptBountyApplication(...args),
 }));
 
 import { BountyBoard } from './BountyBoard';
@@ -48,6 +52,8 @@ const bounty = (over: Partial<Bounty> = {}): Bounty => ({
 describe('BountyBoard', () => {
     beforeEach(() => {
         applyToBounty.mockReset();
+        fetchBountyApplications.mockReset();
+        acceptBountyApplication.mockReset();
     });
 
     it('renders nothing when there are no bounties', async () => {
@@ -85,5 +91,31 @@ describe('BountyBoard', () => {
         expect(applyToBounty).toHaveBeenCalledWith('b1');
         expect(button.textContent).toBe('Applied ✓');
         expect(button.disabled).toBe(true);
+    });
+
+    it('opens the detail panel from a card and shows the apply action for a non-poster', async () => {
+        // Non-poster: the poster-only applicants fetch rejects → applicant mode.
+        fetchBountyApplications.mockRejectedValue(new Error('403'));
+        const container = await render(React.createElement(BountyBoard, { items: [bounty()] }));
+        expect(container.querySelector('[data-testid="bounty-detail-overlay"]')).toBeNull();
+        const details = container.querySelector(
+            '[data-testid="home-bounty-details"]',
+        ) as HTMLButtonElement;
+        await act(async () => {
+            details.click();
+            await flush();
+        });
+        expect(fetchBountyApplications).toHaveBeenCalledWith('b1');
+        expect(container.querySelector('[data-testid="bounty-detail-panel"]')).not.toBeNull();
+        expect(container.querySelector('[data-testid="bounty-detail-apply"]')).not.toBeNull();
+        // Close via backdrop.
+        const backdrop = container.querySelector(
+            '[data-testid="bounty-detail-backdrop"]',
+        ) as HTMLElement;
+        await act(async () => {
+            backdrop.click();
+            await flush();
+        });
+        expect(container.querySelector('[data-testid="bounty-detail-overlay"]')).toBeNull();
     });
 });

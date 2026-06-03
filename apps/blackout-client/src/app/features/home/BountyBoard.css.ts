@@ -69,9 +69,14 @@ export const reward = style({
     color: 'var(--text-muted, #9EC4AF)',
 });
 
+export const cardActions = style({
+    display: 'flex',
+    gap: 8,
+    marginTop: 4,
+});
+
 export const applyButton = style({
     alignSelf: 'flex-start',
-    marginTop: 4,
     padding: '4px 12px',
     fontSize: 12,
     fontWeight: 600,
@@ -90,4 +95,119 @@ export const applyButton = style({
             opacity: 0.7,
         },
     },
+});
+
+export const detailsButton = style([
+    applyButton,
+    {
+        border: '1px solid var(--border-default, #2E5A42)',
+    },
+]);
+
+// --- detail overlay ---
+
+export const overlay = style({
+    position: 'fixed',
+    inset: 0,
+    zIndex: 1000,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+});
+
+export const backdrop = style({
+    position: 'absolute',
+    inset: 0,
+    background: 'rgba(0,0,0,0.55)',
+});
+
+export const panel = style({
+    position: 'relative',
+    zIndex: 1,
+    width: 'min(560px, 100%)',
+    maxHeight: '85vh',
+    overflowY: 'auto',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 8,
+    padding: '20px 22px',
+    borderRadius: 18,
+    border: '1px solid var(--border-default, #2E5A42)',
+    background: 'var(--bg-surface, #0f172a)',
+    color: 'var(--text-primary, #f8fafc)',
+    boxShadow: '0 24px 60px -20px rgba(0,0,0,0.6)',
+});
+
+export const closeButton = style({
+    position: 'absolute',
+    top: 12,
+    right: 14,
+    width: 28,
+    height: 28,
+    borderRadius: '50%',
+    border: '1px solid var(--border-default, #2E5A42)',
+    background: 'transparent',
+    color: 'inherit',
+    fontSize: 18,
+    lineHeight: '1',
+    cursor: 'pointer',
+});
+
+export const detailTitle = style({
+    margin: 0,
+    fontSize: 20,
+    fontWeight: 800,
+});
+
+export const detailDescription = style({
+    margin: 0,
+    fontSize: 14,
+    color: 'var(--text-muted, #9EC4AF)',
+    whiteSpace: 'pre-wrap',
+});
+
+export const detailList = style({
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 4,
+});
+
+export const detailUl = style({
+    margin: '4px 0 0',
+    paddingInlineStart: 18,
+    fontSize: 13,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 2,
+});
+
+export const applicantRow = style({
+    display: 'flex',
+    alignItems: 'center',
+    gap: 10,
+    flexWrap: 'wrap',
+    padding: '8px 10px',
+    borderRadius: 12,
+    border: '1px solid var(--border-default, #2E5A42)',
+    marginTop: 6,
+});
+
+export const applicantId = style({
+    fontSize: 13,
+    fontWeight: 600,
+});
+
+export const applicantMessage = style({
+    fontSize: 12,
+    color: 'var(--text-muted, #9EC4AF)',
+    flex: '1 1 100%',
+});
+
+export const applicantStatus = style({
+    fontSize: 11,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    color: 'var(--text-muted, #9EC4AF)',
+    marginInlineStart: 'auto',
 });

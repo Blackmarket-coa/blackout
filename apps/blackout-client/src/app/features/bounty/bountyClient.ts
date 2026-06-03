@@ -40,6 +40,13 @@ export function fetchBounties(
     return getJson<BountiesResponse>(`${BOUNTY_BASE}${qs ? `?${qs}` : ''}`, token);
 }
 
+/** Auto-matched open bounties for the signed-in creator (Creator Hub growth panel). */
+export function fetchRecommendedBounties(
+    token: string | null = readBlackoutApiToken(),
+): Promise<BountiesResponse> {
+    return getJson<BountiesResponse>(`${BOUNTY_BASE}/recommended`, token);
+}
+
 export interface CreateBountyInput {
     category: BountyCategory;
     title: string;

@@ -105,6 +105,56 @@ export function isBountyStatus(value: unknown): value is BountyStatus {
     return typeof value === 'string' && (BOUNTY_STATUSES as readonly string[]).includes(value);
 }
 
+/** Categories most relevant to creators, highest-priority first, for auto-matching. */
+export const CREATOR_RELEVANT_CATEGORIES: readonly BountyCategory[] = [
+    'creator',
+    'content',
+    'coalition',
+];
+
+export interface RecommendBountiesInput {
+    /** Candidate bounties (typically all open ones). */
+    open: readonly Bounty[];
+    /** The creator the recommendations are for; their own posts are excluded. */
+    viewerId: string;
+    /** Bounty ids the viewer has already applied to; excluded. */
+    appliedBountyIds: ReadonlySet<string> | readonly string[];
+    /** Optional category preferences; defaults to creator-relevant categories. */
+    preferredCategories?: readonly BountyCategory[];
+    limit?: number;
+}
+
+/**
+ * Auto-matching v1: recommend open bounties to a creator. Pure and deterministic
+ * so it is trivially testable. Excludes the viewer's own posts and anything they
+ * already applied to, then ranks preferred/creator-relevant categories first,
+ * breaking ties by most-recent. Heuristic by design — richer signals (niches,
+ * audience, past campaigns) layer on later without changing the contract.
+ */
+export function recommendBounties(input: RecommendBountiesInput): Bounty[] {
+    const applied =
+        input.appliedBountyIds instanceof Set
+            ? input.appliedBountyIds
+            : new Set(input.appliedBountyIds);
+    const preferred = new Set(input.preferredCategories ?? CREATOR_RELEVANT_CATEGORIES);
+    const candidates = input.open.filter(
+        (b) => b.status === 'open' && b.creatorId !== input.viewerId && !applied.has(b.id),
+    );
+    const score = (b: Bounty): number => {
+        let s = 0;
+        if (preferred.has(b.category)) s += 10;
+        const idx = CREATOR_RELEVANT_CATEGORIES.indexOf(b.category);
+        if (idx >= 0) s += CREATOR_RELEVANT_CATEGORIES.length - idx;
+        return s;
+    };
+    return [...candidates]
+        .sort(
+            (a, b) =>
+                score(b) - score(a) || Date.parse(b.createdAt) - Date.parse(a.createdAt),
+        )
+        .slice(0, input.limit ?? 20);
+}
+
 /** Group bounties by category, preserving input order within each category. */
 export function groupBountiesByCategory(
     bounties: readonly Bounty[],
