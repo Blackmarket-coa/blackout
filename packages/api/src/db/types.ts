@@ -1213,7 +1213,8 @@ export type TipContextKind =
   | 'aid_pool'
   | 'referral_bonus'
   | 'ambassador_commission'
-  | 'quest_reward';
+  | 'quest_reward'
+  | 'bounty_reward';
 
 export type TipStatus = 'pending' | 'captured' | 'refunded' | 'failed';
 

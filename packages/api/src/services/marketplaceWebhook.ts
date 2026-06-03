@@ -12,6 +12,7 @@ import { captureSubscription, refundSubscription } from './creatorSubscriptions'
 import { captureBoostPledge, refundBoostPledge } from './communityBoosts';
 import {
     ambassadorService,
+    bountyRewardService,
     questsService,
     referralService,
 } from './growth';
@@ -23,6 +24,7 @@ const GROWTH_ATTRIBUTION_EVENT_TYPES: ReadonlySet<LifecycleEventType> = new Set(
     'referral.attributed',
     'ambassador.commission_paid',
     'quest.reward_settled',
+    'bounty.reward_settled',
 ]);
 
 const SYSTEM_SENDER_USER_ID = 'system:freeblackmarket';
@@ -403,12 +405,41 @@ function dispatchGrowthAttributionEvent(
         return finalizeGrowthAttribution(provider, event, tip?.id ?? null);
     }
 
+    if (event.type === 'bounty.reward_settled') {
+        const bountyId =
+            typeof meta['bountyId'] === 'string' ? (meta['bountyId'] as string) : null;
+        if (!bountyId) {
+            return ackUnresolvable(provider, event, 'missing_bountyId');
+        }
+        const reward = bountyRewardService.get(bountyId);
+        if (!reward) {
+            return ackUnresolvable(provider, event, 'unknown_bountyId');
+        }
+        const tip = safeCreateAndCaptureSystemTip({
+            recipientUserId: reward.beneficiaryId,
+            contextKind: 'bounty_reward',
+            contextRef: bountyId,
+            grossCents: grossCents || reward.rewardCents || 0,
+            currency,
+            fbmOrderId,
+            metadata: { bountyId, posterId: reward.posterId, rewardType: reward.rewardType },
+            note: 'Bounty reward',
+        });
+        if (tip) {
+            bountyRewardService.settle(bountyId, {
+                ref: tip.id,
+                settledAt: event.occurredAt,
+            });
+        }
+        return finalizeGrowthAttribution(provider, event, tip?.id ?? null);
+    }
+
     return ackUnresolvable(provider, event, 'unhandled_event_type');
 }
 
 interface SystemTipInput {
     recipientUserId: string;
-    contextKind: 'referral_bonus' | 'ambassador_commission' | 'quest_reward';
+    contextKind: 'referral_bonus' | 'ambassador_commission' | 'quest_reward' | 'bounty_reward';
     contextRef: string | null;
     grossCents: number;
     currency: string;

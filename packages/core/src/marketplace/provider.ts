@@ -69,7 +69,8 @@ export type LifecycleEventType =
     | 'creator.account.suspended'
     | 'referral.attributed'
     | 'ambassador.commission_paid'
-    | 'quest.reward_settled';
+    | 'quest.reward_settled'
+    | 'bounty.reward_settled';
 
 export interface CatalogQuery {
     category?: MarketplaceCategory;
