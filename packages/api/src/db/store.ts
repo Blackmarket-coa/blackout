@@ -79,6 +79,7 @@ import type {
   CoalitionTaskRecord,
   BountyRecord,
   BountyApplicationRecord,
+  BountyRewardRecord,
   SellerLocationRecord,
   CoalitionFeedItemRecord,
   PluginInstallationRecord,
@@ -195,6 +196,9 @@ type PersistedState = {
   ringInvitations: RingInvitationRecord[];
   coalitionKitApplications: CoalitionKitApplicationRecord[];
   coalitionTasks: CoalitionTaskRecord[];
+  bounties: BountyRecord[];
+  bountyApplications: BountyApplicationRecord[];
+  bountyRewards: BountyRewardRecord[];
   sellerLocations: SellerLocationRecord[];
   coalitionFeedItems: CoalitionFeedItemRecord[];
   pluginInstallations: PluginInstallationRecord[];
@@ -333,6 +337,8 @@ class InMemoryDb {
   bounties = new Map<string, BountyRecord>();
   /** Bounty applications (producer↔creator matching), keyed by application id. */
   bountyApplications = new Map<string, BountyApplicationRecord>();
+  /** Bounty rewards (economic truth from completion), keyed by bounty id. */
+  bountyRewards = new Map<string, BountyRewardRecord>();
   /** Seller map locations, keyed by location id. */
   sellerLocations = new Map<string, SellerLocationRecord>(
     COALITION_SELLER_SEED.map((row) => [row.id, row]),
@@ -2923,6 +2929,81 @@ class InMemoryDb {
     return { bounty: claimed, application: accepted };
   }
 
+  // --- bounty rewards (economic truth from completion) ---
+
+  recordBountyReward(input: {
+    bountyId: string;
+    beneficiaryId: string;
+    posterId: string;
+    rewardType: BountyRewardRecord['rewardType'];
+    rewardSummary: string;
+    rewardCents?: number | null;
+  }): BountyRewardRecord {
+    const existing = this.bountyRewards.get(input.bountyId);
+    if (existing) return existing;
+    const record: BountyRewardRecord = {
+      id: `brw_${crypto.randomUUID()}`,
+      bountyId: input.bountyId,
+      beneficiaryId: input.beneficiaryId,
+      posterId: input.posterId,
+      rewardType: input.rewardType,
+      rewardSummary: input.rewardSummary,
+      rewardCents: input.rewardCents ?? null,
+      status: 'earned',
+      earnedAt: nowIso(),
+      settledAt: null,
+      settledRef: null,
+    };
+    this.bountyRewards.set(record.bountyId, record);
+    return record;
+  }
+
+  getBountyReward(bountyId: string): BountyRewardRecord | undefined {
+    return this.bountyRewards.get(bountyId);
+  }
+
+  listBountyRewardsForBeneficiary(userId: string): BountyRewardRecord[] {
+    return [...this.bountyRewards.values()]
+      .filter((record) => record.beneficiaryId === userId)
+      .sort((a, b) => Date.parse(b.earnedAt) - Date.parse(a.earnedAt));
+  }
+
+  bountyRewardSummary(userId: string): {
+    count: number;
+    earnedCents: number;
+    settledCents: number;
+  } {
+    let count = 0;
+    let earnedCents = 0;
+    let settledCents = 0;
+    for (const record of this.bountyRewards.values()) {
+      if (record.beneficiaryId !== userId || record.status === 'voided') continue;
+      count += 1;
+      const cents = record.rewardCents ?? 0;
+      earnedCents += cents;
+      if (record.status === 'settled') settledCents += cents;
+    }
+    return { count, earnedCents, settledCents };
+  }
+
+  /** Idempotent settlement: flips an earned reward to settled with a payout reference. */
+  settleBountyReward(
+    bountyId: string,
+    params: { ref: string; settledAt?: string },
+  ): BountyRewardRecord | undefined {
+    const existing = this.bountyRewards.get(bountyId);
+    if (!existing) return undefined;
+    if (existing.status === 'settled') return existing;
+    const record: BountyRewardRecord = {
+      ...existing,
+      status: 'settled',
+      settledRef: params.ref,
+      settledAt: params.settledAt ?? nowIso(),
+    };
+    this.bountyRewards.set(bountyId, record);
+    return record;
+  }
+
   // --- seller map locations ---
 
   listSellerLocations(filter: { onlyVisible?: boolean } = {}): SellerLocationRecord[] {
@@ -3466,6 +3547,15 @@ export class FileBackedDb extends InMemoryDb {
     if (parsed.coalitionTasks) {
       this.coalitionTasks = new Map(parsed.coalitionTasks.map((row) => [row.id, row]));
     }
+    if (parsed.bounties) {
+      this.bounties = new Map(parsed.bounties.map((row) => [row.id, row]));
+    }
+    if (parsed.bountyApplications) {
+      this.bountyApplications = new Map(parsed.bountyApplications.map((row) => [row.id, row]));
+    }
+    if (parsed.bountyRewards) {
+      this.bountyRewards = new Map(parsed.bountyRewards.map((row) => [row.bountyId, row]));
+    }
     if (parsed.sellerLocations) {
       this.sellerLocations = new Map(parsed.sellerLocations.map((row) => [row.id, row]));
     }
@@ -3587,6 +3677,9 @@ export class FileBackedDb extends InMemoryDb {
       ringInvitations: [...this.ringInvitations.values()],
       coalitionKitApplications: [...this.coalitionKitApplications.values()],
       coalitionTasks: [...this.coalitionTasks.values()],
+      bounties: [...this.bounties.values()],
+      bountyApplications: [...this.bountyApplications.values()],
+      bountyRewards: [...this.bountyRewards.values()],
       sellerLocations: [...this.sellerLocations.values()],
       coalitionFeedItems: [...this.coalitionFeedItems.values()],
       pluginInstallations: [...this.pluginInstallations.values()],
@@ -4588,6 +4681,61 @@ export class FileBackedDb extends InMemoryDb {
     status: CoalitionTaskRecord['status'],
   ): CoalitionTaskRecord | undefined {
     const updated = super.updateCoalitionTaskStatus(id, status);
+    if (updated) this.persist();
+    return updated;
+  }
+
+  override createBounty(input: Parameters<InMemoryDb['createBounty']>[0]): BountyRecord {
+    const created = super.createBounty(input);
+    this.persist();
+    return created;
+  }
+
+  override updateBountyStatus(
+    id: string,
+    status: BountyRecord['status'],
+  ): BountyRecord | undefined {
+    const updated = super.updateBountyStatus(id, status);
+    if (updated) this.persist();
+    return updated;
+  }
+
+  override claimBounty(id: string, userId: string): BountyRecord | undefined {
+    const updated = super.claimBounty(id, userId);
+    if (updated) this.persist();
+    return updated;
+  }
+
+  override createBountyApplication(
+    input: Parameters<InMemoryDb['createBountyApplication']>[0],
+  ): ReturnType<InMemoryDb['createBountyApplication']> {
+    const result = super.createBountyApplication(input);
+    if (result && typeof result === 'object') this.persist();
+    return result;
+  }
+
+  override acceptBountyApplication(
+    bountyId: string,
+    applicantId: string,
+  ): ReturnType<InMemoryDb['acceptBountyApplication']> {
+    const result = super.acceptBountyApplication(bountyId, applicantId);
+    if (result) this.persist();
+    return result;
+  }
+
+  override recordBountyReward(
+    input: Parameters<InMemoryDb['recordBountyReward']>[0],
+  ): BountyRewardRecord {
+    const record = super.recordBountyReward(input);
+    this.persist();
+    return record;
+  }
+
+  override settleBountyReward(
+    bountyId: string,
+    params: { ref: string; settledAt?: string },
+  ): BountyRewardRecord | undefined {
+    const updated = super.settleBountyReward(bountyId, params);
     if (updated) this.persist();
     return updated;
   }

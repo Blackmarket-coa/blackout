@@ -7,7 +7,8 @@
  * client surfaces have a stable ledger to integrate against.
  */
 
-import type { BountyRewardType } from '@blackout/core';
+import type { BountyReward, BountyRewardSummary } from '@blackout/core';
+import { db } from '../db/store';
 
 const nowIso = (): string => new Date().toISOString();
 
@@ -505,120 +506,39 @@ export const migrationCreditService = new MigrationCreditService();
 
 // ---------------------------------------------------------------- Bounty rewards
 
-export type BountyRewardStatus = 'earned' | 'settled' | 'voided';
-
-export interface BountyRewardRecord {
-    id: string;
-    bountyId: string;
-    /** The claimant who completed the work and earns the reward. */
-    beneficiaryId: string;
-    /** Who posted/funded the bounty. */
-    posterId: string;
-    rewardType: BountyRewardType;
-    rewardSummary: string;
-    /** Structured amount when the reward is monetary (cash / store credit). */
-    rewardCents: number | null;
-    status: BountyRewardStatus;
-    earnedAt: string;
-    /** Set when settlement fires (tip / FBM credit); deferred like referrals & quests. */
-    settledAt: string | null;
-    settledRef: string | null;
-}
+export type { BountyReward, BountyRewardStatus, BountyRewardSummary } from '@blackout/core';
 
 export interface RecordBountyRewardInput {
     bountyId: string;
     beneficiaryId: string;
     posterId: string;
-    rewardType: BountyRewardType;
+    rewardType: BountyReward['rewardType'];
     rewardSummary: string;
     rewardCents?: number | null;
 }
 
-export interface BountyRewardSummary {
-    count: number;
-    earnedCents: number;
-    settledCents: number;
-}
-
 /**
- * Append-only ledger of bounty rewards earned on completion. Keyed by bounty id
- * (one reward per bounty) so marking a bounty completed twice never
- * double-credits. Mirrors the referral/quest pattern: this records the economic
- * truth (who earned what for which bounty); the actual payout settlement (tip /
- * FBM credit) is a deferred follow-up that flips `status` to `settled` via
- * `settle`, exactly as `referralService.settle` does.
+ * Bounty reward ledger facade. The records now live in the write-through store
+ * (`db.bountyRewards`, persisted to Postgres) rather than an in-process Map, so
+ * earned rewards survive restarts. This thin facade preserves the call surface
+ * the routes integrate against. Idempotent per bounty id; `settle` flips an
+ * earned reward to settled once an external payout (FBM tip / Coalition credit)
+ * confirms.
  */
-class BountyRewardService {
-    private records = new Map<string, BountyRewardRecord>();
-
-    record(input: RecordBountyRewardInput): BountyRewardRecord {
-        const existing = this.records.get(input.bountyId);
-        if (existing) return existing;
-        const record: BountyRewardRecord = {
-            id: randomId('brw'),
-            bountyId: input.bountyId,
-            beneficiaryId: input.beneficiaryId,
-            posterId: input.posterId,
-            rewardType: input.rewardType,
-            rewardSummary: input.rewardSummary,
-            rewardCents: input.rewardCents ?? null,
-            status: 'earned',
-            earnedAt: nowIso(),
-            settledAt: null,
-            settledRef: null,
-        };
-        this.records.set(record.bountyId, record);
-        return record;
-    }
-
-    get(bountyId: string): BountyRewardRecord | undefined {
-        return this.records.get(bountyId);
-    }
-
-    listForBeneficiary(userId: string): BountyRewardRecord[] {
-        return [...this.records.values()]
-            .filter((record) => record.beneficiaryId === userId)
-            .sort((a, b) => Date.parse(b.earnedAt) - Date.parse(a.earnedAt));
-    }
-
-    summaryForBeneficiary(userId: string): BountyRewardSummary {
-        let count = 0;
-        let earnedCents = 0;
-        let settledCents = 0;
-        for (const record of this.records.values()) {
-            if (record.beneficiaryId !== userId || record.status === 'voided') continue;
-            count += 1;
-            const cents = record.rewardCents ?? 0;
-            earnedCents += cents;
-            if (record.status === 'settled') settledCents += cents;
-        }
-        return { count, earnedCents, settledCents };
-    }
-
-    /** Idempotent settlement hook (mirrors `referralService.settle`); integration deferred. */
-    settle(
+export const bountyRewardService = {
+    record: (input: RecordBountyRewardInput): BountyReward => db.recordBountyReward(input),
+    get: (bountyId: string): BountyReward | undefined => db.getBountyReward(bountyId),
+    listForBeneficiary: (userId: string): BountyReward[] =>
+        db.listBountyRewardsForBeneficiary(userId),
+    summaryForBeneficiary: (userId: string): BountyRewardSummary => db.bountyRewardSummary(userId),
+    settle: (
         bountyId: string,
         params: { ref: string; settledAt?: string },
-    ): BountyRewardRecord | undefined {
-        const record = this.records.get(bountyId);
-        if (!record) return undefined;
-        if (record.status === 'settled') return record;
-        const updated: BountyRewardRecord = {
-            ...record,
-            status: 'settled',
-            settledRef: params.ref,
-            settledAt: params.settledAt ?? nowIso(),
-        };
-        this.records.set(bountyId, updated);
-        return updated;
-    }
-
-    resetForTest(): void {
-        this.records.clear();
-    }
-}
-
-export const bountyRewardService = new BountyRewardService();
+    ): BountyReward | undefined => db.settleBountyReward(bountyId, params),
+    resetForTest: (): void => {
+        db.bountyRewards.clear();
+    },
+};
 
 /** Convenience aggregator used by `module-bootstrap.integration.test.ts`. */
 export const resetGrowthForTest = (): void => {

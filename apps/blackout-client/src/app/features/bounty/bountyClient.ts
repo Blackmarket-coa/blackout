@@ -2,10 +2,14 @@ import type {
     Bounty,
     BountyApplication,
     BountyCategory,
+    BountyReward,
+    BountyRewardSummary,
     BountyRewardType,
     BountyStatus,
 } from '@blackout/core';
 import { createAuthorizedApiClient } from '../../sdk/client';
+
+export type { BountyReward, BountyRewardSummary } from '@blackout/core';
 import { readBlackoutApiToken } from '../monetization/marketplace/useMarketplaceAuth';
 
 const BOUNTY_BASE = '/v1/bounties';
@@ -120,27 +124,6 @@ export function acceptBountyApplication(
 }
 
 // --- lifecycle + rewards ---
-
-/** Reward earned for completing a bounty (economic truth from the growth ledger). */
-export interface BountyReward {
-    id: string;
-    bountyId: string;
-    beneficiaryId: string;
-    posterId: string;
-    rewardType: BountyRewardType;
-    rewardSummary: string;
-    rewardCents: number | null;
-    status: 'earned' | 'settled' | 'voided';
-    earnedAt: string;
-    settledAt: string | null;
-    settledRef: string | null;
-}
-
-export interface BountyRewardSummary {
-    count: number;
-    earnedCents: number;
-    settledCents: number;
-}
 
 /** Poster-only lifecycle update; completing a claimed bounty records its reward. */
 export function updateBountyStatus(

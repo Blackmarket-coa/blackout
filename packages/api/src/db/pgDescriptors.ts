@@ -58,6 +58,8 @@ const OVERRIDES: Record<string, DescriptorOverride> = {
     keyOf: (r) => `${r.argumentId}::${r.voterId}`,
     conflictColumns: ['argument_id', 'voter_id'],
   },
+  // One reward per bounty: keyed by bountyId, not the surrogate `id`.
+  bountyRewards: { keyOf: (r) => String(r.bountyId), conflictColumns: ['bounty_id'] },
   eventRsvps: {
     keyOf: (r) => `${r.eventId}::${r.userId}`,
     conflictColumns: ['event_id', 'user_id'],
@@ -334,6 +336,9 @@ const ALL_MAP_NAMES = [
   'ringInvitations',
   'coalitionKitApplications',
   'coalitionTasks',
+  'bounties',
+  'bountyApplications',
+  'bountyRewards',
   'sellerLocations',
   'coalitionFeedItems',
   'canopyDirectoryEntries',
@@ -523,6 +528,14 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
   recordCoalitionKitApplication: upsert('coalitionKitApplications'),
   createCoalitionTask: upsert('coalitionTasks'),
   updateCoalitionTaskStatus: upsert('coalitionTasks'),
+  createBounty: upsert('bounties'),
+  updateBountyStatus: upsert('bounties'),
+  claimBounty: upsert('bounties'),
+  createBountyApplication: upsert('bountyApplications'),
+  // Accepts one + declines the rest + claims the bounty: touches two maps.
+  acceptBountyApplication: resync('bountyApplications', 'bounties'),
+  recordBountyReward: upsert('bountyRewards'),
+  settleBountyReward: upsert('bountyRewards'),
   upsertSellerLocation: upsert('sellerLocations'),
   upsertCoalitionFeedItem: upsert('coalitionFeedItems'),
   upsertCanopyDirectoryEntry: upsert('canopyDirectoryEntries'),

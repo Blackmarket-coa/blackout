@@ -167,3 +167,25 @@ Wires the "Reward" edge of the loop into the existing growth-engine ledger, reco
 
 **Deliberately not in this slice:** actual payout settlement (the `settle` hook is the integration seam for an
 FBM tip / Coalition-credit transfer — deferred exactly like the referral/quest settlement), and persistence.
+
+## Sixth slice landed (separate PR): settlement bridge + full persistence
+
+Closes the two seams the fifth slice left open.
+
+- **FBM settlement bridge (stub).** `integrations/fbm/bountySettlement.ts` settles an earned reward through FBM's
+  payout rail. FBM lives in a separate repo, so it calls an *assumed* endpoint (`POST /v1/bounty-settlements`)
+  and is a **no-op when FBM is unconfigured or the reward is non-monetary** — completion never depends on FBM
+  reachability. On success it returns `fbm:<id>`, which flips the reward to `settled`. Wired into the
+  `PATCH /:id` completion path (best-effort, guarded). Unverifiable end-to-end until FBM ships its endpoint.
+- **Full PG-backed persistence.** The three in-memory stores now persist through the write-through store, exactly
+  like `coalition_tasks`: `db.bounties` / `db.bountyApplications` / `db.bountyRewards` Maps + methods, snapshot
+  serialize/hydrate, file-backed `persist()` overrides, `pgDescriptors` (`ALL_MAP_NAMES` + `MUTATOR_SPECS`;
+  `bountyRewards` keyed by `bounty_id`), and migration `049_bounties`. The reward ledger moved out of `growth.ts`
+  into the store (its `bountyRewardService` is now a thin facade over `db`). Reward types are canonical in
+  `@blackout/core`.
+- **Verified:** file-backed round-trip test (bounty/application/reward survive a reload, incl. accepted/declined
+  app states and settled reward); FBM stub config-gating/shaping tests; the PGlite integration test applies
+  `049_bounties` and re-checks all 92 descriptors + mutator specs. Full api suite (1103) green; client typechecks.
+
+**Deliberately not in this slice:** a real FBM endpoint (separate repo), and async/retried settlement (current
+attempt is best-effort inline).
