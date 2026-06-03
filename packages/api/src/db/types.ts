@@ -2,6 +2,7 @@ import type {
   AidPost,
   Bounty,
   BountyApplication,
+  BountyReward,
   CoalitionEvent,
   CoalitionFeedItem,
   CoalitionRing,
@@ -1320,6 +1321,9 @@ export type BountyRecord = Bounty;
 
 /** A creator's application to a bounty. BountyApplication carries createdAt/updatedAt. */
 export type BountyApplicationRecord = BountyApplication;
+
+/** A bounty reward earned on completion. Keyed by bountyId in the store. */
+export type BountyRewardRecord = BountyReward;
 
 /** A seller's map location. Coordinates flatten to lat/lng columns in Postgres. */
 export interface SellerLocationRecord extends SellerLocation {

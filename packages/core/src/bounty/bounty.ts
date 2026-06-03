@@ -72,6 +72,44 @@ export function isBountyApplicationStatus(value: unknown): value is BountyApplic
     );
 }
 
+/**
+ * A bounty reward, recorded as economic truth when a completed bounty's work is
+ * accepted. The `settled` status + `settledRef` are flipped once an external
+ * payout (FBM tip / Coalition credit) confirms — the integration seam.
+ */
+export const BOUNTY_REWARD_STATUSES = ['earned', 'settled', 'voided'] as const;
+export type BountyRewardStatus = (typeof BOUNTY_REWARD_STATUSES)[number];
+
+export interface BountyReward {
+    id: string;
+    bountyId: string;
+    /** The claimant who completed the work and earns the reward. */
+    beneficiaryId: string;
+    /** Who posted/funded the bounty. */
+    posterId: string;
+    rewardType: BountyRewardType;
+    rewardSummary: string;
+    /** Structured amount when the reward is monetary (cash / store credit). */
+    rewardCents: number | null;
+    status: BountyRewardStatus;
+    earnedAt: string;
+    /** Set when settlement confirms (external payout reference). */
+    settledAt: string | null;
+    settledRef: string | null;
+}
+
+export interface BountyRewardSummary {
+    count: number;
+    earnedCents: number;
+    settledCents: number;
+}
+
+export function isBountyRewardStatus(value: unknown): value is BountyRewardStatus {
+    return (
+        typeof value === 'string' && (BOUNTY_REWARD_STATUSES as readonly string[]).includes(value)
+    );
+}
+
 export interface Bounty {
     id: string;
     category: BountyCategory;

@@ -21,6 +21,7 @@ import {
 import { readJsonBody } from '../middleware/validate';
 import { requireUser } from '../middleware/require-user';
 import { bountyRewardService } from '../services/growth';
+import { settleBountyRewardViaFbm } from '../integrations/fbm/bountySettlement';
 
 const bounties = new Hono();
 
@@ -214,6 +215,13 @@ bounties.patch('/:id', async (c) => {
             rewardSummary: bounty.rewardSummary,
             rewardCents: bounty.rewardAmountCents ?? null,
         });
+        // Best-effort settlement through FBM's payout rail. No-op (leaves the
+        // reward `earned`) when FBM is unconfigured or the call fails, so
+        // completion never depends on FBM reachability.
+        const settlement = await settleBountyRewardViaFbm(reward);
+        if (settlement) {
+            reward = bountyRewardService.settle(bounty.id, { ref: settlement.settledRef }) ?? reward;
+        }
     }
     return c.json({ bounty, reward });
 });
