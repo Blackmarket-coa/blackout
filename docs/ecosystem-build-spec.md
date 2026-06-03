@@ -36,7 +36,7 @@ each killer system to existing code and the minimal path to the loop.
 | System | Already in Blackout | Action |
 |---|---|---|
 | **Bounty Board** | *none* — only `packages/api/src/services/growth.ts` (referrals/ambassador) and `services/taskStore.ts` + `@blackout/core` `CoalitionTask` | **Build new** (done: first slice — see below). FBM producer/vendor bounties join later via a provider source. |
-| **Creator Rewards** | `features/creators/`, `features/streaming/`; `services/creatorFees.ts`, `creatorListings.ts`, `creatorSubscriptions.ts`; `channelPoints.ts`; FBM `creator-program`/`creator-rewards`/`creator-attribution` | **Reuse + wire.** Gap = a unified reward dashboard that reads FBM economic metrics via entitlements. Don't rebuild reward primitives. |
+| **Creator Rewards** | `features/creators/`, `features/streaming/`; `services/creatorFees.ts`, `creatorListings.ts`, `creatorSubscriptions.ts`; `channelPoints.ts`, `growth.ts`; FBM `creator-program`/`creator-rewards`/`creator-attribution` | **Reuse + wire.** Bounty rewards now record into the growth ledger on completion and surface in a Creator Hub earnings panel (see "Fifth slice"). FBM-metric dashboard still to wire via entitlements. |
 | **Producer-Creator Matching** | `growth.ts` (referral/ambassador graph), creator services, marketplace providers | **Built** — applications inside the bounty system (apply → accept → claim/decline), a homepage detail panel for poster/applicant flows, and `recommendBounties` auto-matching in Creator Hub. See "Second"/"Third slice" below. Richer match signals next. |
 | **Coalition Storefronts** | `features/coalition/`, `routes/coalition.ts`, `packages/core/src/coalition`, marketplace providers | **Reuse.** Gap = display-only FBM product embeds (product + checkout stay in FBM; Coalition only displays/contextualizes). |
 | **Digital Marketplace** | `features/marketplace/` + `features/monetization/`, signed-plugin protocol (`packages/plugins-sdk`, `packages/blackout-protocol/src/plugins`), `services/marketplaceEntitlements.ts` | **Reuse — front-loaded** per this override. Near-100%-retained digital goods (themes/plugins/templates/courses) as bounty rewards + revenue. |
@@ -149,3 +149,21 @@ Closes the supply side so the whole loop is UI-driven (post → home board → a
 
 **Deliberately not in this slice:** a home-feed post entry point (the board stays hide-when-empty; posting lives
 in Creator Hub for now), edit/delete, FBM source, and persistence.
+
+## Fifth slice landed: bounty rewards → growth ledger + earnings panel
+
+Wires the "Reward" edge of the loop into the existing growth-engine ledger, recording economic truth.
+
+- **Ledger** — `bountyRewardService` in `packages/api/src/services/growth.ts` (same in-memory, append-only
+  pattern as referrals/quests): a `BountyRewardRecord` keyed by bounty id (idempotent — completing twice never
+  double-credits), with `record` / `listForBeneficiary` / `summaryForBeneficiary` and a deferred `settle` hook
+  mirroring `referralService.settle`.
+- **Completion wiring** — `PATCH /v1/bounties/:id` is now **poster-only** (403 otherwise); transitioning a
+  claimed bounty to `completed` records the reward for `claimedBy` (rewardType/summary/cents from the bounty).
+  The poster triggers this from the home detail panel's **Mark completed** action.
+- **Earnings surface** — `GET /v1/bounties/rewards/me` (auth) returns the creator's reward records + a summary
+  (count / earned / settled cents). A `CreatorHubBountyRewards` panel renders it in the Creator Hub **rewards**
+  tab (behind `homeBountyBoard`).
+
+**Deliberately not in this slice:** actual payout settlement (the `settle` hook is the integration seam for an
+FBM tip / Coalition-credit transfer — deferred exactly like the referral/quest settlement), and persistence.

@@ -18,6 +18,10 @@ function postJson<T>(path: string, body: unknown, token: string | null): Promise
     return createAuthorizedApiClient(token)({ method: 'POST', path, body }) as Promise<T>;
 }
 
+function patchJson<T>(path: string, body: unknown, token: string | null): Promise<T> {
+    return createAuthorizedApiClient(token)({ method: 'PATCH', path, body }) as Promise<T>;
+}
+
 export interface BountiesQuery {
     category?: BountyCategory;
     status?: BountyStatus;
@@ -111,6 +115,52 @@ export function acceptBountyApplication(
             applicantId,
         )}/accept`,
         {},
+        token,
+    );
+}
+
+// --- lifecycle + rewards ---
+
+/** Reward earned for completing a bounty (economic truth from the growth ledger). */
+export interface BountyReward {
+    id: string;
+    bountyId: string;
+    beneficiaryId: string;
+    posterId: string;
+    rewardType: BountyRewardType;
+    rewardSummary: string;
+    rewardCents: number | null;
+    status: 'earned' | 'settled' | 'voided';
+    earnedAt: string;
+    settledAt: string | null;
+    settledRef: string | null;
+}
+
+export interface BountyRewardSummary {
+    count: number;
+    earnedCents: number;
+    settledCents: number;
+}
+
+/** Poster-only lifecycle update; completing a claimed bounty records its reward. */
+export function updateBountyStatus(
+    id: string,
+    status: BountyStatus,
+    token: string | null = readBlackoutApiToken(),
+): Promise<{ bounty: Bounty; reward: BountyReward | null }> {
+    return patchJson<{ bounty: Bounty; reward: BountyReward | null }>(
+        `${BOUNTY_BASE}/${encodeURIComponent(id)}`,
+        { status },
+        token,
+    );
+}
+
+/** The signed-in creator's bounty reward earnings (for the rewards dashboard). */
+export function fetchMyBountyRewards(
+    token: string | null = readBlackoutApiToken(),
+): Promise<{ rewards: BountyReward[]; summary: BountyRewardSummary }> {
+    return getJson<{ rewards: BountyReward[]; summary: BountyRewardSummary }>(
+        `${BOUNTY_BASE}/rewards/me`,
         token,
     );
 }

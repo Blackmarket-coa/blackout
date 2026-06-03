@@ -8,10 +8,12 @@ import type { Bounty, BountyApplication } from '@blackout/core';
 const applyToBounty = vi.fn();
 const fetchBountyApplications = vi.fn();
 const acceptBountyApplication = vi.fn();
+const updateBountyStatus = vi.fn();
 vi.mock('../bounty/bountyClient', () => ({
     applyToBounty: (...a: unknown[]) => applyToBounty(...a),
     fetchBountyApplications: (...a: unknown[]) => fetchBountyApplications(...a),
     acceptBountyApplication: (...a: unknown[]) => acceptBountyApplication(...a),
+    updateBountyStatus: (...a: unknown[]) => updateBountyStatus(...a),
 }));
 
 import { BountyDetailPanel } from './BountyDetailPanel';
@@ -61,6 +63,7 @@ describe('BountyDetailPanel', () => {
         applyToBounty.mockReset();
         fetchBountyApplications.mockReset();
         acceptBountyApplication.mockReset();
+        updateBountyStatus.mockReset();
     });
 
     it('shows applicants to the poster and accepting one declines the rest', async () => {
@@ -94,6 +97,23 @@ describe('BountyDetailPanel', () => {
         expect(container.textContent).toContain('declined');
         // No pending Accept buttons remain.
         expect(container.querySelector('[data-testid="bounty-accept"]')).toBeNull();
+
+        // The bounty is now claimed → the poster can mark it completed, which
+        // records the reward.
+        updateBountyStatus.mockResolvedValue({
+            bounty: { ...bounty, status: 'completed', claimedBy: '@alice:bmc' },
+            reward: { id: 'r1', status: 'earned' },
+        });
+        const complete = container.querySelector(
+            '[data-testid="bounty-mark-completed"]',
+        ) as HTMLButtonElement;
+        expect(complete).not.toBeNull();
+        await act(async () => {
+            complete.click();
+            await flush();
+        });
+        expect(updateBountyStatus).toHaveBeenCalledWith('b1', 'completed');
+        expect(container.querySelector('[data-testid="bounty-detail-completed"]')).not.toBeNull();
     });
 
     it('shows the apply action when the viewer is not the poster', async () => {

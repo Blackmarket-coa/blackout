@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import type { Bounty, BountyApplication } from '@blackout/core';
+import type { Bounty, BountyApplication, BountyStatus } from '@blackout/core';
 import {
     acceptBountyApplication,
     applyToBounty,
     fetchBountyApplications,
+    updateBountyStatus,
 } from '../bounty/bountyClient';
 import { BOUNTY_CATEGORY_LABELS } from './bountyCategoryLabels';
 import * as css from './BountyBoard.css';
@@ -29,6 +30,10 @@ export const BountyDetailPanel = ({
     const [mode, setMode] = useState<Mode>('loading');
     const [applications, setApplications] = useState<BountyApplication[]>([]);
     const [applyState, setApplyState] = useState<ApplyState>('idle');
+    const [status, setStatus] = useState<BountyStatus>(bounty.status);
+    const [completeState, setCompleteState] = useState<'idle' | 'completing' | 'done' | 'error'>(
+        'idle',
+    );
 
     useEffect(() => {
         let cancelled = false;
@@ -55,7 +60,8 @@ export const BountyDetailPanel = ({
 
     const onAccept = (applicantId: string) => {
         acceptBountyApplication(bounty.id, applicantId)
-            .then((res) =>
+            .then((res) => {
+                setStatus(res.bounty.status);
                 setApplications((prev) =>
                     prev.map((a) =>
                         a.applicantId === applicantId
@@ -64,12 +70,24 @@ export const BountyDetailPanel = ({
                             ? { ...a, status: 'declined' }
                             : a,
                     ),
-                ),
-            )
+                );
+            })
             .catch(() => {
                 /* swallow — leave the row actionable to retry */
             });
     };
+
+    const onMarkCompleted = () => {
+        setCompleteState('completing');
+        updateBountyStatus(bounty.id, 'completed')
+            .then((res) => {
+                setStatus(res.bounty.status);
+                setCompleteState('done');
+            })
+            .catch(() => setCompleteState('error'));
+    };
+
+    const canComplete = status === 'claimed' || status === 'in_review';
 
     return (
         <div className={css.overlay} role="dialog" aria-modal="true" data-testid="bounty-detail-overlay">
@@ -116,6 +134,25 @@ export const BountyDetailPanel = ({
                     </p>
                 ) : mode === 'poster' ? (
                     <div data-testid="bounty-detail-applicants">
+                        {status === 'completed' || completeState === 'done' ? (
+                            <span className={css.applicantStatus} data-testid="bounty-detail-completed">
+                                Completed ✓ — reward recorded
+                            </span>
+                        ) : canComplete ? (
+                            <button
+                                type="button"
+                                className={css.applyButton}
+                                data-testid="bounty-mark-completed"
+                                disabled={completeState === 'completing'}
+                                onClick={onMarkCompleted}
+                            >
+                                {completeState === 'completing'
+                                    ? 'Completing…'
+                                    : completeState === 'error'
+                                    ? 'Retry complete'
+                                    : 'Mark completed'}
+                            </button>
+                        ) : null}
                         <header className={css.label}>Applicants ({applications.length})</header>
                         {applications.length === 0 ? (
                             <p className={css.detailDescription}>No applicants yet.</p>

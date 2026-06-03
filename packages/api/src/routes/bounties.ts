@@ -20,6 +20,7 @@ import {
 } from '../services/bountyStore';
 import { readJsonBody } from '../middleware/validate';
 import { requireUser } from '../middleware/require-user';
+import { bountyRewardService } from '../services/growth';
 
 const bounties = new Hono();
 
@@ -48,6 +49,17 @@ bounties.get('/recommended', (c) => {
     );
     const recommended = recommendBounties({ open, viewerId: user.sub, appliedBountyIds });
     return c.json({ bounties: recommended });
+});
+
+// The signed-in creator's bounty reward earnings (records economic truth from
+// completed bounties). Declared before `/:id/...` so the static path wins.
+bounties.get('/rewards/me', (c) => {
+    const user = requireUser(c, 'Sign in to view bounty rewards');
+    if (user instanceof Response) return user;
+    return c.json({
+        rewards: bountyRewardService.listForBeneficiary(user.sub),
+        summary: bountyRewardService.summaryForBeneficiary(user.sub),
+    });
 });
 
 const createBountySchema = z.object({
@@ -176,11 +188,34 @@ bounties.patch('/:id', async (c) => {
     if (user instanceof Response) return user;
     const parsed = await readJsonBody(c, updateStatusSchema);
     if (parsed instanceof Response) return parsed;
-    const bounty = updateBountyStatus(c.req.param('id'), parsed.status);
+    const existing = getBounty(c.req.param('id'));
+    if (!existing) {
+        return c.json({ code: 'not_found', message: 'Bounty not found' }, 404);
+    }
+    if (existing.creatorId !== user.sub) {
+        return c.json(
+            { code: 'forbidden', message: 'Only the poster can update this bounty' },
+            403,
+        );
+    }
+    const bounty = updateBountyStatus(existing.id, parsed.status);
     if (!bounty) {
         return c.json({ code: 'not_found', message: 'Bounty not found' }, 404);
     }
-    return c.json({ bounty });
+    // Completing a claimed bounty records the reward as economic truth for the
+    // claimant (idempotent — keyed by bounty id in the ledger).
+    let reward = bountyRewardService.get(bounty.id) ?? null;
+    if (bounty.status === 'completed' && bounty.claimedBy) {
+        reward = bountyRewardService.record({
+            bountyId: bounty.id,
+            beneficiaryId: bounty.claimedBy,
+            posterId: bounty.creatorId,
+            rewardType: bounty.rewardType,
+            rewardSummary: bounty.rewardSummary,
+            rewardCents: bounty.rewardAmountCents ?? null,
+        });
+    }
+    return c.json({ bounty, reward });
 });
 
 export default bounties;
