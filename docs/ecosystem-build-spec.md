@@ -135,3 +135,17 @@ Surfaces the matching backend on both sides of the loop:
 
 **Deliberately not in this slice:** richer match signals (niches/audience/past campaigns — the contract already
 accommodates them), application withdrawal, FBM bounty source, and persistence.
+
+## Fourth slice landed: post-a-bounty composer (Creator Hub)
+
+Closes the supply side so the whole loop is UI-driven (post → home board → apply/auto-match → accept → claim).
+
+- **Composer** — `features/streaming/sections/CreatorHubPostBounty.tsx`: category + reward-type selects, title,
+  reward summary, description, and optional requirements/deliverables (one per line), submitting via the existing
+  `createBounty` client. Mounted in the Creator Hub **overview** tab above the matched-bounties panel, behind the
+  `homeBountyBoard` flag.
+- A posted bounty then appears on the home `BountyBoard` and in other creators' `recommendBounties` matches —
+  no API calls needed to seed the loop.
+
+**Deliberately not in this slice:** a home-feed post entry point (the board stays hide-when-empty; posting lives
+in Creator Hub for now), edit/delete, FBM source, and persistence.
