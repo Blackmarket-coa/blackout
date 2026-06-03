@@ -68,3 +68,26 @@ export const reward = style({
     fontWeight: 500,
     color: 'var(--text-muted, #9EC4AF)',
 });
+
+export const applyButton = style({
+    alignSelf: 'flex-start',
+    marginTop: 4,
+    padding: '4px 12px',
+    fontSize: 12,
+    fontWeight: 600,
+    borderRadius: 999,
+    border: `1px solid ${bmcPalette.forest}`,
+    background: 'transparent',
+    color: 'inherit',
+    cursor: 'pointer',
+    transition: 'background 140ms ease',
+    selectors: {
+        '&:hover:not(:disabled)': {
+            background: 'color-mix(in srgb, currentColor 12%, transparent)',
+        },
+        '&:disabled': {
+            cursor: 'default',
+            opacity: 0.7,
+        },
+    },
+});

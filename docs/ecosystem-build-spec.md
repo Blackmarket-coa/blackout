@@ -37,7 +37,7 @@ each killer system to existing code and the minimal path to the loop.
 |---|---|---|
 | **Bounty Board** | *none* — only `packages/api/src/services/growth.ts` (referrals/ambassador) and `services/taskStore.ts` + `@blackout/core` `CoalitionTask` | **Build new** (done: first slice — see below). FBM producer/vendor bounties join later via a provider source. |
 | **Creator Rewards** | `features/creators/`, `features/streaming/`; `services/creatorFees.ts`, `creatorListings.ts`, `creatorSubscriptions.ts`; `channelPoints.ts`; FBM `creator-program`/`creator-rewards`/`creator-attribution` | **Reuse + wire.** Gap = a unified reward dashboard that reads FBM economic metrics via entitlements. Don't rebuild reward primitives. |
-| **Producer-Creator Matching** | `growth.ts` (referral/ambassador graph), creator services, marketplace providers | **Build a matching panel** atop existing services; lives inside the bounty system (a producer posts a need → creator applies/auto-matched). |
+| **Producer-Creator Matching** | `growth.ts` (referral/ambassador graph), creator services, marketplace providers | **Started** — applications live inside the bounty system (creator applies → poster accepts → bounty claimed, others declined). See "Second slice" below. Auto-matching + producer-side UI next. |
 | **Coalition Storefronts** | `features/coalition/`, `routes/coalition.ts`, `packages/core/src/coalition`, marketplace providers | **Reuse.** Gap = display-only FBM product embeds (product + checkout stay in FBM; Coalition only displays/contextualizes). |
 | **Digital Marketplace** | `features/marketplace/` + `features/monetization/`, signed-plugin protocol (`packages/plugins-sdk`, `packages/blackout-protocol/src/plugins`), `services/marketplaceEntitlements.ts` | **Reuse — front-loaded** per this override. Near-100%-retained digital goods (themes/plugins/templates/courses) as bounty rewards + revenue. |
 | **Opportunity Engine** | *none* in Blackout (price/demand data is FBM-side) | **Defer / embed.** Phase 2/3: embed FBM opportunity cards into the home feed; price tracker / opportunity score / production calculator are FBM work. |
@@ -101,3 +101,20 @@ A thin, dark-by-default vertical slice now adds one (Blackout-side only):
 
 **Deliberately not in this slice:** FBM bounty source, reward settlement/payout, edit/delete, DB persistence
 (in-memory like coalition tasks), producer/vendor presentation. Those are the next increments toward the loop.
+
+## Second slice landed: Producer-Creator matching (applications)
+
+Matching lives inside the bounty system, as the spec specifies. A creator **applies** to an open bounty; the
+poster **accepts** one applicant, which claims the bounty for them and auto-declines the rest.
+
+- **Model** — `BountyApplication` (`pending|accepted|declined|withdrawn`) in `packages/core/src/bounty/bounty.ts`.
+- **Backend** — store methods (`createBountyApplication` with open-only + duplicate guards,
+  `acceptBountyApplication` = accept-one + decline-others + claim-bounty) on `db/store.ts`; service helpers in
+  `services/bountyStore.ts`; routes `POST /v1/bounties/:id/applications` (apply),
+  `GET /v1/bounties/:id/applications` (poster-only), `POST /v1/bounties/:id/applications/:applicantId/accept`
+  (poster-only). Writes are auth-gated; list/accept are restricted to the poster (403 otherwise).
+- **Client** — `applyToBounty` / `fetchBountyApplications` / `acceptBountyApplication` in `bountyClient.ts`; an
+  **Apply** action on each `BountyBoard` card (idle → applying → applied), behind the same `homeBountyBoard` flag.
+
+**Deliberately not in this slice:** auto-matching/recommendation, a producer-side applicant-review UI (backend
++ client exist; surface is next), application withdrawal UI, and persistence — all next increments.

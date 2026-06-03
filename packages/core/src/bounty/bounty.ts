@@ -39,6 +39,39 @@ export const BOUNTY_STATUSES = [
 ] as const;
 export type BountyStatus = (typeof BOUNTY_STATUSES)[number];
 
+/**
+ * Producer ↔ creator matching lives inside the bounty system: a creator applies
+ * to an open bounty, and the poster accepts one applicant (which claims the
+ * bounty and declines the rest). Applications are the backbone of both manual
+ * application and future auto-matching.
+ */
+export const BOUNTY_APPLICATION_STATUSES = [
+    'pending',
+    'accepted',
+    'declined',
+    'withdrawn',
+] as const;
+export type BountyApplicationStatus = (typeof BOUNTY_APPLICATION_STATUSES)[number];
+
+export interface BountyApplication {
+    id: string;
+    bountyId: string;
+    /** User id (MXID/sub) of the applying creator. */
+    applicantId: string;
+    /** Optional pitch from the applicant. */
+    message?: string;
+    status: BountyApplicationStatus;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export function isBountyApplicationStatus(value: unknown): value is BountyApplicationStatus {
+    return (
+        typeof value === 'string' &&
+        (BOUNTY_APPLICATION_STATUSES as readonly string[]).includes(value)
+    );
+}
+
 export interface Bounty {
     id: string;
     category: BountyCategory;

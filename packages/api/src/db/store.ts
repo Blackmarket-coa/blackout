@@ -78,6 +78,7 @@ import type {
   CoalitionKitApplicationRecord,
   CoalitionTaskRecord,
   BountyRecord,
+  BountyApplicationRecord,
   SellerLocationRecord,
   CoalitionFeedItemRecord,
   PluginInstallationRecord,
@@ -330,6 +331,8 @@ class InMemoryDb {
   );
   /** Ecosystem bounties, keyed by bounty id. */
   bounties = new Map<string, BountyRecord>();
+  /** Bounty applications (producer↔creator matching), keyed by application id. */
+  bountyApplications = new Map<string, BountyApplicationRecord>();
   /** Seller map locations, keyed by location id. */
   sellerLocations = new Map<string, SellerLocationRecord>(
     COALITION_SELLER_SEED.map((row) => [row.id, row]),
@@ -2838,6 +2841,86 @@ class InMemoryDb {
     };
     this.bounties.set(id, record);
     return record;
+  }
+
+  // --- bounty applications (producer ↔ creator matching) ---
+
+  listBountyApplications(
+    filter: { bountyId?: string; applicantId?: string } = {},
+  ): BountyApplicationRecord[] {
+    return [...this.bountyApplications.values()].filter(
+      (app) =>
+        (filter.bountyId ? app.bountyId === filter.bountyId : true) &&
+        (filter.applicantId ? app.applicantId === filter.applicantId : true),
+    );
+  }
+
+  /**
+   * Apply to an open bounty. Returns `'not_open'` when the bounty is missing or
+   * not open, `'duplicate'` when the applicant already has a pending application,
+   * otherwise the created record.
+   */
+  createBountyApplication(input: {
+    id: string;
+    bountyId: string;
+    applicantId: string;
+    message?: string;
+  }): BountyApplicationRecord | 'not_open' | 'duplicate' {
+    const bounty = this.bounties.get(input.bountyId);
+    if (!bounty || bounty.status !== 'open') return 'not_open';
+    const already = [...this.bountyApplications.values()].some(
+      (app) =>
+        app.bountyId === input.bountyId &&
+        app.applicantId === input.applicantId &&
+        app.status === 'pending',
+    );
+    if (already) return 'duplicate';
+    const now = nowIso();
+    const record: BountyApplicationRecord = {
+      ...input,
+      status: 'pending',
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.bountyApplications.set(record.id, record);
+    return record;
+  }
+
+  /**
+   * Poster accepts an applicant: that application is accepted, the bounty is
+   * claimed by the applicant, and every other pending application for the same
+   * bounty is declined. Returns undefined when no matching pending application
+   * exists or the bounty is no longer open.
+   */
+  acceptBountyApplication(
+    bountyId: string,
+    applicantId: string,
+  ): { bounty: BountyRecord; application: BountyApplicationRecord } | undefined {
+    const bounty = this.bounties.get(bountyId);
+    if (!bounty || bounty.status !== 'open') return undefined;
+    const target = [...this.bountyApplications.values()].find(
+      (app) =>
+        app.bountyId === bountyId &&
+        app.applicantId === applicantId &&
+        app.status === 'pending',
+    );
+    if (!target) return undefined;
+    const now = nowIso();
+    const accepted: BountyApplicationRecord = { ...target, status: 'accepted', updatedAt: now };
+    this.bountyApplications.set(accepted.id, accepted);
+    for (const app of this.bountyApplications.values()) {
+      if (app.bountyId === bountyId && app.id !== accepted.id && app.status === 'pending') {
+        this.bountyApplications.set(app.id, { ...app, status: 'declined', updatedAt: now });
+      }
+    }
+    const claimed: BountyRecord = {
+      ...bounty,
+      status: 'claimed',
+      claimedBy: applicantId,
+      updatedAt: now,
+    };
+    this.bounties.set(claimed.id, claimed);
+    return { bounty: claimed, application: accepted };
   }
 
   // --- seller map locations ---
