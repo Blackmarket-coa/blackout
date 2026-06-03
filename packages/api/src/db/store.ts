@@ -2211,6 +2211,14 @@ class InMemoryDb {
     return record;
   }
 
+  /** All bridged order rooms for a vendor (their `vendorId` == Blackout sub), newest first. */
+  listFbmBuyerOrderRoomsByVendor(vendorId: string, limit = 200): FbmBuyerOrderRoomRecord[] {
+    return [...this.fbmBuyerOrderRooms.values()]
+      .filter((r) => r.vendorId === vendorId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, limit);
+  }
+
   getFbmDeaddropDeliveryBySourceEvent(
     sourceEventId: string
   ): FbmDeaddropDeliveryRecord | undefined {
