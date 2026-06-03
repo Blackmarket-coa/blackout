@@ -7,6 +7,7 @@ import {
     type ApplyEventResult,
 } from './marketplaceEntitlements';
 import { incrementCounter, logEvent } from './marketplaceObservability';
+import { creatorDrivenSalesTotal, creatorDrivenGmvCentsTotal } from '../telemetry/metrics';
 import { captureTip, createTip, refundTip, TipValidationError } from './tips';
 import { captureSubscription, refundSubscription } from './creatorSubscriptions';
 import { captureBoostPledge, refundBoostPledge } from './communityBoosts';
@@ -480,6 +481,13 @@ function safeCreateAndCaptureSystemTip(
     }
 }
 
+const CREATOR_DRIVEN_KIND_BY_EVENT: Partial<Record<LifecycleEventType, string>> = {
+    'referral.attributed': 'referral_bonus',
+    'ambassador.commission_paid': 'ambassador_commission',
+    'quest.reward_settled': 'quest_reward',
+    'bounty.reward_settled': 'bounty_reward',
+};
+
 function finalizeGrowthAttribution(
     provider: MarketplaceProvider,
     event: NormalizedLifecycleEvent,
@@ -490,6 +498,17 @@ function finalizeGrowthAttribution(
         providerId: provider.id,
         type: event.type,
     });
+    // Record the single KPI — a creator-driven sale — only when a reward tip
+    // was actually captured (tipId set). gmv is the gross cents of the sale.
+    const attributionKind = tipId ? CREATOR_DRIVEN_KIND_BY_EVENT[event.type] : undefined;
+    if (attributionKind) {
+        const meta = event.metadata ?? {};
+        const gmvCents = typeof meta['grossCents'] === 'number' ? (meta['grossCents'] as number) : 0;
+        creatorDrivenSalesTotal.inc({ attribution_kind: attributionKind });
+        creatorDrivenGmvCentsTotal.inc({ attribution_kind: attributionKind }, gmvCents);
+        incrementCounter('creator_driven_sales_total', { attributionKind });
+        incrementCounter('creator_driven_gmv_cents', { attributionKind }, gmvCents);
+    }
     logEvent('marketplace.webhook.growth_attribution', {
         providerId: provider.id,
         eventId: event.eventId,

@@ -15,12 +15,13 @@ import {
     type QuestSourceKind,
     type ReferralSourceKind,
 } from '../services/growth';
+import { summarizeCreatorDrivenSalesFor } from '../services/creatorDrivenSales';
 import type { FeatureModule } from './types';
 
 const referralCreateSchema = z.object({
     refereeUserId: z.string().min(1),
     sourceKind: z
-        .enum(['invite_link', 'ambassador', 'migration_campaign', 'creator_invite'])
+        .enum(['invite_link', 'ambassador', 'migration_campaign', 'creator_invite', 'coalition'])
         .optional(),
     sourceRef: z.string().optional().nullable(),
 });
@@ -237,6 +238,20 @@ function createGrowthRouter() {
         const denied = requireDomainCapability(c, 'growth', 'read');
         if (denied) return denied;
         return c.json({ items: questsService.listCompletionsForUser(user.sub) });
+    });
+
+    // ----- Creator-driven sales (the single KPI) ---------------------
+    // The caller's own attributed sales: count + GMV + platform fee + net,
+    // grouped by attribution kind (referral / ambassador / quest / bounty).
+    // Optional ?since=<ISO> scopes to a window (e.g. month-to-date).
+    growth.get('/creator-driven-sales', (c) => {
+        const user = requireUser(c, 'Sign in to view your creator-driven sales');
+        if (user instanceof Response) return user;
+        const denied = requireDomainCapability(c, 'growth', 'read');
+        if (denied) return denied;
+        const since = c.req.query('since');
+        const sinceIso = since && !Number.isNaN(Date.parse(since)) ? since : undefined;
+        return c.json(summarizeCreatorDrivenSalesFor(user.sub, { sinceIso }));
     });
 
     return growth;
