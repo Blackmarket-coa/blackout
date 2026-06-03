@@ -14,6 +14,7 @@ export * from './monetization';
 
 export * from './apps';
 
+export * from './bounty';
 export * from './coalition';
 export * from './coliseum';
 export * from './den';

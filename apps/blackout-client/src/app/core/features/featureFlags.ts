@@ -100,6 +100,14 @@ export type FeatureFlags = {
      */
     homeStreak: boolean;
     /**
+     * Bounty Board rail on the home feed. When on, HomeFeed fetches open
+     * bounties and renders a "Bounty board" rail (creator / coalition /
+     * developer / tester / content work) above the Live-now rail. The fetch is
+     * isolated so a bounty-API outage cannot affect the rest of the feed.
+     * Default off.
+     */
+    homeBountyBoard: boolean;
+    /**
      * Episodic/series feed badge. When on, feed items carrying a `series:<name>`
      * tag render a "SERIES" badge (the binge/return loop). Pure client-side
      * derivation over existing tags; no schema change. Default off.
@@ -310,6 +318,7 @@ export const defaultFeatureFlags: FeatureFlags = {
     topics: false,
     homeFeedSegments: false,
     homeStreak: false,
+    homeBountyBoard: false,
     seriesTag: false,
     marketTab: true,
     productsAttachments: false,
@@ -605,6 +614,12 @@ export const resolveFeatureFlags = (
         if (env.BLACKOUT_HOME_STREAK === 'false') {
             nextFlags.homeStreak = false;
         }
+        if (env.BLACKOUT_HOME_BOUNTY_BOARD === 'true') {
+            nextFlags.homeBountyBoard = true;
+        }
+        if (env.BLACKOUT_HOME_BOUNTY_BOARD === 'false') {
+            nextFlags.homeBountyBoard = false;
+        }
         if (env.BLACKOUT_SERIES_TAG === 'true') {
             nextFlags.seriesTag = true;
         }
@@ -880,6 +895,12 @@ export const resolveFeatureFlags = (
     }
     if (env.BLACKOUT_HOME_STREAK === 'false') {
         nextFlags.homeStreak = false;
+    }
+    if (env.BLACKOUT_HOME_BOUNTY_BOARD === 'true') {
+        nextFlags.homeBountyBoard = true;
+    }
+    if (env.BLACKOUT_HOME_BOUNTY_BOARD === 'false') {
+        nextFlags.homeBountyBoard = false;
     }
     if (env.BLACKOUT_SERIES_TAG === 'true') {
         nextFlags.seriesTag = true;

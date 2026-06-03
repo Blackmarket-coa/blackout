@@ -77,6 +77,7 @@ import type {
   RingInvitationRecord,
   CoalitionKitApplicationRecord,
   CoalitionTaskRecord,
+  BountyRecord,
   SellerLocationRecord,
   CoalitionFeedItemRecord,
   PluginInstallationRecord,
@@ -327,6 +328,8 @@ class InMemoryDb {
   coalitionTasks = new Map<string, CoalitionTaskRecord>(
     COALITION_TASK_SEED.map((row) => [row.id, row]),
   );
+  /** Ecosystem bounties, keyed by bounty id. */
+  bounties = new Map<string, BountyRecord>();
   /** Seller map locations, keyed by location id. */
   sellerLocations = new Map<string, SellerLocationRecord>(
     COALITION_SELLER_SEED.map((row) => [row.id, row]),
@@ -2780,6 +2783,60 @@ class InMemoryDb {
     if (!existing) return undefined;
     const record: CoalitionTaskRecord = { ...existing, status, updatedAt: nowIso() };
     this.coalitionTasks.set(id, record);
+    return record;
+  }
+
+  // --- ecosystem bounties ---
+
+  listBounties(
+    filter: { category?: string; status?: string; coalitionId?: string } = {},
+  ): BountyRecord[] {
+    return [...this.bounties.values()].filter(
+      (bounty) =>
+        (filter.category ? bounty.category === filter.category : true) &&
+        (filter.status ? bounty.status === filter.status : true) &&
+        (filter.coalitionId ? bounty.coalitionId === filter.coalitionId : true),
+    );
+  }
+
+  createBounty(
+    input: Omit<
+      BountyRecord,
+      'status' | 'claimedBy' | 'createdAt' | 'updatedAt' | 'requirements' | 'deliverables'
+    > & { requirements?: string[]; deliverables?: string[] },
+  ): BountyRecord {
+    const now = nowIso();
+    const record: BountyRecord = {
+      ...input,
+      requirements: input.requirements ?? [],
+      deliverables: input.deliverables ?? [],
+      status: 'open',
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.bounties.set(record.id, record);
+    return record;
+  }
+
+  updateBountyStatus(id: string, status: BountyRecord['status']): BountyRecord | undefined {
+    const existing = this.bounties.get(id);
+    if (!existing) return undefined;
+    const record: BountyRecord = { ...existing, status, updatedAt: nowIso() };
+    this.bounties.set(id, record);
+    return record;
+  }
+
+  /** Claim an open bounty. Returns undefined when missing or not currently open. */
+  claimBounty(id: string, userId: string): BountyRecord | undefined {
+    const existing = this.bounties.get(id);
+    if (!existing || existing.status !== 'open') return undefined;
+    const record: BountyRecord = {
+      ...existing,
+      status: 'claimed',
+      claimedBy: userId,
+      updatedAt: nowIso(),
+    };
+    this.bounties.set(id, record);
     return record;
   }
 
