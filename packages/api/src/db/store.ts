@@ -29,6 +29,12 @@ import type {
   StreamModerationRecord,
   ClipRecord,
   TipRecord,
+  ReferralRecord,
+  AmbassadorRecord,
+  QuestDefinitionRecord,
+  QuestCompletionRecord,
+  MigrationCreditRecord,
+  BountyRewardRecord,
   CreatorSubscriptionTierRecord,
   CreatorSubscriptionRecord,
   CommunityBoostPledgeRecord,
@@ -208,6 +214,12 @@ type PersistedState = {
   coliseumVotes: ColiseumVoteRecord[];
   coliseumLiveSessions: ColiseumLiveSessionRecord[];
   reputationEvents: ReputationEventRecord[];
+  referrals: ReferralRecord[];
+  ambassadors: AmbassadorRecord[];
+  quests: QuestDefinitionRecord[];
+  questCompletions: QuestCompletionRecord[];
+  migrationCredits: MigrationCreditRecord[];
+  bountyRewards: BountyRewardRecord[];
 };
 
 class InMemoryDb {
@@ -243,6 +255,13 @@ class InMemoryDb {
   fbmDisputeRooms = new Map<string, FbmDisputeRoomRecord>();
   fbmAclState = new Map<string, FbmAclStateRecord>();
   tips = new Map<string, TipRecord>();
+  /** Growth ledger — durable referral/ambassador/quest/reward attribution. */
+  referrals = new Map<string, ReferralRecord>();
+  ambassadors = new Map<string, AmbassadorRecord>();
+  quests = new Map<string, QuestDefinitionRecord>();
+  questCompletions = new Map<string, QuestCompletionRecord>();
+  migrationCredits = new Map<string, MigrationCreditRecord>();
+  bountyRewards = new Map<string, BountyRewardRecord>();
   creatorSubscriptionTiers = new Map<string, CreatorSubscriptionTierRecord>();
   creatorSubscriptions = new Map<string, CreatorSubscriptionRecord>();
   communityBoostPledges = new Map<string, CommunityBoostPledgeRecord>();
@@ -2308,6 +2327,157 @@ class InMemoryDb {
     this.tips.clear();
   }
 
+  // ----------------------------------------------------------- Growth ledger
+
+  insertReferral(record: ReferralRecord): ReferralRecord {
+    this.referrals.set(record.id, record);
+    return record;
+  }
+
+  updateReferral(record: ReferralRecord): ReferralRecord {
+    this.referrals.set(record.id, record);
+    return record;
+  }
+
+  getReferral(id: string): ReferralRecord | undefined {
+    return this.referrals.get(id);
+  }
+
+  findReferralByReferee(refereeUserId: string): ReferralRecord | undefined {
+    return [...this.referrals.values()].find((row) => row.refereeUserId === refereeUserId);
+  }
+
+  listReferralsByReferrer(referrerUserId: string): ReferralRecord[] {
+    return [...this.referrals.values()].filter((row) => row.referrerUserId === referrerUserId);
+  }
+
+  resetReferralsForTest(): void {
+    this.referrals.clear();
+  }
+
+  insertAmbassador(record: AmbassadorRecord): AmbassadorRecord {
+    this.ambassadors.set(record.id, record);
+    return record;
+  }
+
+  updateAmbassador(record: AmbassadorRecord): AmbassadorRecord {
+    this.ambassadors.set(record.id, record);
+    return record;
+  }
+
+  getAmbassador(id: string): AmbassadorRecord | undefined {
+    return this.ambassadors.get(id);
+  }
+
+  findAmbassadorByUser(userId: string): AmbassadorRecord | undefined {
+    return [...this.ambassadors.values()].find((row) => row.userId === userId);
+  }
+
+  resetAmbassadorsForTest(): void {
+    this.ambassadors.clear();
+  }
+
+  insertQuest(record: QuestDefinitionRecord): QuestDefinitionRecord {
+    this.quests.set(record.id, record);
+    return record;
+  }
+
+  getQuest(id: string): QuestDefinitionRecord | undefined {
+    return this.quests.get(id);
+  }
+
+  listQuests(): QuestDefinitionRecord[] {
+    return [...this.quests.values()];
+  }
+
+  insertQuestCompletion(record: QuestCompletionRecord): QuestCompletionRecord {
+    this.questCompletions.set(record.id, record);
+    return record;
+  }
+
+  updateQuestCompletion(record: QuestCompletionRecord): QuestCompletionRecord {
+    this.questCompletions.set(record.id, record);
+    return record;
+  }
+
+  getQuestCompletion(questId: string, userId: string): QuestCompletionRecord | undefined {
+    return [...this.questCompletions.values()].find(
+      (row) => row.questId === questId && row.userId === userId,
+    );
+  }
+
+  getQuestCompletionById(id: string): QuestCompletionRecord | undefined {
+    return this.questCompletions.get(id);
+  }
+
+  listQuestCompletionsByUser(userId: string): QuestCompletionRecord[] {
+    return [...this.questCompletions.values()].filter((row) => row.userId === userId);
+  }
+
+  resetQuestsForTest(): void {
+    this.quests.clear();
+    this.questCompletions.clear();
+  }
+
+  insertMigrationCredit(record: MigrationCreditRecord): MigrationCreditRecord {
+    this.migrationCredits.set(record.id, record);
+    return record;
+  }
+
+  updateMigrationCredit(record: MigrationCreditRecord): MigrationCreditRecord {
+    this.migrationCredits.set(record.id, record);
+    return record;
+  }
+
+  getMigrationCredit(id: string): MigrationCreditRecord | undefined {
+    return this.migrationCredits.get(id);
+  }
+
+  findMigrationCredit(
+    userId: string,
+    sourceKind: MigrationCreditRecord['sourceKind'],
+    sourceHandle: string | null,
+  ): MigrationCreditRecord | undefined {
+    return [...this.migrationCredits.values()].find(
+      (row) =>
+        row.userId === userId &&
+        row.sourceKind === sourceKind &&
+        row.sourceHandle === sourceHandle,
+    );
+  }
+
+  listMigrationCreditsByUser(userId: string): MigrationCreditRecord[] {
+    return [...this.migrationCredits.values()].filter((row) => row.userId === userId);
+  }
+
+  resetMigrationCreditsForTest(): void {
+    this.migrationCredits.clear();
+  }
+
+  insertBountyReward(record: BountyRewardRecord): BountyRewardRecord {
+    this.bountyRewards.set(record.id, record);
+    return record;
+  }
+
+  updateBountyReward(record: BountyRewardRecord): BountyRewardRecord {
+    this.bountyRewards.set(record.id, record);
+    return record;
+  }
+
+  getBountyRewardByBounty(bountyId: string): BountyRewardRecord | undefined {
+    return [...this.bountyRewards.values()].find((row) => row.bountyId === bountyId);
+  }
+
+  listBountyRewardsByBeneficiary(beneficiaryId: string): BountyRewardRecord[] {
+    return [...this.bountyRewards.values()]
+      .filter((row) => row.beneficiaryId === beneficiaryId)
+      .sort((a, b) => Date.parse(b.earnedAt) - Date.parse(a.earnedAt));
+  }
+
+  resetBountyRewardsForTest(): void {
+    this.bountyRewards.clear();
+  }
+
   insertCreatorSubscriptionTier(record: CreatorSubscriptionTierRecord): CreatorSubscriptionTierRecord {
     this.creatorSubscriptionTiers.set(record.id, record);
     return record;
@@ -3318,6 +3488,16 @@ export class FileBackedDb extends InMemoryDb {
       (parsed.fbmAclState ?? []).map((row) => [`${row.mxid}::${row.roomId}`, row])
     );
     this.tips = new Map((parsed.tips ?? []).map((row) => [row.id, row]));
+    this.referrals = new Map((parsed.referrals ?? []).map((row) => [row.id, row]));
+    this.ambassadors = new Map((parsed.ambassadors ?? []).map((row) => [row.id, row]));
+    this.quests = new Map((parsed.quests ?? []).map((row) => [row.id, row]));
+    this.questCompletions = new Map(
+      (parsed.questCompletions ?? []).map((row) => [row.id, row])
+    );
+    this.migrationCredits = new Map(
+      (parsed.migrationCredits ?? []).map((row) => [row.id, row])
+    );
+    this.bountyRewards = new Map((parsed.bountyRewards ?? []).map((row) => [row.id, row]));
     this.creatorSubscriptionTiers = new Map(
       (parsed.creatorSubscriptionTiers ?? []).map((row) => [row.id, row])
     );
@@ -3540,6 +3720,12 @@ export class FileBackedDb extends InMemoryDb {
       fbmDisputeRooms: [...this.fbmDisputeRooms.values()],
       fbmAclState: [...this.fbmAclState.values()],
       tips: [...this.tips.values()],
+      referrals: [...this.referrals.values()],
+      ambassadors: [...this.ambassadors.values()],
+      quests: [...this.quests.values()],
+      questCompletions: [...this.questCompletions.values()],
+      migrationCredits: [...this.migrationCredits.values()],
+      bountyRewards: [...this.bountyRewards.values()],
       creatorSubscriptionTiers: [...this.creatorSubscriptionTiers.values()],
       creatorSubscriptions: [...this.creatorSubscriptions.values()],
       communityBoostPledges: [...this.communityBoostPledges.values()],
@@ -4045,6 +4231,97 @@ export class FileBackedDb extends InMemoryDb {
 
   override resetTipsForTest(): void {
     super.resetTipsForTest();
+    this.persist();
+  }
+
+  override insertReferral(record: ReferralRecord): ReferralRecord {
+    const created = super.insertReferral(record);
+    this.persist();
+    return created;
+  }
+
+  override updateReferral(record: ReferralRecord): ReferralRecord {
+    const updated = super.updateReferral(record);
+    this.persist();
+    return updated;
+  }
+
+  override resetReferralsForTest(): void {
+    super.resetReferralsForTest();
+    this.persist();
+  }
+
+  override insertAmbassador(record: AmbassadorRecord): AmbassadorRecord {
+    const created = super.insertAmbassador(record);
+    this.persist();
+    return created;
+  }
+
+  override updateAmbassador(record: AmbassadorRecord): AmbassadorRecord {
+    const updated = super.updateAmbassador(record);
+    this.persist();
+    return updated;
+  }
+
+  override resetAmbassadorsForTest(): void {
+    super.resetAmbassadorsForTest();
+    this.persist();
+  }
+
+  override insertQuest(record: QuestDefinitionRecord): QuestDefinitionRecord {
+    const created = super.insertQuest(record);
+    this.persist();
+    return created;
+  }
+
+  override insertQuestCompletion(record: QuestCompletionRecord): QuestCompletionRecord {
+    const created = super.insertQuestCompletion(record);
+    this.persist();
+    return created;
+  }
+
+  override updateQuestCompletion(record: QuestCompletionRecord): QuestCompletionRecord {
+    const updated = super.updateQuestCompletion(record);
+    this.persist();
+    return updated;
+  }
+
+  override resetQuestsForTest(): void {
+    super.resetQuestsForTest();
+    this.persist();
+  }
+
+  override insertMigrationCredit(record: MigrationCreditRecord): MigrationCreditRecord {
+    const created = super.insertMigrationCredit(record);
+    this.persist();
+    return created;
+  }
+
+  override updateMigrationCredit(record: MigrationCreditRecord): MigrationCreditRecord {
+    const updated = super.updateMigrationCredit(record);
+    this.persist();
+    return updated;
+  }
+
+  override resetMigrationCreditsForTest(): void {
+    super.resetMigrationCreditsForTest();
+    this.persist();
+  }
+
+  override insertBountyReward(record: BountyRewardRecord): BountyRewardRecord {
+    const created = super.insertBountyReward(record);
+    this.persist();
+    return created;
+  }
+
+  override updateBountyReward(record: BountyRewardRecord): BountyRewardRecord {
+    const updated = super.updateBountyReward(record);
+    this.persist();
+    return updated;
+  }
+
+  override resetBountyRewardsForTest(): void {
+    super.resetBountyRewardsForTest();
     this.persist();
   }
 

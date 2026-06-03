@@ -44,7 +44,7 @@ test('every descriptor maps to a real table with columns', async () => {
     const columns = await introspectColumns(client as never, d.tableName);
     assert.ok(columns.length > 0, `table ${d.tableName} (map ${d.mapName}) should exist`);
   }
-  assert.equal(TABLE_DESCRIPTORS.length, 89);
+  assert.equal(TABLE_DESCRIPTORS.length, 95);
   await pg.query('SELECT 1');
 });
 
@@ -157,6 +157,49 @@ test('write-through persists across a simulated restart', async () => {
   // Remove the youtube link — resync must delete exactly that row.
   store1.deleteLinkedAccount(userId, 'youtube');
 
+  // Growth ledger — TEXT (prefixed, non-UUID) ids; nullable cents; jsonb criteria.
+  store1.insertReferral({
+    id: 'ref-test-1',
+    referrerUserId: userId,
+    refereeUserId: 'referee-1',
+    sourceKind: 'creator_invite',
+    sourceRef: 'campaign-x',
+    status: 'pending',
+    rewardTipId: null,
+    rewardCents: null,
+    attributedAt: new Date().toISOString(),
+    settledAt: null,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  });
+  store1.insertQuest({
+    id: 'qst-test-1',
+    sourceKind: 'creator',
+    sourceRef: null,
+    title: 'Post a build clip',
+    description: 'Share a 30s build clip.',
+    rewardKind: 'tip',
+    rewardCents: 500,
+    startsAt: null,
+    endsAt: null,
+    criteria: { minDurationSeconds: 30, tag: 'build' },
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  });
+  store1.insertBountyReward({
+    id: 'brw-test-1',
+    bountyId: 'bounty-1',
+    beneficiaryId: 'creator-9',
+    posterId: userId,
+    rewardType: 'store_credit',
+    rewardSummary: '$5 FBM credit',
+    rewardCents: 500,
+    status: 'earned',
+    earnedAt: new Date().toISOString(),
+    settledAt: null,
+    settledRef: null,
+  });
+
   await store1.drain();
 
   // Simulate a restart: a brand-new store hydrating from the same database.
@@ -201,6 +244,25 @@ test('write-through persists across a simulated restart', async () => {
     undefined,
     'deleted youtube link should not hydrate',
   );
+
+  // Growth ledger survives restart — this is the creator-driven-sales backbone.
+  const referral = store2.getReferral('ref-test-1');
+  assert.ok(referral, 'referral should hydrate');
+  assert.equal(referral?.referrerUserId, userId);
+  assert.equal(referral?.sourceKind, 'creator_invite');
+  // The pg writer omits NULL columns on hydration (null → undefined), matching
+  // every other nullable column in the store; assert nullish rather than strict null.
+  assert.ok(referral?.rewardCents == null, 'unset rewardCents hydrates nullish');
+
+  const quest = store2.getQuest('qst-test-1');
+  assert.ok(quest, 'quest should hydrate');
+  assert.deepEqual(quest?.criteria, { minDurationSeconds: 30, tag: 'build' });
+
+  const reward = store2.getBountyRewardByBounty('bounty-1');
+  assert.ok(reward, 'bounty reward should hydrate by bounty id');
+  assert.equal(reward?.beneficiaryId, 'creator-9');
+  assert.equal(reward?.rewardCents, 500);
+  assert.equal(reward?.status, 'earned');
 });
 
 test('updateClip write-through persists the patch (PATCH /clips/:id path)', async () => {
