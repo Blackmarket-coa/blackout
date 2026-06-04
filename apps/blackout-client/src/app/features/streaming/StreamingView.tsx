@@ -55,6 +55,9 @@ const CreatorHubCreatorDrivenSales = lazy(() =>
         default: mod.CreatorHubCreatorDrivenSales,
     }))
 );
+const CreatorHubContent = lazy(() =>
+    import('./sections/CreatorHubContent').then((mod) => ({ default: mod.CreatorHubContent }))
+);
 
 const contentStyle: CSSProperties = { minHeight: 0, overflow: 'auto' };
 
@@ -98,6 +101,13 @@ export function StreamingView({ initialTab }: StreamingViewProps) {
                         <Suspense fallback={null}>
                             <CreatorHubOverview onSelectTab={handleSelect} />
                         </Suspense>
+                        {runtimeFeatureFlags.creatorContent ? (
+                            <Suspense fallback={null}>
+                                <div style={{ padding: 16 }}>
+                                    <CreatorHubContent />
+                                </div>
+                            </Suspense>
+                        ) : null}
                         {runtimeFeatureFlags.homeBountyBoard ? (
                             <Suspense fallback={null}>
                                 <CreatorHubPostBounty />

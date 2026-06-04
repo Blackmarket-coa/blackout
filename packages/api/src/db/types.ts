@@ -10,6 +10,8 @@ import type {
   CoalitionResource,
   CoalitionRing,
   CoalitionTask,
+  ContentDistribution,
+  CreatorContent,
   EventRsvp,
   RideClaim,
   RideOffer,
@@ -1437,6 +1439,12 @@ export type CoalitionProjectRecord = CoalitionProject;
 
 /** A Coalition shared resource. CoalitionResource carries createdAt/updatedAt. */
 export type CoalitionResourceRecord = CoalitionResource;
+
+/** A creator content item. CreatorContent carries createdAt/updatedAt. */
+export type CreatorContentRecord = CreatorContent;
+
+/** A content→surface distribution record. ContentDistribution carries createdAt. */
+export type ContentDistributionRecord = ContentDistribution;
 
 /** An ecosystem bounty. Bounty already carries createdAt/updatedAt. */
 export type BountyRecord = Bounty;

@@ -1,4 +1,4 @@
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import {
     parseCreatorListingDraft,
@@ -18,6 +18,18 @@ import {
 import { incrementCounter, logEvent } from '../services/marketplaceObservability';
 import { db } from '../db/store';
 import { listTipsReceivedBy } from '../services/tips';
+import { CONTENT_KINDS, CONTENT_STATUSES, DISTRIBUTION_TARGETS } from '@blackout/core';
+import {
+    addDistribution,
+    createContent,
+    getContent,
+    listContent,
+    listDistributions,
+    listHomeContentFeed,
+    newContentId,
+    publishContent,
+    updateContent,
+} from '../services/creatorContentStore';
 
 const creator = new Hono();
 
@@ -338,6 +350,120 @@ creator.post('/payouts/onboarding', async (c) => {
         });
         return c.json({ code: 'upstream_failed', message: 'Onboarding rejected' }, 502);
     }
+});
+
+// --- creator content lifecycle ---
+
+// Public Home-feed source: recently published content fanned out to `home`.
+creator.get('/content/feed', (c) => {
+    const limitRaw = Number.parseInt(c.req.query('limit') ?? '', 10);
+    const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 100) : 30;
+    return c.json({ content: listHomeContentFeed(limit) });
+});
+
+// A creator's own content library (optionally filtered by status).
+creator.get('/content', (c) => {
+    const user = requireUser(c, 'Sign in to view your content');
+    if (user instanceof Response) return user;
+    const status = c.req.query('status');
+    const statusFilter =
+        status && (CONTENT_STATUSES as readonly string[]).includes(status)
+            ? (status as (typeof CONTENT_STATUSES)[number])
+            : undefined;
+    return c.json({ content: listContent({ creatorId: user.sub, status: statusFilter }) });
+});
+
+const createContentSchema = z.object({
+    kind: z.enum(CONTENT_KINDS),
+    title: z.string().min(1).max(200),
+    body: z.string().max(50_000).optional(),
+    mediaUrl: z.string().max(2048).optional(),
+    // Provide scheduledFor to schedule; otherwise the item is created as a draft.
+    scheduledFor: z.string().datetime().optional(),
+});
+
+creator.post('/content', async (c) => {
+    const user = requireUser(c, 'Sign in to create content');
+    if (user instanceof Response) return user;
+    const parsed = await readJsonBody(c, createContentSchema);
+    if (parsed instanceof Response) return parsed;
+    const content = createContent({
+        id: newContentId(),
+        creatorId: user.sub,
+        kind: parsed.kind,
+        title: parsed.title,
+        body: parsed.body,
+        mediaUrl: parsed.mediaUrl,
+        status: parsed.scheduledFor ? 'scheduled' : 'draft',
+        scheduledFor: parsed.scheduledFor,
+    });
+    return c.json({ content }, 201);
+});
+
+const updateContentSchema = z.object({
+    title: z.string().min(1).max(200).optional(),
+    body: z.string().max(50_000).optional(),
+    mediaUrl: z.string().max(2048).optional(),
+    status: z.enum(CONTENT_STATUSES).optional(),
+    scheduledFor: z.string().datetime().optional(),
+});
+
+/** Owner guard: resolves the content and 404/403s if it isn't the caller's. */
+function ownedContentOr(c: Context, userSub: string) {
+    const content = getContent(c.req.param('id') ?? '');
+    if (!content) return c.json({ code: 'not_found', message: 'Content not found' }, 404);
+    if (content.creatorId !== userSub) {
+        return c.json({ code: 'forbidden', message: 'Not your content' }, 403);
+    }
+    return content;
+}
+
+creator.patch('/content/:id', async (c) => {
+    const user = requireUser(c, 'Sign in to edit content');
+    if (user instanceof Response) return user;
+    const owned = ownedContentOr(c, user.sub);
+    if (owned instanceof Response) return owned;
+    const parsed = await readJsonBody(c, updateContentSchema);
+    if (parsed instanceof Response) return parsed;
+    const content = updateContent(owned.id, parsed);
+    return c.json({ content });
+});
+
+creator.post('/content/:id/publish', (c) => {
+    const user = requireUser(c, 'Sign in to publish content');
+    if (user instanceof Response) return user;
+    const owned = ownedContentOr(c, user.sub);
+    if (owned instanceof Response) return owned;
+    const content = publishContent(owned.id);
+    return c.json({ content });
+});
+
+creator.get('/content/:id/distributions', (c) => {
+    const user = requireUser(c, 'Sign in to view distributions');
+    if (user instanceof Response) return user;
+    const owned = ownedContentOr(c, user.sub);
+    if (owned instanceof Response) return owned;
+    return c.json({ distributions: listDistributions(owned.id) });
+});
+
+const distributeSchema = z.object({
+    target: z.enum(DISTRIBUTION_TARGETS),
+    targetId: z.string().max(256).optional(),
+});
+
+creator.post('/content/:id/distribute', async (c) => {
+    const user = requireUser(c, 'Sign in to distribute content');
+    if (user instanceof Response) return user;
+    const owned = ownedContentOr(c, user.sub);
+    if (owned instanceof Response) return owned;
+    const parsed = await readJsonBody(c, distributeSchema);
+    if (parsed instanceof Response) return parsed;
+    const distribution = addDistribution({
+        contentId: owned.id,
+        target: parsed.target,
+        targetId: parsed.targetId,
+    });
+    return c.json({ distribution }, 201);
 });
 
 export default creator;

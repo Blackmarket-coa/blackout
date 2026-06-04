@@ -263,6 +263,15 @@ export type FeatureFlags = {
      * disables it.
      */
     bugReportWidget: boolean;
+    /**
+     * Creator content lifecycle. Owns the Creator Hub "Content" section
+     * (draft/upload/schedule a video, article, or guide) and the published-
+     * content rail on the Home feed. Backed by `/v1/creator/content/*` with
+     * durable persistence; scheduled items auto-publish via the background
+     * dispatcher. Default on so the creator publishing loop is reachable;
+     * `BLACKOUT_CREATOR_CONTENT=false` disables it.
+     */
+    creatorContent: boolean;
 };
 
 export type FeatureMode = 'default' | 'baseline' | 'full';
@@ -344,6 +353,7 @@ export const defaultFeatureFlags: FeatureFlags = {
     creatorsDashboard: false,
     federationSelfHost: false,
     bugReportWidget: true,
+    creatorContent: true,
 };
 
 /**
@@ -752,6 +762,12 @@ export const resolveFeatureFlags = (
         if (env.BLACKOUT_BUG_REPORT_WIDGET === 'false') {
             nextFlags.bugReportWidget = false;
         }
+        if (env.BLACKOUT_CREATOR_CONTENT === 'true') {
+            nextFlags.creatorContent = true;
+        }
+        if (env.BLACKOUT_CREATOR_CONTENT === 'false') {
+            nextFlags.creatorContent = false;
+        }
         return nextFlags;
     }
 
@@ -1033,6 +1049,12 @@ export const resolveFeatureFlags = (
     }
     if (env.BLACKOUT_BUG_REPORT_WIDGET === 'false') {
         nextFlags.bugReportWidget = false;
+    }
+    if (env.BLACKOUT_CREATOR_CONTENT === 'true') {
+        nextFlags.creatorContent = true;
+    }
+    if (env.BLACKOUT_CREATOR_CONTENT === 'false') {
+        nextFlags.creatorContent = false;
     }
 
     applyMonetizationEnvOverrides(env, nextFlags);

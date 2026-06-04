@@ -86,6 +86,8 @@ import type {
   CoalitionNeedRecord,
   CoalitionProjectRecord,
   CoalitionResourceRecord,
+  CreatorContentRecord,
+  ContentDistributionRecord,
   BountyRecord,
   BountyApplicationRecord,
   SellerLocationRecord,
@@ -207,6 +209,8 @@ type PersistedState = {
   coalitionNeeds: CoalitionNeedRecord[];
   coalitionProjects: CoalitionProjectRecord[];
   coalitionResources: CoalitionResourceRecord[];
+  creatorContent: CreatorContentRecord[];
+  contentDistributions: ContentDistributionRecord[];
   sellerLocations: SellerLocationRecord[];
   coalitionFeedItems: CoalitionFeedItemRecord[];
   pluginInstallations: PluginInstallationRecord[];
@@ -360,6 +364,10 @@ class InMemoryDb {
   coalitionProjects = new Map<string, CoalitionProjectRecord>();
   /** Coalition shared resources, keyed by resource id. */
   coalitionResources = new Map<string, CoalitionResourceRecord>();
+  /** Creator content items, keyed by content id. */
+  creatorContent = new Map<string, CreatorContentRecord>();
+  /** Content→surface distribution records, keyed by distribution id. */
+  contentDistributions = new Map<string, ContentDistributionRecord>();
   /** Ecosystem bounties, keyed by bounty id. */
   bounties = new Map<string, BountyRecord>();
   /** Bounty applications (producer↔creator matching), keyed by application id. */
@@ -3075,6 +3083,77 @@ class InMemoryDb {
     return record;
   }
 
+  // --- creator content lifecycle ---
+
+  listCreatorContent(
+    filter: { creatorId?: string; status?: CreatorContentRecord['status'] } = {},
+  ): CreatorContentRecord[] {
+    return [...this.creatorContent.values()].filter(
+      (content) =>
+        (filter.creatorId ? content.creatorId === filter.creatorId : true) &&
+        (filter.status ? content.status === filter.status : true),
+    );
+  }
+
+  getCreatorContent(id: string): CreatorContentRecord | undefined {
+    return this.creatorContent.get(id);
+  }
+
+  createCreatorContent(
+    input: Omit<CreatorContentRecord, 'status' | 'createdAt' | 'updatedAt' | 'publishedAt'> & {
+      status?: CreatorContentRecord['status'];
+    },
+  ): CreatorContentRecord {
+    const now = nowIso();
+    const status = input.status ?? 'draft';
+    const record: CreatorContentRecord = {
+      ...input,
+      status,
+      publishedAt: status === 'published' ? now : undefined,
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.creatorContent.set(record.id, record);
+    return record;
+  }
+
+  updateCreatorContent(
+    id: string,
+    patch: Partial<
+      Pick<CreatorContentRecord, 'title' | 'body' | 'mediaUrl' | 'status' | 'scheduledFor' | 'publishedAt'>
+    >,
+  ): CreatorContentRecord | undefined {
+    const existing = this.creatorContent.get(id);
+    if (!existing) return undefined;
+    const record: CreatorContentRecord = { ...existing, ...patch, updatedAt: nowIso() };
+    this.creatorContent.set(id, record);
+    return record;
+  }
+
+  /** Flip a scheduled item to published once its scheduledFor has passed. */
+  listDueScheduledContent(asOf: string = nowIso()): CreatorContentRecord[] {
+    return [...this.creatorContent.values()].filter(
+      (content) =>
+        content.status === 'scheduled' &&
+        content.scheduledFor !== undefined &&
+        content.scheduledFor <= asOf,
+    );
+  }
+
+  listContentDistributions(filter: { contentId?: string } = {}): ContentDistributionRecord[] {
+    return [...this.contentDistributions.values()].filter((dist) =>
+      filter.contentId ? dist.contentId === filter.contentId : true,
+    );
+  }
+
+  addContentDistribution(
+    input: Omit<ContentDistributionRecord, 'createdAt'>,
+  ): ContentDistributionRecord {
+    const record: ContentDistributionRecord = { ...input, createdAt: nowIso() };
+    this.contentDistributions.set(record.id, record);
+    return record;
+  }
+
   // --- ecosystem bounties ---
 
   listBounties(
@@ -3771,6 +3850,14 @@ export class FileBackedDb extends InMemoryDb {
     if (parsed.coalitionResources) {
       this.coalitionResources = new Map(parsed.coalitionResources.map((row) => [row.id, row]));
     }
+    if (parsed.creatorContent) {
+      this.creatorContent = new Map(parsed.creatorContent.map((row) => [row.id, row]));
+    }
+    if (parsed.contentDistributions) {
+      this.contentDistributions = new Map(
+        parsed.contentDistributions.map((row) => [row.id, row]),
+      );
+    }
     if (parsed.sellerLocations) {
       this.sellerLocations = new Map(parsed.sellerLocations.map((row) => [row.id, row]));
     }
@@ -3901,6 +3988,8 @@ export class FileBackedDb extends InMemoryDb {
       coalitionNeeds: [...this.coalitionNeeds.values()],
       coalitionProjects: [...this.coalitionProjects.values()],
       coalitionResources: [...this.coalitionResources.values()],
+      creatorContent: [...this.creatorContent.values()],
+      contentDistributions: [...this.contentDistributions.values()],
       sellerLocations: [...this.sellerLocations.values()],
       coalitionFeedItems: [...this.coalitionFeedItems.values()],
       pluginInstallations: [...this.pluginInstallations.values()],
@@ -5048,6 +5137,35 @@ export class FileBackedDb extends InMemoryDb {
     const updated = super.updateCoalitionResourceAvailability(id, availability);
     if (updated) this.persist();
     return updated;
+  }
+
+  override createCreatorContent(
+    input: Omit<CreatorContentRecord, 'status' | 'createdAt' | 'updatedAt' | 'publishedAt'> & {
+      status?: CreatorContentRecord['status'];
+    },
+  ): CreatorContentRecord {
+    const created = super.createCreatorContent(input);
+    this.persist();
+    return created;
+  }
+
+  override updateCreatorContent(
+    id: string,
+    patch: Partial<
+      Pick<CreatorContentRecord, 'title' | 'body' | 'mediaUrl' | 'status' | 'scheduledFor' | 'publishedAt'>
+    >,
+  ): CreatorContentRecord | undefined {
+    const updated = super.updateCreatorContent(id, patch);
+    if (updated) this.persist();
+    return updated;
+  }
+
+  override addContentDistribution(
+    input: Omit<ContentDistributionRecord, 'createdAt'>,
+  ): ContentDistributionRecord {
+    const created = super.addContentDistribution(input);
+    this.persist();
+    return created;
   }
 
   override upsertSellerLocation(

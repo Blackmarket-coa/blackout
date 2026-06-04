@@ -16,6 +16,7 @@ export * from './apps';
 
 export * from './bounty';
 export * from './coalition';
+export * from './creator';
 export * from './coliseum';
 export * from './den';
 export * from './reputation';

@@ -23,6 +23,7 @@ import { useHomeTour } from '../onboarding/homeTourState';
 import { trackOnboardingTourStarted } from '../onboarding/onboardingTelemetry';
 import { useUnifiedFeed } from './hooks/useUnifiedFeed';
 import { useBountyBoard } from './hooks/useBountyBoard';
+import { useCreatorContentFeed } from './hooks/useCreatorContentFeed';
 import type { FeedSort, UnifiedFeedItem } from './unifiedFeedModel';
 import { useStreak } from './streakState';
 import {
@@ -33,6 +34,7 @@ import {
 import { HomeComposer } from './HomeComposer';
 import { LiveNowRail } from './LiveNowRail';
 import { BountyBoard } from './BountyBoard';
+import { CreatorContentRail } from './CreatorContentRail';
 import { UnifiedFeedCard } from './UnifiedFeedCard';
 import { AmbientBackdrop } from './AmbientBackdrop';
 import { EcosystemCanvas } from './EcosystemCanvas';
@@ -143,6 +145,7 @@ export const HomeFeed = (): JSX.Element => {
     const [query, setQuery] = useState('');
     const feed = useUnifiedFeed(segmentsEnabled ? sort : undefined);
     const bountyBoard = useBountyBoard(runtimeFeatureFlags.homeBountyBoard);
+    const creatorContentFeed = useCreatorContentFeed(runtimeFeatureFlags.creatorContent);
     const streak = useStreak(streakEnabled);
     const atmosphere = useTimeOfDay();
     const reducedMotion = useReducedMotion();
@@ -420,6 +423,7 @@ export const HomeFeed = (): JSX.Element => {
                             </section>
                         ) : null}
                         <BountyBoard items={bountyBoard.bounties} />
+                        <CreatorContentRail items={creatorContentFeed.content} />
                         <LiveNowRail items={feed.liveRail} />
                         <WaveDivider />
                         {segmentsEnabled ? (

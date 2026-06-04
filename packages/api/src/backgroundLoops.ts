@@ -103,6 +103,17 @@ export function startBackgroundLoops(): void {
         log.info('scheduled_message_dispatcher_started', { intervalMs });
       },
     );
+
+    // Scheduled creator-content publisher. Flips scheduled video/article/guide
+    // posts to published (and surfaces them on the Home feed) once their
+    // scheduledFor passes. Shares the scheduled-messages enable/cadence env so
+    // operators toggle first-party scheduling in one place.
+    void import('./services/scheduledContentDispatcher').then(
+      ({ startScheduledContentDispatcher }) => {
+        startScheduledContentDispatcher(intervalMs);
+        log.info('scheduled_content_dispatcher_started', { intervalMs });
+      },
+    );
   }
 
   // FBM → Matrix bridge tombstone sweeper. Purges expired digital-product
