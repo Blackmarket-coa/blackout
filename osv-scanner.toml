@@ -84,3 +84,21 @@ source we control; an attacker would need to land malicious source in the
 repo to exploit it, by which point they have a much larger attack surface.
 Tracked for vite-plugin-pwa major bump in a follow-up PR.
 """
+
+# vitest (2.1.9 + 3.2.4 across the workspace) — test-runner devDependency,
+# never present in any production bundle or runtime. Fixed in vitest 4.1.0,
+# a breaking major bump (config/coverage API changes) that warrants its own
+# migration PR rather than a lockfile patch here.
+
+[[IgnoredVulns]]
+id = "GHSA-5xrq-8626-4rwp"
+ignoreUntil = 2026-08-31
+reason = """
+Vitest API / browser server can be reached by a malicious origin to execute
+code. Vitest is a devDependency test runner: it is never bundled into or
+loaded by the production app, and CI runs it headless against first-party
+tests with no externally-reachable API/browser server. The exploit vector (a
+remote page connecting to a developer's running Vitest server) does not exist
+in CI or production. Fixed in vitest >=4.1.0; tracked for a dedicated vitest 4
+upgrade PR (breaking config/coverage changes) rather than this PR's diff.
+"""

@@ -16,6 +16,8 @@ import {
     updateCreatorListingStatus,
 } from '../services/creatorListings';
 import { incrementCounter, logEvent } from '../services/marketplaceObservability';
+import { db } from '../db/store';
+import { listTipsReceivedBy } from '../services/tips';
 
 const creator = new Hono();
 
@@ -118,6 +120,56 @@ creator.get('/listings/mine', (c) => {
     if (user instanceof Response) return user;
     const records = listCreatorListingsForUser(user.sub).map(toClientView);
     return c.json({ listings: records });
+});
+
+// Vendor order + earnings visibility. Read-only surface of what Blackout already
+// receives — order management, payouts, and GMV truth stay in FreeBlackMarket.
+// A vendor's bridged `vendorId` is their Blackout `sub`. Returns the bridge room
+// layout (where FBM pushes order/inventory/ledger updates), the per-order rooms,
+// and an earnings rollup over captured tips received by the vendor.
+creator.get('/orders', (c) => {
+    const user = requireUser(c, 'Sign in to view your orders');
+    if (user instanceof Response) return user;
+
+    const vendorRooms = db.getFbmVendorRooms(user.sub) ?? null;
+    const orderRooms = db.listFbmBuyerOrderRoomsByVendor(user.sub);
+    const orders = orderRooms.map((r) => ({
+        orderId: r.orderId,
+        buyerUserId: r.buyerUserId,
+        roomId: r.roomId,
+        createdAt: r.createdAt,
+    }));
+
+    const capturedTips = listTipsReceivedBy(user.sub).filter((t) => t.status === 'captured');
+    const earnings = capturedTips.reduce(
+        (acc, t) => {
+            acc.capturedCount += 1;
+            acc.grossCents += t.grossCents;
+            acc.feeCents += t.feeCents;
+            acc.netCents += t.netCents;
+            return acc;
+        },
+        { capturedCount: 0, grossCents: 0, feeCents: 0, netCents: 0 },
+    );
+
+    return c.json({
+        vendorId: user.sub,
+        rooms: vendorRooms
+            ? {
+                  spaceRoomId: vendorRooms.spaceRoomId,
+                  ordersRoomId: vendorRooms.ordersRoomId,
+                  inventoryRoomId: vendorRooms.inventoryRoomId,
+                  ledgerRoomId: vendorRooms.ledgerRoomId,
+                  announceRoomId: vendorRooms.announceRoomId ?? null,
+                  customerMessagesRoomId: vendorRooms.customerMessagesRoomId ?? null,
+              }
+            : null,
+        orders,
+        orderCount: orders.length,
+        earnings,
+        // Order amounts/status live in FBM; navigate to the rooms above for detail.
+        note: 'Order amounts and fulfilment status are pushed into the FBM bridge rooms.',
+    });
 });
 
 creator.post('/listings', async (c) => {

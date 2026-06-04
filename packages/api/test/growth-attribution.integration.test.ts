@@ -25,6 +25,7 @@ const {
     referralService,
     ambassadorService,
     questsService,
+    bountyRewardService,
     resetGrowthForTest,
 } = await import('../src/services/growth');
 const { resetMarketplaceEntitlementsForTest } = await import(
@@ -53,7 +54,11 @@ function signWebhook(rawBody: string): string {
 
 interface AttributionEventOptions {
     eventId: string;
-    type: 'referral.attributed' | 'ambassador.commission_paid' | 'quest.reward_settled';
+    type:
+        | 'referral.attributed'
+        | 'ambassador.commission_paid'
+        | 'quest.reward_settled'
+        | 'bounty.reward_settled';
     userId: string;
     metadata: Record<string, unknown>;
     occurredAt?: string;
@@ -211,6 +216,51 @@ test('quest.reward_settled creates a quest_reward tip and links the completion',
         .listCompletionsForUser('quester-1')
         .find((c) => c.id === completion.id);
     assert.equal(settled?.rewardTipId, tip!.id);
+});
+
+test('bounty.reward_settled creates a bounty_reward tip and settles the reward', async () => {
+    resetForEachTest();
+    ensureUser('bounty-poster-1', 'bountyposter');
+    ensureUser('bounty-winner-1', 'bountywinner');
+
+    const reward = bountyRewardService.record({
+        bountyId: 'bounty-xyz',
+        beneficiaryId: 'bounty-winner-1',
+        posterId: 'bounty-poster-1',
+        rewardType: 'store_credit',
+        rewardSummary: '$5 store credit',
+        rewardCents: 500,
+    });
+    assert.equal(reward.status, 'earned');
+
+    const eventId = 'evt-bounty-1';
+    const body = attributionEventBody({
+        eventId,
+        type: 'bounty.reward_settled',
+        userId: 'bounty-winner-1',
+        metadata: {
+            bountyId: 'bounty-xyz',
+            grossCents: 500,
+            currency: 'USD',
+            fbmOrderId: 'fbm-bounty-1',
+        },
+    });
+    const response = await postWebhook(eventId, body);
+    assert.equal(response.status, 200);
+
+    const tips = listTipsReceivedBy('bounty-winner-1');
+    assert.equal(tips.length, 1);
+    const [tip] = tips;
+    assert.equal(tip!.contextKind, 'bounty_reward');
+    assert.equal(tip!.status, 'captured');
+    assert.equal(tip!.grossCents, 500);
+    assert.equal(tip!.metadata?.['bountyId'], 'bounty-xyz');
+    assert.equal(tip!.metadata?.['posterId'], 'bounty-poster-1');
+
+    const settled = bountyRewardService.get('bounty-xyz');
+    assert.equal(settled?.status, 'settled');
+    assert.equal(settled?.settledRef, tip!.id);
+    assert.equal(settled?.settledAt, '2026-05-06T12:00:00.000Z');
 });
 
 test('flag off: dispatcher acks event but skips side-effects', async () => {

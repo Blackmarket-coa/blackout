@@ -2,6 +2,7 @@ import type {
   AidPost,
   Bounty,
   BountyApplication,
+  BountyRewardType,
   CoalitionEvent,
   CoalitionFeedItem,
   CoalitionRing,
@@ -1212,7 +1213,8 @@ export type TipContextKind =
   | 'aid_pool'
   | 'referral_bonus'
   | 'ambassador_commission'
-  | 'quest_reward';
+  | 'quest_reward'
+  | 'bounty_reward';
 
 export type TipStatus = 'pending' | 'captured' | 'refunded' | 'failed';
 
@@ -1235,6 +1237,115 @@ export interface TipRecord {
   capturedAt: string | null;
   refundedAt: string | null;
   metadata?: Record<string, unknown>;
+}
+
+// ---------------------------------------------------------------- Growth ledger
+// Durable counterparts to the growth-engine primitives that previously lived as
+// in-process Maps in `services/growth.ts`. Persisted through `db/store.ts` exactly
+// like `TipRecord`, so referral/ambassador/quest/bounty-reward attribution — the
+// backbone of the creator-driven-sales KPI — survives a restart.
+
+export type ReferralSourceKind =
+  | 'invite_link'
+  | 'ambassador'
+  | 'migration_campaign'
+  | 'creator_invite'
+  | 'coalition';
+
+export type ReferralStatus = 'pending' | 'attributed' | 'settled' | 'voided';
+
+export interface ReferralRecord {
+  id: string;
+  referrerUserId: string;
+  refereeUserId: string;
+  sourceKind: ReferralSourceKind;
+  sourceRef: string | null;
+  status: ReferralStatus;
+  rewardTipId: string | null;
+  rewardCents: number | null;
+  attributedAt: string;
+  settledAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type AmbassadorTier = 'seedling' | 'sapling' | 'canopy' | 'elder';
+export type AmbassadorStatus = 'pending' | 'active' | 'paused' | 'archived';
+
+export interface AmbassadorRecord {
+  id: string;
+  userId: string;
+  tier: AmbassadorTier;
+  commissionBps: number;
+  quotaCanopiesActive: number;
+  status: AmbassadorStatus;
+  startedAt: string;
+  lastReviewedAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type QuestSourceKind = 'system' | 'canopy' | 'creator';
+export type QuestRewardKind = 'tip' | 'fbm_credit';
+
+export interface QuestDefinitionRecord {
+  id: string;
+  sourceKind: QuestSourceKind;
+  sourceRef: string | null;
+  title: string;
+  description: string;
+  rewardKind: QuestRewardKind;
+  rewardCents: number;
+  startsAt: string | null;
+  endsAt: string | null;
+  criteria: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** A quest completion. Keyed in-memory by `${questId}::${userId}`. */
+export interface QuestCompletionRecord {
+  id: string;
+  questId: string;
+  userId: string;
+  rewardTipId: string | null;
+  completedAt: string;
+}
+
+export type MigrationCreditSourceKind =
+  | 'discord_migration'
+  | 'twitch_migration'
+  | 'creator_invite'
+  | 'campaign';
+
+export interface MigrationCreditRecord {
+  id: string;
+  userId: string;
+  fbmCreditId: string | null;
+  sourceKind: MigrationCreditSourceKind;
+  sourceHandle: string | null;
+  valueCents: number;
+  currency: string;
+  grantedAt: string;
+  redeemedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type BountyRewardStatus = 'earned' | 'settled' | 'voided';
+
+export interface BountyRewardRecord {
+  id: string;
+  bountyId: string;
+  beneficiaryId: string;
+  posterId: string;
+  rewardType: BountyRewardType;
+  rewardSummary: string;
+  rewardCents: number | null;
+  status: BountyRewardStatus;
+  earnedAt: string;
+  settledAt: string | null;
+  settledRef: string | null;
 }
 
 /** A pin on the Coalition spatial map (events, dens, streams, aid, vendors, …). */

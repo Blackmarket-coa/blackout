@@ -308,4 +308,20 @@ export const invitationsMatrixMintFailuresTotal = new Counter(
   ['reason'],
 );
 
+// The single KPI: sales that happened because a creator / coalition / bounty /
+// referral generated them. Incremented when a growth-attribution reward tip is
+// captured (see services/marketplaceWebhook.ts). `gmv_cents` is a sum, exposed
+// as a monotonic counter so a rate()/increase() query yields period GMV.
+export const creatorDrivenSalesTotal = new Counter(
+  'creator_driven_sales_total',
+  'Count of creator-attributed sales (settled growth-attribution reward tips), by attribution kind.',
+  ['attribution_kind'],
+);
+
+export const creatorDrivenGmvCentsTotal = new Counter(
+  'creator_driven_gmv_cents_total',
+  'Gross merchandise value (gross cents) of creator-attributed sales, by attribution kind.',
+  ['attribution_kind'],
+);
+
 export const __test__ = { Registry };

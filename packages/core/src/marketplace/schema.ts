@@ -64,6 +64,7 @@ const lifecycleEventTypes: LifecycleEventType[] = [
     'referral.attributed',
     'ambassador.commission_paid',
     'quest.reward_settled',
+    'bounty.reward_settled',
 ];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
