@@ -176,3 +176,40 @@ export const redeemMigrationCredit = (
         undefined,
         token
     );
+
+// ---------------------------------------------------------------- Creator-driven sales (KPI)
+
+export type CreatorDrivenAttributionKind =
+    | 'referral_bonus'
+    | 'ambassador_commission'
+    | 'quest_reward'
+    | 'bounty_reward';
+
+export interface CreatorDrivenSalesBucket {
+    count: number;
+    gmvCents: number;
+    feeCents: number;
+    netCents: number;
+}
+
+export interface CreatorDrivenSalesSummary {
+    beneficiaryUserId: string;
+    total: CreatorDrivenSalesBucket;
+    byKind: Record<CreatorDrivenAttributionKind, CreatorDrivenSalesBucket>;
+    sinceIso: string | null;
+    generatedAt: string;
+}
+
+/**
+ * The single KPI for the signed-in creator: sales that happened because they
+ * referred, ambassador-drove, quest, or won a bounty. The endpoint returns the
+ * summary object directly (count + GMV + fee + net, total and by attribution
+ * kind). Optional `sinceIso` scopes to a window (e.g. month-to-date).
+ */
+export const fetchCreatorDrivenSales = (
+    options: { sinceIso?: string } = {},
+    token: string | null = readBlackoutApiToken()
+): Promise<CreatorDrivenSalesSummary> => {
+    const query = options.sinceIso ? `?since=${encodeURIComponent(options.sinceIso)}` : '';
+    return callJson('GET', `${GROWTH_BASE}/creator-driven-sales${query}`, undefined, token);
+};

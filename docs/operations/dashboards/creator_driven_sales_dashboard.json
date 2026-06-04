@@ -1,0 +1,10 @@
+{
+  "title": "Creator-Driven Sales — Growth Attribution KPI",
+  "version": 1,
+  "panels": [
+    { "id": "creator_driven_sales_rate", "metric": "sum by (attribution_kind) (rate(creator_driven_sales_total[1h]))" },
+    { "id": "creator_driven_sales_cumulative", "metric": "sum by (attribution_kind) (creator_driven_sales_total)" },
+    { "id": "creator_driven_gmv_rate_cents", "metric": "sum by (attribution_kind) (rate(creator_driven_gmv_cents_total[1h]))" },
+    { "id": "creator_driven_gmv_cumulative_cents", "metric": "sum (creator_driven_gmv_cents_total)" }
+  ]
+}
