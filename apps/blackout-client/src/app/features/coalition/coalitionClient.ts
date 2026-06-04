@@ -5,6 +5,12 @@ import type {
     CoalitionKit,
     CoalitionRankingModel,
     CoalitionRing,
+    CoalitionNeed,
+    CoalitionProject,
+    CoalitionResource,
+    NeedStatus,
+    ProjectStatus,
+    ResourceAvailability,
     CoalitionTabId,
     CoalitionTask,
     RingInvitation,
@@ -197,6 +203,129 @@ export function updateCoalitionTaskStatus(
     return patchJson<{ task: CoalitionTask }>(
         `${COALITION_BASE}/tasks/${encodeURIComponent(id)}`,
         { status },
+        token
+    );
+}
+
+// --- coalition needs board ---
+
+export interface NeedsResponse {
+    needs: CoalitionNeed[];
+}
+
+export interface CreateNeedInput {
+    canopyId: string;
+    kind: string;
+    title: string;
+    description?: string;
+}
+
+export function fetchCoalitionNeeds(
+    scope: CoalitionScopeQuery,
+    token: string | null = readBlackoutApiToken()
+): Promise<NeedsResponse> {
+    const path = appendQuery(`${COALITION_BASE}/needs`, { canopyId: scope.canopyId });
+    return getJson<NeedsResponse>(path, token);
+}
+
+export function createCoalitionNeed(
+    input: CreateNeedInput,
+    token: string | null = readBlackoutApiToken()
+): Promise<{ need: CoalitionNeed }> {
+    return postJson<{ need: CoalitionNeed }>(`${COALITION_BASE}/needs`, input, token);
+}
+
+export function updateCoalitionNeed(
+    id: string,
+    patch: { status?: NeedStatus; fulfilledByListingId?: string },
+    token: string | null = readBlackoutApiToken()
+): Promise<{ need: CoalitionNeed }> {
+    return patchJson<{ need: CoalitionNeed }>(
+        `${COALITION_BASE}/needs/${encodeURIComponent(id)}`,
+        patch,
+        token
+    );
+}
+
+// --- coalition projects ---
+
+export interface ProjectsResponse {
+    projects: CoalitionProject[];
+}
+
+export interface CreateProjectInput {
+    canopyId: string;
+    title: string;
+    category: string;
+    description?: string;
+    proposalEventId?: string;
+}
+
+export function fetchCoalitionProjects(
+    scope: CoalitionScopeQuery,
+    token: string | null = readBlackoutApiToken()
+): Promise<ProjectsResponse> {
+    const path = appendQuery(`${COALITION_BASE}/projects`, { canopyId: scope.canopyId });
+    return getJson<ProjectsResponse>(path, token);
+}
+
+export function createCoalitionProject(
+    input: CreateProjectInput,
+    token: string | null = readBlackoutApiToken()
+): Promise<{ project: CoalitionProject }> {
+    return postJson<{ project: CoalitionProject }>(`${COALITION_BASE}/projects`, input, token);
+}
+
+export function updateCoalitionProjectStatus(
+    id: string,
+    status: ProjectStatus,
+    token: string | null = readBlackoutApiToken()
+): Promise<{ project: CoalitionProject }> {
+    return patchJson<{ project: CoalitionProject }>(
+        `${COALITION_BASE}/projects/${encodeURIComponent(id)}`,
+        { status },
+        token
+    );
+}
+
+// --- coalition resource registry ---
+
+export interface ResourcesResponse {
+    resources: CoalitionResource[];
+}
+
+export interface CreateResourceInput {
+    canopyId: string;
+    name: string;
+    kind: string;
+    description?: string;
+    availability?: ResourceAvailability;
+    location?: string;
+}
+
+export function fetchCoalitionResources(
+    scope: CoalitionScopeQuery,
+    token: string | null = readBlackoutApiToken()
+): Promise<ResourcesResponse> {
+    const path = appendQuery(`${COALITION_BASE}/resources`, { canopyId: scope.canopyId });
+    return getJson<ResourcesResponse>(path, token);
+}
+
+export function createCoalitionResource(
+    input: CreateResourceInput,
+    token: string | null = readBlackoutApiToken()
+): Promise<{ resource: CoalitionResource }> {
+    return postJson<{ resource: CoalitionResource }>(`${COALITION_BASE}/resources`, input, token);
+}
+
+export function updateCoalitionResourceAvailability(
+    id: string,
+    availability: ResourceAvailability,
+    token: string | null = readBlackoutApiToken()
+): Promise<{ resource: CoalitionResource }> {
+    return patchJson<{ resource: CoalitionResource }>(
+        `${COALITION_BASE}/resources/${encodeURIComponent(id)}`,
+        { availability },
         token
     );
 }

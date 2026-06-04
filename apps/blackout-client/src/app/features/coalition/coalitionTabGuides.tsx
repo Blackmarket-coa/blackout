@@ -40,6 +40,24 @@ export const COALITION_TAB_GUIDES: Record<CoalitionTabId, ReactNode> = {
             done.
         </>
     ),
+    needs: (
+        <>
+            What this coalition is looking for — compost, seedlings, a creator, a developer. Post a
+            need and mark it fulfilled when the community comes through.
+        </>
+    ),
+    projects: (
+        <>
+            Concrete initiatives the coalition is building — gardens, tool libraries, food and
+            open-source projects. Launch one and move it from proposed to complete.
+        </>
+    ),
+    resources: (
+        <>
+            Shared gear the coalition can offer — greenhouses, CNC machines, 3D printers, kitchens,
+            tools. Register a resource and keep its availability current.
+        </>
+    ),
     kits: <>Set up your space in one tap with a ready-made bundle of tabs and tools.</>,
     documents: <>Shared files and pinned references for this den, kept in one place.</>,
     ai: <>AI helpers for this den — summaries, drafting, and other assistive tools.</>,

@@ -3,6 +3,9 @@ import type { CoalitionFeedItem, CoalitionRankingModel } from '@blackout/core';
 import {
     fetchCoalitionEvents,
     fetchCoalitionFeed,
+    fetchCoalitionNeeds,
+    fetchCoalitionProjects,
+    fetchCoalitionResources,
     fetchCoalitionTasks,
     fetchKits,
     fetchMutualAid,
@@ -14,6 +17,9 @@ import {
     type CoalitionScopeQuery,
     type EventsResponse,
     type MutualAidResponse,
+    type NeedsResponse,
+    type ProjectsResponse,
+    type ResourcesResponse,
     type NearbyQuery,
     type RingView,
     type SellerLocationsResponse,
@@ -65,19 +71,26 @@ export type { CoalitionScopeQuery } from '../coalitionClient';
 
 export function useCoalitionFeed(
     scope: CoalitionScopeQuery,
-    options: { kind?: CoalitionFeedItem['kind']; model?: CoalitionRankingModel; limit?: number } = {},
+    options: {
+        kind?: CoalitionFeedItem['kind'];
+        model?: CoalitionRankingModel;
+        limit?: number;
+    } = {}
 ) {
     return useAsync<CoalitionFeedResponse>(
         () => fetchCoalitionFeed(scope, options),
-        [scope.canopyId, scope.denId, options.kind, options.model, options.limit],
+        [scope.canopyId, scope.denId, options.kind, options.model, options.limit]
     );
 }
 
 export function useSpatialFeed(scope: CoalitionScopeQuery, layers?: string[]) {
-    const layersKey = useMemo(() => (layers && layers.length > 0 ? layers.join(',') : ''), [layers]);
+    const layersKey = useMemo(
+        () => (layers && layers.length > 0 ? layers.join(',') : ''),
+        [layers]
+    );
     return useAsync<SpatialFeedResponse>(
         () => fetchSpatialFeed(scope, layers),
-        [scope.canopyId, layersKey],
+        [scope.canopyId, layersKey]
     );
 }
 
@@ -87,14 +100,14 @@ const nearbyKey = (nearby?: NearbyQuery): string =>
 export function useMutualAid(scope: CoalitionScopeQuery, nearby?: NearbyQuery) {
     return useAsync<MutualAidResponse>(
         () => fetchMutualAid(scope, nearby),
-        [scope.denId, nearbyKey(nearby)],
+        [scope.denId, nearbyKey(nearby)]
     );
 }
 
 export function useSellerLocations(nearby?: NearbyQuery) {
     return useAsync<SellerLocationsResponse>(
         () => fetchSellerLocations(nearby),
-        [nearbyKey(nearby)],
+        [nearbyKey(nearby)]
     );
 }
 
@@ -102,8 +115,23 @@ export function useCoalitionTasks(scope: CoalitionScopeQuery) {
     return useAsync<TasksResponse>(() => fetchCoalitionTasks(scope), [scope.denId]);
 }
 
+export function useCoalitionNeeds(scope: CoalitionScopeQuery) {
+    return useAsync<NeedsResponse>(() => fetchCoalitionNeeds(scope), [scope.canopyId]);
+}
+
+export function useCoalitionProjects(scope: CoalitionScopeQuery) {
+    return useAsync<ProjectsResponse>(() => fetchCoalitionProjects(scope), [scope.canopyId]);
+}
+
+export function useCoalitionResources(scope: CoalitionScopeQuery) {
+    return useAsync<ResourcesResponse>(() => fetchCoalitionResources(scope), [scope.canopyId]);
+}
+
 export function useCoalitionEvents(scope: CoalitionScopeQuery) {
-    return useAsync<EventsResponse>(() => fetchCoalitionEvents(scope), [scope.canopyId, scope.denId]);
+    return useAsync<EventsResponse>(
+        () => fetchCoalitionEvents(scope),
+        [scope.canopyId, scope.denId]
+    );
 }
 
 export function useCoalitionRings(memberId?: string) {

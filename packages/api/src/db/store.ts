@@ -83,6 +83,9 @@ import type {
   RingInvitationRecord,
   CoalitionKitApplicationRecord,
   CoalitionTaskRecord,
+  CoalitionNeedRecord,
+  CoalitionProjectRecord,
+  CoalitionResourceRecord,
   BountyRecord,
   BountyApplicationRecord,
   SellerLocationRecord,
@@ -201,6 +204,9 @@ type PersistedState = {
   ringInvitations: RingInvitationRecord[];
   coalitionKitApplications: CoalitionKitApplicationRecord[];
   coalitionTasks: CoalitionTaskRecord[];
+  coalitionNeeds: CoalitionNeedRecord[];
+  coalitionProjects: CoalitionProjectRecord[];
+  coalitionResources: CoalitionResourceRecord[];
   sellerLocations: SellerLocationRecord[];
   coalitionFeedItems: CoalitionFeedItemRecord[];
   pluginInstallations: PluginInstallationRecord[];
@@ -348,6 +354,12 @@ class InMemoryDb {
   coalitionTasks = new Map<string, CoalitionTaskRecord>(
     COALITION_TASK_SEED.map((row) => [row.id, row]),
   );
+  /** Coalition Needs Board posts, keyed by need id. */
+  coalitionNeeds = new Map<string, CoalitionNeedRecord>();
+  /** Coalition projects, keyed by project id. */
+  coalitionProjects = new Map<string, CoalitionProjectRecord>();
+  /** Coalition shared resources, keyed by resource id. */
+  coalitionResources = new Map<string, CoalitionResourceRecord>();
   /** Ecosystem bounties, keyed by bounty id. */
   bounties = new Map<string, BountyRecord>();
   /** Bounty applications (producer↔creator matching), keyed by application id. */
@@ -2967,6 +2979,102 @@ class InMemoryDb {
     return record;
   }
 
+  // --- coalition needs board ---
+
+  listCoalitionNeeds(filter: { canopyId?: string } = {}): CoalitionNeedRecord[] {
+    return [...this.coalitionNeeds.values()].filter((need) =>
+      filter.canopyId ? need.canopyId === filter.canopyId : true,
+    );
+  }
+
+  createCoalitionNeed(
+    input: Omit<CoalitionNeedRecord, 'status' | 'createdAt' | 'updatedAt'>,
+  ): CoalitionNeedRecord {
+    const now = nowIso();
+    const record: CoalitionNeedRecord = { ...input, status: 'open', createdAt: now, updatedAt: now };
+    this.coalitionNeeds.set(record.id, record);
+    return record;
+  }
+
+  updateCoalitionNeed(
+    id: string,
+    patch: Partial<Pick<CoalitionNeedRecord, 'status' | 'fulfilledByListingId'>>,
+  ): CoalitionNeedRecord | undefined {
+    const existing = this.coalitionNeeds.get(id);
+    if (!existing) return undefined;
+    const record: CoalitionNeedRecord = { ...existing, ...patch, updatedAt: nowIso() };
+    this.coalitionNeeds.set(id, record);
+    return record;
+  }
+
+  // --- coalition projects ---
+
+  listCoalitionProjects(filter: { canopyId?: string } = {}): CoalitionProjectRecord[] {
+    return [...this.coalitionProjects.values()].filter((project) =>
+      filter.canopyId ? project.canopyId === filter.canopyId : true,
+    );
+  }
+
+  createCoalitionProject(
+    input: Omit<CoalitionProjectRecord, 'status' | 'createdAt' | 'updatedAt'>,
+  ): CoalitionProjectRecord {
+    const now = nowIso();
+    const record: CoalitionProjectRecord = {
+      ...input,
+      status: 'proposed',
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.coalitionProjects.set(record.id, record);
+    return record;
+  }
+
+  updateCoalitionProjectStatus(
+    id: string,
+    status: CoalitionProjectRecord['status'],
+  ): CoalitionProjectRecord | undefined {
+    const existing = this.coalitionProjects.get(id);
+    if (!existing) return undefined;
+    const record: CoalitionProjectRecord = { ...existing, status, updatedAt: nowIso() };
+    this.coalitionProjects.set(id, record);
+    return record;
+  }
+
+  // --- coalition resource registry ---
+
+  listCoalitionResources(filter: { canopyId?: string } = {}): CoalitionResourceRecord[] {
+    return [...this.coalitionResources.values()].filter((resource) =>
+      filter.canopyId ? resource.canopyId === filter.canopyId : true,
+    );
+  }
+
+  createCoalitionResource(
+    input: Omit<CoalitionResourceRecord, 'availability' | 'createdAt' | 'updatedAt'> & {
+      availability?: CoalitionResourceRecord['availability'];
+    },
+  ): CoalitionResourceRecord {
+    const now = nowIso();
+    const record: CoalitionResourceRecord = {
+      ...input,
+      availability: input.availability ?? 'available',
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.coalitionResources.set(record.id, record);
+    return record;
+  }
+
+  updateCoalitionResourceAvailability(
+    id: string,
+    availability: CoalitionResourceRecord['availability'],
+  ): CoalitionResourceRecord | undefined {
+    const existing = this.coalitionResources.get(id);
+    if (!existing) return undefined;
+    const record: CoalitionResourceRecord = { ...existing, availability, updatedAt: nowIso() };
+    this.coalitionResources.set(id, record);
+    return record;
+  }
+
   // --- ecosystem bounties ---
 
   listBounties(
@@ -3654,6 +3762,15 @@ export class FileBackedDb extends InMemoryDb {
     if (parsed.coalitionTasks) {
       this.coalitionTasks = new Map(parsed.coalitionTasks.map((row) => [row.id, row]));
     }
+    if (parsed.coalitionNeeds) {
+      this.coalitionNeeds = new Map(parsed.coalitionNeeds.map((row) => [row.id, row]));
+    }
+    if (parsed.coalitionProjects) {
+      this.coalitionProjects = new Map(parsed.coalitionProjects.map((row) => [row.id, row]));
+    }
+    if (parsed.coalitionResources) {
+      this.coalitionResources = new Map(parsed.coalitionResources.map((row) => [row.id, row]));
+    }
     if (parsed.sellerLocations) {
       this.sellerLocations = new Map(parsed.sellerLocations.map((row) => [row.id, row]));
     }
@@ -3781,6 +3898,9 @@ export class FileBackedDb extends InMemoryDb {
       ringInvitations: [...this.ringInvitations.values()],
       coalitionKitApplications: [...this.coalitionKitApplications.values()],
       coalitionTasks: [...this.coalitionTasks.values()],
+      coalitionNeeds: [...this.coalitionNeeds.values()],
+      coalitionProjects: [...this.coalitionProjects.values()],
+      coalitionResources: [...this.coalitionResources.values()],
       sellerLocations: [...this.sellerLocations.values()],
       coalitionFeedItems: [...this.coalitionFeedItems.values()],
       pluginInstallations: [...this.pluginInstallations.values()],
@@ -4873,6 +4993,59 @@ export class FileBackedDb extends InMemoryDb {
     status: CoalitionTaskRecord['status'],
   ): CoalitionTaskRecord | undefined {
     const updated = super.updateCoalitionTaskStatus(id, status);
+    if (updated) this.persist();
+    return updated;
+  }
+
+  override createCoalitionNeed(
+    input: Omit<CoalitionNeedRecord, 'status' | 'createdAt' | 'updatedAt'>,
+  ): CoalitionNeedRecord {
+    const created = super.createCoalitionNeed(input);
+    this.persist();
+    return created;
+  }
+
+  override updateCoalitionNeed(
+    id: string,
+    patch: Partial<Pick<CoalitionNeedRecord, 'status' | 'fulfilledByListingId'>>,
+  ): CoalitionNeedRecord | undefined {
+    const updated = super.updateCoalitionNeed(id, patch);
+    if (updated) this.persist();
+    return updated;
+  }
+
+  override createCoalitionProject(
+    input: Omit<CoalitionProjectRecord, 'status' | 'createdAt' | 'updatedAt'>,
+  ): CoalitionProjectRecord {
+    const created = super.createCoalitionProject(input);
+    this.persist();
+    return created;
+  }
+
+  override updateCoalitionProjectStatus(
+    id: string,
+    status: CoalitionProjectRecord['status'],
+  ): CoalitionProjectRecord | undefined {
+    const updated = super.updateCoalitionProjectStatus(id, status);
+    if (updated) this.persist();
+    return updated;
+  }
+
+  override createCoalitionResource(
+    input: Omit<CoalitionResourceRecord, 'availability' | 'createdAt' | 'updatedAt'> & {
+      availability?: CoalitionResourceRecord['availability'];
+    },
+  ): CoalitionResourceRecord {
+    const created = super.createCoalitionResource(input);
+    this.persist();
+    return created;
+  }
+
+  override updateCoalitionResourceAvailability(
+    id: string,
+    availability: CoalitionResourceRecord['availability'],
+  ): CoalitionResourceRecord | undefined {
+    const updated = super.updateCoalitionResourceAvailability(id, availability);
     if (updated) this.persist();
     return updated;
   }

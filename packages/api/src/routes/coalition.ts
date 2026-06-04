@@ -26,6 +26,9 @@ import {
     rankCoalitionFeed,
     seatsRemaining,
     slotRemaining,
+    NEED_STATUSES,
+    PROJECT_STATUSES,
+    RESOURCE_AVAILABILITY,
 } from '@blackout/core';
 import {
     createAidPost,
@@ -69,6 +72,18 @@ import {
     saveRsvp,
     saveVolunteerSignup,
     saveVolunteerSlot,
+    createNeed,
+    listNeeds,
+    newNeedId,
+    updateNeed,
+    createProject,
+    listProjects,
+    newProjectId,
+    updateProjectStatus,
+    createResource,
+    listResources,
+    newResourceId,
+    updateResourceAvailability,
 } from '../services/coalitionStore';
 import { createTask, listTasks, newTaskId, updateTaskStatus } from '../services/taskStore';
 import { authorizeScope, installPluginAtScope } from '../services/pluginInstallations';
@@ -255,6 +270,151 @@ coalition.patch('/tasks/:id', async (c) => {
         return c.json({ code: 'not_found', message: 'Task not found' }, 404);
     }
     return c.json({ task });
+});
+
+// --- Coalition Needs Board ---
+
+coalition.get('/needs', (c) => {
+    const canopyId = c.req.query('canopyId');
+    return c.json({ needs: listNeeds({ canopyId }) });
+});
+
+const createNeedSchema = z.object({
+    canopyId: z.string().min(1),
+    kind: z.string().min(1).max(64),
+    title: z.string().min(1).max(200),
+    description: z.string().max(2000).optional(),
+});
+
+coalition.post('/needs', async (c) => {
+    const user = requireUser(c, 'Sign in to post a need');
+    if (user instanceof Response) return user;
+    const parsed = await readJsonBody(c, createNeedSchema);
+    if (parsed instanceof Response) return parsed;
+    const need = createNeed({
+        id: newNeedId(),
+        canopyId: parsed.canopyId,
+        kind: parsed.kind,
+        title: parsed.title,
+        description: parsed.description,
+        authorId: user.sub,
+    });
+    return c.json({ need }, 201);
+});
+
+const updateNeedSchema = z.object({
+    status: z.enum(NEED_STATUSES).optional(),
+    fulfilledByListingId: z.string().max(256).optional(),
+});
+
+coalition.patch('/needs/:id', async (c) => {
+    const user = requireUser(c, 'Sign in to update a need');
+    if (user instanceof Response) return user;
+    const parsed = await readJsonBody(c, updateNeedSchema);
+    if (parsed instanceof Response) return parsed;
+    const need = updateNeed(c.req.param('id'), parsed);
+    if (!need) {
+        return c.json({ code: 'not_found', message: 'Need not found' }, 404);
+    }
+    return c.json({ need });
+});
+
+// --- Coalition projects ---
+
+coalition.get('/projects', (c) => {
+    const canopyId = c.req.query('canopyId');
+    return c.json({ projects: listProjects({ canopyId }) });
+});
+
+const createProjectSchema = z.object({
+    canopyId: z.string().min(1),
+    title: z.string().min(1).max(200),
+    category: z.string().min(1).max(64),
+    description: z.string().max(2000).optional(),
+    proposalEventId: z.string().optional(),
+});
+
+coalition.post('/projects', async (c) => {
+    const user = requireUser(c, 'Sign in to launch a project');
+    if (user instanceof Response) return user;
+    const parsed = await readJsonBody(c, createProjectSchema);
+    if (parsed instanceof Response) return parsed;
+    const project = createProject({
+        id: newProjectId(),
+        canopyId: parsed.canopyId,
+        title: parsed.title,
+        category: parsed.category,
+        description: parsed.description,
+        leadId: user.sub,
+        proposalEventId: parsed.proposalEventId,
+    });
+    return c.json({ project }, 201);
+});
+
+const updateProjectSchema = z.object({
+    status: z.enum(PROJECT_STATUSES),
+});
+
+coalition.patch('/projects/:id', async (c) => {
+    const user = requireUser(c, 'Sign in to update a project');
+    if (user instanceof Response) return user;
+    const parsed = await readJsonBody(c, updateProjectSchema);
+    if (parsed instanceof Response) return parsed;
+    const project = updateProjectStatus(c.req.param('id'), parsed.status);
+    if (!project) {
+        return c.json({ code: 'not_found', message: 'Project not found' }, 404);
+    }
+    return c.json({ project });
+});
+
+// --- Coalition Resource Registry ---
+
+coalition.get('/resources', (c) => {
+    const canopyId = c.req.query('canopyId');
+    return c.json({ resources: listResources({ canopyId }) });
+});
+
+const createResourceSchema = z.object({
+    canopyId: z.string().min(1),
+    name: z.string().min(1).max(200),
+    kind: z.string().min(1).max(64),
+    description: z.string().max(2000).optional(),
+    availability: z.enum(RESOURCE_AVAILABILITY).optional(),
+    location: z.string().max(256).optional(),
+});
+
+coalition.post('/resources', async (c) => {
+    const user = requireUser(c, 'Sign in to register a resource');
+    if (user instanceof Response) return user;
+    const parsed = await readJsonBody(c, createResourceSchema);
+    if (parsed instanceof Response) return parsed;
+    const resource = createResource({
+        id: newResourceId(),
+        canopyId: parsed.canopyId,
+        name: parsed.name,
+        kind: parsed.kind,
+        description: parsed.description,
+        availability: parsed.availability,
+        stewardId: user.sub,
+        location: parsed.location,
+    });
+    return c.json({ resource }, 201);
+});
+
+const updateResourceSchema = z.object({
+    availability: z.enum(RESOURCE_AVAILABILITY),
+});
+
+coalition.patch('/resources/:id', async (c) => {
+    const user = requireUser(c, 'Sign in to update a resource');
+    if (user instanceof Response) return user;
+    const parsed = await readJsonBody(c, updateResourceSchema);
+    if (parsed instanceof Response) return parsed;
+    const resource = updateResourceAvailability(c.req.param('id'), parsed.availability);
+    if (!resource) {
+        return c.json({ code: 'not_found', message: 'Resource not found' }, 404);
+    }
+    return c.json({ resource });
 });
 
 // --- Coalition events (gatherings) ---

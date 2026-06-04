@@ -14,6 +14,9 @@ import RingsTab from './tabs/RingsTab';
 import KitsTab from './tabs/KitsTab';
 import ShopTab from './tabs/ShopTab';
 import TasksTab from './tabs/TasksTab';
+import NeedsTab from './tabs/NeedsTab';
+import ProjectsTab from './tabs/ProjectsTab';
+import ResourcesTab from './tabs/ResourcesTab';
 import { DocumentsTab } from '../documents/DocumentsTab';
 import AiDenPanel from '../aiden/AiDenPanel';
 
@@ -99,6 +102,9 @@ export function CoalitionView({
                 {activeTab === 'rings' ? <RingsTab /> : null}
                 {activeTab === 'shop' ? <ShopTab scope={scope} /> : null}
                 {activeTab === 'tasks' ? <TasksTab scope={scope} /> : null}
+                {activeTab === 'needs' ? <NeedsTab scope={scope} /> : null}
+                {activeTab === 'projects' ? <ProjectsTab scope={scope} /> : null}
+                {activeTab === 'resources' ? <ResourcesTab scope={scope} /> : null}
                 {activeTab === 'kits' ? <KitsTab scope={scope} /> : null}
                 {activeTab === 'documents' && denId ? <DocumentsTab roomId={denId} /> : null}
                 {activeTab === 'ai' ? (

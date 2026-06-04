@@ -5,6 +5,9 @@ import type {
   BountyRewardType,
   CoalitionEvent,
   CoalitionFeedItem,
+  CoalitionNeed,
+  CoalitionProject,
+  CoalitionResource,
   CoalitionRing,
   CoalitionTask,
   EventRsvp,
@@ -1425,6 +1428,15 @@ export interface CoalitionKitApplicationRecord {
 
 /** A Coalition den task. CoalitionTask already carries createdAt/updatedAt. */
 export type CoalitionTaskRecord = CoalitionTask;
+
+/** A Coalition Needs Board post. CoalitionNeed carries createdAt/updatedAt. */
+export type CoalitionNeedRecord = CoalitionNeed;
+
+/** A Coalition project. CoalitionProject carries createdAt/updatedAt. */
+export type CoalitionProjectRecord = CoalitionProject;
+
+/** A Coalition shared resource. CoalitionResource carries createdAt/updatedAt. */
+export type CoalitionResourceRecord = CoalitionResource;
 
 /** An ecosystem bounty. Bounty already carries createdAt/updatedAt. */
 export type BountyRecord = Bounty;

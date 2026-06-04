@@ -4,7 +4,7 @@ import { COALITION_TABS, type CoalitionTabId, DEFAULT_COALITION_TAB } from '@bla
 
 export const coalitionTabAtom = atomWithStorage<CoalitionTabId>(
     'bmc-coalition-tab',
-    DEFAULT_COALITION_TAB,
+    DEFAULT_COALITION_TAB
 );
 
 export interface CoalitionScope {
@@ -23,6 +23,9 @@ export const COALITION_TAB_LABELS: Record<CoalitionTabId, string> = {
     rings: 'Rings',
     shop: 'Shop',
     tasks: 'Tasks',
+    needs: 'Needs',
+    projects: 'Projects',
+    resources: 'Resources',
     kits: 'Kits',
     documents: 'Documents',
     ai: 'AI',
@@ -31,5 +34,5 @@ export const COALITION_TAB_LABELS: Record<CoalitionTabId, string> = {
 // `ai` is excluded from the default order; it surfaces only for AI-type dens,
 // appended by CoalitionView.
 export const COALITION_TAB_ORDER: CoalitionTabId[] = [...COALITION_TABS].filter(
-    (tab) => tab !== 'ai',
+    (tab) => tab !== 'ai'
 );

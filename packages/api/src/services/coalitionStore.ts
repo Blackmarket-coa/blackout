@@ -276,3 +276,54 @@ export function newKitApplicationId(): string {
 export function nowIso(): string {
     return NOW_ISO();
 }
+
+// --- coalition needs board ---
+
+export function listNeeds(filter: { canopyId?: string } = {}) {
+    return db.listCoalitionNeeds(filter);
+}
+export function createNeed(input: Parameters<typeof db.createCoalitionNeed>[0]) {
+    return db.createCoalitionNeed(input);
+}
+export function updateNeed(id: string, patch: Parameters<typeof db.updateCoalitionNeed>[1]) {
+    return db.updateCoalitionNeed(id, patch) ?? null;
+}
+export function newNeedId(): string {
+    return `need_${rand()}`;
+}
+
+// --- coalition projects ---
+
+export function listProjects(filter: { canopyId?: string } = {}) {
+    return db.listCoalitionProjects(filter);
+}
+export function createProject(input: Parameters<typeof db.createCoalitionProject>[0]) {
+    return db.createCoalitionProject(input);
+}
+export function updateProjectStatus(
+    id: string,
+    status: Parameters<typeof db.updateCoalitionProjectStatus>[1],
+) {
+    return db.updateCoalitionProjectStatus(id, status) ?? null;
+}
+export function newProjectId(): string {
+    return `proj_${rand()}`;
+}
+
+// --- coalition resource registry ---
+
+export function listResources(filter: { canopyId?: string } = {}) {
+    return db.listCoalitionResources(filter);
+}
+export function createResource(input: Parameters<typeof db.createCoalitionResource>[0]) {
+    return db.createCoalitionResource(input);
+}
+export function updateResourceAvailability(
+    id: string,
+    availability: Parameters<typeof db.updateCoalitionResourceAvailability>[1],
+) {
+    return db.updateCoalitionResourceAvailability(id, availability) ?? null;
+}
+export function newResourceId(): string {
+    return `res_${rand()}`;
+}
