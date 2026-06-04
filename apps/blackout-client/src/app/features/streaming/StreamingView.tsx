@@ -50,6 +50,11 @@ const CreatorHubBountyRewards = lazy(() =>
         default: mod.CreatorHubBountyRewards,
     }))
 );
+const CreatorHubCreatorDrivenSales = lazy(() =>
+    import('./sections/CreatorHubCreatorDrivenSales').then((mod) => ({
+        default: mod.CreatorHubCreatorDrivenSales,
+    }))
+);
 
 const contentStyle: CSSProperties = { minHeight: 0, overflow: 'auto' };
 
@@ -132,6 +137,7 @@ export function StreamingView({ initialTab }: StreamingViewProps) {
                         </Suspense>
                         {runtimeFeatureFlags.homeBountyBoard ? (
                             <Suspense fallback={null}>
+                                <CreatorHubCreatorDrivenSales />
                                 <CreatorHubBountyRewards />
                             </Suspense>
                         ) : null}
