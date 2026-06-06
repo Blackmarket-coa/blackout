@@ -21,6 +21,7 @@ import {
   performDiscoveryAction,
   rankDiscoveryItems,
 } from './model';
+import { GlobalSearchPanel } from './GlobalSearchPanel';
 
 const DEFAULT_FILTERS: DiscoveryFilters = {
   type: 'all',
@@ -158,6 +159,7 @@ export function DiscoverySurface({ onSelectRoom, onSelectSpace }: DiscoverySurfa
       <PageContent>
         <PageContentCenter>
           <Box direction="Column" gap="300">
+            <GlobalSearchPanel />
             <Box direction="Column" gap="200">
               <Text size="L400">Filter chips</Text>
               <Box gap="100" wrap="Wrap">
