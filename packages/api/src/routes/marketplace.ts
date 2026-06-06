@@ -28,6 +28,14 @@ import {
 import { dispatchMarketplaceWebhook } from '../services/marketplaceWebhook';
 import { resolveVendorMxid } from '../services/fbmMatrixBridge/identity';
 import { incrementCounter, logEvent } from '../services/marketplaceObservability';
+import {
+    addVersion,
+    listReviews,
+    listVersions,
+    ratingSummary,
+    upsertReview,
+} from '../services/productReviews';
+import { isValidProductRating } from '@blackout/core';
 import { db } from '../db/store';
 import type { MarketplaceProviderIdString } from '../db/types';
 
@@ -176,6 +184,76 @@ marketplace.get('/listings/:providerId/:listingId', async (c) => {
         return c.json({ code: 'listing_not_found', message: 'Listing not found' }, 404);
     }
     return c.json({ listing });
+});
+
+// --- product pages: ratings, reviews, version history ---
+
+marketplace.get('/listings/:providerId/:listingId/reviews', (c) => {
+    const providerId = c.req.param('providerId');
+    const listingId = c.req.param('listingId');
+    if (!isProviderId(providerId)) {
+        return c.json({ code: 'invalid_provider', message: 'Unknown provider id' }, 400);
+    }
+    return c.json({
+        reviews: listReviews(providerId, listingId),
+        summary: ratingSummary(providerId, listingId),
+    });
+});
+
+const reviewSchema = z.object({
+    rating: z.number().int().min(1).max(5),
+    body: z.string().max(4000).optional(),
+});
+
+marketplace.post('/listings/:providerId/:listingId/reviews', async (c) => {
+    const user = requireUser(c, 'Sign in to review a product');
+    if (user instanceof Response) return user;
+    const providerId = c.req.param('providerId');
+    const listingId = c.req.param('listingId');
+    if (!isProviderId(providerId)) {
+        return c.json({ code: 'invalid_provider', message: 'Unknown provider id' }, 400);
+    }
+    const parsed = await readJsonBody(c, reviewSchema);
+    if (parsed instanceof Response) return parsed;
+    if (!isValidProductRating(parsed.rating)) {
+        return c.json({ code: 'invalid_rating', message: 'Rating must be 1–5' }, 400);
+    }
+    const review = upsertReview({
+        providerId,
+        listingId,
+        authorId: user.sub,
+        rating: parsed.rating,
+        body: parsed.body,
+    });
+    return c.json({ review, summary: ratingSummary(providerId, listingId) }, 201);
+});
+
+marketplace.get('/listings/:providerId/:listingId/versions', (c) => {
+    const providerId = c.req.param('providerId');
+    const listingId = c.req.param('listingId');
+    if (!isProviderId(providerId)) {
+        return c.json({ code: 'invalid_provider', message: 'Unknown provider id' }, 400);
+    }
+    return c.json({ versions: listVersions(providerId, listingId) });
+});
+
+const versionSchema = z.object({
+    version: z.string().min(1).max(64),
+    notes: z.string().max(4000).optional(),
+});
+
+marketplace.post('/listings/:providerId/:listingId/versions', async (c) => {
+    const user = requireUser(c, 'Sign in to publish a version');
+    if (user instanceof Response) return user;
+    const providerId = c.req.param('providerId');
+    const listingId = c.req.param('listingId');
+    if (!isProviderId(providerId)) {
+        return c.json({ code: 'invalid_provider', message: 'Unknown provider id' }, 400);
+    }
+    const parsed = await readJsonBody(c, versionSchema);
+    if (parsed instanceof Response) return parsed;
+    const version = addVersion({ providerId, listingId, version: parsed.version, notes: parsed.notes });
+    return c.json({ version }, 201);
 });
 
 marketplace.post('/checkout', async (c) => {

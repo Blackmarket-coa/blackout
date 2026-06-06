@@ -8,6 +8,7 @@ import {
 import { readBlackoutApiToken } from './useMarketplaceAuth';
 import { ensureBlackoutApiToken } from '../../../../client/blackoutApiSession';
 import { resolveMarketplaceProvider } from './providerMetadata';
+import { ProductReviewsPanel } from './ProductReviewsPanel';
 
 type FetchAssetFn = (entitlementId: string) => Promise<FulfillmentAsset>;
 
@@ -226,7 +227,12 @@ function LibraryEntitlementRow({
                       : null
               );
 
-    return createElement('li', { style: { display: 'grid', gap: 4 } }, header, action);
+    const reviews = createElement(ProductReviewsPanel, {
+        providerId: entitlement.providerId,
+        listingId: entitlement.providerListingId,
+    });
+
+    return createElement('li', { style: { display: 'grid', gap: 8 } }, header, action, reviews);
 }
 
 export function LibraryView({ entitlements, providers, fetchAsset }: LibraryViewProps): ReactNode {

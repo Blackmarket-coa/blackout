@@ -27,6 +27,8 @@ import type {
   ColiseumLiveSession,
   ColiseumTopic,
   ColiseumVote,
+  ProductReview,
+  ProductVersion,
   ReputationEventType,
   ReputationSubject,
 } from '@blackout/core';
@@ -1445,6 +1447,12 @@ export type CreatorContentRecord = CreatorContent;
 
 /** A content→surface distribution record. ContentDistribution carries createdAt. */
 export type ContentDistributionRecord = ContentDistribution;
+
+/** A marketplace product review. ProductReview carries createdAt/updatedAt. */
+export type ProductReviewRecord = ProductReview;
+
+/** A marketplace product version-history entry. ProductVersion carries releasedAt. */
+export type ProductVersionRecord = ProductVersion;
 
 /** An ecosystem bounty. Bounty already carries createdAt/updatedAt. */
 export type BountyRecord = Bounty;

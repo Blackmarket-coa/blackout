@@ -88,6 +88,8 @@ import type {
   CoalitionResourceRecord,
   CreatorContentRecord,
   ContentDistributionRecord,
+  ProductReviewRecord,
+  ProductVersionRecord,
   BountyRecord,
   BountyApplicationRecord,
   SellerLocationRecord,
@@ -211,6 +213,8 @@ type PersistedState = {
   coalitionResources: CoalitionResourceRecord[];
   creatorContent: CreatorContentRecord[];
   contentDistributions: ContentDistributionRecord[];
+  productReviews: ProductReviewRecord[];
+  productVersions: ProductVersionRecord[];
   sellerLocations: SellerLocationRecord[];
   coalitionFeedItems: CoalitionFeedItemRecord[];
   pluginInstallations: PluginInstallationRecord[];
@@ -368,6 +372,10 @@ class InMemoryDb {
   creatorContent = new Map<string, CreatorContentRecord>();
   /** Content→surface distribution records, keyed by distribution id. */
   contentDistributions = new Map<string, ContentDistributionRecord>();
+  /** Marketplace product reviews, keyed by review id. */
+  productReviews = new Map<string, ProductReviewRecord>();
+  /** Marketplace product version-history entries, keyed by version id. */
+  productVersions = new Map<string, ProductVersionRecord>();
   /** Ecosystem bounties, keyed by bounty id. */
   bounties = new Map<string, BountyRecord>();
   /** Bounty applications (producer↔creator matching), keyed by application id. */
@@ -3154,6 +3162,50 @@ class InMemoryDb {
     return record;
   }
 
+  // --- marketplace product reviews + versions ---
+
+  listProductReviews(filter: { providerId: string; listingId: string }): ProductReviewRecord[] {
+    return [...this.productReviews.values()].filter(
+      (review) =>
+        review.providerId === filter.providerId && review.listingId === filter.listingId,
+    );
+  }
+
+  /**
+   * Upsert a review: one per (provider, listing, author). A repeat review from
+   * the same author updates their existing row (stable id) so the durable
+   * write-through stays an id-keyed upsert.
+   */
+  upsertProductReview(
+    input: Omit<ProductReviewRecord, 'createdAt' | 'updatedAt'>,
+  ): ProductReviewRecord {
+    const now = nowIso();
+    const existing = [...this.productReviews.values()].find(
+      (review) =>
+        review.providerId === input.providerId &&
+        review.listingId === input.listingId &&
+        review.authorId === input.authorId,
+    );
+    const record: ProductReviewRecord = existing
+      ? { ...existing, rating: input.rating, body: input.body, updatedAt: now }
+      : { ...input, createdAt: now, updatedAt: now };
+    this.productReviews.set(record.id, record);
+    return record;
+  }
+
+  listProductVersions(filter: { providerId: string; listingId: string }): ProductVersionRecord[] {
+    return [...this.productVersions.values()].filter(
+      (version) =>
+        version.providerId === filter.providerId && version.listingId === filter.listingId,
+    );
+  }
+
+  addProductVersion(input: Omit<ProductVersionRecord, 'releasedAt'> & { releasedAt?: string }): ProductVersionRecord {
+    const record: ProductVersionRecord = { ...input, releasedAt: input.releasedAt ?? nowIso() };
+    this.productVersions.set(record.id, record);
+    return record;
+  }
+
   // --- ecosystem bounties ---
 
   listBounties(
@@ -3858,6 +3910,12 @@ export class FileBackedDb extends InMemoryDb {
         parsed.contentDistributions.map((row) => [row.id, row]),
       );
     }
+    if (parsed.productReviews) {
+      this.productReviews = new Map(parsed.productReviews.map((row) => [row.id, row]));
+    }
+    if (parsed.productVersions) {
+      this.productVersions = new Map(parsed.productVersions.map((row) => [row.id, row]));
+    }
     if (parsed.sellerLocations) {
       this.sellerLocations = new Map(parsed.sellerLocations.map((row) => [row.id, row]));
     }
@@ -3990,6 +4048,8 @@ export class FileBackedDb extends InMemoryDb {
       coalitionResources: [...this.coalitionResources.values()],
       creatorContent: [...this.creatorContent.values()],
       contentDistributions: [...this.contentDistributions.values()],
+      productReviews: [...this.productReviews.values()],
+      productVersions: [...this.productVersions.values()],
       sellerLocations: [...this.sellerLocations.values()],
       coalitionFeedItems: [...this.coalitionFeedItems.values()],
       pluginInstallations: [...this.pluginInstallations.values()],
@@ -5164,6 +5224,22 @@ export class FileBackedDb extends InMemoryDb {
     input: Omit<ContentDistributionRecord, 'createdAt'>,
   ): ContentDistributionRecord {
     const created = super.addContentDistribution(input);
+    this.persist();
+    return created;
+  }
+
+  override upsertProductReview(
+    input: Omit<ProductReviewRecord, 'createdAt' | 'updatedAt'>,
+  ): ProductReviewRecord {
+    const created = super.upsertProductReview(input);
+    this.persist();
+    return created;
+  }
+
+  override addProductVersion(
+    input: Omit<ProductVersionRecord, 'releasedAt'> & { releasedAt?: string },
+  ): ProductVersionRecord {
+    const created = super.addProductVersion(input);
     this.persist();
     return created;
   }

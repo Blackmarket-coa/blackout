@@ -12,3 +12,4 @@ export * from './discovery';
 export * from './presentation';
 
 export * from './creator';
+export * from './reviews';
