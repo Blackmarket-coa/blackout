@@ -12,6 +12,7 @@ overrides:
   brace-expansion@5.0.5: 5.0.6
   esbuild@0.19.12: 0.25.0
   esbuild@0.21.5: 0.25.0
+  hono@4.12.18: 4.12.21
   i18next-http-backend@2.5.2: 3.0.5
   lodash@4.17.23: 4.18.0
   picomatch@4.0.3: 4.0.4
@@ -490,13 +491,13 @@ importers:
         version: link:../blackout-protocol
       '@hono/node-server':
         specifier: 1.19.13
-        version: 1.19.13(hono@4.12.18)
+        version: 1.19.13(hono@4.12.21)
       '@simplewebauthn/server':
         specifier: 13.3.0
         version: 13.3.0
       hono:
-        specifier: 4.12.18
-        version: 4.12.18
+        specifier: 4.12.21
+        version: 4.12.21
       ioredis:
         specifier: 5.10.1
         version: 5.10.1
@@ -1870,7 +1871,7 @@ packages:
     resolution: {integrity: sha512-TsQLe4i2gvoTtrHje625ngThGBySOgSK3Xo2XRYOdqGN1teR8+I7vchQC46uLJi8OF62YTYA3AhSpumtkhsaKQ==}
     engines: {node: '>=18.14.1'}
     peerDependencies:
-      hono: ^4
+      hono: 4.12.21
 
   '@humanwhocodes/config-array@0.11.14':
     resolution: {integrity: sha512-3T8LkOmg45BV5FICb15QQMsyUSWrQ8AygVfC7ZG32zOalnqrilm018ZVCw0eapXux8FtA33q8PSRSstjee3jSg==}
@@ -4856,8 +4857,8 @@ packages:
   hoist-non-react-statics@3.3.2:
     resolution: {integrity: sha512-/gGivxi8JPKWNm/W0jSmzcMPpfpPLc3dY/6GxhX2hQ9iGj3aDfklV4ET7NjKpSinLpJ5vafa9iiGIEZg10SfBw==}
 
-  hono@4.12.18:
-    resolution: {integrity: sha512-RWzP96k/yv0PQfyXnWjs6zot20TqfpfsNXhOnev8d1InAxubW93L11/oNUc3tQqn2G0bSdAOBpX+2uDFHV7kdQ==}
+  hono@4.12.21:
+    resolution: {integrity: sha512-uV63apnb0kyPtAUwoWgaGh9HyIFcv8lgmzPZSiTBQAFOFGIzka5EZ1dZocmGnn0XdX0+XTqJ6Tqv7selMuGLRQ==}
     engines: {node: '>=16.9.0'}
 
   html-dom-parser@4.0.0:
@@ -8645,9 +8646,9 @@ snapshots:
 
   '@hexagon/base64@1.1.28': {}
 
-  '@hono/node-server@1.19.13(hono@4.12.18)':
+  '@hono/node-server@1.19.13(hono@4.12.21)':
     dependencies:
-      hono: 4.12.18
+      hono: 4.12.21
 
   '@humanwhocodes/config-array@0.11.14':
     dependencies:
@@ -12360,7 +12361,7 @@ snapshots:
     dependencies:
       react-is: 16.13.1
 
-  hono@4.12.18: {}
+  hono@4.12.21: {}
 
   html-dom-parser@4.0.0:
     dependencies:
