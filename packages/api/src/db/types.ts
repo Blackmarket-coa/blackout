@@ -5,8 +5,13 @@ import type {
   BountyRewardType,
   CoalitionEvent,
   CoalitionFeedItem,
+  CoalitionNeed,
+  CoalitionProject,
+  CoalitionResource,
   CoalitionRing,
   CoalitionTask,
+  ContentDistribution,
+  CreatorContent,
   EventRsvp,
   RideClaim,
   RideOffer,
@@ -22,6 +27,8 @@ import type {
   ColiseumLiveSession,
   ColiseumTopic,
   ColiseumVote,
+  ProductReview,
+  ProductVersion,
   ReputationEventType,
   ReputationSubject,
 } from '@blackout/core';
@@ -1425,6 +1432,27 @@ export interface CoalitionKitApplicationRecord {
 
 /** A Coalition den task. CoalitionTask already carries createdAt/updatedAt. */
 export type CoalitionTaskRecord = CoalitionTask;
+
+/** A Coalition Needs Board post. CoalitionNeed carries createdAt/updatedAt. */
+export type CoalitionNeedRecord = CoalitionNeed;
+
+/** A Coalition project. CoalitionProject carries createdAt/updatedAt. */
+export type CoalitionProjectRecord = CoalitionProject;
+
+/** A Coalition shared resource. CoalitionResource carries createdAt/updatedAt. */
+export type CoalitionResourceRecord = CoalitionResource;
+
+/** A creator content item. CreatorContent carries createdAt/updatedAt. */
+export type CreatorContentRecord = CreatorContent;
+
+/** A content→surface distribution record. ContentDistribution carries createdAt. */
+export type ContentDistributionRecord = ContentDistribution;
+
+/** A marketplace product review. ProductReview carries createdAt/updatedAt. */
+export type ProductReviewRecord = ProductReview;
+
+/** A marketplace product version-history entry. ProductVersion carries releasedAt. */
+export type ProductVersionRecord = ProductVersion;
 
 /** An ecosystem bounty. Bounty already carries createdAt/updatedAt. */
 export type BountyRecord = Bounty;

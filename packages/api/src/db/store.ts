@@ -83,6 +83,13 @@ import type {
   RingInvitationRecord,
   CoalitionKitApplicationRecord,
   CoalitionTaskRecord,
+  CoalitionNeedRecord,
+  CoalitionProjectRecord,
+  CoalitionResourceRecord,
+  CreatorContentRecord,
+  ContentDistributionRecord,
+  ProductReviewRecord,
+  ProductVersionRecord,
   BountyRecord,
   BountyApplicationRecord,
   SellerLocationRecord,
@@ -201,6 +208,13 @@ type PersistedState = {
   ringInvitations: RingInvitationRecord[];
   coalitionKitApplications: CoalitionKitApplicationRecord[];
   coalitionTasks: CoalitionTaskRecord[];
+  coalitionNeeds: CoalitionNeedRecord[];
+  coalitionProjects: CoalitionProjectRecord[];
+  coalitionResources: CoalitionResourceRecord[];
+  creatorContent: CreatorContentRecord[];
+  contentDistributions: ContentDistributionRecord[];
+  productReviews: ProductReviewRecord[];
+  productVersions: ProductVersionRecord[];
   sellerLocations: SellerLocationRecord[];
   coalitionFeedItems: CoalitionFeedItemRecord[];
   pluginInstallations: PluginInstallationRecord[];
@@ -348,6 +362,20 @@ class InMemoryDb {
   coalitionTasks = new Map<string, CoalitionTaskRecord>(
     COALITION_TASK_SEED.map((row) => [row.id, row]),
   );
+  /** Coalition Needs Board posts, keyed by need id. */
+  coalitionNeeds = new Map<string, CoalitionNeedRecord>();
+  /** Coalition projects, keyed by project id. */
+  coalitionProjects = new Map<string, CoalitionProjectRecord>();
+  /** Coalition shared resources, keyed by resource id. */
+  coalitionResources = new Map<string, CoalitionResourceRecord>();
+  /** Creator content items, keyed by content id. */
+  creatorContent = new Map<string, CreatorContentRecord>();
+  /** Content→surface distribution records, keyed by distribution id. */
+  contentDistributions = new Map<string, ContentDistributionRecord>();
+  /** Marketplace product reviews, keyed by review id. */
+  productReviews = new Map<string, ProductReviewRecord>();
+  /** Marketplace product version-history entries, keyed by version id. */
+  productVersions = new Map<string, ProductVersionRecord>();
   /** Ecosystem bounties, keyed by bounty id. */
   bounties = new Map<string, BountyRecord>();
   /** Bounty applications (producer↔creator matching), keyed by application id. */
@@ -2967,6 +2995,217 @@ class InMemoryDb {
     return record;
   }
 
+  // --- coalition needs board ---
+
+  listCoalitionNeeds(filter: { canopyId?: string } = {}): CoalitionNeedRecord[] {
+    return [...this.coalitionNeeds.values()].filter((need) =>
+      filter.canopyId ? need.canopyId === filter.canopyId : true,
+    );
+  }
+
+  createCoalitionNeed(
+    input: Omit<CoalitionNeedRecord, 'status' | 'createdAt' | 'updatedAt'>,
+  ): CoalitionNeedRecord {
+    const now = nowIso();
+    const record: CoalitionNeedRecord = { ...input, status: 'open', createdAt: now, updatedAt: now };
+    this.coalitionNeeds.set(record.id, record);
+    return record;
+  }
+
+  updateCoalitionNeed(
+    id: string,
+    patch: Partial<Pick<CoalitionNeedRecord, 'status' | 'fulfilledByListingId'>>,
+  ): CoalitionNeedRecord | undefined {
+    const existing = this.coalitionNeeds.get(id);
+    if (!existing) return undefined;
+    const record: CoalitionNeedRecord = { ...existing, ...patch, updatedAt: nowIso() };
+    this.coalitionNeeds.set(id, record);
+    return record;
+  }
+
+  // --- coalition projects ---
+
+  listCoalitionProjects(filter: { canopyId?: string } = {}): CoalitionProjectRecord[] {
+    return [...this.coalitionProjects.values()].filter((project) =>
+      filter.canopyId ? project.canopyId === filter.canopyId : true,
+    );
+  }
+
+  createCoalitionProject(
+    input: Omit<CoalitionProjectRecord, 'status' | 'createdAt' | 'updatedAt'>,
+  ): CoalitionProjectRecord {
+    const now = nowIso();
+    const record: CoalitionProjectRecord = {
+      ...input,
+      status: 'proposed',
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.coalitionProjects.set(record.id, record);
+    return record;
+  }
+
+  updateCoalitionProjectStatus(
+    id: string,
+    status: CoalitionProjectRecord['status'],
+  ): CoalitionProjectRecord | undefined {
+    const existing = this.coalitionProjects.get(id);
+    if (!existing) return undefined;
+    const record: CoalitionProjectRecord = { ...existing, status, updatedAt: nowIso() };
+    this.coalitionProjects.set(id, record);
+    return record;
+  }
+
+  // --- coalition resource registry ---
+
+  listCoalitionResources(filter: { canopyId?: string } = {}): CoalitionResourceRecord[] {
+    return [...this.coalitionResources.values()].filter((resource) =>
+      filter.canopyId ? resource.canopyId === filter.canopyId : true,
+    );
+  }
+
+  createCoalitionResource(
+    input: Omit<CoalitionResourceRecord, 'availability' | 'createdAt' | 'updatedAt'> & {
+      availability?: CoalitionResourceRecord['availability'];
+    },
+  ): CoalitionResourceRecord {
+    const now = nowIso();
+    const record: CoalitionResourceRecord = {
+      ...input,
+      availability: input.availability ?? 'available',
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.coalitionResources.set(record.id, record);
+    return record;
+  }
+
+  updateCoalitionResourceAvailability(
+    id: string,
+    availability: CoalitionResourceRecord['availability'],
+  ): CoalitionResourceRecord | undefined {
+    const existing = this.coalitionResources.get(id);
+    if (!existing) return undefined;
+    const record: CoalitionResourceRecord = { ...existing, availability, updatedAt: nowIso() };
+    this.coalitionResources.set(id, record);
+    return record;
+  }
+
+  // --- creator content lifecycle ---
+
+  listCreatorContent(
+    filter: { creatorId?: string; status?: CreatorContentRecord['status'] } = {},
+  ): CreatorContentRecord[] {
+    return [...this.creatorContent.values()].filter(
+      (content) =>
+        (filter.creatorId ? content.creatorId === filter.creatorId : true) &&
+        (filter.status ? content.status === filter.status : true),
+    );
+  }
+
+  getCreatorContent(id: string): CreatorContentRecord | undefined {
+    return this.creatorContent.get(id);
+  }
+
+  createCreatorContent(
+    input: Omit<CreatorContentRecord, 'status' | 'createdAt' | 'updatedAt' | 'publishedAt'> & {
+      status?: CreatorContentRecord['status'];
+    },
+  ): CreatorContentRecord {
+    const now = nowIso();
+    const status = input.status ?? 'draft';
+    const record: CreatorContentRecord = {
+      ...input,
+      status,
+      publishedAt: status === 'published' ? now : undefined,
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.creatorContent.set(record.id, record);
+    return record;
+  }
+
+  updateCreatorContent(
+    id: string,
+    patch: Partial<
+      Pick<CreatorContentRecord, 'title' | 'body' | 'mediaUrl' | 'status' | 'scheduledFor' | 'publishedAt'>
+    >,
+  ): CreatorContentRecord | undefined {
+    const existing = this.creatorContent.get(id);
+    if (!existing) return undefined;
+    const record: CreatorContentRecord = { ...existing, ...patch, updatedAt: nowIso() };
+    this.creatorContent.set(id, record);
+    return record;
+  }
+
+  /** Flip a scheduled item to published once its scheduledFor has passed. */
+  listDueScheduledContent(asOf: string = nowIso()): CreatorContentRecord[] {
+    return [...this.creatorContent.values()].filter(
+      (content) =>
+        content.status === 'scheduled' &&
+        content.scheduledFor !== undefined &&
+        content.scheduledFor <= asOf,
+    );
+  }
+
+  listContentDistributions(filter: { contentId?: string } = {}): ContentDistributionRecord[] {
+    return [...this.contentDistributions.values()].filter((dist) =>
+      filter.contentId ? dist.contentId === filter.contentId : true,
+    );
+  }
+
+  addContentDistribution(
+    input: Omit<ContentDistributionRecord, 'createdAt'>,
+  ): ContentDistributionRecord {
+    const record: ContentDistributionRecord = { ...input, createdAt: nowIso() };
+    this.contentDistributions.set(record.id, record);
+    return record;
+  }
+
+  // --- marketplace product reviews + versions ---
+
+  listProductReviews(filter: { providerId: string; listingId: string }): ProductReviewRecord[] {
+    return [...this.productReviews.values()].filter(
+      (review) =>
+        review.providerId === filter.providerId && review.listingId === filter.listingId,
+    );
+  }
+
+  /**
+   * Upsert a review: one per (provider, listing, author). A repeat review from
+   * the same author updates their existing row (stable id) so the durable
+   * write-through stays an id-keyed upsert.
+   */
+  upsertProductReview(
+    input: Omit<ProductReviewRecord, 'createdAt' | 'updatedAt'>,
+  ): ProductReviewRecord {
+    const now = nowIso();
+    const existing = [...this.productReviews.values()].find(
+      (review) =>
+        review.providerId === input.providerId &&
+        review.listingId === input.listingId &&
+        review.authorId === input.authorId,
+    );
+    const record: ProductReviewRecord = existing
+      ? { ...existing, rating: input.rating, body: input.body, updatedAt: now }
+      : { ...input, createdAt: now, updatedAt: now };
+    this.productReviews.set(record.id, record);
+    return record;
+  }
+
+  listProductVersions(filter: { providerId: string; listingId: string }): ProductVersionRecord[] {
+    return [...this.productVersions.values()].filter(
+      (version) =>
+        version.providerId === filter.providerId && version.listingId === filter.listingId,
+    );
+  }
+
+  addProductVersion(input: Omit<ProductVersionRecord, 'releasedAt'> & { releasedAt?: string }): ProductVersionRecord {
+    const record: ProductVersionRecord = { ...input, releasedAt: input.releasedAt ?? nowIso() };
+    this.productVersions.set(record.id, record);
+    return record;
+  }
+
   // --- ecosystem bounties ---
 
   listBounties(
@@ -3654,6 +3893,29 @@ export class FileBackedDb extends InMemoryDb {
     if (parsed.coalitionTasks) {
       this.coalitionTasks = new Map(parsed.coalitionTasks.map((row) => [row.id, row]));
     }
+    if (parsed.coalitionNeeds) {
+      this.coalitionNeeds = new Map(parsed.coalitionNeeds.map((row) => [row.id, row]));
+    }
+    if (parsed.coalitionProjects) {
+      this.coalitionProjects = new Map(parsed.coalitionProjects.map((row) => [row.id, row]));
+    }
+    if (parsed.coalitionResources) {
+      this.coalitionResources = new Map(parsed.coalitionResources.map((row) => [row.id, row]));
+    }
+    if (parsed.creatorContent) {
+      this.creatorContent = new Map(parsed.creatorContent.map((row) => [row.id, row]));
+    }
+    if (parsed.contentDistributions) {
+      this.contentDistributions = new Map(
+        parsed.contentDistributions.map((row) => [row.id, row]),
+      );
+    }
+    if (parsed.productReviews) {
+      this.productReviews = new Map(parsed.productReviews.map((row) => [row.id, row]));
+    }
+    if (parsed.productVersions) {
+      this.productVersions = new Map(parsed.productVersions.map((row) => [row.id, row]));
+    }
     if (parsed.sellerLocations) {
       this.sellerLocations = new Map(parsed.sellerLocations.map((row) => [row.id, row]));
     }
@@ -3781,6 +4043,13 @@ export class FileBackedDb extends InMemoryDb {
       ringInvitations: [...this.ringInvitations.values()],
       coalitionKitApplications: [...this.coalitionKitApplications.values()],
       coalitionTasks: [...this.coalitionTasks.values()],
+      coalitionNeeds: [...this.coalitionNeeds.values()],
+      coalitionProjects: [...this.coalitionProjects.values()],
+      coalitionResources: [...this.coalitionResources.values()],
+      creatorContent: [...this.creatorContent.values()],
+      contentDistributions: [...this.contentDistributions.values()],
+      productReviews: [...this.productReviews.values()],
+      productVersions: [...this.productVersions.values()],
       sellerLocations: [...this.sellerLocations.values()],
       coalitionFeedItems: [...this.coalitionFeedItems.values()],
       pluginInstallations: [...this.pluginInstallations.values()],
@@ -4875,6 +5144,104 @@ export class FileBackedDb extends InMemoryDb {
     const updated = super.updateCoalitionTaskStatus(id, status);
     if (updated) this.persist();
     return updated;
+  }
+
+  override createCoalitionNeed(
+    input: Omit<CoalitionNeedRecord, 'status' | 'createdAt' | 'updatedAt'>,
+  ): CoalitionNeedRecord {
+    const created = super.createCoalitionNeed(input);
+    this.persist();
+    return created;
+  }
+
+  override updateCoalitionNeed(
+    id: string,
+    patch: Partial<Pick<CoalitionNeedRecord, 'status' | 'fulfilledByListingId'>>,
+  ): CoalitionNeedRecord | undefined {
+    const updated = super.updateCoalitionNeed(id, patch);
+    if (updated) this.persist();
+    return updated;
+  }
+
+  override createCoalitionProject(
+    input: Omit<CoalitionProjectRecord, 'status' | 'createdAt' | 'updatedAt'>,
+  ): CoalitionProjectRecord {
+    const created = super.createCoalitionProject(input);
+    this.persist();
+    return created;
+  }
+
+  override updateCoalitionProjectStatus(
+    id: string,
+    status: CoalitionProjectRecord['status'],
+  ): CoalitionProjectRecord | undefined {
+    const updated = super.updateCoalitionProjectStatus(id, status);
+    if (updated) this.persist();
+    return updated;
+  }
+
+  override createCoalitionResource(
+    input: Omit<CoalitionResourceRecord, 'availability' | 'createdAt' | 'updatedAt'> & {
+      availability?: CoalitionResourceRecord['availability'];
+    },
+  ): CoalitionResourceRecord {
+    const created = super.createCoalitionResource(input);
+    this.persist();
+    return created;
+  }
+
+  override updateCoalitionResourceAvailability(
+    id: string,
+    availability: CoalitionResourceRecord['availability'],
+  ): CoalitionResourceRecord | undefined {
+    const updated = super.updateCoalitionResourceAvailability(id, availability);
+    if (updated) this.persist();
+    return updated;
+  }
+
+  override createCreatorContent(
+    input: Omit<CreatorContentRecord, 'status' | 'createdAt' | 'updatedAt' | 'publishedAt'> & {
+      status?: CreatorContentRecord['status'];
+    },
+  ): CreatorContentRecord {
+    const created = super.createCreatorContent(input);
+    this.persist();
+    return created;
+  }
+
+  override updateCreatorContent(
+    id: string,
+    patch: Partial<
+      Pick<CreatorContentRecord, 'title' | 'body' | 'mediaUrl' | 'status' | 'scheduledFor' | 'publishedAt'>
+    >,
+  ): CreatorContentRecord | undefined {
+    const updated = super.updateCreatorContent(id, patch);
+    if (updated) this.persist();
+    return updated;
+  }
+
+  override addContentDistribution(
+    input: Omit<ContentDistributionRecord, 'createdAt'>,
+  ): ContentDistributionRecord {
+    const created = super.addContentDistribution(input);
+    this.persist();
+    return created;
+  }
+
+  override upsertProductReview(
+    input: Omit<ProductReviewRecord, 'createdAt' | 'updatedAt'>,
+  ): ProductReviewRecord {
+    const created = super.upsertProductReview(input);
+    this.persist();
+    return created;
+  }
+
+  override addProductVersion(
+    input: Omit<ProductVersionRecord, 'releasedAt'> & { releasedAt?: string },
+  ): ProductVersionRecord {
+    const created = super.addProductVersion(input);
+    this.persist();
+    return created;
   }
 
   override upsertSellerLocation(

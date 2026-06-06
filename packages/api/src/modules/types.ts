@@ -12,7 +12,8 @@ export type FeatureModuleId =
   | 'profile'
   | 'stego'
   | 'topics'
-  | 'growth';
+  | 'growth'
+  | 'search';
 
 export interface FeatureModule {
   id: FeatureModuleId;
