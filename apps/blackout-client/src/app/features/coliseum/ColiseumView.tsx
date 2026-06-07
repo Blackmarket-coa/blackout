@@ -9,6 +9,8 @@ import TopicsTab from './tabs/TopicsTab';
 import DebateTab from './tabs/DebateTab';
 import ReelTab from './tabs/ReelTab';
 import LiveTab from './tabs/LiveTab';
+import ChallengesTab from './tabs/ChallengesTab';
+import LeaderboardsTab from './tabs/LeaderboardsTab';
 import SourcesTab from './tabs/SourcesTab';
 
 export interface ColiseumViewProps {
@@ -85,6 +87,8 @@ export function ColiseumView({
                 {activeTab === 'debate' ? <DebateTab /> : null}
                 {activeTab === 'reel' ? <ReelTab /> : null}
                 {activeTab === 'live' ? <LiveTab /> : null}
+                {activeTab === 'challenges' ? <ChallengesTab /> : null}
+                {activeTab === 'leaderboards' ? <LeaderboardsTab /> : null}
                 {activeTab === 'sources' ? <SourcesTab /> : null}
             </div>
         </section>

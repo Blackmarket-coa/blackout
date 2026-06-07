@@ -17,6 +17,7 @@ import {
 } from '../services/creatorListings';
 import { incrementCounter, logEvent } from '../services/marketplaceObservability';
 import { db } from '../db/store';
+import { matrixClient } from '../integrations/matrix-client';
 import { listTipsReceivedBy } from '../services/tips';
 import { CONTENT_KINDS, CONTENT_STATUSES, DISTRIBUTION_TARGETS } from '@blackout/core';
 import {
@@ -463,6 +464,29 @@ creator.post('/content/:id/distribute', async (c) => {
         target: parsed.target,
         targetId: parsed.targetId,
     });
+    // Side-effect: for room-backed targets (a den or a coalition space), actually
+    // cross-post an announcement into that Matrix room, bot-attributed to the
+    // creator. Best-effort — a Matrix failure must not fail the distribution
+    // record (sendEvent returns { ok:false } when Matrix isn't configured).
+    if ((parsed.target === 'den' || parsed.target === 'coalition') && parsed.targetId) {
+        const creatorName = db.getUserById(user.sub)?.username ?? user.sub;
+        const body = `${creatorName} shared a ${owned.kind}: ${owned.title}`;
+        void matrixClient
+            .sendEvent(
+                parsed.targetId,
+                {
+                    msgtype: 'm.text',
+                    body,
+                    'co.bmc.content_distribution': {
+                        content_id: owned.id,
+                        kind: owned.kind,
+                        target: parsed.target,
+                    },
+                },
+                { txnId: `dist-${distribution.id}` },
+            )
+            .catch(() => undefined);
+    }
     return c.json({ distribution }, 201);
 });
 

@@ -81,13 +81,13 @@ CREATE TABLE IF NOT EXISTS marketplace_webhook_events (
 );
 
 CREATE TABLE IF NOT EXISTS marketplace_seller_profiles (
-  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  provider_id VARCHAR(64) NOT NULL,
+  user_id TEXT NOT NULL,
+  provider_id TEXT NOT NULL,
   display_name TEXT,
   bio TEXT,
   avatar_url TEXT,
-  payout_id VARCHAR(128),
-  reputation_tier VARCHAR(32),
+  payout_id TEXT,
+  reputation_tier TEXT,
   vacation_mode BOOLEAN NOT NULL DEFAULT FALSE,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   PRIMARY KEY (user_id, provider_id)

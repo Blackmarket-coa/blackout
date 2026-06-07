@@ -523,4 +523,89 @@ marketplace.post('/webhooks/:providerId', async (c) => {
     return c.json(body, 200);
 });
 
+// --- producer profiles (seller display cards) -----------------------------
+//
+// Display-only read-view over marketplace_seller_profiles. The public GET omits
+// payoutId (private payout routing); the authed PUT lets a producer edit their
+// own display fields. reputationTier is server/FBM-derived and is preserved
+// across edits rather than client-settable.
+
+interface PublicProducerProfile {
+    userId: string;
+    providerId: string;
+    displayName: string | null;
+    bio: string | null;
+    avatarUrl: string | null;
+    reputationTier: string | null;
+    vacationMode: boolean;
+    updatedAt: string;
+}
+
+function toPublicProfile(record: {
+    userId: string;
+    providerId: string;
+    displayName: string | null;
+    bio: string | null;
+    avatarUrl: string | null;
+    reputationTier: string | null;
+    vacationMode: boolean;
+    updatedAt: string;
+}): PublicProducerProfile {
+    return {
+        userId: record.userId,
+        providerId: record.providerId,
+        displayName: record.displayName,
+        bio: record.bio,
+        avatarUrl: record.avatarUrl,
+        reputationTier: record.reputationTier,
+        vacationMode: record.vacationMode,
+        updatedAt: record.updatedAt,
+    };
+}
+
+marketplace.get('/sellers/:userId/profile', (c) => {
+    const userId = c.req.param('userId');
+    const providerId = c.req.query('providerId') ?? 'freeblackmarket';
+    if (!isProviderId(providerId)) {
+        return c.json({ code: 'invalid_provider', message: 'Unknown provider id' }, 400);
+    }
+    const record = db.getSellerProfile(userId, providerId);
+    if (!record) {
+        return c.json({ code: 'not_found', message: 'No producer profile' }, 404);
+    }
+    return c.json({ profile: toPublicProfile(record) });
+});
+
+const producerProfileSchema = z.object({
+    providerId: z.string().min(1).max(64).optional(),
+    displayName: z.string().max(120).nullish(),
+    bio: z.string().max(2000).nullish(),
+    avatarUrl: z.string().url().max(2048).nullish(),
+    vacationMode: z.boolean().optional(),
+});
+
+marketplace.put('/sellers/me/profile', async (c) => {
+    const user = requireUser(c, 'Sign in to edit your producer profile');
+    if (user instanceof Response) return user;
+    const parsed = await readJsonBody(c, producerProfileSchema);
+    if (parsed instanceof Response) return parsed;
+    const providerId = parsed.providerId ?? 'freeblackmarket';
+    if (!isProviderId(providerId)) {
+        return c.json({ code: 'invalid_provider', message: 'Unknown provider id' }, 400);
+    }
+    const existing = db.getSellerProfile(user.sub, providerId);
+    const profile = db.upsertSellerProfile({
+        userId: user.sub,
+        providerId,
+        displayName: parsed.displayName ?? existing?.displayName ?? null,
+        bio: parsed.bio ?? existing?.bio ?? null,
+        avatarUrl: parsed.avatarUrl ?? existing?.avatarUrl ?? null,
+        // payoutId / reputationTier are not client-settable — preserve existing.
+        payoutId: existing?.payoutId ?? null,
+        reputationTier: existing?.reputationTier ?? null,
+        vacationMode: parsed.vacationMode ?? existing?.vacationMode ?? false,
+    });
+    return c.json({ profile: toPublicProfile(profile) }, existing ? 200 : 201);
+});
+
 export default marketplace;

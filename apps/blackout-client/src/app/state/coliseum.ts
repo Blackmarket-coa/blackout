@@ -25,6 +25,8 @@ export const COLISEUM_TAB_LABELS: Record<ColiseumTabId, string> = {
     debate: 'Debate',
     reel: 'Reel',
     live: 'Live',
+    challenges: 'Challenges',
+    leaderboards: 'Leaderboards',
     sources: 'Sources',
 };
 

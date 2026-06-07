@@ -1,6 +1,6 @@
 export const COLISEUM_STATE_EVENT_TYPE = 'co.bmc.coliseum' as const;
 
-export const COLISEUM_TABS = ['topics', 'debate', 'reel', 'live', 'sources'] as const;
+export const COLISEUM_TABS = ['topics', 'debate', 'reel', 'live', 'challenges', 'leaderboards', 'sources'] as const;
 export type ColiseumTabId = (typeof COLISEUM_TABS)[number];
 
 export const DEFAULT_COLISEUM_TAB: ColiseumTabId = 'topics';

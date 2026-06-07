@@ -93,6 +93,7 @@ import type {
   BountyRecord,
   BountyApplicationRecord,
   SellerLocationRecord,
+  SellerProfileRecord,
   CoalitionFeedItemRecord,
   PluginInstallationRecord,
   PluginDenRecord,
@@ -101,6 +102,9 @@ import type {
   PluginForkRecord,
   PluginShowcaseRecord,
   ColiseumTopicRecord,
+  ColiseumChallengeRecord,
+  ChallengeEntryRecord,
+  ChallengeVoteRecord,
   ColiseumArgumentRecord,
   ColiseumVoteRecord,
   ColiseumLiveSessionRecord,
@@ -216,6 +220,7 @@ type PersistedState = {
   productReviews: ProductReviewRecord[];
   productVersions: ProductVersionRecord[];
   sellerLocations: SellerLocationRecord[];
+  marketplaceSellerProfiles: SellerProfileRecord[];
   coalitionFeedItems: CoalitionFeedItemRecord[];
   pluginInstallations: PluginInstallationRecord[];
   pluginDens: PluginDenRecord[];
@@ -224,6 +229,9 @@ type PersistedState = {
   pluginForks: PluginForkRecord[];
   pluginShowcases: PluginShowcaseRecord[];
   coliseumTopics: ColiseumTopicRecord[];
+  coliseumChallenges: ColiseumChallengeRecord[];
+  challengeEntries: ChallengeEntryRecord[];
+  challengeVotes: ChallengeVoteRecord[];
   coliseumArguments: ColiseumArgumentRecord[];
   coliseumVotes: ColiseumVoteRecord[];
   coliseumLiveSessions: ColiseumLiveSessionRecord[];
@@ -384,6 +392,8 @@ class InMemoryDb {
   sellerLocations = new Map<string, SellerLocationRecord>(
     COALITION_SELLER_SEED.map((row) => [row.id, row]),
   );
+  /** Seller/producer profiles, keyed by `${userId}::${providerId}`. */
+  marketplaceSellerProfiles = new Map<string, SellerProfileRecord>();
   /** Coalition feed items (video/event/aid/listing/proposal), keyed by item id. */
   coalitionFeedItems = new Map<string, CoalitionFeedItemRecord>(
     COALITION_FEED_SEED.map((row) => [row.id, row]),
@@ -402,6 +412,12 @@ class InMemoryDb {
   pluginShowcases = new Map<string, PluginShowcaseRecord>();
   /** Coliseum debate topics, keyed by topic id. */
   coliseumTopics = new Map<string, ColiseumTopicRecord>();
+  /** Coliseum challenges, keyed by challenge id. */
+  coliseumChallenges = new Map<string, ColiseumChallengeRecord>();
+  /** Challenge entries, keyed by entry id. */
+  challengeEntries = new Map<string, ChallengeEntryRecord>();
+  /** Challenge votes (one per voter per entry), keyed by vote id. */
+  challengeVotes = new Map<string, ChallengeVoteRecord>();
   /** Coliseum arguments, keyed by argument id. */
   coliseumArguments = new Map<string, ColiseumArgumentRecord>();
   /** Coliseum votes, keyed by `${argumentId}::${voterId}` (one vote per pair). */
@@ -3362,6 +3378,27 @@ class InMemoryDb {
     return record;
   }
 
+  // --- seller/producer profiles ---
+
+  private sellerProfileKey(userId: string, providerId: string): string {
+    return `${userId}::${providerId}`;
+  }
+
+  getSellerProfile(userId: string, providerId: string): SellerProfileRecord | undefined {
+    return this.marketplaceSellerProfiles.get(this.sellerProfileKey(userId, providerId));
+  }
+
+  upsertSellerProfile(
+    input: Omit<SellerProfileRecord, 'updatedAt'>,
+  ): SellerProfileRecord {
+    const record: SellerProfileRecord = { ...input, updatedAt: nowIso() };
+    this.marketplaceSellerProfiles.set(
+      this.sellerProfileKey(record.userId, record.providerId),
+      record,
+    );
+    return record;
+  }
+
   // --- coalition feed items ---
 
   listCoalitionFeedItems(
@@ -3584,6 +3621,73 @@ class InMemoryDb {
 
   upsertColiseumTopic(record: ColiseumTopicRecord): ColiseumTopicRecord {
     this.coliseumTopics.set(record.id, record);
+    return record;
+  }
+
+  // --- coliseum challenges ---
+
+  listColiseumChallenges(
+    filter: { status?: ColiseumChallengeRecord['status'] } = {},
+  ): ColiseumChallengeRecord[] {
+    return [...this.coliseumChallenges.values()].filter((challenge) =>
+      filter.status ? challenge.status === filter.status : true,
+    );
+  }
+
+  getColiseumChallenge(id: string): ColiseumChallengeRecord | undefined {
+    return this.coliseumChallenges.get(id);
+  }
+
+  createColiseumChallenge(
+    input: Omit<ColiseumChallengeRecord, 'status' | 'createdAt' | 'updatedAt'>,
+  ): ColiseumChallengeRecord {
+    const now = nowIso();
+    const record: ColiseumChallengeRecord = {
+      ...input,
+      status: 'open',
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.coliseumChallenges.set(record.id, record);
+    return record;
+  }
+
+  updateColiseumChallengeStatus(
+    id: string,
+    status: ColiseumChallengeRecord['status'],
+  ): ColiseumChallengeRecord | undefined {
+    const existing = this.coliseumChallenges.get(id);
+    if (!existing) return undefined;
+    const record: ColiseumChallengeRecord = { ...existing, status, updatedAt: nowIso() };
+    this.coliseumChallenges.set(id, record);
+    return record;
+  }
+
+  listChallengeEntries(filter: { challengeId?: string } = {}): ChallengeEntryRecord[] {
+    return [...this.challengeEntries.values()].filter((entry) =>
+      filter.challengeId ? entry.challengeId === filter.challengeId : true,
+    );
+  }
+
+  createChallengeEntry(input: Omit<ChallengeEntryRecord, 'createdAt'>): ChallengeEntryRecord {
+    const record: ChallengeEntryRecord = { ...input, createdAt: nowIso() };
+    this.challengeEntries.set(record.id, record);
+    return record;
+  }
+
+  listChallengeVotes(filter: { entryId?: string } = {}): ChallengeVoteRecord[] {
+    return [...this.challengeVotes.values()].filter((vote) =>
+      filter.entryId ? vote.entryId === filter.entryId : true,
+    );
+  }
+
+  /** Add a vote; idempotent per (entry, voter) so a repeat vote reuses its id. */
+  addChallengeVote(input: Omit<ChallengeVoteRecord, 'createdAt'>): ChallengeVoteRecord {
+    const existing = [...this.challengeVotes.values()].find(
+      (vote) => vote.entryId === input.entryId && vote.voterId === input.voterId,
+    );
+    const record: ChallengeVoteRecord = existing ?? { ...input, createdAt: nowIso() };
+    this.challengeVotes.set(record.id, record);
     return record;
   }
 
@@ -3919,6 +4023,11 @@ export class FileBackedDb extends InMemoryDb {
     if (parsed.sellerLocations) {
       this.sellerLocations = new Map(parsed.sellerLocations.map((row) => [row.id, row]));
     }
+    if (parsed.marketplaceSellerProfiles) {
+      this.marketplaceSellerProfiles = new Map(
+        parsed.marketplaceSellerProfiles.map((row) => [`${row.userId}::${row.providerId}`, row]),
+      );
+    }
     if (parsed.coalitionFeedItems) {
       this.coalitionFeedItems = new Map(parsed.coalitionFeedItems.map((row) => [row.id, row]));
     }
@@ -3939,6 +4048,15 @@ export class FileBackedDb extends InMemoryDb {
     this.pluginShowcases = new Map((parsed.pluginShowcases ?? []).map((row) => [row.id, row]));
     if (parsed.coliseumTopics) {
       this.coliseumTopics = new Map(parsed.coliseumTopics.map((row) => [row.id, row]));
+    }
+    if (parsed.coliseumChallenges) {
+      this.coliseumChallenges = new Map(parsed.coliseumChallenges.map((row) => [row.id, row]));
+    }
+    if (parsed.challengeEntries) {
+      this.challengeEntries = new Map(parsed.challengeEntries.map((row) => [row.id, row]));
+    }
+    if (parsed.challengeVotes) {
+      this.challengeVotes = new Map(parsed.challengeVotes.map((row) => [row.id, row]));
     }
     if (parsed.coliseumArguments) {
       this.coliseumArguments = new Map(parsed.coliseumArguments.map((row) => [row.id, row]));
@@ -4051,6 +4169,7 @@ export class FileBackedDb extends InMemoryDb {
       productReviews: [...this.productReviews.values()],
       productVersions: [...this.productVersions.values()],
       sellerLocations: [...this.sellerLocations.values()],
+      marketplaceSellerProfiles: [...this.marketplaceSellerProfiles.values()],
       coalitionFeedItems: [...this.coalitionFeedItems.values()],
       pluginInstallations: [...this.pluginInstallations.values()],
       pluginDens: [...this.pluginDens.values()],
@@ -4059,6 +4178,9 @@ export class FileBackedDb extends InMemoryDb {
       pluginForks: [...this.pluginForks.values()],
       pluginShowcases: [...this.pluginShowcases.values()],
       coliseumTopics: [...this.coliseumTopics.values()],
+      coliseumChallenges: [...this.coliseumChallenges.values()],
+      challengeEntries: [...this.challengeEntries.values()],
+      challengeVotes: [...this.challengeVotes.values()],
       coliseumArguments: [...this.coliseumArguments.values()],
       coliseumVotes: [...this.coliseumVotes.values()],
       coliseumLiveSessions: [...this.coliseumLiveSessions.values()],
@@ -5252,6 +5374,14 @@ export class FileBackedDb extends InMemoryDb {
     return created;
   }
 
+  override upsertSellerProfile(
+    input: Omit<SellerProfileRecord, 'updatedAt'>,
+  ): SellerProfileRecord {
+    const created = super.upsertSellerProfile(input);
+    this.persist();
+    return created;
+  }
+
   override upsertCoalitionFeedItem(
     input: Omit<CoalitionFeedItemRecord, 'updatedAt'>,
   ): CoalitionFeedItemRecord {
@@ -5332,6 +5462,37 @@ export class FileBackedDb extends InMemoryDb {
     const saved = super.upsertColiseumTopic(record);
     this.persist();
     return saved;
+  }
+
+  override createColiseumChallenge(
+    input: Omit<ColiseumChallengeRecord, 'status' | 'createdAt' | 'updatedAt'>,
+  ): ColiseumChallengeRecord {
+    const created = super.createColiseumChallenge(input);
+    this.persist();
+    return created;
+  }
+
+  override updateColiseumChallengeStatus(
+    id: string,
+    status: ColiseumChallengeRecord['status'],
+  ): ColiseumChallengeRecord | undefined {
+    const updated = super.updateColiseumChallengeStatus(id, status);
+    if (updated) this.persist();
+    return updated;
+  }
+
+  override createChallengeEntry(
+    input: Omit<ChallengeEntryRecord, 'createdAt'>,
+  ): ChallengeEntryRecord {
+    const created = super.createChallengeEntry(input);
+    this.persist();
+    return created;
+  }
+
+  override addChallengeVote(input: Omit<ChallengeVoteRecord, 'createdAt'>): ChallengeVoteRecord {
+    const created = super.addChallengeVote(input);
+    this.persist();
+    return created;
   }
 
   override upsertColiseumArgument(record: ColiseumArgumentRecord): ColiseumArgumentRecord {

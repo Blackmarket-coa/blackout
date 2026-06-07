@@ -36,6 +36,20 @@ import {
 import { readJsonBody } from '../middleware/validate';
 import { requireUser } from '../middleware/require-user';
 import { createRateLimit } from '../middleware/rate-limit';
+import { CHALLENGE_STATUSES, LEADERBOARD_CATEGORIES, isLeaderboardCategory } from '@blackout/core';
+import {
+    createChallenge,
+    createEntry,
+    getChallenge,
+    getEntry,
+    listChallenges,
+    listRankedEntries,
+    newChallengeId,
+    newEntryId,
+    updateChallengeStatus,
+    voteForEntry,
+} from '../services/coliseumChallenges';
+import { leaderboard } from '../services/leaderboards';
 
 const coliseum = new Hono();
 
@@ -389,6 +403,112 @@ coliseum.post('/live/sessions/:id/end', (c) => {
     if (user instanceof Response) return user;
     const result = endLiveSession(c.req.param('id'), user.sub);
     return liveResult(c, result);
+});
+
+// --- challenges ---
+
+coliseum.get('/challenges', (c) => {
+    const status = c.req.query('status');
+    const statusFilter =
+        status && (CHALLENGE_STATUSES as readonly string[]).includes(status)
+            ? (status as (typeof CHALLENGE_STATUSES)[number])
+            : undefined;
+    return c.json({ challenges: listChallenges({ status: statusFilter }) });
+});
+
+coliseum.get('/challenges/:id', (c) => {
+    const challenge = getChallenge(c.req.param('id'));
+    if (!challenge) return c.json({ code: 'not_found', message: 'Challenge not found' }, 404);
+    return c.json({ challenge, entries: listRankedEntries(challenge.id) });
+});
+
+const createChallengeSchema = z.object({
+    title: z.string().min(1).max(200),
+    description: z.string().max(4000).optional(),
+    category: z.string().min(1).max(64),
+});
+
+coliseum.post('/challenges', async (c) => {
+    const user = requireUser(c, 'Sign in to create a challenge');
+    if (user instanceof Response) return user;
+    const parsed = await readJsonBody(c, createChallengeSchema);
+    if (parsed instanceof Response) return parsed;
+    const challenge = createChallenge({
+        id: newChallengeId(),
+        title: parsed.title,
+        description: parsed.description,
+        category: parsed.category,
+        creatorId: user.sub,
+    });
+    return c.json({ challenge }, 201);
+});
+
+const updateChallengeSchema = z.object({ status: z.enum(CHALLENGE_STATUSES) });
+
+coliseum.patch('/challenges/:id', async (c) => {
+    const user = requireUser(c, 'Sign in to update a challenge');
+    if (user instanceof Response) return user;
+    const challenge = getChallenge(c.req.param('id'));
+    if (!challenge) return c.json({ code: 'not_found', message: 'Challenge not found' }, 404);
+    if (challenge.creatorId !== user.sub) {
+        return c.json({ code: 'forbidden', message: 'Not your challenge' }, 403);
+    }
+    const parsed = await readJsonBody(c, updateChallengeSchema);
+    if (parsed instanceof Response) return parsed;
+    const updated = updateChallengeStatus(challenge.id, parsed.status);
+    return c.json({ challenge: updated });
+});
+
+const createEntrySchema = z.object({
+    title: z.string().min(1).max(200),
+    body: z.string().max(8000).optional(),
+    mediaUrl: z.string().max(2048).optional(),
+});
+
+coliseum.post('/challenges/:id/entries', async (c) => {
+    const user = requireUser(c, 'Sign in to enter a challenge');
+    if (user instanceof Response) return user;
+    const challenge = getChallenge(c.req.param('id'));
+    if (!challenge) return c.json({ code: 'not_found', message: 'Challenge not found' }, 404);
+    if (challenge.status !== 'open') {
+        return c.json({ code: 'challenge_closed', message: 'Challenge is not open for entries' }, 409);
+    }
+    const parsed = await readJsonBody(c, createEntrySchema);
+    if (parsed instanceof Response) return parsed;
+    const entry = createEntry({
+        id: newEntryId(),
+        challengeId: challenge.id,
+        entrantId: user.sub,
+        title: parsed.title,
+        body: parsed.body,
+        mediaUrl: parsed.mediaUrl,
+    });
+    return c.json({ entry }, 201);
+});
+
+coliseum.post('/challenges/entries/:entryId/vote', (c) => {
+    const user = requireUser(c, 'Sign in to vote');
+    if (user instanceof Response) return user;
+    const entry = getEntry(c.req.param('entryId'));
+    if (!entry) return c.json({ code: 'not_found', message: 'Entry not found' }, 404);
+    voteForEntry(entry.id, user.sub);
+    return c.json({ entries: listRankedEntries(entry.challengeId) });
+});
+
+// --- leaderboards ---
+
+coliseum.get('/leaderboards', (c) => {
+    const category = c.req.query('category') ?? 'creators';
+    if (!isLeaderboardCategory(category)) {
+        return c.json(
+            { code: 'invalid_category', message: `category must be one of ${LEADERBOARD_CATEGORIES.join(', ')}` },
+            400,
+        );
+    }
+    const region = c.req.query('region');
+    const limitRaw = Number.parseInt(c.req.query('limit') ?? '', 10);
+    const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? limitRaw : undefined;
+    return c.json({ category, entries: leaderboard(category, { region, limit }) });
 });
 
 export default coliseum;

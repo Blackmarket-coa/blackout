@@ -24,6 +24,9 @@ import type {
 } from '@blackout/core';
 import type {
   ColiseumArgument,
+  ColiseumChallenge,
+  ChallengeEntry,
+  ChallengeVote,
   ColiseumLiveSession,
   ColiseumTopic,
   ColiseumVote,
@@ -1454,6 +1457,15 @@ export type ProductReviewRecord = ProductReview;
 /** A marketplace product version-history entry. ProductVersion carries releasedAt. */
 export type ProductVersionRecord = ProductVersion;
 
+/** A Coliseum challenge. ColiseumChallenge carries createdAt/updatedAt. */
+export type ColiseumChallengeRecord = ColiseumChallenge;
+
+/** A challenge entry. ChallengeEntry carries createdAt. */
+export type ChallengeEntryRecord = ChallengeEntry;
+
+/** A challenge vote (one per voter per entry). ChallengeVote carries createdAt. */
+export type ChallengeVoteRecord = ChallengeVote;
+
 /** An ecosystem bounty. Bounty already carries createdAt/updatedAt. */
 export type BountyRecord = Bounty;
 
@@ -1463,6 +1475,24 @@ export type BountyApplicationRecord = BountyApplication;
 /** A seller's map location. Coordinates flatten to lat/lng columns in Postgres. */
 export interface SellerLocationRecord extends SellerLocation {
   createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * A marketplace seller/producer profile (one per user per provider). Mirrors the
+ * `marketplace_seller_profiles` bootstrap table. `payoutId` is private (payout
+ * routing) and never leaves the server in the public read-view; the rest is the
+ * display-only producer card buyers see.
+ */
+export interface SellerProfileRecord {
+  userId: string;
+  providerId: string;
+  displayName: string | null;
+  bio: string | null;
+  avatarUrl: string | null;
+  payoutId: string | null;
+  reputationTier: string | null;
+  vacationMode: boolean;
   updatedAt: string;
 }
 

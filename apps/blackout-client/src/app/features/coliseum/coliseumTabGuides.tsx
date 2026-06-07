@@ -21,5 +21,17 @@ export const COLISEUM_TAB_GUIDES: Record<ColiseumTabId, ReactNode> = {
     ),
     reel: <>A vertical feed of the strongest arguments across every debate — swipe to browse.</>,
     live: <>Real-time town halls. Join, request to speak, and follow the pinned evidence.</>,
+    challenges: (
+        <>
+            Community challenges — start a business, grow food, build a project. Enter your attempt
+            and vote on others; the top entries rise to the top.
+        </>
+    ),
+    leaderboards: (
+        <>
+            Who's leading across the ecosystem — creators, coalitions, projects, and challenges,
+            ranked by activity.
+        </>
+    ),
     sources: <>Curated news and feeds you can cite to back up your arguments.</>,
 };
