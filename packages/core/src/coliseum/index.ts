@@ -5,3 +5,5 @@ export * from './events';
 export * from './feed';
 export * from './consensus';
 export * from './live';
+export * from './challenges';
+export * from './leaderboards';

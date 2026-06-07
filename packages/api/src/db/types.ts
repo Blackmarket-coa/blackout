@@ -24,6 +24,9 @@ import type {
 } from '@blackout/core';
 import type {
   ColiseumArgument,
+  ColiseumChallenge,
+  ChallengeEntry,
+  ChallengeVote,
   ColiseumLiveSession,
   ColiseumTopic,
   ColiseumVote,
@@ -1453,6 +1456,15 @@ export type ProductReviewRecord = ProductReview;
 
 /** A marketplace product version-history entry. ProductVersion carries releasedAt. */
 export type ProductVersionRecord = ProductVersion;
+
+/** A Coliseum challenge. ColiseumChallenge carries createdAt/updatedAt. */
+export type ColiseumChallengeRecord = ColiseumChallenge;
+
+/** A challenge entry. ChallengeEntry carries createdAt. */
+export type ChallengeEntryRecord = ChallengeEntry;
+
+/** A challenge vote (one per voter per entry). ChallengeVote carries createdAt. */
+export type ChallengeVoteRecord = ChallengeVote;
 
 /** An ecosystem bounty. Bounty already carries createdAt/updatedAt. */
 export type BountyRecord = Bounty;
