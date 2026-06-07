@@ -65,6 +65,14 @@ async function postJson<T>(url: string, body: unknown, token: string | null): Pr
     });
 }
 
+async function putJson<T>(url: string, body: unknown, token: string | null): Promise<T> {
+    return createAuthorizedApiClient(token)({
+        method: 'PUT',
+        path: url,
+        body,
+    });
+}
+
 export async function fetchProviders(token: string | null): Promise<MarketplaceProviderSummary[]> {
     const data = await getJson<{ providers: MarketplaceProviderSummary[] }>(
         `${MARKETPLACE_BASE}/providers`,
@@ -134,6 +142,58 @@ export async function fetchVendorMatrixId(
     token: string | null
 ): Promise<VendorMatrixIdentity> {
     return getJson(`${MARKETPLACE_BASE}/vendors/${encodeURIComponent(vendorId)}/matrix`, token);
+}
+
+export interface ProducerProfile {
+    userId: string;
+    providerId: string;
+    displayName: string | null;
+    bio: string | null;
+    avatarUrl: string | null;
+    reputationTier: string | null;
+    vacationMode: boolean;
+    updatedAt: string;
+}
+
+export interface ProducerProfileEdit {
+    displayName?: string | null;
+    bio?: string | null;
+    avatarUrl?: string | null;
+    vacationMode?: boolean;
+    providerId?: string;
+}
+
+/**
+ * Display-only read-view of a producer/seller profile. Resolves to `null` on a
+ * 404 (no profile yet) so callers can render an empty state rather than throw.
+ */
+export async function fetchProducerProfile(
+    userId: string,
+    token: string | null,
+    providerId = 'freeblackmarket'
+): Promise<ProducerProfile | null> {
+    try {
+        const data = await getJson<{ profile: ProducerProfile }>(
+            `${MARKETPLACE_BASE}/sellers/${encodeURIComponent(userId)}/profile?providerId=${encodeURIComponent(providerId)}`,
+            token
+        );
+        return data.profile;
+    } catch {
+        return null;
+    }
+}
+
+/** Upsert the signed-in producer's own profile (display fields only). */
+export async function updateMyProducerProfile(
+    edit: ProducerProfileEdit,
+    token: string | null
+): Promise<ProducerProfile> {
+    const data = await putJson<{ profile: ProducerProfile }>(
+        `${MARKETPLACE_BASE}/sellers/me/profile`,
+        edit,
+        token
+    );
+    return data.profile;
 }
 
 export async function fetchEntitlements(token: string | null): Promise<NormalizedEntitlement[]> {
