@@ -1478,6 +1478,24 @@ export interface SellerLocationRecord extends SellerLocation {
   updatedAt: string;
 }
 
+/**
+ * A marketplace seller/producer profile (one per user per provider). Mirrors the
+ * `marketplace_seller_profiles` bootstrap table. `payoutId` is private (payout
+ * routing) and never leaves the server in the public read-view; the rest is the
+ * display-only producer card buyers see.
+ */
+export interface SellerProfileRecord {
+  userId: string;
+  providerId: string;
+  displayName: string | null;
+  bio: string | null;
+  avatarUrl: string | null;
+  payoutId: string | null;
+  reputationTier: string | null;
+  vacationMode: boolean;
+  updatedAt: string;
+}
+
 /** A ranked Coalition feed item (video/event/aid/listing/proposal). */
 export interface CoalitionFeedItemRecord extends CoalitionFeedItem {
   updatedAt: string;

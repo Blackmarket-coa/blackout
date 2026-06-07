@@ -32,6 +32,10 @@ const OVERRIDES: Record<string, DescriptorOverride> = {
     conflictColumns: ['entitlement_id'],
   },
   marketplaceListingsCache: { keyOf: (r) => String(r.cacheKey), conflictColumns: ['cache_key'] },
+  marketplaceSellerProfiles: {
+    keyOf: (r) => `${r.userId}::${r.providerId}`,
+    conflictColumns: ['user_id', 'provider_id'],
+  },
   fbmVendorRooms: { keyOf: (r) => String(r.vendorId), conflictColumns: ['vendor_id'] },
   fbmDisputeRooms: { keyOf: (r) => String(r.disputeId), conflictColumns: ['dispute_id'] },
   fbmAclState: {
@@ -348,6 +352,7 @@ const ALL_MAP_NAMES = [
   'productReviews',
   'productVersions',
   'sellerLocations',
+  'marketplaceSellerProfiles',
   'coalitionFeedItems',
   'canopyDirectoryEntries',
   'clips',
@@ -568,6 +573,7 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
   updateClip: upsert('clips'),
   deleteClip: resync('clips'),
   upsertColiseumTopic: upsert('coliseumTopics'),
+  upsertSellerProfile: upsert('marketplaceSellerProfiles'),
   createColiseumChallenge: upsert('coliseumChallenges'),
   updateColiseumChallengeStatus: upsert('coliseumChallenges'),
   createChallengeEntry: upsert('challengeEntries'),

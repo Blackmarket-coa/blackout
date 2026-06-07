@@ -93,6 +93,7 @@ import type {
   BountyRecord,
   BountyApplicationRecord,
   SellerLocationRecord,
+  SellerProfileRecord,
   CoalitionFeedItemRecord,
   PluginInstallationRecord,
   PluginDenRecord,
@@ -219,6 +220,7 @@ type PersistedState = {
   productReviews: ProductReviewRecord[];
   productVersions: ProductVersionRecord[];
   sellerLocations: SellerLocationRecord[];
+  marketplaceSellerProfiles: SellerProfileRecord[];
   coalitionFeedItems: CoalitionFeedItemRecord[];
   pluginInstallations: PluginInstallationRecord[];
   pluginDens: PluginDenRecord[];
@@ -390,6 +392,8 @@ class InMemoryDb {
   sellerLocations = new Map<string, SellerLocationRecord>(
     COALITION_SELLER_SEED.map((row) => [row.id, row]),
   );
+  /** Seller/producer profiles, keyed by `${userId}::${providerId}`. */
+  marketplaceSellerProfiles = new Map<string, SellerProfileRecord>();
   /** Coalition feed items (video/event/aid/listing/proposal), keyed by item id. */
   coalitionFeedItems = new Map<string, CoalitionFeedItemRecord>(
     COALITION_FEED_SEED.map((row) => [row.id, row]),
@@ -3374,6 +3378,27 @@ class InMemoryDb {
     return record;
   }
 
+  // --- seller/producer profiles ---
+
+  private sellerProfileKey(userId: string, providerId: string): string {
+    return `${userId}::${providerId}`;
+  }
+
+  getSellerProfile(userId: string, providerId: string): SellerProfileRecord | undefined {
+    return this.marketplaceSellerProfiles.get(this.sellerProfileKey(userId, providerId));
+  }
+
+  upsertSellerProfile(
+    input: Omit<SellerProfileRecord, 'updatedAt'>,
+  ): SellerProfileRecord {
+    const record: SellerProfileRecord = { ...input, updatedAt: nowIso() };
+    this.marketplaceSellerProfiles.set(
+      this.sellerProfileKey(record.userId, record.providerId),
+      record,
+    );
+    return record;
+  }
+
   // --- coalition feed items ---
 
   listCoalitionFeedItems(
@@ -3998,6 +4023,11 @@ export class FileBackedDb extends InMemoryDb {
     if (parsed.sellerLocations) {
       this.sellerLocations = new Map(parsed.sellerLocations.map((row) => [row.id, row]));
     }
+    if (parsed.marketplaceSellerProfiles) {
+      this.marketplaceSellerProfiles = new Map(
+        parsed.marketplaceSellerProfiles.map((row) => [`${row.userId}::${row.providerId}`, row]),
+      );
+    }
     if (parsed.coalitionFeedItems) {
       this.coalitionFeedItems = new Map(parsed.coalitionFeedItems.map((row) => [row.id, row]));
     }
@@ -4139,6 +4169,7 @@ export class FileBackedDb extends InMemoryDb {
       productReviews: [...this.productReviews.values()],
       productVersions: [...this.productVersions.values()],
       sellerLocations: [...this.sellerLocations.values()],
+      marketplaceSellerProfiles: [...this.marketplaceSellerProfiles.values()],
       coalitionFeedItems: [...this.coalitionFeedItems.values()],
       pluginInstallations: [...this.pluginInstallations.values()],
       pluginDens: [...this.pluginDens.values()],
@@ -5339,6 +5370,14 @@ export class FileBackedDb extends InMemoryDb {
     input: Omit<SellerLocationRecord, 'createdAt' | 'updatedAt'>,
   ): SellerLocationRecord {
     const created = super.upsertSellerLocation(input);
+    this.persist();
+    return created;
+  }
+
+  override upsertSellerProfile(
+    input: Omit<SellerProfileRecord, 'updatedAt'>,
+  ): SellerProfileRecord {
+    const created = super.upsertSellerProfile(input);
     this.persist();
     return created;
   }
