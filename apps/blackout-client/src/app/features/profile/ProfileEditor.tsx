@@ -13,6 +13,7 @@ import { saveProfile as saveProfileDefault, type SaveProfileInput } from './prof
 import { syncStatusToPresence } from './customStatus';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { useHardenAvatarImage } from '../privacy-tools/useHardenAvatarImage';
+import { MEMBER_PRIMARY_ROLES } from './profileTypes';
 import type {
     ConnectionType,
     ProfileConnection,
@@ -297,6 +298,33 @@ export const ProfileEditor = ({ saveProfile = saveProfileDefault }: ProfileEdito
                         }
                         style={{ display: 'block', width: '100%' }}
                     />
+                </label>
+                <label>
+                    Primary role
+                    <select
+                        data-testid="profile-editor-primary-role"
+                        value={profile.primaryRole ?? ''}
+                        onChange={(event) =>
+                            setProfile((prev) => ({
+                                ...prev,
+                                primaryRole: event.target.value || undefined,
+                            }))
+                        }
+                        style={{ display: 'block', width: '100%' }}
+                    >
+                        <option value="">No primary role</option>
+                        {MEMBER_PRIMARY_ROLES.map((role) => (
+                            <option key={role} value={role}>
+                                {role}
+                            </option>
+                        ))}
+                        {profile.primaryRole &&
+                        !MEMBER_PRIMARY_ROLES.includes(
+                            profile.primaryRole as (typeof MEMBER_PRIMARY_ROLES)[number],
+                        ) ? (
+                            <option value={profile.primaryRole}>{profile.primaryRole}</option>
+                        ) : null}
+                    </select>
                 </label>
             </section>
 
