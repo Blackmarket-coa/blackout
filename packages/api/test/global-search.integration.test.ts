@@ -15,6 +15,8 @@ process.env.LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET ?? 'lk_test_secr
 const { default: app } = await import('../src/index');
 const { signJwt } = await import('../src/services/auth');
 const { discoveryService } = await import('../src/services/discovery');
+const coliseumStore = await import('../src/services/coliseumStore');
+const creatorContentStore = await import('../src/services/creatorContentStore');
 
 function authHeader(sub = 'search-test-user'): Record<string, string> {
     return {
@@ -83,6 +85,49 @@ test('global search honors the types= filter', async () => {
     const { results } = (await res.json()) as { results: Array<{ type: string }> };
     assert.ok(results.length > 0);
     assert.ok(results.every((r) => r.type === 'bounty'));
+});
+
+test('global search spans debate topics and knowledge content', async () => {
+    // Seed a Coliseum debate topic and a published creator guide, both about compost.
+    coliseumStore.createTopic({
+        id: 'topic-compost-debate',
+        title: 'Compost vs vermiculture',
+        newsAnchor: {
+            sourceUrl: 'https://example.test/compost',
+            headline: 'The compost debate heats up',
+            publishedAt: new Date().toISOString(),
+        },
+        tags: ['compost', 'soil'],
+    });
+    const guide = creatorContentStore.createContent({
+        id: creatorContentStore.newContentId(),
+        creatorId: '@compostking:bmc',
+        kind: 'guide',
+        title: 'How to start a compost pile',
+        body: 'A step-by-step compost guide.',
+    });
+    creatorContentStore.publishContent(guide.id);
+
+    // Debate Search.
+    const debateRes = await app.request('/v1/search?q=compost&types=debate');
+    assert.equal(debateRes.status, 200);
+    const debate = (await debateRes.json()) as { results: Array<{ type: string; title: string }> };
+    assert.ok(debate.results.length > 0, 'expected a debate hit');
+    assert.ok(debate.results.every((r) => r.type === 'debate'));
+
+    // Knowledge Search.
+    const knowledgeRes = await app.request('/v1/search?q=compost&types=knowledge');
+    assert.equal(knowledgeRes.status, 200);
+    const knowledge = (await knowledgeRes.json()) as { results: Array<{ type: string }> };
+    assert.ok(knowledge.results.length > 0, 'expected a knowledge hit');
+    assert.ok(knowledge.results.every((r) => r.type === 'knowledge'));
+
+    // Default (no types=) now spans debate + knowledge alongside the rest.
+    const allRes = await app.request('/v1/search?q=compost');
+    const all = (await allRes.json()) as { results: Array<{ type: string }> };
+    const types = new Set(all.results.map((r) => r.type));
+    assert.ok(types.has('debate'), 'default search should include debate hits');
+    assert.ok(types.has('knowledge'), 'default search should include knowledge hits');
 });
 
 test('global trending returns a ranked cross-entity list', async () => {

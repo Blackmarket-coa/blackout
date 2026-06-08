@@ -1,11 +1,22 @@
 /**
  * Cross-entity global search + trending. A read-only aggregation layer over the
  * existing per-entity stores (discovery entities for creators/coalitions, the
- * bounty store, the coalition-project store). No persistence of its own — the
- * server fans out across those stores and returns a unified, ranked result.
+ * bounty store, the coalition-project store, coliseum debate topics, and
+ * published creator content). No persistence of its own — the server fans out
+ * across those stores and returns a unified, ranked result.
+ *
+ * `debate` searches Coliseum debate topics (Debate Search); `knowledge` searches
+ * published creator guides/articles (Knowledge Search).
  */
 
-export const GLOBAL_SEARCH_TYPES = ['coalition', 'creator', 'bounty', 'project'] as const;
+export const GLOBAL_SEARCH_TYPES = [
+    'coalition',
+    'creator',
+    'bounty',
+    'project',
+    'debate',
+    'knowledge',
+] as const;
 export type GlobalSearchType = (typeof GLOBAL_SEARCH_TYPES)[number];
 
 export interface GlobalSearchResult {

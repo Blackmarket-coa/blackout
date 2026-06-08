@@ -2,6 +2,11 @@ import type { GlobalSearchResult, GlobalSearchType } from '@blackout/core';
 import { discoveryService } from './discovery';
 import { listBounties } from './bountyStore';
 import { listProjects } from './coalitionStore';
+import { listTopics } from './coliseumStore';
+import { listContent } from './creatorContentStore';
+
+/** Content kinds surfaced by Knowledge Search — long-form, not short videos. */
+const KNOWLEDGE_KINDS = new Set(['guide', 'article']);
 
 const matches = (query: string, ...fields: (string | undefined)[]): boolean => {
     if (!query) return true;
@@ -36,7 +41,7 @@ export function globalSearch(input: GlobalSearchInput = {}): GlobalSearchResult[
     const types = new Set<GlobalSearchType>(
         input.types && input.types.length > 0
             ? input.types
-            : ['coalition', 'creator', 'bounty', 'project'],
+            : ['coalition', 'creator', 'bounty', 'project', 'debate', 'knowledge'],
     );
     const limit = Math.max(1, Math.min(input.limit ?? 30, 100));
     const results: GlobalSearchResult[] = [];
@@ -82,6 +87,38 @@ export function globalSearch(input: GlobalSearchInput = {}): GlobalSearchResult[
                 title: project.title,
                 subtitle: project.category,
                 score: textScore(query, project.title, project.description),
+            });
+        }
+    }
+
+    // Debate Search — Coliseum debate topics, matched on title + tags. Hotter
+    // debates rank slightly higher via debateHeat (0..1).
+    if (types.has('debate')) {
+        for (const topic of listTopics()) {
+            const tagText = topic.tags.join(' ');
+            if (!matches(query, topic.title, tagText)) continue;
+            results.push({
+                type: 'debate',
+                id: topic.id,
+                title: topic.title,
+                subtitle: topic.category ?? topic.tags[0],
+                score: textScore(query, topic.title, tagText) + topic.debateHeat,
+            });
+        }
+    }
+
+    // Knowledge Search — published creator guides/articles (community solutions,
+    // tutorials), matched on title + body.
+    if (types.has('knowledge')) {
+        for (const content of listContent({ status: 'published' })) {
+            if (!KNOWLEDGE_KINDS.has(content.kind)) continue;
+            if (!matches(query, content.title, content.body)) continue;
+            results.push({
+                type: 'knowledge',
+                id: content.id,
+                title: content.title,
+                subtitle: content.kind,
+                score: textScore(query, content.title, content.body),
             });
         }
     }
@@ -133,6 +170,21 @@ export function globalTrending(input: { region?: string; limit?: number } = {}):
             title: project.title,
             subtitle: project.category,
             score: 400 - index,
+        });
+    });
+
+    // Trending discussions — hottest live debates by debateHeat. listTopics()
+    // already ranks; drop archived topics and band the top slice below projects.
+    const hotDebates = listTopics()
+        .filter((topic) => topic.status !== 'archived')
+        .slice(0, limit);
+    hotDebates.forEach((topic, index) => {
+        results.push({
+            type: 'debate',
+            id: topic.id,
+            title: topic.title,
+            subtitle: topic.category ?? topic.tags[0],
+            score: 300 - index,
         });
     });
 

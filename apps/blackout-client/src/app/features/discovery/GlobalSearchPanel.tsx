@@ -11,6 +11,8 @@ const TYPE_LABEL: Record<GlobalSearchType, string> = {
     creator: 'Creator',
     bounty: 'Bounty',
     project: 'Project',
+    debate: 'Debate',
+    knowledge: 'Knowledge',
 };
 
 const panelStyle: CSSProperties = {
@@ -139,7 +141,7 @@ export function GlobalSearchPanel(): JSX.Element {
                     onKeyDown={(event) => {
                         if (event.key === 'Enter') runSearch();
                     }}
-                    placeholder="Search coalitions, creators, bounties, projects…"
+                    placeholder="Search coalitions, creators, bounties, projects, debates, guides…"
                     data-testid="global-search-input"
                     style={inputStyle}
                 />
