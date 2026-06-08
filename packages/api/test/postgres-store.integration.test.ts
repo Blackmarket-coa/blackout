@@ -44,7 +44,7 @@ test('every descriptor maps to a real table with columns', async () => {
     const columns = await introspectColumns(client as never, d.tableName);
     assert.ok(columns.length > 0, `table ${d.tableName} (map ${d.mapName}) should exist`);
   }
-  assert.equal(TABLE_DESCRIPTORS.length, 106);
+  assert.equal(TABLE_DESCRIPTORS.length, 108);
   await pg.query('SELECT 1');
 });
 
@@ -200,6 +200,34 @@ test('write-through persists across a simulated restart', async () => {
     settledRef: null,
   });
 
+  // Ecosystem bounty + applications — JSONB string-array columns, and the
+  // acceptBountyApplication resync path (claims the bounty, declines siblings).
+  store1.createBounty({
+    id: 'bounty-eco-1',
+    category: 'creator',
+    title: 'Film a compost explainer',
+    description: 'Short vertical explainer for the Coliseum reel.',
+    creatorId: userId,
+    rewardType: 'store_credit',
+    rewardSummary: '$25 FBM credit',
+    rewardAmountCents: 2500,
+    requirements: ['vertical 9:16', 'under 60s'],
+    deliverables: ['mp4', 'thumbnail'],
+  });
+  store1.createBountyApplication({
+    id: 'bapp-eco-1',
+    bountyId: 'bounty-eco-1',
+    applicantId: 'creator-a',
+    message: 'I run a compost channel.',
+  });
+  store1.createBountyApplication({
+    id: 'bapp-eco-2',
+    bountyId: 'bounty-eco-1',
+    applicantId: 'creator-b',
+  });
+  // Accept creator-a: bounty → claimed, creator-a accepted, creator-b declined.
+  store1.acceptBountyApplication('bounty-eco-1', 'creator-a');
+
   await store1.drain();
 
   // Simulate a restart: a brand-new store hydrating from the same database.
@@ -263,6 +291,23 @@ test('write-through persists across a simulated restart', async () => {
   assert.equal(reward?.beneficiaryId, 'creator-9');
   assert.equal(reward?.rewardCents, 500);
   assert.equal(reward?.status, 'earned');
+
+  // Ecosystem bounty survives restart with its JSONB array columns intact, and
+  // the accept resync (claim + decline siblings) is durable.
+  const bounty = store2.listBounties().find((b) => b.id === 'bounty-eco-1');
+  assert.ok(bounty, 'ecosystem bounty should hydrate');
+  assert.equal(bounty?.status, 'claimed');
+  assert.equal(bounty?.claimedBy, 'creator-a');
+  assert.deepEqual(bounty?.requirements, ['vertical 9:16', 'under 60s']);
+  assert.deepEqual(bounty?.deliverables, ['mp4', 'thumbnail']);
+  assert.equal(bounty?.rewardAmountCents, 2500);
+
+  const apps = store2
+    .listBountyApplications({ bountyId: 'bounty-eco-1' })
+    .sort((a, b) => a.id.localeCompare(b.id));
+  assert.equal(apps.length, 2, 'both applications should hydrate');
+  assert.equal(apps.find((a) => a.id === 'bapp-eco-1')?.status, 'accepted');
+  assert.equal(apps.find((a) => a.id === 'bapp-eco-2')?.status, 'declined');
 });
 
 test('updateClip write-through persists the patch (PATCH /clips/:id path)', async () => {
