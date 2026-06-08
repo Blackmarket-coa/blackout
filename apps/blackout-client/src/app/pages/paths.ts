@@ -94,6 +94,7 @@ export const CREATOR_HUB_PATH = '/creator-hub';
 /** Top-level Coalition and Coliseum destinations (see their feature `routes.ts`). */
 export const COALITION_PATH = '/coalition';
 export const COLISEUM_PATH = '/coliseum';
+export const GOVERNANCE_PATH = '/governance';
 
 /** The signed-in user's own profile ("personal headquarters"); see `features/profile/routes.ts`. */
 export const PROFILE_SELF_PATH = '/profile/me';

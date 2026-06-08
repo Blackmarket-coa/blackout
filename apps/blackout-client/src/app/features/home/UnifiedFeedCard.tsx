@@ -11,6 +11,7 @@ const SOURCE_LABELS: Record<UnifiedFeedSource, string> = {
     status: 'Status',
     wall: 'Post',
     marketplace: 'Market',
+    governance: 'Governance',
 };
 
 const SOURCE_GLYPH: Record<UnifiedFeedSource, string> = {
@@ -21,6 +22,7 @@ const SOURCE_GLYPH: Record<UnifiedFeedSource, string> = {
     status: '✦',
     wall: '📝',
     marketplace: '🛒',
+    governance: '🗳️',
 };
 
 interface UnifiedFeedCardProps {
