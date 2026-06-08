@@ -190,3 +190,79 @@ export function globalTrending(input: { region?: string; limit?: number } = {}):
 
     return results.sort((a, b) => b.score - a.score || a.title.localeCompare(b.title)).slice(0, limit);
 }
+
+export interface RecommendationInput {
+    /** Viewer interest tags (e.g. discovery interests) — entities sharing them
+     * are boosted. Case-insensitive. */
+    interestTags?: string[];
+    /** Ids the viewer already engages with (followed creators, joined
+     * coalitions, owned projects) — excluded from suggestions. */
+    excludeIds?: string[];
+    region?: string;
+    limit?: number;
+}
+
+/** Each shared interest tag is a strong relevance signal. */
+const tagOverlapBoost = (entityTags: readonly string[], interests: Set<string>): number => {
+    if (interests.size === 0) return 0;
+    let overlap = 0;
+    for (const tag of entityTags) if (interests.has(tag.toLowerCase())) overlap += 1;
+    return overlap * 3;
+};
+
+/**
+ * Personalized recommendations across communities, creators, projects, and
+ * knowledge content. Reuses the discovery `recommended` surface for
+ * creators/coalitions (so gating is honored), fans across active projects and
+ * published guides, boosts entities that share the viewer's interest tags, and
+ * drops anything the viewer already engages with. Pure read — no persistence.
+ */
+export function recommend(input: RecommendationInput = {}): GlobalSearchResult[] {
+    const limit = Math.max(1, Math.min(input.limit ?? 30, 100));
+    const interests = new Set((input.interestTags ?? []).map((tag) => tag.toLowerCase()));
+    const exclude = new Set(input.excludeIds ?? []);
+    const results: GlobalSearchResult[] = [];
+
+    // Communities + creators the viewer doesn't already follow.
+    for (const entity of discoveryService.browse({ surface: 'recommended', region: input.region })) {
+        if (exclude.has(entity.id)) continue;
+        const type: GlobalSearchType = entity.entityType === 'canopy' ? 'coalition' : 'creator';
+        results.push({
+            type,
+            id: entity.id,
+            title: entity.name,
+            subtitle: entity.bio || undefined,
+            score: 100 + entity.activityScore + tagOverlapBoost(entity.tags, interests),
+        });
+    }
+
+    // Active projects — boosted when their category matches a viewer interest.
+    for (const project of listProjects()) {
+        if (project.status !== 'active' || exclude.has(project.id)) continue;
+        const categoryBoost = interests.has(project.category.toLowerCase()) ? 6 : 0;
+        results.push({
+            type: 'project',
+            id: project.id,
+            title: project.title,
+            subtitle: project.category,
+            score: 40 + categoryBoost,
+        });
+    }
+
+    // Recently published knowledge (guides/articles), newest first.
+    const knowledge = listContent({ status: 'published' })
+        .filter((content) => KNOWLEDGE_KINDS.has(content.kind) && !exclude.has(content.id))
+        .sort((a, b) => (b.publishedAt ?? b.createdAt).localeCompare(a.publishedAt ?? a.createdAt))
+        .slice(0, limit);
+    knowledge.forEach((content, index) => {
+        results.push({
+            type: 'knowledge',
+            id: content.id,
+            title: content.title,
+            subtitle: content.kind,
+            score: 30 - index,
+        });
+    });
+
+    return results.sort((a, b) => b.score - a.score || a.title.localeCompare(b.title)).slice(0, limit);
+}

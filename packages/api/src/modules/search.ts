@@ -1,11 +1,20 @@
 import { Hono } from 'hono';
 import { parseGlobalSearchTypes } from '@blackout/core';
-import { globalSearch, globalTrending } from '../services/globalSearch';
+import { globalSearch, globalTrending, recommend } from '../services/globalSearch';
 import type { FeatureModule } from './types';
 
 const parseLimit = (raw: string | undefined): number | undefined => {
   const n = Number.parseInt(raw ?? '', 10);
   return Number.isFinite(n) && n > 0 ? n : undefined;
+};
+
+const parseCsv = (raw: string | undefined): string[] | undefined => {
+  if (!raw) return undefined;
+  const parts = raw
+    .split(',')
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0);
+  return parts.length > 0 ? parts : undefined;
 };
 
 export const createSearchRouter = (): Hono => {
@@ -28,6 +37,17 @@ export const createSearchRouter = (): Hono => {
     const region = c.req.query('region');
     const limit = parseLimit(c.req.query('limit'));
     return c.json({ results: globalTrending({ region, limit }) });
+  });
+
+  // Personalized recommendations: communities/creators/projects/knowledge the
+  // viewer doesn't already engage with. `tags=` are interest tags to boost,
+  // `exclude=` are ids already followed/joined/owned.
+  search.get('/recommended', (c) => {
+    const interestTags = parseCsv(c.req.query('tags'));
+    const excludeIds = parseCsv(c.req.query('exclude'));
+    const region = c.req.query('region');
+    const limit = parseLimit(c.req.query('limit'));
+    return c.json({ results: recommend({ interestTags, excludeIds, region, limit }) });
   });
 
   return search;

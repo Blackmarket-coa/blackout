@@ -139,3 +139,55 @@ test('global trending returns a ranked cross-entity list', async () => {
         assert.ok(results[i - 1]!.score >= results[i]!.score, 'results must be score-descending');
     }
 });
+
+test('recommendations boost shared interests and exclude already-followed', async () => {
+    discoveryService.upsertProfile({
+        id: '@permaculture-pat:bmc',
+        entityType: 'creator',
+        name: 'Permaculture Pat',
+        bio: 'Food forests',
+        tags: ['permaculture', 'soil'],
+        visibility: 'public',
+        moderationStatus: 'approved',
+    });
+    discoveryService.upsertProfile({
+        id: '@unrelated-uma:bmc',
+        entityType: 'creator',
+        name: 'Unrelated Uma',
+        tags: ['knitting'],
+        visibility: 'public',
+        moderationStatus: 'approved',
+    });
+    discoveryService.upsertProfile({
+        id: '!followed-canopy:bmc',
+        entityType: 'canopy',
+        name: 'Already Joined Coalition',
+        tags: ['permaculture'],
+        visibility: 'public',
+        moderationStatus: 'approved',
+    });
+    discoveryService.runFullIndex();
+
+    const res = await app.request(
+        '/v1/search/recommended?tags=permaculture&exclude=!followed-canopy:bmc',
+    );
+    assert.equal(res.status, 200);
+    const { results } = (await res.json()) as {
+        results: Array<{ id: string; type: string; score: number }>;
+    };
+
+    // Excluded entity must not be recommended.
+    assert.ok(
+        !results.some((r) => r.id === '!followed-canopy:bmc'),
+        'followed coalition should be excluded',
+    );
+    // The interest-matching creator outranks the unrelated one.
+    const pat = results.find((r) => r.id === '@permaculture-pat:bmc');
+    const uma = results.find((r) => r.id === '@unrelated-uma:bmc');
+    assert.ok(pat, 'interest-matching creator should be recommended');
+    if (uma) assert.ok(pat!.score > uma.score, 'shared-interest creator should outrank unrelated');
+    // Ranked descending.
+    for (let i = 1; i < results.length; i++) {
+        assert.ok(results[i - 1]!.score >= results[i]!.score, 'results must be score-descending');
+    }
+});

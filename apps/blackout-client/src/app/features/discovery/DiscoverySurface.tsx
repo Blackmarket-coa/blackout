@@ -22,6 +22,7 @@ import {
   rankDiscoveryItems,
 } from './model';
 import { GlobalSearchPanel } from './GlobalSearchPanel';
+import { useDiscoveryInterestTags } from '../home/discoveryInterests';
 
 const DEFAULT_FILTERS: DiscoveryFilters = {
   type: 'all',
@@ -48,6 +49,8 @@ export function DiscoverySurface({ onSelectRoom, onSelectSpace }: DiscoverySurfa
   const roomToParents = useAtomValue(roomToParentsAtom);
   const mDirects = useAtomValue(mDirectAtom);
   const joinedSpaces = useSpaces(mx, allRoomsAtom);
+  const interestTagsSet = useDiscoveryInterestTags();
+  const interestTags = useMemo(() => [...interestTagsSet], [interestTagsSet]);
   const rootSpaceId = joinedSpaces[0] ?? '__blackout_discovery__';
   const childRoomScopeFactory = useChildRoomScopeFactory(mx, mDirects, roomToParents);
   const spaceChildren = useSpaceChildren(allRoomsAtom, rootSpaceId, childRoomScopeFactory);
@@ -159,7 +162,7 @@ export function DiscoverySurface({ onSelectRoom, onSelectSpace }: DiscoverySurfa
       <PageContent>
         <PageContentCenter>
           <Box direction="Column" gap="300">
-            <GlobalSearchPanel />
+            <GlobalSearchPanel interestTags={interestTags} excludeIds={joinedSpaces} />
             <Box direction="Column" gap="200">
               <Text size="L400">Filter chips</Text>
               <Box gap="100" wrap="Wrap">
