@@ -90,6 +90,22 @@ export interface MemberProfile {
     profile: BmcProfileEvent;
 }
 
+/**
+ * Canonical primary roles a member can switch between. `primaryRole` is
+ * self-presentation (how you show up across the ecosystem), distinct from
+ * earned `roleBadges`. Kept open (the field stays `string`) so legacy/custom
+ * values still round-trip, but the editor offers this curated set.
+ */
+export const MEMBER_PRIMARY_ROLES = [
+    'Creator',
+    'Builder',
+    'Producer',
+    'Community Member',
+    'Moderator',
+    'Developer',
+] as const;
+export type MemberPrimaryRole = (typeof MEMBER_PRIMARY_ROLES)[number];
+
 export interface DecorationOption {
     id: string;
     label: string;

@@ -6,6 +6,7 @@ import {
     mapCoalition,
     mapColiseum,
     mapDens,
+    mapGovernance,
     mapMarketplace,
     mapStatuses,
     mapStreams,
@@ -15,6 +16,7 @@ import {
     selectLiveRail,
     seriesNameFromTags,
     withSeriesBadges,
+    type GovernanceProposalEntry,
     type UnifiedFeedItem,
 } from './unifiedFeedModel';
 
@@ -92,6 +94,40 @@ describe('mapCoalition / mapColiseum', () => {
         expect(item.id).toBe('coliseum:t');
         expect(item.score).toBe(0.9);
         expect(item.subtitle).toBe('Headline');
+    });
+});
+
+describe('mapGovernance', () => {
+    const proposal = (
+        overrides: Partial<GovernanceProposalEntry> & { proposalEventId: string }
+    ): GovernanceProposalEntry => ({
+        canopyId: '!canopy:s',
+        title: 'Fund the tool library',
+        status: 'active',
+        proposalType: 'binary',
+        createdAt: NOW - HOUR,
+        ...overrides,
+    });
+
+    it('flags active proposals with a VOTE badge and ranks them high', () => {
+        const [item] = mapGovernance([proposal({ proposalEventId: 'p1' })], NOW);
+        expect(item.id).toBe('governance:p1');
+        expect(item.source).toBe('governance');
+        expect(item.badge).toBe('VOTE');
+        expect(item.subtitle).toBe('Vote open · Yes/no vote');
+        expect(item.score).toBeGreaterThan(0.9);
+        expect(item.href).toBe('/governance');
+        expect(item.canopyId).toBe('!canopy:s');
+    });
+
+    it('demotes settled proposals and drops the badge', () => {
+        const [item] = mapGovernance(
+            [proposal({ proposalEventId: 'p2', status: 'passed', createdAt: NOW - HOUR })],
+            NOW
+        );
+        expect(item.badge).toBeUndefined();
+        expect(item.subtitle.startsWith('Passed · ')).toBe(true);
+        expect(item.score).toBeLessThan(0.5);
     });
 });
 

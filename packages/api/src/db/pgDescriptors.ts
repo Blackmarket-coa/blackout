@@ -297,6 +297,8 @@ const ALL_MAP_NAMES = [
   'questCompletions',
   'migrationCredits',
   'bountyRewards',
+  'bounties',
+  'bountyApplications',
   'creatorSubscriptionTiers',
   'creatorSubscriptions',
   'communityBoostPledges',
@@ -474,6 +476,13 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
   updateMigrationCredit: upsert('migrationCredits'),
   insertBountyReward: upsert('bountyRewards'),
   updateBountyReward: upsert('bountyRewards'),
+  createBounty: upsert('bounties'),
+  updateBountyStatus: upsert('bounties'),
+  claimBounty: upsert('bounties'),
+  createBountyApplication: upsert('bountyApplications'),
+  // Accepting one applicant also claims the bounty and declines every sibling
+  // pending application, so resync both maps rather than upsert a single record.
+  acceptBountyApplication: resync('bounties', 'bountyApplications'),
   insertCreatorSubscriptionTier: upsert('creatorSubscriptionTiers'),
   updateCreatorSubscriptionTier: upsert('creatorSubscriptionTiers'),
   insertCreatorSubscription: upsert('creatorSubscriptions'),

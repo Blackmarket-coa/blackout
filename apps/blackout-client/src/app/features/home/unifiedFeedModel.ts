@@ -11,6 +11,7 @@ import {
     buildLivePath,
     COALITION_PATH,
     COLISEUM_PATH,
+    GOVERNANCE_PATH,
     MARKET_PATH,
 } from '../../pages/paths';
 import { buildHomeFeed, type RoomLike } from './feedModel';
@@ -23,7 +24,8 @@ export type UnifiedFeedSource =
     | 'coliseum'
     | 'status'
     | 'wall'
-    | 'marketplace';
+    | 'marketplace'
+    | 'governance';
 
 interface UnifiedFeedItemBase {
     /** Unique across sources: `${source}:${rawId}`. */
@@ -76,6 +78,17 @@ export interface MarketplaceFeedItem extends UnifiedFeedItemBase {
     currency: string;
 }
 
+/** Governance proposal status/type, kept as local string unions so this pure
+ * model stays free of the matrix/protocol packages. */
+export type GovernanceFeedStatus = 'active' | 'passed' | 'failed' | 'cancelled';
+export type GovernanceFeedType = 'binary' | 'multiple_choice' | 'ranked' | 'consent';
+
+export interface GovernanceFeedItem extends UnifiedFeedItemBase {
+    source: 'governance';
+    status: GovernanceFeedStatus;
+    proposalType: GovernanceFeedType;
+}
+
 export type UnifiedFeedItem =
     | DenFeedItem
     | StreamFeedItem
@@ -83,7 +96,8 @@ export type UnifiedFeedItem =
     | ColiseumFeedCardItem
     | StatusFeedItem
     | WallFeedItem
-    | MarketplaceFeedItem;
+    | MarketplaceFeedItem
+    | GovernanceFeedItem;
 
 /** Lightweight projection of a profile status for the feed. */
 export interface StatusEntry {
@@ -201,6 +215,60 @@ export const mapColiseum = (
             href: COLISEUM_PATH,
             mediaUrl: topic.newsAnchor?.opengraphImage,
             tags: topic.tags ?? [],
+        };
+    });
+
+/** Lightweight projection of a governance proposal for the feed. The hook
+ * extracts these from joined-room state so this model stays matrix-free. */
+export interface GovernanceProposalEntry {
+    proposalEventId: string;
+    /** Canopy/space the proposal lives in, for the Following partition. */
+    canopyId: string | null;
+    title: string;
+    status: GovernanceFeedStatus;
+    proposalType: GovernanceFeedType;
+    /** Event timestamp (ms-since-epoch) the proposal was created. */
+    createdAt: number;
+}
+
+const GOVERNANCE_TYPE_LABEL: Record<GovernanceFeedType, string> = {
+    binary: 'Yes/no vote',
+    multiple_choice: 'Multiple choice',
+    ranked: 'Ranked vote',
+    consent: 'Consent round',
+};
+
+const GOVERNANCE_STATUS_LABEL: Record<GovernanceFeedStatus, string> = {
+    active: 'Vote open',
+    passed: 'Passed',
+    failed: 'Failed',
+    cancelled: 'Cancelled',
+};
+
+export const mapGovernance = (
+    entries: readonly GovernanceProposalEntry[],
+    now: number
+): GovernanceFeedItem[] =>
+    entries.map((entry) => {
+        const active = entry.status === 'active';
+        const recency = recencyScore(entry.createdAt, now);
+        return {
+            id: `governance:${entry.proposalEventId}`,
+            source: 'governance',
+            status: entry.status,
+            proposalType: entry.proposalType,
+            title: entry.title,
+            subtitle: active
+                ? `${GOVERNANCE_STATUS_LABEL.active} · ${GOVERNANCE_TYPE_LABEL[entry.proposalType]}`
+                : `${GOVERNANCE_STATUS_LABEL[entry.status]} · ${relativeSubtitle(entry.createdAt, now)}`,
+            canopyId: entry.canopyId,
+            denId: null,
+            timestamp: entry.createdAt,
+            // Active proposals lead governance; settled ones fade with age.
+            score: clamp01(active ? 0.7 + 0.3 * recency : 0.3 * recency),
+            href: GOVERNANCE_PATH,
+            badge: active ? 'VOTE' : undefined,
+            tags: [],
         };
     });
 

@@ -41,6 +41,7 @@ export const card = recipe({
             status: { vars: { '--card-accent': bmcPalette.neonLeaf } },
             wall: { vars: { '--card-accent': bmcPalette.forest } },
             marketplace: { vars: { '--card-accent': bmcPalette.lightGreen } },
+            governance: { vars: { '--card-accent': bmcPalette.solarMint } },
         },
     },
     defaultVariants: { source: 'den' },

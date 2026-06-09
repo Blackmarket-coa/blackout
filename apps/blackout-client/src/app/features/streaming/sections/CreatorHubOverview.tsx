@@ -8,6 +8,9 @@ import {
 } from '../../../pages/paths';
 import { listStreams } from '../../streams';
 import { fetchMyAmbassador, fetchMyReferrals } from '../../growth';
+import { creatorSubsApi } from '../../monetization/monetizationApi';
+import { readBlackoutApiToken } from '../../monetization/marketplace/useMarketplaceAuth';
+import { fetchMyContent } from '../../creators/contentClient';
 import type { StreamingTabId } from '../../../state/streaming';
 import {
     HubSection,
@@ -68,9 +71,12 @@ export const CreatorHubOverview = ({ onSelectTab }: CreatorHubOverviewProps): JS
     const [liveCount, setLiveCount] = useState<number | null>(null);
     const [referralCount, setReferralCount] = useState<number | null>(null);
     const [ambassadorTier, setAmbassadorTier] = useState<string | null>(null);
+    const [activeSubscribers, setActiveSubscribers] = useState<number | null>(null);
+    const [publishedContent, setPublishedContent] = useState<number | null>(null);
 
     useEffect(() => {
         let cancelled = false;
+        const token = readBlackoutApiToken();
         listStreams({ state: 'live', limit: 60 })
             .then((response) => {
                 if (cancelled) return;
@@ -87,6 +93,21 @@ export const CreatorHubOverview = ({ onSelectTab }: CreatorHubOverviewProps): JS
             .then((response) => {
                 if (cancelled) return;
                 setAmbassadorTier(response.ambassador?.tier ?? null);
+            })
+            .catch(() => undefined);
+        creatorSubsApi
+            .listMySubscribers(token)
+            .then((response) => {
+                if (cancelled) return;
+                setActiveSubscribers(
+                    response.subscriptions.filter((sub) => sub.status === 'active').length,
+                );
+            })
+            .catch(() => undefined);
+        fetchMyContent('published', token)
+            .then((response) => {
+                if (cancelled) return;
+                setPublishedContent(response.content.length);
             })
             .catch(() => undefined);
         return () => {
@@ -106,6 +127,16 @@ export const CreatorHubOverview = ({ onSelectTab }: CreatorHubOverviewProps): JS
         : referralCount && referralCount > 0
         ? `${referralCount} referrals tracked`
         : 'Track referrals, quests & credits';
+
+    const earningsMeta =
+        activeSubscribers && activeSubscribers > 0
+            ? `${activeSubscribers} active subscriber${activeSubscribers === 1 ? '' : 's'}`
+            : 'Subscriptions, tips & payouts';
+
+    const dashboardMeta =
+        publishedContent && publishedContent > 0
+            ? `${publishedContent} published · listings & growth`
+            : 'Listings, growth & storefront';
 
     return (
         <HubSection
@@ -151,7 +182,7 @@ export const CreatorHubOverview = ({ onSelectTab }: CreatorHubOverviewProps): JS
                     <CardInner
                         label="Storefront"
                         title="Creator dashboard"
-                        meta="Listings, growth & storefront"
+                        meta={dashboardMeta}
                     />
                 </Link>
                 <Link
@@ -159,11 +190,7 @@ export const CreatorHubOverview = ({ onSelectTab }: CreatorHubOverviewProps): JS
                     style={hubCardStyle}
                     data-testid="creator-hub-overview-earnings"
                 >
-                    <CardInner
-                        label="Monetization"
-                        title="Earnings"
-                        meta="Subscriptions, tips & payouts"
-                    />
+                    <CardInner label="Monetization" title="Earnings" meta={earningsMeta} />
                 </Link>
                 <Link
                     to={COALITION_PATH}

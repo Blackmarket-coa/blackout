@@ -15,6 +15,8 @@ process.env.LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET ?? 'lk_test_secr
 const { default: app } = await import('../src/index');
 const { signJwt } = await import('../src/services/auth');
 const { discoveryService } = await import('../src/services/discovery');
+const coliseumStore = await import('../src/services/coliseumStore');
+const creatorContentStore = await import('../src/services/creatorContentStore');
 
 function authHeader(sub = 'search-test-user'): Record<string, string> {
     return {
@@ -85,11 +87,106 @@ test('global search honors the types= filter', async () => {
     assert.ok(results.every((r) => r.type === 'bounty'));
 });
 
+test('global search spans debate topics and knowledge content', async () => {
+    // Seed a Coliseum debate topic and a published creator guide, both about compost.
+    coliseumStore.createTopic({
+        id: 'topic-compost-debate',
+        title: 'Compost vs vermiculture',
+        newsAnchor: {
+            sourceUrl: 'https://example.test/compost',
+            headline: 'The compost debate heats up',
+            publishedAt: new Date().toISOString(),
+        },
+        tags: ['compost', 'soil'],
+    });
+    const guide = creatorContentStore.createContent({
+        id: creatorContentStore.newContentId(),
+        creatorId: '@compostking:bmc',
+        kind: 'guide',
+        title: 'How to start a compost pile',
+        body: 'A step-by-step compost guide.',
+    });
+    creatorContentStore.publishContent(guide.id);
+
+    // Debate Search.
+    const debateRes = await app.request('/v1/search?q=compost&types=debate');
+    assert.equal(debateRes.status, 200);
+    const debate = (await debateRes.json()) as { results: Array<{ type: string; title: string }> };
+    assert.ok(debate.results.length > 0, 'expected a debate hit');
+    assert.ok(debate.results.every((r) => r.type === 'debate'));
+
+    // Knowledge Search.
+    const knowledgeRes = await app.request('/v1/search?q=compost&types=knowledge');
+    assert.equal(knowledgeRes.status, 200);
+    const knowledge = (await knowledgeRes.json()) as { results: Array<{ type: string }> };
+    assert.ok(knowledge.results.length > 0, 'expected a knowledge hit');
+    assert.ok(knowledge.results.every((r) => r.type === 'knowledge'));
+
+    // Default (no types=) now spans debate + knowledge alongside the rest.
+    const allRes = await app.request('/v1/search?q=compost');
+    const all = (await allRes.json()) as { results: Array<{ type: string }> };
+    const types = new Set(all.results.map((r) => r.type));
+    assert.ok(types.has('debate'), 'default search should include debate hits');
+    assert.ok(types.has('knowledge'), 'default search should include knowledge hits');
+});
+
 test('global trending returns a ranked cross-entity list', async () => {
     const res = await app.request('/v1/search/trending');
     assert.equal(res.status, 200);
     const { results } = (await res.json()) as { results: Array<{ score: number }> };
     assert.ok(Array.isArray(results));
+    for (let i = 1; i < results.length; i++) {
+        assert.ok(results[i - 1]!.score >= results[i]!.score, 'results must be score-descending');
+    }
+});
+
+test('recommendations boost shared interests and exclude already-followed', async () => {
+    discoveryService.upsertProfile({
+        id: '@permaculture-pat:bmc',
+        entityType: 'creator',
+        name: 'Permaculture Pat',
+        bio: 'Food forests',
+        tags: ['permaculture', 'soil'],
+        visibility: 'public',
+        moderationStatus: 'approved',
+    });
+    discoveryService.upsertProfile({
+        id: '@unrelated-uma:bmc',
+        entityType: 'creator',
+        name: 'Unrelated Uma',
+        tags: ['knitting'],
+        visibility: 'public',
+        moderationStatus: 'approved',
+    });
+    discoveryService.upsertProfile({
+        id: '!followed-canopy:bmc',
+        entityType: 'canopy',
+        name: 'Already Joined Coalition',
+        tags: ['permaculture'],
+        visibility: 'public',
+        moderationStatus: 'approved',
+    });
+    discoveryService.runFullIndex();
+
+    const res = await app.request(
+        '/v1/search/recommended?tags=permaculture&exclude=!followed-canopy:bmc',
+    );
+    assert.equal(res.status, 200);
+    const { results } = (await res.json()) as {
+        results: Array<{ id: string; type: string; score: number }>;
+    };
+
+    // Excluded entity must not be recommended.
+    assert.ok(
+        !results.some((r) => r.id === '!followed-canopy:bmc'),
+        'followed coalition should be excluded',
+    );
+    // The interest-matching creator outranks the unrelated one.
+    const pat = results.find((r) => r.id === '@permaculture-pat:bmc');
+    const uma = results.find((r) => r.id === '@unrelated-uma:bmc');
+    assert.ok(pat, 'interest-matching creator should be recommended');
+    if (uma) assert.ok(pat!.score > uma.score, 'shared-interest creator should outrank unrelated');
+    // Ranked descending.
     for (let i = 1; i < results.length; i++) {
         assert.ok(results[i - 1]!.score >= results[i]!.score, 'results must be score-descending');
     }

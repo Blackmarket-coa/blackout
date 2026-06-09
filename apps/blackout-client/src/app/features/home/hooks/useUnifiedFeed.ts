@@ -8,10 +8,13 @@ import { fetchCoalitionFeed } from '../../coalition/coalitionClient';
 import { fetchColiseumTopics } from '../../coliseum/coliseumClient';
 import { fetchListings } from '../../monetization/marketplace/marketplaceClient';
 import { readBlackoutApiToken } from '../../monetization/marketplace/useMarketplaceAuth';
+import { GOVERNANCE_PROPOSAL_EVENT_TYPE } from '@blackout/protocol';
+import { normalizeProposalEventContent } from '../../governance/eventSchemas';
 import {
     mapCoalition,
     mapColiseum,
     mapDens,
+    mapGovernance,
     mapMarketplace,
     mapStatuses,
     mapStreams,
@@ -23,6 +26,7 @@ import {
     type CoalitionFeedCardItem,
     type ColiseumFeedCardItem,
     type FeedSort,
+    type GovernanceProposalEntry,
     type MarketplaceFeedItem,
     type StreamFeedItem,
     type UnifiedFeedItem,
@@ -68,6 +72,42 @@ const collectJoinedCanopyIds = (rooms: readonly RoomLike[]): Set<string> => {
         if (parent) ids.add(parent);
     }
     return ids;
+};
+
+/**
+ * Extract governance proposals from joined-room state. Proposals are
+ * `GOVERNANCE_PROPOSAL_EVENT_TYPE` state events (canopy spaces and dens);
+ * normalized here and handed to the pure `mapGovernance` so the feed model
+ * stays matrix-free. The proposal's canopy is the space itself, or the den's
+ * canonical parent, so it lands in the Following partition correctly.
+ */
+const collectGovernanceProposals = (rooms: readonly Room[]): GovernanceProposalEntry[] => {
+    const entries: GovernanceProposalEntry[] = [];
+    for (const room of rooms) {
+        const raw = room.currentState?.getStateEvents(GOVERNANCE_PROPOSAL_EVENT_TYPE);
+        const events = Array.isArray(raw) ? raw : raw ? [raw] : [];
+        if (events.length === 0) continue;
+        const roomLike = room as unknown as RoomLike;
+        const canopyId =
+            roomLike.getType?.() === 'm.space'
+                ? room.roomId
+                : (roomLike.getCanonicalParent?.() ?? null);
+        for (const event of events) {
+            const normalized = normalizeProposalEventContent(
+                event.getContent<Record<string, unknown>>(),
+            );
+            if (!normalized.data) continue;
+            entries.push({
+                proposalEventId: event.getId() ?? `${room.roomId}-${event.getStateKey() ?? ''}`,
+                canopyId,
+                title: normalized.data.title,
+                status: normalized.data.status,
+                proposalType: normalized.data.type,
+                createdAt: event.getTs(),
+            });
+        }
+    }
+    return entries;
 };
 
 export function useUnifiedFeed(sort?: FeedSort): UnifiedFeedResult {
@@ -158,12 +198,16 @@ export function useUnifiedFeed(sort?: FeedSort): UnifiedFeedResult {
         const denItems = mapDens(rooms as unknown as RoomLike[], now);
         const statusItems = mapStatuses(activity.statuses, now);
         const wallItems = mapWallPosts(activity.walls, now);
+        const governanceItems = flags.governance
+            ? mapGovernance(collectGovernanceProposals(rooms), now)
+            : [];
         const joinedCanopyIds = collectJoinedCanopyIds(rooms as unknown as RoomLike[]);
 
         const merged: UnifiedFeedItem[] = [
             ...denItems,
             ...statusItems,
             ...wallItems,
+            ...governanceItems,
             ...remote.streams,
             ...remote.coalition,
             ...remote.coliseum,

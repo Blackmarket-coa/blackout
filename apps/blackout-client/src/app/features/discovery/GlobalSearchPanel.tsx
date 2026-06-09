@@ -4,13 +4,15 @@ import {
     type GlobalSearchResult,
     type GlobalSearchType,
 } from '@blackout/core';
-import { globalSearch, globalTrending } from './globalSearchClient';
+import { globalRecommended, globalSearch, globalTrending } from './globalSearchClient';
 
 const TYPE_LABEL: Record<GlobalSearchType, string> = {
     coalition: 'Coalition',
     creator: 'Creator',
     bounty: 'Bounty',
     project: 'Project',
+    debate: 'Debate',
+    knowledge: 'Knowledge',
 };
 
 const panelStyle: CSSProperties = {
@@ -77,17 +79,31 @@ function ResultRow({ result }: { result: GlobalSearchResult }) {
     );
 }
 
+type IdleMode = 'trending' | 'recommended';
+
+export interface GlobalSearchPanelProps {
+    /** Viewer interest tags used to personalize the "For you" recommendations. */
+    interestTags?: string[];
+    /** Entity ids the viewer already follows/joined, excluded from suggestions. */
+    excludeIds?: string[];
+}
+
 /**
- * Cross-entity global search + trending. Searches coalitions, creators,
- * bounties, and projects via `/v1/search`; with an empty query it shows the
- * cross-entity trending list. Self-contained so it can mount anywhere.
+ * Cross-entity global search + discovery. Searches coalitions, creators,
+ * bounties, projects, debates and guides via `/v1/search`; with an empty query
+ * it shows either the cross-entity trending list or personalized
+ * recommendations ("For you"). Self-contained so it can mount anywhere.
  */
-export function GlobalSearchPanel(): JSX.Element {
+export function GlobalSearchPanel({
+    interestTags,
+    excludeIds,
+}: GlobalSearchPanelProps = {}): JSX.Element {
     const [query, setQuery] = useState('');
     const [activeTypes, setActiveTypes] = useState<Set<GlobalSearchType>>(new Set());
     const [results, setResults] = useState<GlobalSearchResult[]>([]);
     const [loading, setLoading] = useState(false);
     const [trendingMode, setTrendingMode] = useState(true);
+    const [idleMode, setIdleMode] = useState<IdleMode>('trending');
 
     const toggleType = useCallback((type: GlobalSearchType) => {
         setActiveTypes((prev) => {
@@ -98,13 +114,23 @@ export function GlobalSearchPanel(): JSX.Element {
         });
     }, []);
 
-    // Load trending on mount and whenever the query is cleared.
+    // Serialize the personalization inputs so the effect re-runs when they change
+    // without depending on unstable array identities.
+    const interestKey = (interestTags ?? []).join(',');
+    const excludeKey = (excludeIds ?? []).join(',');
+
+    // Load the idle list (trending or recommended) on mount and whenever the
+    // query is cleared or the idle mode / personalization inputs change.
     useEffect(() => {
         if (query.trim().length > 0) return;
         let cancelled = false;
         setTrendingMode(true);
         setLoading(true);
-        globalTrending()
+        const request =
+            idleMode === 'recommended'
+                ? globalRecommended(interestTags, excludeIds)
+                : globalTrending();
+        request
             .then((res) => {
                 if (!cancelled) setResults(res.results);
             })
@@ -117,7 +143,8 @@ export function GlobalSearchPanel(): JSX.Element {
         return () => {
             cancelled = true;
         };
-    }, [query]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [query, idleMode, interestKey, excludeKey]);
 
     const runSearch = useCallback(() => {
         const trimmed = query.trim();
@@ -139,7 +166,7 @@ export function GlobalSearchPanel(): JSX.Element {
                     onKeyDown={(event) => {
                         if (event.key === 'Enter') runSearch();
                     }}
-                    placeholder="Search coalitions, creators, bounties, projects…"
+                    placeholder="Search coalitions, creators, bounties, projects, debates, guides…"
                     data-testid="global-search-input"
                     style={inputStyle}
                 />
@@ -174,8 +201,37 @@ export function GlobalSearchPanel(): JSX.Element {
                 ))}
             </div>
 
+            {trendingMode ? (
+                <div style={{ display: 'flex', gap: 6 }} role="tablist" aria-label="Discovery mode">
+                    <button
+                        type="button"
+                        role="tab"
+                        aria-selected={idleMode === 'trending'}
+                        data-testid="global-search-trending-tab"
+                        style={chipStyle(idleMode === 'trending')}
+                        onClick={() => setIdleMode('trending')}
+                    >
+                        Trending
+                    </button>
+                    <button
+                        type="button"
+                        role="tab"
+                        aria-selected={idleMode === 'recommended'}
+                        data-testid="global-search-foryou-tab"
+                        style={chipStyle(idleMode === 'recommended')}
+                        onClick={() => setIdleMode('recommended')}
+                    >
+                        For you
+                    </button>
+                </div>
+            ) : null}
+
             <span style={{ fontSize: 12, color: 'var(--text-secondary, #aaa)' }}>
-                {trendingMode ? 'Trending across the ecosystem' : `Results for “${query.trim()}”`}
+                {trendingMode
+                    ? idleMode === 'recommended'
+                        ? 'Recommended for you'
+                        : 'Trending across the ecosystem'
+                    : `Results for “${query.trim()}”`}
             </span>
 
             {loading ? (
