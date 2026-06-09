@@ -45,7 +45,7 @@ import { OAuthCallback } from './app/features/settings/linked-accounts/OAuthCall
 import { InviteLandingPage, PendingInviteRedeemer } from './app/components/invite-landing';
 import { OnboardingPage } from './app/features/welcome/OnboardingPage';
 import { PublicDirectory } from './app/features/discovery/PublicDirectory';
-import { ONBOARDING_PATH } from './app/pages/paths';
+import { ONBOARDING_PATH, SWIPE_FEED_PATH } from './app/pages/paths';
 import { trimTrailingSlash } from './app/utils/common';
 
 // HomeFeed is gated behind two flags and a small Matrix-tied data path
@@ -54,6 +54,7 @@ import { trimTrailingSlash } from './app/utils/common';
 // off — the same pattern PR 1 adopted for ClientLayout in
 // CommunitiesRoute.
 const HomeFeedLazy = React.lazy(() => import('./app/features/home/HomeFeed'));
+const MobileSwipeFeedLazy = React.lazy(() => import('./app/features/home/MobileSwipeFeed'));
 import { pushSessionToSW } from './sw-session';
 import { getFallbackSession } from './app/state/sessions';
 import { initDesktopBridge } from './platform/initDesktopBridge';
@@ -216,6 +217,20 @@ const buildAppRouter = (capabilityContext: {
         // here (with the invited room as `?room=`) before dropping them into
         // the room; otherwise the wizard only ever shows as a ClientLayout modal.
         { path: ONBOARDING_PATH, element: <OnboardingPage /> },
+        // Full-screen swipe-first feed. Reuses the unified-feed data and the
+        // AppShell chrome, so it rides the same flags as HomeFeed.
+        ...(homeFeedEnabled
+            ? [
+                  {
+                      path: SWIPE_FEED_PATH,
+                      element: (
+                          <React.Suspense fallback={null}>
+                              <MobileSwipeFeedLazy />
+                          </React.Suspense>
+                      ),
+                  },
+              ]
+            : []),
         ...authRedirectRoutes,
         ...registryRoutes,
     ];

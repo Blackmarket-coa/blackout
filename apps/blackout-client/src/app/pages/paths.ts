@@ -46,6 +46,8 @@ export const HOME_PATH = '/home/';
 export const HOME_CREATE_PATH = `/home/${_CREATE_PATH}`;
 export const HOME_JOIN_PATH = `/home/${_JOIN_PATH}`;
 export const HOME_SEARCH_PATH = `/home/${_SEARCH_PATH}`;
+/** Full-screen, swipe-first vertical feed (mobile-first). */
+export const SWIPE_FEED_PATH = '/feed/';
 
 export const LEGACY_DIRECT_PATH = '/direct/';
 export type DirectCreateSearchParams = {

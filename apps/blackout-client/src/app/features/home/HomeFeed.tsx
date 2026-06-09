@@ -13,6 +13,7 @@ import {
     EVENTS_PATH,
     LIVE_PATH,
     MARKET_PATH,
+    SWIPE_FEED_PATH,
     buildCommunitiesPath,
 } from '../../pages/paths';
 import { TopicChipBar } from '../topics/TopicChipBar';
@@ -267,6 +268,14 @@ export const HomeFeed = (): JSX.Element => {
                     </div>
                     <div className={css.headerActions}>
                         {runtimeFeatureFlags.profile ? <HomeComposer /> : null}
+                        <Link
+                            to={SWIPE_FEED_PATH}
+                            className={css.iconButton}
+                            data-testid="home-swipe-view-link"
+                            title="Open the full-screen swipe feed"
+                        >
+                            ⬍ Swipe view
+                        </Link>
                         <button
                             type="button"
                             className={css.iconButton}
