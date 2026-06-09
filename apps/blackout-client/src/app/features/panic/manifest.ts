@@ -6,9 +6,10 @@ import { activeDefenseSettings, panicWipeSettings } from './settings';
  * (Active Defense). See `docs/oss_manifest_packaging.md` for the
  * free/tiered/plugin classification.
  *
- * Two customizations:
- *   - `panic-wipe`      free personal-safety baseline; gated only by
- *                       `panic.wipe.trigger` (no feature flag).
+ * The module is registered behind the `activeDefense` flag (see
+ * `coreModules.ts`). Two customizations:
+ *   - `panic-wipe`      free personal-safety baseline within the module;
+ *                       gated by the `panic.wipe.trigger` capability.
  *   - `active-defense`  enterprise/Sovereignty-tier deception primitives
  *                       (canary tokens, decoy data); gated by
  *                       `defense.canary.deploy` behind the `activeDefense`

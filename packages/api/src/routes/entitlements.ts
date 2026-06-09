@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { EntitlementAccessPayload, EntitlementFamily, EntitlementMap, EntitlementReadResponse, EntitlementTier } from '@blackout/protocol';
-import { DEAD_DROP_TIER_ENTITLEMENTS, buildFullyUnlockedEntitlementPayload, parseEntitlementAccessPayload } from '@blackout/protocol';
+import { DEAD_DROP_TIER_ENTITLEMENTS, PERSONA_TIER_ENTITLEMENTS, HARDENING_TIER_ENTITLEMENTS, buildFullyUnlockedEntitlementPayload, parseEntitlementAccessPayload } from '@blackout/protocol';
 import type { MarketplaceProviderId } from '@blackout/core';
 import { getSubscription } from '../services/subscriptions';
 import { requireUser } from '../middleware/require-user';
@@ -20,10 +20,18 @@ const featurePrefixes: Record<EntitlementFamily, string> = {
   stego: 'features.stego.',
   governance: 'features.governance.',
   deaddrop: 'features.deaddrop.',
+  persona: 'features.persona.',
+  hardening: 'features.hardening.',
 };
 
 const deaddropEntitlementsForTier = (tier: EntitlementTier): EntitlementMap =>
   DEAD_DROP_TIER_ENTITLEMENTS[tier] as EntitlementMap;
+
+const personaEntitlementsForTier = (tier: EntitlementTier): EntitlementMap =>
+  PERSONA_TIER_ENTITLEMENTS[tier] as EntitlementMap;
+
+const hardeningEntitlementsForTier = (tier: EntitlementTier): EntitlementMap =>
+  HARDENING_TIER_ENTITLEMENTS[tier] as EntitlementMap;
 
 function defaultPayload(): EntitlementAccessPayload {
   if (betaUnlockAllEnabled()) return buildFullyUnlockedEntitlementPayload();
@@ -34,6 +42,8 @@ function defaultPayload(): EntitlementAccessPayload {
       'features.stego.ephemeral': false,
       'features.governance.entitlements': false,
       ...deaddropEntitlementsForTier('free'),
+      ...personaEntitlementsForTier('free'),
+      ...hardeningEntitlementsForTier('free'),
     },
     orgTier: 'free',
     orgTierEntitlements: {
@@ -41,6 +51,8 @@ function defaultPayload(): EntitlementAccessPayload {
       'features.stego.ephemeral': false,
       'features.governance.entitlements': false,
       ...deaddropEntitlementsForTier('free'),
+      ...personaEntitlementsForTier('free'),
+      ...hardeningEntitlementsForTier('free'),
     },
     planState: {
       tier: 'free',
@@ -71,6 +83,8 @@ function canonicalPayloadFromSubscription(userId: string): EntitlementAccessPayl
     'features.canopy.premium': paid,
     'features.canopy.priority_support': premium,
     ...deaddropEntitlementsForTier(tier),
+    ...personaEntitlementsForTier(tier),
+    ...hardeningEntitlementsForTier(tier),
   };
 
   return {
@@ -145,8 +159,8 @@ entitlements.get('/me', (c) => {
 
 entitlements.get('/:family', (c) => {
   const family = c.req.param('family');
-  if (family !== 'stego' && family !== 'governance' && family !== 'deaddrop') {
-    return c.json({ code: 'invalid_entitlement_family', message: 'Family must be stego, governance, or deaddrop.' }, 400);
+  if (family !== 'stego' && family !== 'governance' && family !== 'deaddrop' && family !== 'persona' && family !== 'hardening') {
+    return c.json({ code: 'invalid_entitlement_family', message: 'Family must be stego, governance, deaddrop, persona, or hardening.' }, 400);
   }
 
   try {

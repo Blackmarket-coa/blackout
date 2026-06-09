@@ -255,20 +255,29 @@ New section `privacy_suite` + rows: `shield_visibility`, `privacy_hardening`,
 ### Feature-module allowlist — `core/features/manifest.ts`
 Added ids: `privacy-tools`, `burner-identity`, `panic`.
 
-### Skeleton plugin manifests (promote existing dirs)
-- `features/privacy-tools/{manifest,settings}.ts` — G1 + G2 customizations.
-- `features/burner-identity/{manifest,settings}.ts` — G3 customization.
-- `features/panic/{manifest,settings}.ts` — G5 (free panic-wipe + gated active-defense).
+### Plugin manifests (promote existing dirs) — wired into `coreModules.ts`
+- `features/privacy-tools/{manifest,settings,index}.ts` — G1 + G2 customizations.
+  Module gated by `shieldVisibility`; the `privacy-hardening` customization is
+  further gated by `privacyHardening` within the module.
+- `features/burner-identity/{manifest,settings,index}.ts` — G3 customization.
+  Module gated by `personaEngine`.
+- `features/panic/{manifest,settings,index}.ts` — G5. Module gated by
+  `activeDefense`; `panic-wipe` is the free tier inside it (capability
+  `panic.wipe.trigger`), `active-defense` carries the canary/decoy gate.
 
-> These manifests are not yet wired into `coreModules.ts`; they are declared
-> and registry-conformant so the gating is documented, but stay dormant until
-> the underlying capabilities land.
+Each module loads via a `coreFeatureModules` entry behind its flag; per-feature
+customizations gate further by `capabilityGate`. All flags default-off, so the
+canonical shell is unchanged until an operator opts in.
 
-### Entitlement maps — `packages/blackout-protocol/src/`
+### Entitlement maps — `packages/blackout-protocol/src/`, consumed by the API
 - `persona/entitlements.ts` — keys `features.persona.{enabled,rotation,compartments}`;
   `PERSONA_QUOTAS.maxPersonas` = free 1 / pro 8 / team 32 / enterprise -1.
 - `hardening/entitlements.ts` — keys `features.hardening.{enabled,torTransport,decoyTraffic,imagePerturbation}`;
   free keeps `enabled`, `pro`+ unlock the rest.
+- Aggregated into the canonical entitlement payload in
+  `packages/api/src/routes/entitlements.ts` (default + per-subscription + the
+  `/:family` filter) and `entitlements/fullyUnlocked.ts`, alongside `deaddrop`.
+  `EntitlementFamily` now includes `persona` and `hardening`.
 
 ---
 

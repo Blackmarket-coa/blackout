@@ -31,6 +31,9 @@ import { stegoToolkitFeature } from '../../features/stego-toolkit';
 import { streamsFeature } from '../../features/streams';
 import { streamingFeature } from '../../features/streaming';
 import { topicsFeature } from '../../features/topics';
+import { privacyToolsFeature } from '../../features/privacy-tools';
+import { burnerIdentityFeature } from '../../features/burner-identity';
+import { panicFeature } from '../../features/panic';
 import type { FeatureModule } from './types';
 
 export const coreFeatureModules: FeatureModule[] = [
@@ -157,5 +160,23 @@ export const coreFeatureModules: FeatureModule[] = [
     {
         feature: federationSelfHostFeature,
         flag: 'federationSelfHost',
+    },
+    {
+        // OSS-manifest G1/G2. `shieldVisibility` is the privacy-tools module
+        // switch; the privacy-hardening customization is further gated by
+        // `privacyHardening` within the module (pro-tier surface).
+        feature: privacyToolsFeature,
+        flag: 'shieldVisibility',
+    },
+    {
+        feature: burnerIdentityFeature,
+        flag: 'personaEngine',
+    },
+    {
+        // OSS-manifest G5. `activeDefense` is the panic/active-defense module
+        // switch; `panic-wipe` is the free tier inside it, while the
+        // `active-defense` (canary/decoy) customization carries its own gate.
+        feature: panicFeature,
+        flag: 'activeDefense',
     },
 ];
