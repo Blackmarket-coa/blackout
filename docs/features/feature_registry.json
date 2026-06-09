@@ -42,9 +42,22 @@
             "epic_delivery_blueprint"
           ],
           "total": 8
+        },
+        {
+          "id": "privacy_suite",
+          "name": "Privacy suite (OSS-manifest packaging)",
+          "featureIds": [
+            "shield_visibility",
+            "privacy_hardening",
+            "persona_engine",
+            "active_defense",
+            "mesh_transport",
+            "transparency_reports"
+          ],
+          "total": 6
         }
       ],
-      "globalTotal": 16
+      "globalTotal": 22
     }
   ],
   "features": [
@@ -576,6 +589,187 @@
       ],
       "lastVerifiedAt": "2026-04-09",
       "verifiedBy": "blackout-ci"
+    },
+    {
+      "id": "shield_visibility",
+      "name": "Shield / Visibility",
+      "category": "novel",
+      "status": "planned",
+      "presetKey": "features.shield.enabled",
+      "uiEntry": "settings_toggle:feature-toggle-shield-visibility",
+      "owner": "privacy-eng",
+      "testCoverage": "none",
+      "notes": "Opt-in tracker, fingerprint, and leak detection surface (uBlock- and Privacy-Badger-class lists plus heuristics). Free baseline capability delivered as a default-off plugin. Registry and feature-flag stub only.",
+      "sourcePointers": [
+        "apps/blackout-client/src/app/features/privacy-tools/manifest.ts",
+        "docs/oss_manifest_packaging.md"
+      ],
+      "presetPolicy": {
+        "baseline_matrix": false,
+        "community_plus": true,
+        "blackout_full": true
+      },
+      "uiTestRefs": [
+        "apps/blackout-client/src/app/features/privacy-tools/manifest.ts::feature-toggle-shield-visibility"
+      ],
+      "fallbackBehavior": "When the shieldVisibility flag is off or the capability is ungranted, the customization does not register and the canonical shell renders unchanged.",
+      "evidenceType": "docs",
+      "evidencePaths": [
+        "docs/oss_manifest_packaging.md"
+      ],
+      "lastVerifiedAt": "2026-06-09",
+      "verifiedBy": "blackout-coa"
+    },
+    {
+      "id": "privacy_hardening",
+      "name": "Privacy Hardening",
+      "category": "novel",
+      "status": "planned",
+      "presetKey": "features.hardening.enabled",
+      "uiEntry": "settings_toggle:feature-toggle-privacy-hardening",
+      "owner": "privacy-eng",
+      "testCoverage": "none",
+      "notes": "Advanced per-user anonymity: anonymized transport, decoy traffic, fingerprint randomization, and image perturbation. Gated to the pro entitlement tier. Registry and feature-flag stub only.",
+      "sourcePointers": [
+        "apps/blackout-client/src/app/features/privacy-tools/manifest.ts",
+        "packages/blackout-protocol/src/hardening/entitlements.ts",
+        "docs/oss_manifest_packaging.md"
+      ],
+      "presetPolicy": {
+        "baseline_matrix": false,
+        "community_plus": false,
+        "blackout_full": true
+      },
+      "uiTestRefs": [
+        "apps/blackout-client/src/app/features/privacy-tools/manifest.ts::feature-toggle-privacy-hardening"
+      ],
+      "fallbackBehavior": "When the privacyHardening flag is off or the pro entitlement is absent, the customization does not register and the canonical shell renders unchanged.",
+      "evidenceType": "docs",
+      "evidencePaths": [
+        "docs/oss_manifest_packaging.md"
+      ],
+      "lastVerifiedAt": "2026-06-09",
+      "verifiedBy": "blackout-coa"
+    },
+    {
+      "id": "persona_engine",
+      "name": "Persona Engine",
+      "category": "novel",
+      "status": "planned",
+      "presetKey": "features.persona.enabled",
+      "uiEntry": "settings_toggle:feature-toggle-persona-engine",
+      "owner": "identity-eng",
+      "testCoverage": "none",
+      "notes": "Multi-persona compartmentalization and alias rotation above the free single burner identity. Roster size is a pro-tier quota. Registry and feature-flag stub only.",
+      "sourcePointers": [
+        "apps/blackout-client/src/app/features/burner-identity/manifest.ts",
+        "packages/blackout-protocol/src/persona/entitlements.ts",
+        "docs/oss_manifest_packaging.md"
+      ],
+      "presetPolicy": {
+        "baseline_matrix": false,
+        "community_plus": false,
+        "blackout_full": true
+      },
+      "uiTestRefs": [
+        "apps/blackout-client/src/app/features/burner-identity/manifest.ts::feature-toggle-persona-engine"
+      ],
+      "fallbackBehavior": "When the personaEngine flag is off or the capability is ungranted, the customization does not register and the canonical shell renders unchanged.",
+      "evidenceType": "docs",
+      "evidencePaths": [
+        "docs/oss_manifest_packaging.md"
+      ],
+      "lastVerifiedAt": "2026-06-09",
+      "verifiedBy": "blackout-coa"
+    },
+    {
+      "id": "active_defense",
+      "name": "Active Defense",
+      "category": "novel",
+      "status": "planned",
+      "presetKey": "features.activedefense.enabled",
+      "uiEntry": "admin_console:feature-toggle-active-defense",
+      "owner": "security-eng",
+      "testCoverage": "none",
+      "notes": "Defensive-only deception primitives (canary tokens, decoy data) above the free panic and duress controls. Gated to the enterprise tier with explicit admin consent. Registry and feature-flag stub only.",
+      "sourcePointers": [
+        "apps/blackout-client/src/app/features/panic/manifest.ts",
+        "docs/oss_manifest_packaging.md"
+      ],
+      "presetPolicy": {
+        "baseline_matrix": false,
+        "community_plus": false,
+        "blackout_full": true
+      },
+      "uiTestRefs": [
+        "apps/blackout-client/src/app/features/panic/manifest.ts::feature-toggle-active-defense"
+      ],
+      "fallbackBehavior": "When the activeDefense flag is off or the capability is ungranted, the customization does not register and the canonical shell renders unchanged.",
+      "evidenceType": "docs",
+      "evidencePaths": [
+        "docs/oss_manifest_packaging.md"
+      ],
+      "lastVerifiedAt": "2026-06-09",
+      "verifiedBy": "blackout-coa"
+    },
+    {
+      "id": "mesh_transport",
+      "name": "Mesh / Offline Transport",
+      "category": "novel",
+      "status": "planned",
+      "presetKey": "features.mesh.enabled",
+      "uiEntry": "settings_toggle:feature-toggle-mesh-transport",
+      "owner": "federation-eng",
+      "testCoverage": "none",
+      "notes": "Store-and-forward peer sync over local radios (Briar-class). Topology capability gated to the enterprise tier. Registry and feature-flag stub only; no client surface yet.",
+      "sourcePointers": [
+        "docs/oss_manifest_packaging.md"
+      ],
+      "presetPolicy": {
+        "baseline_matrix": false,
+        "community_plus": false,
+        "blackout_full": true
+      },
+      "uiTestRefs": [
+        "docs/oss_manifest_packaging.md::feature-toggle-mesh-transport"
+      ],
+      "fallbackBehavior": "When the meshTransport flag is off, no mesh surface registers and the canonical shell renders unchanged.",
+      "evidenceType": "docs",
+      "evidencePaths": [
+        "docs/oss_manifest_packaging.md"
+      ],
+      "lastVerifiedAt": "2026-06-09",
+      "verifiedBy": "blackout-coa"
+    },
+    {
+      "id": "transparency_reports",
+      "name": "Transparency Reports",
+      "category": "novel",
+      "status": "planned",
+      "presetKey": "features.transparency.enabled",
+      "uiEntry": "settings_toggle:feature-toggle-transparency-reports",
+      "owner": "trust-eng",
+      "testCoverage": "none",
+      "notes": "Self-service transparency and warrant-canary view (free); org-scoped audit export is a Governance-tier capability. Registry and feature-flag stub only.",
+      "sourcePointers": [
+        "apps/blackout-client/src/app/features/data-transparency",
+        "docs/oss_manifest_packaging.md"
+      ],
+      "presetPolicy": {
+        "baseline_matrix": false,
+        "community_plus": true,
+        "blackout_full": true
+      },
+      "uiTestRefs": [
+        "docs/oss_manifest_packaging.md::feature-toggle-transparency-reports"
+      ],
+      "fallbackBehavior": "When the transparencyReports flag is off, no transparency surface registers and the canonical shell renders unchanged.",
+      "evidenceType": "docs",
+      "evidencePaths": [
+        "docs/oss_manifest_packaging.md"
+      ],
+      "lastVerifiedAt": "2026-06-09",
+      "verifiedBy": "blackout-coa"
     }
   ]
 }

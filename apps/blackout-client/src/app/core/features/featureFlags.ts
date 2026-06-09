@@ -272,6 +272,49 @@ export type FeatureFlags = {
      * `BLACKOUT_CREATOR_CONTENT=false` disables it.
      */
     creatorContent: boolean;
+    /**
+     * Shield / Visibility plugin (OSS-manifest group G1). Opt-in surface for
+     * tracker / fingerprint / leak detection (uBlock-, Privacy-Badger-class
+     * lists + heuristics). Detection is a free baseline capability, but the
+     * plugin is default-off because it adds UI and active probing not every
+     * deployment wants. `BLACKOUT_SHIELD_VISIBILITY=true` enables it.
+     */
+    shieldVisibility: boolean;
+    /**
+     * Privacy Hardening plugin (OSS-manifest group G2). Advanced per-user
+     * anonymity: anonymized transport, decoy traffic, fingerprint
+     * randomization, and image perturbation. Gated to the `pro` entitlement
+     * tier (basic vault stays free). `BLACKOUT_PRIVACY_HARDENING=true` enables.
+     */
+    privacyHardening: boolean;
+    /**
+     * Persona engine plugin (OSS-manifest group G3). Multi-persona
+     * compartmentalization and alias rotation on top of the free single
+     * burner identity. Roster size is a `pro`-tier quota. Default off;
+     * `BLACKOUT_PERSONA_ENGINE=true` enables.
+     */
+    personaEngine: boolean;
+    /**
+     * Active defense plugin (OSS-manifest group G5). Defensive-only deception
+     * primitives (canary tokens, decoy data) layered on the free panic/duress
+     * controls. Gated to the highest (enterprise / Sovereignty) tier with
+     * explicit admin consent. `BLACKOUT_ACTIVE_DEFENSE=true` enables.
+     */
+    activeDefense: boolean;
+    /**
+     * Mesh / offline transport plugin (OSS-manifest group G6). Store-and-forward
+     * peer sync over local radios (Briar-class). Topology capability gated to
+     * the highest (enterprise / Sovereignty) tier. Registry+flag stub only;
+     * default off. `BLACKOUT_MESH_TRANSPORT=true` enables.
+     */
+    meshTransport: boolean;
+    /**
+     * Transparency reports plugin (OSS-manifest group G9). Self-service
+     * transparency / warrant-canary view (free); org-scoped audit export is a
+     * Governance-tier capability. Default off;
+     * `BLACKOUT_TRANSPARENCY_REPORTS=true` enables.
+     */
+    transparencyReports: boolean;
 };
 
 export type FeatureMode = 'default' | 'baseline' | 'full';
@@ -354,6 +397,12 @@ export const defaultFeatureFlags: FeatureFlags = {
     federationSelfHost: false,
     bugReportWidget: true,
     creatorContent: true,
+    shieldVisibility: false,
+    privacyHardening: false,
+    personaEngine: false,
+    activeDefense: false,
+    meshTransport: false,
+    transparencyReports: false,
 };
 
 /**
@@ -515,6 +564,42 @@ export const resolveFeatureFlags = (
         }
         if (env.BLACKOUT_STEGO_TOOLKIT === 'false') {
             nextFlags.stegoToolkit = false;
+        }
+        if (env.BLACKOUT_SHIELD_VISIBILITY === 'true') {
+            nextFlags.shieldVisibility = true;
+        }
+        if (env.BLACKOUT_SHIELD_VISIBILITY === 'false') {
+            nextFlags.shieldVisibility = false;
+        }
+        if (env.BLACKOUT_PRIVACY_HARDENING === 'true') {
+            nextFlags.privacyHardening = true;
+        }
+        if (env.BLACKOUT_PRIVACY_HARDENING === 'false') {
+            nextFlags.privacyHardening = false;
+        }
+        if (env.BLACKOUT_PERSONA_ENGINE === 'true') {
+            nextFlags.personaEngine = true;
+        }
+        if (env.BLACKOUT_PERSONA_ENGINE === 'false') {
+            nextFlags.personaEngine = false;
+        }
+        if (env.BLACKOUT_ACTIVE_DEFENSE === 'true') {
+            nextFlags.activeDefense = true;
+        }
+        if (env.BLACKOUT_ACTIVE_DEFENSE === 'false') {
+            nextFlags.activeDefense = false;
+        }
+        if (env.BLACKOUT_MESH_TRANSPORT === 'true') {
+            nextFlags.meshTransport = true;
+        }
+        if (env.BLACKOUT_MESH_TRANSPORT === 'false') {
+            nextFlags.meshTransport = false;
+        }
+        if (env.BLACKOUT_TRANSPARENCY_REPORTS === 'true') {
+            nextFlags.transparencyReports = true;
+        }
+        if (env.BLACKOUT_TRANSPARENCY_REPORTS === 'false') {
+            nextFlags.transparencyReports = false;
         }
         if (env.BLACKOUT_SETTINGS_PARITY === 'true') {
             nextFlags.settingsParity = true;
@@ -809,6 +894,42 @@ export const resolveFeatureFlags = (
     }
     if (env.BLACKOUT_STEGO_TOOLKIT === 'false') {
         nextFlags.stegoToolkit = false;
+    }
+    if (env.BLACKOUT_SHIELD_VISIBILITY === 'true') {
+        nextFlags.shieldVisibility = true;
+    }
+    if (env.BLACKOUT_SHIELD_VISIBILITY === 'false') {
+        nextFlags.shieldVisibility = false;
+    }
+    if (env.BLACKOUT_PRIVACY_HARDENING === 'true') {
+        nextFlags.privacyHardening = true;
+    }
+    if (env.BLACKOUT_PRIVACY_HARDENING === 'false') {
+        nextFlags.privacyHardening = false;
+    }
+    if (env.BLACKOUT_PERSONA_ENGINE === 'true') {
+        nextFlags.personaEngine = true;
+    }
+    if (env.BLACKOUT_PERSONA_ENGINE === 'false') {
+        nextFlags.personaEngine = false;
+    }
+    if (env.BLACKOUT_ACTIVE_DEFENSE === 'true') {
+        nextFlags.activeDefense = true;
+    }
+    if (env.BLACKOUT_ACTIVE_DEFENSE === 'false') {
+        nextFlags.activeDefense = false;
+    }
+    if (env.BLACKOUT_MESH_TRANSPORT === 'true') {
+        nextFlags.meshTransport = true;
+    }
+    if (env.BLACKOUT_MESH_TRANSPORT === 'false') {
+        nextFlags.meshTransport = false;
+    }
+    if (env.BLACKOUT_TRANSPARENCY_REPORTS === 'true') {
+        nextFlags.transparencyReports = true;
+    }
+    if (env.BLACKOUT_TRANSPARENCY_REPORTS === 'false') {
+        nextFlags.transparencyReports = false;
     }
     if (env.BLACKOUT_SETTINGS_PARITY === 'true') {
         nextFlags.settingsParity = true;
