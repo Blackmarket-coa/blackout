@@ -8,6 +8,8 @@ import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 const listStreamsMock = vi.fn();
 const fetchMyReferralsMock = vi.fn();
 const fetchMyAmbassadorMock = vi.fn();
+const listMySubscribersMock = vi.fn();
+const fetchMyContentMock = vi.fn();
 
 vi.mock('../../streams', () => ({
     listStreams: (...a: unknown[]) => listStreamsMock(...a),
@@ -16,12 +18,20 @@ vi.mock('../../growth', () => ({
     fetchMyReferrals: (...a: unknown[]) => fetchMyReferralsMock(...a),
     fetchMyAmbassador: (...a: unknown[]) => fetchMyAmbassadorMock(...a),
 }));
+vi.mock('../../monetization/monetizationApi', () => ({
+    creatorSubsApi: { listMySubscribers: (...a: unknown[]) => listMySubscribersMock(...a) },
+}));
+vi.mock('../../monetization/marketplace/useMarketplaceAuth', () => ({
+    readBlackoutApiToken: () => 'tok',
+}));
+vi.mock('../../creators/contentClient', () => ({
+    fetchMyContent: (...a: unknown[]) => fetchMyContentMock(...a),
+}));
 
 import CreatorHubOverview from './CreatorHubOverview';
 
 const flush = async () => {
-    await Promise.resolve();
-    await Promise.resolve();
+    for (let i = 0; i < 6; i++) await Promise.resolve();
 };
 
 const mount = async (onSelectTab = vi.fn()) => {
@@ -45,9 +55,13 @@ describe('CreatorHubOverview', () => {
         listStreamsMock.mockReset();
         fetchMyReferralsMock.mockReset();
         fetchMyAmbassadorMock.mockReset();
+        listMySubscribersMock.mockReset();
+        fetchMyContentMock.mockReset();
         listStreamsMock.mockResolvedValue({ items: [] });
         fetchMyReferralsMock.mockResolvedValue({ items: [] });
         fetchMyAmbassadorMock.mockResolvedValue({ ambassador: null });
+        listMySubscribersMock.mockResolvedValue({ subscriptions: [] });
+        fetchMyContentMock.mockResolvedValue({ content: [] });
     });
 
     it('renders the overview grid with external deep-links', async () => {
@@ -55,6 +69,29 @@ describe('CreatorHubOverview', () => {
         expect(container.querySelector('[data-testid="creator-hub-overview-grid"]')).not.toBeNull();
         const dashboard = container.querySelector('[data-testid="creator-hub-overview-dashboard"]');
         expect(dashboard?.getAttribute('href')).toBe('/creator');
+    });
+
+    it('surfaces active-subscriber and published-content metrics on the cards', async () => {
+        listMySubscribersMock.mockResolvedValue({
+            subscriptions: [
+                { status: 'active' },
+                { status: 'active' },
+                { status: 'canceled' },
+            ],
+        });
+        fetchMyContentMock.mockResolvedValue({ content: [{}, {}, {}] });
+        const { container } = await mount();
+        const earnings = container.querySelector('[data-testid="creator-hub-overview-earnings"]');
+        const dashboard = container.querySelector('[data-testid="creator-hub-overview-dashboard"]');
+        expect(earnings?.textContent).toContain('2 active subscribers');
+        expect(dashboard?.textContent).toContain('3 published');
+        expect(fetchMyContentMock).toHaveBeenCalledWith('published', 'tok');
+    });
+
+    it('falls back to static copy when metrics are empty', async () => {
+        const { container } = await mount();
+        const earnings = container.querySelector('[data-testid="creator-hub-overview-earnings"]');
+        expect(earnings?.textContent).toContain('Subscriptions, tips & payouts');
     });
 
     it('fires onSelectTab for in-hub jumps (clips)', async () => {
