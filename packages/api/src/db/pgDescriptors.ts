@@ -420,6 +420,7 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
   createInvitationRedemption: upsert('invitationRedemptions'),
   createBurnerIdentity: upsert('burnerIdentities'),
   markBurnerIdentityBurned: upsert('burnerIdentities'),
+  rotateBurnerIdentity: upsert('burnerIdentities'),
   purgeUserAuthArtifacts: resync(
     'passwordResetTokens',
     'emailVerificationTokens',

@@ -238,6 +238,86 @@ test('POST /v1/identities/:id/burn deactivates and marks the burner burned', asy
     });
 });
 
+test('POST /v1/identities/:id/rotate is gated to paid tiers and bumps the rotation epoch', async () => {
+    const freeOwner = makeUser(`free_${randomUUID().slice(0, 8)}`);
+    await withMatrix({ provisionBurner: provisionOk }, async () => {
+        const created = await app.request('/v1/identities', {
+            method: 'POST',
+            headers: { authorization: `Bearer ${freeOwner.token}`, 'content-type': 'application/json' },
+            body: JSON.stringify({ label: 'free persona' }),
+        });
+        const { burner } = (await created.json()) as { burner: { burnerUserId: string; rotationEpoch: number } };
+        assert.equal(burner.rotationEpoch, 0);
+
+        // Free tier cannot rotate.
+        const denied = await app.request(
+            `/v1/identities/${encodeURIComponent(burner.burnerUserId)}/rotate`,
+            { method: 'POST', headers: { authorization: `Bearer ${freeOwner.token}` } },
+        );
+        assert.equal(denied.status, 402);
+        const deniedBody = (await denied.json()) as { code: string; suggestedTier: string };
+        assert.equal(deniedBody.code, 'rotation_not_entitled');
+        assert.equal(deniedBody.suggestedTier, 'pro');
+    });
+
+    const proOwner = makeUser(`pro_${randomUUID().slice(0, 8)}`);
+    applyManualComp(proOwner.id, 'integration-test');
+    await withMatrix({ provisionBurner: provisionOk }, async () => {
+        const created = await app.request('/v1/identities', {
+            method: 'POST',
+            headers: { authorization: `Bearer ${proOwner.token}`, 'content-type': 'application/json' },
+            body: JSON.stringify({ label: 'pro persona' }),
+        });
+        const { burner } = (await created.json()) as { burner: { burnerUserId: string } };
+
+        const rotated = await app.request(
+            `/v1/identities/${encodeURIComponent(burner.burnerUserId)}/rotate`,
+            { method: 'POST', headers: { authorization: `Bearer ${proOwner.token}` } },
+        );
+        assert.equal(rotated.status, 200);
+        const body = (await rotated.json()) as { burner: { rotationEpoch: number } };
+        assert.equal(body.burner.rotationEpoch, 1);
+    });
+});
+
+test('POST /v1/identities compartments are gated, and GET /roster groups by compartment', async () => {
+    const freeOwner = makeUser(`free_${randomUUID().slice(0, 8)}`);
+    await withMatrix({ provisionBurner: provisionOk }, async () => {
+        const denied = await app.request('/v1/identities', {
+            method: 'POST',
+            headers: { authorization: `Bearer ${freeOwner.token}`, 'content-type': 'application/json' },
+            body: JSON.stringify({ label: 'x', compartmentId: 'work' }),
+        });
+        assert.equal(denied.status, 402);
+        assert.equal(((await denied.json()) as { code: string }).code, 'compartments_not_entitled');
+    });
+
+    const proOwner = makeUser(`pro_${randomUUID().slice(0, 8)}`);
+    applyManualComp(proOwner.id, 'integration-test');
+    await withMatrix({ provisionBurner: provisionOk }, async () => {
+        for (const compartmentId of ['work', 'activism']) {
+            const res = await app.request('/v1/identities', {
+                method: 'POST',
+                headers: { authorization: `Bearer ${proOwner.token}`, 'content-type': 'application/json' },
+                body: JSON.stringify({ label: compartmentId, compartmentId }),
+            });
+            assert.equal(res.status, 201);
+            const { burner } = (await res.json()) as { burner: { compartmentId: string | null } };
+            assert.equal(burner.compartmentId, compartmentId);
+        }
+
+        const roster = await app.request('/v1/identities/roster', {
+            headers: { authorization: `Bearer ${proOwner.token}` },
+        });
+        assert.equal(roster.status, 200);
+        const body = (await roster.json()) as {
+            roster: { compartmentId: string | null; personas: unknown[] }[];
+        };
+        const compartments = body.roster.map((g) => g.compartmentId).sort();
+        assert.deepEqual(compartments, ['activism', 'work']);
+    });
+});
+
 test('POST /v1/identities/:id/burn 404s for a burner the caller does not own', async () => {
     const owner = makeUser(`owner_${randomUUID().slice(0, 8)}`);
     const stranger = makeUser(`stranger_${randomUUID().slice(0, 8)}`);

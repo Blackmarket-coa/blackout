@@ -31,6 +31,10 @@ export interface CreateBurnerInput {
   tier?: EntitlementTier;
   /** @deprecated back-compat: raises the cap when `tier` is not supplied. */
   advancedEntitled?: boolean;
+  /** Optional compartment grouping for the persona roster. */
+  compartmentId?: string;
+  /** SHA-256 commitment of the client-held persona root key (no raw key). */
+  rootKeyCommitment?: string;
 }
 
 export type CreateBurnerOutcome =
@@ -83,9 +87,46 @@ export async function createBurnerForOwner(input: CreateBurnerInput): Promise<Cr
     burnerUserId: provisioned.userId,
     label,
     expiresAt,
+    compartmentId: input.compartmentId ?? null,
+    rotationEpoch: 0,
+    rootKeyCommitment: input.rootKeyCommitment ?? null,
   });
 
   return { kind: 'ok', record, password: provisioned.password, baseUrl: publicBaseUrl() };
+}
+
+export type RotatePersonaOutcome =
+  | { kind: 'ok'; record: BurnerIdentityRecord }
+  | { kind: 'not_found' };
+
+/** Bump a burner's alias-rotation epoch (client re-derives aliases from it). */
+export function rotatePersonaForOwner(input: {
+  ownerUserId: string;
+  burnerUserId: string;
+}): RotatePersonaOutcome {
+  const updated = db.rotateBurnerIdentity(input.ownerUserId, input.burnerUserId);
+  return updated ? { kind: 'ok', record: updated } : { kind: 'not_found' };
+}
+
+export type PersonaCompartmentGroup = {
+  compartmentId: string | null;
+  personas: BurnerIdentityRecord[];
+};
+
+/** Active personas for an owner, grouped by compartment for the roster UI. */
+export function listPersonaRosterForOwner(ownerUserId: string): PersonaCompartmentGroup[] {
+  const active = db.listBurnerIdentitiesForOwner(ownerUserId);
+  const byCompartment = new Map<string | null, BurnerIdentityRecord[]>();
+  for (const persona of active) {
+    const key = persona.compartmentId ?? null;
+    const group = byCompartment.get(key) ?? [];
+    group.push(persona);
+    byCompartment.set(key, group);
+  }
+  return [...byCompartment.entries()].map(([compartmentId, personas]) => ({
+    compartmentId,
+    personas,
+  }));
 }
 
 export function listBurnersForOwner(ownerUserId: string): BurnerIdentityRecord[] {

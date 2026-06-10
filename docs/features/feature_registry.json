@@ -660,8 +660,9 @@
       "uiEntry": "settings_toggle:feature-toggle-persona-engine",
       "owner": "identity-eng",
       "testCoverage": "unit+integration",
-      "notes": "Active-persona roster cap is enforced server-side from the canonical PERSONA_QUOTAS for the caller's entitlement tier (burnerIdentities service + identities route), with a client pre-flight gate (checkPersonaEntitlements) and a usePersonaQuota hook surfacing tier/quota/rotation/compartments. Per-conversation HKDF alias derivation, rotation, and the compartment roster UI remain pending, so status is partial.",
+      "notes": "Active-persona roster cap is enforced server-side from the canonical PERSONA_QUOTAS for the caller's tier, with a client pre-flight gate (checkPersonaEntitlements) and usePersonaQuota hook. Clean-room HKDF per-conversation alias derivation, epoch rotation, and compartments are implemented (aliasDerivation.ts) and exposed via the rotate + roster endpoints with server-side rotation/compartment entitlement enforcement. The full compartment roster UI and cross-device persona-key sync remain pending, so status is partial.",
       "sourcePointers": [
+        "packages/blackout-protocol/src/persona/aliasDerivation.ts",
         "packages/api/src/services/burnerIdentities.ts",
         "packages/api/src/routes/identities.ts",
         "packages/blackout-protocol/src/persona/entitlements.ts",
@@ -681,6 +682,7 @@
       "evidencePaths": [
         "packages/api/test/identities-routes.integration.test.ts",
         "apps/blackout-client/tests/unit/sdk/personaGate.test.ts",
+        "apps/blackout-client/tests/unit/sdk/personaAlias.test.ts",
         "apps/blackout-client/tests/unit/features/burner-identity/usePersonaQuota.test.ts"
       ],
       "lastVerifiedAt": "2026-06-10",

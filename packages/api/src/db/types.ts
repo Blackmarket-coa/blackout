@@ -167,6 +167,16 @@ export interface BurnerIdentityRecord {
   /** ISO 8601 timestamp the burner was deactivated; null while active. */
   burnedAt: string | null;
   createdAt: string;
+  /** Optional compartment grouping for the persona roster (G3). */
+  compartmentId?: string | null;
+  /** Monotonic alias-rotation epoch; bumped each time aliases are rotated. */
+  rotationEpoch: number;
+  /**
+   * Lower-hex SHA-256 commitment of the client-held persona root key. The raw
+   * root key never leaves the client; this lets the server bookkeep rotation
+   * without ever holding key material.
+   */
+  rootKeyCommitment?: string | null;
 }
 
 /**
