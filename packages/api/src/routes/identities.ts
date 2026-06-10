@@ -10,6 +10,7 @@ import {
   listBurnersForOwner,
 } from '../services/burnerIdentities';
 import { userHasPrivacyFeature } from '../services/privacyEntitlements';
+import { entitlementTierForUser } from '../services/subscriptions';
 import type { BurnerIdentityRecord } from '../db/types';
 
 const identities = new Hono();
@@ -38,11 +39,19 @@ identities.post('/', async (c) => {
   const parsed = await readJsonBody(c, createSchema);
   if (parsed instanceof Response) return parsed;
 
+  // Roster cap is driven by the canonical PERSONA_QUOTAS for the user's tier.
+  // Back-compat: a legacy `burner_pro` privacy grant still raises a free-tier
+  // user to the `pro` cap for one release while grants migrate to plan tiers.
+  let tier = entitlementTierForUser(user.sub);
+  if (tier === 'free' && userHasPrivacyFeature(user.sub, 'burner_pro')) {
+    tier = 'pro';
+  }
+
   const outcome = await createBurnerForOwner({
     ownerUserId: user.sub,
     label: parsed.label,
     ttlHours: parsed.ttlHours,
-    advancedEntitled: userHasPrivacyFeature(user.sub, 'burner_pro'),
+    tier,
   });
 
   switch (outcome.kind) {

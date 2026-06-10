@@ -14,6 +14,7 @@ const { default: app } = await import('../src/index');
 const { signJwt } = await import('../src/services/auth');
 const { db } = await import('../src/db/store');
 const { matrixClient } = await import('../src/integrations/matrix-client');
+const { applyManualComp } = await import('../src/services/subscriptions');
 
 type AnyFn = (...args: unknown[]) => unknown;
 
@@ -151,6 +152,26 @@ test('POST /v1/identities raises the cap when burner_pro is granted', async () =
                 body: JSON.stringify({ label: `pro-${i}` }),
             });
             assert.equal(res.status, 201, `create ${i} should succeed`);
+        }
+    });
+});
+
+test('POST /v1/identities raises the roster cap for a paid subscription tier (PERSONA_QUOTAS)', async () => {
+    const owner = makeUser(`owner_${randomUUID().slice(0, 8)}`);
+    // Comp the user onto the sprout plan → resolves to the `pro` entitlement
+    // tier, whose PERSONA_QUOTAS.maxPersonas (8) clears the free cap of 1.
+    applyManualComp(owner.id, 'integration-test');
+    await withMatrix({ provisionBurner: provisionOk }, async () => {
+        for (let i = 0; i < 2; i += 1) {
+            const res = await app.request('/v1/identities', {
+                method: 'POST',
+                headers: {
+                    authorization: `Bearer ${owner.token}`,
+                    'content-type': 'application/json',
+                },
+                body: JSON.stringify({ label: `pro-sub-${i}` }),
+            });
+            assert.equal(res.status, 201, `create ${i} should succeed on the pro tier`);
         }
     });
 });

@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import type { EntitlementAccessPayload, EntitlementFamily, EntitlementMap, EntitlementReadResponse, EntitlementTier } from '@blackout/protocol';
 import { DEAD_DROP_TIER_ENTITLEMENTS, PERSONA_TIER_ENTITLEMENTS, HARDENING_TIER_ENTITLEMENTS, buildFullyUnlockedEntitlementPayload, parseEntitlementAccessPayload } from '@blackout/protocol';
 import type { MarketplaceProviderId } from '@blackout/core';
-import { getSubscription } from '../services/subscriptions';
+import { getSubscription, entitlementTierForUser } from '../services/subscriptions';
 import { requireUser } from '../middleware/require-user';
 import { entitlementForListing } from '../services/entitlementChecks';
 import { betaUnlockAllEnabled } from '../services/betaUnlock';
@@ -73,8 +73,7 @@ function canonicalPayloadFromSubscription(userId: string): EntitlementAccessPayl
   const subscription = getSubscription(userId);
   const paid = subscription.entitlementActive;
   const premium = subscription.tier !== 'free';
-  const tier: EntitlementTier =
-    subscription.tier === 'canopy_pro' ? 'enterprise' : subscription.tier === 'sprout' ? 'pro' : 'free';
+  const tier: EntitlementTier = entitlementTierForUser(userId);
 
   const entitlementSet: EntitlementMap = {
     'features.stego.enabled': true,

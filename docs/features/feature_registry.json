@@ -655,16 +655,18 @@
       "id": "persona_engine",
       "name": "Persona Engine",
       "category": "novel",
-      "status": "planned",
+      "status": "partial",
       "presetKey": "features.persona.enabled",
       "uiEntry": "settings_toggle:feature-toggle-persona-engine",
       "owner": "identity-eng",
-      "testCoverage": "none",
-      "notes": "Multi-persona compartmentalization and alias rotation above the free single burner identity. Roster size is a pro-tier quota. Registry and feature-flag stub only.",
+      "testCoverage": "unit+integration",
+      "notes": "Active-persona roster cap is enforced server-side from the canonical PERSONA_QUOTAS for the caller's entitlement tier (burnerIdentities service + identities route), with a client pre-flight gate (checkPersonaEntitlements) and a usePersonaQuota hook surfacing tier/quota/rotation/compartments. Per-conversation HKDF alias derivation, rotation, and the compartment roster UI remain pending, so status is partial.",
       "sourcePointers": [
-        "apps/blackout-client/src/app/features/burner-identity/manifest.ts",
+        "packages/api/src/services/burnerIdentities.ts",
+        "packages/api/src/routes/identities.ts",
         "packages/blackout-protocol/src/persona/entitlements.ts",
-        "docs/oss_manifest_packaging.md"
+        "packages/blackout-sdk/src/persona/entitlementGate.ts",
+        "apps/blackout-client/src/app/features/burner-identity/usePersonaQuota.ts"
       ],
       "presetPolicy": {
         "baseline_matrix": false,
@@ -675,11 +677,13 @@
         "apps/blackout-client/src/app/features/burner-identity/manifest.ts::feature-toggle-persona-engine"
       ],
       "fallbackBehavior": "When the personaEngine flag is off or the capability is ungranted, the customization does not register and the canonical shell renders unchanged.",
-      "evidenceType": "docs",
+      "evidenceType": "code",
       "evidencePaths": [
-        "docs/oss_manifest_packaging.md"
+        "packages/api/test/identities-routes.integration.test.ts",
+        "apps/blackout-client/tests/unit/sdk/personaGate.test.ts",
+        "apps/blackout-client/tests/unit/features/burner-identity/usePersonaQuota.test.ts"
       ],
-      "lastVerifiedAt": "2026-06-09",
+      "lastVerifiedAt": "2026-06-10",
       "verifiedBy": "blackout-coa"
     },
     {
