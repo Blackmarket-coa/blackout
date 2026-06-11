@@ -9,7 +9,7 @@ volumes:
 
 services:
   postgres-primary:
-    image: bitnami/postgresql-repmgr:16
+    image: soldevelo/postgresql-repmgr:16
     restart: unless-stopped
     environment:
       POSTGRESQL_POSTGRES_PASSWORD: postgres
@@ -32,7 +32,7 @@ services:
       - backend
 
   postgres-replica:
-    image: bitnami/postgresql-repmgr:16
+    image: soldevelo/postgresql-repmgr:16
     restart: unless-stopped
     environment:
       POSTGRESQL_POSTGRES_PASSWORD: postgres
@@ -57,7 +57,7 @@ services:
       - backend
 
   postgres-proxy:
-    image: bitnami/pgpool:4
+    image: soldevelo/pgpool:4
     restart: unless-stopped
     environment:
       PGPOOL_BACKEND_NODES: 0:postgres-primary:5432,1:postgres-replica:5432
