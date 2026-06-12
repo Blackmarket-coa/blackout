@@ -624,16 +624,18 @@
       "id": "privacy_hardening",
       "name": "Privacy Hardening",
       "category": "novel",
-      "status": "planned",
+      "status": "partial",
       "presetKey": "features.hardening.enabled",
       "uiEntry": "settings_toggle:feature-toggle-privacy-hardening",
       "owner": "privacy-eng",
-      "testCoverage": "none",
-      "notes": "Advanced per-user anonymity: anonymized transport, decoy traffic, fingerprint randomization, and image perturbation. Gated to the pro entitlement tier. Registry and feature-flag stub only.",
+      "testCoverage": "unit+integration",
+      "notes": "Image perturbation is enforced end-to-end: the /v1/media/perturb route gates on features.hardening.imagePerturbation for the caller's tier (back-compat OR with the legacy privacy_tool grant) and an improved clean-room perturbation kernel (chroma-weighted, edge-gated, amplitude-clamped) runs client-side. A checkHardeningEntitlements SDK gate and useHardeningFeatures hook surface the tier. torTransport and decoyTraffic remain planned sub-capabilities (keys + gate only), so status is partial.",
       "sourcePointers": [
-        "apps/blackout-client/src/app/features/privacy-tools/manifest.ts",
-        "packages/blackout-protocol/src/hardening/entitlements.ts",
-        "docs/oss_manifest_packaging.md"
+        "packages/api/src/routes/media.ts",
+        "apps/blackout-client/src/app/utils/perturbImage.ts",
+        "packages/blackout-sdk/src/hardening/entitlementGate.ts",
+        "apps/blackout-client/src/app/features/privacy-tools/useHardeningFeatures.ts",
+        "packages/blackout-protocol/src/hardening/entitlements.ts"
       ],
       "presetPolicy": {
         "baseline_matrix": false,
@@ -641,14 +643,17 @@
         "blackout_full": true
       },
       "uiTestRefs": [
-        "apps/blackout-client/src/app/features/privacy-tools/manifest.ts::feature-toggle-privacy-hardening"
+        "apps/blackout-client/src/app/features/privacy-tools/PrivacyToolsSettings.tsx::feature-toggle-privacy-hardening"
       ],
-      "fallbackBehavior": "When the privacyHardening flag is off or the pro entitlement is absent, the customization does not register and the canonical shell renders unchanged.",
-      "evidenceType": "docs",
+      "fallbackBehavior": "When the privacyHardening flag is off or the pro entitlement is absent, the perturb control is disabled (Pro badge) and the server returns 402 perturbation_not_entitled; the canonical shell renders unchanged.",
+      "evidenceType": "code",
       "evidencePaths": [
-        "docs/oss_manifest_packaging.md"
+        "packages/api/test/media-routes.integration.test.ts",
+        "apps/blackout-client/tests/unit/sdk/hardeningGate.test.ts",
+        "apps/blackout-client/tests/unit/features/privacy-tools/perturbPixels.test.ts",
+        "apps/blackout-client/tests/unit/features/privacy-tools/useHardeningFeatures.test.ts"
       ],
-      "lastVerifiedAt": "2026-06-09",
+      "lastVerifiedAt": "2026-06-10",
       "verifiedBy": "blackout-coa"
     },
     {

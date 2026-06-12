@@ -13,6 +13,14 @@ const { default: app } = await import('../src/index');
 const { signJwt } = await import('../src/services/auth');
 const { db } = await import('../src/db/store');
 const { perturbationClient } = await import('../src/integrations/perturbation-client');
+const { applyManualComp } = await import('../src/services/subscriptions');
+
+/** Comp a user onto the sprout plan → `pro` tier → hardening.imagePerturbation. */
+function makeEntitledUser(username: string): { id: string; token: string } {
+    const user = makeUser(username);
+    applyManualComp(user.id, 'integration-test');
+    return user;
+}
 
 type AnyFn = (...args: unknown[]) => unknown;
 
@@ -42,8 +50,21 @@ test('POST /v1/media/perturb rejects unauthenticated callers', async () => {
     assert.equal(res.status, 401);
 });
 
+test('POST /v1/media/perturb returns 402 for callers without the perturbation entitlement', async () => {
+    const user = makeUser(`free_${randomUUID().slice(0, 8)}`);
+    const res = await app.request('/v1/media/perturb', {
+        method: 'POST',
+        headers: { authorization: `Bearer ${user.token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ mimetype: 'image/png', image: tinyPngBase64 }),
+    });
+    assert.equal(res.status, 402);
+    const body = (await res.json()) as { code: string; suggestedTier: string };
+    assert.equal(body.code, 'perturbation_not_entitled');
+    assert.equal(body.suggestedTier, 'pro');
+});
+
 test('POST /v1/media/perturb returns 503 when the sidecar is not configured', async () => {
-    const user = makeUser(`u_${randomUUID().slice(0, 8)}`);
+    const user = makeEntitledUser(`u_${randomUUID().slice(0, 8)}`);
     // PERTURBATION_SERVICE_URL is unset in the test env → not_configured.
     const res = await app.request('/v1/media/perturb', {
         method: 'POST',
@@ -56,7 +77,7 @@ test('POST /v1/media/perturb returns 503 when the sidecar is not configured', as
 });
 
 test('POST /v1/media/perturb returns the perturbed image on success', async () => {
-    const user = makeUser(`u_${randomUUID().slice(0, 8)}`);
+    const user = makeEntitledUser(`u_${randomUUID().slice(0, 8)}`);
     const client = perturbationClient as unknown as Record<string, AnyFn>;
     const original = client.perturb;
     client.perturb = (async (image: unknown, mimetype: unknown) => ({
