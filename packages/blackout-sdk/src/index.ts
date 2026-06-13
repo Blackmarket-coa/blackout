@@ -22,6 +22,7 @@ export * from './persona/entitlementGate';
 export * from './hardening/entitlementGate';
 export * from './transparency/entitlementGate';
 export * from './activedefense/entitlementGate';
+export * from './shield/entitlementGate';
 export * from './moderation/actions';
 export * from './matrix/types';
 export * from './shell/panelMetadata';

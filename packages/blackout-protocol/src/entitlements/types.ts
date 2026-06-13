@@ -9,7 +9,8 @@ export type EntitlementFamily =
     | 'persona'
     | 'hardening'
     | 'transparency'
-    | 'activedefense';
+    | 'activedefense'
+    | 'shield';
 
 export type PlanStateStatus = 'trialing' | 'active' | 'past_due' | 'canceled' | 'inactive';
 

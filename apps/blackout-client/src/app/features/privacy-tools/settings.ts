@@ -1,5 +1,6 @@
 import type { FeatureSettingsItem } from '../../core/features/types';
 import { PrivacyToolsSettings } from './PrivacyToolsSettings';
+import { ShieldVisibilitySettings } from './ShieldVisibilitySettings';
 
 /**
  * Settings sections for the OSS-manifest privacy groups G1 (Shield /
@@ -10,7 +11,7 @@ import { PrivacyToolsSettings } from './PrivacyToolsSettings';
 export const shieldVisibilitySettings: FeatureSettingsItem[] = [
     {
         section: 'Privacy / Shield',
-        component: PrivacyToolsSettings,
+        component: ShieldVisibilitySettings,
     },
 ];
 

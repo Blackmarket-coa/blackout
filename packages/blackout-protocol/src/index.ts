@@ -7,6 +7,7 @@ export * from './persona';
 export * from './hardening';
 export * from './transparency';
 export * from './activedefense';
+export * from './shield';
 export * from './moderation/events';
 export * from './shell/events';
 export * from './capabilities/events';

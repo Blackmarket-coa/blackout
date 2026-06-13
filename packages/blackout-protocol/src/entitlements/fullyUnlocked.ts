@@ -13,6 +13,7 @@ import { PERSONA_TIER_ENTITLEMENTS } from '../persona/entitlements';
 import { HARDENING_TIER_ENTITLEMENTS } from '../hardening/entitlements';
 import { TRANSPARENCY_TIER_ENTITLEMENTS } from '../transparency/entitlements';
 import { ACTIVE_DEFENSE_TIER_ENTITLEMENTS } from '../activedefense/entitlements';
+import { SHIELD_TIER_ENTITLEMENTS } from '../shield/entitlements';
 import type { EntitlementAccessPayload, EntitlementMap } from './types';
 
 const FULLY_UNLOCKED_ENTITLEMENTS: EntitlementMap = {
@@ -26,6 +27,7 @@ const FULLY_UNLOCKED_ENTITLEMENTS: EntitlementMap = {
     ...HARDENING_TIER_ENTITLEMENTS.enterprise,
     ...TRANSPARENCY_TIER_ENTITLEMENTS.enterprise,
     ...ACTIVE_DEFENSE_TIER_ENTITLEMENTS.enterprise,
+    ...SHIELD_TIER_ENTITLEMENTS.enterprise,
 };
 
 export function buildFullyUnlockedEntitlementPayload(): EntitlementAccessPayload {
