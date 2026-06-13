@@ -130,7 +130,11 @@ jobs:
     name: Bundle size check
     runs-on: ubuntu-latest
     env:
-      MAX_BUNDLE_KB: 24576
+      # Re-baselined for the vite 6 -> 8 migration: vite 8's rolldown bundler
+      # emits ~1.9MB more than rollup did for the same sources (the wasm/worker
+      # payloads are unchanged; the delta is JS chunk output). Raised from
+      # 24576 to 28672 with ~2MB headroom to keep catching unexpected growth.
+      MAX_BUNDLE_KB: 28672
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
       - uses: pnpm/action-setup@v5
