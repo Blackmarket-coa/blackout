@@ -34,6 +34,7 @@ import { topicsFeature } from '../../features/topics';
 import { privacyToolsFeature } from '../../features/privacy-tools';
 import { burnerIdentityFeature } from '../../features/burner-identity';
 import { panicFeature } from '../../features/panic';
+import { meshFeature } from '../../features/mesh';
 import type { FeatureModule } from './types';
 
 export const coreFeatureModules: FeatureModule[] = [
@@ -178,5 +179,11 @@ export const coreFeatureModules: FeatureModule[] = [
         // `active-defense` (canary/decoy) customization carries its own gate.
         feature: panicFeature,
         flag: 'activeDefense',
+    },
+    {
+        // OSS-manifest G6. `meshTransport` switches the store-and-forward
+        // mesh module; the `mesh-transport` customization is enterprise-gated.
+        feature: meshFeature,
+        flag: 'meshTransport',
     },
 ];

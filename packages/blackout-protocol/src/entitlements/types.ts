@@ -10,7 +10,8 @@ export type EntitlementFamily =
     | 'hardening'
     | 'transparency'
     | 'activedefense'
-    | 'shield';
+    | 'shield'
+    | 'mesh';
 
 export type PlanStateStatus = 'trialing' | 'active' | 'past_due' | 'canceled' | 'inactive';
 

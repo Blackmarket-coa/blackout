@@ -46,6 +46,7 @@ describe('feature allowlist manifest', () => {
             'privacy-tools',
             'burner-identity',
             'panic',
+            'mesh',
         ]);
     });
 

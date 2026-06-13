@@ -735,14 +735,18 @@
       "id": "mesh_transport",
       "name": "Mesh / Offline Transport",
       "category": "novel",
-      "status": "planned",
+      "status": "partial",
       "presetKey": "features.mesh.enabled",
       "uiEntry": "settings_toggle:feature-toggle-mesh-transport",
       "owner": "federation-eng",
-      "testCoverage": "none",
-      "notes": "Store-and-forward peer sync over local radios (Briar-class). Topology capability gated to the enterprise tier. Registry and feature-flag stub only; no client surface yet.",
+      "testCoverage": "unit+integration",
+      "notes": "Store-and-forward peer sync (Briar-class) is enforced end-to-end with first-party greenfield gossip primitives — no Briar/Bramble code ships (GPLv3, reference-only; ethics §4). A pure mergeMeshEnvelopes implements epidemic store-and-forward (hop-count + TTL bounding, seenBy dedup/routing, expiry pruning) and is shared by the client and the server relay node. The server acts as one always-on mesh node: POST /v1/mesh/enqueue originates opaque end-to-end-encrypted envelopes, POST /v1/mesh/sync gossips with a peer (merge + offer-back), and GET /v1/mesh/inbox delivers. Every route gates on features.mesh.* for the enterprise tier (402 mesh_not_entitled otherwise); the relay never inspects payloads. A checkMeshEntitlements SDK gate + useMeshFeatures hook + the MeshTransportSettings surface (feature-toggle-mesh-transport, registered behind the meshTransport flag) front it. Local-radio/BLE/LoRa transport bridges and persistence are tracked follow-ups, so status is partial.",
       "sourcePointers": [
-        "docs/oss_manifest_packaging.md"
+        "packages/blackout-protocol/src/mesh/storeAndForward.ts",
+        "packages/api/src/routes/mesh.ts",
+        "packages/api/src/services/meshRelay.ts",
+        "packages/blackout-sdk/src/mesh/entitlementGate.ts",
+        "apps/blackout-client/src/app/features/mesh/MeshTransportSettings.tsx"
       ],
       "presetPolicy": {
         "baseline_matrix": false,
@@ -750,14 +754,16 @@
         "blackout_full": true
       },
       "uiTestRefs": [
-        "docs/oss_manifest_packaging.md::feature-toggle-mesh-transport"
+        "apps/blackout-client/src/app/features/mesh/MeshTransportSettings.tsx::feature-toggle-mesh-transport"
       ],
-      "fallbackBehavior": "When the meshTransport flag is off, no mesh surface registers and the canonical shell renders unchanged.",
-      "evidenceType": "docs",
+      "fallbackBehavior": "When the meshTransport flag is off or the enterprise entitlement is absent, the mesh module does not register and the server returns 402 mesh_not_entitled; the canonical shell renders unchanged.",
+      "evidenceType": "code",
       "evidencePaths": [
-        "docs/oss_manifest_packaging.md"
+        "packages/api/test/mesh-routes.integration.test.ts",
+        "apps/blackout-client/tests/unit/mesh/storeAndForward.test.ts",
+        "apps/blackout-client/tests/unit/sdk/meshGate.test.ts"
       ],
-      "lastVerifiedAt": "2026-06-09",
+      "lastVerifiedAt": "2026-06-13",
       "verifiedBy": "blackout-coa"
     },
     {

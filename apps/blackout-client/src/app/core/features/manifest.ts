@@ -42,6 +42,7 @@ export const featureModuleManifest = [
     'privacy-tools',
     'burner-identity',
     'panic',
+    'mesh',
 ] as const;
 
 export type FeatureModuleId = typeof featureModuleManifest[number];
@@ -92,8 +93,7 @@ export const removeRuntimeModuleAllowedId = (id: string): void => {
     runtimeModuleAllowlist.delete(id);
 };
 
-export const isRuntimeModuleAllowedId = (id: string): boolean =>
-    runtimeModuleAllowlist.has(id);
+export const isRuntimeModuleAllowedId = (id: string): boolean => runtimeModuleAllowlist.has(id);
 
 export const _resetRuntimeModuleAllowlistForTest = (): void => {
     runtimeModuleAllowlist.clear();
