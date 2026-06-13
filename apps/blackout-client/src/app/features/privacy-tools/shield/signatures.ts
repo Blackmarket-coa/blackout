@@ -14,7 +14,11 @@ export type ShieldCategory =
     | 'tracker'
     | 'advertising'
     | 'fingerprinting'
-    | 'pixel';
+    | 'pixel'
+    // Device-permission audit (camera/microphone granted to this origin).
+    | 'permission'
+    // A form whose action posts to a third-party origin (data-exfil risk).
+    | 'form-exfil';
 
 export type DomainSignature = {
     /** Matched against the resource hostname (exact or subdomain). */
