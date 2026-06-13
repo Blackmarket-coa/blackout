@@ -756,15 +756,18 @@
       "id": "transparency_reports",
       "name": "Transparency Reports",
       "category": "novel",
-      "status": "planned",
+      "status": "partial",
       "presetKey": "features.transparency.enabled",
       "uiEntry": "settings_toggle:feature-toggle-transparency-reports",
       "owner": "trust-eng",
-      "testCoverage": "none",
-      "notes": "Self-service transparency and warrant-canary view (free); org-scoped audit export is a Governance-tier capability. Registry and feature-flag stub only.",
+      "testCoverage": "unit+integration",
+      "notes": "Self-service transparency is enforced end-to-end: GET /v1/transparency/me returns the server-held self-report (subscription, active burner count, effective entitlements) and GET /v1/transparency/canary returns a dated warrant-canary statement with a sha256 tamper-evidence digest — both free. Org-scoped GET /v1/transparency/audit-export gates on features.transparency.auditExport (team+) and returns 402 audit_export_not_entitled otherwise. A checkTransparencyEntitlements SDK gate and useTransparencyFeatures hook surface the tier in the 'Your data' settings section. Cryptographic signing of the canary (vs. the current integrity digest) is a tracked follow-up, so status is partial.",
       "sourcePointers": [
-        "apps/blackout-client/src/app/features/data-transparency",
-        "docs/oss_manifest_packaging.md"
+        "packages/api/src/routes/transparency.ts",
+        "packages/blackout-protocol/src/transparency/entitlements.ts",
+        "packages/blackout-sdk/src/transparency/entitlementGate.ts",
+        "apps/blackout-client/src/app/features/data-transparency/useTransparencyFeatures.ts",
+        "apps/blackout-client/src/app/features/data-transparency/DataTransparencySettings.tsx"
       ],
       "presetPolicy": {
         "baseline_matrix": false,
@@ -772,14 +775,15 @@
         "blackout_full": true
       },
       "uiTestRefs": [
-        "docs/oss_manifest_packaging.md::feature-toggle-transparency-reports"
+        "apps/blackout-client/src/app/features/data-transparency/DataTransparencySettings.tsx::feature-toggle-transparency-reports"
       ],
-      "fallbackBehavior": "When the transparencyReports flag is off, no transparency surface registers and the canonical shell renders unchanged.",
-      "evidenceType": "docs",
+      "fallbackBehavior": "When the transparencyReports flag is off, no transparency surface registers and the canonical shell renders unchanged. When the auditExport entitlement is absent the export button is disabled (Team badge) and the server returns 402 audit_export_not_entitled.",
+      "evidenceType": "code",
       "evidencePaths": [
-        "docs/oss_manifest_packaging.md"
+        "packages/api/test/transparency-routes.integration.test.ts",
+        "apps/blackout-client/tests/unit/sdk/transparencyGate.test.ts"
       ],
-      "lastVerifiedAt": "2026-06-09",
+      "lastVerifiedAt": "2026-06-13",
       "verifiedBy": "blackout-coa"
     }
   ]

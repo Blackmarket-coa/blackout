@@ -20,6 +20,7 @@ export * from './deadman/matrixActions';
 export * from './deaddrop/entitlementGate';
 export * from './persona/entitlementGate';
 export * from './hardening/entitlementGate';
+export * from './transparency/entitlementGate';
 export * from './moderation/actions';
 export * from './matrix/types';
 export * from './shell/panelMetadata';

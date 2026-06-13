@@ -11,6 +11,7 @@
 import { DEAD_DROP_TIER_ENTITLEMENTS } from '../deaddrop/entitlements';
 import { PERSONA_TIER_ENTITLEMENTS } from '../persona/entitlements';
 import { HARDENING_TIER_ENTITLEMENTS } from '../hardening/entitlements';
+import { TRANSPARENCY_TIER_ENTITLEMENTS } from '../transparency/entitlements';
 import type { EntitlementAccessPayload, EntitlementMap } from './types';
 
 const FULLY_UNLOCKED_ENTITLEMENTS: EntitlementMap = {
@@ -22,6 +23,7 @@ const FULLY_UNLOCKED_ENTITLEMENTS: EntitlementMap = {
     ...DEAD_DROP_TIER_ENTITLEMENTS.enterprise,
     ...PERSONA_TIER_ENTITLEMENTS.enterprise,
     ...HARDENING_TIER_ENTITLEMENTS.enterprise,
+    ...TRANSPARENCY_TIER_ENTITLEMENTS.enterprise,
 };
 
 export function buildFullyUnlockedEntitlementPayload(): EntitlementAccessPayload {

@@ -5,6 +5,7 @@ export * from './forum/events';
 export * from './deaddrop';
 export * from './persona';
 export * from './hardening';
+export * from './transparency';
 export * from './moderation/events';
 export * from './shell/events';
 export * from './capabilities/events';
