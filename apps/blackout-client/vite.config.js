@@ -11,13 +11,11 @@ import fs from 'fs';
 import path from 'path';
 import buildConfig from './build.config';
 
+// vite-plugin-static-copy v4 always preserves the source path structure under
+// `dest` (output = dest + src-relative-path); use `rename.stripBase` to flatten.
+// The pdf worker is handled natively via a `?url` import in plugins/pdfjs-dist.ts.
 const copyFiles = {
   targets: [
-    {
-      src: 'node_modules/pdfjs-dist/build/pdf.worker.min.mjs',
-      dest: '',
-      rename: 'pdf.worker.min.js',
-    },
     {
       src: 'netlify.toml',
       dest: '',
@@ -27,16 +25,20 @@ const copyFiles = {
       dest: '',
     },
     {
+      // -> dist/manifest.json (strip the leading `public/` segment).
       src: 'public/manifest.json',
+      dest: '',
+      rename: { stripBase: 1 },
+    },
+    {
+      // src already starts with `public/`, so dest '' -> dist/public/res/android.
+      src: 'public/res/android',
       dest: '',
     },
     {
-      src: 'public/res/android',
-      dest: 'public/',
-    },
-    {
+      // src already starts with `public/`, so dest '' -> dist/public/locales.
       src: 'public/locales',
-      dest: 'public/',
+      dest: '',
     },
   ],
 };
@@ -124,6 +126,10 @@ export default defineConfig({
     outDir: 'dist',
     sourcemap: true,
     copyPublicDir: false,
+    // The app relies on top-level await (es2022). Pin the build target to
+    // es2022 so esbuild 0.28 doesn't try (and fail) to lower destructuring in
+    // the top-level-await wrapper down to the legacy default target.
+    target: 'es2022',
     // matrix-sdk (~1.1MB) and react-vendor (~210KB) are split out below for
     // caching across deploys. The app's main bundle is what's needed for
     // initial render after that split; gate the limit just above it to still
@@ -132,9 +138,24 @@ export default defineConfig({
     rollupOptions: {
       plugins: [inject({ Buffer: ['buffer', 'Buffer'] })],
       output: {
-        manualChunks: {
-          'matrix-sdk': ['matrix-js-sdk', '@matrix-org/matrix-sdk-crypto-wasm'],
-          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+        // Function form (works on both Rollup and vite 8's Rolldown; the
+        // object form was dropped in vite 8).
+        manualChunks: (id) => {
+          if (
+            id.includes('node_modules/matrix-js-sdk') ||
+            id.includes('node_modules/@matrix-org/matrix-sdk-crypto-wasm')
+          ) {
+            return 'matrix-sdk';
+          }
+          if (
+            id.includes('node_modules/react-dom') ||
+            id.includes('node_modules/react-router-dom') ||
+            id.includes('node_modules/react/') ||
+            id.includes('node_modules/scheduler/')
+          ) {
+            return 'react-vendor';
+          }
+          return undefined;
         },
       },
     },
