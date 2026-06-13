@@ -3,23 +3,15 @@
  * primitives: canary tokens and synthetic decoy data. No outbound traffic, no
  * third-party-directed behavior; everything here is generated and stored
  * locally so an operator can seed their own honeypots and detect unauthorized
- * access. In-memory store (parity with the other first-party stub services).
+ * access. Canaries persist via the write-through store (durable across
+ * restarts); decoy data is generated on demand and never stored.
  */
 
 import { randomUUID, randomBytes } from 'node:crypto';
+import { db } from '../db/store';
+import type { CanaryTokenRecord } from '../db/types';
 
-export type CanaryToken = {
-  id: string;
-  ownerUserId: string;
-  label: string;
-  /** Opaque token an operator embeds in a honeypot artifact. */
-  token: string;
-  createdAt: string;
-  lastTrippedAt: string | null;
-  tripCount: number;
-  /** User-agent of the most recent trip (truncated), when a tripwire fired. */
-  lastTripUserAgent: string | null;
-};
+export type CanaryToken = CanaryTokenRecord;
 
 export type TripContext = {
   userAgent?: string | null;
@@ -37,11 +29,8 @@ export type DecoyRecord = {
 const MAX_CANARIES_PER_OWNER = 100;
 const MAX_DECOY_COUNT = 100;
 
-const canariesByOwner = new Map<string, CanaryToken[]>();
-const canariesByToken = new Map<string, CanaryToken>();
-
 export function listCanaries(ownerUserId: string): CanaryToken[] {
-  return canariesByOwner.get(ownerUserId) ?? [];
+  return db.listCanaryTokensForOwner(ownerUserId);
 }
 
 export type MintCanaryResult =
@@ -49,8 +38,7 @@ export type MintCanaryResult =
   | { kind: 'limit_reached'; cap: number };
 
 export function mintCanary(ownerUserId: string, label: string): MintCanaryResult {
-  const existing = canariesByOwner.get(ownerUserId) ?? [];
-  if (existing.length >= MAX_CANARIES_PER_OWNER) {
+  if (db.listCanaryTokensForOwner(ownerUserId).length >= MAX_CANARIES_PER_OWNER) {
     return { kind: 'limit_reached', cap: MAX_CANARIES_PER_OWNER };
   }
   const record: CanaryToken = {
@@ -63,8 +51,7 @@ export function mintCanary(ownerUserId: string, label: string): MintCanaryResult
     tripCount: 0,
     lastTripUserAgent: null,
   };
-  canariesByOwner.set(ownerUserId, [...existing, record]);
-  canariesByToken.set(record.token, record);
+  db.upsertCanaryToken(record);
   return { kind: 'ok', record };
 }
 
@@ -75,7 +62,7 @@ export function mintCanary(ownerUserId: string, label: string): MintCanaryResult
  * the signal we want to capture.
  */
 export function tripCanary(token: string, context: TripContext = {}): CanaryToken | null {
-  const record = canariesByToken.get(token);
+  const record = db.findCanaryTokenByToken(token);
   if (!record) return null;
   const userAgent = context.userAgent ? context.userAgent.slice(0, 400) : record.lastTripUserAgent;
   const updated: CanaryToken = {
@@ -84,12 +71,7 @@ export function tripCanary(token: string, context: TripContext = {}): CanaryToke
     tripCount: record.tripCount + 1,
     lastTripUserAgent: userAgent ?? null,
   };
-  canariesByToken.set(token, updated);
-  const owned = canariesByOwner.get(record.ownerUserId) ?? [];
-  canariesByOwner.set(
-    record.ownerUserId,
-    owned.map((c) => (c.id === updated.id ? updated : c)),
-  );
+  db.upsertCanaryToken(updated);
   return updated;
 }
 
@@ -126,8 +108,7 @@ export function generateDecoyData(kind: DecoyKind, count: number): DecoyRecord[]
   return out;
 }
 
-/** Test-only reset of the in-memory store. */
+/** Test-only reset of the canary store. */
 export function __resetActiveDefenseForTest(): void {
-  canariesByOwner.clear();
-  canariesByToken.clear();
+  db.canaryTokens.clear();
 }
