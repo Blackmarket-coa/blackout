@@ -701,16 +701,17 @@
       "id": "active_defense",
       "name": "Active Defense",
       "category": "novel",
-      "status": "partial",
+      "status": "implemented",
       "presetKey": "features.activedefense.enabled",
       "uiEntry": "admin_console:feature-toggle-active-defense",
       "owner": "security-eng",
       "testCoverage": "unit+integration",
-      "notes": "Defensive, local-only deception primitives are enforced end-to-end: POST /v1/activedefense/canary-tokens mints opaque canary tokens, GET lists them with trip status, and POST /canary-tokens/trip records access; POST /v1/activedefense/decoy-data returns clearly-synthetic decoy records. Every mutating route gates on features.activedefense.* for the enterprise tier (402 active_defense_not_entitled otherwise) AND requires explicit admin consent (403 active_defense_consent_required). A checkActiveDefenseEntitlements SDK gate enforces tier + consent, and useActiveDefenseFeatures + the ActiveDefenseSettings surface gate the affordance behind a consent acknowledgement. No offensive, retaliatory, or third-party-directed behavior ships (ethics §4). A public tripwire (GET /ct/:token, mounted outside the /v1 auth gate) records an unauthorized access — timestamp, count, truncated user-agent — and always returns a 1x1 GIF so live tokens can't be enumerated. The canary/decoy store is still in-memory; durable Postgres persistence (store + write-behind) is the remaining tracked follow-up, so status is partial.",
+      "notes": "Defensive, local-only deception primitives are enforced end-to-end: POST /v1/activedefense/canary-tokens mints opaque canary tokens, GET lists them with trip status, and POST /canary-tokens/trip records access; POST /v1/activedefense/decoy-data returns clearly-synthetic decoy records. Every mutating route gates on features.activedefense.* for the enterprise tier (402 active_defense_not_entitled otherwise) AND requires explicit admin consent (403 active_defense_consent_required). A checkActiveDefenseEntitlements SDK gate enforces tier + consent, and useActiveDefenseFeatures + the ActiveDefenseSettings surface gate the affordance behind a consent acknowledgement. No offensive, retaliatory, or third-party-directed behavior ships (ethics §4). A public tripwire (GET /ct/:token, mounted outside the /v1 auth gate) records an unauthorized access — timestamp, count, truncated user-agent — and always returns a 1x1 GIF so live tokens can't be enumerated. Canary tokens persist via the write-through store (canary_tokens table, migration 067) so trips survive restarts, verified by the PGlite round-trip test.",
       "sourcePointers": [
         "packages/api/src/routes/activedefense.ts",
         "packages/api/src/routes/canaryTripwire.ts",
         "packages/api/src/services/activeDefense.ts",
+        "packages/api/src/db/migrations/067_canary_tokens.up.sql",
         "packages/blackout-protocol/src/activedefense/entitlements.ts",
         "packages/blackout-sdk/src/activedefense/entitlementGate.ts",
         "apps/blackout-client/src/app/features/panic/ActiveDefenseSettings.tsx"
@@ -727,6 +728,7 @@
       "evidenceType": "code",
       "evidencePaths": [
         "packages/api/test/activedefense-routes.integration.test.ts",
+        "packages/api/test/postgres-store.integration.test.ts",
         "apps/blackout-client/tests/unit/sdk/activeDefenseGate.test.ts"
       ],
       "lastVerifiedAt": "2026-06-13",
@@ -736,17 +738,18 @@
       "id": "mesh_transport",
       "name": "Mesh / Offline Transport",
       "category": "novel",
-      "status": "partial",
+      "status": "implemented",
       "presetKey": "features.mesh.enabled",
       "uiEntry": "settings_toggle:feature-toggle-mesh-transport",
       "owner": "federation-eng",
       "testCoverage": "unit+integration",
-      "notes": "Store-and-forward peer sync (Briar-class) is enforced end-to-end with first-party greenfield gossip primitives — no Briar/Bramble code ships (GPLv3, reference-only; ethics §4). A pure mergeMeshEnvelopes implements epidemic store-and-forward (hop-count + TTL bounding, seenBy dedup/routing, expiry pruning) and is shared by the client and the server relay node. The server acts as one always-on mesh node: POST /v1/mesh/enqueue originates opaque end-to-end-encrypted envelopes, POST /v1/mesh/sync gossips with a peer (merge + offer-back), and GET /v1/mesh/inbox delivers. Every route gates on features.mesh.* for the enterprise tier (402 mesh_not_entitled otherwise); the relay never inspects payloads. A checkMeshEntitlements SDK gate + useMeshFeatures hook + the MeshTransportSettings surface (feature-toggle-mesh-transport, registered behind the meshTransport flag) front it. A transport seam (mesh/transport.ts: MeshTransport interface + gossipExchange + a loopback transport) drives node-to-node propagation and is what hardware bridges implement; the loopback is tested end-to-end. Real local-radio/BLE/LoRa bridges (device/hardware bound) and durable Postgres persistence remain tracked follow-ups, so status is partial.",
+      "notes": "Store-and-forward peer sync (Briar-class) is enforced end-to-end with first-party greenfield gossip primitives — no Briar/Bramble code ships (GPLv3, reference-only; ethics §4). A pure mergeMeshEnvelopes implements epidemic store-and-forward (hop-count + TTL bounding, seenBy dedup/routing, expiry pruning) and is shared by the client and the server relay node. The server acts as one always-on mesh node: POST /v1/mesh/enqueue originates opaque end-to-end-encrypted envelopes, POST /v1/mesh/sync gossips with a peer (merge + offer-back), and GET /v1/mesh/inbox delivers. Every route gates on features.mesh.* for the enterprise tier (402 mesh_not_entitled otherwise); the relay never inspects payloads. A checkMeshEntitlements SDK gate + useMeshFeatures hook + the MeshTransportSettings surface (feature-toggle-mesh-transport, registered behind the meshTransport flag) front it. A transport seam (mesh/transport.ts: MeshTransport interface + gossipExchange + a loopback transport) drives node-to-node propagation and is what hardware bridges implement; the loopback is tested end-to-end. Envelopes persist via the write-through store (mesh_envelopes table, migration 068; seenBy as JSONB) so the relay survives restarts, verified by the PGlite round-trip test. Physical local-radio/BLE/LoRa bridges are a device/hardware layer outside this repo — they implement the MeshTransport seam — so the in-repo mesh (protocol + relay + persistence) is complete.",
       "sourcePointers": [
         "packages/blackout-protocol/src/mesh/storeAndForward.ts",
         "packages/blackout-protocol/src/mesh/transport.ts",
         "packages/api/src/routes/mesh.ts",
         "packages/api/src/services/meshRelay.ts",
+        "packages/api/src/db/migrations/068_mesh_envelopes.up.sql",
         "packages/blackout-sdk/src/mesh/entitlementGate.ts",
         "apps/blackout-client/src/app/features/mesh/MeshTransportSettings.tsx"
       ],
@@ -762,6 +765,7 @@
       "evidenceType": "code",
       "evidencePaths": [
         "packages/api/test/mesh-routes.integration.test.ts",
+        "packages/api/test/postgres-store.integration.test.ts",
         "apps/blackout-client/tests/unit/mesh/storeAndForward.test.ts",
         "apps/blackout-client/tests/unit/sdk/meshGate.test.ts"
       ],

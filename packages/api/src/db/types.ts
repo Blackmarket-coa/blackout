@@ -1537,3 +1537,37 @@ export interface ReputationEventRecord {
   dedupeKey?: string;
   createdAt: string;
 }
+
+/**
+ * Canary token (OSS-manifest G5). Defensive deception primitive; persisted via
+ * the write-through store so trips survive restarts. Field names map to
+ * snake_case columns in `canary_tokens` by reflection.
+ */
+export interface CanaryTokenRecord {
+  id: UUID;
+  ownerUserId: string;
+  label: string;
+  token: string;
+  createdAt: string;
+  lastTrippedAt: string | null;
+  tripCount: number;
+  lastTripUserAgent: string | null;
+}
+
+/**
+ * Store-and-forward mesh envelope (OSS-manifest G6). Opaque, end-to-end
+ * encrypted; the relay never inspects `payload`. `seenBy` persists as JSONB.
+ * Structurally identical to the protocol MeshEnvelope. Columns are the
+ * snake_case of these fields in `mesh_envelopes`.
+ */
+export interface MeshEnvelopeRecord {
+  id: string;
+  sender: string;
+  recipient: string;
+  payload: string;
+  createdAt: string;
+  expiresAt: string;
+  hopCount: number;
+  maxHops: number;
+  seenBy: string[];
+}

@@ -47,6 +47,8 @@ import type {
   InvitationTokenRecord,
   InvitationRedemptionRecord,
   BurnerIdentityRecord,
+  CanaryTokenRecord,
+  MeshEnvelopeRecord,
   RefreshTokenRecord,
   RevokedSessionRecord,
   LinkedAccountRecord,
@@ -177,6 +179,8 @@ type PersistedState = {
   invitationTokens: InvitationTokenRecord[];
   invitationRedemptions: InvitationRedemptionRecord[];
   burnerIdentities: BurnerIdentityRecord[];
+  canaryTokens: CanaryTokenRecord[];
+  meshEnvelopes: MeshEnvelopeRecord[];
   refreshTokens: RefreshTokenRecord[];
   revokedSessions: RevokedSessionRecord[];
   linkedAccounts: LinkedAccountRecord[];
@@ -299,6 +303,8 @@ class InMemoryDb {
   invitationRedemptions = new Map<string, InvitationRedemptionRecord>();
   /** Burner identities, keyed by row id. */
   burnerIdentities = new Map<string, BurnerIdentityRecord>();
+  canaryTokens = new Map<string, CanaryTokenRecord>();
+  meshEnvelopes = new Map<string, MeshEnvelopeRecord>();
   refreshTokens = new Map<string, RefreshTokenRecord>();
   revokedSessions = new Map<string, RevokedSessionRecord>();
   /** Keyed by `${blackoutUserId}:${provider}` to enforce one link per (user, provider). */
@@ -739,6 +745,47 @@ class InMemoryDb {
     const updated: BurnerIdentityRecord = { ...existing, burnedAt: nowIso() };
     this.burnerIdentities.set(id, updated);
     return updated;
+  }
+
+  // --- Canary tokens (G5 active defense) ---
+
+  upsertCanaryToken(record: CanaryTokenRecord): CanaryTokenRecord {
+    this.canaryTokens.set(record.id, record);
+    return record;
+  }
+
+  listCanaryTokensForOwner(ownerUserId: string): CanaryTokenRecord[] {
+    return [...this.canaryTokens.values()]
+      .filter((c) => c.ownerUserId === ownerUserId)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  }
+
+  findCanaryTokenByToken(token: string): CanaryTokenRecord | undefined {
+    return [...this.canaryTokens.values()].find((c) => c.token === token);
+  }
+
+  // --- Mesh envelopes (G6 store-and-forward) ---
+
+  upsertMeshEnvelope(record: MeshEnvelopeRecord): MeshEnvelopeRecord {
+    this.meshEnvelopes.set(record.id, record);
+    return record;
+  }
+
+  listMeshEnvelopes(): MeshEnvelopeRecord[] {
+    return [...this.meshEnvelopes.values()];
+  }
+
+  listMeshEnvelopesForRecipient(recipient: string): MeshEnvelopeRecord[] {
+    return [...this.meshEnvelopes.values()].filter((e) => e.recipient === recipient);
+  }
+
+  /**
+   * Reconcile the whole envelope set after a gossip merge (which prunes expired
+   * and accepts new envelopes). Drives a `resync('meshEnvelopes')` write-through.
+   */
+  replaceMeshEnvelopes(records: MeshEnvelopeRecord[]): MeshEnvelopeRecord[] {
+    this.meshEnvelopes = new Map(records.map((r) => [r.id, r]));
+    return records;
   }
 
   listInvitationRedemptionsByToken(invitationTokenId: string): InvitationRedemptionRecord[] {
@@ -3903,6 +3950,8 @@ export class FileBackedDb extends InMemoryDb {
     this.burnerIdentities = new Map(
       (parsed.burnerIdentities ?? []).map((row) => [row.id, row])
     );
+    this.canaryTokens = new Map((parsed.canaryTokens ?? []).map((row) => [row.id, row]));
+    this.meshEnvelopes = new Map((parsed.meshEnvelopes ?? []).map((row) => [row.id, row]));
     this.refreshTokens = new Map((parsed.refreshTokens ?? []).map((row) => [row.id, row]));
     this.revokedSessions = new Map(
       (parsed.revokedSessions ?? []).map((row) => [row.jti, row])
@@ -4146,6 +4195,8 @@ export class FileBackedDb extends InMemoryDb {
       invitationTokens: [...this.invitationTokens.values()],
       invitationRedemptions: [...this.invitationRedemptions.values()],
       burnerIdentities: [...this.burnerIdentities.values()],
+      canaryTokens: [...this.canaryTokens.values()],
+      meshEnvelopes: [...this.meshEnvelopes.values()],
       refreshTokens: [...this.refreshTokens.values()],
       revokedSessions: [...this.revokedSessions.values()],
       linkedAccounts: [...this.linkedAccounts.values()],

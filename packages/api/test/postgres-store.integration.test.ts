@@ -44,7 +44,7 @@ test('every descriptor maps to a real table with columns', async () => {
     const columns = await introspectColumns(client as never, d.tableName);
     assert.ok(columns.length > 0, `table ${d.tableName} (map ${d.mapName}) should exist`);
   }
-  assert.equal(TABLE_DESCRIPTORS.length, 108);
+  assert.equal(TABLE_DESCRIPTORS.length, 110);
   await pg.query('SELECT 1');
 });
 
@@ -228,6 +228,30 @@ test('write-through persists across a simulated restart', async () => {
   // Accept creator-a: bounty → claimed, creator-a accepted, creator-b declined.
   store1.acceptBountyApplication('bounty-eco-1', 'creator-a');
 
+  // Canary token (G5) — trip attribution columns.
+  store1.upsertCanaryToken({
+    id: 'canary-test-1',
+    ownerUserId: userId,
+    label: 'db-honeypot',
+    token: 'bo-canary-deadbeef',
+    createdAt: new Date().toISOString(),
+    lastTrippedAt: new Date().toISOString(),
+    tripCount: 2,
+    lastTripUserAgent: 'EvilCrawler/9.9',
+  });
+  // Mesh envelope (G6) — JSONB seenBy string-array column.
+  store1.upsertMeshEnvelope({
+    id: 'mesh-test-1',
+    sender: '@a:server',
+    recipient: '@b:server',
+    payload: 'opaque-ct',
+    createdAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+    hopCount: 1,
+    maxHops: 8,
+    seenBy: ['server', 'peerNode'],
+  });
+
   await store1.drain();
 
   // Simulate a restart: a brand-new store hydrating from the same database.
@@ -308,6 +332,22 @@ test('write-through persists across a simulated restart', async () => {
   assert.equal(apps.length, 2, 'both applications should hydrate');
   assert.equal(apps.find((a) => a.id === 'bapp-eco-1')?.status, 'accepted');
   assert.equal(apps.find((a) => a.id === 'bapp-eco-2')?.status, 'declined');
+
+  // Canary token (G5) survives restart with trip attribution intact.
+  const canary = store2.findCanaryTokenByToken('bo-canary-deadbeef');
+  assert.ok(canary, 'canary token should hydrate');
+  assert.equal(canary?.tripCount, 2);
+  assert.equal(canary?.lastTripUserAgent, 'EvilCrawler/9.9');
+  assert.deepEqual(
+    store2.listCanaryTokensForOwner(userId).map((c) => c.id),
+    ['canary-test-1'],
+  );
+
+  // Mesh envelope (G6) survives restart with its JSONB seenBy array intact.
+  const envelopes = store2.listMeshEnvelopes().filter((e) => e.id === 'mesh-test-1');
+  assert.equal(envelopes.length, 1, 'mesh envelope should hydrate');
+  assert.deepEqual(envelopes[0]?.seenBy, ['server', 'peerNode']);
+  assert.equal(envelopes[0]?.payload, 'opaque-ct');
 });
 
 test('updateClip write-through persists the patch (PATCH /clips/:id path)', async () => {

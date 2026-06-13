@@ -311,6 +311,8 @@ const ALL_MAP_NAMES = [
   'invitationTokens',
   'invitationRedemptions',
   'burnerIdentities',
+  'canaryTokens',
+  'meshEnvelopes',
   'refreshTokens',
   'revokedSessions',
   'linkedAccounts',
@@ -421,6 +423,9 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
   createBurnerIdentity: upsert('burnerIdentities'),
   markBurnerIdentityBurned: upsert('burnerIdentities'),
   rotateBurnerIdentity: upsert('burnerIdentities'),
+  upsertCanaryToken: upsert('canaryTokens'),
+  upsertMeshEnvelope: upsert('meshEnvelopes'),
+  replaceMeshEnvelopes: resync('meshEnvelopes'),
   purgeUserAuthArtifacts: resync(
     'passwordResetTokens',
     'emailVerificationTokens',
