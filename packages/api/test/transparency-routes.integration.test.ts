@@ -75,6 +75,39 @@ test('GET /v1/transparency/canary returns a dated statement with a stable sha256
     assert.equal(body2.digest, body.digest);
 });
 
+test('GET /v1/transparency/canary is Ed25519-signed and verifies against the returned key', async () => {
+    const { verify } = await import('node:crypto');
+    const { createPublicKey } = await import('node:crypto');
+    const user = makeUser(`sig_${randomUUID().slice(0, 8)}`);
+    const res = await app.request('/v1/transparency/canary', auth(user.token));
+    assert.equal(res.status, 200);
+    const body = (await res.json()) as Record<string, any>;
+
+    assert.equal(body.signatureAlgorithm, 'ed25519');
+    // In the test env an ephemeral key signs the canary.
+    assert.equal(body.signatureKeySource, 'ephemeral');
+    assert.ok(typeof body.signature === 'string' && body.signature.length > 0);
+    assert.ok(typeof body.publicKey === 'string' && body.publicKey.length > 0);
+
+    const canonical = `${body.statement}|${body.periodStart}|${body.periodEnd}`;
+    const publicKey = createPublicKey({
+        key: Buffer.from(body.publicKey, 'base64'),
+        format: 'der',
+        type: 'spki',
+    });
+    const ok = verify(null, Buffer.from(canonical, 'utf8'), publicKey, Buffer.from(body.signature, 'base64'));
+    assert.equal(ok, true);
+
+    // A tampered statement must fail verification.
+    const bad = verify(
+        null,
+        Buffer.from(`${canonical} TAMPERED`, 'utf8'),
+        publicKey,
+        Buffer.from(body.signature, 'base64'),
+    );
+    assert.equal(bad, false);
+});
+
 test('GET /v1/transparency/audit-export returns 402 for an unentitled (free) caller', async () => {
     const user = makeUser(`noexport_${randomUUID().slice(0, 8)}`);
     const res = await app.request('/v1/transparency/audit-export', auth(user.token));

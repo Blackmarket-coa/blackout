@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { requireUser } from '../middleware/require-user';
 import { entitlementTierForUser, getSubscription } from '../services/subscriptions';
 import { listBurnersForOwner } from '../services/burnerIdentities';
+import { signCanary } from '../services/canarySigning';
 import { TRANSPARENCY_ENTITLEMENT_KEYS, TRANSPARENCY_TIER_ENTITLEMENTS } from '@blackout/protocol';
 import type { EntitlementTier } from '@blackout/protocol';
 
@@ -53,10 +54,10 @@ transparency.get('/me', (c) => {
 });
 
 /**
- * Warrant canary (OSS-manifest G9). Returns a structured, dated affirmation
- * plus a sha256 digest of the canonical statement so clients can detect any
- * change to the wording over time. Cryptographic signing with a server key is
- * a tracked follow-up; the digest provides tamper-evidence in the interim.
+ * Warrant canary (OSS-manifest G9). Returns a structured, dated affirmation,
+ * a sha256 integrity digest, and an Ed25519 signature over the canonical
+ * statement so clients can cryptographically verify authenticity (the public
+ * key travels with the response for verification).
  */
 transparency.get('/canary', (c) => {
   const user = requireUser(c);
@@ -77,6 +78,7 @@ transparency.get('/canary', (c) => {
 
   const canonical = `${statement}|${periodStart}|${periodEnd}`;
   const digest = createHash('sha256').update(canonical).digest('hex');
+  const signed = signCanary(canonical);
 
   return c.json({
     statement,
@@ -85,6 +87,11 @@ transparency.get('/canary', (c) => {
     generatedAt: now.toISOString(),
     digestAlgorithm: 'sha256',
     digest,
+    // Ed25519 signature over `${statement}|${periodStart}|${periodEnd}`.
+    signatureAlgorithm: signed.algorithm,
+    signatureKeySource: signed.keySource,
+    signature: signed.signature,
+    publicKey: signed.publicKey,
   });
 });
 
