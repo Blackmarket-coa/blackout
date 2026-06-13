@@ -128,3 +128,35 @@ test('POST /v1/activedefense/decoy-data returns 402 for a non-enterprise caller'
     );
     assert.equal(res.status, 402);
 });
+
+test('public tripwire GET /ct/:token records a trip and returns a 1x1 gif (no auth)', async () => {
+    const owner = makeEnterpriseUser(`trip_${randomUUID().slice(0, 8)}`);
+    const mint = await app.request(
+        '/v1/activedefense/canary-tokens',
+        authJson(owner.token, { label: 'doc-honeypot', consent: true }),
+    );
+    const { canary } = (await mint.json()) as Record<string, any>;
+
+    // Unauthenticated access to the tripwire (as an attacker opening a honeypot).
+    const hit = await app.request(`/ct/${canary.token}`, {
+        headers: { 'user-agent': 'EvilCrawler/9.9' },
+    });
+    assert.equal(hit.status, 200);
+    assert.equal(hit.headers.get('content-type'), 'image/gif');
+
+    // The owner sees the trip recorded with attribution.
+    const list = await app.request('/v1/activedefense/canary-tokens', {
+        headers: { authorization: `Bearer ${owner.token}` },
+    });
+    const { canaries } = (await list.json()) as Record<string, any>;
+    const updated = canaries.find((x: any) => x.token === canary.token);
+    assert.equal(updated.tripCount, 1);
+    assert.ok(updated.lastTrippedAt);
+    assert.equal(updated.lastTripUserAgent, 'EvilCrawler/9.9');
+});
+
+test('public tripwire returns the same 1x1 gif for an unknown token (no enumeration)', async () => {
+    const res = await app.request('/ct/bo-canary-does-not-exist');
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get('content-type'), 'image/gif');
+});

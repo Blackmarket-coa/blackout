@@ -3,3 +3,4 @@
  */
 export * from './entitlements';
 export * from './storeAndForward';
+export * from './transport';

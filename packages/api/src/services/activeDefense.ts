@@ -17,6 +17,12 @@ export type CanaryToken = {
   createdAt: string;
   lastTrippedAt: string | null;
   tripCount: number;
+  /** User-agent of the most recent trip (truncated), when a tripwire fired. */
+  lastTripUserAgent: string | null;
+};
+
+export type TripContext = {
+  userAgent?: string | null;
 };
 
 export type DecoyKind = 'contact' | 'message' | 'credential';
@@ -55,6 +61,7 @@ export function mintCanary(ownerUserId: string, label: string): MintCanaryResult
     createdAt: new Date().toISOString(),
     lastTrippedAt: null,
     tripCount: 0,
+    lastTripUserAgent: null,
   };
   canariesByOwner.set(ownerUserId, [...existing, record]);
   canariesByToken.set(record.token, record);
@@ -63,16 +70,19 @@ export function mintCanary(ownerUserId: string, label: string): MintCanaryResult
 
 /**
  * Record that a canary was accessed. Returns the updated record, or null when
- * the token is unknown. (Owner-scoped today; mapping a public tripwire route is
- * a tracked follow-up.)
+ * the token is unknown. Called both by the owner-scoped authed route and by the
+ * public tripwire (`GET /ct/:token`), where an unauthorized access is exactly
+ * the signal we want to capture.
  */
-export function tripCanary(token: string): CanaryToken | null {
+export function tripCanary(token: string, context: TripContext = {}): CanaryToken | null {
   const record = canariesByToken.get(token);
   if (!record) return null;
+  const userAgent = context.userAgent ? context.userAgent.slice(0, 400) : record.lastTripUserAgent;
   const updated: CanaryToken = {
     ...record,
     lastTrippedAt: new Date().toISOString(),
     tripCount: record.tripCount + 1,
+    lastTripUserAgent: userAgent ?? null,
   };
   canariesByToken.set(token, updated);
   const owned = canariesByOwner.get(record.ownerUserId) ?? [];

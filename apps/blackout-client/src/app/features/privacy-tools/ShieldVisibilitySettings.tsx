@@ -1,6 +1,11 @@
 import { useCallback, useState } from 'react';
 import { useShieldFeatures } from './useShieldFeatures';
-import { runShieldScan, type ShieldReport } from './shield/shieldEngine';
+import {
+    runShieldScan,
+    type ShieldFormDescriptor,
+    type ShieldPermissionState,
+    type ShieldReport,
+} from './shield/shieldEngine';
 
 type ShieldVisibilitySettingsProps = {
     requestClose?: () => void;
@@ -28,6 +33,41 @@ const collectResourceUrls = (): string[] => {
     }
 };
 
+/** Collect this page's forms so off-site (cross-origin) actions can be flagged. */
+const collectForms = (): ShieldFormDescriptor[] => {
+    try {
+        return Array.from(document.forms).map((form) => ({
+            action: form.getAttribute('action') ?? '',
+            method: form.getAttribute('method') ?? 'get',
+        }));
+    } catch {
+        return [];
+    }
+};
+
+/** Best-effort camera/microphone permission audit via the Permissions API. */
+const queryPermissions = async (): Promise<{
+    camera?: ShieldPermissionState;
+    microphone?: ShieldPermissionState;
+}> => {
+    const out: { camera?: ShieldPermissionState; microphone?: ShieldPermissionState } = {};
+    try {
+        const perms = navigator.permissions;
+        if (!perms?.query) return out;
+        for (const name of ['camera', 'microphone'] as const) {
+            try {
+                const status = await perms.query({ name: name as PermissionName });
+                out[name] = status.state as ShieldPermissionState;
+            } catch {
+                // Some browsers reject unknown permission names; skip them.
+            }
+        }
+    } catch {
+        // Permissions API unavailable.
+    }
+    return out;
+};
+
 /**
  * Shield / visibility surface (OSS-manifest group G1). A free, opt-in detection
  * baseline: it scans the resources this page has loaded against the first-party
@@ -38,8 +78,16 @@ export function ShieldVisibilitySettings({ requestClose }: ShieldVisibilitySetti
     const shield = useShieldFeatures();
     const [report, setReport] = useState<ShieldReport | null>(null);
 
-    const runScan = useCallback(() => {
-        setReport(runShieldScan({ resourceUrls: collectResourceUrls() }));
+    const runScan = useCallback(async () => {
+        const permissions = await queryPermissions();
+        setReport(
+            runShieldScan({
+                resourceUrls: collectResourceUrls(),
+                permissions,
+                forms: collectForms(),
+                pageOrigin: typeof window !== 'undefined' ? window.location.origin : undefined,
+            })
+        );
     }, []);
 
     return (
@@ -66,7 +114,7 @@ export function ShieldVisibilitySettings({ requestClose }: ShieldVisibilitySetti
                 <button
                     type="button"
                     data-testid="shield-run-scan"
-                    onClick={runScan}
+                    onClick={() => void runScan()}
                     disabled={!shield.enabled}
                 >
                     Run shield scan

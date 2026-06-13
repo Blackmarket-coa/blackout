@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+    auditFormAction,
+    auditPermission,
     classifyResource,
     hostMatchesDomain,
     runShieldScan,
@@ -63,5 +65,43 @@ describe('runShieldScan', () => {
         const report = runShieldScan({ resourceUrls: ['https://app.blackout.example/main.js'] });
         expect(report.total).toBe(0);
         expect(report.findings).toEqual([]);
+    });
+
+    it('surfaces granted camera/mic permissions and off-site form actions', () => {
+        const report = runShieldScan({
+            permissions: { camera: 'granted', microphone: 'prompt' },
+            forms: [
+                { action: 'https://evil.example/collect', method: 'post' },
+                { action: '/local/submit', method: 'post' },
+            ],
+            pageOrigin: 'https://app.blackout.example',
+        });
+        expect(report.summary.permission).toBe(1); // only the granted one
+        expect(report.summary['form-exfil']).toBe(1); // only the off-site one
+        expect(report.total).toBe(2);
+    });
+});
+
+describe('auditPermission', () => {
+    it('reports only granted device permissions', () => {
+        expect(auditPermission('camera', 'granted')?.category).toBe('permission');
+        expect(auditPermission('microphone', 'prompt')).toBeNull();
+        expect(auditPermission('camera', 'denied')).toBeNull();
+        expect(auditPermission('camera', undefined)).toBeNull();
+    });
+});
+
+describe('auditFormAction', () => {
+    const origin = 'https://app.blackout.example';
+    it('flags a cross-origin form action as high-severity exfil', () => {
+        const f = auditFormAction({ action: 'https://evil.example/x', method: 'post' }, origin);
+        expect(f?.category).toBe('form-exfil');
+        expect(f?.severity).toBe('high');
+        expect(f?.detail).toBe('evil.example');
+    });
+    it('ignores same-origin, relative, and empty actions', () => {
+        expect(auditFormAction({ action: `${origin}/submit` }, origin)).toBeNull();
+        expect(auditFormAction({ action: '/submit' }, origin)).toBeNull();
+        expect(auditFormAction({ action: '' }, origin)).toBeNull();
     });
 });
