@@ -225,13 +225,13 @@ UX polish.
 - Workstream A Port 3 (notifications + presence digest UI) recommended — thread activity badging shares unread-aggregation pathways.
 - UI Primitives v1 `Popover` + `Tooltip` recommended but not required (interim ad-hoc reactions UI works).
 
-### Exit criteria
+### Exit criteria — ✅ CLOSED (2026-06-13)
 
-- Reaction bar renders aggregated counts + reactors; double-click on own reaction removes it.
-- Reaction picker accessible by keyboard; recent reactions persist per device.
-- Thread panel renders root + replies + composer in thread mode; `MessageComposer` `target.mode='thread'` integration works end-to-end.
-- Thread unread badge in left-panel updates within one tick of an `m.thread` reply landing.
-- Page-level tests cover: reaction add / remove / aggregate, thread reply post, unread badge update on inbound reply.
+- ✅ Reaction bar renders aggregated counts + reactors; double-click on own reaction removes it.
+- ✅ Reaction picker accessible by keyboard; recent reactions persist per device.
+- ✅ Thread panel renders root + replies + composer in thread mode; `MessageComposer` `target.mode='thread'` integration works end-to-end (`ThreadPanel` wired into `panelSlots.tsx` `threads` slot).
+- ✅ Thread unread badge in left-panel updates within one tick of an `m.thread` reply landing (`ThreadUnreadBadgeMount` in `CanopySidebar.tsx`).
+- ✅ Page-level tests cover: reaction add / remove / aggregate, thread reply post, unread badge update on inbound reply — `apps/blackout-client/tests/unit/features/threading-parity/workstreamC.roundtrip.test.tsx`.
 
 ### Size
 
