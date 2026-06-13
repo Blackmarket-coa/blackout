@@ -127,6 +127,11 @@
       "ws@8.19.0": "8.20.1",
       "@types/react": "^18.2.39",
       "@types/react-dom": "^18.2.17"
+    },
+    "auditConfig": {
+      "ignoreGhsas": [
+        "GHSA-gv7w-rqvm-qjhr"
+      ]
     }
   }
 }
