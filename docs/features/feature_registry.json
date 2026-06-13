@@ -697,15 +697,18 @@
       "id": "active_defense",
       "name": "Active Defense",
       "category": "novel",
-      "status": "planned",
+      "status": "partial",
       "presetKey": "features.activedefense.enabled",
       "uiEntry": "admin_console:feature-toggle-active-defense",
       "owner": "security-eng",
-      "testCoverage": "none",
-      "notes": "Defensive-only deception primitives (canary tokens, decoy data) above the free panic and duress controls. Gated to the enterprise tier with explicit admin consent. Registry and feature-flag stub only.",
+      "testCoverage": "unit+integration",
+      "notes": "Defensive, local-only deception primitives are enforced end-to-end: POST /v1/activedefense/canary-tokens mints opaque canary tokens, GET lists them with trip status, and POST /canary-tokens/trip records access; POST /v1/activedefense/decoy-data returns clearly-synthetic decoy records. Every mutating route gates on features.activedefense.* for the enterprise tier (402 active_defense_not_entitled otherwise) AND requires explicit admin consent (403 active_defense_consent_required). A checkActiveDefenseEntitlements SDK gate enforces tier + consent, and useActiveDefenseFeatures + the ActiveDefenseSettings surface gate the affordance behind a consent acknowledgement. No offensive, retaliatory, or third-party-directed behavior ships (ethics §4). Canary tripping is owner-scoped and the store is in-memory; a public tripwire route and persistence are tracked follow-ups, so status is partial.",
       "sourcePointers": [
-        "apps/blackout-client/src/app/features/panic/manifest.ts",
-        "docs/oss_manifest_packaging.md"
+        "packages/api/src/routes/activedefense.ts",
+        "packages/api/src/services/activeDefense.ts",
+        "packages/blackout-protocol/src/activedefense/entitlements.ts",
+        "packages/blackout-sdk/src/activedefense/entitlementGate.ts",
+        "apps/blackout-client/src/app/features/panic/ActiveDefenseSettings.tsx"
       ],
       "presetPolicy": {
         "baseline_matrix": false,
@@ -713,14 +716,15 @@
         "blackout_full": true
       },
       "uiTestRefs": [
-        "apps/blackout-client/src/app/features/panic/manifest.ts::feature-toggle-active-defense"
+        "apps/blackout-client/src/app/features/panic/ActiveDefenseSettings.tsx::feature-toggle-active-defense"
       ],
-      "fallbackBehavior": "When the activeDefense flag is off or the capability is ungranted, the customization does not register and the canonical shell renders unchanged.",
-      "evidenceType": "docs",
+      "fallbackBehavior": "When the activeDefense flag is off or the enterprise entitlement is absent, the customization does not register and the server returns 402 active_defense_not_entitled; without explicit admin consent the server returns 403 active_defense_consent_required. The canonical shell renders unchanged.",
+      "evidenceType": "code",
       "evidencePaths": [
-        "docs/oss_manifest_packaging.md"
+        "packages/api/test/activedefense-routes.integration.test.ts",
+        "apps/blackout-client/tests/unit/sdk/activeDefenseGate.test.ts"
       ],
-      "lastVerifiedAt": "2026-06-09",
+      "lastVerifiedAt": "2026-06-13",
       "verifiedBy": "blackout-coa"
     },
     {

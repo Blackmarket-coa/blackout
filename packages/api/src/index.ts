@@ -14,6 +14,7 @@ import scheduledMessageRoutes from './routes/scheduledMessages';
 import federationRoutes from './routes/federation';
 import entitlementRoutes from './routes/entitlements';
 import transparencyRoutes from './routes/transparency';
+import activeDefenseRoutes from './routes/activedefense';
 import marketplaceRoutes from './routes/marketplace';
 import threadRoutes from './routes/threads';
 import capabilityRoutes from './routes/capabilities';
@@ -166,6 +167,7 @@ for (const root of legacyAliasEnabled ? [API_ROOTS.v1, API_ROOTS.legacyApiAlias]
   app.route(`${root}/federation`, federationRoutes);
   app.route(`${root}/entitlements`, entitlementRoutes);
   app.route(`${root}/transparency`, transparencyRoutes);
+  app.route(`${root}/activedefense`, activeDefenseRoutes);
   app.route(`${root}/marketplace`, marketplaceRoutes);
   app.route(`${root}/threads`, threadRoutes);
   app.route(`${root}/capabilities`, capabilityRoutes);

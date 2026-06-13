@@ -8,7 +8,8 @@ export type EntitlementFamily =
     | 'deaddrop'
     | 'persona'
     | 'hardening'
-    | 'transparency';
+    | 'transparency'
+    | 'activedefense';
 
 export type PlanStateStatus = 'trialing' | 'active' | 'past_due' | 'canceled' | 'inactive';
 
