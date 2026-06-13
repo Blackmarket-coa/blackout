@@ -1,6 +1,7 @@
 import { useAtom, useAtomValue } from 'jotai';
 import { privacyToolsEntitledAtom, privacyToolsSettingsAtom } from './privacyToolsAtoms';
 import { openPrivacyUpgradeFlow } from './privacyToolsTelemetry';
+import { useHardeningFeatures } from './useHardeningFeatures';
 
 type PrivacyToolsSettingsProps = {
     requestClose?: () => void;
@@ -9,6 +10,9 @@ type PrivacyToolsSettingsProps = {
 export function PrivacyToolsSettings({ requestClose }: PrivacyToolsSettingsProps = {}) {
     const [settings, setSettings] = useAtom(privacyToolsSettingsAtom);
     const advancedEntitled = useAtomValue(privacyToolsEntitledAtom);
+    // Tier-aware hardening entitlements (advisory until a global entitlements
+    // atom lands; the operative gate stays `advancedEntitled` for now).
+    const hardening = useHardeningFeatures();
 
     return (
         <section style={{ display: 'grid', gap: 12 }}>
@@ -33,6 +37,7 @@ export function PrivacyToolsSettings({ requestClose }: PrivacyToolsSettingsProps
                 <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }}>
                     <input
                         type="checkbox"
+                        data-testid="feature-toggle-privacy-hardening"
                         checked={settings.avatarPerturbationEnabled}
                         disabled={!advancedEntitled}
                         onChange={(event) =>
@@ -43,6 +48,9 @@ export function PrivacyToolsSettings({ requestClose }: PrivacyToolsSettingsProps
                         }
                     />
                     Perturb avatars against facial recognition (Advanced, best-effort)
+                    {hardening.imagePerturbation ? null : (
+                        <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Pro</span>
+                    )}
                 </label>
                 <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }}>
                     <input

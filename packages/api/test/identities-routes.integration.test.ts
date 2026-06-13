@@ -14,6 +14,7 @@ const { default: app } = await import('../src/index');
 const { signJwt } = await import('../src/services/auth');
 const { db } = await import('../src/db/store');
 const { matrixClient } = await import('../src/integrations/matrix-client');
+const { applyManualComp } = await import('../src/services/subscriptions');
 
 type AnyFn = (...args: unknown[]) => unknown;
 
@@ -155,6 +156,26 @@ test('POST /v1/identities raises the cap when burner_pro is granted', async () =
     });
 });
 
+test('POST /v1/identities raises the roster cap for a paid subscription tier (PERSONA_QUOTAS)', async () => {
+    const owner = makeUser(`owner_${randomUUID().slice(0, 8)}`);
+    // Comp the user onto the sprout plan → resolves to the `pro` entitlement
+    // tier, whose PERSONA_QUOTAS.maxPersonas (8) clears the free cap of 1.
+    applyManualComp(owner.id, 'integration-test');
+    await withMatrix({ provisionBurner: provisionOk }, async () => {
+        for (let i = 0; i < 2; i += 1) {
+            const res = await app.request('/v1/identities', {
+                method: 'POST',
+                headers: {
+                    authorization: `Bearer ${owner.token}`,
+                    'content-type': 'application/json',
+                },
+                body: JSON.stringify({ label: `pro-sub-${i}` }),
+            });
+            assert.equal(res.status, 201, `create ${i} should succeed on the pro tier`);
+        }
+    });
+});
+
 test('POST /v1/identities returns 503 when Synapse is unconfigured', async () => {
     const owner = makeUser(`owner_${randomUUID().slice(0, 8)}`);
     await withMatrix({ provisionBurner: provisionNotConfigured }, async () => {
@@ -214,6 +235,86 @@ test('POST /v1/identities/:id/burn deactivates and marks the burner burned', asy
             body: JSON.stringify({ label: 'fresh' }),
         });
         assert.equal(again.status, 201);
+    });
+});
+
+test('POST /v1/identities/:id/rotate is gated to paid tiers and bumps the rotation epoch', async () => {
+    const freeOwner = makeUser(`free_${randomUUID().slice(0, 8)}`);
+    await withMatrix({ provisionBurner: provisionOk }, async () => {
+        const created = await app.request('/v1/identities', {
+            method: 'POST',
+            headers: { authorization: `Bearer ${freeOwner.token}`, 'content-type': 'application/json' },
+            body: JSON.stringify({ label: 'free persona' }),
+        });
+        const { burner } = (await created.json()) as { burner: { burnerUserId: string; rotationEpoch: number } };
+        assert.equal(burner.rotationEpoch, 0);
+
+        // Free tier cannot rotate.
+        const denied = await app.request(
+            `/v1/identities/${encodeURIComponent(burner.burnerUserId)}/rotate`,
+            { method: 'POST', headers: { authorization: `Bearer ${freeOwner.token}` } },
+        );
+        assert.equal(denied.status, 402);
+        const deniedBody = (await denied.json()) as { code: string; suggestedTier: string };
+        assert.equal(deniedBody.code, 'rotation_not_entitled');
+        assert.equal(deniedBody.suggestedTier, 'pro');
+    });
+
+    const proOwner = makeUser(`pro_${randomUUID().slice(0, 8)}`);
+    applyManualComp(proOwner.id, 'integration-test');
+    await withMatrix({ provisionBurner: provisionOk }, async () => {
+        const created = await app.request('/v1/identities', {
+            method: 'POST',
+            headers: { authorization: `Bearer ${proOwner.token}`, 'content-type': 'application/json' },
+            body: JSON.stringify({ label: 'pro persona' }),
+        });
+        const { burner } = (await created.json()) as { burner: { burnerUserId: string } };
+
+        const rotated = await app.request(
+            `/v1/identities/${encodeURIComponent(burner.burnerUserId)}/rotate`,
+            { method: 'POST', headers: { authorization: `Bearer ${proOwner.token}` } },
+        );
+        assert.equal(rotated.status, 200);
+        const body = (await rotated.json()) as { burner: { rotationEpoch: number } };
+        assert.equal(body.burner.rotationEpoch, 1);
+    });
+});
+
+test('POST /v1/identities compartments are gated, and GET /roster groups by compartment', async () => {
+    const freeOwner = makeUser(`free_${randomUUID().slice(0, 8)}`);
+    await withMatrix({ provisionBurner: provisionOk }, async () => {
+        const denied = await app.request('/v1/identities', {
+            method: 'POST',
+            headers: { authorization: `Bearer ${freeOwner.token}`, 'content-type': 'application/json' },
+            body: JSON.stringify({ label: 'x', compartmentId: 'work' }),
+        });
+        assert.equal(denied.status, 402);
+        assert.equal(((await denied.json()) as { code: string }).code, 'compartments_not_entitled');
+    });
+
+    const proOwner = makeUser(`pro_${randomUUID().slice(0, 8)}`);
+    applyManualComp(proOwner.id, 'integration-test');
+    await withMatrix({ provisionBurner: provisionOk }, async () => {
+        for (const compartmentId of ['work', 'activism']) {
+            const res = await app.request('/v1/identities', {
+                method: 'POST',
+                headers: { authorization: `Bearer ${proOwner.token}`, 'content-type': 'application/json' },
+                body: JSON.stringify({ label: compartmentId, compartmentId }),
+            });
+            assert.equal(res.status, 201);
+            const { burner } = (await res.json()) as { burner: { compartmentId: string | null } };
+            assert.equal(burner.compartmentId, compartmentId);
+        }
+
+        const roster = await app.request('/v1/identities/roster', {
+            headers: { authorization: `Bearer ${proOwner.token}` },
+        });
+        assert.equal(roster.status, 200);
+        const body = (await roster.json()) as {
+            roster: { compartmentId: string | null; personas: unknown[] }[];
+        };
+        const compartments = body.roster.map((g) => g.compartmentId).sort();
+        assert.deepEqual(compartments, ['activism', 'work']);
     });
 });
 

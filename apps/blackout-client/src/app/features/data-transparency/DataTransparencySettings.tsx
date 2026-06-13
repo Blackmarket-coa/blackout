@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { useDeviceList } from '../../hooks/useDeviceList';
+import { useTransparencyFeatures } from './useTransparencyFeatures';
 
 type DataTransparencySettingsProps = {
     requestClose?: () => void;
@@ -58,6 +59,7 @@ export function DataTransparencySettings({ requestClose }: DataTransparencySetti
     }, [mx]);
 
     const localKeys = useMemo(() => readLocalKeys(), []);
+    const transparency = useTransparencyFeatures();
 
     return (
         <section style={{ display: 'grid', gap: 12 }}>
@@ -74,6 +76,28 @@ export function DataTransparencySettings({ requestClose }: DataTransparencySetti
                 A summary of the account metadata your homeserver retains and the data Blackout
                 keeps on this device. Everything here is read directly from your own session.
             </p>
+
+            <div style={sectionStyle} data-testid="feature-toggle-transparency-reports">
+                <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <input type="checkbox" checked={transparency.selfReport} disabled readOnly />
+                    <strong>Self-service transparency</strong>
+                </label>
+                <p style={{ margin: '6px 0 0', color: 'var(--text-secondary)', fontSize: 13 }}>
+                    The self-report below and the warrant canary are always available on your plan (
+                    {transparency.tier}). Org-scoped audit export
+                    {transparency.auditExport
+                        ? ' is enabled.'
+                        : ' requires the Team tier or higher.'}
+                </p>
+                <button
+                    type="button"
+                    style={{ marginTop: 8 }}
+                    disabled={!transparency.auditExport}
+                    data-testid="transparency-audit-export"
+                >
+                    {transparency.auditExport ? 'Export my audit record' : 'Audit export (Team)'}
+                </button>
+            </div>
 
             <div style={sectionStyle}>
                 <strong>Account &amp; homeserver</strong>

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { PERSONA_QUOTAS, type EntitlementTier } from '@blackout/protocol';
 import { db } from '../db/store';
 import type { BurnerIdentityRecord } from '../db/types';
 import { matrixClient } from '../integrations/matrix-client';
@@ -6,16 +7,34 @@ import { log } from '../telemetry/logger';
 
 export const DEFAULT_BURNER_TTL_HOURS = 24 * 7; // 7 days
 export const MAX_BURNER_TTL_HOURS = 24 * 90; // 90 days
-/** Active-burner cap for the free tier; the advanced entitlement raises it. */
+/** Legacy fallback cap when no tier is supplied (back-compat only). */
 export const FREE_TIER_ACTIVE_BURNER_CAP = 1;
 export const ADVANCED_TIER_ACTIVE_BURNER_CAP = 10;
+
+/**
+ * Active-persona cap for a tier, sourced from the canonical
+ * `PERSONA_QUOTAS.maxPersonas` (`-1` ⇒ unlimited).
+ */
+export function activePersonaCapForTier(tier: EntitlementTier): number {
+  const max = PERSONA_QUOTAS[tier].maxPersonas;
+  return max === -1 ? Number.POSITIVE_INFINITY : max;
+}
 
 export interface CreateBurnerInput {
   ownerUserId: string;
   label?: string;
   ttlHours?: number;
-  /** Raised cap when the owner holds the advanced privacy entitlement. */
+  /**
+   * Entitlement tier whose `PERSONA_QUOTAS.maxPersonas` sets the active cap.
+   * When omitted, falls back to the legacy `advancedEntitled` boolean.
+   */
+  tier?: EntitlementTier;
+  /** @deprecated back-compat: raises the cap when `tier` is not supplied. */
   advancedEntitled?: boolean;
+  /** Optional compartment grouping for the persona roster. */
+  compartmentId?: string;
+  /** SHA-256 commitment of the client-held persona root key (no raw key). */
+  rootKeyCommitment?: string;
 }
 
 export type CreateBurnerOutcome =
@@ -36,9 +55,11 @@ const publicBaseUrl = (): string =>
     '').replace(/\/+$/, '');
 
 export async function createBurnerForOwner(input: CreateBurnerInput): Promise<CreateBurnerOutcome> {
-  const cap = input.advancedEntitled
-    ? ADVANCED_TIER_ACTIVE_BURNER_CAP
-    : FREE_TIER_ACTIVE_BURNER_CAP;
+  const cap = input.tier
+    ? activePersonaCapForTier(input.tier)
+    : input.advancedEntitled
+      ? ADVANCED_TIER_ACTIVE_BURNER_CAP
+      : FREE_TIER_ACTIVE_BURNER_CAP;
   const active = db.listBurnerIdentitiesForOwner(input.ownerUserId);
   if (active.length >= cap) {
     return { kind: 'cap_reached', cap };
@@ -66,9 +87,46 @@ export async function createBurnerForOwner(input: CreateBurnerInput): Promise<Cr
     burnerUserId: provisioned.userId,
     label,
     expiresAt,
+    compartmentId: input.compartmentId ?? null,
+    rotationEpoch: 0,
+    rootKeyCommitment: input.rootKeyCommitment ?? null,
   });
 
   return { kind: 'ok', record, password: provisioned.password, baseUrl: publicBaseUrl() };
+}
+
+export type RotatePersonaOutcome =
+  | { kind: 'ok'; record: BurnerIdentityRecord }
+  | { kind: 'not_found' };
+
+/** Bump a burner's alias-rotation epoch (client re-derives aliases from it). */
+export function rotatePersonaForOwner(input: {
+  ownerUserId: string;
+  burnerUserId: string;
+}): RotatePersonaOutcome {
+  const updated = db.rotateBurnerIdentity(input.ownerUserId, input.burnerUserId);
+  return updated ? { kind: 'ok', record: updated } : { kind: 'not_found' };
+}
+
+export type PersonaCompartmentGroup = {
+  compartmentId: string | null;
+  personas: BurnerIdentityRecord[];
+};
+
+/** Active personas for an owner, grouped by compartment for the roster UI. */
+export function listPersonaRosterForOwner(ownerUserId: string): PersonaCompartmentGroup[] {
+  const active = db.listBurnerIdentitiesForOwner(ownerUserId);
+  const byCompartment = new Map<string | null, BurnerIdentityRecord[]>();
+  for (const persona of active) {
+    const key = persona.compartmentId ?? null;
+    const group = byCompartment.get(key) ?? [];
+    group.push(persona);
+    byCompartment.set(key, group);
+  }
+  return [...byCompartment.entries()].map(([compartmentId, personas]) => ({
+    compartmentId,
+    personas,
+  }));
 }
 
 export function listBurnersForOwner(ownerUserId: string): BurnerIdentityRecord[] {

@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import type { EntitlementTier } from '@blackout/protocol';
 
 export type SubscriptionStatus = 'trialing' | 'active' | 'past_due' | 'canceled';
 export type BillingInterval = 'monthly' | 'annual';
@@ -360,6 +361,17 @@ export function getSubscriptionAuditTimeline(userId: string): SubscriptionAuditE
 
 export function hasPremiumCanopyEntitlement(userId: string): boolean {
   return getSubscription(userId).entitlementActive;
+}
+
+/**
+ * Canonical mapping from a user's Canopy subscription tier to the
+ * `EntitlementTier` used across the entitlement system. Single source of
+ * truth — reused by the entitlements route and per-feature quota checks
+ * (e.g. persona roster caps) so they never diverge.
+ */
+export function entitlementTierForUser(userId: string): EntitlementTier {
+  const tier = getSubscription(userId).tier;
+  return tier === 'canopy_pro' ? 'enterprise' : tier === 'sprout' ? 'pro' : 'free';
 }
 
 function expireStaleGifts(): void {

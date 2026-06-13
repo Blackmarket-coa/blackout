@@ -43,6 +43,10 @@ describe('feature allowlist manifest', () => {
             'onboarding-creator',
             'creators-dashboard',
             'federation-self-host',
+            'privacy-tools',
+            'burner-identity',
+            'panic',
+            'mesh',
         ]);
     });
 

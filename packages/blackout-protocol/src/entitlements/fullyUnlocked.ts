@@ -9,6 +9,12 @@
  */
 
 import { DEAD_DROP_TIER_ENTITLEMENTS } from '../deaddrop/entitlements';
+import { PERSONA_TIER_ENTITLEMENTS } from '../persona/entitlements';
+import { HARDENING_TIER_ENTITLEMENTS } from '../hardening/entitlements';
+import { TRANSPARENCY_TIER_ENTITLEMENTS } from '../transparency/entitlements';
+import { ACTIVE_DEFENSE_TIER_ENTITLEMENTS } from '../activedefense/entitlements';
+import { SHIELD_TIER_ENTITLEMENTS } from '../shield/entitlements';
+import { MESH_TIER_ENTITLEMENTS } from '../mesh/entitlements';
 import type { EntitlementAccessPayload, EntitlementMap } from './types';
 
 const FULLY_UNLOCKED_ENTITLEMENTS: EntitlementMap = {
@@ -18,6 +24,12 @@ const FULLY_UNLOCKED_ENTITLEMENTS: EntitlementMap = {
     'features.canopy.premium': true,
     'features.canopy.priority_support': true,
     ...DEAD_DROP_TIER_ENTITLEMENTS.enterprise,
+    ...PERSONA_TIER_ENTITLEMENTS.enterprise,
+    ...HARDENING_TIER_ENTITLEMENTS.enterprise,
+    ...TRANSPARENCY_TIER_ENTITLEMENTS.enterprise,
+    ...ACTIVE_DEFENSE_TIER_ENTITLEMENTS.enterprise,
+    ...SHIELD_TIER_ENTITLEMENTS.enterprise,
+    ...MESH_TIER_ENTITLEMENTS.enterprise,
 };
 
 export function buildFullyUnlockedEntitlementPayload(): EntitlementAccessPayload {

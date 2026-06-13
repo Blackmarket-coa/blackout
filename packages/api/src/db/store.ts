@@ -687,10 +687,30 @@ class InMemoryDb {
     const record: BurnerIdentityRecord = {
       ...input,
       burnedAt: input.burnedAt ?? null,
+      compartmentId: input.compartmentId ?? null,
+      rotationEpoch: input.rotationEpoch ?? 0,
+      rootKeyCommitment: input.rootKeyCommitment ?? null,
       createdAt: nowIso(),
     };
     this.burnerIdentities.set(record.id, record);
     return record;
+  }
+
+  /** Bump the alias-rotation epoch of an active burner the owner controls. */
+  rotateBurnerIdentity(
+    ownerUserId: string,
+    burnerUserId: string,
+  ): BurnerIdentityRecord | undefined {
+    const existing = [...this.burnerIdentities.values()].find(
+      (b) => b.ownerUserId === ownerUserId && b.burnerUserId === burnerUserId && !b.burnedAt,
+    );
+    if (!existing) return undefined;
+    const updated: BurnerIdentityRecord = {
+      ...existing,
+      rotationEpoch: (existing.rotationEpoch ?? 0) + 1,
+    };
+    this.burnerIdentities.set(updated.id, updated);
+    return updated;
   }
 
   /** Active = not yet burned. Used to enforce the per-owner active-burner cap. */

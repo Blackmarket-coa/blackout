@@ -102,3 +102,32 @@ remote page connecting to a developer's running Vitest server) does not exist
 in CI or production. Fixed in vitest >=4.1.0; tracked for a dedicated vitest 4
 upgrade PR (breaking config/coverage changes) rather than this PR's diff.
 """
+
+# esbuild (0.25.0 / 0.27.7 / 0.28.0 across the workspace) — build-time bundler
+# devDependency pulled in via vite / vite-plugin-* / tsx. Fixed in esbuild
+# 0.28.1, which only resolves under vite 8 (forcing 0.28.1 under the current
+# vite 6 breaks `vite build`). The vite 6→8 toolchain migration is a breaking
+# major bump tracked in its own dedicated PR, not this feature PR's diff.
+
+[[IgnoredVulns]]
+id = "GHSA-gv7w-rqvm-qjhr"
+ignoreUntil = 2026-08-31
+reason = """
+esbuild: missing binary integrity verification when its install script runs
+under Deno's npm-compatibility layer. This is a Node + pnpm repository that
+never installs or runs under Deno, so the vulnerable install path is
+unreachable. esbuild is build-time-only tooling and is never present in any
+production bundle or runtime. Fixed in esbuild >=0.28.1, which requires the
+vite 8 migration; tracked for the dedicated vite-8 upgrade PR.
+"""
+
+[[IgnoredVulns]]
+id = "GHSA-g7r4-m6w7-qqqr"
+ignoreUntil = 2026-08-31
+reason = """
+Low-severity (CVSS 2.5) esbuild advisory affecting <0.28.1. esbuild is a
+build-time bundler devDependency (via vite / vite-plugin-* / tsx) and is never
+loaded in the production bundle or at runtime. Fixed in esbuild >=0.28.1,
+which requires the vite 8 migration; tracked for the dedicated vite-8 upgrade
+PR alongside GHSA-gv7w-rqvm-qjhr.
+"""
