@@ -15,6 +15,7 @@ import federationRoutes from './routes/federation';
 import entitlementRoutes from './routes/entitlements';
 import transparencyRoutes from './routes/transparency';
 import activeDefenseRoutes from './routes/activedefense';
+import canaryTripwireRoutes from './routes/canaryTripwire';
 import meshRoutes from './routes/mesh';
 import marketplaceRoutes from './routes/marketplace';
 import threadRoutes from './routes/threads';
@@ -134,6 +135,11 @@ app.use(
 );
 app.use('*', httpMetricsMiddleware);
 app.use('*', rateLimit);
+
+// Public canary tripwire (OSS-manifest G5) — mounted before the /v1 auth gate
+// so an unauthorized party who opens a honeypot artifact fires the canary.
+app.route('/ct', canaryTripwireRoutes);
+
 app.use(`${API_ROOTS.v1}/*`, authMiddleware);
 
 if (legacyAliasEnabled) {
