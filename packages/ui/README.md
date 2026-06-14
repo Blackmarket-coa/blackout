@@ -28,6 +28,36 @@ automatically when the active theme class changes.
 | `Separator` | `orientation` (`role="separator"`) | `designColors.borderDefault` |
 | `Card` | — | `designColors.bgSurface/border*/textPrimary`, `designRadii.lgPx`, `designSpacing.comfortableGapPx` |
 
+### B1.1 (remaining primitives)
+
+Forms, display, layout, navigation and overlay primitives. Overlays are
+hand-rolled (no positioning/focus-trap dependency): `createPortal` to
+`document.body` for `Modal`/`Sheet`/`Toast`, CSS placement props for
+`Tooltip`/`Popover`/`Menu`. **v1 has no viewport collision detection** — callers
+pick a side that fits; smart flipping is a future enhancement.
+
+| Primitive | Props (key) | Notes |
+| --- | --- | --- |
+| `TextArea` | `invalid` | styled native `<textarea>` |
+| `Select` | `invalid` | styled native `<select>`; pass `<option>` children |
+| `Checkbox` | `label` | native `<input type=checkbox>` + label |
+| `Radio` | `label` | native `<input type=radio>` + label |
+| `Switch` | `checked`, `onCheckedChange` | `role="switch"` toggle |
+| `Avatar` | `src`, `name`, `size` | image with initials fallback |
+| `EmptyState` | `title`, `description`, `icon`, `action` | centered placeholder |
+| `Inline` | `gap`, `align` | non-wrapping flex row |
+| `Cluster` | `gap`, `justify`, `align` | wrapping group |
+| `Grid` | `columns`, `minItemWidth`, `gap` | CSS grid (fixed or auto-fill) |
+| `Tabs` | `items`, `value`/`defaultValue`, `onValueChange` | roving-tabindex `role="tablist"` |
+| `Tooltip` | `content`, `placement` | hover/focus; `aria-describedby` link |
+| `Popover` | `trigger`, `placement`, `open`/`onOpenChange` | click-toggle `role="dialog"`; Escape + outside-click dismiss |
+| `Menu` | `trigger`, `items`, `placement` | `role="menu"` keyboard nav; Escape + outside-click dismiss |
+| `Modal` | `open`, `onClose`, `title` | portal `aria-modal` dialog; Escape + backdrop close; focus restore |
+| `Sheet` | `open`, `onClose`, `title` | portal bottom-sheet (web generalization of `OverflowSheet`) |
+| `ToastProvider` / `useToast` | `toast({ message, tone, duration })`, `dismiss(id)` | portal viewport with auto-dismiss |
+
+B1.1 tests + fixtures: `apps/blackout-client/tests/unit/ui-primitives/primitives-b11.test.tsx`.
+
 ### Consumption
 
 Because the primitives are styled with vanilla-extract, they are consumed

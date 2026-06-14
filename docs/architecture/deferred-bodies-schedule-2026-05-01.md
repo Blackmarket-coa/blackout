@@ -205,9 +205,28 @@ typography / radii tokens (colors map onto the client theme's CSS-var contract).
 - ✅ `pnpm --filter @blackout/ui run build` emits ESM + types (incl.
   `dist/primitives`).
 
-**B1.1 (remaining primitives, L):** Tooltip, Popover, Modal/Dialog, Tabs, Menu,
-Sheet, Select, Checkbox, Switch, Radio, Avatar, Toast, EmptyState, Grid,
-Inline, Cluster.
+### B1.1 tranche — ✅ DELIVERED (2026-06-14)
+
+Remaining primitives landed under `@blackout/ui/primitives`: **TextArea, Select,
+Checkbox, Radio, Switch, Avatar, EmptyState, Inline, Cluster, Grid, Tabs,
+Tooltip, Popover, Menu, Modal, Sheet, Toast (`ToastProvider`/`useToast`)** — same
+vanilla-extract + `@blackout/design` token approach as B1.
+
+- ✅ Each primitive has a unit test + render fixture —
+  `apps/blackout-client/tests/unit/ui-primitives/primitives-b11.test.tsx` (20 tests).
+- ✅ `pnpm --filter @blackout/ui run build` emits ESM + types for the full set.
+- Overlays are hand-rolled (no positioning/focus-trap dependency exists in the
+  repo): `createPortal` to `document.body` for Modal/Sheet/Toast; CSS placement
+  props for Tooltip/Popover/Menu. **Known v1 limitation:** no viewport collision
+  detection (smart flip/shift) — tracked as a future enhancement. Native form
+  controls (Select/Checkbox/Radio) are styled rather than re-implemented for
+  accessibility.
+- `react-dom` added to `@blackout/ui` (for `createPortal`); the canonical client
+  consumes the primitives from source and dedupes React to its single instance.
+
+With B1 + B1.1 the full Workstream B primitive set ships; remaining Workstream B
+work is broader **production adoption** across feature pages (incremental, as
+pages are touched) rather than new primitives.
 
 ### Decisions (B1)
 
