@@ -6,6 +6,16 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./primitives": {
+      "types": "./dist/primitives/index.d.ts",
+      "import": "./dist/primitives/index.js"
+    }
+  },
   "scripts": {
     "build": "tsc --build",
     "lint": "tsc --noEmit",
@@ -16,6 +26,7 @@
     "@blackout/config": "workspace:*",
     "@blackout/core": "workspace:*",
     "@blackout/design": "workspace:*",
+    "@vanilla-extract/css": "1.20.1",
     "lucide-react-native": "^0.542.0",
     "react": "^19.1.1",
     "react-native": "^0.82.0"
