@@ -9,7 +9,10 @@ import topLevelAwait from 'vite-plugin-top-level-await';
 import { VitePWA } from 'vite-plugin-pwa';
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import buildConfig from './build.config';
+
+const rootDir = path.dirname(fileURLToPath(import.meta.url));
 
 // vite-plugin-static-copy v4 always preserves the source path structure under
 // `dest` (output = dest + src-relative-path); use `rename.stripBase` to flatten.
@@ -73,6 +76,18 @@ export default defineConfig({
   appType: 'spa',
   publicDir: false,
   base: buildConfig.base,
+  resolve: {
+    // `@blackout/ui` primitives (consumed from source) import `@blackout/design`
+    // by package name. Resolve it to source — the client already consumes
+    // design from source — so the production build does not depend on the
+    // design package's `dist` being built first. Dedupe React so the primitives
+    // share the app's single react 18 instance instead of the ui package's
+    // own react ^19 copy.
+    dedupe: ['react', 'react-dom'],
+    alias: {
+      '@blackout/design': path.resolve(rootDir, '../../packages/design/src/index.ts'),
+    },
+  },
   server: {
     port: 8080,
     host: true,

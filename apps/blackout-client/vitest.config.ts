@@ -17,8 +17,12 @@
 // coverage with a small margin. Bump them in lock-step every time a
 // `it.skip` is un-skipped or new src/ code lands with tests.
 
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 import { vanillaExtractPlugin } from '@vanilla-extract/vite-plugin';
+
+const rootDir = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
     // Vitest needs the vanilla-extract plugin to transform `.css.ts` files.
@@ -32,6 +36,11 @@ export default defineConfig({
     // created by one React are "not valid as a React child" for the other.
     resolve: {
         dedupe: ['react', 'react-dom'],
+        alias: {
+            // `@blackout/ui` primitives import `@blackout/design` by package
+            // name; resolve it to source so tests don't depend on its dist.
+            '@blackout/design': path.resolve(rootDir, '../../packages/design/src/index.ts'),
+        },
     },
     test: {
         coverage: {
