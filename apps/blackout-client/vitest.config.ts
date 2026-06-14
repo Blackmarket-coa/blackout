@@ -26,6 +26,13 @@ export default defineConfig({
     // tests previously crashed on any module that transitively imported a
     // `.css.ts` ("Styles were unable to be assigned to a file").
     plugins: [vanillaExtractPlugin()],
+    // Dedupe React so primitives consumed from `@blackout/ui` source (which
+    // declares its own react ^19 for the RN components) share the app's single
+    // react 18 instance instead of pulling a second copy — otherwise elements
+    // created by one React are "not valid as a React child" for the other.
+    resolve: {
+        dedupe: ['react', 'react-dom'],
+    },
     test: {
         coverage: {
             provider: 'v8',

@@ -13,6 +13,9 @@ export default defineConfig({
         alias: {
             '@blackout/sdk': path.resolve(rootDir, '../../packages/blackout-sdk/src/index.ts'),
         },
+        // Ensure `@blackout/ui` primitives (consumed from source) share the
+        // app's single React instance rather than the ui package's own react.
+        dedupe: ['react', 'react-dom'],
     },
     plugins: [react(), wasm(), topLevelAwait(), sri()],
 });
