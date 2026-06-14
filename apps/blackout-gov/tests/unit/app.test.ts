@@ -1,4 +1,10 @@
 import { describe, expect, it } from "vitest";
+import {
+  designColors,
+  designRadii,
+  designSpacing,
+  designTypography,
+} from "@blackout/design";
 
 import { renderGovernanceShell } from "../../src/app";
 
@@ -14,6 +20,23 @@ describe("renderGovernanceShell — default view", () => {
     expect(html).toContain("Proposal creation UI");
     expect(html).toContain('data-action="vote-approve"');
     expect(html).toContain('data-action="meeting-schedule"');
+  });
+
+  it("consumes shared @blackout/design tokens (Workstream B1) in both views", () => {
+    const defaultHtml = renderGovernanceShell(baseConfig);
+    const simplifiedHtml = renderGovernanceShell(baseConfig, { view: "simplified" });
+
+    for (const html of [defaultHtml, simplifiedHtml]) {
+      expect(html).toContain('data-testid="gov-design-tokens"');
+      // spacing bundle
+      expect(html).toContain(`${designSpacing.comfortableGapPx}px`);
+      // radii bundle
+      expect(html).toContain(`${designRadii.lgPx}px`);
+      // typography bundle
+      expect(html).toContain(`${designTypography.fontSizeMdPx}px`);
+      // color bundle — semantic var contract shared with the client theme
+      expect(html).toContain(designColors.textPrimary);
+    }
   });
 
   it("renders P2 delegation/treasury/analytics stats", () => {

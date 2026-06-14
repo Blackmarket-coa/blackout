@@ -187,14 +187,47 @@ re-inventing styling.
 - `apps/blackout-client` MessageComposer's inline styles for the feature menu, attachment chips, and submission button are replaced by primitive usages (eat your own dogfood).
 - `pnpm --filter @blackout/ui run build` emits ESM + types cleanly.
 
+### B1 tranche — ✅ DELIVERED (2026-06-14)
+
+First tranche (the essential 8) landed under `@blackout/ui/primitives`:
+**Button, IconButton, Input, Badge, Spinner, Stack, Separator, Card** — styled
+with vanilla-extract `.css.ts` consuming new `@blackout/design` color /
+typography / radii tokens (colors map onto the client theme's CSS-var contract).
+
+- ✅ Each primitive has a unit test + render fixture —
+  `apps/blackout-client/tests/unit/ui-primitives/primitives.test.tsx`.
+- ✅ `MessageComposer` dogfoods 5 primitives in a production path (send button →
+  `Button` + `Spinner` via `loading`, format-mark toolbar → `IconButton`,
+  attachment chips → `Badge`, action row → `Stack`).
+- ✅ `apps/blackout-gov` consumes the shared design tokens (spacing / typography /
+  radii / color contract) via a token-derived `<style>` block — the non-React
+  HTML shell reuses tokens rather than React primitives (decision below).
+- ✅ `pnpm --filter @blackout/ui run build` emits ESM + types (incl.
+  `dist/primitives`).
+
+**B1.1 (remaining primitives, L):** Tooltip, Popover, Modal/Dialog, Tabs, Menu,
+Sheet, Select, Checkbox, Switch, Radio, Avatar, Toast, EmptyState, Grid,
+Inline, Cluster.
+
+### Decisions (B1)
+
+- **Styling:** vanilla-extract `.css.ts`. Web primitives live under a separate
+  `@blackout/ui/primitives` entry so the package's existing React-Native
+  boutique components are never pulled into a web bundle. Consumed from source
+  (the client's vanilla-extract plugin compiles the `.css.ts`); React is deduped
+  to the app's single instance.
+- **Gov adoption:** `apps/blackout-gov` is a non-React HTML-string shell, so it
+  consumes the shared `@blackout/design` tokens instead of importing React
+  primitives.
+
 ### Open scope questions
 
-- Should v1 ship a Storybook? (Recommend no — too much infra; keep the test fixtures lightweight.)
-- Should v1 prescribe a theming hook (`useTheme`) or should consumers read `@blackout/design` tokens directly? (Recommend latter for v1 simplicity.)
+- Should v1 ship a Storybook? (Recommend no — too much infra; keep the test fixtures lightweight.) — **Resolved: no Storybook; lightweight test fixtures.**
+- Should v1 prescribe a theming hook (`useTheme`) or should consumers read `@blackout/design` tokens directly? (Recommend latter for v1 simplicity.) — **Resolved: consumers read tokens directly; primitives reference the theme CSS-var contract.**
 
 ### Size
 
-XL (~3–4 weeks for the full primitive set + canonical-client adoption + tests). Splittable: primitives in tranches of 5–6, each tranche L.
+XL (~3–4 weeks for the full primitive set + canonical-client adoption + tests). Splittable: primitives in tranches of 5–6, each tranche L. **B1 (essential 8) delivered 2026-06-14; B1.1 remains.**
 
 ---
 
