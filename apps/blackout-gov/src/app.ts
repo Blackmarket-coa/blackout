@@ -1,3 +1,10 @@
+import {
+  designBreakpoints,
+  designColors,
+  designRadii,
+  designSpacing,
+  designTypography,
+} from "@blackout/design";
 import type { GovernanceRuntimeConfig } from "./config";
 
 export interface DelegationRow {
@@ -101,6 +108,41 @@ export class BlackoutGovApp {
   }
 }
 
+// Workstream B1: the governance shell is a non-React HTML string renderer, so
+// rather than importing React primitives it consumes the shared
+// `@blackout/design` tokens here — keeping its layout rhythm, typography, radii
+// and semantic color contract in lock-step with the canonical client (whose
+// theme defines the `--*` custom properties referenced by `designColors`).
+export function renderGovDesignTokenStyles(): string {
+  return `<style data-testid="gov-design-tokens">
+        .gov-shell {
+          --gov-gap: ${designSpacing.comfortableGapPx}px;
+          --gov-gap-compact: ${designSpacing.compactGapPx}px;
+          --gov-radius: ${designRadii.lgPx}px;
+          --gov-font-size: ${designTypography.fontSizeMdPx}px;
+          --gov-font-size-heading: ${designTypography.fontSizeXlPx}px;
+          --gov-font-weight-strong: ${designTypography.fontWeightSemibold};
+          color: ${designColors.textPrimary};
+          background: ${designColors.bgSurface};
+          font-size: var(--gov-font-size);
+          gap: var(--gov-gap);
+        }
+        .gov-shell__card {
+          border: 1px solid ${designColors.borderDefault};
+          border-radius: var(--gov-radius);
+          padding: var(--gov-gap);
+        }
+        .gov-shell__header h1 {
+          font-size: var(--gov-font-size-heading);
+          font-weight: var(--gov-font-weight-strong);
+        }
+        .gov-shell__actions { gap: var(--gov-gap-compact); }
+        @media (max-width: ${designBreakpoints.mobileMaxPx}px) {
+          .gov-shell__grid { grid-template-columns: 1fr; }
+        }
+      </style>`;
+}
+
 export function renderGovernanceShell(
   config: GovernanceRuntimeConfig,
   options: GovernanceShellOptions = {},
@@ -108,11 +150,10 @@ export function renderGovernanceShell(
   const view = options.view ?? "default";
   const data = options.data ?? {};
 
-  if (view === "simplified") {
-    return renderSimplifiedShell(data);
-  }
+  const body =
+    view === "simplified" ? renderSimplifiedShell(data) : renderDefaultShell(config, data);
 
-  return renderDefaultShell(config, data);
+  return `${renderGovDesignTokenStyles()}${body}`;
 }
 
 function renderDefaultShell(config: GovernanceRuntimeConfig, data: GovernanceData): string {

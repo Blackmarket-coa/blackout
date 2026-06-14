@@ -21,6 +21,14 @@ import {
 import { withHistory } from 'slate-history';
 import { Editable, ReactEditor, Slate, useSlate, withReact } from 'slate-react';
 import { useAtom } from 'jotai';
+// @blackout/ui v1 primitives (Workstream B1 dogfood). Consumed from source so
+// the client's vanilla-extract plugin compiles their `.css.ts`.
+import {
+    Badge,
+    Button,
+    IconButton,
+    Stack,
+} from '../../../../../../packages/ui/src/primitives';
 import { useLegacyRoomMembersAdapter as useRoomMembers } from '../../plugins/matrix-adapters/hooks/useLegacyRoomAdapter';
 import { useNavigationSpaceTree } from '../../plugins/navigation';
 import {
@@ -463,11 +471,11 @@ const FormatMarkButton = ({
     const editor = useSlate();
     const active = isComposerMarkActive(editor, mark);
     return (
-        <button
-            type="button"
+        <IconButton
+            size="sm"
+            active={active}
             title={title}
             aria-label={title}
-            aria-pressed={active}
             // onMouseDown + preventDefault keeps the editor selection so the
             // mark toggles the currently selected text instead of losing focus.
             onMouseDown={(event) => {
@@ -478,20 +486,9 @@ const FormatMarkButton = ({
                     Editor.addMark(editor, mark, true);
                 }
             }}
-            style={{
-                minWidth: 28,
-                height: 28,
-                borderRadius: 6,
-                border: '1px solid var(--border-default)',
-                background: active ? 'var(--accent-muted)' : 'var(--bg-input)',
-                color: 'var(--text-primary)',
-                fontSize: 13,
-                cursor: 'pointer',
-                ...style,
-            }}
         >
-            {label}
-        </button>
+            <span style={style}>{label}</span>
+        </IconButton>
     );
 };
 
@@ -1578,37 +1575,17 @@ export const MessageComposer = ({
                 encryptionPresetEnabled ? (
                     <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                         {attachments.map((file, idx) => (
-                            <span
+                            <Badge
                                 key={`${file.name}-${idx}`}
-                                style={{
-                                    border: '1px solid var(--border-default)',
-                                    borderRadius: 999,
-                                    padding: '2px 8px',
-                                    fontSize: 12,
-                                    display: 'inline-flex',
-                                    gap: 6,
-                                    alignItems: 'center',
-                                }}
+                                dismissLabel={`Remove ${file.name}`}
+                                onDismiss={() =>
+                                    setAttachments((current) =>
+                                        current.filter((_, currentIdx) => currentIdx !== idx)
+                                    )
+                                }
                             >
                                 Attach: {file.name}
-                                <button
-                                    type="button"
-                                    aria-label={`Remove ${file.name}`}
-                                    onClick={() =>
-                                        setAttachments((current) =>
-                                            current.filter((_, currentIdx) => currentIdx !== idx)
-                                        )
-                                    }
-                                    style={{
-                                        border: 'none',
-                                        background: 'transparent',
-                                        color: 'var(--text-secondary)',
-                                        cursor: 'pointer',
-                                    }}
-                                >
-                                    ×
-                                </button>
-                            </span>
+                            </Badge>
                         ))}
                         {stegoAttachment ? (
                             <span
@@ -1871,7 +1848,7 @@ export const MessageComposer = ({
                     <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>
                         Enter to send · Shift+Enter for newline
                     </span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <Stack align="center" gap={10}>
                         {plainTextLength > MAX_MESSAGE_LENGTH * 0.8 ? (
                             <span
                                 style={{
@@ -1884,23 +1861,15 @@ export const MessageComposer = ({
                                 {plainTextLength}/{MAX_MESSAGE_LENGTH}
                             </span>
                         ) : null}
-                        <button
-                            type="button"
+                        <Button
                             onClick={() => void sendCurrentMessage()}
-                            disabled={sending || overLimit}
+                            loading={sending}
+                            disabled={overLimit}
                             title={overLimit ? 'Message exceeds the maximum length' : undefined}
-                            style={{
-                                border: '1px solid var(--border-default)',
-                                background: 'var(--accent-primary)',
-                                color: 'var(--bg-surface)',
-                                borderRadius: 8,
-                                padding: '6px 10px',
-                                opacity: sending || overLimit ? 0.6 : 1,
-                            }}
                         >
                             {sending ? 'Sending…' : 'Send'}
-                        </button>
-                    </div>
+                        </Button>
+                    </Stack>
                 </div>
             </Slate>
 

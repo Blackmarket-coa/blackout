@@ -4,8 +4,15 @@
   "private": true,
   "description": "Design tokens, fonts, icons, and theme definitions",
   "type": "module",
-  "main": "dist/index.js",
+  "main": "src/index.ts",
+  "module": "src/index.ts",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./src/index.ts"
+    }
+  },
   "scripts": {
     "build": "tsc --build",
     "lint": "tsc --noEmit",

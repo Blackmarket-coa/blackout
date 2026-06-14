@@ -121,6 +121,18 @@ describe('MessageComposer', () => {
         expect(findButton(container, '</>')).toBeTruthy();
     });
 
+    // Workstream B1 dogfood: the toolbar marks are @blackout/ui IconButtons
+    // (toggles expose aria-pressed) and the send action is a @blackout/ui
+    // Button. These assert the primitives are actually wired into a production
+    // path rather than re-inlined.
+    it('drives the toolbar and send action through @blackout/ui primitives', async () => {
+        const { container } = await mountComposer();
+        const bold = findButton(container, 'B');
+        expect(bold?.getAttribute('aria-pressed')).toBe('false');
+        const send = findButton(container, 'Send');
+        expect(send?.getAttribute('type')).toBe('button');
+    });
+
     it('routes a scheduled send to the server API instead of sending immediately', async () => {
         const { container } = await mountComposer({ initialMarkdown: 'later message' });
 
