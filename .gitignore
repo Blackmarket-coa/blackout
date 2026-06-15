@@ -90,6 +90,12 @@ deploy/docker/production/.cloudflared/
 !.env.example
 # SOPS-encrypted env files are committed; see .sops.yaml + deploy/secrets/README.md
 !*.sops.env
+
+# age PRIVATE keys / key-ceremony output — must never be committed
+/.sops-ceremony-out/
+*.agekey
+age-keys.txt
+keys.txt
 .pnpm-store
 apps/blackout-client/docs/release/staging-signoff.report.json
 
