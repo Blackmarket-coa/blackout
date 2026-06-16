@@ -38,10 +38,19 @@ vi.mock('../../../../src/app/features/room/scheduledMessagesClient', () => ({
 
 import { MessageComposer, toHtml } from '../../../../src/app/features/room/MessageComposer';
 
+// Track every root we mount so afterEach can unmount them. Without unmounting,
+// slate-react's <Editable> never runs its effect cleanup, leaving a debounced
+// DOM-selection scheduler pending; it fires after the jsdom environment is torn
+// down and throws "ReferenceError: ShadowRoot is not defined" as an unhandled
+// error. That surfaces only in full-suite parallel runs (not in isolation) and,
+// under --coverage, fails the whole run's exit code despite every test passing.
+const mountedRoots: ReactDOM.Root[] = [];
+
 const mountComposer = async (props: { roomId?: string; initialMarkdown?: string } = {}) => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = ReactDOM.createRoot(container);
+    mountedRoots.push(root);
     await act(async () => {
         root.render(
             <Provider store={createStore()}>
@@ -90,7 +99,13 @@ beforeEach(() => {
             } as unknown as MediaQueryList));
 });
 
-afterEach(() => {
+afterEach(async () => {
+    // Unmount inside act so slate-react flushes its effect cleanup synchronously,
+    // cancelling the pending DOM-selection scheduler before jsdom is torn down.
+    await act(async () => {
+        mountedRoots.splice(0).forEach((root) => root.unmount());
+        await Promise.resolve();
+    });
     document.body.innerHTML = '';
 });
 
