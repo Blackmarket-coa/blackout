@@ -63,7 +63,7 @@ fully trusted against the current tree until the pointers are repaired.
 | A3 | ~120 commented-out Jotai session lines | `apps/blackout-client/src/app/state/sessions.ts` (former L1-6, L41-44, L98-165) | **Removed** this pass (live exports kept) |
 | A4 | Orphaned route constants `SPACE_SETTINGS_PATH` (`/space-settings/`), `ROOM_SETTINGS_PATH` (`/room-settings/`) — zero references | `apps/blackout-client/src/app/pages/paths.ts` | **Removed** this pass |
 | A5 | Declared-but-unconsumed flags `logistics`, `legacyRoomSurfaceLayout` (no module, no reader, no env override) | `core/features/featureFlags.ts` (+ 3 test fixtures) | **Removed** this pass |
-| A6 | CI workflows reference `scripts/*` paths that no longer resolve (resolved via the removed `_port` symlink); several are inherited Element-Web CI | `.github/workflows/build_develop.yml:37,40`, `docs.yml:46`, `security.yml:10`, `tracker-evidence-validation.yml:44` | **Triage follow-up** (not touched — CI risk) |
+| A6 | CI workflows reference `scripts/*` paths that no longer resolve (resolved via the removed `_port` symlink); several are inherited Element-Web CI | `.github/workflows/build_develop.yml:37,40`, `docs.yml:46`, `security.yml:10`, `tracker-evidence-validation.yml:44` | **Resolved** — deleted the 2 dead Element-Web workflows; dropped the dead path filter; refreshed the stale comment |
 | A7 | `knip` raw output unreliable (stale config); e.g. it flags CI-used `load/k6/*.js` as unused | n/a | Do **not** action until knip is repointed or re-run on the real tree |
 | A8 | Colocated `src/**/*.test.*` are **not in the `test:unit` CI gate** (`vitest run tests/unit` filters to that path), so e.g. `features/growth/ReferralBreakdown.test.tsx` never runs in CI | client `vitest.config.ts` + `web:test` | **Triage follow-up**; new growth/platform tests were placed under `tests/unit/**` to stay in the gate |
 
@@ -170,14 +170,30 @@ pass. Each phase is a separate commit.
 
 ---
 
-## 8. Follow-ups (not done here)
+## 8. Follow-ups
 
-- **A6** — triage the inherited Element-Web workflows referencing missing
-  `scripts/*` paths.
+**Resolved after the initial phases:**
+- **A6** — deleted the dead inherited Element-Web workflows `build_develop.yml`
+  (Element `develop.element.io` deploy, already neutered) and `docs.yml`
+  (Element/Matrix docs Pages deploy); dropped the dead `scripts/**` path filter
+  from the live `security.yml`; refreshed the stale symlink comment in
+  `tracker-evidence-validation.yml`. (`ci.yml`'s
+  `deploy/docker/production/scripts/check-no-latest-images.sh` is a real path —
+  untouched.)
+- **`_port/` doc sweep** — `_port/` is fully removed (0 tracked files). Replaced
+  the dead `_port/` guardrail section in `CONTRIBUTING.md` (nonexistent tree +
+  nonexistent `guard:port` script) with a historical note. The remaining ~50
+  references are **intentional and left as-is**: dated `evidence/`+`audits/`
+  docs (historical record), code provenance comments ("Mirrors `_port/src/...`"),
+  the `blackout-elements-registry.json` migration-source entries, and the
+  `check-legacy-runtime-imports` test fixture. **Still open (maintainer call):**
+  a few live release-process docs invoke the removed
+  `_port/scripts/operations/docs_integrity_check.cjs` "monthly guardrail" —
+  restore/relocate the script vs retire the guardrail.
+
+**Still open:**
 - **A8** — relocate colocated `src/**` tests into the `test:unit` gate (or
   broaden the gate).
-- **`_port/` doc sweep** — ~46 docs cite vanished `_port/...` paths (exclude
-  historical changelogs).
 - **knip** — either keep deleted, or re-enable properly:
 
 Re-enable-knip alternative (instead of deletion): add a `apps/blackout-client`

@@ -41,10 +41,10 @@ jobs:
               uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
 
             - name: Validate tracker evidence artifacts
-              # The validator's canonical home is the symlink at scripts/operations/,
-              # but that symlink points at _port/scripts which isn't present in the
-              # worktree. Invoke the actual file directly from the repo root so its
-              # `cd ../..` resolves under a known prefix.
+              # The legacy `scripts/operations/` symlink (-> _port/scripts) that used
+              # to front this validator has been removed, so invoke the actual file
+              # directly from the repo root; its `cd ../..` then resolves under a
+              # known prefix.
               run: |
                   cd "${GITHUB_WORKSPACE}"
                   bash apps/blackout-server/scripts-dev/blackout/validate_tracker_evidence.sh
