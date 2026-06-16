@@ -80,6 +80,9 @@ export const COMMUNITIES_NO_CANOPY_SENTINEL = '-';
  */
 export const TOPICS_PATH = '/topics';
 export const TOPIC_DETAIL_PATH = '/topics/:tag';
+export const GROWTH_REFERRALS_PATH = '/growth/referrals';
+export const GROWTH_AMBASSADORS_PATH = '/growth/ambassadors';
+export const GROWTH_QUESTS_PATH = '/growth/quests';
 export const MARKET_PATH = '/market';
 export const MARKET_LISTING_PATH = '/market/listings/:listingId';
 export const LIVE_PATH = '/live';
@@ -160,10 +163,6 @@ export type InboxNotificationsPathSearchParams = {
 export const INBOX_PATH = MESSAGING_PATH;
 export const INBOX_NOTIFICATIONS_PATH = `/messages/${_NOTIFICATIONS_PATH}`;
 export const INBOX_INVITES_PATH = `/messages/${_INVITES_PATH}`;
-
-export const SPACE_SETTINGS_PATH = '/space-settings/';
-
-export const ROOM_SETTINGS_PATH = '/room-settings/';
 
 export const ONBOARDING_PATH = '/onboarding/:spaceIdOrAlias/';
 export const ONBOARDING_ANALYTICS_PATH = '/onboarding/:spaceIdOrAlias/analytics/';

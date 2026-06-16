@@ -35,15 +35,13 @@ sign-off line.
   — roadmap, plugin ideas, governance, UX feedback, federation, steganography
   research.
 
-## `_port/` migration guardrail
+## `_port/` (removed)
 
-The `_port/` tree is parked reference material for migration and is read-only
-for implementation work.
-
-- Run `pnpm guard:port` before opening a PR.
-- For branch comparisons (e.g. local CI parity), run `pnpm guard:port:range -- --base <ref>`.
-- Only migration metadata docs (`_port/README.md`, `_port/MIGRATION_INVENTORY.md`)
-  are allowed to change by default.
+`_port/` was the parked Element-fork reference tree used during the initial
+migration. It has been removed — the ported source now lives under `apps/`
+(primarily `apps/blackout-client/` for the web client and `apps/blackout-server/`).
+Older evidence and audit docs may still cite `_port/...` paths as they existed
+before removal; those are historical and intentionally left as-is.
 
 ## How to contribute
 

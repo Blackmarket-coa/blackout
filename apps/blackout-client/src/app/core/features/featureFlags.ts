@@ -27,10 +27,8 @@ export type FeatureFlags = {
     federatedOps: boolean;
     authThreads: boolean;
     education: boolean;
-    logistics: boolean;
     legacyShellLayout: boolean;
     legacyThemeOverrides: boolean;
-    legacyRoomSurfaceLayout: boolean;
     composerQuickActions: boolean;
     navigationSpaceHierarchy: boolean;
     notificationsAdapter: boolean;
@@ -345,10 +343,8 @@ export const defaultFeatureFlags: FeatureFlags = {
     federatedOps: false,
     authThreads: false,
     education: false,
-    logistics: false,
     legacyShellLayout: false,
     legacyThemeOverrides: false,
-    legacyRoomSurfaceLayout: false,
     composerQuickActions: true,
     navigationSpaceHierarchy: true,
     notificationsAdapter: true,
@@ -546,6 +542,12 @@ export const resolveFeatureFlags = (
         }
         if (env.BLACKOUT_PLATFORM_OPS === 'false') {
             nextFlags.platformOps = false;
+        }
+        if (env.BLACKOUT_MODERATION === 'true') {
+            nextFlags.moderation = true;
+        }
+        if (env.BLACKOUT_MODERATION === 'false') {
+            nextFlags.moderation = false;
         }
         if (env.BLACKOUT_NOTIFICATIONS_PRESENCE === 'true') {
             nextFlags.notificationsPresence = true;
@@ -876,6 +878,12 @@ export const resolveFeatureFlags = (
     }
     if (env.BLACKOUT_PLATFORM_OPS === 'false') {
         nextFlags.platformOps = false;
+    }
+    if (env.BLACKOUT_MODERATION === 'true') {
+        nextFlags.moderation = true;
+    }
+    if (env.BLACKOUT_MODERATION === 'false') {
+        nextFlags.moderation = false;
     }
     if (env.BLACKOUT_NOTIFICATIONS_PRESENCE === 'true') {
         nextFlags.notificationsPresence = true;

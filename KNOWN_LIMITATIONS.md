@@ -19,12 +19,14 @@ For the source-of-truth triage with tier/owner detail see
 ### Livestream den chat overlay
 - **Where:** `/live/:streamId` viewer
   (`apps/blackout-client/src/app/features/streams/LivestreamViewer.tsx`)
-- **State:** Viewer, Owncast embed, TipButton, and a "Join den chat" CTA
-  (deep-links into the associated den) all ship. A stream→den association
-  is now part of `StreamRecord.denId` and round-trips through
-  `PUT /v1/streaming/streams/:streamId/metadata`. A fully embedded chat
-  overlay (Matrix room mounted next to the player) is deferred to
-  Workstream D scope; the deep link is the beta-shippable interim.
+- **State:** Viewer, Owncast embed, TipButton, an "Open full den" deep-link
+  CTA, and the embedded den chat all ship. A stream→den association is part
+  of `StreamRecord.denId` and round-trips through
+  `PUT /v1/streaming/streams/:streamId/metadata`. The embedded chat (the
+  associated Matrix den mounted in-page below the player) is lazy-loaded via
+  `EmbeddedDenChat` whenever the stream has a `denId`; the deep link remains
+  as the "open full den" path. Further Workstream D polish (richer overlay
+  controls) is still scoped.
 
 ### Playbook Q1 icons
 - **Where:** Q1 ("How many of us are in this den?") in the playbook
@@ -49,9 +51,13 @@ For the source-of-truth triage with tier/owner detail see
     production until real adapters are implemented.
 
 ### Notification click-to-room routing
-- The notification subsystem ships across web/mobile/desktop, but
-  end-to-end routing (notification tap → land on the right room/thread)
-  has no harnessed test coverage on Capacitor or Tauri yet. Manual
+- The notification subsystem ships across web/mobile/desktop. The in-app
+  routing handler (notification tap / deep link → room) is implemented in
+  `NativeBridgeListener` and unit-tested
+  (`apps/blackout-client/tests/unit/platform/NativeBridgeListener.test.tsx`);
+  full end-to-end coverage on real Capacitor/Tauri builds is still pending.
+  Thread-level deep routing (landing on a specific thread, not just the room)
+  is not yet wired — the native-bridge contract carries `roomId` only. Manual
   reports welcome.
 
 ---

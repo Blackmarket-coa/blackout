@@ -7,7 +7,6 @@ on:
             - "packages/**"
             - "pnpm-lock.yaml"
             - "package.json"
-            - "scripts/**"
             - ".github/workflows/security.yml"
             - ".gitleaksignore"
             - "osv-scanner.toml"

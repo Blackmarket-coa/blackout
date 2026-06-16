@@ -67,4 +67,19 @@ describe('resolveFeatureFlags', () => {
         const flags = resolveFeatureFlags({});
         expect(flags).toEqual(defaultFeatureFlags);
     });
+
+    it('allows explicit moderation override in default and non-default modes', () => {
+        // moderation ships off by default and (unlike platformOps/federatedOps)
+        // previously had no env enable path; BLACKOUT_MODERATION is the override.
+        expect(defaultFeatureFlags.moderation).toBe(false);
+
+        const defaultOn = resolveFeatureFlags({ BLACKOUT_MODERATION: 'true' });
+        expect(defaultOn.moderation).toBe(true);
+
+        const fullOn = resolveFeatureFlags({
+            BLACKOUT_FEATURE_MODE: 'full',
+            BLACKOUT_MODERATION: 'true',
+        });
+        expect(fullOn.moderation).toBe(true);
+    });
 });
