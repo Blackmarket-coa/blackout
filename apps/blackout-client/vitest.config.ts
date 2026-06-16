@@ -55,16 +55,16 @@ export default defineConfig({
             thresholds: {
                 // Re-baselined for vitest 4: coverage-v8 4.x switched to
                 // AST-aware remapping (ast-v8-to-istanbul), which counts
-                // branches/functions far more granularly than vitest 2 did. The
-                // same tests now measure (1480 tests, 260 files):
-                //   statements ~28.4, lines ~29.3, branches ~19.5, functions ~19.4
-                // (statements/lines rose; branches/functions fell purely from
-                // the new methodology, not a coverage regression). Floors set
-                // ~1pp below current to absorb measurement noise.
-                lines: 28,
-                functions: 18,
-                branches: 18,
-                statements: 27,
+                // branches/functions far more granularly than vitest 2 did.
+                // Latest measurement (1599 tests, 271 files):
+                //   statements ~28.9, lines ~29.8, branches ~19.9, functions ~20.1
+                // Floors sit ~0.5pp below current actuals to absorb measurement
+                // noise; ratchet up as coverage grows so gains can't silently
+                // regress.
+                lines: 29.3,
+                functions: 19.5,
+                branches: 19.4,
+                statements: 28.4,
             },
             reporter: ['text', 'lcov'],
         },

@@ -65,6 +65,30 @@ invoke `sops -d` to materialise plaintext env files at start time
 into a tmpfs mount, never to disk. See the runbook §2.C and §3 for
 the exact wiring.
 
+## Key-generation ceremony
+
+The runbook §2.C ceremony is automated by
+[`scripts/sops-key-ceremony.sh`](scripts/sops-key-ceremony.sh). Private
+keys never enter the repo: identities are written to a `.gitignore`-d
+output dir at mode `0400`, and only the public keys are wired into
+`../../.sops.yaml`.
+
+```sh
+# 1. Prove the encrypt/decrypt pipeline with throwaway keys (no repo changes):
+deploy/secrets/scripts/sops-key-ceremony.sh --dry-run
+
+# 2. Run the real ceremony on a trusted machine (generates the three
+#    identities, patches .sops.yaml placeholders with their public keys):
+deploy/secrets/scripts/sops-key-ceremony.sh generate
+
+# 3. Distribute the three identities out-of-band (offsite vault /
+#    co-maintainer / deploy host), delete the local copies, then review and
+#    commit the .sops.yaml diff.
+
+# Confirm a held identity can read an encrypted file:
+deploy/secrets/scripts/sops-key-ceremony.sh verify <identity> deploy/secrets/primary.sops.env
+```
+
 ## Bootstrap state
 
 Until the key-generation ceremony in the runbook §2.C is completed,
