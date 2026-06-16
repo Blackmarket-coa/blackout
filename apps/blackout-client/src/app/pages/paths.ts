@@ -80,6 +80,9 @@ export const COMMUNITIES_NO_CANOPY_SENTINEL = '-';
  */
 export const TOPICS_PATH = '/topics';
 export const TOPIC_DETAIL_PATH = '/topics/:tag';
+export const GROWTH_REFERRALS_PATH = '/growth/referrals';
+export const GROWTH_AMBASSADORS_PATH = '/growth/ambassadors';
+export const GROWTH_QUESTS_PATH = '/growth/quests';
 export const MARKET_PATH = '/market';
 export const MARKET_LISTING_PATH = '/market/listings/:listingId';
 export const LIVE_PATH = '/live';

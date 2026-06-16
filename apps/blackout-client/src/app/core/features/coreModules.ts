@@ -31,6 +31,11 @@ import { stegoToolkitFeature } from '../../features/stego-toolkit';
 import { streamsFeature } from '../../features/streams';
 import { streamingFeature } from '../../features/streaming';
 import { topicsFeature } from '../../features/topics';
+import {
+    growthReferralsFeature,
+    growthAmbassadorsFeature,
+    growthQuestsFeature,
+} from '../../features/growth';
 import { privacyToolsFeature } from '../../features/privacy-tools';
 import { burnerIdentityFeature } from '../../features/burner-identity';
 import { panicFeature } from '../../features/panic';
@@ -125,6 +130,18 @@ export const coreFeatureModules: FeatureModule[] = [
     {
         feature: topicsFeature,
         flag: 'topics',
+    },
+    {
+        feature: growthReferralsFeature,
+        flag: 'growthReferrals',
+    },
+    {
+        feature: growthAmbassadorsFeature,
+        flag: 'growthAmbassadors',
+    },
+    {
+        feature: growthQuestsFeature,
+        flag: 'growthQuests',
     },
     {
         feature: marketFeature,
