@@ -65,6 +65,7 @@ fully trusted against the current tree until the pointers are repaired.
 | A5 | Declared-but-unconsumed flags `logistics`, `legacyRoomSurfaceLayout` (no module, no reader, no env override) | `core/features/featureFlags.ts` (+ 3 test fixtures) | **Removed** this pass |
 | A6 | CI workflows reference `scripts/*` paths that no longer resolve (resolved via the removed `_port` symlink); several are inherited Element-Web CI | `.github/workflows/build_develop.yml:37,40`, `docs.yml:46`, `security.yml:10`, `tracker-evidence-validation.yml:44` | **Triage follow-up** (not touched — CI risk) |
 | A7 | `knip` raw output unreliable (stale config); e.g. it flags CI-used `load/k6/*.js` as unused | n/a | Do **not** action until knip is repointed or re-run on the real tree |
+| A8 | Colocated `src/**/*.test.*` are **not in the `test:unit` CI gate** (`vitest run tests/unit` filters to that path), so e.g. `features/growth/ReferralBreakdown.test.tsx` never runs in CI | client `vitest.config.ts` + `web:test` | **Triage follow-up**; new growth/platform tests were placed under `tests/unit/**` to stay in the gate |
 
 **Reclassified (NOT dead):** the root `package.json:17` `web:test:mobile` script
 targets `legacy/blackout-web` (archived), but the legacy package ships a working
@@ -125,43 +126,59 @@ The May-2026 registers (`KNOWN_LIMITATIONS.md`, `unfinished_items_review_2026_05
 
 | Item | Register says | Reality |
 | --- | --- | --- |
-| Composer native `pickPhoto` (T4-04 carry) | "call-site swap remains" | Wired — `features/room/attachments/useAttachPhoto.ts` branches native→`pickPhotoAttachment`, mounted in `MessageComposer.tsx`. Only a regression test is missing. |
+| Composer native `pickPhoto` (T4-04 carry) | "call-site swap remains" | Wired — `features/room/attachments/useAttachPhoto.ts` branches native→`pickPhotoAttachment`, mounted in `MessageComposer.tsx`, **and already covered** by `tests/unit/features/room/attachments/useAttachPhoto.test.tsx`. No action. |
 | Livestream den chat overlay (T2-02) | "deferred; deep-link interim; needs `StreamRecord.den_id`" | `denId` landed; `features/streams/LivestreamViewer.tsx:306` mounts `<EmbeddedDenChatLazy denId={stream.denId}/>`. The cited "TODO L134" is gone. |
 | Notification tap → room routing | "no end-to-end routing tested" | Routing implemented in `NativeBridgeListener.tsx:22-25` (`notification_interacted` / `deep_link_opened`). Only test-harness coverage is missing. |
 
-`KNOWN_LIMITATIONS.md` should be updated to reflect these.
+`KNOWN_LIMITATIONS.md` has been updated to reflect these (den chat + notification routing).
 
 ---
 
-## 7. Actions taken in this pass (Phase 1)
+## 7. Actions taken (completed)
 
-Behavior-neutral cleanups (no runtime behavior change):
-1. Deleted dangling `scripts` symlink.
-2. Deleted orphaned `knip.ts`.
-3. Stripped the dead commented Jotai block from `state/sessions.ts`.
-4. Removed `SPACE_SETTINGS_PATH` / `ROOM_SETTINGS_PATH` from `pages/paths.ts`.
-5. Removed `logistics` / `legacyRoomSurfaceLayout` from `featureFlags.ts` and the
-   three feature-test fixtures (`composition`, `buildRegistry`, `manifestContract`).
+**Phase 1 — cleanups (behavior-neutral):** deleted the dangling `scripts`
+symlink and orphaned `knip.ts`; stripped the dead commented Jotai block in
+`state/sessions.ts`; removed `SPACE_SETTINGS_PATH`/`ROOM_SETTINGS_PATH` and the
+unconsumed `logistics`/`legacyRoomSurfaceLayout` flags (+ 3 test fixtures).
+Reclassified `web:test:mobile` as live CI (kept). A6/A8 + `_port/` doc sweep
+logged as follow-ups.
 
-Reclassified `web:test:mobile` as live CI (kept). Logged A6 (CI `scripts/*`
-refs) and the `_port/` doc sweep as follow-ups.
+**Phase 2 — in-app feature toggles.** New `effectiveFlags.ts`
+(`USER_TOGGLEABLE_FLAGS` allowlist = the security boundary; `resolveEffectiveFlags`)
+and `flagOverrides.ts` (the `(account, labs)` settings-bucket ↔
+`capabilityContextAtom` bridge + `wrapLabsFetcherWithFlags`). The Labs tab now
+lists the staged flags (`stegoToolkit`, `topics`, home-feed extras,
+`transparencyReports`); toggles persist per-user and apply live (the router
+already rebuilds on `flags`). Capability/dev hydration now preserves atom flags
+so overrides aren't clobbered. `LabsPage.tsx` unchanged.
+
+**Phase 3 — wire/close gaps.**
+- 3.1 Growth Engine UI: `growthReferralsFeature`/`growthAmbassadorsFeature`/
+  `growthQuestsFeature` (referrals/ambassador/quests routes under `/growth/*`),
+  registered in `coreModules.ts` + `featureModuleManifest`; `growth/index.ts`
+  comment corrected. Gated by the existing `growth*` flags (env `BLACKOUT_GROWTH_*`)
+  + `growth.read`.
+- 3.2 `moderation`: added the `BLACKOUT_MODERATION` enable path (env/admin only,
+  not in the user allowlist).
+- 3.4/3.5: added `NativeBridgeListener` routing test; corrected
+  `KNOWN_LIMITATIONS.md`. 3.3 (pickPhoto) already covered — no change.
+- 3.6 Playbook Q1 SVGs — **still blocked** on design asset delivery.
+
+All phases: client `tsc --noEmit` clean; `guard:feature-registry`,
+`guard:feature-budget`, `guard:duplicate-paths` green; new + existing unit suites
+pass. Each phase is a separate commit.
 
 ---
 
-## 8. Remediation roadmap (Phases 2–3)
+## 8. Follow-ups (not done here)
 
-- **Phase 2 — in-app feature toggles.** Reuse the existing per-user Labs store
-  (`packages/blackout-sdk/src/settings/actions.ts`) + the runtime-reactive
-  `capabilityContextAtom.flags` (the router already rebuilds on flag change).
-  Add `resolveEffectiveFlags(base, overrides)` + a `USER_TOGGLEABLE_FLAGS`
-  allowlist (security boundary: excludes monetization/privileged/entitlement/
-  structural flags). First slice: `stegoToolkit`, `topics`, the home-feed flags,
-  `transparencyReports`.
-- **Phase 3 — wire the disconnected feature + close gaps.** Growth Engine UI
-  module (mirror `features/topics` / the `creators` split); `BLACKOUT_MODERATION`
-  enable path; regression/harness tests for `useAttachPhoto` and
-  `NativeBridgeListener`; refresh `KNOWN_LIMITATIONS.md`. **Blocked:** Playbook
-  Q1 SVGs (`features/playbook/picker/QuestionSize.tsx:13`) await design assets.
+- **A6** — triage the inherited Element-Web workflows referencing missing
+  `scripts/*` paths.
+- **A8** — relocate colocated `src/**` tests into the `test:unit` gate (or
+  broaden the gate).
+- **`_port/` doc sweep** — ~46 docs cite vanished `_port/...` paths (exclude
+  historical changelogs).
+- **knip** — either keep deleted, or re-enable properly:
 
 Re-enable-knip alternative (instead of deletion): add a `apps/blackout-client`
 workspace block pointing `entry` at `src/main.tsx`, repoint `ignoreIssues` to the
