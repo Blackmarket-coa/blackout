@@ -543,6 +543,12 @@ export const resolveFeatureFlags = (
         if (env.BLACKOUT_PLATFORM_OPS === 'false') {
             nextFlags.platformOps = false;
         }
+        if (env.BLACKOUT_MODERATION === 'true') {
+            nextFlags.moderation = true;
+        }
+        if (env.BLACKOUT_MODERATION === 'false') {
+            nextFlags.moderation = false;
+        }
         if (env.BLACKOUT_NOTIFICATIONS_PRESENCE === 'true') {
             nextFlags.notificationsPresence = true;
         }
@@ -872,6 +878,12 @@ export const resolveFeatureFlags = (
     }
     if (env.BLACKOUT_PLATFORM_OPS === 'false') {
         nextFlags.platformOps = false;
+    }
+    if (env.BLACKOUT_MODERATION === 'true') {
+        nextFlags.moderation = true;
+    }
+    if (env.BLACKOUT_MODERATION === 'false') {
+        nextFlags.moderation = false;
     }
     if (env.BLACKOUT_NOTIFICATIONS_PRESENCE === 'true') {
         nextFlags.notificationsPresence = true;
