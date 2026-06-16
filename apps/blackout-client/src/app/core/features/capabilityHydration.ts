@@ -103,10 +103,20 @@ export const hydrateCapabilityContext = async (
         fetched = [];
     }
 
+    // Preserve the atom's current flags rather than resetting to
+    // `runtimeFeatureFlags`. Capability hydration owns capabilities, not flags;
+    // resetting here would clobber any per-user flag override (Labs toggles)
+    // already layered onto the atom, depending on async resolution order. The
+    // atom defaults to `runtimeFeatureFlags`, so this is a no-op when no
+    // override is present.
+    const current = store.get(capabilityContextAtom) as {
+        capabilities: string[];
+        flags: typeof runtimeFeatureFlags;
+    };
     const next = buildCapabilityContextValue({
         fetched,
         devSeed,
-        flags: runtimeFeatureFlags,
+        flags: current.flags,
     });
     store.set(capabilityContextAtom, next);
     return next.capabilities;

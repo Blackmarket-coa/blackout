@@ -29,13 +29,16 @@ import {
     hydrateCapabilityContext,
     resolveDevCapabilitySeed,
 } from './app/core/features/capabilityHydration';
-import { runtimeFeatureFlags } from './app/core/features/featureFlags';
 import { buildRegistryRouteObjects } from './app/core/features/RegistryRouteList';
 import { RegistryFetcherProvider } from './app/core/features/RegistryFetcherProvider';
 import { buildRegistryFetchers } from './app/core/features/registryFetchers';
-import { createCapabilityActions } from '@blackout/sdk';
+import {
+    hydrateFlagOverrides,
+    wrapLabsFetcherWithFlags,
+} from './app/core/features/flagOverrides';
+import { createCapabilityActions, createSettingsActions } from '@blackout/sdk';
 import { createAuthorizedApiClient } from './app/sdk/client';
-import { useStore } from 'jotai';
+import { useStore, createStore } from 'jotai';
 import './index.css';
 import './app/styles/theme.css.ts';
 import './app/i18n';
@@ -102,8 +105,21 @@ const queryClient = new QueryClient();
  * base URL (same-origin in production) is owned by `app/sdk/client`.
  */
 const apiClient = createAuthorizedApiClient(null);
-const registryFetchers = buildRegistryFetchers(apiClient);
 const fetchCapabilities = createCapabilityActions(apiClient).fetchCapabilities;
+const settingsActions = createSettingsActions(apiClient);
+
+// Explicit jotai store shared by the React tree (`<JotaiProvider store>`) and
+// the module-scope wiring below, so the Labs flag-toggle write path can update
+// `capabilityContextAtom` directly (live router rebuild) without a context hook.
+const appStore = createStore();
+
+// Production fetcher bag, with the `labs` fetcher wrapped so the Labs tab also
+// lists the user-toggleable feature flags and their toggles persist + apply live.
+const baseRegistryFetchers = buildRegistryFetchers(apiClient);
+const registryFetchers = {
+    ...baseRegistryFetchers,
+    labs: wrapLabsFetcherWithFlags(baseRegistryFetchers.labs, appStore as never, settingsActions),
+};
 
 void initDesktopBridge();
 
@@ -133,7 +149,9 @@ const DevCapabilitySeeder = () => {
         const next = buildCapabilityContextValue({
             fetched: current.capabilities,
             devSeed,
-            flags: runtimeFeatureFlags,
+            // Preserve any per-user flag override already on the atom; the dev
+            // seed contributes capabilities, not flags.
+            flags: current.flags,
         });
         store.set(capabilityContextAtom, next);
     }, [store]);
@@ -153,6 +171,19 @@ const CapabilityHydrator = () => {
         // The helper accepts any structural `{ get, set }` store; jotai's store
         // has a stricter generic shape than that loose contract, so cast.
         void hydrateCapabilityContext(store as never, fetchCapabilities);
+    }, [store]);
+    return null;
+};
+
+// Boot-time per-user feature-flag override hydration. Mounted alongside
+// `CapabilityHydrator` (post-login) so the `(account, labs)` settings fetch is
+// authenticated. Layers persisted Labs flag toggles onto `capabilityContextAtom`
+// so they survive reloads; `BootstrapStatus` rebuilds the router off the result.
+// eslint-disable-next-line react-refresh/only-export-components
+const FeatureFlagOverrideHydrator = () => {
+    const store = useStore();
+    React.useEffect(() => {
+        void hydrateFlagOverrides(store as never, settingsActions.fetchBucket);
     }, [store]);
     return null;
 };
@@ -278,6 +309,7 @@ const BootstrapStatus = () => {
             <>
                 <RoomsAtomBinder />
                 <CapabilityHydrator />
+                <FeatureFlagOverrideHydrator />
                 <PluginEntitlementHydrator />
                 <PendingInviteRedeemer />
                 <RouterProvider router={router} />
@@ -441,7 +473,7 @@ if (harnessActive) {
 } else {
     ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
         <React.StrictMode>
-            <JotaiProvider>
+            <JotaiProvider store={appStore}>
                 <ThemeProvider>
                     <ClientConfigLoader>
                         <CrashBoundary>
