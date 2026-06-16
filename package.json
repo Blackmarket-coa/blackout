@@ -104,6 +104,7 @@
   },
   "pnpm": {
     "overrides": {
+      "@babel/core@7.29.0": "7.29.6",
       "@babel/plugin-transform-modules-systemjs@7.29.0": "7.29.7",
       "@xmldom/xmldom@0.8.11": "0.8.13",
       "@xmldom/xmldom@0.8.12": "0.8.13",
@@ -122,10 +123,12 @@
       "sanitize-html@2.12.1": "2.17.4",
       "serialize-javascript@6.0.2": "7.0.5",
       "shell-quote@1.8.3": "1.8.4",
+      "tar@7.5.13": "7.5.16",
       "uuid@10.0.0": "14.0.0",
       "uuid@11.1.0": "14.0.0",
       "uuid@13.0.0": "14.0.0",
       "vite@5.4.21": "8.0.16",
+      "vite@7.3.2": "7.3.5",
       "vitest@3.2.4": "3.2.6",
       "ws": "8.21.0",
       "@types/react": "^18.2.39",
