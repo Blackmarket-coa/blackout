@@ -27,10 +27,8 @@ export type FeatureFlags = {
     federatedOps: boolean;
     authThreads: boolean;
     education: boolean;
-    logistics: boolean;
     legacyShellLayout: boolean;
     legacyThemeOverrides: boolean;
-    legacyRoomSurfaceLayout: boolean;
     composerQuickActions: boolean;
     navigationSpaceHierarchy: boolean;
     notificationsAdapter: boolean;
@@ -345,10 +343,8 @@ export const defaultFeatureFlags: FeatureFlags = {
     federatedOps: false,
     authThreads: false,
     education: false,
-    logistics: false,
     legacyShellLayout: false,
     legacyThemeOverrides: false,
-    legacyRoomSurfaceLayout: false,
     composerQuickActions: true,
     navigationSpaceHierarchy: true,
     notificationsAdapter: true,
