@@ -9,6 +9,7 @@ import {
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 import { GlossaryTerm } from '../../lib/GlossaryTerm';
 import {
+    CANOPIES_PATH,
     COMMUNITIES_PATH,
     EVENTS_PATH,
     LIVE_PATH,
@@ -72,12 +73,19 @@ interface QuickAction {
 /**
  * Shortcut cards for secondary discovery destinations. The primary
  * destinations (Home · Creator Hub · Coalition · Coliseum) live in the
- * global top nav, and canopies live in the left rail, so they are not
- * duplicated here. Each card is gated by its own feature flag so it only
+ * global top nav. Each card is gated by its own feature flag so it only
  * renders when its route is actually mounted (never a dead link). Order is
- * display priority.
+ * display priority — the canopies hub leads since it's the gateway into the
+ * Discord-style server experience.
  */
 const QUICK_ACTIONS: QuickAction[] = [
+    {
+        flag: 'canopyServer',
+        to: CANOPIES_PATH,
+        title: BLACKOUT_TERMS.canopy.titlePlural,
+        subtitle: 'Your communities & channels',
+        testid: 'home-quick-action-canopies',
+    },
     {
         flag: 'eventsV1',
         to: EVENTS_PATH,

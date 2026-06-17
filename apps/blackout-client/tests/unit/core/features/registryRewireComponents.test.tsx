@@ -180,6 +180,7 @@ describe('RegistryRouteList + buildRegistryRouteObjects', () => {
             flags: {
                 ...runtimeFeatureFlags,
                 communities: false,
+                canopyServer: false,
                 plugins: false,
                 coalition: false,
                 coliseum: false,

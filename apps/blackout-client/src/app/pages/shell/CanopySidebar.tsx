@@ -8,7 +8,7 @@ import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 import { RegistrySidebarList } from '../../core/features/RegistrySidebarList';
 import { ThreadUnreadBadgeMount } from '../../features/auth-threads';
 import type { ShellPanelEntry } from '../../core/features/types';
-import { COMMUNITIES_PATH, buildCommunitiesPath } from '../paths';
+import { CANOPIES_PATH, buildCommunitiesPath } from '../paths';
 
 /**
  * Sidebar registry entries already surfaced by the global top nav
@@ -177,12 +177,12 @@ export const CanopySidebar = () => {
 
             <div style={FOOTER_STYLE}>
                 <Link
-                    to={COMMUNITIES_PATH}
+                    to={CANOPIES_PATH}
                     data-testid="canopy-sidebar-discover"
                     style={itemStyle(false)}
                 >
                     <span aria-hidden>🧭</span>
-                    <span>Discover {BLACKOUT_TERMS.canopy.plural}</span>
+                    <span>All {BLACKOUT_TERMS.canopy.plural}</span>
                 </Link>
                 <button
                     type="button"

@@ -18,6 +18,12 @@ vi.mock('../../../../src/app/pages/client/ClientLayout', () => ({
     default: () => <div data-testid="client-layout" />,
 }));
 
+// With `canopyServer` on (default), a real canopy route mounts the new server
+// page. Stub it too so this test stays focused on the URL -> atom mapping.
+vi.mock('../../../../src/app/features/canopy/CanopyServerPage', () => ({
+    default: () => <div data-testid="canopy-server-page" />,
+}));
+
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const mountedRoots: ReactDOM.Root[] = [];
