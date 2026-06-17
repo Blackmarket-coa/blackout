@@ -101,6 +101,38 @@ const unreadCount = (room: Room): number => {
     }
 };
 
+interface ActivityPreview {
+    sender: string;
+    body: string;
+    ts: number;
+}
+
+const lastMessage = (room: Room): ActivityPreview | null => {
+    const events = room.getLiveTimeline?.().getEvents?.() ?? [];
+    for (let i = events.length - 1; i >= 0; i -= 1) {
+        const event = events[i];
+        if (event.getType?.() !== 'm.room.message') continue;
+        const body = (event.getContent?.() as { body?: string })?.body ?? '';
+        if (!body) continue;
+        return {
+            sender: event.sender?.name ?? event.getSender?.() ?? '',
+            body,
+            ts: event.getTs?.() ?? 0,
+        };
+    }
+    return null;
+};
+
+const formatRelative = (ts: number): string => {
+    const diff = Date.now() - ts;
+    if (diff < 60_000) return 'just now';
+    const minutes = Math.round(diff / 60_000);
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.round(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    return `${Math.round(hours / 24)}d ago`;
+};
+
 /**
  * Homepage-reachable directory of the user's canopies. Each card previews a
  * canopy (name, member count, aggregate unread, description) and opens the
@@ -130,6 +162,22 @@ export const CanopyHub = () => {
             });
         });
         return totals;
+    }, [rooms, roomToParents]);
+
+    const latestByCanopy = useMemo(() => {
+        const latest = new Map<string, ActivityPreview>();
+        rooms.forEach((room) => {
+            if (room.getType() === 'm.space') return;
+            const parents = roomToParents.get(room.roomId);
+            if (!parents || parents.size === 0) return;
+            const preview = lastMessage(room);
+            if (!preview) return;
+            parents.forEach((parentId) => {
+                const prev = latest.get(parentId);
+                if (!prev || preview.ts > prev.ts) latest.set(parentId, preview);
+            });
+        });
+        return latest;
     }, [rooms, roomToParents]);
 
     return (
@@ -165,6 +213,7 @@ export const CanopyHub = () => {
                         {canopies.map((canopy) => {
                             const unread = unreadByCanopy.get(canopy.roomId) ?? 0;
                             const topic = readTopic(canopy);
+                            const latest = latestByCanopy.get(canopy.roomId) ?? null;
                             return (
                                 <button
                                     key={canopy.roomId}
@@ -192,10 +241,43 @@ export const CanopyHub = () => {
                                             <span style={badgeStyle}>{unread > 99 ? '99+' : unread}</span>
                                         ) : null}
                                     </div>
-                                    <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>
-                                        {canopy.getJoinedMemberCount()} members
+                                    <div
+                                        style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: 8,
+                                            color: 'var(--text-muted)',
+                                            fontSize: 12,
+                                        }}
+                                    >
+                                        <span>{canopy.getJoinedMemberCount()} members</span>
+                                        {latest ? (
+                                            <span style={{ marginLeft: 'auto' }}>
+                                                {formatRelative(latest.ts)}
+                                            </span>
+                                        ) : null}
                                     </div>
-                                    {topic ? (
+                                    {latest ? (
+                                        <p
+                                            data-testid="canopy-hub-card-activity"
+                                            style={{
+                                                margin: 0,
+                                                color: 'var(--text-secondary)',
+                                                fontSize: 13,
+                                                display: '-webkit-box',
+                                                WebkitLineClamp: 2,
+                                                WebkitBoxOrient: 'vertical',
+                                                overflow: 'hidden',
+                                            }}
+                                        >
+                                            {latest.sender ? (
+                                                <strong style={{ fontWeight: 600 }}>
+                                                    {latest.sender}:{' '}
+                                                </strong>
+                                            ) : null}
+                                            {latest.body}
+                                        </p>
+                                    ) : topic ? (
                                         <p
                                             style={{
                                                 margin: 0,

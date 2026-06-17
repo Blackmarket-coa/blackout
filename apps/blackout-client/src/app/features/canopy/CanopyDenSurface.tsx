@@ -10,6 +10,8 @@ import { CallProvider, VoiceChannel } from '../call';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 import { useDenKind } from './denKind';
 
+export type RightDock = 'members' | 'threads' | null;
+
 const COLUMN_STYLE: CSSProperties = {
     flex: 1,
     minWidth: 0,
@@ -22,14 +24,13 @@ const COLUMN_STYLE: CSSProperties = {
 const HEADER_STYLE: CSSProperties = {
     display: 'flex',
     alignItems: 'center',
-    gap: 12,
-    padding: '0 16px',
+    gap: 8,
+    padding: '0 12px',
     minHeight: 52,
     borderBottom: '1px solid var(--border-default)',
 };
 
-const headerButtonStyle = (active: boolean): CSSProperties => ({
-    marginLeft: 'auto',
+const toggleStyle = (active: boolean): CSSProperties => ({
     border: '1px solid var(--border-default)',
     background: active ? 'var(--bg-hover, rgba(255,255,255,0.08))' : 'var(--bg-input)',
     color: 'var(--text-primary)',
@@ -37,7 +38,22 @@ const headerButtonStyle = (active: boolean): CSSProperties => ({
     padding: '6px 10px',
     fontSize: 13,
     cursor: 'pointer',
+    whiteSpace: 'nowrap',
 });
+
+const iconToggleStyle: CSSProperties = {
+    border: '1px solid var(--border-default)',
+    background: 'var(--bg-input)',
+    color: 'var(--text-primary)',
+    borderRadius: 8,
+    width: 32,
+    height: 32,
+    display: 'grid',
+    placeItems: 'center',
+    cursor: 'pointer',
+    fontSize: 15,
+    flex: '0 0 auto',
+};
 
 const topicStyle: CSSProperties = {
     color: 'var(--text-muted)',
@@ -45,7 +61,7 @@ const topicStyle: CSSProperties = {
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
-    maxWidth: '50%',
+    maxWidth: '40%',
 };
 
 const EmptyState = ({ canopy }: { canopy: Room }) => (
@@ -63,30 +79,66 @@ const EmptyState = ({ canopy }: { canopy: Room }) => (
     </div>
 );
 
+interface DenHeaderProps {
+    title: string;
+    topic?: string;
+    rightDock: RightDock;
+    showThreads: boolean;
+    compact: boolean;
+    onOpenChannels: () => void;
+    onToggleMembers: () => void;
+    onToggleThreads: () => void;
+}
+
 const DenHeader = ({
     title,
     topic,
-    membersVisible,
+    rightDock,
+    showThreads,
+    compact,
+    onOpenChannels,
     onToggleMembers,
-}: {
-    title: string;
-    topic?: string;
-    membersVisible: boolean;
-    onToggleMembers: () => void;
-}) => (
+    onToggleThreads,
+}: DenHeaderProps) => (
     <header style={HEADER_STYLE}>
+        {compact ? (
+            <button
+                type="button"
+                onClick={onOpenChannels}
+                aria-label="Show channels"
+                title="Show channels"
+                data-testid="canopy-open-channels"
+                style={iconToggleStyle}
+            >
+                ☰
+            </button>
+        ) : null}
         <strong style={{ fontSize: 15, whiteSpace: 'nowrap' }}>{title}</strong>
-        {topic ? <span style={topicStyle}>{topic}</span> : null}
-        <button
-            type="button"
-            onClick={onToggleMembers}
-            aria-pressed={membersVisible}
-            data-testid="canopy-members-toggle"
-            title="Toggle member list"
-            style={headerButtonStyle(membersVisible)}
-        >
-            👥 Members
-        </button>
+        {topic && !compact ? <span style={topicStyle}>{topic}</span> : null}
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+            {showThreads ? (
+                <button
+                    type="button"
+                    onClick={onToggleThreads}
+                    aria-pressed={rightDock === 'threads'}
+                    data-testid="canopy-threads-toggle"
+                    title="Toggle threads"
+                    style={toggleStyle(rightDock === 'threads')}
+                >
+                    🧵{compact ? '' : ' Threads'}
+                </button>
+            ) : null}
+            <button
+                type="button"
+                onClick={onToggleMembers}
+                aria-pressed={rightDock === 'members'}
+                data-testid="canopy-members-toggle"
+                title="Toggle member list"
+                style={toggleStyle(rightDock === 'members')}
+            >
+                👥{compact ? '' : ' Members'}
+            </button>
+        </div>
     </header>
 );
 
@@ -105,13 +157,19 @@ const getTopic = (room: Room): string | undefined => {
 export const CanopyDenSurface = ({
     denId,
     canopy,
-    membersVisible,
+    rightDock,
+    compact,
+    onOpenChannels,
     onToggleMembers,
+    onToggleThreads,
 }: {
     denId: string | null;
     canopy: Room;
-    membersVisible: boolean;
+    rightDock: RightDock;
+    compact: boolean;
+    onOpenChannels: () => void;
     onToggleMembers: () => void;
+    onToggleThreads: () => void;
 }) => {
     const mx = useMatrixClient();
     const jumpToEventId = useAtomValue(roomJumpTargetEventIdAtom);
@@ -133,8 +191,12 @@ export const CanopyDenSurface = ({
                 <DenHeader
                     title={room.name}
                     topic={getTopic(room)}
-                    membersVisible={membersVisible}
+                    rightDock={rightDock}
+                    showThreads={false}
+                    compact={compact}
+                    onOpenChannels={onOpenChannels}
                     onToggleMembers={onToggleMembers}
+                    onToggleThreads={onToggleThreads}
                 />
                 <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: 16 }}>
                     <CallProvider>
@@ -155,8 +217,12 @@ export const CanopyDenSurface = ({
             <DenHeader
                 title={room.name}
                 topic={getTopic(room)}
-                membersVisible={membersVisible}
+                rightDock={rightDock}
+                showThreads
+                compact={compact}
+                onOpenChannels={onOpenChannels}
                 onToggleMembers={onToggleMembers}
+                onToggleThreads={onToggleThreads}
             />
             <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
                 <RoomTimeline

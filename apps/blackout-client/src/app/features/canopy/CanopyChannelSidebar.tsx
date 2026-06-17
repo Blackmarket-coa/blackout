@@ -146,9 +146,11 @@ const unreadCount = (room: Room): number => {
 export const CanopyChannelSidebar = ({
     canopy,
     onOpenSettings,
+    onNavigate,
 }: {
     canopy: Room;
     onOpenSettings: () => void;
+    onNavigate?: () => void;
 }) => {
     const mx = useMatrixClient();
     const rooms = useAtomValue(joinedRoomsAtom);
@@ -182,6 +184,7 @@ export const CanopyChannelSidebar = ({
             const denId = await createDenInCanopy(mx, { canopyId: canopy.roomId, name, kind: 'voice' });
             setVoiceDraft(null);
             navigateRoom(denId);
+            onNavigate?.();
         } finally {
             setBusy(false);
         }
@@ -255,7 +258,10 @@ export const CanopyChannelSidebar = ({
                                         <button
                                             key={room.roomId}
                                             type="button"
-                                            onClick={() => navigateRoom(room.roomId)}
+                                            onClick={() => {
+                                                navigateRoom(room.roomId);
+                                                onNavigate?.();
+                                            }}
                                             aria-current={active ? 'page' : undefined}
                                             data-testid={`canopy-channel-${room.roomId}`}
                                             data-den-kind={kind}
