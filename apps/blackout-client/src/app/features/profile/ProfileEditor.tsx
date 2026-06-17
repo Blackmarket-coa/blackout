@@ -3,6 +3,7 @@ import { useAtom, useAtomValue } from 'jotai';
 import AvatarDecoration from './AvatarDecoration';
 import ProfileThemeEditor from './ProfileThemeEditor';
 import { myProfileAtom } from './profileAtoms';
+import { profileDisplayLabel } from './profileDisplay';
 import {
     avatarDecorationCatalogAtom,
     badgeCatalogAtom,
@@ -264,7 +265,7 @@ export const ProfileEditor = ({ saveProfile = saveProfileDefault }: ProfileEdito
                 <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
                     <AvatarDecoration
                         avatarUrl={profile.avatarUrl}
-                        displayName={profile.displayName}
+                        displayName={profileDisplayLabel(profile)}
                         decorationId={profile.profile.decoration}
                         size={88}
                     />

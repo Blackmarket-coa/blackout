@@ -18,6 +18,7 @@ import { Provider as JotaiProvider } from 'jotai';
 import { ThemeProvider } from './app/components/ThemeProvider';
 import { MatrixBootstrapper } from './app/components/bmc/MatrixBootstrapper';
 import { PluginEntitlementHydrator } from './app/features/monetization/install/PluginEntitlementHydrator';
+import { SelfProfileHydrator } from './app/features/profile/SelfProfileHydrator';
 import { useMatrixClient } from './app/hooks/useMatrixClient';
 import { useBindAllRoomsAtom } from './app/state/rooms';
 import { LoginPage } from './app/components/bmc/auth';
@@ -32,10 +33,7 @@ import {
 import { buildRegistryRouteObjects } from './app/core/features/RegistryRouteList';
 import { RegistryFetcherProvider } from './app/core/features/RegistryFetcherProvider';
 import { buildRegistryFetchers } from './app/core/features/registryFetchers';
-import {
-    hydrateFlagOverrides,
-    wrapLabsFetcherWithFlags,
-} from './app/core/features/flagOverrides';
+import { hydrateFlagOverrides, wrapLabsFetcherWithFlags } from './app/core/features/flagOverrides';
 import { createCapabilityActions, createSettingsActions } from '@blackout/sdk';
 import { createAuthorizedApiClient } from './app/sdk/client';
 import { useStore, createStore } from 'jotai';
@@ -311,6 +309,7 @@ const BootstrapStatus = () => {
                 <CapabilityHydrator />
                 <FeatureFlagOverrideHydrator />
                 <PluginEntitlementHydrator />
+                <SelfProfileHydrator />
                 <PendingInviteRedeemer />
                 <RouterProvider router={router} />
             </>

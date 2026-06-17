@@ -33,8 +33,8 @@ describe('ProfileEditor identity reconciliation', () => {
         const store = createStore();
         store.set(matrixClientAtom, mockClient as never);
 
-        // The default self-profile ships with the placeholder '@you:example.org'.
-        expect(store.get(myProfileAtom).userId).toBe('@you:example.org');
+        // The self-profile seed ships empty; identity is populated from Matrix.
+        expect(store.get(myProfileAtom).userId).toBe('');
 
         await act(async () => {
             root.render(
