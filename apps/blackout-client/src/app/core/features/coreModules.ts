@@ -1,3 +1,4 @@
+import { canopyFeature } from '../../features/canopy';
 import { coalitionFeature } from '../../features/coalition';
 import { coliseumFeature } from '../../features/coliseum';
 import { communitiesFeature } from '../../features/communities';
@@ -46,6 +47,10 @@ export const coreFeatureModules: FeatureModule[] = [
     {
         feature: communitiesFeature,
         flag: 'communities',
+    },
+    {
+        feature: canopyFeature,
+        flag: 'canopyServer',
     },
     {
         feature: governanceFeature,

@@ -74,6 +74,13 @@ export const COMMUNITIES_DEN_PATH = '/communities/:canopyId/dens/:denId';
 export const COMMUNITIES_NO_CANOPY_SENTINEL = '-';
 
 /**
+ * Canopies hub — a homepage-reachable directory of the user's canopies with
+ * rich previews plus discovery. Opening a canopy from here lands on the
+ * canonical `/communities/:canopyId` server page (see `buildCommunitiesPath`).
+ */
+export const CANOPIES_PATH = '/canopies';
+
+/**
  * Top-level destinations introduced by the AppShell (bottom-tab + desktop
  * rail). Surface bodies still live in their feature manifests; these
  * constants are the canonical link targets.

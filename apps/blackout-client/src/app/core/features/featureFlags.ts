@@ -54,6 +54,15 @@ export type FeatureFlags = {
     profile: boolean;
     home: boolean;
     communities: boolean;
+    /**
+     * Canopy server experience. When enabled, opening a canopy renders the
+     * Discord-style server page (categorized channel sidebar with text +
+     * voice dens, chat, docked member list, settings/admin) in place of the
+     * legacy `ClientLayout`, and the `/canopies` hub is mounted as a
+     * homepage-reachable directory of the user's canopies. Default on; flip
+     * off to fall back to the legacy chat shell.
+     */
+    canopyServer: boolean;
     plugins: boolean;
     /**
      * AppShell mode-routing flag. When enabled (default-on as of PR-10),
@@ -357,6 +366,7 @@ export const defaultFeatureFlags: FeatureFlags = {
     profile: true,
     home: true,
     communities: true,
+    canopyServer: true,
     plugins: true,
     shellAppShell: true,
     // HomeFeed is the default `/` surface so the home tour (gated by
@@ -687,6 +697,12 @@ export const resolveFeatureFlags = (
         if (env.BLACKOUT_DISCOVERY_HOME_FEED === 'false') {
             nextFlags.discoveryHomeFeed = false;
         }
+        if (env.BLACKOUT_CANOPY_SERVER === 'true') {
+            nextFlags.canopyServer = true;
+        }
+        if (env.BLACKOUT_CANOPY_SERVER === 'false') {
+            nextFlags.canopyServer = false;
+        }
         if (env.BLACKOUT_TOPICS === 'true') {
             nextFlags.topics = true;
         }
@@ -1016,6 +1032,12 @@ export const resolveFeatureFlags = (
     }
     if (env.BLACKOUT_DISCOVERY_HOME_FEED === 'false') {
         nextFlags.discoveryHomeFeed = false;
+    }
+    if (env.BLACKOUT_CANOPY_SERVER === 'true') {
+        nextFlags.canopyServer = true;
+    }
+    if (env.BLACKOUT_CANOPY_SERVER === 'false') {
+        nextFlags.canopyServer = false;
     }
     if (env.BLACKOUT_TOPICS === 'true') {
         nextFlags.topics = true;

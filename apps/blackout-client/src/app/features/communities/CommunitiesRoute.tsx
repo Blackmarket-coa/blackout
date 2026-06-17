@@ -7,6 +7,7 @@ import {
     selectedSpaceIdAtom,
 } from '../../state/navigation';
 import { COMMUNITIES_NO_CANOPY_SENTINEL } from '../../pages/paths';
+import { runtimeFeatureFlags } from '../../core/features/featureFlags';
 
 // ClientLayout is a heavy module (it transitively pulls in matrix-js-sdk
 // crypto helpers that touch `window`). Loading it lazily keeps the
@@ -14,6 +15,12 @@ import { COMMUNITIES_NO_CANOPY_SENTINEL } from '../../pages/paths';
 // non-jsdom unit tests — free of the side-effect chain. The tradeoff
 // is one frame of suspense the first time the canopy/den route renders.
 const ClientLayoutLazy = lazy(() => import('../../pages/client/ClientLayout'));
+
+// The modern Discord-style canopy server page. Mounted in place of the legacy
+// shell when the `canopyServer` flag is on AND the route addresses a real
+// canopy (not the `-` sentinel used by direct/orphan rooms, which keep using
+// the proven ClientLayout path).
+const CanopyServerPageLazy = lazy(() => import('../canopy/CanopyServerPage'));
 
 const decodeId = (raw: string | undefined): string | null => {
     if (!raw) return null;
@@ -53,9 +60,14 @@ export const CommunitiesRoute = () => {
         setRoomJumpTargetEventId(jumpEventId);
     }, [canopyId, denId, jumpEventId, setSelectedRoomId, setSelectedSpaceId, setRoomJumpTargetEventId]);
 
+    const useCanopyServer =
+        runtimeFeatureFlags.canopyServer &&
+        !!canopyId &&
+        canopyId !== COMMUNITIES_NO_CANOPY_SENTINEL;
+
     return (
         <Suspense fallback={null}>
-            <ClientLayoutLazy />
+            {useCanopyServer ? <CanopyServerPageLazy /> : <ClientLayoutLazy />}
         </Suspense>
     );
 };
