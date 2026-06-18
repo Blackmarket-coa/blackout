@@ -34,7 +34,11 @@ export const availableDecorations: DecorationOption[] = [
 // account (display name + avatar) by `SelfProfileHydrator`, which only fills
 // fields the user hasn't set. Matrix supplies name + avatar; everything else
 // stays empty until the user edits it, rather than shipping fabricated data.
-export const myProfileAtom = atomWithStorage<MemberProfile>('blackout.profile.self.v1', {
+//
+// Storage key bumped v1 → v2 to drop the legacy mock profile ("Alex Rivers",
+// placehold.co avatar, fake bio/role/connections) that older builds persisted:
+// existing installs re-seed empty and re-hydrate from Matrix on next login.
+export const myProfileAtom = atomWithStorage<MemberProfile>('blackout.profile.self.v2', {
     userId: '',
     displayName: '',
     avatarUrl: undefined,
