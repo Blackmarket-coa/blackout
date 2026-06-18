@@ -1,6 +1,6 @@
 import { atom } from 'jotai';
 import { atomWithStorage } from 'jotai/utils';
-import type { DecorationOption, MemberProfile, ProfileConnection } from './profileTypes';
+import type { DecorationOption, MemberProfile } from './profileTypes';
 
 export const availableDecorations: DecorationOption[] = [
     {
@@ -30,26 +30,23 @@ export const availableDecorations: DecorationOption[] = [
     },
 ];
 
-const defaultConnections: ProfileConnection[] = [
-    { type: 'github', username: 'blackout-user', url: 'https://github.com/blackout-user' },
-    { type: 'website', label: 'Project Site', url: 'https://example.org' },
-];
-
-export const myProfileAtom = atomWithStorage<MemberProfile>('blackout.profile.self.v1', {
-    userId: '@you:example.org',
-    displayName: 'Alex Rivers',
-    avatarUrl: 'https://placehold.co/160x160/png',
-    primaryRole: 'Moderator',
-    roleBadges: ['Moderator', 'Builder', 'Verified'],
-    mutualSpaces: ['Solarpunk Commons', 'BMC Townhall', 'Design Ops'],
+// The self-profile starts empty and is hydrated from the logged-in Matrix
+// account (display name + avatar) by `SelfProfileHydrator`, which only fills
+// fields the user hasn't set. Matrix supplies name + avatar; everything else
+// stays empty until the user edits it, rather than shipping fabricated data.
+//
+// Storage key bumped v1 → v2 to drop the legacy mock profile ("Alex Rivers",
+// placehold.co avatar, fake bio/role/connections) that older builds persisted:
+// existing installs re-seed empty and re-hydrate from Matrix on next login.
+export const myProfileAtom = atomWithStorage<MemberProfile>('blackout.profile.self.v2', {
+    userId: '',
+    displayName: '',
+    avatarUrl: undefined,
+    primaryRole: undefined,
+    roleBadges: [],
+    mutualSpaces: [],
     isFriend: false,
-    profile: {
-        banner: 'https://placehold.co/1400x360/png',
-        bio: 'Hi! I maintain **community** spaces and care about *privacy-first* defaults.\n\nBuilding safer, calmer chat for everyone.',
-        pronouns: 'they/them',
-        connections: defaultConnections,
-        decoration: 'ring-solarpunk-01',
-    },
+    profile: {},
 });
 
 export const viewedProfileAtom = atom<MemberProfile | null>(null);

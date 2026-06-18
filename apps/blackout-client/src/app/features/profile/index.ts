@@ -4,6 +4,7 @@ export { profileRoutes } from './routes';
 export { default as AvatarDecoration } from './AvatarDecoration';
 export { default as ProfileModal } from './ProfileModal';
 export { default as ProfileEditor } from './ProfileEditor';
+export { default as SelfProfileHydrator } from './SelfProfileHydrator';
 export { default as MiniProfile } from './MiniProfile';
 export { default as ProfilePage } from './ProfilePage';
 export { default as ProfileWall, canPostOnWall, canViewWall } from './ProfileWall';

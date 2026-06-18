@@ -29,7 +29,11 @@ export const AvatarDecoration = ({
 
     // Old Discord default avatar colors (blurple shades)
     const discordAvatarColors = ['#7289DA', '#5865F2', '#57F287', '#FEE75C', '#EB459E'];
-    const colorIndex = displayName.charCodeAt(0) % discordAvatarColors.length;
+    // Guard the empty-name case: `''.charCodeAt(0)` is NaN, which would index out
+    // of the palette. Fall back to a stable placeholder so the swatch + initials
+    // stay valid while the self-profile is still hydrating.
+    const safeName = displayName.trim() || '?';
+    const colorIndex = safeName.charCodeAt(0) % discordAvatarColors.length;
 
     const avatarStyle: CSSProperties = {
         width: size,
@@ -48,9 +52,9 @@ export const AvatarDecoration = ({
     return (
         <div style={{ position: 'relative', width: size, height: size }}>
             {avatarUrl ? (
-                <img src={avatarUrl} alt={displayName} style={avatarStyle} />
+                <img src={avatarUrl} alt={safeName} style={avatarStyle} />
             ) : (
-                <div style={avatarStyle}>{getInitials(displayName)}</div>
+                <div style={avatarStyle}>{getInitials(safeName)}</div>
             )}
             {decoration ? (
                 <div

@@ -1,6 +1,7 @@
 import React, { type CSSProperties } from 'react';
 import { useAtomValue } from 'jotai';
 import { myProfileAtom } from './profileAtoms';
+import { profileDisplayLabel } from './profileDisplay';
 import AvatarDecoration from './AvatarDecoration';
 import Nameplate from './Nameplate';
 import ProfileEffect from './ProfileEffect';
@@ -89,6 +90,7 @@ export function ProfilePage({ profile, viewerId, viewerIsFriend = false }: Profi
     const ownProfile = useAtomValue(myProfileAtom);
     const target = profile ?? ownProfile;
     const { profile: profileEvent } = target;
+    const displayLabel = profileDisplayLabel(target);
 
     return (
         <ProfileThemeScope profileId={target.userId} theme={profileEvent.customTheme}>
@@ -103,7 +105,7 @@ export function ProfilePage({ profile, viewerId, viewerIsFriend = false }: Profi
                     <div style={{ position: 'relative', width: 112, height: 112 }}>
                         <AvatarDecoration
                             avatarUrl={target.avatarUrl}
-                            displayName={target.displayName}
+                            displayName={displayLabel}
                             decorationId={profileEvent.decoration}
                             size={112}
                         />
@@ -112,7 +114,7 @@ export function ProfilePage({ profile, viewerId, viewerIsFriend = false }: Profi
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                         <h1 style={{ margin: 0 }}>
                             <Nameplate
-                                displayName={target.displayName}
+                                displayName={displayLabel}
                                 nameplateId={profileEvent.nameplateId}
                                 fontSize={24}
                             />
@@ -190,7 +192,9 @@ export function ProfilePage({ profile, viewerId, viewerIsFriend = false }: Profi
                                                     textDecoration: 'none',
                                                 }}
                                             >
-                                                {connection.label ?? connection.username ?? connection.url}
+                                                {connection.label ??
+                                                    connection.username ??
+                                                    connection.url}
                                             </a>
                                             <span
                                                 style={{

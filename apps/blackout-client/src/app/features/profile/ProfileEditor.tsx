@@ -1,8 +1,9 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAtom, useAtomValue } from 'jotai';
 import AvatarDecoration from './AvatarDecoration';
 import ProfileThemeEditor from './ProfileThemeEditor';
 import { myProfileAtom } from './profileAtoms';
+import { profileDisplayLabel } from './profileDisplay';
 import {
     avatarDecorationCatalogAtom,
     badgeCatalogAtom,
@@ -33,7 +34,7 @@ const defaultConnection = (): ProfileConnection => ({ type: 'website', label: ''
 
 function nextStatus(
     current: ProfileStatus | undefined,
-    patch: Partial<ProfileStatus>,
+    patch: Partial<ProfileStatus>
 ): ProfileStatus | undefined {
     const merged: ProfileStatus = {
         text: current?.text ?? '',
@@ -47,7 +48,7 @@ function nextStatus(
 
 function nextWall(
     current: ProfileWallSettings | undefined,
-    patch: Partial<ProfileWallSettings>,
+    patch: Partial<ProfileWallSettings>
 ): ProfileWallSettings {
     return {
         visibility: current?.visibility ?? 'public',
@@ -92,11 +93,29 @@ export const ProfileEditor = ({ saveProfile = saveProfileDefault }: ProfileEdito
 
     const bioLength = useMemo(() => profile.profile.bio?.length ?? 0, [profile.profile.bio]);
 
+    // The self-profile atom ships with a placeholder identity
+    // (`userId: '@you:example.org'`). The API rejects (403) any profile PUT whose
+    // path userId doesn't match the authenticated subject, so an un-reconciled
+    // profile can never be saved. Pull the signed-in Matrix id and adopt it as
+    // the profile's identity before the user reaches "Save".
+    const authenticatedUserId = mx.getUserId();
+    useEffect(() => {
+        if (!authenticatedUserId) return;
+        if (profile.userId === authenticatedUserId) return;
+        setProfile((prev) =>
+            prev.userId === authenticatedUserId ? prev : { ...prev, userId: authenticatedUserId }
+        );
+    }, [authenticatedUserId, profile.userId, setProfile]);
+
     const onSave = useCallback(async () => {
         setSaveState('saving');
         setSaveError(null);
+        // Save against the authenticated id (falling back to the stored id when the
+        // Matrix client can't supply one) so the request targets the caller's own
+        // profile rather than the seeded placeholder.
+        const targetUserId = authenticatedUserId ?? profile.userId;
         try {
-            await saveProfile(profile.userId, {
+            await saveProfile(targetUserId, {
                 displayName: profile.displayName,
                 avatarUrl: profile.avatarUrl,
                 primaryRole: profile.primaryRole,
@@ -112,7 +131,7 @@ export const ProfileEditor = ({ saveProfile = saveProfileDefault }: ProfileEdito
             setSaveError(error instanceof Error ? error.message : 'Failed to save profile.');
             setSaveState('error');
         }
-    }, [mx, profile, saveProfile]);
+    }, [authenticatedUserId, mx, profile, saveProfile]);
 
     const onImageUpload = async (field: 'banner' | 'avatarUrl', file?: File) => {
         if (!file) return;
@@ -123,7 +142,7 @@ export const ProfileEditor = ({ saveProfile = saveProfileDefault }: ProfileEdito
         setProfile((prev) =>
             field === 'banner'
                 ? { ...prev, profile: { ...prev.profile, banner: objectUrl } }
-                : { ...prev, avatarUrl: objectUrl },
+                : { ...prev, avatarUrl: objectUrl }
         );
     };
 
@@ -133,7 +152,7 @@ export const ProfileEditor = ({ saveProfile = saveProfileDefault }: ProfileEdito
             profile: {
                 ...prev.profile,
                 connections: (prev.profile.connections ?? []).map((entry, entryIdx) =>
-                    entryIdx === idx ? { ...entry, ...patch } : entry,
+                    entryIdx === idx ? { ...entry, ...patch } : entry
                 ),
             },
         }));
@@ -246,7 +265,7 @@ export const ProfileEditor = ({ saveProfile = saveProfileDefault }: ProfileEdito
                 <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
                     <AvatarDecoration
                         avatarUrl={profile.avatarUrl}
-                        displayName={profile.displayName}
+                        displayName={profileDisplayLabel(profile)}
                         decorationId={profile.profile.decoration}
                         size={88}
                     />
@@ -320,7 +339,7 @@ export const ProfileEditor = ({ saveProfile = saveProfileDefault }: ProfileEdito
                         ))}
                         {profile.primaryRole &&
                         !MEMBER_PRIMARY_ROLES.includes(
-                            profile.primaryRole as (typeof MEMBER_PRIMARY_ROLES)[number],
+                            profile.primaryRole as typeof MEMBER_PRIMARY_ROLES[number]
                         ) ? (
                             <option value={profile.primaryRole}>{profile.primaryRole}</option>
                         ) : null}
@@ -397,7 +416,7 @@ export const ProfileEditor = ({ saveProfile = saveProfileDefault }: ProfileEdito
                                         profile: {
                                             ...prev.profile,
                                             connections: (prev.profile.connections ?? []).filter(
-                                                (_, entryIdx) => entryIdx !== idx,
+                                                (_, entryIdx) => entryIdx !== idx
                                             ),
                                         },
                                     }))
