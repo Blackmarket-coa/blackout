@@ -51,6 +51,13 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # tauri.conf.json references icons/32x32.png, icon.ico, icon.icns, etc.,
+      # which are generated from src-tauri/icons/blackout.svg and gitignored.
+      # Generate them here (cross-platform CLI invocation) before tauri build.
+      - name: Generate app icons
+        working-directory: blackout-desktop
+        run: pnpm tauri icon src-tauri/icons/blackout.svg --output src-tauri/icons
+
       - name: Import Apple certificate
         if: runner.os == 'macOS'
         env:
