@@ -1,8 +1,10 @@
 name: blackout-mobile
 
+# Signed store release builds (beta/production). Internal-track builds on main
+# are owned by mobile-native-ci.yml, so this workflow only runs on explicit
+# release tags (and manual dispatch) to avoid duplicate heavy native builds.
 on:
   push:
-    branches: [main]
     tags:
       - 'mobile-release-*'
   workflow_dispatch:
@@ -13,6 +15,10 @@ jobs:
     defaults:
       run:
         working-directory: blackout-mobile
+    env:
+      # Surfaced from secrets so the signing step can be conditionally skipped
+      # (unsigned release builds still succeed when no keystore is configured).
+      ANDROID_UPLOAD_KEYSTORE_B64: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_B64 }}
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
       - uses: actions/setup-node@v4
@@ -27,17 +33,39 @@ jobs:
           java-version: 17
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Ensure Android project exists
+        run: |
+          if [ ! -f "android/gradlew" ]; then
+            pnpm add:android
+          fi
       - name: Sync Capacitor project
         run: pnpm sync:android
-      - name: Build Android release
+      - name: Configure release signing
+        if: env.ANDROID_UPLOAD_KEYSTORE_B64 != ''
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          echo "$ANDROID_UPLOAD_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/blackout-upload.jks"
+          cat > android/keystore.properties <<PROPS
+          storeFile=$RUNNER_TEMP/blackout-upload.jks
+          storePassword=${ANDROID_KEYSTORE_PASSWORD}
+          keyAlias=${ANDROID_KEY_ALIAS}
+          keyPassword=${ANDROID_KEY_PASSWORD}
+          PROPS
+      - name: Build Android release (AAB + APK)
         run: |
           cd android
-          ./gradlew assembleRelease
-      - name: Upload Android artifact
+          ./gradlew bundleRelease assembleRelease
+      - name: Upload Android artifacts
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: blackout-android-release
-          path: blackout-mobile/android/app/build/outputs/**/*.apk
+          path: |
+            blackout-mobile/android/app/build/outputs/**/*.aab
+            blackout-mobile/android/app/build/outputs/**/*.apk
+          if-no-files-found: warn
 
   ios:
     runs-on: macos-latest
@@ -59,6 +87,11 @@ jobs:
           bundler-cache: false
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Ensure iOS project exists
+        run: |
+          if [ ! -d "ios/App" ]; then
+            pnpm add:ios
+          fi
       - name: Sync Capacitor project
         run: pnpm sync:ios
       - name: Build/TestFlight upload with Fastlane
