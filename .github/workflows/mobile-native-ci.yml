@@ -4,11 +4,13 @@ on:
   pull_request:
     paths:
       - 'mobile/**'
+      - 'blackout-mobile/**'
       - '.github/workflows/mobile-native-ci.yml'
   push:
     branches: [main]
     paths:
       - 'mobile/**'
+      - 'blackout-mobile/**'
       - '.github/workflows/mobile-native-ci.yml'
   workflow_dispatch:
     inputs:
@@ -43,54 +45,106 @@ jobs:
     needs: verify-mobile-workspace
     runs-on: ubuntu-24.04
     if: github.event_name != 'pull_request'
+    defaults:
+      run:
+        working-directory: blackout-mobile
     env:
       PLAY_TRACK: internal
+      ANDROID_UPLOAD_KEYSTORE_B64: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_B64 }}
+      GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: pnpm/action-setup@v5
+        with:
+          version: 9.15.4
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
-      - name: Decode Android signing keystore
-        env:
-          ANDROID_UPLOAD_KEYSTORE_B64: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_B64 }}
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Ensure Android project exists
         run: |
-          if [ -z "$ANDROID_UPLOAD_KEYSTORE_B64" ]; then
-            echo "ANDROID_UPLOAD_KEYSTORE_B64 is required" >&2
-            exit 1
+          if [ ! -f "android/gradlew" ]; then
+            pnpm add:android
           fi
-          echo "$ANDROID_UPLOAD_KEYSTORE_B64" | base64 -d > /tmp/android-upload.jks
-      - name: Build Android AAB for internal track
+      - name: Sync Capacitor project
+        run: pnpm sync:android
+      - name: Configure release signing
+        if: env.ANDROID_UPLOAD_KEYSTORE_B64 != ''
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          echo "./gradlew bundleRelease with signing config would run here"
+          echo "$ANDROID_UPLOAD_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/blackout-upload.jks"
+          cat > android/keystore.properties <<PROPS
+          storeFile=$RUNNER_TEMP/blackout-upload.jks
+          storePassword=${ANDROID_KEYSTORE_PASSWORD}
+          keyAlias=${ANDROID_KEY_ALIAS}
+          keyPassword=${ANDROID_KEY_PASSWORD}
+          PROPS
+      - name: Build signed AAB for internal track
+        run: |
+          cd android
+          ./gradlew bundleRelease
       - name: Upload to Play internal test track
-        run: |
-          echo "Upload signed AAB to Google Play track: $PLAY_TRACK"
+        if: env.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON != ''
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: co.bmc.blackout
+          releaseFiles: blackout-mobile/android/app/build/outputs/bundle/release/*.aab
+          track: ${{ env.PLAY_TRACK }}
+          status: completed
 
   ios-internal:
     needs: verify-mobile-workspace
     runs-on: macos-14
     if: github.event_name != 'pull_request'
+    defaults:
+      run:
+        working-directory: blackout-mobile
     env:
       TESTFLIGHT_GROUP: internal
     steps:
       - uses: actions/checkout@v4
-      - name: Import App Store Connect API key
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: pnpm/action-setup@v5
+        with:
+          version: 9.15.4
+      - name: Install Ruby and Fastlane
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+          bundler-cache: false
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Ensure iOS project exists
+        run: |
+          if [ ! -d "ios/App" ]; then
+            pnpm add:ios
+          fi
+      - name: Sync Capacitor project
+        run: pnpm sync:ios
+      - name: Build + upload to TestFlight (internal)
         env:
           APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
           APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           APP_STORE_CONNECT_API_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
         run: |
           if [ -z "$APP_STORE_CONNECT_API_KEY_CONTENT" ]; then
-            echo "App Store Connect API key missing" >&2
+            echo "App Store Connect API key missing — set APP_STORE_CONNECT_* secrets" >&2
             exit 1
           fi
-      - name: Build signed iOS archive
-        run: |
-          echo "xcodebuild archive/export with match or manual signing would run here"
-      - name: Upload to TestFlight internal testers
-        run: |
-          echo "Upload IPA to TestFlight group: $TESTFLIGHT_GROUP"
+          cd ios
+          fastlane beta
 
   rollout-promotion:
     needs: [android-internal, ios-internal]

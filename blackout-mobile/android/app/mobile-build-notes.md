@@ -1,5 +1,5 @@
 # Android build notes
 
-- Target package: `co.bmc.blackout.mobile`
-- Signing should be supplied from CI secrets (`ANDROID_KEYSTORE_BASE64`, alias, passwords)
-- Upload artifacts to Play Console beta track for staged rollout
+- Target package: `co.bmc.blackout` (must match `capacitor.config.ts` `appId` and the iOS bundle id)
+- Signing should be supplied from CI secrets (`ANDROID_UPLOAD_KEYSTORE_B64`, alias, passwords)
+- Upload artifacts to Play Console internal/beta track for staged rollout

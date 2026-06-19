@@ -27,8 +27,17 @@ pnpm dev
 
 ## Build
 
+To produce real, installable desktop bundles (.dmg/.app, .msi/.nsis, .deb/.rpm/.appimage):
+
 ```bash
-pnpm build
+pnpm bundle
 ```
 
-Build outputs are produced in `src-tauri/target/release/bundle`.
+Build outputs are produced in `src-tauri/target/release/bundle`. Bundles are
+per-OS: build macOS artifacts on macOS, Windows on Windows, Linux on Linux. The
+cross-platform release build runs in CI via
+`.github/workflows/blackout-desktop-tauri.yml`.
+
+> Note: `pnpm build` is an intentional no-op used to keep the monorepo-wide
+> `turbo run build` portable (it does not require the Rust/Tauri toolchain). Use
+> `pnpm bundle` for actual packaging.

@@ -53,7 +53,7 @@
     "updater": {
       "active": true,
       "endpoints": [
-        "https://github.com/bmc/blackout/releases/latest/download/latest.json"
+        "https://github.com/blackmarket-coa/blackout/releases/latest/download/latest.json"
       ],
       "pubkey": "${TAURI_UPDATER_PUBKEY}"
     },

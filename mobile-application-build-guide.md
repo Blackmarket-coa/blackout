@@ -38,7 +38,7 @@ pnpm mobile:open:android
 
 ## 3) Build the web bundle consumed by mobile
 
-The mobile shell packages the web client output from `@blackout/blackout-web`.
+The mobile shell packages the web client output from `@blackout/client` (`apps/blackout-client`).
 
 ```bash
 cd blackout-mobile

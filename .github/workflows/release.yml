@@ -41,31 +41,10 @@ jobs:
           name: blackout-web-${{ github.ref_name }}
           path: apps/blackout-client/dist
 
-  build-desktop:
-    name: Build desktop (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-    steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
-      - uses: pnpm/action-setup@v5
-        with:
-          version: 9.15.4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - name: Build desktop app
-        working-directory: blackout-desktop
-        run: pnpm build
-      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
-        with:
-          name: blackout-desktop-${{ matrix.os }}-${{ github.ref_name }}
-          path: blackout-desktop/src-tauri/target/release/bundle
-          if-no-files-found: warn
+  # Desktop bundles are produced by the dedicated cross-OS workflow
+  # .github/workflows/blackout-desktop-tauri.yml (which also triggers on v* tags).
+  # It builds + signs via tauri-action and attaches the installers + updater JSON
+  # to this same release tag, so there is no separate build-desktop job here.
 
   build-mobile-android:
     name: Build mobile artifact (Android)
@@ -84,6 +63,12 @@ jobs:
           distribution: temurin
           java-version: 17
       - run: pnpm install --frozen-lockfile
+      - name: Ensure Android project exists
+        working-directory: blackout-mobile
+        run: |
+          if [ ! -f "android/gradlew" ]; then
+            pnpm add:android
+          fi
       - run: pnpm --filter blackout-mobile run sync:android
       - run: cd blackout-mobile/android && ./gradlew assembleRelease
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
@@ -130,7 +115,7 @@ jobs:
 
   release:
     name: Create GitHub release + deploy
-    needs: [build-web, build-desktop, build-mobile-android, build-mobile-ios]
+    needs: [build-web, build-mobile-android, build-mobile-ios]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
