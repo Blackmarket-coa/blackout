@@ -1,11 +1,11 @@
 # Blackout Mobile
 
-Capacitor wrapper that packages the Blackout web client (`apps/blackout-web`) as a native iOS and Android app.
+Capacitor wrapper that packages the Blackout web client (`@blackout/client` at `apps/blackout-client`) as a native iOS and Android app.
 
 ## How It Works
 
 ```
-blackout-web (Vite build)  →  dist/  →  Capacitor copies into native WebView
+@blackout/client (Vite build)  →  apps/blackout-client/dist/  →  Capacitor copies into native WebView
                                     ↓
                            iOS app (Xcode project)
                            Android app (Gradle project)
@@ -21,7 +21,7 @@ Your existing web frontend runs inside a native shell. Capacitor provides native
 
 # Or manually:
 pnpm install
-pnpm build:web          # builds apps/blackout-web
+pnpm build:web          # builds @blackout/client → apps/blackout-client/dist
 npx cap add ios         # one-time: generates Xcode project
 npx cap add android     # one-time: generates Android Studio project
 pnpm sync:ios           # copies web build + plugins to iOS

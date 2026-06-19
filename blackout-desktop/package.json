@@ -6,7 +6,9 @@
   "scripts": {
     "icons:generate": "./scripts/generate-icons.sh",
     "dev": "pnpm icons:generate && tauri dev",
-    "build": "pnpm icons:generate && node -e \"console.log('desktop build scaffold ok (tauri packaging skipped in monorepo parity)')\"",
+    "build": "node -e \"console.log('blackout-desktop: monorepo parity build (no native toolchain). Run \\'pnpm bundle\\' to produce installers.')\"",
+    "bundle": "pnpm icons:generate && tauri build",
+    "bundle:debug": "pnpm icons:generate && tauri build --debug",
     "tauri": "tauri"
   },
   "devDependencies": {
