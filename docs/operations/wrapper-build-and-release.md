@@ -105,17 +105,21 @@ One-time, on a Mac:
 ```bash
 cd blackout-mobile
 pnpm build:web
-pnpm add:ios          # generates ios/App/App.xcworkspace (cap add ios)
+pnpm add:ios                  # generates ios/App/App.xcworkspace (cap add ios)
 pnpm sync:ios
-pnpm open:ios         # open in Xcode → Signing & Capabilities, then Run/Archive
+./scripts/apply-ios-config.sh # applies Info.plist deep links + permissions (idempotent, macOS-only)
+pnpm open:ios                 # open in Xcode → Signing & Capabilities, then Run/Archive
 ```
 
 `cap add ios` writes into `ios/App/`, leaving the existing `ios/fastlane/` lanes
-intact. Customizations to apply (commit them after generation):
+intact. `scripts/apply-ios-config.sh` applies most native config automatically;
+review and commit the result. Customizations (commit them after generation):
 - `ios/App/App/Info.plist` — `matrix`/`blackout` URL schemes (`CFBundleURLTypes`);
   `NSCameraUsageDescription`, `NSMicrophoneUsageDescription`,
   `NSPhotoLibraryUsageDescription`; `UIBackgroundModes: remote-notification`.
-- Push Notifications entitlement (`ios/App/App/App.entitlements`, `aps-environment`).
+  (All applied by `scripts/apply-ios-config.sh`.)
+- Push Notifications entitlement (`ios/App/App/App.entitlements`, `aps-environment`)
+  — add via Xcode → Signing & Capabilities.
 - App icons / splash via the same `@capacitor/assets` run (`--ios`).
 
 **CI / release:** the macOS jobs in `mobile-native-ci.yml` (internal TestFlight)
