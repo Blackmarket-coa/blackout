@@ -1,0 +1,116 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "links": [],
+  "panels": [
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "id": 1,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
+      "pluginVersion": "11.0.0",
+      "targets": [
+        {
+          "expr": "sum by (route) (rate(http_requests_total{service=\"blackout-api\",route=~\"/v1/coalition.*\"}[5m]))",
+          "legendFormat": "{{route}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Coalition request rate by route",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "max": 1 }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "id": 2,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
+      "pluginVersion": "11.0.0",
+      "targets": [
+        {
+          "expr": "sum by (route) (rate(http_requests_total{service=\"blackout-api\",route=~\"/v1/coalition.*\",status=~\"5..\"}[5m])) / clamp_min(sum by (route) (rate(http_requests_total{service=\"blackout-api\",route=~\"/v1/coalition.*\"}[5m])), 0.0001)",
+          "legendFormat": "{{route}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Coalition 5xx error ratio by route",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "id": 3,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
+      "pluginVersion": "11.0.0",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, route) (rate(http_request_duration_seconds_bucket{service=\"blackout-api\",route=~\"/v1/coalition/feed/:id/(likes|comments)\"}[5m])))",
+          "legendFormat": "p95 {{route}}",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.50, sum by (le, route) (rate(http_request_duration_seconds_bucket{service=\"blackout-api\",route=~\"/v1/coalition/feed/:id/(likes|comments)\"}[5m])))",
+          "legendFormat": "p50 {{route}}",
+          "refId": "B"
+        }
+      ],
+      "title": "Feed engagement latency (likes/comments)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "id": 4,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
+      "pluginVersion": "11.0.0",
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{service=\"blackout-api\",route=\"/v1/coalition/feed/:id/likes\",method=\"POST\",status=~\"2..\"}[5m]))",
+          "legendFormat": "likes set",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(http_requests_total{service=\"blackout-api\",route=\"/v1/coalition/feed/:id/comments\",method=\"POST\",status=~\"2..\"}[5m]))",
+          "legendFormat": "comments posted",
+          "refId": "B"
+        }
+      ],
+      "title": "Engagement write throughput (2xx)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
+      "id": 5,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
+      "pluginVersion": "11.0.0",
+      "targets": [
+        {
+          "expr": "sum by (status) (rate(http_requests_total{service=\"blackout-api\",route=~\"/v1/coalition-kit-manifests/.*\"}[5m]))",
+          "legendFormat": "{{status}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Kit-manifest apply responses by status",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "style": "dark",
+  "tags": ["coalition", "blackout-api"],
+  "templating": { "list": [] },
+  "time": { "from": "now-6h", "to": "now" },
+  "timepicker": {},
+  "timezone": "",
+  "title": "Coalition Operations",
+  "uid": "coalition-operations",
+  "version": 1,
+  "weekStart": ""
+}
