@@ -333,8 +333,13 @@ export const defaultFeatureFlags: FeatureFlags = {
     deadman: true,
     steganography: true,
     moderation: false,
-    monetization: false,
-    monetizationSubscriptions: false,
+    // Creator Hub production readiness: creator subscription tiers ship on by
+    // default. The master `monetization` flag is required for the subscriptions
+    // slice to resolve (per validateMonetizationSkuDependencies); the remaining
+    // monetization slices stay off. Surfaces still require the `billing.read`
+    // entitlement capability, and `BLACKOUT_MONETIZATION*` overrides per env.
+    monetization: true,
+    monetizationSubscriptions: true,
     monetizationBoosts: false,
     monetizationMarketplace: false,
     monetizationApps: false,
