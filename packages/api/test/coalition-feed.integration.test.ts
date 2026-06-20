@@ -82,6 +82,24 @@ test('coalition feed comments: create returns 201 and lists newest-first', async
     assert.equal(comments[0].body, 'second comment');
 });
 
+test('coalition feed engagement: reads are public (likedByMe false when signed out)', async () => {
+    // Seed a like so the public count is non-zero.
+    await app.request(`/v1/coalition/feed/${VIDEO_ID}/likes`, {
+        method: 'POST',
+        headers: authHeader('public-read-liker'),
+        body: JSON.stringify({ active: true }),
+    });
+
+    const likes = await app.request(`/v1/coalition/feed/${VIDEO_ID}/likes`);
+    assert.equal(likes.status, 200);
+    const likeBody = (await likes.json()) as { count: number; likedByMe: boolean };
+    assert.ok(likeBody.count >= 1);
+    assert.equal(likeBody.likedByMe, false);
+
+    const comments = await app.request(`/v1/coalition/feed/${VIDEO_ID}/comments`);
+    assert.equal(comments.status, 200);
+});
+
 test('coalition feed engagement: writes require auth', async () => {
     const likeNoAuth = await app.request(`/v1/coalition/feed/${VIDEO_ID}/likes`, {
         method: 'POST',

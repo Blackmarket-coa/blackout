@@ -97,7 +97,7 @@ import { authorizeScope, installPluginAtScope } from '../services/pluginInstalla
 import { db } from '../db/store';
 import { matrixClient } from '../integrations/matrix-client';
 import { readJsonBody } from '../middleware/validate';
-import { requireUser } from '../middleware/require-user';
+import { getAuthUser, requireUser } from '../middleware/require-user';
 
 const coalition = new Hono();
 
@@ -135,22 +135,22 @@ coalition.get('/feed', (c) => {
 // --- feed engagement (likes + comments on feed items, surfaced on video) ---
 
 /** Active like count + whether the viewer currently likes the item. */
-function likeState(feedItemId: string, userId: string): { count: number; likedByMe: boolean } {
+function likeState(feedItemId: string, userId: string | undefined): { count: number; likedByMe: boolean } {
     const likes = listFeedLikes(feedItemId);
     return {
         count: countActive(likes),
-        likedByMe: likes.some((l) => l.userId === userId && l.active),
+        likedByMe: userId ? likes.some((l) => l.userId === userId && l.active) : false,
     };
 }
 
 coalition.get('/feed/:id/likes', (c) => {
-    const user = requireUser(c, 'Sign in to view likes');
-    if (user instanceof Response) return user;
+    // Reads are public (the feed itself is public); `likedByMe` is false when signed out.
+    const user = getAuthUser(c);
     const id = c.req.param('id');
     if (!getFeedItem(id)) {
         return c.json({ code: 'not_found', message: 'Feed item not found' }, 404);
     }
-    return c.json(likeState(id, user.sub));
+    return c.json(likeState(id, user?.sub));
 });
 
 const likeSchema = z.object({ active: z.boolean() });
@@ -169,8 +169,7 @@ coalition.post('/feed/:id/likes', async (c) => {
 });
 
 coalition.get('/feed/:id/comments', (c) => {
-    const user = requireUser(c, 'Sign in to view comments');
-    if (user instanceof Response) return user;
+    // Reads are public (the feed itself is public).
     const id = c.req.param('id');
     if (!getFeedItem(id)) {
         return c.json({ code: 'not_found', message: 'Feed item not found' }, 404);

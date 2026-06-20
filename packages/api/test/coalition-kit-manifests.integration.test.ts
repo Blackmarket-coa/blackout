@@ -122,37 +122,46 @@ test('coalition-kit routes 404 when explicitly disabled (rollback toggle)', asyn
     }
 });
 
-test('applyCoalitionKitManifest re-apply retries failed dens and updates the row', async () => {
+test('applyCoalitionKitManifest re-apply refreshes the row without re-creating dens', async () => {
     const manifest = parseCoalitionKitManifest(rawManifest);
-    // First apply: the second den fails to provision.
-    let calls = 0;
-    const flaky = async (spec: { slug: string }) => {
-        calls += 1;
-        return spec.slug === 'ops'
-            ? { ok: false as const, reason: 'matrix_not_configured' }
-            : { ok: true as const, denId: `!den-${spec.slug}:test` };
-    };
-    const first = await applyCoalitionKitManifest(
-        { coalitionId: 'coa-kit-retry', manifest, appliedByUserId: COORDINATOR_ID },
-        flaky,
-    );
-    assert.equal(first.application.denIds.length, 1);
-    assert.equal(first.denFailures.length, 1);
-
-    // Re-apply with a working provisioner: the outstanding den is provisioned,
-    // the row is updated (not duplicated), and no plugins are re-created.
-    const working = async (spec: { slug: string }) => ({
+    const provisioner = async (spec: { slug: string }) => ({
         ok: true as const,
         denId: `!den-${spec.slug}:test`,
     });
+    const first = await applyCoalitionKitManifest(
+        { coalitionId: 'coa-kit-reapply', manifest, appliedByUserId: COORDINATOR_ID },
+        provisioner,
+    );
+    assert.equal(first.application.denIds.length, 2);
+    const originalDenIds = first.application.denIds;
+
+    // Re-apply with updated customization. The row is updated in place (no
+    // duplicate application, no re-created dens, denFailures empty), and the
+    // provisioner is never called again.
+    let provisionerCalls = 0;
+    const trackingProvisioner = async (spec: { slug: string }) => {
+        provisionerCalls += 1;
+        return { ok: true as const, denId: `!den-${spec.slug}:test` };
+    };
+    const updatedManifest = parseCoalitionKitManifest({
+        ...rawManifest,
+        customization: { ...rawManifest.customization, activePreset: 'sovereignty' },
+    });
+    assert.equal(first.application.customization.activePreset, 'governance');
     const second = await applyCoalitionKitManifest(
-        { coalitionId: 'coa-kit-retry', manifest, appliedByUserId: COORDINATOR_ID },
-        working,
+        { coalitionId: 'coa-kit-reapply', manifest: updatedManifest, appliedByUserId: COORDINATOR_ID },
+        trackingProvisioner,
     );
     assert.equal(second.alreadyApplied, true);
     assert.equal(second.denFailures.length, 0);
-    assert.equal(second.application.denIds.length, 2);
-    assert.equal(listCoalitionKitManifestApplications('coa-kit-retry').length, 1);
+    assert.equal(provisionerCalls, 0, 'existing dens are not re-provisioned');
+    assert.deepEqual(second.application.denIds, originalDenIds, 'dens are preserved as-is');
+    assert.equal(
+        second.application.customization.activePreset,
+        'sovereignty',
+        'customization snapshot is refreshed',
+    );
+    assert.equal(listCoalitionKitManifestApplications('coa-kit-reapply').length, 1);
 });
 
 test('apply route enforces governance for a paid kit', async () => {

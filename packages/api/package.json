@@ -30,7 +30,7 @@
     "hono": "4.12.25",
     "ioredis": "5.10.1",
     "livekit-server-sdk": "^2.15.2",
-    "nodemailer": "^8.0.9",
+    "nodemailer": "^9.0.1",
     "pg": "^8.13.1",
     "socket.io": "^4.8.3",
     "ws": "^8.18.0",

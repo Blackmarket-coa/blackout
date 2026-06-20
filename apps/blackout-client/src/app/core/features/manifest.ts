@@ -27,6 +27,7 @@ export const featureModuleManifest = [
     'profile',
     'home',
     'communities',
+    'canopy',
     'plugins',
     'shell-destinations',
     'topics',

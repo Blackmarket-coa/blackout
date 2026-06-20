@@ -96,27 +96,20 @@ export async function applyCoalitionKitManifest(
 
     const existing = db.findCoalitionKitManifestApplication(coalitionId, manifest.kitId);
     if (existing) {
-        // Re-apply: adopt the latest manifest customization snapshot and re-attempt
-        // any dens not yet provisioned. We never re-install plugins or re-create
-        // dens that already exist. Dens are provisioned in manifest order, so the
-        // outstanding specs are those beyond the count already recorded.
-        const pending = manifest.dens.slice(existing.denIds.length);
-        const denIds = [...existing.denIds];
-        const denFailures: Array<{ slug: string; reason: string }> = [];
-        for (const spec of pending) {
-            const result = await provisioner(spec);
-            if (result.ok) denIds.push(result.denId);
-            else denFailures.push({ slug: spec.slug, reason: result.reason });
-        }
+        // Re-apply adopts the latest manifest snapshot (customization/theme/feature
+        // flags + bundled plugin list) and refreshes updatedAt. It deliberately does
+        // not re-install plugins or touch dens: the application row only records
+        // provisioned room ids, not a slug→room map, so we cannot tell which specs
+        // failed earlier — retrying by position would re-create or duplicate the
+        // wrong dens. Provisioning gaps are surfaced via denFailures on first apply.
         const updated = db.updateCoalitionKitManifestApplication(existing.id, {
             appliedByUserId,
             archetype: manifest.archetype,
             customization: { ...manifest.customization },
-            denIds,
             bundledPluginIds: [...manifest.bundledPluginIds],
             status: 'applied',
         });
-        return { application: toModel(updated ?? existing), alreadyApplied: true, denFailures };
+        return { application: toModel(updated ?? existing), alreadyApplied: true, denFailures: [] };
     }
 
     // Install bundled plugins at coalition scope (lands as `available` — per-den
