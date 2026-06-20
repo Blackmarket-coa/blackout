@@ -43,6 +43,13 @@ import {
     listRideOffers,
     listSellerLocations,
     listSpatialItems,
+    getFeedItem,
+    listFeedLikes,
+    saveFeedLike,
+    listFeedComments,
+    createFeedComment,
+    newFeedLikeId,
+    newFeedCommentId,
     listVolunteerSignups,
     listVolunteerSlots,
     getRing,
@@ -123,6 +130,72 @@ coalition.get('/feed', (c) => {
         generatedAt: new Date().toISOString(),
         items: limit ? ranked.slice(0, limit) : ranked,
     });
+});
+
+// --- feed engagement (likes + comments on feed items, surfaced on video) ---
+
+/** Active like count + whether the viewer currently likes the item. */
+function likeState(feedItemId: string, userId: string): { count: number; likedByMe: boolean } {
+    const likes = listFeedLikes(feedItemId);
+    return {
+        count: countActive(likes),
+        likedByMe: likes.some((l) => l.userId === userId && l.active),
+    };
+}
+
+coalition.get('/feed/:id/likes', (c) => {
+    const user = requireUser(c, 'Sign in to view likes');
+    if (user instanceof Response) return user;
+    const id = c.req.param('id');
+    if (!getFeedItem(id)) {
+        return c.json({ code: 'not_found', message: 'Feed item not found' }, 404);
+    }
+    return c.json(likeState(id, user.sub));
+});
+
+const likeSchema = z.object({ active: z.boolean() });
+
+coalition.post('/feed/:id/likes', async (c) => {
+    const user = requireUser(c, 'Sign in to like a video');
+    if (user instanceof Response) return user;
+    const id = c.req.param('id');
+    if (!getFeedItem(id)) {
+        return c.json({ code: 'not_found', message: 'Feed item not found' }, 404);
+    }
+    const parsed = await readJsonBody(c, likeSchema);
+    if (parsed instanceof Response) return parsed;
+    saveFeedLike({ id: newFeedLikeId(), feedItemId: id, userId: user.sub, active: parsed.active });
+    return c.json(likeState(id, user.sub));
+});
+
+coalition.get('/feed/:id/comments', (c) => {
+    const user = requireUser(c, 'Sign in to view comments');
+    if (user instanceof Response) return user;
+    const id = c.req.param('id');
+    if (!getFeedItem(id)) {
+        return c.json({ code: 'not_found', message: 'Feed item not found' }, 404);
+    }
+    return c.json({ comments: listFeedComments(id) });
+});
+
+const commentSchema = z.object({ body: z.string().min(1).max(2000) });
+
+coalition.post('/feed/:id/comments', async (c) => {
+    const user = requireUser(c, 'Sign in to comment');
+    if (user instanceof Response) return user;
+    const id = c.req.param('id');
+    if (!getFeedItem(id)) {
+        return c.json({ code: 'not_found', message: 'Feed item not found' }, 404);
+    }
+    const parsed = await readJsonBody(c, commentSchema);
+    if (parsed instanceof Response) return parsed;
+    const comment = createFeedComment({
+        id: newFeedCommentId(),
+        feedItemId: id,
+        authorId: user.sub,
+        body: parsed.body,
+    });
+    return c.json({ comment }, 201);
 });
 
 const spatialQuerySchema = z.object({

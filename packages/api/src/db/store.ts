@@ -95,6 +95,8 @@ import type {
   SellerLocationRecord,
   SellerProfileRecord,
   CoalitionFeedItemRecord,
+  CoalitionFeedLikeRecord,
+  CoalitionFeedCommentRecord,
   PluginInstallationRecord,
   PluginDenRecord,
   CoalitionKitManifestApplicationRecord,
@@ -222,6 +224,8 @@ type PersistedState = {
   sellerLocations: SellerLocationRecord[];
   marketplaceSellerProfiles: SellerProfileRecord[];
   coalitionFeedItems: CoalitionFeedItemRecord[];
+  coalitionFeedLikes: CoalitionFeedLikeRecord[];
+  coalitionFeedComments: CoalitionFeedCommentRecord[];
   pluginInstallations: PluginInstallationRecord[];
   pluginDens: PluginDenRecord[];
   coalitionKitManifestApplications: CoalitionKitManifestApplicationRecord[];
@@ -398,6 +402,10 @@ class InMemoryDb {
   coalitionFeedItems = new Map<string, CoalitionFeedItemRecord>(
     COALITION_FEED_SEED.map((row) => [row.id, row]),
   );
+  /** Feed likes, keyed by `${feedItemId}::${userId}`. */
+  coalitionFeedLikes = new Map<string, CoalitionFeedLikeRecord>();
+  /** Feed comments, keyed by comment id. */
+  coalitionFeedComments = new Map<string, CoalitionFeedCommentRecord>();
   /** Plugin installations (activation-at-scope), keyed by installation id. */
   pluginInstallations = new Map<string, PluginInstallationRecord>();
   /** Plugin-provisioned companion dens, keyed by linkage id. */
@@ -3440,6 +3448,50 @@ class InMemoryDb {
     return record;
   }
 
+  /** Single feed-item lookup (used by the like/comment routes to 404 unknown ids). */
+  getCoalitionFeedItem(id: string): CoalitionFeedItemRecord | undefined {
+    return this.coalitionFeedItems.get(id);
+  }
+
+  private static feedLikeKey(feedItemId: string, userId: string): string {
+    return `${feedItemId}::${userId}`;
+  }
+
+  listCoalitionFeedLikes(feedItemId: string): CoalitionFeedLikeRecord[] {
+    return [...this.coalitionFeedLikes.values()].filter((r) => r.feedItemId === feedItemId);
+  }
+
+  /** Idempotent on `(feedItemId, userId)`: re-liking/unliking flips `active`, never duplicates. */
+  upsertCoalitionFeedLike(
+    input: Omit<CoalitionFeedLikeRecord, 'createdAt' | 'updatedAt'>,
+  ): CoalitionFeedLikeRecord {
+    const key = InMemoryDb.feedLikeKey(input.feedItemId, input.userId);
+    const existing = this.coalitionFeedLikes.get(key);
+    const now = nowIso();
+    const record: CoalitionFeedLikeRecord = {
+      ...input,
+      id: existing?.id ?? input.id,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+    this.coalitionFeedLikes.set(key, record);
+    return record;
+  }
+
+  listCoalitionFeedComments(feedItemId: string): CoalitionFeedCommentRecord[] {
+    return [...this.coalitionFeedComments.values()]
+      .filter((r) => r.feedItemId === feedItemId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  createCoalitionFeedComment(
+    input: Omit<CoalitionFeedCommentRecord, 'createdAt'>,
+  ): CoalitionFeedCommentRecord {
+    const record: CoalitionFeedCommentRecord = { ...input, createdAt: nowIso() };
+    this.coalitionFeedComments.set(record.id, record);
+    return record;
+  }
+
   // --- plugin installations (activation-at-scope) ---
 
   createPluginInstallation(
@@ -4051,6 +4103,16 @@ export class FileBackedDb extends InMemoryDb {
     if (parsed.coalitionFeedItems) {
       this.coalitionFeedItems = new Map(parsed.coalitionFeedItems.map((row) => [row.id, row]));
     }
+    if (parsed.coalitionFeedLikes) {
+      this.coalitionFeedLikes = new Map(
+        parsed.coalitionFeedLikes.map((row) => [`${row.feedItemId}::${row.userId}`, row]),
+      );
+    }
+    if (parsed.coalitionFeedComments) {
+      this.coalitionFeedComments = new Map(
+        parsed.coalitionFeedComments.map((row) => [row.id, row]),
+      );
+    }
     if (parsed.coalitionAidPosts) {
       this.coalitionAidPosts = new Map(
         parsed.coalitionAidPosts.map((row) => [row.id, row]),
@@ -4191,6 +4253,8 @@ export class FileBackedDb extends InMemoryDb {
       sellerLocations: [...this.sellerLocations.values()],
       marketplaceSellerProfiles: [...this.marketplaceSellerProfiles.values()],
       coalitionFeedItems: [...this.coalitionFeedItems.values()],
+      coalitionFeedLikes: [...this.coalitionFeedLikes.values()],
+      coalitionFeedComments: [...this.coalitionFeedComments.values()],
       pluginInstallations: [...this.pluginInstallations.values()],
       pluginDens: [...this.pluginDens.values()],
       coalitionKitManifestApplications: [...this.coalitionKitManifestApplications.values()],
@@ -5406,6 +5470,22 @@ export class FileBackedDb extends InMemoryDb {
     input: Omit<CoalitionFeedItemRecord, 'updatedAt'>,
   ): CoalitionFeedItemRecord {
     const created = super.upsertCoalitionFeedItem(input);
+    this.persist();
+    return created;
+  }
+
+  override upsertCoalitionFeedLike(
+    input: Omit<CoalitionFeedLikeRecord, 'createdAt' | 'updatedAt'>,
+  ): CoalitionFeedLikeRecord {
+    const saved = super.upsertCoalitionFeedLike(input);
+    this.persist();
+    return saved;
+  }
+
+  override createCoalitionFeedComment(
+    input: Omit<CoalitionFeedCommentRecord, 'createdAt'>,
+  ): CoalitionFeedCommentRecord {
+    const created = super.createCoalitionFeedComment(input);
     this.persist();
     return created;
   }

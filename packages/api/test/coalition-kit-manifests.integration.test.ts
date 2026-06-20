@@ -101,10 +101,58 @@ test('applyCoalitionKitManifest records den provisioning failures', async () => 
     assert.equal(result.denFailures.length, 2);
 });
 
-test('coalition-kit routes 404 when the flag is off', async () => {
-    const res = await app.request('/v1/coalition-kit-manifests/coa-x', { headers: headers(COORDINATOR_ID) });
-    assert.equal(res.status, 404);
-    assert.equal(((await res.json()) as { code: string }).code, 'feature_disabled');
+test('coalition-kit routes are reachable by default (enabled unless explicitly disabled)', async () => {
+    const res = await app.request('/v1/coalition-kit-manifests/coa-default', {
+        headers: headers(COORDINATOR_ID),
+    });
+    // Default-on: the gate no longer blocks; the list route returns 200.
+    assert.equal(res.status, 200);
+});
+
+test('coalition-kit routes 404 when explicitly disabled (rollback toggle)', async () => {
+    process.env.BLACKOUT_COALITION_KIT_MANIFESTS = 'false';
+    try {
+        const res = await app.request('/v1/coalition-kit-manifests/coa-x', {
+            headers: headers(COORDINATOR_ID),
+        });
+        assert.equal(res.status, 404);
+        assert.equal(((await res.json()) as { code: string }).code, 'feature_disabled');
+    } finally {
+        delete process.env.BLACKOUT_COALITION_KIT_MANIFESTS;
+    }
+});
+
+test('applyCoalitionKitManifest re-apply retries failed dens and updates the row', async () => {
+    const manifest = parseCoalitionKitManifest(rawManifest);
+    // First apply: the second den fails to provision.
+    let calls = 0;
+    const flaky = async (spec: { slug: string }) => {
+        calls += 1;
+        return spec.slug === 'ops'
+            ? { ok: false as const, reason: 'matrix_not_configured' }
+            : { ok: true as const, denId: `!den-${spec.slug}:test` };
+    };
+    const first = await applyCoalitionKitManifest(
+        { coalitionId: 'coa-kit-retry', manifest, appliedByUserId: COORDINATOR_ID },
+        flaky,
+    );
+    assert.equal(first.application.denIds.length, 1);
+    assert.equal(first.denFailures.length, 1);
+
+    // Re-apply with a working provisioner: the outstanding den is provisioned,
+    // the row is updated (not duplicated), and no plugins are re-created.
+    const working = async (spec: { slug: string }) => ({
+        ok: true as const,
+        denId: `!den-${spec.slug}:test`,
+    });
+    const second = await applyCoalitionKitManifest(
+        { coalitionId: 'coa-kit-retry', manifest, appliedByUserId: COORDINATOR_ID },
+        working,
+    );
+    assert.equal(second.alreadyApplied, true);
+    assert.equal(second.denFailures.length, 0);
+    assert.equal(second.application.denIds.length, 2);
+    assert.equal(listCoalitionKitManifestApplications('coa-kit-retry').length, 1);
 });
 
 test('apply route enforces governance for a paid kit', async () => {

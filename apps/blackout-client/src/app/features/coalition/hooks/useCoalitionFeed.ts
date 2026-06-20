@@ -7,13 +7,19 @@ import {
     fetchCoalitionProjects,
     fetchCoalitionResources,
     fetchCoalitionTasks,
+    fetchFeedComments,
+    fetchFeedLikes,
     fetchKits,
     fetchMutualAid,
     fetchMyRingInvites,
     fetchRings,
     fetchSellerLocations,
     fetchSpatialFeed,
+    postFeedComment,
+    setFeedLike,
     type CoalitionFeedResponse,
+    type FeedCommentsResponse,
+    type FeedLikeState,
     type CoalitionScopeQuery,
     type EventsResponse,
     type MutualAidResponse,
@@ -144,4 +150,36 @@ export function useCoalitionKits() {
 
 export function useMyRingInvites() {
     return useAsync(() => fetchMyRingInvites(), []);
+}
+
+/**
+ * Likes + comments for a single feed item, plus imperative mutators that
+ * refetch after a successful write so counts/lists stay live.
+ */
+export function useCoalitionVideoEngagement(feedItemId: string) {
+    const likes = useAsync<FeedLikeState>(() => fetchFeedLikes(feedItemId), [feedItemId]);
+    const comments = useAsync<FeedCommentsResponse>(
+        () => fetchFeedComments(feedItemId),
+        [feedItemId]
+    );
+    const { refetch: refetchLikes } = likes;
+    const { refetch: refetchComments } = comments;
+
+    const toggleLike = useCallback(
+        async (active: boolean) => {
+            await setFeedLike(feedItemId, active);
+            refetchLikes();
+        },
+        [feedItemId, refetchLikes]
+    );
+
+    const addComment = useCallback(
+        async (body: string) => {
+            await postFeedComment(feedItemId, body);
+            refetchComments();
+        },
+        [feedItemId, refetchComments]
+    );
+
+    return { likes, comments, toggleLike, addComment };
 }

@@ -1,6 +1,7 @@
 import type {
     AidPost,
     CoalitionEvent,
+    CoalitionFeedComment,
     CoalitionFeedItem,
     CoalitionKit,
     CoalitionRankingModel,
@@ -115,6 +116,50 @@ export function fetchCoalitionFeed(
         limit: options.limit !== undefined ? String(options.limit) : undefined,
     });
     return getJson<CoalitionFeedResponse>(path, token);
+}
+
+// --- feed engagement (likes + comments, surfaced on video) ---
+
+export interface FeedLikeState {
+    count: number;
+    likedByMe: boolean;
+}
+
+export interface FeedCommentsResponse {
+    comments: CoalitionFeedComment[];
+}
+
+const feedPath = (id: string, suffix: string): string =>
+    `${COALITION_BASE}/feed/${encodeURIComponent(id)}${suffix}`;
+
+export function fetchFeedLikes(
+    id: string,
+    token: string | null = readBlackoutApiToken()
+): Promise<FeedLikeState> {
+    return getJson<FeedLikeState>(feedPath(id, '/likes'), token);
+}
+
+export function setFeedLike(
+    id: string,
+    active: boolean,
+    token: string | null = readBlackoutApiToken()
+): Promise<FeedLikeState> {
+    return postJson<FeedLikeState>(feedPath(id, '/likes'), { active }, token);
+}
+
+export function fetchFeedComments(
+    id: string,
+    token: string | null = readBlackoutApiToken()
+): Promise<FeedCommentsResponse> {
+    return getJson<FeedCommentsResponse>(feedPath(id, '/comments'), token);
+}
+
+export function postFeedComment(
+    id: string,
+    body: string,
+    token: string | null = readBlackoutApiToken()
+): Promise<{ comment: CoalitionFeedComment }> {
+    return postJson<{ comment: CoalitionFeedComment }>(feedPath(id, '/comments'), { body }, token);
 }
 
 export function fetchSpatialFeed(

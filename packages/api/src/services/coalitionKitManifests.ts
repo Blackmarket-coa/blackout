@@ -22,9 +22,12 @@ import type { CoalitionKitManifestApplicationRecord } from '../db/types';
 import { matrixClient } from '../integrations/matrix-client';
 import { installPluginAtScope } from './pluginInstallations';
 
-/** Default-off gate. Flip `BLACKOUT_COALITION_KIT_MANIFESTS=true` to enable. */
+/**
+ * Default-on gate. Coalition kit manifests ship enabled in production; set
+ * `BLACKOUT_COALITION_KIT_MANIFESTS=false` to disable (rollback toggle).
+ */
 export function coalitionKitManifestsEnabled(): boolean {
-    return process.env.BLACKOUT_COALITION_KIT_MANIFESTS === 'true';
+    return process.env.BLACKOUT_COALITION_KIT_MANIFESTS !== 'false';
 }
 
 export type KitDenProvisionResult =
@@ -93,7 +96,27 @@ export async function applyCoalitionKitManifest(
 
     const existing = db.findCoalitionKitManifestApplication(coalitionId, manifest.kitId);
     if (existing) {
-        return { application: toModel(existing), alreadyApplied: true, denFailures: [] };
+        // Re-apply: adopt the latest manifest customization snapshot and re-attempt
+        // any dens not yet provisioned. We never re-install plugins or re-create
+        // dens that already exist. Dens are provisioned in manifest order, so the
+        // outstanding specs are those beyond the count already recorded.
+        const pending = manifest.dens.slice(existing.denIds.length);
+        const denIds = [...existing.denIds];
+        const denFailures: Array<{ slug: string; reason: string }> = [];
+        for (const spec of pending) {
+            const result = await provisioner(spec);
+            if (result.ok) denIds.push(result.denId);
+            else denFailures.push({ slug: spec.slug, reason: result.reason });
+        }
+        const updated = db.updateCoalitionKitManifestApplication(existing.id, {
+            appliedByUserId,
+            archetype: manifest.archetype,
+            customization: { ...manifest.customization },
+            denIds,
+            bundledPluginIds: [...manifest.bundledPluginIds],
+            status: 'applied',
+        });
+        return { application: toModel(updated ?? existing), alreadyApplied: true, denFailures };
     }
 
     // Install bundled plugins at coalition scope (lands as `available` — per-den
