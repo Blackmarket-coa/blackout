@@ -190,9 +190,13 @@ describe('CreatorListings', () => {
         const title = container.querySelector<HTMLInputElement>(
             '[data-testid="creator-listing-composer-title"]'
         );
+        const description = container.querySelector<HTMLTextAreaElement>(
+            '[data-testid="creator-listing-composer-description"]'
+        );
         expect(title).not.toBeNull();
         await act(async () => {
             setInputValue(title!, 'Overlay pack');
+            setInputValue(description!, 'A neon overlay set');
             await flush();
         });
 
@@ -212,9 +216,51 @@ describe('CreatorListings', () => {
             category: 'creator-asset',
             entitlementKind: 'stream_asset',
             title: 'Overlay pack',
+            description: 'A neon overlay set',
         });
         // A clean empty payload — never the `{ placeholder: true }` sentinel.
         expect(body.artifactPayload).toEqual({});
+    });
+
+    it('keeps submit disabled until both title and description are provided', async () => {
+        fetchCreatorProvidersMock.mockResolvedValue({
+            providers: [
+                {
+                    id: 'freeblackmarket',
+                    displayName: 'FreeBlackMarket',
+                    capabilities: ['creator-write'],
+                },
+            ],
+        });
+        fetchMyCreatorListingsMock.mockResolvedValue({ listings: [] });
+
+        const container = await mountPage();
+        await act(async () => {
+            openComposer(container);
+            await flush();
+        });
+        const submit = () =>
+            container.querySelector<HTMLButtonElement>(
+                '[data-testid="creator-listing-composer-submit"]'
+            );
+        // Title only — still disabled (the server requires a description).
+        const title = container.querySelector<HTMLInputElement>(
+            '[data-testid="creator-listing-composer-title"]'
+        );
+        await act(async () => {
+            setInputValue(title!, 'Overlay pack');
+            await flush();
+        });
+        expect(submit()?.disabled).toBe(true);
+        // Add a description — now enabled.
+        const description = container.querySelector<HTMLTextAreaElement>(
+            '[data-testid="creator-listing-composer-description"]'
+        );
+        await act(async () => {
+            setInputValue(description!, 'A neon overlay set');
+            await flush();
+        });
+        expect(submit()?.disabled).toBe(false);
     });
 
     it('surfaces a create failure in the error banner', async () => {
@@ -238,8 +284,12 @@ describe('CreatorListings', () => {
         const title = container.querySelector<HTMLInputElement>(
             '[data-testid="creator-listing-composer-title"]'
         );
+        const description = container.querySelector<HTMLTextAreaElement>(
+            '[data-testid="creator-listing-composer-description"]'
+        );
         await act(async () => {
             setInputValue(title!, 'Bad listing');
+            setInputValue(description!, 'desc');
             await flush();
         });
         const submit = container.querySelector<HTMLButtonElement>(

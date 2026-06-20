@@ -210,7 +210,9 @@ export const CreatorListings = (): JSX.Element => {
     }, [refresh]);
 
     const handleCreate = async () => {
-        if (!draft.title.trim() || !draft.providerId) return;
+        // The server requires a non-empty title and description
+        // (creator.ts draftSchema: title/description z.string().min(1)).
+        if (!draft.title.trim() || !draft.description.trim() || !draft.providerId) return;
         setCreating(true);
         setError(null);
         try {
@@ -357,6 +359,7 @@ export const CreatorListings = (): JSX.Element => {
                                 onChange={(e) =>
                                     setDraft((prev) => ({ ...prev, description: e.target.value }))
                                 }
+                                data-testid="creator-listing-composer-description"
                             />
                         </label>
                         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -434,7 +437,12 @@ export const CreatorListings = (): JSX.Element => {
                         <button
                             type="submit"
                             style={accentButton}
-                            disabled={creating || !draft.title.trim() || !draft.providerId}
+                            disabled={
+                                creating ||
+                                !draft.title.trim() ||
+                                !draft.description.trim() ||
+                                !draft.providerId
+                            }
                             data-testid="creator-listing-composer-submit"
                         >
                             {creating ? 'Creating…' : 'Create listing'}
