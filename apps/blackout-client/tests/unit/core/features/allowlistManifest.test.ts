@@ -31,6 +31,7 @@ describe('feature allowlist manifest', () => {
             'profile',
             'home',
             'communities',
+            'canopy',
             'plugins',
             'shell-destinations',
             'topics',

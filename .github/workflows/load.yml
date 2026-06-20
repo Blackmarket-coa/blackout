@@ -104,6 +104,11 @@ jobs:
           BASE_URL: ${{ github.event.inputs.base_url || 'http://localhost:3000' }}
         run: k6 run --summary-export=rate-limit-summary.json load/k6/rate-limit.js
 
+      - name: k6 — coalition feed engagement
+        env:
+          BASE_URL: ${{ github.event.inputs.base_url || 'http://localhost:3000' }}
+        run: k6 run --summary-export=coalition-feed-summary.json load/k6/coalition-feed.js
+
       - name: Upload k6 summaries
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6

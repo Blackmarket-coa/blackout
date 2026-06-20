@@ -38,6 +38,34 @@ export function newFeedItemId(): string {
     return `feed_${Math.random().toString(36).slice(2, 10)}_${Date.now().toString(36)}`;
 }
 
+export function getFeedItem(id: string) {
+    return db.getCoalitionFeedItem(id);
+}
+
+export function listFeedLikes(feedItemId: string) {
+    return db.listCoalitionFeedLikes(feedItemId);
+}
+
+export function saveFeedLike(input: Parameters<typeof db.upsertCoalitionFeedLike>[0]) {
+    return db.upsertCoalitionFeedLike(input);
+}
+
+export function listFeedComments(feedItemId: string) {
+    return db.listCoalitionFeedComments(feedItemId);
+}
+
+export function createFeedComment(input: Parameters<typeof db.createCoalitionFeedComment>[0]) {
+    return db.createCoalitionFeedComment(input);
+}
+
+export function newFeedLikeId(): string {
+    return `flike_${Math.random().toString(36).slice(2, 10)}_${Date.now().toString(36)}`;
+}
+
+export function newFeedCommentId(): string {
+    return `fcmt_${Math.random().toString(36).slice(2, 10)}_${Date.now().toString(36)}`;
+}
+
 export interface SpatialFilter {
     layers?: string[];
     canopyId?: string;

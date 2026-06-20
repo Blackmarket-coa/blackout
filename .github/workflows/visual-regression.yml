@@ -69,7 +69,7 @@ jobs:
           name: visual-regression-report
           path: |
             apps/blackout-client/playwright-report
-            apps/blackout-client/tests/e2e/__screenshots__
+            __screenshots__
           if-no-files-found: ignore
 
   update-baselines:
@@ -125,7 +125,7 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add apps/blackout-client/tests/e2e/__screenshots__
+          git add __screenshots__
           if git diff --cached --quiet; then
             echo "No baseline changes to commit."
             exit 0

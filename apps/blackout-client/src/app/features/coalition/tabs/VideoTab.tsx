@@ -1,5 +1,10 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { useCoalitionFeed, type CoalitionScopeQuery } from '../hooks/useCoalitionFeed';
+import type { CoalitionFeedItem } from '@blackout/core';
+import {
+    useCoalitionFeed,
+    useCoalitionVideoEngagement,
+    type CoalitionScopeQuery,
+} from '../hooks/useCoalitionFeed';
 import { buildCommunitiesPath } from '../../../pages/paths';
 
 export interface VideoTabProps {
@@ -9,13 +14,7 @@ export interface VideoTabProps {
 export function VideoTab({ scope }: VideoTabProps) {
     const { data, loading, error } = useCoalitionFeed(scope, { kind: 'video', limit: 20 });
     const items = useMemo(() => data?.items ?? [], [data]);
-    const [liked, setLiked] = useState<Record<string, boolean>>({});
-    const [commenting, setCommenting] = useState<string | null>(null);
     const [shareStatus, setShareStatus] = useState<string | null>(null);
-
-    const toggleLike = useCallback((id: string) => {
-        setLiked((prev) => ({ ...prev, [id]: !prev[id] }));
-    }, []);
 
     const onShare = useCallback(async (id: string, title: string) => {
         const url = `${window.location.origin}/coalition/video/${encodeURIComponent(id)}`;
@@ -79,147 +78,227 @@ export function VideoTab({ scope }: VideoTabProps) {
                     {shareStatus}
                 </div>
             ) : null}
-            {items.map((item) => {
-                const isLiked = !!liked[item.id];
-                const isCommenting = commenting === item.id;
-                return (
-                    <article
-                        key={item.id}
-                        style={{
-                            scrollSnapAlign: 'start',
-                            height: '100%',
-                            minHeight: 360,
-                            position: 'relative',
-                            display: 'flex',
-                            alignItems: 'flex-end',
-                            justifyContent: 'center',
-                            background: '#0a0a0a',
-                            color: '#fff',
-                        }}
+            {items.map((item) => (
+                <VideoReelItem key={item.id} item={item} onShare={onShare} />
+            ))}
+        </div>
+    );
+}
+
+interface VideoReelItemProps {
+    item: CoalitionFeedItem;
+    onShare: (id: string, title: string) => void | Promise<void>;
+}
+
+/**
+ * A single reel item. Each item owns its like/comment state via the engagement
+ * hook — extracted into its own component so the hook is called once per item
+ * rather than inside a `.map()` (rules-of-hooks).
+ */
+function VideoReelItem({ item, onShare }: VideoReelItemProps) {
+    const { likes, comments, toggleLike, addComment } = useCoalitionVideoEngagement(item.id);
+    const [isCommenting, setIsCommenting] = useState(false);
+    const [draft, setDraft] = useState('');
+    const [submitting, setSubmitting] = useState(false);
+
+    const likedByMe = likes.data?.likedByMe ?? false;
+    const likeCount = likes.data?.count ?? 0;
+    const commentList = comments.data?.comments ?? [];
+
+    const onToggleLike = useCallback(() => {
+        void toggleLike(!likedByMe);
+    }, [toggleLike, likedByMe]);
+
+    const onSubmitComment = useCallback(async () => {
+        const body = draft.trim();
+        if (!body || submitting) return;
+        setSubmitting(true);
+        try {
+            await addComment(body);
+            setDraft('');
+        } finally {
+            setSubmitting(false);
+        }
+    }, [draft, submitting, addComment]);
+
+    return (
+        <article
+            style={{
+                scrollSnapAlign: 'start',
+                height: '100%',
+                minHeight: 360,
+                position: 'relative',
+                display: 'flex',
+                alignItems: 'flex-end',
+                justifyContent: 'center',
+                background: '#0a0a0a',
+                color: '#fff',
+            }}
+        >
+            {item.mediaUrl ? (
+                <video
+                    src={item.mediaUrl}
+                    playsInline
+                    muted
+                    loop
+                    style={{
+                        position: 'absolute',
+                        inset: 0,
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'cover',
+                    }}
+                />
+            ) : (
+                <div
+                    style={{
+                        position: 'absolute',
+                        inset: 0,
+                        background: 'linear-gradient(180deg, #1ABC9C 0%, #0d1f14 100%)',
+                    }}
+                />
+            )}
+            <div
+                style={{
+                    position: 'relative',
+                    padding: '24px 16px',
+                    width: '100%',
+                    background: 'linear-gradient(0deg, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0) 100%)',
+                }}
+            >
+                <div style={{ fontSize: 14, opacity: 0.8 }}>{item.authorId ?? 'Coalition'}</div>
+                <div style={{ fontSize: 18, fontWeight: 600, marginTop: 4 }}>{item.title}</div>
+                {item.body ? (
+                    <div style={{ fontSize: 14, marginTop: 4, opacity: 0.9 }}>{item.body}</div>
+                ) : null}
+                <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                    <button
+                        type="button"
+                        onClick={onToggleLike}
+                        aria-pressed={likedByMe}
+                        aria-label={likedByMe ? 'Unlike' : 'Like'}
+                        data-testid={`coalition-video-like-${item.id}`}
+                        style={reelButtonStyle(likedByMe)}
                     >
-                        {item.mediaUrl ? (
-                            <video
-                                src={item.mediaUrl}
-                                playsInline
-                                muted
-                                loop
-                                style={{
-                                    position: 'absolute',
-                                    inset: 0,
-                                    width: '100%',
-                                    height: '100%',
-                                    objectFit: 'cover',
-                                }}
-                            />
-                        ) : (
-                            <div
-                                style={{
-                                    position: 'absolute',
-                                    inset: 0,
-                                    background:
-                                        'linear-gradient(180deg, #1ABC9C 0%, #0d1f14 100%)',
-                                }}
-                            />
-                        )}
-                        <div
+                        {likedByMe ? '♥' : '♡'} {likeCount > 0 ? likeCount : 'Like'}
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setIsCommenting((prev) => !prev)}
+                        aria-expanded={isCommenting}
+                        aria-label="Comment"
+                        data-testid={`coalition-video-comment-${item.id}`}
+                        style={reelButtonStyle(isCommenting)}
+                    >
+                        💬 {commentList.length > 0 ? commentList.length : 'Comment'}
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => void onShare(item.id, item.title)}
+                        aria-label="Share"
+                        data-testid={`coalition-video-share-${item.id}`}
+                        style={reelButtonStyle(false)}
+                    >
+                        ↗ Share
+                    </button>
+                    {item.denId ? (
+                        <a
+                            href={buildCommunitiesPath(null, item.denId)}
                             style={{
-                                position: 'relative',
-                                padding: '24px 16px',
-                                width: '100%',
-                                background:
-                                    'linear-gradient(0deg, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0) 100%)',
+                                ...reelButtonStyle(false),
+                                textDecoration: 'none',
+                                display: 'inline-flex',
+                                alignItems: 'center',
                             }}
                         >
-                            <div style={{ fontSize: 14, opacity: 0.8 }}>
-                                {item.authorId ?? 'Coalition'}
-                            </div>
-                            <div style={{ fontSize: 18, fontWeight: 600, marginTop: 4 }}>
-                                {item.title}
-                            </div>
-                            {item.body ? (
-                                <div style={{ fontSize: 14, marginTop: 4, opacity: 0.9 }}>
-                                    {item.body}
-                                </div>
-                            ) : null}
-                            <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-                                <button
-                                    type="button"
-                                    onClick={() => toggleLike(item.id)}
-                                    aria-pressed={isLiked}
-                                    aria-label={isLiked ? 'Unlike' : 'Like'}
-                                    data-testid={`coalition-video-like-${item.id}`}
-                                    style={reelButtonStyle(isLiked)}
-                                >
-                                    {isLiked ? '♥ Liked' : '♡ Like'}
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() =>
-                                        setCommenting((prev) => (prev === item.id ? null : item.id))
-                                    }
-                                    aria-expanded={isCommenting}
-                                    aria-label="Comment"
-                                    data-testid={`coalition-video-comment-${item.id}`}
-                                    style={reelButtonStyle(isCommenting)}
-                                >
-                                    💬 Comment
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => void onShare(item.id, item.title)}
-                                    aria-label="Share"
-                                    data-testid={`coalition-video-share-${item.id}`}
-                                    style={reelButtonStyle(false)}
-                                >
-                                    ↗ Share
-                                </button>
-                                {item.denId ? (
-                                    <a
-                                        href={buildCommunitiesPath(null, item.denId)}
-                                        style={{
-                                            ...reelButtonStyle(false),
-                                            textDecoration: 'none',
-                                            display: 'inline-flex',
-                                            alignItems: 'center',
-                                        }}
-                                    >
-                                        Open den →
-                                    </a>
-                                ) : null}
-                            </div>
-                            {isCommenting ? (
-                                <div
+                            Open den →
+                        </a>
+                    ) : null}
+                </div>
+                {isCommenting ? (
+                    <div
+                        style={{
+                            marginTop: 10,
+                            background: 'rgba(0,0,0,0.45)',
+                            border: '1px solid rgba(255,255,255,0.15)',
+                            borderRadius: 10,
+                            padding: 8,
+                        }}
+                    >
+                        <div style={{ display: 'flex', gap: 8 }}>
+                            <textarea
+                                value={draft}
+                                onChange={(e) => setDraft(e.target.value)}
+                                placeholder="Add a comment…"
+                                rows={2}
+                                data-testid={`coalition-video-comment-input-${item.id}`}
+                                style={{
+                                    flex: 1,
+                                    resize: 'vertical',
+                                    borderRadius: 8,
+                                    border: '1px solid rgba(255,255,255,0.2)',
+                                    background: 'rgba(0,0,0,0.4)',
+                                    color: '#fff',
+                                    padding: 8,
+                                    fontSize: 13,
+                                }}
+                            />
+                            <button
+                                type="button"
+                                onClick={() => void onSubmitComment()}
+                                disabled={submitting || draft.trim().length === 0}
+                                data-testid={`coalition-video-comment-submit-${item.id}`}
+                                style={{
+                                    ...reelButtonStyle(false),
+                                    alignSelf: 'flex-start',
+                                    opacity: submitting || draft.trim().length === 0 ? 0.5 : 1,
+                                }}
+                            >
+                                Post
+                            </button>
+                        </div>
+                        {comments.error ? (
+                            <p style={{ margin: '8px 0 0', fontSize: 12, color: 'var(--danger)' }}>
+                                Couldn't load comments: {comments.error}
+                            </p>
+                        ) : null}
+                        <ul
+                            data-testid={`coalition-video-comment-list-${item.id}`}
+                            style={{ listStyle: 'none', margin: '8px 0 0', padding: 0 }}
+                        >
+                            {commentList.map((comment) => (
+                                <li
+                                    key={comment.id}
                                     style={{
-                                        marginTop: 10,
-                                        background: 'rgba(0,0,0,0.45)',
-                                        border: '1px solid rgba(255,255,255,0.15)',
-                                        borderRadius: 10,
-                                        padding: 8,
+                                        padding: '6px 0',
+                                        borderTop: '1px solid rgba(255,255,255,0.08)',
+                                        fontSize: 13,
                                     }}
                                 >
-                                    {item.denId ? (
-                                        <p style={{ margin: 0, fontSize: 12, opacity: 0.85 }}>
-                                            Comments live in the linked den.{' '}
-                                            <a
-                                                href={buildCommunitiesPath(null, item.denId)}
-                                                style={{ color: '#1ABC9C' }}
-                                            >
-                                                Open conversation →
-                                            </a>
-                                        </p>
-                                    ) : (
-                                        <p style={{ margin: 0, fontSize: 12, opacity: 0.85 }}>
-                                            This video isn't linked to a den yet, so comments
-                                            aren't available.
-                                        </p>
-                                    )}
-                                </div>
+                                    <span style={{ opacity: 0.7 }}>{comment.authorId}</span>{' '}
+                                    {comment.body}
+                                </li>
+                            ))}
+                            {commentList.length === 0 && !comments.loading ? (
+                                <li style={{ padding: '6px 0', fontSize: 12, opacity: 0.7 }}>
+                                    No comments yet — start the conversation.
+                                </li>
                             ) : null}
-                        </div>
-                    </article>
-                );
-            })}
-        </div>
+                        </ul>
+                        {item.denId ? (
+                            <p style={{ margin: '8px 0 0', fontSize: 12, opacity: 0.7 }}>
+                                <a
+                                    href={buildCommunitiesPath(null, item.denId)}
+                                    style={{ color: '#1ABC9C' }}
+                                >
+                                    Continue in the den →
+                                </a>
+                            </p>
+                        ) : null}
+                    </div>
+                ) : null}
+            </div>
+        </article>
     );
 }
 

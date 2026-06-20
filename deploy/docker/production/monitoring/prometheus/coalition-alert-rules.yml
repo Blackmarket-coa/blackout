@@ -1,0 +1,74 @@
+groups:
+  # Coalition feature SLOs, driven by the api's generic HTTP RED metrics
+  # (http_requests_total / http_request_duration_seconds), labelled by the
+  # matched route pattern. Covers the feed engagement surface (likes/comments)
+  # and the kit-manifests apply path enabled by default.
+  - name: coalition-availability
+    interval: 30s
+    rules:
+      - alert: CoalitionApiErrorRateHigh
+        expr: |
+          sum by (route) (rate(http_requests_total{service="blackout-api",route=~"/v1/coalition.*",status=~"5.."}[5m]))
+            /
+          sum by (route) (rate(http_requests_total{service="blackout-api",route=~"/v1/coalition.*"}[5m]))
+            > 0.05
+        for: 10m
+        labels:
+          severity: warning
+          team: platform
+          service: coalition
+        annotations:
+          summary: "Coalition route 5xx rate above SLO"
+          description: "5xx responses exceed 5% of traffic on {{ $labels.route }} over 10m; check api logs and the store/Matrix dependencies."
+
+      - alert: CoalitionApiErrorRateCritical
+        expr: |
+          sum by (route) (rate(http_requests_total{service="blackout-api",route=~"/v1/coalition.*",status=~"5.."}[5m]))
+            /
+          sum by (route) (rate(http_requests_total{service="blackout-api",route=~"/v1/coalition.*"}[5m]))
+            > 0.2
+        for: 5m
+        labels:
+          severity: critical
+          team: platform
+          service: coalition
+        annotations:
+          summary: "Coalition route 5xx rate critical"
+          description: "5xx responses exceed 20% of traffic on {{ $labels.route }} over 5m; user impact is likely active."
+
+  - name: coalition-latency
+    interval: 30s
+    rules:
+      # Feed engagement (likes/comments) should stay snappy; the reel reads
+      # these inline. p95 over the write+read routes.
+      - alert: CoalitionFeedEngagementLatencyHigh
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le, route) (rate(http_request_duration_seconds_bucket{service="blackout-api",route=~"/v1/coalition/feed/:id/(likes|comments)"}[5m]))
+          ) > 0.8
+        for: 10m
+        labels:
+          severity: warning
+          team: platform
+          service: coalition
+        annotations:
+          summary: "Coalition feed engagement p95 latency above SLO"
+          description: "p95 latency on {{ $labels.route }} is above 800ms for 10m; check DB write-through queue and Postgres health."
+
+  - name: coalition-kit-manifests
+    interval: 30s
+    rules:
+      # The kit-manifests apply path is now enabled by default. A sustained
+      # spike in apply errors (5xx) suggests provisioning/plugin-install issues.
+      - alert: CoalitionKitManifestApplyErrors
+        expr: |
+          sum (rate(http_requests_total{service="blackout-api",route=~"/v1/coalition-kit-manifests/.*",status=~"5.."}[10m])) > 0.05
+        for: 10m
+        labels:
+          severity: warning
+          team: platform
+          service: coalition
+        annotations:
+          summary: "Coalition kit-manifest apply errors elevated"
+          description: "5xx rate on the kit-manifest routes exceeds 0.05/sec over 10m; check den provisioning (Matrix) and plugin installation."

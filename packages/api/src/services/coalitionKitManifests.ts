@@ -22,9 +22,12 @@ import type { CoalitionKitManifestApplicationRecord } from '../db/types';
 import { matrixClient } from '../integrations/matrix-client';
 import { installPluginAtScope } from './pluginInstallations';
 
-/** Default-off gate. Flip `BLACKOUT_COALITION_KIT_MANIFESTS=true` to enable. */
+/**
+ * Default-on gate. Coalition kit manifests ship enabled in production; set
+ * `BLACKOUT_COALITION_KIT_MANIFESTS=false` to disable (rollback toggle).
+ */
 export function coalitionKitManifestsEnabled(): boolean {
-    return process.env.BLACKOUT_COALITION_KIT_MANIFESTS === 'true';
+    return process.env.BLACKOUT_COALITION_KIT_MANIFESTS !== 'false';
 }
 
 export type KitDenProvisionResult =
@@ -93,7 +96,20 @@ export async function applyCoalitionKitManifest(
 
     const existing = db.findCoalitionKitManifestApplication(coalitionId, manifest.kitId);
     if (existing) {
-        return { application: toModel(existing), alreadyApplied: true, denFailures: [] };
+        // Re-apply adopts the latest manifest snapshot (customization/theme/feature
+        // flags + bundled plugin list) and refreshes updatedAt. It deliberately does
+        // not re-install plugins or touch dens: the application row only records
+        // provisioned room ids, not a slug→room map, so we cannot tell which specs
+        // failed earlier — retrying by position would re-create or duplicate the
+        // wrong dens. Provisioning gaps are surfaced via denFailures on first apply.
+        const updated = db.updateCoalitionKitManifestApplication(existing.id, {
+            appliedByUserId,
+            archetype: manifest.archetype,
+            customization: { ...manifest.customization },
+            bundledPluginIds: [...manifest.bundledPluginIds],
+            status: 'applied',
+        });
+        return { application: toModel(updated ?? existing), alreadyApplied: true, denFailures: [] };
     }
 
     // Install bundled plugins at coalition scope (lands as `available` — per-den

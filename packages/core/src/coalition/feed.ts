@@ -56,6 +56,23 @@ export interface CoalitionFeedItem {
     tags?: string[];
 }
 
+/** A viewer's like on a feed item. `active` toggles off on unlike (rows are never deleted). */
+export interface CoalitionFeedLike {
+    id: string;
+    feedItemId: string;
+    userId: string;
+    active: boolean;
+}
+
+/** A flat (non-threaded) comment on a feed item. Listed newest-first. */
+export interface CoalitionFeedComment {
+    id: string;
+    feedItemId: string;
+    authorId: string;
+    body: string;
+    createdAt: string;
+}
+
 export type CoalitionRankingModel =
     | 'coalition_social_v1'
     | 'recency_only'

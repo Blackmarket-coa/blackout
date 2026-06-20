@@ -70,6 +70,10 @@ const OVERRIDES: Record<string, DescriptorOverride> = {
     keyOf: (r) => `${r.slotId}::${r.userId}`,
     conflictColumns: ['slot_id', 'user_id'],
   },
+  coalitionFeedLikes: {
+    keyOf: (r) => `${r.feedItemId}::${r.userId}`,
+    conflictColumns: ['feed_item_id', 'user_id'],
+  },
   eventRideClaims: {
     keyOf: (r) => `${r.offerId}::${r.riderId}`,
     conflictColumns: ['offer_id', 'rider_id'],
@@ -356,6 +360,8 @@ const ALL_MAP_NAMES = [
   'sellerLocations',
   'marketplaceSellerProfiles',
   'coalitionFeedItems',
+  'coalitionFeedLikes',
+  'coalitionFeedComments',
   'canopyDirectoryEntries',
   'clips',
   'coliseumTopics',
@@ -578,6 +584,8 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
   addProductVersion: upsert('productVersions'),
   upsertSellerLocation: upsert('sellerLocations'),
   upsertCoalitionFeedItem: upsert('coalitionFeedItems'),
+  upsertCoalitionFeedLike: upsert('coalitionFeedLikes'),
+  createCoalitionFeedComment: upsert('coalitionFeedComments'),
   upsertCanopyDirectoryEntry: upsert('canopyDirectoryEntries'),
   upsertClip: upsert('clips'),
   updateClip: upsert('clips'),

@@ -4,7 +4,9 @@ import type {
   BountyApplication,
   BountyRewardType,
   CoalitionEvent,
+  CoalitionFeedComment,
   CoalitionFeedItem,
+  CoalitionFeedLike,
   CoalitionNeed,
   CoalitionProject,
   CoalitionResource,
@@ -1510,6 +1512,15 @@ export interface SellerProfileRecord {
 export interface CoalitionFeedItemRecord extends CoalitionFeedItem {
   updatedAt: string;
 }
+
+/** A like on a feed item. Keyed in-memory by `${feedItemId}::${userId}`. */
+export interface CoalitionFeedLikeRecord extends CoalitionFeedLike {
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** A flat comment on a feed item. `CoalitionFeedComment` already carries `createdAt`. */
+export type CoalitionFeedCommentRecord = CoalitionFeedComment;
 
 /**
  * Coliseum debate records. These persist the discourse layer (topics,
