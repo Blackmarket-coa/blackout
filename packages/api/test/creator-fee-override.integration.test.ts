@@ -38,16 +38,18 @@ test('resolveListingFeeBps only applies the override when allowed', () => {
 });
 
 test('commissionForListing gates the override behind the flag', () => {
-    process.env.BLACKOUT_CREATOR_FEE_OVERRIDE = '';
-    const off = commissionForListing(1_000, 'freeblackmarket', 500);
-    assert.equal(off.feeBps, 300, 'flag off → provider base rate');
+    // Default-on: unset env honors the per-listing override.
+    delete process.env.BLACKOUT_CREATOR_FEE_OVERRIDE;
+    const on = commissionForListing(1_000, 'freeblackmarket', 500);
+    assert.equal(on.feeBps, 500, 'default on → per-listing override');
 
-    process.env.BLACKOUT_CREATOR_FEE_OVERRIDE = 'true';
+    // Explicit opt-out falls back to the provider base rate.
+    process.env.BLACKOUT_CREATOR_FEE_OVERRIDE = 'false';
     try {
-        const on = commissionForListing(1_000, 'freeblackmarket', 500);
-        assert.equal(on.feeBps, 500, 'flag on → per-listing override');
+        const off = commissionForListing(1_000, 'freeblackmarket', 500);
+        assert.equal(off.feeBps, 300, 'flag off → provider base rate');
     } finally {
-        process.env.BLACKOUT_CREATOR_FEE_OVERRIDE = '';
+        delete process.env.BLACKOUT_CREATOR_FEE_OVERRIDE;
     }
 });
 

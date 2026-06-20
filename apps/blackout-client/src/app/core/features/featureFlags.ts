@@ -333,8 +333,13 @@ export const defaultFeatureFlags: FeatureFlags = {
     deadman: true,
     steganography: true,
     moderation: false,
-    monetization: false,
-    monetizationSubscriptions: false,
+    // Creator Hub production readiness: creator subscription tiers ship on by
+    // default. The master `monetization` flag is required for the subscriptions
+    // slice to resolve (per validateMonetizationSkuDependencies); the remaining
+    // monetization slices stay off. Surfaces still require the `billing.read`
+    // entitlement capability, and `BLACKOUT_MONETIZATION*` overrides per env.
+    monetization: true,
+    monetizationSubscriptions: true,
     monetizationBoosts: false,
     monetizationMarketplace: false,
     monetizationApps: false,
@@ -376,30 +381,37 @@ export const defaultFeatureFlags: FeatureFlags = {
     topics: false,
     homeFeedSegments: false,
     homeStreak: false,
-    homeBountyBoard: false,
+    // Creator Hub production readiness: the bounty board sections are built and
+    // wired into the hub overview/rewards tabs. `BLACKOUT_HOME_BOUNTY_BOARD`
+    // overrides per environment.
+    homeBountyBoard: true,
     seriesTag: false,
     marketTab: true,
     productsAttachments: false,
     productsAttachComposer: false,
-    creatorsListings: false,
+    // Creator Hub production readiness: the listings/storefront/dashboard
+    // surfaces, growth ledgers, bounty board, and the creator-onboarding wizard
+    // are built and wired into the hub, so they ship on by default. Each retains
+    // its `BLACKOUT_*` env override for per-environment rollback.
+    creatorsListings: true,
     streamsViewer: false,
-    creatorsStorefront: false,
-    growthReferrals: false,
-    growthAmbassadors: false,
-    growthQuests: false,
-    growthQuestsUi: false,
+    creatorsStorefront: true,
+    growthReferrals: true,
+    growthAmbassadors: true,
+    growthQuests: true,
+    growthQuestsUi: true,
     eventsV1: false,
-    onboardingCreatorPath: false,
-    onboardingMigrationCredits: false,
-    onboardingCreatorPlatformLinking: false,
-    onboardingCreatorRewards: false,
-    onboardingCreatorKits: false,
+    onboardingCreatorPath: true,
+    onboardingMigrationCredits: true,
+    onboardingCreatorPlatformLinking: true,
+    onboardingCreatorRewards: true,
+    onboardingCreatorKits: true,
     onboardingDeveloperStep: false,
     onboardingInterestPicker: false,
     // On by default: new (incl. invited) users get the Home tour. Env
     // `BLACKOUT_ONBOARDING_HOME_TOUR=false` can still disable it.
     onboardingHomeTour: true,
-    creatorsDashboard: false,
+    creatorsDashboard: true,
     federationSelfHost: false,
     bugReportWidget: true,
     creatorContent: true,

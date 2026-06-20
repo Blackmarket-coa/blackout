@@ -58,6 +58,9 @@ const CreatorHubCreatorDrivenSales = lazy(() =>
 const CreatorHubContent = lazy(() =>
     import('./sections/CreatorHubContent').then((mod) => ({ default: mod.CreatorHubContent }))
 );
+const CreatorHubListings = lazy(() =>
+    import('./sections/CreatorHubListings').then((mod) => ({ default: mod.CreatorHubListings }))
+);
 
 const contentStyle: CSSProperties = { minHeight: 0, overflow: 'auto' };
 
@@ -76,11 +79,21 @@ export interface StreamingViewProps {
 export function StreamingView({ initialTab }: StreamingViewProps) {
     const [storedTab, setTab] = useAtom(streamingTabAtom);
 
+    // The Listings tab is gated by the `creatorsListings` flag; filter it out of
+    // the strip (and treat it as invalid) when the flag is off.
+    const visibleTabs = useMemo<StreamingTabId[]>(
+        () =>
+            STREAMING_TAB_ORDER.filter(
+                (tab) => tab !== 'listings' || runtimeFeatureFlags.creatorsListings
+            ),
+        []
+    );
+
     const activeTab = useMemo<StreamingTabId>(() => {
-        if (initialTab && isValidStreamingTab(initialTab)) return initialTab;
-        if (isValidStreamingTab(storedTab)) return storedTab;
-        return STREAMING_TAB_ORDER[0];
-    }, [initialTab, storedTab]);
+        if (initialTab && visibleTabs.includes(initialTab)) return initialTab;
+        if (isValidStreamingTab(storedTab) && visibleTabs.includes(storedTab)) return storedTab;
+        return visibleTabs[0];
+    }, [initialTab, storedTab, visibleTabs]);
 
     const handleSelect = useCallback(
         (tab: StreamingTabId) => {
@@ -94,7 +107,11 @@ export function StreamingView({ initialTab }: StreamingViewProps) {
             style={{ display: 'grid', gridTemplateRows: 'auto 1fr', height: '100%', minHeight: 0 }}
             data-testid="streaming-view"
         >
-            <StreamingTabStrip activeTab={activeTab} onSelectTab={handleSelect} />
+            <StreamingTabStrip
+                activeTab={activeTab}
+                onSelectTab={handleSelect}
+                tabs={visibleTabs}
+            />
             <div style={contentStyle}>
                 {activeTab === 'overview' ? (
                     <div data-testid="streaming-tab-overview">
@@ -137,6 +154,13 @@ export function StreamingView({ initialTab }: StreamingViewProps) {
                     <div data-testid="streaming-tab-kits">
                         <Suspense fallback={null}>
                             <CreatorKits />
+                        </Suspense>
+                    </div>
+                ) : null}
+                {activeTab === 'listings' ? (
+                    <div data-testid="streaming-tab-listings">
+                        <Suspense fallback={null}>
+                            <CreatorHubListings />
                         </Suspense>
                     </div>
                 ) : null}

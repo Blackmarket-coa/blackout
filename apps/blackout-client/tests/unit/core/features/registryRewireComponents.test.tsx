@@ -187,6 +187,10 @@ describe('RegistryRouteList + buildRegistryRouteObjects', () => {
                 streaming: false,
                 marketTab: false,
                 migrationHub: false,
+                creatorsListings: false,
+                creatorsStorefront: false,
+                creatorsDashboard: false,
+                onboardingCreatorPath: false,
             },
         });
         expect(objects).toEqual([]);

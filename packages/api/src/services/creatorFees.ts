@@ -14,9 +14,12 @@ import {
     type PlatformCommissionSplit,
 } from '@blackout/core';
 
-/** Default-off gate. Flip `BLACKOUT_CREATOR_FEE_OVERRIDE=true` to enable. */
+/**
+ * Default-on gate. Per-listing commission overrides are honored unless
+ * explicitly disabled with `BLACKOUT_CREATOR_FEE_OVERRIDE=false`.
+ */
 export function creatorFeeOverrideEnabled(): boolean {
-    return process.env.BLACKOUT_CREATOR_FEE_OVERRIDE === 'true';
+    return process.env.BLACKOUT_CREATOR_FEE_OVERRIDE !== 'false';
 }
 
 export function commissionForListing(

@@ -59,6 +59,9 @@ vi.mock('./sections/CreatorKits', () => ({
 vi.mock('./sections/RewardsSection', () => ({
     RewardsSection: () => <div data-testid="stub-rewards" />,
 }));
+vi.mock('./sections/CreatorHubListings', () => ({
+    CreatorHubListings: () => <div data-testid="stub-listings" />,
+}));
 
 import StreamingView, { type StreamingViewProps } from './StreamingView';
 
@@ -115,6 +118,7 @@ describe('StreamingView', () => {
             'replays',
             'clips',
             'kits',
+            'listings',
             'rewards',
             'broadcast',
             'connections',
@@ -123,6 +127,13 @@ describe('StreamingView', () => {
         ]);
         expect(container.querySelector('[data-testid="streaming-tab-overview"]')).not.toBeNull();
         expect(container.querySelector('[data-testid="stub-overview"]')).not.toBeNull();
+    });
+
+    it('switches to the Listings tab and mounts the creator listings section', async () => {
+        const { container } = await mountView();
+        await clickTab(container, 'listings');
+        expect(container.querySelector('[data-testid="streaming-tab-listings"]')).not.toBeNull();
+        expect(container.querySelector('[data-testid="stub-listings"]')).not.toBeNull();
     });
 
     it('switches to Live and mounts the live directory', async () => {

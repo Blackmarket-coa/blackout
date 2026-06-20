@@ -45,7 +45,12 @@ export type CreatorEntitlementKind =
     | 'stream_asset'
     | 'vault_item';
 
-export type CreatorListingStatus = 'draft' | 'published' | 'archived' | string;
+export type CreatorListingStatus =
+    | 'draft'
+    | 'pending_review'
+    | 'published'
+    | 'rejected'
+    | 'archived';
 
 export interface CreatorListingView {
     id: string;
@@ -65,8 +70,14 @@ export interface CreatorListingView {
     updatedAt: string;
 }
 
+export interface CreatorProviderSummary {
+    id: string;
+    displayName: string;
+    capabilities: string[];
+}
+
 export interface CreatorProvidersResponse {
-    providers: Array<{ id: string; displayName: string; capabilities: string[] }>;
+    providers: CreatorProviderSummary[];
 }
 
 export interface CreatorListingsResponse {
@@ -88,9 +99,18 @@ export interface CreatorListingDraft {
     artifactUploadId?: string;
 }
 
+/** Alias for the studio composer, which historically named the draft type this way. */
+export type CreateListingInput = CreatorListingDraft;
+
+/**
+ * Payout-onboarding handle. Mirrors the server contract — the
+ * `/v1/creator/payouts/onboarding` route returns the provider's
+ * `CreatorOnboardingHandle` (`{ onboardingUrl, expiresAt }`) verbatim
+ * (see `@blackout/core` `marketplace/provider.ts`).
+ */
 export interface CreatorOnboardingHandle {
-    redirectUrl?: string;
-    [key: string]: unknown;
+    onboardingUrl: string;
+    expiresAt: string;
 }
 
 const callJson = <T>(

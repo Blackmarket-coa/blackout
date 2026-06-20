@@ -3,13 +3,21 @@ import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 import { useConfirm } from '../../components/confirm-dialog';
 import {
     archiveCreatorListing,
+    createCreatorListing,
     fetchCreatorProviders,
     fetchMyCreatorListings,
     publishCreatorListing,
     startCreatorPayoutOnboarding,
+    type CreatorArtifactKind,
     type CreatorListingView,
     type CreatorProvidersResponse,
 } from './creatorClient';
+import {
+    categoryForArtifact,
+    entitlementForArtifact,
+    CREATOR_ARTIFACT_KINDS,
+    CREATOR_ARTIFACT_LABELS,
+} from './creatorArtifactMap';
 
 const layoutStyle: CSSProperties = {
     display: 'flex',
@@ -92,6 +100,52 @@ const accentButton: CSSProperties = {
     cursor: 'pointer',
 };
 
+const composerCardStyle: CSSProperties = {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 10,
+    padding: '12px 14px',
+    border: '1px solid var(--border-default, #374151)',
+    borderRadius: 12,
+    background: 'var(--bg-input, #0f172a)',
+};
+
+const inputStyle: CSSProperties = {
+    padding: '6px 10px',
+    borderRadius: 8,
+    border: '1px solid var(--border-default, #374151)',
+    background: 'var(--bg-surface, #0f172a)',
+    color: 'var(--text-primary, #f8fafc)',
+    width: '100%',
+    fontSize: 13,
+};
+
+const fieldLabelStyle: CSSProperties = {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 4,
+    fontSize: 12,
+    color: 'var(--text-muted, #9ca3af)',
+};
+
+interface ListingDraftState {
+    title: string;
+    description: string;
+    priceCents: number;
+    currency: string;
+    providerId: string;
+    artifactKind: CreatorArtifactKind;
+}
+
+const emptyDraft = (providerId: string): ListingDraftState => ({
+    title: '',
+    description: '',
+    priceCents: 0,
+    currency: 'USD',
+    providerId,
+    artifactKind: 'stream_asset',
+});
+
 const formatPrice = (priceCents: number, currency: string): string => {
     try {
         return new Intl.NumberFormat(undefined, {
@@ -120,9 +174,13 @@ const formatPrice = (priceCents: number, currency: string): string => {
 export const CreatorListings = (): JSX.Element => {
     const [providers, setProviders] = useState<CreatorProvidersResponse['providers']>([]);
     const [listings, setListings] = useState<CreatorListingView[]>([]);
+    const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [busyId, setBusyId] = useState<string | null>(null);
     const [onboardingProvider, setOnboardingProvider] = useState<string | null>(null);
+    const [composerOpen, setComposerOpen] = useState(false);
+    const [draft, setDraft] = useState<ListingDraftState>(() => emptyDraft(''));
+    const [creating, setCreating] = useState(false);
     const confirm = useConfirm();
 
     const refresh = useCallback(async () => {
@@ -134,14 +192,52 @@ export const CreatorListings = (): JSX.Element => {
             ]);
             setProviders(providersRes.providers);
             setListings(listingsRes.listings);
+            // Seed the composer's provider once we know the available providers.
+            setDraft((prev) =>
+                prev.providerId
+                    ? prev
+                    : { ...prev, providerId: providersRes.providers[0]?.id ?? '' }
+            );
         } catch (err) {
             setError(err instanceof Error ? err.message : 'failed to load creator listings');
+        } finally {
+            setLoading(false);
         }
     }, []);
 
     useEffect(() => {
         void refresh();
     }, [refresh]);
+
+    const handleCreate = async () => {
+        // The server requires a non-empty title and description
+        // (creator.ts draftSchema: title/description z.string().min(1)).
+        if (!draft.title.trim() || !draft.description.trim() || !draft.providerId) return;
+        setCreating(true);
+        setError(null);
+        try {
+            await createCreatorListing({
+                providerId: draft.providerId,
+                artifactKind: draft.artifactKind,
+                category: categoryForArtifact(draft.artifactKind),
+                entitlementKind: entitlementForArtifact(draft.artifactKind),
+                title: draft.title.trim(),
+                description: draft.description.trim(),
+                priceCents: draft.priceCents,
+                currency: draft.currency.trim() || 'USD',
+                // Metadata-only draft — the server requires a payload (or upload
+                // id); an empty object is the honest "no inline artifact" value.
+                artifactPayload: {},
+            });
+            setDraft(emptyDraft(draft.providerId));
+            setComposerOpen(false);
+            await refresh();
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'failed to create listing');
+        } finally {
+            setCreating(false);
+        }
+    };
 
     const handlePublish = async (listing: CreatorListingView) => {
         setBusyId(listing.id);
@@ -182,8 +278,8 @@ export const CreatorListings = (): JSX.Element => {
         setOnboardingProvider(providerId);
         try {
             const handle = await startCreatorPayoutOnboarding(providerId, window.location.href);
-            if (typeof handle.redirectUrl === 'string') {
-                window.open(handle.redirectUrl, '_blank', 'noopener,noreferrer');
+            if (typeof handle.onboardingUrl === 'string') {
+                window.open(handle.onboardingUrl, '_blank', 'noopener,noreferrer');
             }
         } catch (err) {
             setError(err instanceof Error ? err.message : 'onboarding failed');
@@ -195,7 +291,26 @@ export const CreatorListings = (): JSX.Element => {
     return (
         <section style={layoutStyle} data-shell-region="creator-listings">
             <header style={headerStyle}>
-                <h1 style={titleStyle}>Creator listings</h1>
+                <div
+                    style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 12,
+                        flexWrap: 'wrap',
+                    }}
+                >
+                    <h1 style={titleStyle}>Creator listings</h1>
+                    <button
+                        type="button"
+                        style={accentButton}
+                        onClick={() => setComposerOpen((open) => !open)}
+                        data-testid="creator-listing-new-toggle"
+                        aria-expanded={composerOpen}
+                    >
+                        {composerOpen ? 'Close' : 'New listing'}
+                    </button>
+                </div>
                 <p style={subtitleStyle}>
                     Publish, manage, and archive products you sell to your{' '}
                     {BLACKOUT_TERMS.canopy.singular} community.
@@ -212,6 +327,127 @@ export const CreatorListings = (): JSX.Element => {
                     >
                         {error}
                     </p>
+                ) : null}
+
+                {composerOpen ? (
+                    <form
+                        style={composerCardStyle}
+                        data-testid="creator-listing-composer"
+                        onSubmit={(e) => {
+                            e.preventDefault();
+                            void handleCreate();
+                        }}
+                    >
+                        <strong style={{ fontSize: 14 }}>Create a listing</strong>
+                        <label style={fieldLabelStyle}>
+                            Title
+                            <input
+                                style={inputStyle}
+                                value={draft.title}
+                                onChange={(e) =>
+                                    setDraft((prev) => ({ ...prev, title: e.target.value }))
+                                }
+                                data-testid="creator-listing-composer-title"
+                            />
+                        </label>
+                        <label style={fieldLabelStyle}>
+                            Description
+                            <textarea
+                                style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }}
+                                rows={3}
+                                value={draft.description}
+                                onChange={(e) =>
+                                    setDraft((prev) => ({ ...prev, description: e.target.value }))
+                                }
+                                data-testid="creator-listing-composer-description"
+                            />
+                        </label>
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                            <label style={{ ...fieldLabelStyle, flex: 1, minWidth: 120 }}>
+                                Type
+                                <select
+                                    style={inputStyle}
+                                    value={draft.artifactKind}
+                                    onChange={(e) =>
+                                        setDraft((prev) => ({
+                                            ...prev,
+                                            artifactKind: e.target.value as CreatorArtifactKind,
+                                        }))
+                                    }
+                                >
+                                    {CREATOR_ARTIFACT_KINDS.map((kind) => (
+                                        <option key={kind} value={kind}>
+                                            {CREATOR_ARTIFACT_LABELS[kind]}
+                                        </option>
+                                    ))}
+                                </select>
+                            </label>
+                            <label style={{ ...fieldLabelStyle, width: 100 }}>
+                                Price (¢)
+                                <input
+                                    type="number"
+                                    min={0}
+                                    style={inputStyle}
+                                    value={draft.priceCents}
+                                    onChange={(e) =>
+                                        setDraft((prev) => ({
+                                            ...prev,
+                                            priceCents: Number.parseInt(e.target.value, 10) || 0,
+                                        }))
+                                    }
+                                />
+                            </label>
+                            <label style={{ ...fieldLabelStyle, width: 90 }}>
+                                Currency
+                                <input
+                                    style={inputStyle}
+                                    value={draft.currency}
+                                    onChange={(e) =>
+                                        setDraft((prev) => ({ ...prev, currency: e.target.value }))
+                                    }
+                                />
+                            </label>
+                        </div>
+                        {providers.length > 0 ? (
+                            <label style={fieldLabelStyle}>
+                                Provider
+                                <select
+                                    style={inputStyle}
+                                    value={draft.providerId}
+                                    onChange={(e) =>
+                                        setDraft((prev) => ({
+                                            ...prev,
+                                            providerId: e.target.value,
+                                        }))
+                                    }
+                                >
+                                    {providers.map((provider) => (
+                                        <option key={provider.id} value={provider.id}>
+                                            {provider.displayName}
+                                        </option>
+                                    ))}
+                                </select>
+                            </label>
+                        ) : (
+                            <span style={listingMetaStyle}>
+                                No payout provider is available yet — connect one below before
+                                creating a listing.
+                            </span>
+                        )}
+                        <button
+                            type="submit"
+                            style={accentButton}
+                            disabled={
+                                creating ||
+                                !draft.title.trim() ||
+                                !draft.description.trim() ||
+                                !draft.providerId
+                            }
+                            data-testid="creator-listing-composer-submit"
+                        >
+                            {creating ? 'Creating…' : 'Create listing'}
+                        </button>
+                    </form>
                 ) : null}
 
                 {providers.length > 0 ? (
@@ -239,7 +475,18 @@ export const CreatorListings = (): JSX.Element => {
                     </div>
                 ) : null}
 
-                {listings.length === 0 ? (
+                {loading ? (
+                    <p
+                        style={{
+                            color: 'var(--text-muted, #9ca3af)',
+                            fontSize: 13,
+                            margin: 0,
+                        }}
+                        data-testid="creator-listings-loading"
+                    >
+                        Loading your listings…
+                    </p>
+                ) : listings.length === 0 ? (
                     <p
                         style={{
                             color: 'var(--text-muted, #9ca3af)',
@@ -248,9 +495,9 @@ export const CreatorListings = (): JSX.Element => {
                         }}
                         data-testid="creator-listings-empty"
                     >
-                        You haven't created any listings yet. The composer affordance ships in a
-                        follow-up; for now, listings are created via the FBM seller dashboard and
-                        appear here automatically.
+                        You haven't created any listings yet. Use <strong>New listing</strong> above
+                        to create one — drafts appear here and can be published or archived.
+                        Listings created in the FBM seller dashboard also sync in automatically.
                     </p>
                 ) : (
                     <div
