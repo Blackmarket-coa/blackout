@@ -181,6 +181,138 @@ test('GET /v1/creator/listings/mine returns the caller\'s listings only', async 
     assert.equal(json.listings[0]!.title, 'Theme X');
 });
 
+test('POST /v1/creator/listings returns 502 when the upstream provider fails', async () => {
+    resetForEachTest();
+    fetchHandler = () =>
+        new Response(JSON.stringify({ error: 'boom' }), {
+            status: 500,
+            headers: { 'content-type': 'application/json' },
+        });
+    const response = await app.request('/v1/creator/listings', {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({
+            providerId: 'freeblackmarket',
+            artifactKind: 'theme',
+            category: 'plugin-curated',
+            entitlementKind: 'plugin_flag',
+            title: 'Theme Y',
+            description: 'Another theme',
+            priceCents: 0,
+            currency: 'USD',
+            artifactPayload: {},
+        }),
+    });
+    assert.equal(response.status, 502);
+    const json = (await response.json()) as { code: string };
+    assert.equal(json.code, 'upstream_failed');
+});
+
+test('POST /v1/creator/listings rejects coalition_kit artifacts with 400', async () => {
+    resetForEachTest();
+    const response = await app.request('/v1/creator/listings', {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({
+            providerId: 'freeblackmarket',
+            artifactKind: 'coalition_kit',
+            category: 'community-template',
+            entitlementKind: 'community_template',
+            title: 'Coalition starter',
+            description: 'A kit',
+            priceCents: 0,
+            currency: 'USD',
+            artifactPayload: {},
+        }),
+    });
+    assert.equal(response.status, 400);
+    const json = (await response.json()) as { code: string };
+    assert.equal(json.code, 'unsupported_artifact');
+});
+
+test('POST /v1/creator/listings/:id/publish publishes an owned listing', async () => {
+    resetForEachTest();
+    fetchHandler = (url) => {
+        if (url.endsWith('/publish')) {
+            return new Response(
+                JSON.stringify({ id: 'fbm-pub-1', slug: 'pub-theme', status: 'published' }),
+                { headers: { 'content-type': 'application/json' } }
+            );
+        }
+        return new Response(
+            JSON.stringify({ id: 'fbm-pub-1', slug: 'pub-theme', status: 'draft' }),
+            { headers: { 'content-type': 'application/json' } }
+        );
+    };
+    const created = await app.request('/v1/creator/listings', {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({
+            providerId: 'freeblackmarket',
+            artifactKind: 'theme',
+            category: 'plugin-curated',
+            entitlementKind: 'plugin_flag',
+            title: 'Publishable theme',
+            description: 'desc',
+            priceCents: 0,
+            currency: 'USD',
+            artifactPayload: {},
+        }),
+    });
+    const { listing } = (await created.json()) as { listing: { id: string } };
+    const response = await app.request(`/v1/creator/listings/${listing.id}/publish`, {
+        method: 'POST',
+        headers: authHeaders(),
+    });
+    assert.equal(response.status, 200);
+    const json = (await response.json()) as { listing: { status: string } | null };
+    assert.equal(json.listing?.status, 'published');
+});
+
+test('POST /v1/creator/listings/:id/publish 404s for an unknown listing', async () => {
+    resetForEachTest();
+    const response = await app.request('/v1/creator/listings/does-not-exist/publish', {
+        method: 'POST',
+        headers: authHeaders(),
+    });
+    assert.equal(response.status, 404);
+});
+
+test('DELETE /v1/creator/listings/:id 404s for an unknown listing', async () => {
+    resetForEachTest();
+    const response = await app.request('/v1/creator/listings/does-not-exist', {
+        method: 'DELETE',
+        headers: authHeaders(),
+    });
+    assert.equal(response.status, 404);
+});
+
+test('POST /v1/creator/payouts/onboarding returns the provider onboarding handle', async () => {
+    resetForEachTest();
+    fetchHandler = (url) => {
+        if (url.endsWith('/v1/seller/onboarding')) {
+            return new Response(
+                JSON.stringify({
+                    url: 'https://api.freeblackmarket.test/onboard/abc',
+                    expiresAt: '2026-01-01T00:00:00Z',
+                }),
+                { headers: { 'content-type': 'application/json' } }
+            );
+        }
+        return new Response('{}', { headers: { 'content-type': 'application/json' } });
+    };
+    const response = await app.request('/v1/creator/payouts/onboarding', {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ providerId: 'freeblackmarket', returnUrl: 'https://app.test/x' }),
+    });
+    assert.equal(response.status, 200);
+    // Pins the field name the client reads (`onboardingUrl`, not `redirectUrl`).
+    const json = (await response.json()) as { onboardingUrl?: string; expiresAt?: string };
+    assert.equal(json.onboardingUrl, 'https://api.freeblackmarket.test/onboard/abc');
+    assert.equal(json.expiresAt, '2026-01-01T00:00:00Z');
+});
+
 test('POST /v1/marketplace/checkout passes embed flag to provider', async () => {
     resetForEachTest();
     fetchHandler = (url) => {

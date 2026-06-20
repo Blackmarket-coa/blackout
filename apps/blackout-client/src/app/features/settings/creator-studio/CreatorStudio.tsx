@@ -12,6 +12,7 @@ import {
     type CreatorProviderSummary,
     type CreateListingInput,
 } from './creatorClient';
+import { categoryForArtifact, entitlementForArtifact } from '../../creators/creatorArtifactMap';
 
 type TabId = CreatorArtifactKind | 'listings' | 'payouts';
 
@@ -91,56 +92,6 @@ const TABS: Array<{ id: TabId; label: string; description: string }> = [
     { id: 'payouts', label: 'Payouts', description: 'Connect your seller account for payouts.' },
 ];
 
-function categoryFor(kind: CreatorArtifactKind): string {
-    switch (kind) {
-        case 'theme':
-            return 'plugin-curated';
-        case 'manifest_plugin':
-        case 'code_plugin':
-            return 'plugin-curated';
-        case 'asset_bundle':
-            return 'emoji-sticker';
-        case 'profile_cosmetic':
-            return 'profile-cosmetic';
-        case 'sound_pack':
-            return 'audio-pack';
-        case 'community_template':
-            return 'community-template';
-        case 'stream_asset':
-            return 'creator-asset';
-        case 'vault_item':
-            return 'security-tool';
-        case 'ai_persona':
-        case 'automation_recipe':
-            return 'ai-automation';
-    }
-}
-
-function entitlementFor(kind: CreatorArtifactKind): string {
-    switch (kind) {
-        case 'theme':
-        case 'manifest_plugin':
-            return 'plugin_flag';
-        case 'code_plugin':
-            return 'software_license';
-        case 'asset_bundle':
-            return 'asset_bundle';
-        case 'profile_cosmetic':
-            return 'profile_cosmetic';
-        case 'sound_pack':
-            return 'sound_pack';
-        case 'community_template':
-            return 'community_template';
-        case 'stream_asset':
-            return 'stream_asset';
-        case 'vault_item':
-            return 'vault_item';
-        case 'ai_persona':
-        case 'automation_recipe':
-            return 'plugin_flag';
-    }
-}
-
 function statusBadgeColor(status: CreatorListingView['status']): string {
     switch (status) {
         case 'published':
@@ -181,8 +132,10 @@ export const CreatorStudio: React.FC = () => {
     const refreshListings = useCallback(async () => {
         try {
             setListings(await fetchMyListings(token));
-        } catch (err) {
-            console.warn('[creator-studio] failed to load listings', err);
+        } catch {
+            // Non-critical: the listings tab simply stays empty if the fetch
+            // fails. Errors that block authoring (provider load, create) surface
+            // in the error banner below.
         }
     }, [token]);
 
@@ -196,9 +149,8 @@ export const CreatorStudio: React.FC = () => {
                 if (list.length > 0 && !list.find((p) => p.id === providerId)) {
                     setProviderId(list[0].id);
                 }
-            } catch (err) {
+            } catch {
                 if (!cancelled) setError('Could not load creator providers.');
-                console.warn('[creator-studio] providers failed', err);
             }
         })();
         return () => {
@@ -228,13 +180,16 @@ export const CreatorStudio: React.FC = () => {
                 const body: CreateListingInput = {
                     providerId,
                     artifactKind: kind,
-                    category: categoryFor(kind),
-                    entitlementKind: entitlementFor(kind),
+                    category: categoryForArtifact(kind),
+                    entitlementKind: entitlementForArtifact(kind),
                     title: draft.title,
                     description: draft.description,
                     priceCents: draft.priceCents,
                     currency: draft.currency,
-                    artifactPayload: payload ?? { placeholder: true },
+                    // The server requires an artifactPayload (or an upload id);
+                    // default to an empty object for metadata-only drafts rather
+                    // than a misleading `{ placeholder: true }` sentinel.
+                    artifactPayload: payload ?? {},
                 };
                 const listing = await createListing(body, token);
                 setFeedback(`Listing created (${listing.status}).`);
@@ -287,11 +242,7 @@ export const CreatorStudio: React.FC = () => {
         setBusy(true);
         setError(null);
         try {
-            const handle = await startPayoutOnboarding(
-                providerId,
-                window.location.href,
-                token
-            );
+            const handle = await startPayoutOnboarding(providerId, window.location.href, token);
             setOnboardingUrl(handle.onboardingUrl);
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Onboarding failed.');
@@ -315,9 +266,7 @@ export const CreatorStudio: React.FC = () => {
                 <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Description</span>
                 <textarea
                     value={draft.description}
-                    onChange={(e) =>
-                        setDraft((prev) => ({ ...prev, description: e.target.value }))
-                    }
+                    onChange={(e) => setDraft((prev) => ({ ...prev, description: e.target.value }))}
                     rows={3}
                     style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }}
                 />
@@ -358,9 +307,7 @@ export const CreatorStudio: React.FC = () => {
                 </span>
                 <textarea
                     value={draft.payloadJson}
-                    onChange={(e) =>
-                        setDraft((prev) => ({ ...prev, payloadJson: e.target.value }))
-                    }
+                    onChange={(e) => setDraft((prev) => ({ ...prev, payloadJson: e.target.value }))}
                     rows={6}
                     placeholder='{"...": "..."}'
                     style={{ ...inputStyle, fontFamily: 'monospace', resize: 'vertical' }}
@@ -380,10 +327,7 @@ export const CreatorStudio: React.FC = () => {
     const tabContent = (() => {
         switch (tab) {
             case 'theme':
-                return renderDraftForm(
-                    'theme',
-                    'Paste a serialized BlackoutCustomizationBundle.'
-                );
+                return renderDraftForm('theme', 'Paste a serialized BlackoutCustomizationBundle.');
             case 'manifest_plugin':
                 return renderDraftForm(
                     'manifest_plugin',
@@ -483,8 +427,7 @@ export const CreatorStudio: React.FC = () => {
                                     </div>
                                     <small style={{ color: 'var(--text-secondary)' }}>
                                         {listing.providerId} ·{' '}
-                                        {(listing.priceCents / 100).toFixed(2)}{' '}
-                                        {listing.currency}
+                                        {(listing.priceCents / 100).toFixed(2)} {listing.currency}
                                     </small>
                                     <div style={{ display: 'flex', gap: 6 }}>
                                         <button
@@ -515,8 +458,8 @@ export const CreatorStudio: React.FC = () => {
                 return (
                     <div style={{ display: 'grid', gap: 8 }}>
                         <p style={{ color: 'var(--text-secondary)' }}>
-                            Connect your marketplace seller account to receive payouts. The
-                            host marketplace handles KYC and payout schedules.
+                            Connect your marketplace seller account to receive payouts. The host
+                            marketplace handles KYC and payout schedules.
                         </p>
                         <button
                             type="button"
@@ -529,11 +472,7 @@ export const CreatorStudio: React.FC = () => {
                         {onboardingUrl ? (
                             <p style={{ fontSize: 12 }}>
                                 Onboarding URL ready —{' '}
-                                <a
-                                    href={onboardingUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                >
+                                <a href={onboardingUrl} target="_blank" rel="noopener noreferrer">
                                     open in browser
                                 </a>
                                 .
@@ -549,8 +488,8 @@ export const CreatorStudio: React.FC = () => {
             <header>
                 <h3 style={{ marginBottom: 4 }}>Creator Studio</h3>
                 <p style={{ margin: 0, color: 'var(--text-secondary)' }}>
-                    Author and publish themes, manifest plugins, code plugins, and asset
-                    packs to a connected marketplace.
+                    Author and publish themes, manifest plugins, code plugins, and asset packs to a
+                    connected marketplace.
                 </p>
             </header>
 
@@ -593,10 +532,7 @@ export const CreatorStudio: React.FC = () => {
                                 tab === entry.id
                                     ? 'var(--accent-primary, #4ECDC4)'
                                     : 'var(--bg-surface)',
-                            color:
-                                tab === entry.id
-                                    ? 'var(--bg-surface)'
-                                    : 'var(--text-primary)',
+                            color: tab === entry.id ? 'var(--bg-surface)' : 'var(--text-primary)',
                             cursor: 'pointer',
                             fontSize: 12,
                         }}
@@ -623,9 +559,7 @@ export const CreatorStudio: React.FC = () => {
                     {error}
                 </div>
             ) : null}
-            {feedback ? (
-                <small style={{ color: 'var(--text-secondary)' }}>{feedback}</small>
-            ) : null}
+            {feedback ? <small style={{ color: 'var(--text-secondary)' }}>{feedback}</small> : null}
 
             <div
                 style={{

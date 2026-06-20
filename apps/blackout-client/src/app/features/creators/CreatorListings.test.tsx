@@ -6,6 +6,7 @@ import ReactDOM from 'react-dom/client';
 
 const fetchCreatorProvidersMock = vi.fn();
 const fetchMyCreatorListingsMock = vi.fn();
+const createCreatorListingMock = vi.fn();
 const publishCreatorListingMock = vi.fn();
 const archiveCreatorListingMock = vi.fn();
 const startCreatorPayoutOnboardingMock = vi.fn();
@@ -13,7 +14,7 @@ const startCreatorPayoutOnboardingMock = vi.fn();
 vi.mock('./creatorClient', () => ({
     fetchCreatorProviders: (...a: unknown[]) => fetchCreatorProvidersMock(...a),
     fetchMyCreatorListings: (...a: unknown[]) => fetchMyCreatorListingsMock(...a),
-    createCreatorListing: vi.fn(),
+    createCreatorListing: (...a: unknown[]) => createCreatorListingMock(...a),
     publishCreatorListing: (...a: unknown[]) => publishCreatorListingMock(...a),
     archiveCreatorListing: (...a: unknown[]) => archiveCreatorListingMock(...a),
     startCreatorPayoutOnboarding: (...a: unknown[]) => startCreatorPayoutOnboardingMock(...a),
@@ -50,6 +51,7 @@ describe('CreatorListings', () => {
         document.body.innerHTML = '';
         fetchCreatorProvidersMock.mockReset();
         fetchMyCreatorListingsMock.mockReset();
+        createCreatorListingMock.mockReset();
         publishCreatorListingMock.mockReset();
         archiveCreatorListingMock.mockReset();
         startCreatorPayoutOnboardingMock.mockReset();
@@ -136,5 +138,117 @@ describe('CreatorListings', () => {
         fetchMyCreatorListingsMock.mockRejectedValue(new Error('forbidden'));
         const container = await mountPage();
         expect(container.textContent).toContain('forbidden');
+    });
+
+    // --- composer ---------------------------------------------------------
+
+    const setInputValue = (el: HTMLInputElement | HTMLTextAreaElement, value: string) => {
+        const proto =
+            el instanceof HTMLTextAreaElement
+                ? HTMLTextAreaElement.prototype
+                : HTMLInputElement.prototype;
+        const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+        setter?.call(el, value);
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+
+    const openComposer = (container: HTMLElement) => {
+        const toggle = container.querySelector<HTMLButtonElement>(
+            '[data-testid="creator-listing-new-toggle"]'
+        );
+        toggle?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    };
+
+    it('replaces the stale "follow-up" copy with a composer call-to-action', async () => {
+        fetchCreatorProvidersMock.mockResolvedValue({ providers: [] });
+        fetchMyCreatorListingsMock.mockResolvedValue({ listings: [] });
+        const container = await mountPage();
+        const empty = container.querySelector('[data-testid="creator-listings-empty"]');
+        expect(empty?.textContent).not.toContain('ships in a follow-up');
+        expect(empty?.textContent).toContain('New listing');
+    });
+
+    it('creates a listing from the composer with a derived category/entitlement', async () => {
+        fetchCreatorProvidersMock.mockResolvedValue({
+            providers: [
+                {
+                    id: 'freeblackmarket',
+                    displayName: 'FreeBlackMarket',
+                    capabilities: ['creator-write'],
+                },
+            ],
+        });
+        fetchMyCreatorListingsMock.mockResolvedValue({ listings: [] });
+        createCreatorListingMock.mockResolvedValue({ listing: { id: 'NEW' } });
+
+        const container = await mountPage();
+        await act(async () => {
+            openComposer(container);
+            await flush();
+        });
+
+        const title = container.querySelector<HTMLInputElement>(
+            '[data-testid="creator-listing-composer-title"]'
+        );
+        expect(title).not.toBeNull();
+        await act(async () => {
+            setInputValue(title!, 'Overlay pack');
+            await flush();
+        });
+
+        const submit = container.querySelector<HTMLButtonElement>(
+            '[data-testid="creator-listing-composer-submit"]'
+        );
+        await act(async () => {
+            submit?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+            await flush();
+        });
+
+        expect(createCreatorListingMock).toHaveBeenCalledTimes(1);
+        const body = createCreatorListingMock.mock.calls[0][0];
+        expect(body).toMatchObject({
+            providerId: 'freeblackmarket',
+            artifactKind: 'stream_asset',
+            category: 'creator-asset',
+            entitlementKind: 'stream_asset',
+            title: 'Overlay pack',
+        });
+        // A clean empty payload — never the `{ placeholder: true }` sentinel.
+        expect(body.artifactPayload).toEqual({});
+    });
+
+    it('surfaces a create failure in the error banner', async () => {
+        fetchCreatorProvidersMock.mockResolvedValue({
+            providers: [
+                {
+                    id: 'freeblackmarket',
+                    displayName: 'FreeBlackMarket',
+                    capabilities: ['creator-write'],
+                },
+            ],
+        });
+        fetchMyCreatorListingsMock.mockResolvedValue({ listings: [] });
+        createCreatorListingMock.mockRejectedValue(new Error('provider rejected'));
+
+        const container = await mountPage();
+        await act(async () => {
+            openComposer(container);
+            await flush();
+        });
+        const title = container.querySelector<HTMLInputElement>(
+            '[data-testid="creator-listing-composer-title"]'
+        );
+        await act(async () => {
+            setInputValue(title!, 'Bad listing');
+            await flush();
+        });
+        const submit = container.querySelector<HTMLButtonElement>(
+            '[data-testid="creator-listing-composer-submit"]'
+        );
+        await act(async () => {
+            submit?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+            await flush();
+        });
+        expect(container.textContent).toContain('provider rejected');
     });
 });

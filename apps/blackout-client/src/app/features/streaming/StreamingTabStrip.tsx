@@ -8,6 +8,8 @@ import {
 export interface StreamingTabStripProps {
     activeTab: StreamingTabId;
     onSelectTab: (tab: StreamingTabId) => void;
+    /** Visible tabs, in order. Defaults to the full tab set. */
+    tabs?: StreamingTabId[];
 }
 
 const stripStyle: CSSProperties = {
@@ -39,10 +41,14 @@ const tabActiveStyle: CSSProperties = {
     borderBottom: '2px solid var(--accent-primary, #1ABC9C)',
 };
 
-export function StreamingTabStrip({ activeTab, onSelectTab }: StreamingTabStripProps) {
+export function StreamingTabStrip({
+    activeTab,
+    onSelectTab,
+    tabs = STREAMING_TAB_ORDER,
+}: StreamingTabStripProps) {
     return (
         <nav style={stripStyle} role="tablist" aria-label="Streaming tabs">
-            {STREAMING_TAB_ORDER.map((tab) => (
+            {tabs.map((tab) => (
                 <button
                     key={tab}
                     type="button"

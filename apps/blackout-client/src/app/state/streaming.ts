@@ -17,6 +17,7 @@ export type StreamingTabId =
     | 'replays'
     | 'clips'
     | 'kits'
+    | 'listings'
     | 'rewards'
     | 'broadcast'
     | 'connections'
@@ -29,6 +30,7 @@ export const STREAMING_TAB_ORDER: StreamingTabId[] = [
     'replays',
     'clips',
     'kits',
+    'listings',
     'rewards',
     'broadcast',
     'connections',
@@ -42,6 +44,7 @@ export const STREAMING_TAB_LABELS: Record<StreamingTabId, string> = {
     replays: 'Replays',
     clips: 'Clips',
     kits: 'Kits',
+    listings: 'Listings',
     rewards: 'Rewards',
     broadcast: 'Broadcast',
     connections: 'Connections',
