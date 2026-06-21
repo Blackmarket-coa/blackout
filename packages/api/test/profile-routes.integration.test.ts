@@ -154,3 +154,62 @@ test('profile wall append and list round-trip in chronological order', async () 
     assert.equal(body.posts[1]!.body, 'first post');
     assert.equal(body.posts[0]!.authorId, visitor);
 });
+
+test('public profile GET 404s until the owner opts in', async () => {
+    __resetProfileStoreForTests();
+    const userId = 'profile-user-pub-a';
+    // Seed a profile that is NOT public.
+    await app.request(`/v1/profile/${userId}`, {
+        method: 'PUT',
+        headers: authHeaders(userId),
+        body: JSON.stringify({ profile: { bio: 'hidden' } }),
+    });
+    // No auth header — this is the zero-auth public read.
+    const res = await app.request(`/v1/profile/${userId}/public`);
+    assert.equal(res.status, 404);
+});
+
+test('public profile GET returns safe fields and strips contact connections, no auth', async () => {
+    __resetProfileStoreForTests();
+    const userId = 'profile-user-pub-b';
+    await app.request(`/v1/profile/${userId}`, {
+        method: 'PUT',
+        headers: authHeaders(userId),
+        body: JSON.stringify({
+            displayName: 'Public Creator',
+            profile: {
+                public: true,
+                bio: 'shipping in public',
+                pronouns: 'they/them',
+                sponsors: ['acme-goods'],
+                badgeIds: ['founder'],
+                connections: [
+                    { type: 'github', url: 'https://github.com/test' },
+                    { type: 'fbm', username: 'creator-store', url: 'https://freeblackmarket.com/creator-store' },
+                    { type: 'email', url: 'mailto:secret@example.com' },
+                    { type: 'phone', url: 'tel:+15551234' },
+                ],
+            },
+        }),
+    });
+
+    const res = await app.request(`/v1/profile/${userId}/public`);
+    assert.equal(res.status, 200);
+    const body = (await res.json()) as {
+        displayName: string;
+        profile: {
+            bio?: string;
+            public?: boolean;
+            sponsors?: string[];
+            badgeIds?: string[];
+            connections?: Array<{ type: string }>;
+        };
+    };
+    assert.equal(body.displayName, 'Public Creator');
+    assert.equal(body.profile.bio, 'shipping in public');
+    assert.equal(body.profile.public, true);
+    assert.deepEqual(body.profile.sponsors, ['acme-goods']);
+    assert.deepEqual(body.profile.badgeIds, ['founder']);
+    const types = (body.profile.connections ?? []).map((c) => c.type).sort();
+    assert.deepEqual(types, ['fbm', 'github']);
+});

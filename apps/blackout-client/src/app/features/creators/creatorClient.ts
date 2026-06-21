@@ -166,12 +166,33 @@ export const startCreatorPayoutOnboarding = (
 // client wrappers below keep their shapes loose so the page can render
 // partial data without crashing on an absent service slice.
 
+export interface PublicProfileConnection {
+    type: string;
+    username?: string;
+    label?: string;
+    url?: string;
+}
+
 export interface PublicProfileResponse {
     userId: string;
     handle?: string;
     displayName?: string;
     bio?: string;
     avatarUrl?: string;
+    primaryRole?: string;
+    roleBadges?: string[];
+    /** Nested safe profile event from GET /v1/profile/:userId/public. */
+    profile?: {
+        bio?: string;
+        pronouns?: string;
+        banner?: string;
+        decoration?: string;
+        public?: boolean;
+        sponsors?: string[];
+        featuredCanopies?: string[];
+        badgeIds?: string[];
+        connections?: PublicProfileConnection[];
+    };
     [key: string]: unknown;
 }
 
@@ -188,11 +209,13 @@ export interface PublicCreatorTiersResponse {
     tiers: PublicCreatorTier[];
 }
 
+// Zero-auth public profile read (the single source of truth — the server
+// profile store). Returns 404 unless the owner has opted into publishing.
 export const fetchPublicProfile = (
     userId: string,
     token: string | null = readBlackoutApiToken()
 ): Promise<PublicProfileResponse> =>
-    callJson('GET', `/v1/profile/${encodeURIComponent(userId)}`, undefined, token);
+    callJson('GET', `/v1/profile/${encodeURIComponent(userId)}/public`, undefined, token);
 
 export const fetchCreatorTiers = (
     creatorUserId: string,

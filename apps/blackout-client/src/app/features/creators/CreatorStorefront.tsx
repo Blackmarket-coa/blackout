@@ -76,19 +76,6 @@ interface MatrixProfile {
     avatar_url?: string;
 }
 
-/** Minimal public projection of `co.bmc.profile` served by the Synapse module. */
-interface PublicBmcProfile {
-    bio?: string;
-    pronouns?: string;
-    banner?: string;
-    decoration?: string;
-    public?: boolean;
-    badgeIds?: string[];
-    sponsors?: string[];
-    featuredCanopies?: string[];
-    connections?: Array<{ type: string; username?: string; url?: string; label?: string }>;
-}
-
 const formatCents = (amount: number, currency = 'USD'): string => {
     try {
         return new Intl.NumberFormat(undefined, {
@@ -238,7 +225,7 @@ interface CreatorStorefrontViewProps {
     handle?: string;
     /**
      * When true (public `/@handle` page), require the profile to be opted-in
-     * public via the Synapse endpoint; otherwise show a not-found state.
+     * public (the public endpoint 404s otherwise); show a not-found state.
      */
     gated?: boolean;
 }
@@ -258,7 +245,6 @@ export const CreatorStorefrontView = ({
     const handle = handleProp ?? (userId.startsWith('@') ? userId.slice(1).split(':')[0] : userId);
 
     const [matrixProfile, setMatrixProfile] = useState<MatrixProfile | null>(null);
-    const [bmc, setBmc] = useState<PublicBmcProfile | null>(null);
     const [profile, setProfile] = useState<PublicProfileResponse | null>(null);
     const [tiers, setTiers] = useState<PublicCreatorTier[]>([]);
     const [streams, setStreams] = useState<StreamSummary[]>([]);
@@ -289,27 +275,15 @@ export const CreatorStorefrontView = ({
             }
         })();
 
-        // co.bmc.profile public projection — also the opt-in gate.
-        (async () => {
-            try {
-                const res = await fetch(
-                    `${HOMESERVER_URL}/_blackout/v1/profile/${encodeURIComponent(userId)}`
-                );
-                if (res.ok) {
-                    const body = (await res.json()) as { profile?: PublicBmcProfile };
-                    set(setBmc, body.profile ?? {});
-                    set(setGateState, 'ok');
-                } else {
-                    set(setGateState, 'notfound');
-                }
-            } catch {
-                set(setGateState, 'notfound');
-            }
-        })();
-
+        // Single source of truth: the zero-auth public projection of the server
+        // profile store (GET /v1/profile/:userId/public). Also the opt-in gate —
+        // it 404s unless the owner has published, so a rejection means not-found.
         fetchPublicProfile(userId)
-            .then((value) => set(setProfile, value))
-            .catch(() => undefined);
+            .then((value) => {
+                set(setProfile, value);
+                set(setGateState, 'ok');
+            })
+            .catch(() => set(setGateState, 'notfound'));
         fetchCreatorTiers(userId)
             .then((value) => set(setTiers, value.tiers))
             .catch(() => undefined);
@@ -331,10 +305,12 @@ export const CreatorStorefrontView = ({
         };
     }, [userId]);
 
+    const memberProfile = profile?.profile;
+
     // Resolve the FBM vendor handle from connections, then load the catalog.
     const fbmHandle = useMemo(
-        () => bmc?.connections?.find((conn) => conn.type === 'fbm')?.username?.trim() || '',
-        [bmc]
+        () => memberProfile?.connections?.find((conn) => conn.type === 'fbm')?.username?.trim() || '',
+        [memberProfile]
     );
     useEffect(() => {
         if (!fbmHandle) return undefined;
@@ -353,7 +329,7 @@ export const CreatorStorefrontView = ({
     }, [fbmHandle]);
 
     // Curated sponsor vendors.
-    const sponsorHandles = useMemo(() => bmc?.sponsors ?? [], [bmc]);
+    const sponsorHandles = useMemo(() => memberProfile?.sponsors ?? [], [memberProfile]);
     useEffect(() => {
         if (sponsorHandles.length === 0) return undefined;
         let cancelled = false;
@@ -380,20 +356,19 @@ export const CreatorStorefrontView = ({
     }, [sponsorHandles]);
 
     // --- derived view data ---
-    // For logged-in viewers, `/v1/profile` (MemberProfile) nests the rich fields
-    // under `.profile`; the zero-auth `bmc` mirror is the primary source.
-    const memberProfile = (profile as { profile?: PublicBmcProfile } | null)?.profile;
+    // Single source: rich fields come from the server profile store's safe
+    // projection (`profile.profile`); Matrix profile supplies name/avatar.
     const displayName =
         matrixProfile?.displayname || profile?.displayName || profile?.handle || handle;
     const displayHandle = profile?.handle || handle;
-    const bio = bmc?.bio || memberProfile?.bio || profile?.bio || '';
-    const pronouns = bmc?.pronouns || memberProfile?.pronouns || '';
-    const bannerMxc = bmc?.banner || memberProfile?.banner;
+    const bio = memberProfile?.bio || profile?.bio || '';
+    const pronouns = memberProfile?.pronouns || '';
+    const bannerMxc = memberProfile?.banner;
     const bannerUrl = bannerMxc ? mxcToUrl(bannerMxc, HOMESERVER_URL) : null;
     const avatarUrl = matrixProfile?.avatar_url
         ? mxcToUrl(matrixProfile.avatar_url, HOMESERVER_URL)
         : null;
-    const socialLinks = (bmc?.connections ?? memberProfile?.connections ?? []).filter(
+    const socialLinks = (memberProfile?.connections ?? []).filter(
         (conn) => conn.type !== 'fbm' && conn.type !== 'email' && conn.type !== 'phone' && conn.url
     );
     const level = useMemo(() => creatorLevelFromReputation(reputation), [reputation]);
@@ -418,7 +393,7 @@ export const CreatorStorefrontView = ({
 
     const hasReputation = !!reputation && level.xp > 0;
     const achievements = [
-        ...(bmc?.badgeIds ?? []).map((id) => ({ key: `badge-${id}`, label: id })),
+        ...(memberProfile?.badgeIds ?? []).map((id) => ({ key: `badge-${id}`, label: id })),
         ...(coliseum && coliseum.wins > 0
             ? [{ key: 'wins', label: `${coliseum.wins} challenge win${coliseum.wins === 1 ? '' : 's'}` }]
             : []),

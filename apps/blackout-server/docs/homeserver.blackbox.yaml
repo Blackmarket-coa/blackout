@@ -42,9 +42,6 @@ modules:
       proposal_rate_limit: 5
       proposal_rate_window_s: 3600
       attestation_cooldown_s: 600
-  # Zero-auth public creator profile read at GET /_blackout/v1/profile/{user_id}.
-  - module: blackout_modules.public_profile.PublicProfileModule
-    config: {}
 
 # log rotation should be handled by systemd/journald or external logrotate
 log_config: /data/blackbox-log.config

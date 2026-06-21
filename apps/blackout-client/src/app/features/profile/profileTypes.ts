@@ -86,8 +86,8 @@ export interface BmcProfileEvent {
     pinnedMedia?: ProfilePinnedMedia[];
     /**
      * Opt-in flag that exposes this profile on the public creator page
-     * (`theblackout.app/@handle`). The public Synapse endpoint
-     * (`/_blackout/v1/profile/{userId}`) returns 404 unless this is `true`.
+     * (`theblackout.app/@handle`). The zero-auth read
+     * (`GET /v1/profile/{userId}/public`) returns 404 unless this is `true`.
      */
     public?: boolean;
     /** Curated FreeBlackMarket vendor handles shown as sponsors/backers. */

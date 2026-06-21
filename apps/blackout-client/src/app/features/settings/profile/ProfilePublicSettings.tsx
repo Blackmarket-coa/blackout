@@ -1,16 +1,11 @@
-import React, { ChangeEventHandler, useCallback, useMemo, useState } from 'react';
+import React, { ChangeEventHandler, useCallback, useEffect, useState } from 'react';
 import { Box, Button, Input, Spinner, Switch, Text, color, config, toRem } from 'folds';
 import { SequenceCard } from '../../../components/sequence-card';
 import { SequenceCardStyle } from '../styles.css';
 import { SettingTile } from '../../../components/setting-tile';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
-import { type BmcProfileEvent } from '../../profile/profileTypes';
-import { fetchProfile } from '../../profile/profileClient';
-import {
-  mirrorProfileToAccountData,
-  readPublicProfileAccountData,
-  writePublicProfileSettings,
-} from '../../profile/publicProfileMirror';
+import { type BmcProfileEvent, type ProfileConnection } from '../../profile/profileTypes';
+import { fetchProfile, saveProfile } from '../../profile/profileClient';
 
 const FBM_VENDOR_ENDPOINT = 'https://api.freeblackmarket.com/store/vendors';
 
@@ -29,10 +24,11 @@ const verifyFbmHandle = async (handle: string): Promise<boolean> => {
 };
 
 /**
- * Public creator profile controls. Lives in Account → Identity and writes to the
- * `co.bmc.profile` Matrix account data event that the public Synapse endpoint
- * (`/_blackout/v1/profile/{userId}`) reads. The Save handler merges into the
- * existing event so all other profile fields are preserved.
+ * Public creator profile controls. Lives in Account → Identity and reads/writes
+ * the single source of truth — the server profile store (GET/PUT /v1/profile).
+ * The public page (theblackout.app/@handle) reads the same store via the zero-auth
+ * GET /v1/profile/:userId/public projection. Save merges into the existing
+ * profile event so all other fields the editor manages are preserved.
  */
 export function ProfilePublicSettings() {
   const mx = useMatrixClient();
@@ -40,16 +36,30 @@ export function ProfilePublicSettings() {
   const handle = userId.startsWith('@') ? userId.slice(1).split(':')[0] : userId;
   const profileUrl = `theblackout.app/@${handle}`;
 
-  const existing = useMemo<BmcProfileEvent>(() => readPublicProfileAccountData(mx), [mx]);
-
-  const [isPublic, setIsPublic] = useState<boolean>(existing.public === true);
-  const [fbmHandle, setFbmHandle] = useState<string>(
-    existing.connections?.find((conn) => conn.type === 'fbm')?.username ?? ''
-  );
+  const [isPublic, setIsPublic] = useState<boolean>(false);
+  const [fbmHandle, setFbmHandle] = useState<string>('');
   const [fbmStatus, setFbmStatus] = useState<VerifyState>('idle');
-  const [sponsors, setSponsors] = useState<string[]>(existing.sponsors ?? []);
+  const [sponsors, setSponsors] = useState<string[]>([]);
   const [newSponsor, setNewSponsor] = useState<string>('');
   const [saveState, setSaveState] = useState<SaveState>('idle');
+
+  // Seed controls from the canonical server profile.
+  useEffect(() => {
+    if (!userId) return undefined;
+    let cancelled = false;
+    fetchProfile(userId)
+      .then((member) => {
+        if (cancelled) return;
+        const p = member.profile ?? {};
+        setIsPublic(p.public === true);
+        setFbmHandle(p.connections?.find((conn) => conn.type === 'fbm')?.username ?? '');
+        setSponsors(p.sponsors ?? []);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
 
   const handleFbmChange: ChangeEventHandler<HTMLInputElement> = (evt) => {
     setFbmHandle(evt.currentTarget.value);
@@ -88,23 +98,35 @@ export function ProfilePublicSettings() {
   const handleSave = useCallback(async () => {
     setSaveState('saving');
     try {
-      // Pull the canonical server profile and mirror it into account data so
-      // publishing immediately reflects the user's existing bio/banner/etc. on
-      // their public page (best-effort — the publish gate below is what matters).
-      if (userId) {
-        try {
-          const member = await fetchProfile(userId);
-          if (member?.profile) await mirrorProfileToAccountData(mx, member.profile);
-        } catch {
-          /* server profile unavailable — fall through to the gate write */
-        }
+      // Read the current canonical profile, merge our owned fields into the full
+      // event (upsertProfile replaces `profile` wholesale, so we must send it all),
+      // and persist via PUT /v1/profile.
+      const member = await fetchProfile(userId);
+      const current: BmcProfileEvent = member.profile ?? {};
+      const trimmedFbm = fbmHandle.trim();
+      const connections: ProfileConnection[] = [
+        ...(current.connections ?? []).filter((conn) => conn.type !== 'fbm'),
+      ];
+      if (trimmedFbm) {
+        connections.push({
+          type: 'fbm',
+          username: trimmedFbm,
+          url: `https://freeblackmarket.com/${trimmedFbm}`,
+          label: 'FreeBlackMarket',
+        });
       }
-      await writePublicProfileSettings(mx, { isPublic, sponsors, fbmHandle });
+      const merged: BmcProfileEvent = {
+        ...current,
+        public: isPublic,
+        connections,
+        sponsors: sponsors.length > 0 ? sponsors : undefined,
+      };
+      await saveProfile(userId, { profile: merged });
       setSaveState('saved');
     } catch {
       setSaveState('error');
     }
-  }, [mx, userId, isPublic, fbmHandle, sponsors]);
+  }, [userId, isPublic, fbmHandle, sponsors]);
 
   return (
     <Box direction="Column" gap="100">

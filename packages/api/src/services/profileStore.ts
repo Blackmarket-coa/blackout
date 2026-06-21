@@ -4,7 +4,7 @@
  * `apps/blackout-client/src/app/features/profile/profileTypes.ts`.
  */
 
-export type ConnectionType = 'github' | 'website' | 'x' | 'linkedin' | 'matrix' | 'other';
+export type ConnectionType = 'github' | 'website' | 'x' | 'linkedin' | 'matrix' | 'fbm' | 'other';
 
 export interface ProfileConnection {
     type: ConnectionType;
@@ -63,6 +63,14 @@ export interface BmcProfileEvent {
     customTheme?: ProfileCustomTheme;
     status?: ProfileStatus;
     pinnedMedia?: ProfilePinnedMedia[];
+    /** Opt-in publish flag for the zero-auth public profile page. */
+    public?: boolean;
+    /** Curated FreeBlackMarket vendor handles shown as sponsors/backers. */
+    sponsors?: string[];
+    /** Curated canopy ids surfaced as affiliations on the public profile. */
+    featuredCanopies?: string[];
+    /** Equipped collectible badge cosmetic ids (capped). */
+    badgeIds?: string[];
 }
 
 export interface MemberProfile {
@@ -268,6 +276,24 @@ export function sanitizeProfileEvent(input: unknown): BmcProfileEvent {
         customTheme: sanitizeCustomTheme(data.customTheme),
         status: sanitizeStatus(data.status),
         pinnedMedia: sanitizePinnedMedia(data.pinnedMedia),
+        public: data.public === true ? true : undefined,
+        sponsors: Array.isArray(data.sponsors)
+            ? data.sponsors
+                  .filter(isString)
+                  .map((handle) => handle.trim().slice(0, 64))
+                  .filter((handle) => handle.length > 0)
+                  .slice(0, 12)
+            : undefined,
+        featuredCanopies: Array.isArray(data.featuredCanopies)
+            ? data.featuredCanopies
+                  .filter(isString)
+                  .map((id) => id.trim().slice(0, 128))
+                  .filter((id) => id.length > 0)
+                  .slice(0, 12)
+            : undefined,
+        badgeIds: Array.isArray(data.badgeIds)
+            ? data.badgeIds.filter(isString).map((id) => id.slice(0, 64)).slice(0, 6)
+            : undefined,
     };
 }
 
