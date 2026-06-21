@@ -30,6 +30,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       libssl3 libffi8 gettext-base \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=py-builder /usr/local /usr/local
+# Custom Synapse modules (loaded via homeserver.yaml `modules:`). Placed on the
+# interpreter's site-packages so `blackout_modules.public_profile` is importable.
+COPY blackout_modules /usr/local/lib/python3.11/site-packages/blackout_modules
 COPY services/blackout-server/entrypoint.sh /entrypoint.sh
 COPY services/blackout-server/homeserver.yaml.template /templates/homeserver.yaml.template
 RUN chmod +x /entrypoint.sh

@@ -46,6 +46,10 @@ import { OAuthCallback } from './app/features/settings/linked-accounts/OAuthCall
 import { InviteLandingPage, PendingInviteRedeemer } from './app/components/invite-landing';
 import { OnboardingPage } from './app/features/welcome/OnboardingPage';
 import { PublicDirectory } from './app/features/discovery/PublicDirectory';
+import {
+    CreatorStorefront as PublicProfileRoute,
+    PublicProfileStandalone,
+} from './app/features/creators/CreatorStorefront';
 import { ONBOARDING_PATH, SWIPE_FEED_PATH } from './app/pages/paths';
 import { trimTrailingSlash } from './app/utils/common';
 
@@ -242,6 +246,11 @@ const buildAppRouter = (capabilityContext: {
         // logged-out case is intercepted in BootstrapStatus before this
         // router ever mounts (see below).
         { path: '/invite/:token', element: <InviteLandingPage /> },
+        // Public creator profile (vanity handle). Logged-in visitors resolve it
+        // through the router here; the logged-out case is intercepted in
+        // BootstrapStatus before the router mounts (see below). Placed ahead of
+        // the dynamic registry/catch-all routes so `@handle` wins.
+        { path: '/@:handle', element: <PublicProfileRoute /> },
         // Full-page onboarding host. Invite acceptance routes brand-new users
         // here (with the invited room as `?room=`) before dropping them into
         // the room; otherwise the wizard only ever shows as a ClientLayout modal.
@@ -341,6 +350,17 @@ const BootstrapStatus = () => {
         authState === 'logged_out'
     ) {
         return <PublicDirectory />;
+    }
+
+    // Public creator profile (`/@handle`) is readable without an account. The
+    // router only maps it once logged in, so intercept the logged-out case here
+    // and render the standalone, session-less profile.
+    if (
+        typeof window !== 'undefined' &&
+        /^\/@[^/]+/.test(window.location.pathname) &&
+        authState === 'logged_out'
+    ) {
+        return <PublicProfileStandalone />;
     }
 
     const title =

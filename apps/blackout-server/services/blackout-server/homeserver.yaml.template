@@ -52,3 +52,11 @@ turn_user_lifetime: 1h
 blackout:
   fbm_api_url: "${FBM_API_URL:-}"
   ollama_url: "${OLLAMA_URL:-}"
+
+# Custom Synapse modules. PublicProfileModule serves the zero-auth public
+# creator profile read at GET /_blackout/v1/profile/{user_id}. The
+# `blackout_modules` package is copied onto the Python path in the image
+# (see services/blackout-server/Dockerfile).
+modules:
+  - module: blackout_modules.public_profile.PublicProfileModule
+    config: {}

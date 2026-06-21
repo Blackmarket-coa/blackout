@@ -191,6 +191,42 @@ export function fetchColiseumReel(
     return getJson<ColiseumReelResponse>(path, token);
 }
 
+// --- Per-creator public summary (for the public creator profile) ---
+
+export interface CreatorColiseumEntry {
+    challengeId: string;
+    challengeTitle: string;
+    entryId: string;
+    title: string;
+    votes: number;
+    rank: number;
+}
+
+export interface CreatorColiseumSummary {
+    userId: string;
+    challengesRun: Array<{
+        id: string;
+        title: string;
+        description?: string;
+        category: string;
+        status: string;
+    }>;
+    entries: CreatorColiseumEntry[];
+    wins: number;
+    leaderboard: { rank: number; score: number; title: string } | null;
+}
+
+/** Public: a creator's Coliseum standing (challenges, wins, leaderboard rank). */
+export function fetchCreatorColiseum(
+    userId: string,
+    token: string | null = readBlackoutApiToken()
+): Promise<CreatorColiseumSummary> {
+    return getJson<CreatorColiseumSummary>(
+        `${COLISEUM_BASE}/creators/${encodeURIComponent(userId)}`,
+        token
+    );
+}
+
 // --- Live debate sessions (Feature 2) ---
 
 export interface ColiseumLiveSessionResponse {

@@ -362,6 +362,19 @@ creator.get('/content/feed', (c) => {
     return c.json({ content: listHomeContentFeed(limit) });
 });
 
+// Public: a specific creator's published content, newest first. Backs the
+// public creator profile page (`theblackout.app/@handle`), so it requires no
+// auth and only ever returns `published` items.
+creator.get('/content/by/:userId', (c) => {
+    const userId = decodeURIComponent(c.req.param('userId'));
+    const limitRaw = Number.parseInt(c.req.query('limit') ?? '', 10);
+    const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 100) : 30;
+    const content = listContent({ creatorId: userId, status: 'published' })
+        .sort((a, b) => (b.publishedAt ?? b.createdAt).localeCompare(a.publishedAt ?? a.createdAt))
+        .slice(0, limit);
+    return c.json({ content });
+});
+
 // A creator's own content library (optionally filtered by status).
 creator.get('/content', (c) => {
     const user = requireUser(c, 'Sign in to view your content');

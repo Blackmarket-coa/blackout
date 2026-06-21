@@ -119,3 +119,32 @@ test('leaderboards: challenges category ranks by entry count; bad category 400',
     const bad = await app.request('/v1/coliseum/leaderboards?category=bogus');
     assert.equal(bad.status, 400);
 });
+
+test('coliseum: public per-creator summary aggregates runs + entries + wins, no auth', async () => {
+    // host-x runs a challenge; host-x also enters it and gets a vote (a win).
+    const challengeId = await createChallenge('host-x');
+    const entryRes = await app.request(`/v1/coliseum/challenges/${challengeId}/entries`, {
+        method: 'POST',
+        headers: authHeader('host-x'),
+        body: JSON.stringify({ title: 'Seed library' }),
+    });
+    const entryId = ((await entryRes.json()) as { entry: { id: string } }).entry.id;
+    await app.request(`/v1/coliseum/challenges/entries/${entryId}/vote`, {
+        method: 'POST',
+        headers: authHeader('voter-z'),
+    });
+
+    // Public read — no auth header.
+    const res = await app.request('/v1/coliseum/creators/host-x');
+    assert.equal(res.status, 200);
+    const summary = (await res.json()) as {
+        userId: string;
+        challengesRun: Array<{ id: string }>;
+        entries: Array<{ entryId: string; rank: number }>;
+        wins: number;
+    };
+    assert.equal(summary.userId, 'host-x');
+    assert.ok(summary.challengesRun.some((ch) => ch.id === challengeId));
+    assert.ok(summary.entries.some((e) => e.entryId === entryId));
+    assert.ok(summary.wins >= 1);
+});
