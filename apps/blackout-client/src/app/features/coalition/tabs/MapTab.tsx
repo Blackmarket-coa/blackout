@@ -1,4 +1,4 @@
-import React, { Suspense, useMemo, useState } from 'react';
+import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import {
     AID_POST_CATEGORIES,
     AID_POST_TYPES,
@@ -21,12 +21,40 @@ import {
     type CoalitionScopeQuery,
 } from '../hooks/useCoalitionFeed';
 import { createCoalitionAidPost, type NearbyQuery } from '../coalitionClient';
+import {
+    buildLayerIconSvg,
+    layerStyleFor,
+    SOLARPUNK_CONTROL_ACTIVE,
+    SOLARPUNK_PANEL_GLOW,
+} from './solarpunkMap';
 import { MyceliumLayer, useMyceliumGraph } from './mycelium';
 import { buildCommunitiesPath } from '../../../pages/paths';
 import { useViewportWidth } from '../../../hooks/useViewportWidth';
 import { isMobileViewport } from '../../../pages/client/layoutMetrics';
 
 const CoalitionMap = React.lazy(() => import('./CoalitionMap'));
+
+/**
+ * Renders a layer's solarpunk glyph inside a control pill, tying the toggle to
+ * its map markers. Appends the static SVG via a ref (reusing the marker icon
+ * builder) so we avoid dangerouslySetInnerHTML; stroke contrasts its surface.
+ */
+function LayerGlyph({ layer, active }: { layer: string; active: boolean }) {
+    const ref = useRef<HTMLSpanElement>(null);
+    useEffect(() => {
+        const host = ref.current;
+        if (!host) return;
+        const style = layerStyleFor(layer);
+        host.replaceChildren(buildLayerIconSvg(style, active ? style.ink : style.color));
+    }, [layer, active]);
+    return (
+        <span
+            ref={ref}
+            aria-hidden="true"
+            style={{ display: 'inline-flex', marginRight: 5, verticalAlign: '-2px' }}
+        />
+    );
+}
 
 export interface MapTabProps {
     scope: CoalitionScopeQuery;
@@ -248,8 +276,8 @@ function AidPostForm({
                     ...fieldStyle,
                     cursor: 'pointer',
                     fontWeight: 600,
-                    background: 'var(--accent-primary, #1ABC9C)',
-                    color: '#04201b',
+                    background: SOLARPUNK_CONTROL_ACTIVE.bg,
+                    color: SOLARPUNK_CONTROL_ACTIVE.ink,
                 }}
             >
                 {busy ? 'Posting…' : 'Post aid'}
@@ -377,8 +405,7 @@ export function MapTab({ scope }: MapTabProps) {
                 style={{
                     position: 'relative',
                     height: '100%',
-                    background:
-                        'radial-gradient(circle at 30% 30%, rgba(26,188,156,0.08), transparent 60%), var(--bg-input)',
+                    background: SOLARPUNK_PANEL_GLOW,
                     overflow: 'hidden',
                 }}
                 data-testid="coalition-map-canvas"
@@ -428,6 +455,7 @@ export function MapTab({ scope }: MapTabProps) {
                 >
                     {SPATIAL_LAYER_DEFINITIONS.map((definition) => {
                         const active = activeLayers.has(definition.key);
+                        const layerStyle = layerStyleFor(definition.key);
                         return (
                             <button
                                 key={definition.key}
@@ -435,17 +463,20 @@ export function MapTab({ scope }: MapTabProps) {
                                 onClick={() => toggleLayer(definition.key)}
                                 aria-pressed={active}
                                 style={{
-                                    border: '1px solid var(--border-default)',
+                                    border: `1px solid ${
+                                        active ? layerStyle.color : 'var(--border-default)'
+                                    }`,
                                     borderRadius: 999,
                                     padding: '4px 10px',
                                     fontSize: 12,
-                                    background: active
-                                        ? 'var(--accent-primary, #1ABC9C)'
-                                        : 'var(--bg-surface)',
-                                    color: active ? '#0a1a0f' : 'var(--text-primary)',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    background: active ? layerStyle.color : 'var(--bg-surface)',
+                                    color: active ? layerStyle.ink : 'var(--text-primary)',
                                     cursor: 'pointer',
                                 }}
                             >
+                                <LayerGlyph layer={definition.key} active={active} />
                                 {definition.label}
                             </button>
                         );
@@ -465,10 +496,8 @@ export function MapTab({ scope }: MapTabProps) {
                             borderRadius: 999,
                             padding: '4px 10px',
                             fontSize: 12,
-                            background: nearby
-                                ? 'var(--accent-primary, #1ABC9C)'
-                                : 'var(--bg-surface)',
-                            color: nearby ? '#0a1a0f' : 'var(--text-primary)',
+                            background: nearby ? SOLARPUNK_CONTROL_ACTIVE.bg : 'var(--bg-surface)',
+                            color: nearby ? SOLARPUNK_CONTROL_ACTIVE.ink : 'var(--text-primary)',
                             cursor: 'pointer',
                         }}
                     >
@@ -489,9 +518,12 @@ export function MapTab({ scope }: MapTabProps) {
                                 fontSize: 12,
                                 background:
                                     radiusKm === km
-                                        ? 'var(--accent-primary, #1ABC9C)'
+                                        ? SOLARPUNK_CONTROL_ACTIVE.bg
                                         : 'var(--bg-surface)',
-                                color: radiusKm === km ? '#0a1a0f' : 'var(--text-primary)',
+                                color:
+                                    radiusKm === km
+                                        ? SOLARPUNK_CONTROL_ACTIVE.ink
+                                        : 'var(--text-primary)',
                                 cursor: 'pointer',
                             }}
                         >
@@ -515,9 +547,11 @@ export function MapTab({ scope }: MapTabProps) {
                             padding: '4px 10px',
                             fontSize: 12,
                             background: showAidForm
-                                ? 'var(--accent-primary, #1ABC9C)'
+                                ? SOLARPUNK_CONTROL_ACTIVE.bg
                                 : 'var(--bg-surface)',
-                            color: showAidForm ? '#0a1a0f' : 'var(--text-primary)',
+                            color: showAidForm
+                                ? SOLARPUNK_CONTROL_ACTIVE.ink
+                                : 'var(--text-primary)',
                             cursor: 'pointer',
                         }}
                     >
@@ -563,9 +597,11 @@ export function MapTab({ scope }: MapTabProps) {
                                     padding: '4px 10px',
                                     fontSize: 12,
                                     background: active
-                                        ? 'var(--accent-primary, #1ABC9C)'
+                                        ? SOLARPUNK_CONTROL_ACTIVE.bg
                                         : 'var(--bg-surface)',
-                                    color: active ? '#0a1a0f' : 'var(--text-primary)',
+                                    color: active
+                                        ? SOLARPUNK_CONTROL_ACTIVE.ink
+                                        : 'var(--text-primary)',
                                     cursor: 'pointer',
                                 }}
                             >
@@ -585,9 +621,9 @@ export function MapTab({ scope }: MapTabProps) {
                             padding: '4px 10px',
                             fontSize: 12,
                             background: showHeat
-                                ? 'var(--accent-primary, #1ABC9C)'
+                                ? SOLARPUNK_CONTROL_ACTIVE.bg
                                 : 'var(--bg-surface)',
-                            color: showHeat ? '#0a1a0f' : 'var(--text-primary)',
+                            color: showHeat ? SOLARPUNK_CONTROL_ACTIVE.ink : 'var(--text-primary)',
                             cursor: 'pointer',
                         }}
                     >
@@ -699,7 +735,7 @@ export function MapTab({ scope }: MapTabProps) {
                                                     : '1px solid var(--border-default)',
                                                 borderRadius: 8,
                                                 background: active
-                                                    ? 'rgba(26,188,156,0.16)'
+                                                    ? 'rgba(214,154,46,0.16)'
                                                     : 'var(--bg-surface)',
                                                 color: 'var(--text-primary)',
                                                 padding: '6px 8px',
@@ -777,7 +813,7 @@ export function MapTab({ scope }: MapTabProps) {
                             {selectedPin.denId ? (
                                 <a
                                     href={buildCommunitiesPath(null, selectedPin.denId)}
-                                    style={{ color: 'var(--accent-primary, #1ABC9C)' }}
+                                    style={{ color: SOLARPUNK_CONTROL_ACTIVE.bg }}
                                 >
                                     Open associated den →
                                 </a>

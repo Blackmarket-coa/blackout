@@ -2,6 +2,16 @@ import React, { useEffect, useRef } from 'react';
 import maplibregl, { type LngLatLike, type StyleSpecification } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { buildCommunitiesPath } from '../../../pages/paths';
+import {
+    buildLayerIconSvg,
+    ensureSolarpunkMapStyles,
+    layerStyleFor,
+    MARKER_RING,
+    SOLARPUNK_HEAT_RAMP,
+    SOLARPUNK_MAP_CLASS,
+    VIEWER_MARKER_COLOR,
+    type SolarpunkLayerStyle,
+} from './solarpunkMap';
 
 export interface CoalitionMapPin {
     id: string;
@@ -41,23 +51,6 @@ export interface CoalitionMapProps {
     /** Called when the user dismisses the marker popup, so selection can clear. */
     onDeselect?: () => void;
 }
-
-/** Per-layer marker colors, keyed by `SpatialLayerKey`. */
-const LAYER_COLORS: Record<string, string> = {
-    vendors: '#1ABC9C',
-    jobs: '#3498DB',
-    gardens: '#2ECC71',
-    votes: '#9B59B6',
-    aid: '#E74C3C',
-    infra: '#F39C12',
-    events: '#D7FF3F',
-    dens: '#2EF2C5',
-    streams: '#FF6B6B',
-    projects: '#E67E22',
-    communities: '#5DADE2',
-    mycelium: '#8E44AD',
-};
-const DEFAULT_MARKER_COLOR = '#1ABC9C';
 
 const HEAT_SOURCE_ID = 'coalition-heat';
 const HEAT_LAYER_ID = 'coalition-heat-layer';
@@ -115,8 +108,13 @@ function resolveStyle(): string | StyleSpecification {
     return url && url.length > 0 ? url : OSM_RASTER_STYLE;
 }
 
+/**
+ * A solarpunk marker: a warm botanical/solar glyph in a layer-colored badge
+ * ringed in cream. The glyph (SVG) carries the layer's identity; the hue gives
+ * it family warmth. Live / high-activity pins keep the ambient pulse.
+ */
 function buildMarkerElement(
-    color: string,
+    style: SolarpunkLayerStyle,
     label: string,
     options: { pulsing?: boolean } = {}
 ): HTMLButtonElement {
@@ -125,21 +123,24 @@ function buildMarkerElement(
     el.setAttribute('data-testid', 'coalition-map-marker');
     el.setAttribute('aria-label', label);
     el.style.cssText = [
-        'width:18px',
-        'height:18px',
+        'width:26px',
+        'height:26px',
         'border-radius:50%',
-        `background:${color}`,
-        'border:2px solid #fff',
-        'box-shadow:0 1px 4px rgba(0,0,0,0.4)',
+        `background:${style.color}`,
+        `border:2px solid ${MARKER_RING}`,
+        'box-shadow:0 1px 5px rgba(31,90,71,0.45)',
         'cursor:pointer',
         'padding:0',
-        'display:block',
+        'display:flex',
+        'align-items:center',
+        'justify-content:center',
     ].join(';');
+    el.appendChild(buildLayerIconSvg(style));
     if (options.pulsing) {
         ensurePulseKeyframes();
         el.dataset.pulsing = 'true';
-        el.style.setProperty('--coalition-pulse-color', hexToRgba(color, 0.7));
-        el.style.animation = 'coalition-pulse 1.8s ease-out infinite';
+        el.style.setProperty('--coalition-pulse-color', hexToRgba(style.color, 0.7));
+        el.style.animation = 'coalition-pulse 2.4s ease-out infinite';
     }
     return el;
 }
@@ -153,19 +154,19 @@ function buildPopupContent(pin: CoalitionMapPin): HTMLElement {
     root.style.cssText = 'display:grid;gap:4px;min-width:150px;max-width:240px';
     const title = document.createElement('strong');
     title.textContent = pin.title;
-    title.style.cssText = 'font-size:13px;color:#0a1a0f';
+    title.style.cssText = 'font-size:13px;color:#1B130A';
     root.appendChild(title);
     if (pin.subtitle) {
         const subtitle = document.createElement('small');
         subtitle.textContent = pin.subtitle;
-        subtitle.style.cssText = 'font-size:11px;color:#5a5a5a';
+        subtitle.style.cssText = 'font-size:11px;color:#6B5A4A';
         root.appendChild(subtitle);
     }
     if (pin.denId) {
         const link = document.createElement('a');
         link.href = buildCommunitiesPath(null, pin.denId);
         link.textContent = 'Open associated den →';
-        link.style.cssText = 'font-size:12px;font-weight:600;color:#0a7d68';
+        link.style.cssText = 'font-size:12px;font-weight:600;color:#C66A2B';
         root.appendChild(link);
     }
     return root;
@@ -220,6 +221,7 @@ export function CoalitionMap({
 
     useEffect(() => {
         if (!containerRef.current) return undefined;
+        ensureSolarpunkMapStyles();
         const map = new maplibregl.Map({
             container: containerRef.current,
             style: resolveStyle(),
@@ -251,8 +253,9 @@ export function CoalitionMap({
         let plotted = 0;
         for (const pin of pins) {
             if (!Number.isFinite(pin.latitude) || !Number.isFinite(pin.longitude)) continue;
-            const color = LAYER_COLORS[pin.layer] ?? DEFAULT_MARKER_COLOR;
-            const el = buildMarkerElement(color, pin.title, { pulsing: isPinPulsing(pin) });
+            const el = buildMarkerElement(layerStyleFor(pin.layer), pin.title, {
+                pulsing: isPinPulsing(pin),
+            });
             el.addEventListener('click', (event) => {
                 event.stopPropagation();
                 onSelectRef.current(pin.id);
@@ -285,7 +288,7 @@ export function CoalitionMap({
         viewerMarkerRef.current?.remove();
         viewerMarkerRef.current = null;
         if (!viewerLocation) return;
-        viewerMarkerRef.current = new maplibregl.Marker({ color: '#2D6CDF' })
+        viewerMarkerRef.current = new maplibregl.Marker({ color: VIEWER_MARKER_COLOR })
             .setLngLat([viewerLocation.lng, viewerLocation.lat])
             .addTo(map);
     }, [viewerLocation]);
@@ -359,8 +362,9 @@ export function CoalitionMap({
                 paint: {
                     'heatmap-weight': ['get', 'heat'],
                     'heatmap-intensity': 1.2,
-                    'heatmap-radius': 36,
-                    'heatmap-opacity': 0.65,
+                    'heatmap-radius': 38,
+                    'heatmap-opacity': 0.55,
+                    'heatmap-color': SOLARPUNK_HEAT_RAMP,
                 },
             } as never);
         };
@@ -376,6 +380,7 @@ export function CoalitionMap({
         <div
             ref={containerRef}
             data-testid="coalition-map-gl"
+            className={SOLARPUNK_MAP_CLASS}
             style={{ position: 'absolute', inset: 0 }}
         />
     );

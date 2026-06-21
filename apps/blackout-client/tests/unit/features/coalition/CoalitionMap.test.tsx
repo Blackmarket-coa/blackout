@@ -120,6 +120,8 @@ vi.mock('maplibre-gl', () => {
 
 // eslint-disable-next-line import/first
 import { CoalitionMap } from '../../../../src/app/features/coalition/tabs/CoalitionMap';
+// eslint-disable-next-line import/first
+import { VIEWER_MARKER_COLOR } from '../../../../src/app/features/coalition/tabs/solarpunkMap';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -164,6 +166,8 @@ describe('CoalitionMap', () => {
         render(<CoalitionMap pins={pins} onSelectPin={vi.fn()} />);
         expect(mocks.markerInstances).toHaveLength(2);
         expect(mocks.markerInstances[0].lngLat).toEqual([-74.2, 40.1]);
+        // Each marker carries a solarpunk layer glyph.
+        expect(mocks.markerInstances[0].element?.querySelector('svg')).toBeTruthy();
         // >1 pin → viewport is fit to the marker bounds.
         expect(mocks.mapInstance.fitBounds).toHaveBeenCalled();
     });
@@ -187,7 +191,9 @@ describe('CoalitionMap', () => {
         );
         // 2 pin markers + 1 colored viewer marker.
         expect(mocks.markerInstances).toHaveLength(3);
-        expect(mocks.markerInstances.some((marker) => marker.color === '#2D6CDF')).toBe(true);
+        expect(mocks.markerInstances.some((marker) => marker.color === VIEWER_MARKER_COLOR)).toBe(
+            true
+        );
     });
 
     it('flies to the focused pin', () => {
