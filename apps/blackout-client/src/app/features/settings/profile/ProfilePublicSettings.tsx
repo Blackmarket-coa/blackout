@@ -4,19 +4,18 @@ import { SequenceCard } from '../../../components/sequence-card';
 import { SequenceCardStyle } from '../styles.css';
 import { SettingTile } from '../../../components/setting-tile';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
+import { type BmcProfileEvent } from '../../profile/profileTypes';
+import { fetchProfile } from '../../profile/profileClient';
 import {
-  BMC_PROFILE_EVENT_TYPE,
-  type BmcProfileEvent,
-  type ProfileConnection,
-} from '../../profile/profileTypes';
+  mirrorProfileToAccountData,
+  readPublicProfileAccountData,
+  writePublicProfileSettings,
+} from '../../profile/publicProfileMirror';
 
 const FBM_VENDOR_ENDPOINT = 'https://api.freeblackmarket.com/store/vendors';
 
 type VerifyState = 'idle' | 'checking' | 'valid' | 'invalid';
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
-
-const readProfile = (content: unknown): BmcProfileEvent =>
-  content && typeof content === 'object' ? (content as BmcProfileEvent) : {};
 
 /** Verify an FBM vendor handle resolves on the public store API. */
 const verifyFbmHandle = async (handle: string): Promise<boolean> => {
@@ -37,22 +36,11 @@ const verifyFbmHandle = async (handle: string): Promise<boolean> => {
  */
 export function ProfilePublicSettings() {
   const mx = useMatrixClient();
-  // matrix-js-sdk types account-data accessors to known event keys; co.bmc.profile
-  // is a custom type, so access it through a string-keyed structural view (same
-  // pattern as features/home/streakState.ts and features/quests/useQuests.ts).
-  const accountData = mx as unknown as {
-    getAccountData: (type: string) => { getContent: () => unknown } | undefined;
-    setAccountData: (type: string, content: Record<string, unknown>) => Promise<unknown>;
-  };
   const userId = mx.getUserId() ?? '';
-  const serverName = userId.includes(':') ? userId.split(':')[1] : 'theblackout.app';
   const handle = userId.startsWith('@') ? userId.slice(1).split(':')[0] : userId;
   const profileUrl = `theblackout.app/@${handle}`;
 
-  const existing = useMemo<BmcProfileEvent>(
-    () => readProfile(accountData.getAccountData(BMC_PROFILE_EVENT_TYPE)?.getContent()),
-    [mx]
-  );
+  const existing = useMemo<BmcProfileEvent>(() => readPublicProfileAccountData(mx), [mx]);
 
   const [isPublic, setIsPublic] = useState<boolean>(existing.public === true);
   const [fbmHandle, setFbmHandle] = useState<string>(
@@ -100,31 +88,23 @@ export function ProfilePublicSettings() {
   const handleSave = useCallback(async () => {
     setSaveState('saving');
     try {
-      const current = readProfile(accountData.getAccountData(BMC_PROFILE_EVENT_TYPE)?.getContent());
-      const trimmedFbm = fbmHandle.trim();
-      const connections: ProfileConnection[] = [
-        ...(current.connections ?? []).filter((conn) => conn.type !== 'fbm'),
-      ];
-      if (trimmedFbm) {
-        connections.push({
-          type: 'fbm',
-          username: trimmedFbm,
-          url: `https://freeblackmarket.com/${trimmedFbm}`,
-          label: 'FreeBlackMarket',
-        });
+      // Pull the canonical server profile and mirror it into account data so
+      // publishing immediately reflects the user's existing bio/banner/etc. on
+      // their public page (best-effort — the publish gate below is what matters).
+      if (userId) {
+        try {
+          const member = await fetchProfile(userId);
+          if (member?.profile) await mirrorProfileToAccountData(mx, member.profile);
+        } catch {
+          /* server profile unavailable — fall through to the gate write */
+        }
       }
-      const merged: BmcProfileEvent = {
-        ...current,
-        public: isPublic,
-        connections,
-        sponsors: sponsors.length > 0 ? sponsors : undefined,
-      };
-      await accountData.setAccountData(BMC_PROFILE_EVENT_TYPE, merged as Record<string, unknown>);
+      await writePublicProfileSettings(mx, { isPublic, sponsors, fbmHandle });
       setSaveState('saved');
     } catch {
       setSaveState('error');
     }
-  }, [mx, isPublic, fbmHandle, sponsors]);
+  }, [mx, userId, isPublic, fbmHandle, sponsors]);
 
   return (
     <Box direction="Column" gap="100">

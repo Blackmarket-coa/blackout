@@ -12,6 +12,7 @@ import {
 } from './cosmeticsAtoms';
 import { saveProfile as saveProfileDefault, type SaveProfileInput } from './profileClient';
 import { syncStatusToPresence } from './customStatus';
+import { mirrorProfileToAccountData } from './publicProfileMirror';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { useHardenAvatarImage } from '../privacy-tools/useHardenAvatarImage';
 import { MEMBER_PRIMARY_ROLES } from './profileTypes';
@@ -126,6 +127,10 @@ export const ProfileEditor = ({ saveProfile = saveProfileDefault }: ProfileEdito
             });
             // Publish the status to presence so other clients can see it.
             await syncStatusToPresence(mx, profile.profile.status);
+            // Mirror the public-facing fields into co.bmc.profile account data so
+            // the zero-auth public profile (theblackout.app/@handle) reflects this
+            // edit. Preserves the publish gate + sponsors owned by public settings.
+            await mirrorProfileToAccountData(mx, profile.profile);
             setSaveState('saved');
         } catch (error) {
             setSaveError(error instanceof Error ? error.message : 'Failed to save profile.');

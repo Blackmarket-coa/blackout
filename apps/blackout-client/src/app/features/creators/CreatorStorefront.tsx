@@ -380,16 +380,20 @@ export const CreatorStorefrontView = ({
     }, [sponsorHandles]);
 
     // --- derived view data ---
+    // For logged-in viewers, `/v1/profile` (MemberProfile) nests the rich fields
+    // under `.profile`; the zero-auth `bmc` mirror is the primary source.
+    const memberProfile = (profile as { profile?: PublicBmcProfile } | null)?.profile;
     const displayName =
         matrixProfile?.displayname || profile?.displayName || profile?.handle || handle;
     const displayHandle = profile?.handle || handle;
-    const bio = bmc?.bio || profile?.bio || '';
-    const pronouns = bmc?.pronouns || '';
-    const bannerUrl = bmc?.banner ? mxcToUrl(bmc.banner, HOMESERVER_URL) : null;
+    const bio = bmc?.bio || memberProfile?.bio || profile?.bio || '';
+    const pronouns = bmc?.pronouns || memberProfile?.pronouns || '';
+    const bannerMxc = bmc?.banner || memberProfile?.banner;
+    const bannerUrl = bannerMxc ? mxcToUrl(bannerMxc, HOMESERVER_URL) : null;
     const avatarUrl = matrixProfile?.avatar_url
         ? mxcToUrl(matrixProfile.avatar_url, HOMESERVER_URL)
         : null;
-    const socialLinks = (bmc?.connections ?? []).filter(
+    const socialLinks = (bmc?.connections ?? memberProfile?.connections ?? []).filter(
         (conn) => conn.type !== 'fbm' && conn.type !== 'email' && conn.type !== 'phone' && conn.url
     );
     const level = useMemo(() => creatorLevelFromReputation(reputation), [reputation]);
