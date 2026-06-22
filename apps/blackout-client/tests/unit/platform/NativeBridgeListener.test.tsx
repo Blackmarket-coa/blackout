@@ -56,6 +56,25 @@ describe('NativeBridgeListener', () => {
         expect(navigate).not.toHaveBeenCalled();
     });
 
+    it('routes a threaded notification to the room with a thread param', async () => {
+        await mount();
+        await emit({
+            type: 'notification_interacted',
+            roomId: '!room:bmc',
+            threadRootEventId: '$root:bmc',
+        });
+        const target = navigate.mock.calls[0]?.[0] as string;
+        expect(target.startsWith(buildCommunitiesPath(null, '!room:bmc'))).toBe(true);
+        expect(target).toContain(`thread=${encodeURIComponent('$root:bmc')}`);
+        expect(target).toContain(`event=${encodeURIComponent('$root:bmc')}`);
+    });
+
+    it('routes a non-threaded notification to the bare room (no thread param)', async () => {
+        await mount();
+        await emit({ type: 'notification_interacted', roomId: '!room:bmc' });
+        expect(navigate).toHaveBeenCalledWith(buildCommunitiesPath(null, '!room:bmc'));
+    });
+
     it('routes a deep link to the extracted room', async () => {
         extractRoomIdFromDeepLinkUrl.mockReturnValue('!deep:bmc');
         await mount();

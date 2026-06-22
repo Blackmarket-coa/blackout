@@ -18,6 +18,14 @@ export type NotificationInteractedEvent = {
     type: 'notification_interacted';
     source: NativeBridgeSource;
     roomId: string;
+    /**
+     * Optional thread root event id. When the push payload identifies a
+     * threaded message, the listener routes to the room *and* opens that
+     * thread; absent, it falls back to room-level routing. End-to-end this
+     * also requires the Sygnal push gateway to forward the thread id in the
+     * FCM/APNs payload (see KNOWN_LIMITATIONS.md).
+     */
+    threadRootEventId?: string;
 };
 
 export type ResumeSyncEvent = {

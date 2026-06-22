@@ -7,6 +7,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { Provider, createStore } from 'jotai';
 import CommunitiesRoute from '../../../../src/app/features/communities/CommunitiesRoute';
 import {
+    activeThreadRootIdAtom,
     roomJumpTargetEventIdAtom,
     selectedRoomIdAtom,
     selectedSpaceIdAtom,
@@ -100,5 +101,23 @@ describe('CommunitiesRoute URL -> atom mapping', () => {
         );
 
         expect(store.get(roomJumpTargetEventIdAtom)).toBe('$evt:server');
+    });
+
+    it('opens the thread panel from ?thread= (threaded notification routing)', () => {
+        const den = '!den:server';
+        const store = renderAt(
+            `/communities/-/dens/${encodeURIComponent(den)}?thread=${encodeURIComponent(
+                '$root:server'
+            )}`
+        );
+
+        expect(store.get(activeThreadRootIdAtom)).toBe('$root:server');
+    });
+
+    it('clears the active thread root when no ?thread= is present', () => {
+        const den = '!den:server';
+        const store = renderAt(`/communities/-/dens/${encodeURIComponent(den)}`);
+
+        expect(store.get(activeThreadRootIdAtom)).toBeNull();
     });
 });

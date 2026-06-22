@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { useSetAtom } from 'jotai';
 import {
+    activeThreadRootIdAtom,
     roomJumpTargetEventIdAtom,
     selectedRoomIdAtom,
     selectedSpaceIdAtom,
@@ -49,8 +50,10 @@ export const CommunitiesRoute = () => {
     const setSelectedRoomId = useSetAtom(selectedRoomIdAtom);
     const setSelectedSpaceId = useSetAtom(selectedSpaceIdAtom);
     const setRoomJumpTargetEventId = useSetAtom(roomJumpTargetEventIdAtom);
+    const setActiveThreadRootId = useSetAtom(activeThreadRootIdAtom);
 
     const jumpEventId = searchParams.get('event');
+    const jumpThreadRootId = searchParams.get('thread');
 
     useEffect(() => {
         setSelectedSpaceId(decodeId(canopyId));
@@ -58,7 +61,20 @@ export const CommunitiesRoute = () => {
         // `?event=<id>` (set by navigateRoom) focuses a specific message in the
         // den timeline; ClientLayout reads this atom and feeds RoomTimeline.
         setRoomJumpTargetEventId(jumpEventId);
-    }, [canopyId, denId, jumpEventId, setSelectedRoomId, setSelectedSpaceId, setRoomJumpTargetEventId]);
+        // `?thread=<rootId>` (set when routing from a threaded notification)
+        // opens the thread panel on that root; clearing it when absent keeps
+        // the panel from sticking open across plain room navigations.
+        setActiveThreadRootId(jumpThreadRootId);
+    }, [
+        canopyId,
+        denId,
+        jumpEventId,
+        jumpThreadRootId,
+        setSelectedRoomId,
+        setSelectedSpaceId,
+        setRoomJumpTargetEventId,
+        setActiveThreadRootId,
+    ]);
 
     const useCanopyServer =
         runtimeFeatureFlags.canopyServer &&
