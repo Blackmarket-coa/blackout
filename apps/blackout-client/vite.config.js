@@ -34,8 +34,15 @@ const copyFiles = {
       rename: { stripBase: 1 },
     },
     {
-      // src already starts with `public/`, so dest '' -> dist/public/res/android.
-      src: 'public/res/android',
+      // src already starts with `public/`, so dest '' -> dist/public/res.
+      // Covers the android-chrome icons referenced by manifest.json and the
+      // apple-touch-icons referenced by index.html (both served /public/res/...).
+      src: 'public/res',
+      dest: '',
+    },
+    {
+      // -> dist/public/favicon.ico (index.html references ./public/favicon.ico).
+      src: 'public/favicon.ico',
       dest: '',
     },
     {
