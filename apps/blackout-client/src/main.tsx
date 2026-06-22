@@ -1,4 +1,5 @@
 /* eslint-disable import/first */
+import './polyfills';
 import { installConsoleCapture } from './app/lib/diagnostics/consoleCapture';
 
 // Install the console ring buffer before any other import emits, so the
