@@ -18,12 +18,18 @@ import {
     type PublicCreatorTier,
     type PublicProfileResponse,
 } from './creatorClient';
+import {
+    fetchFbmVendor,
+    type FbmProduct,
+    type FbmVendor,
+    type FbmVendorResponse,
+} from './fbmClient';
+import { fetchMatrixProfile, type MatrixProfile } from './matrixProfileClient';
 
 // --- Blackout deployment constants (public surface; no SDK/session needed) ---
 const HOMESERVER_URL = 'https://matrix.theblackout.app';
 const SERVER_NAME = 'theblackout.app';
 const CHAT_URL = 'https://chat.theblackout.app';
-const FBM_API = 'https://api.freeblackmarket.com';
 const FBM_STORE = 'https://freeblackmarket.com';
 
 // --- BMC solarpunk palette ---
@@ -34,47 +40,6 @@ const CARD_BG = '#12121e';
 const BORDER = '#1e1e2e';
 const BANNER_GRADIENT = 'linear-gradient(135deg, #1a0a2e 0%, #261242 50%, #1a2e1a 100%)';
 const FONT_STACK = "'IBM Plex Sans', system-ui, -apple-system, sans-serif";
-
-// --- Loose FBM vendor/catalog shapes (public /store API) ---
-interface FbmVendor {
-    id?: string;
-    name?: string;
-    handle?: string;
-    description?: string;
-    photo?: string;
-}
-interface FbmProduct {
-    id: string;
-    title: string;
-    description?: string;
-    handle?: string;
-    thumbnail?: string;
-    status?: string;
-    type?: { value?: string };
-    metadata?: {
-        event_date?: string;
-        event_time?: string;
-        venue_name?: string;
-        venue_location?: string;
-        recurring?: string | boolean;
-    };
-    variants?: Array<{ id: string; prices?: Array<{ amount?: number; currency_code?: string }> }>;
-}
-interface FbmVendorResponse {
-    vendor: FbmVendor;
-    catalog?: {
-        events?: FbmProduct[];
-        digital?: FbmProduct[];
-        services?: FbmProduct[];
-        physical?: FbmProduct[];
-        all?: FbmProduct[];
-    };
-}
-
-interface MatrixProfile {
-    displayname?: string;
-    avatar_url?: string;
-}
 
 const formatCents = (amount: number, currency = 'USD'): string => {
     try {
@@ -264,16 +229,11 @@ export const CreatorStorefrontView = ({
         };
 
         // Matrix profile (always public).
-        (async () => {
-            try {
-                const res = await fetch(
-                    `${HOMESERVER_URL}/_matrix/client/v3/profile/${encodeURIComponent(userId)}`
-                );
-                if (res.ok) set(setMatrixProfile, (await res.json()) as MatrixProfile);
-            } catch {
-                /* ignore */
-            }
-        })();
+        fetchMatrixProfile(HOMESERVER_URL, userId)
+            .then((value) => {
+                if (value) set(setMatrixProfile, value);
+            })
+            .catch(() => undefined);
 
         // Single source of truth: the zero-auth public projection of the server
         // profile store (GET /v1/profile/:userId/public). Also the opt-in gate —
@@ -315,14 +275,11 @@ export const CreatorStorefrontView = ({
     useEffect(() => {
         if (!fbmHandle) return undefined;
         let cancelled = false;
-        (async () => {
-            try {
-                const res = await fetch(`${FBM_API}/store/vendors/${encodeURIComponent(fbmHandle)}`);
-                if (res.ok && !cancelled) setFbm((await res.json()) as FbmVendorResponse);
-            } catch {
-                /* ignore */
-            }
-        })();
+        fetchFbmVendor(fbmHandle)
+            .then((value) => {
+                if (value && !cancelled) setFbm(value);
+            })
+            .catch(() => undefined);
         return () => {
             cancelled = true;
         };
@@ -336,17 +293,8 @@ export const CreatorStorefrontView = ({
         (async () => {
             const vendors: FbmVendor[] = [];
             for (const sponsor of sponsorHandles) {
-                try {
-                    const res = await fetch(
-                        `${FBM_API}/store/vendors/${encodeURIComponent(sponsor)}`
-                    );
-                    if (res.ok) {
-                        const body = (await res.json()) as FbmVendorResponse;
-                        if (body.vendor) vendors.push(body.vendor);
-                    }
-                } catch {
-                    /* ignore */
-                }
+                const body = await fetchFbmVendor(sponsor);
+                if (body?.vendor) vendors.push(body.vendor);
             }
             if (!cancelled) setSponsorVendors(vendors);
         })();

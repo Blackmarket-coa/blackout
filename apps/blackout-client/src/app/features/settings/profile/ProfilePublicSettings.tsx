@@ -6,22 +6,10 @@ import { SettingTile } from '../../../components/setting-tile';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { type BmcProfileEvent, type ProfileConnection } from '../../profile/profileTypes';
 import { fetchProfile, saveProfile } from '../../profile/profileClient';
-
-const FBM_VENDOR_ENDPOINT = 'https://api.freeblackmarket.com/store/vendors';
+import { verifyFbmHandle } from '../../creators/fbmClient';
 
 type VerifyState = 'idle' | 'checking' | 'valid' | 'invalid';
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
-
-/** Verify an FBM vendor handle resolves on the public store API. */
-const verifyFbmHandle = async (handle: string): Promise<boolean> => {
-  if (!handle) return false;
-  try {
-    const res = await fetch(`${FBM_VENDOR_ENDPOINT}/${encodeURIComponent(handle)}`);
-    return res.ok;
-  } catch {
-    return false;
-  }
-};
 
 /**
  * Public creator profile controls. Lives in Account → Identity and reads/writes
