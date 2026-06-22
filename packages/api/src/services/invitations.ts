@@ -412,25 +412,58 @@ export type InvitationListState = 'active' | 'revoked' | 'exhausted' | 'expired'
 export interface InvitationListFilters {
   state?: InvitationListState;
   label?: string;
+  /** Opaque cursor — the `${createdAt}|${id}` of the last row of the prior page. */
+  before?: string;
+  /** Max rows for this page. Omit for the (legacy) unbounded listing. */
+  limit?: number;
 }
 
-// TODO: when pagination lands, push state+label filtering into the DB layer
-// (`db.listInvitationTokensByCreator`) so we don't load the whole set per call.
+export interface InvitationListPage {
+  rows: InvitationTokenRecord[];
+  nextCursor: string | null;
+  hasMore: boolean;
+}
+
+const invitationCursor = (row: InvitationTokenRecord): string => `${row.createdAt}|${row.id}`;
+
+const paginateInvitations = (
+  rows: InvitationTokenRecord[],
+  limit?: number,
+): InvitationListPage => {
+  if (typeof limit !== 'number') return { rows, nextCursor: null, hasMore: false };
+  const hasMore = rows.length > limit;
+  const page = hasMore ? rows.slice(0, limit) : rows;
+  const last = page[page.length - 1];
+  return { rows: page, nextCursor: hasMore && last ? invitationCursor(last) : null, hasMore };
+};
+
 export const listInvitationsForUser = (
   userId: string,
   filters: InvitationListFilters = {},
-): InvitationTokenRecord[] => {
-  const rows = db.listInvitationTokensByCreator(userId);
-  if (!filters.state && !filters.label) return rows;
+): InvitationListPage => {
+  const { state, label, before, limit } = filters;
+  const wantedKind = state === 'active' ? 'ok' : state;
 
-  const wantedKind = filters.state === 'active' ? 'ok' : filters.state;
-  const needle = filters.label?.toLowerCase();
+  // The cheap filters (label substring + the createdAt|id cursor) push down to
+  // the store. The derived `state` filter can't — expired/exhausted depend on
+  // the current time + use-count — so when it's active we fetch the
+  // label/cursor-filtered set and apply state in memory, then paginate AFTER
+  // the state filter so a page never comes back short while more matching rows
+  // remain. With no derived filter, the store does the limiting (fetching one
+  // extra row so we can detect a further page cheaply).
+  if (wantedKind) {
+    const rows = db
+      .listInvitationTokensByCreator(userId, { label, before })
+      .filter((row) => evaluateInvitation(row).kind === wantedKind);
+    return paginateInvitations(rows, limit);
+  }
 
-  return rows.filter((row) => {
-    if (wantedKind && evaluateInvitation(row).kind !== wantedKind) return false;
-    if (needle && !(row.label ?? '').toLowerCase().includes(needle)) return false;
-    return true;
+  const fetched = db.listInvitationTokensByCreator(userId, {
+    label,
+    before,
+    limit: typeof limit === 'number' ? limit + 1 : undefined,
   });
+  return paginateInvitations(fetched, limit);
 };
 
 const clampMaxUses = (n: number): number => {

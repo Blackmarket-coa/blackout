@@ -268,3 +268,87 @@ test('GET /v1/invitations lists the inviter rows with redemptions', async () => 
         assert.equal(row!.redemptions[0]!.userId, redeemer.id);
     });
 });
+
+type ListBody = {
+    invitations: Array<{ id: string; label?: string }>;
+    nextCursor: string | null;
+    hasMore: boolean;
+};
+
+async function createInvite(token: string, label: string): Promise<string> {
+    const res = await app.request('/v1/invitations', {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ matrixRoomId: '!den:test.local', label }),
+    });
+    assert.equal(res.status, 201);
+    const body = (await res.json()) as { invitation: { id: string } };
+    return body.invitation.id;
+}
+
+async function listInvites(token: string, query = ''): Promise<ListBody> {
+    const res = await app.request(`/v1/invitations${query}`, {
+        headers: { authorization: `Bearer ${token}` },
+    });
+    assert.equal(res.status, 200);
+    return (await res.json()) as ListBody;
+}
+
+test('GET /v1/invitations paginates with limit + before cursor without overlap', async () => {
+    const inviter = makeUser(`pager_${randomUUID().slice(0, 8)}`);
+    await withMatrix(matrixHappyPath, async () => {
+        const ids = new Set<string>();
+        for (let i = 0; i < 3; i += 1) ids.add(await createInvite(inviter.token, `crew-${i}`));
+
+        const page1 = await listInvites(inviter.token, '?limit=2');
+        assert.equal(page1.invitations.length, 2);
+        assert.equal(page1.hasMore, true);
+        assert.ok(page1.nextCursor, 'first page should expose a cursor');
+
+        const page2 = await listInvites(
+            inviter.token,
+            `?limit=2&before=${encodeURIComponent(page1.nextCursor!)}`,
+        );
+        assert.equal(page2.invitations.length, 1);
+        assert.equal(page2.hasMore, false);
+        assert.equal(page2.nextCursor, null);
+
+        const seen = [...page1.invitations, ...page2.invitations].map((r) => r.id);
+        assert.equal(new Set(seen).size, seen.length, 'pages must not overlap');
+        for (const id of ids) assert.ok(seen.includes(id), `id ${id} should appear across pages`);
+    });
+});
+
+test('GET /v1/invitations label filter composes with pagination', async () => {
+    const inviter = makeUser(`labeler_${randomUUID().slice(0, 8)}`);
+    await withMatrix(matrixHappyPath, async () => {
+        await createInvite(inviter.token, 'alpha-squad');
+        await createInvite(inviter.token, 'alpha-squad');
+        await createInvite(inviter.token, 'beta-squad');
+
+        const filtered = await listInvites(inviter.token, '?label=alpha&limit=1');
+        assert.equal(filtered.invitations.length, 1);
+        assert.equal(filtered.hasMore, true, 'two alpha rows exist, page of 1 has more');
+        assert.ok(filtered.invitations[0]!.label!.includes('alpha'));
+
+        const rest = await listInvites(
+            inviter.token,
+            `?label=alpha&limit=1&before=${encodeURIComponent(filtered.nextCursor!)}`,
+        );
+        assert.equal(rest.invitations.length, 1);
+        assert.equal(rest.hasMore, false);
+        assert.ok(rest.invitations[0]!.label!.includes('alpha'));
+    });
+});
+
+test('GET /v1/invitations without limit stays backward-compatible (unbounded, no cursor)', async () => {
+    const inviter = makeUser(`legacy_${randomUUID().slice(0, 8)}`);
+    await withMatrix(matrixHappyPath, async () => {
+        await createInvite(inviter.token, 'x');
+        await createInvite(inviter.token, 'y');
+        const all = await listInvites(inviter.token);
+        assert.ok(all.invitations.length >= 2);
+        assert.equal(all.hasMore, false);
+        assert.equal(all.nextCursor, null);
+    });
+});
