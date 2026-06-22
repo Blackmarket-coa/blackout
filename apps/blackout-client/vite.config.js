@@ -3,7 +3,6 @@ import react from '@vitejs/plugin-react';
 import { wasm } from '@rollup/plugin-wasm';
 import { viteStaticCopy } from 'vite-plugin-static-copy';
 import { vanillaExtractPlugin } from '@vanilla-extract/vite-plugin';
-import { NodeGlobalsPolyfillPlugin } from '@esbuild-plugins/node-globals-polyfill';
 import inject from '@rollup/plugin-inject';
 import topLevelAwait from 'vite-plugin-top-level-await';
 import { VitePWA } from 'vite-plugin-pwa';
@@ -34,8 +33,15 @@ const copyFiles = {
       rename: { stripBase: 1 },
     },
     {
-      // src already starts with `public/`, so dest '' -> dist/public/res/android.
-      src: 'public/res/android',
+      // src already starts with `public/`, so dest '' -> dist/public/res.
+      // Covers the android-chrome icons referenced by manifest.json and the
+      // apple-touch-icons referenced by index.html (both served /public/res/...).
+      src: 'public/res',
+      dest: '',
+    },
+    {
+      // -> dist/public/favicon.ico (index.html references ./public/favicon.ico).
+      src: 'public/favicon.ico',
       dest: '',
     },
     {
@@ -124,18 +130,11 @@ export default defineConfig({
     }),
   ],
   optimizeDeps: {
-    esbuildOptions: {
-      define: {
-        global: 'globalThis',
-      },
-      plugins: [
-        // Enable esbuild polyfill plugins
-        NodeGlobalsPolyfillPlugin({
-          process: false,
-          buffer: true,
-        }),
-      ],
-    },
+    // Node globals (Buffer/global) are polyfilled at runtime via src/polyfills.ts
+    // and index.html rather than through esbuild here: Vite 8 optimizes deps with
+    // Rolldown, which does not run esbuild plugins, and the old
+    // `optimizeDeps.esbuildOptions` path (NodeGlobalsPolyfillPlugin) throws
+    // "Not implemented" under the new optimizer.
   },
   build: {
     outDir: 'dist',
