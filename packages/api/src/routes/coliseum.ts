@@ -511,4 +511,49 @@ coliseum.get('/leaderboards', (c) => {
     return c.json({ category, entries: leaderboard(category, { region, limit }) });
 });
 
+// --- per-creator public summary ---
+
+// Public: a creator's Coliseum standing for the public profile page. Aggregates
+// challenges they run, challenges they've entered (with rank/wins) and their
+// creators-leaderboard placement. No auth required — read-only public data.
+coliseum.get('/creators/:userId', (c) => {
+    const userId = decodeURIComponent(c.req.param('userId'));
+
+    const challengesRun = listChallenges({}).filter((ch) => ch.creatorId === userId);
+
+    const entries: Array<{
+        challengeId: string;
+        challengeTitle: string;
+        entryId: string;
+        title: string;
+        votes: number;
+        rank: number;
+    }> = [];
+    for (const challenge of listChallenges({})) {
+        for (const entry of listRankedEntries(challenge.id)) {
+            if (entry.entrantId !== userId) continue;
+            entries.push({
+                challengeId: challenge.id,
+                challengeTitle: challenge.title,
+                entryId: entry.id,
+                title: entry.title,
+                votes: entry.votes,
+                rank: entry.rank,
+            });
+        }
+    }
+    const wins = entries.filter((entry) => entry.rank === 1).length;
+
+    const placement =
+        leaderboard('creators', {}).find((entry) => entry.id === userId) ?? null;
+
+    return c.json({
+        userId,
+        challengesRun,
+        entries,
+        wins,
+        leaderboard: placement,
+    });
+});
+
 export default coliseum;

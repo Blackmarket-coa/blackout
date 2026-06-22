@@ -35,6 +35,43 @@ function createProfileRouter() {
         return c.json(getProfileOrDefault(userId));
     });
 
+    // Zero-auth public projection backing the public creator profile page
+    // (theblackout.app/@handle). No capability gate — anyone can read a profile
+    // the owner has opted into publishing. Returns 404 unless `public: true`,
+    // and strips contact connections so they never leak on the public surface.
+    profile.get('/:userId/public', (c) => {
+        const { userId } = c.req.param();
+        const member = getProfileOrDefault(userId);
+        if (member.profile.public !== true) {
+            return c.json({ code: 'not_found', message: 'Profile not found' }, 404);
+        }
+        const p = member.profile;
+        // Contact connections (email/phone) only ever arrive as raw strings via
+        // the sanitizer's cast; never expose them on the public surface.
+        const connections = (p.connections ?? []).filter(
+            (conn) => (conn.type as string) !== 'email' && (conn.type as string) !== 'phone'
+        );
+        c.header('Cache-Control', 'public, max-age=60');
+        return c.json({
+            userId: member.userId,
+            displayName: member.displayName,
+            avatarUrl: member.avatarUrl,
+            primaryRole: member.primaryRole,
+            roleBadges: member.roleBadges,
+            profile: {
+                bio: p.bio,
+                pronouns: p.pronouns,
+                banner: p.banner,
+                decoration: p.decoration,
+                public: true,
+                sponsors: p.sponsors,
+                featuredCanopies: p.featuredCanopies,
+                badgeIds: p.badgeIds,
+                connections,
+            },
+        });
+    });
+
     profile.put('/:userId', async (c) => {
         const denied = requireDomainCapability(c, 'profile', 'write');
         if (denied) return denied;

@@ -3,6 +3,7 @@ import { Box, Chip, Text, IconButton, Icon, Icons, Scroll } from 'folds';
 import { Page, PageContent, PageHeader } from '../../../components/page';
 import { MatrixId } from './MatrixId';
 import { Profile } from './Profile';
+import { ProfilePublicSettings } from '../profile/ProfilePublicSettings';
 import { ContactInformation } from './ContactInfo';
 import { IgnoredUserList } from './IgnoredUserList';
 import { LinkedAccounts } from '../linked-accounts';
@@ -75,6 +76,7 @@ export function Account({ requestClose }: AccountProps) {
               {tab === 'identity' && (
                 <>
                   <Profile />
+                  <ProfilePublicSettings />
                   <MatrixId />
                   <ContactInformation />
                   <LinkedAccounts />

@@ -32,6 +32,18 @@ export function fetchHomeContentFeed(
     return getJson<ContentResponse>(`${CONTENT_BASE}/feed?limit=${limit}`, token);
 }
 
+/** Public: a specific creator's published content (for their public profile). */
+export function fetchCreatorContentByUser(
+    userId: string,
+    limit = 30,
+    token: string | null = readBlackoutApiToken(),
+): Promise<ContentResponse> {
+    return getJson<ContentResponse>(
+        `${CONTENT_BASE}/by/${encodeURIComponent(userId)}?limit=${limit}`,
+        token,
+    );
+}
+
 /** The signed-in creator's own content library. */
 export function fetchMyContent(
     status?: ContentStatus,

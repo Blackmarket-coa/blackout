@@ -131,3 +131,33 @@ test('creator content: write requires auth', async () => {
     });
     assert.equal(res.status, 401);
 });
+
+test('creator content: public per-creator endpoint returns only published items, no auth', async () => {
+    const draft = await app.request('/v1/creator/content', {
+        method: 'POST',
+        headers: authHeader('creator-public-1'),
+        body: JSON.stringify({ kind: 'guide', title: 'Hidden draft' }),
+    });
+    assert.equal(draft.status, 201);
+
+    const pub = await app.request('/v1/creator/content', {
+        method: 'POST',
+        headers: authHeader('creator-public-1'),
+        body: JSON.stringify({ kind: 'article', title: 'Shipped piece' }),
+    });
+    const { content: pubContent } = (await pub.json()) as { content: { id: string } };
+    await app.request(`/v1/creator/content/${pubContent.id}/publish`, {
+        method: 'POST',
+        headers: authHeader('creator-public-1'),
+    });
+
+    // No auth header — this is a public read.
+    const res = await app.request('/v1/creator/content/by/creator-public-1');
+    assert.equal(res.status, 200);
+    const { content } = (await res.json()) as {
+        content: Array<{ id: string; status: string; title: string }>;
+    };
+    assert.ok(content.every((item) => item.status === 'published'));
+    assert.ok(content.some((item) => item.id === pubContent.id));
+    assert.ok(!content.some((item) => item.title === 'Hidden draft'));
+});
