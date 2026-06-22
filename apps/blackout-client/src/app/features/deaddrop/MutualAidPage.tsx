@@ -6,6 +6,17 @@ import {
     type OpenMutualAidThreadInput,
 } from '@blackout/sdk';
 import { useRegistryFetcher } from '../../core/features/RegistryFetcherProvider';
+// @blackout/ui v1 primitives (Workstream B production adoption). Consumed from
+// source so the client's vanilla-extract plugin compiles their `.css.ts`,
+// matching MessageComposer's dogfood import.
+import {
+    Button,
+    Card,
+    Checkbox,
+    Input,
+    Stack,
+    TextArea,
+} from '../../../../../../packages/ui/src/primitives';
 
 export type MutualAidFetcher = {
     listThreads: () => Promise<{ threads: MutualAidThreadPayload[] }>;
@@ -131,53 +142,44 @@ export function MutualAidPage({ fetcher: explicitFetcher, showInactive = false }
                 </p>
             ) : null}
 
-            <form
-                data-testid="mutual-aid-open-form"
-                onSubmit={onOpen}
-                style={{
-                    border: '1px solid var(--border-default)',
-                    borderRadius: 10,
-                    padding: 12,
-                    display: 'grid',
-                    gap: 6,
-                }}
-            >
-                <strong>Open a request</strong>
-                <label>
-                    Headline
-                    <input
-                        data-testid="mutual-aid-headline"
-                        value={headline}
-                        onChange={(event) => setHeadline(event.target.value)}
-                    />
-                </label>
-                <label>
-                    Body (optional)
-                    <textarea
-                        data-testid="mutual-aid-body"
-                        value={body}
-                        onChange={(event) => setBody(event.target.value)}
-                        rows={3}
-                    />
-                </label>
-                <button
-                    type="submit"
-                    data-testid="mutual-aid-open-submit"
-                    disabled={pending === 'open'}
-                >
-                    {pending === 'open' ? 'Opening…' : 'Open request'}
-                </button>
+            <form data-testid="mutual-aid-open-form" onSubmit={onOpen}>
+                <Card>
+                    <Stack direction="column" gap={6}>
+                        <strong>Open a request</strong>
+                        <label>
+                            Headline
+                            <Input
+                                data-testid="mutual-aid-headline"
+                                value={headline}
+                                onChange={(event) => setHeadline(event.target.value)}
+                            />
+                        </label>
+                        <label>
+                            Body (optional)
+                            <TextArea
+                                data-testid="mutual-aid-body"
+                                value={body}
+                                onChange={(event) => setBody(event.target.value)}
+                                rows={3}
+                            />
+                        </label>
+                        <Button
+                            type="submit"
+                            data-testid="mutual-aid-open-submit"
+                            loading={pending === 'open'}
+                        >
+                            {pending === 'open' ? 'Opening…' : 'Open request'}
+                        </Button>
+                    </Stack>
+                </Card>
             </form>
 
-            <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                <input
-                    data-testid="mutual-aid-toggle-inactive"
-                    type="checkbox"
-                    checked={includeInactive}
-                    onChange={(event) => setIncludeInactive(event.target.checked)}
-                />
-                Show resolved + cancelled threads
-            </label>
+            <Checkbox
+                data-testid="mutual-aid-toggle-inactive"
+                label="Show resolved + cancelled threads"
+                checked={includeInactive}
+                onChange={(event) => setIncludeInactive(event.target.checked)}
+            />
 
             {visible.length === 0 ? (
                 <p
@@ -193,41 +195,37 @@ export function MutualAidPage({ fetcher: explicitFetcher, showInactive = false }
                             key={thread.threadId}
                             data-testid={`mutual-aid-thread-${thread.threadId}`}
                             data-status={thread.status}
-                            style={{
-                                border: '1px solid var(--border-default)',
-                                borderRadius: 10,
-                                padding: 10,
-                                display: 'grid',
-                                gap: 4,
-                            }}
                         >
-                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                <strong>{thread.headline}</strong>
-                                <small>{thread.status}</small>
-                            </div>
-                            <small style={{ color: 'var(--text-secondary)' }}>
-                                requester: {thread.requester} · opened {thread.openedAt}
-                            </small>
-                            {thread.body ? (
-                                <p style={{ margin: 0 }}>{thread.body}</p>
-                            ) : null}
-                            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                                {STATUSES.filter((status) => status !== thread.status).map(
-                                    (status) => (
-                                        <button
-                                            key={status}
-                                            type="button"
-                                            data-testid={`mutual-aid-status-${thread.threadId}-${status}`}
-                                            onClick={() =>
-                                                void onUpdateStatus(thread.threadId, status)
-                                            }
-                                            disabled={pending === thread.threadId}
-                                        >
-                                            Mark {status}
-                                        </button>
-                                    )
-                                )}
-                            </div>
+                            <Card>
+                                <Stack direction="column" gap={4}>
+                                    <Stack direction="row" justify="space-between">
+                                        <strong>{thread.headline}</strong>
+                                        <small>{thread.status}</small>
+                                    </Stack>
+                                    <small style={{ color: 'var(--text-secondary)' }}>
+                                        requester: {thread.requester} · opened {thread.openedAt}
+                                    </small>
+                                    {thread.body ? <p style={{ margin: 0 }}>{thread.body}</p> : null}
+                                    <Stack direction="row" gap={6} wrap>
+                                        {STATUSES.filter((status) => status !== thread.status).map(
+                                            (status) => (
+                                                <Button
+                                                    key={status}
+                                                    tone="neutral"
+                                                    size="sm"
+                                                    data-testid={`mutual-aid-status-${thread.threadId}-${status}`}
+                                                    onClick={() =>
+                                                        void onUpdateStatus(thread.threadId, status)
+                                                    }
+                                                    disabled={pending === thread.threadId}
+                                                >
+                                                    Mark {status}
+                                                </Button>
+                                            )
+                                        )}
+                                    </Stack>
+                                </Stack>
+                            </Card>
                         </li>
                     ))}
                 </ul>

@@ -649,10 +649,29 @@ class InMemoryDb {
     return [...this.invitationTokens.values()].find((t) => t.tokenHash === tokenHash);
   }
 
-  listInvitationTokensByCreator(createdBy: string): InvitationTokenRecord[] {
-    return [...this.invitationTokens.values()]
+  listInvitationTokensByCreator(
+    createdBy: string,
+    opts: { label?: string; before?: string; limit?: number } = {},
+  ): InvitationTokenRecord[] {
+    const needle = opts.label?.toLowerCase();
+    // Deterministic ordering (createdAt desc, then id desc) so the composite
+    // `${createdAt}|${id}` cursor is stable even when two tokens share a
+    // createdAt timestamp.
+    let rows = [...this.invitationTokens.values()]
       .filter((t) => t.createdBy === createdBy)
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      .sort(
+        (a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id),
+      );
+    if (needle) {
+      rows = rows.filter((t) => (t.label ?? '').toLowerCase().includes(needle));
+    }
+    if (opts.before) {
+      rows = rows.filter((t) => `${t.createdAt}|${t.id}`.localeCompare(opts.before!) < 0);
+    }
+    if (typeof opts.limit === 'number') {
+      rows = rows.slice(0, Math.max(0, opts.limit));
+    }
+    return rows;
   }
 
   /** Atomically bump useCount; returns the updated record or undefined when

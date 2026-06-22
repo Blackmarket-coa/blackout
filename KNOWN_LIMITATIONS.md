@@ -56,8 +56,15 @@ For the source-of-truth triage with tier/owner detail see
   `NativeBridgeListener` and unit-tested
   (`apps/blackout-client/tests/unit/platform/NativeBridgeListener.test.tsx`);
   full end-to-end coverage on real Capacitor/Tauri builds is still pending.
-  Thread-level deep routing (landing on a specific thread, not just the room)
-  is not yet wired — the native-bridge contract carries `roomId` only. Manual
+- **Thread-level deep routing is now wired client-side.**
+  `NotificationInteractedEvent` carries an optional `threadRootEventId`; the
+  mobile push handler forwards `thread_root_event_id` when present;
+  `NativeBridgeListener` routes to a `?thread=&event=` target; and
+  `CommunitiesRoute` hydrates `activeThreadRootIdAtom` from `?thread=` so the
+  thread panel opens on that root (mirrors the existing `?event=` jump). The
+  remaining end-to-end gap is the **Sygnal push gateway emitting the thread id
+  in the FCM/APNs payload** (homeserver-config); until then mobile taps still
+  arrive with `room_id` only and fall back to room-level routing. Manual
   reports welcome.
 
 ---
@@ -70,7 +77,7 @@ Workstream A (Ports 1–5) is closed; B–F remain post-beta scope.
 
 | Workstream | Scope | Status |
 | --- | --- | --- |
-| **B** | `@blackout/ui` v1 primitives (Button/Input/Select/etc., ~18 components) using `vanilla-extract`. | Scoped, not started. |
+| **B** | `@blackout/ui` v1 primitives (Button/Input/Select/etc.) using `vanilla-extract`. | Primitive set shipped (B1 + B1.1). Incremental production adoption ongoing — `MessageComposer` and `MutualAidPage` consume them today. |
 | **C** | Reactions / threading hardening: `ThreadPanel` slot mount in `panelSlots.tsx`, sidebar `ThreadUnreadBadge` mount, integration coverage. Helpers and components landed; final wiring pending. | ~60% complete. |
 | **D** | Discord parity P2: GIF picker (Giphy), voice/video polish, screen-sharing polish, media player controls. | Scoped, not started. |
 | **E** | Discord parity P3: AutoMod via Draupnir sidecar, raid protection, verification gates, slowmode. | Scoped, not started. |

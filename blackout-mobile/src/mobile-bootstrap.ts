@@ -86,13 +86,16 @@ export async function initBlackoutMobileBridge() {
           new CustomEvent('blackout:push-action', { detail: notification })
         );
 
-        // Navigate to the room if the notification contains a room_id
+        // Navigate to the room if the notification contains a room_id. When
+        // the push payload also identifies a thread root, forward it so the
+        // listener can open that thread (Sygnal must emit thread_root_event_id).
         const data = notification.notification?.data;
         if (data?.room_id) {
           dispatchNativeBridgeEvent({
             type: 'notification_interacted',
             source: 'mobile',
             roomId: data.room_id,
+            threadRootEventId: data.thread_root_event_id || undefined,
           });
           window.dispatchEvent(
             new CustomEvent('blackout:navigate-room', {

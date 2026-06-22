@@ -49,6 +49,10 @@ const createSchema = z.object({
 const listQuerySchema = z.object({
   state: z.enum(['active', 'revoked', 'exhausted', 'expired']).optional(),
   label: z.string().trim().min(1).max(120).optional(),
+  // Page size, bounded 1–200; absent means the (legacy) unbounded listing.
+  limit: z.coerce.number().int().min(1).max(200).optional(),
+  // Opaque cursor echoed back as `nextCursor` from the previous page.
+  before: z.string().trim().min(1).max(200).optional(),
 });
 
 /**
@@ -256,9 +260,9 @@ invitations.get('/', (c) => {
     );
   }
 
-  const rows = listInvitationsForUser(user.sub, parsedQuery.data);
+  const page = listInvitationsForUser(user.sub, parsedQuery.data);
   return c.json({
-    invitations: rows.map((r) => ({
+    invitations: page.rows.map((r) => ({
       ...publicShape(r),
       redemptions: db.listInvitationRedemptionsByToken(r.id).map((red) => ({
         userId: red.redeemedByUserId,
@@ -267,6 +271,8 @@ invitations.get('/', (c) => {
         at: red.createdAt,
       })),
     })),
+    nextCursor: page.nextCursor,
+    hasMore: page.hasMore,
   });
 });
 

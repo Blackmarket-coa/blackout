@@ -13,6 +13,35 @@
 
 ---
 
+## 0. Update — 2026-06 code-debt pass (`claude/code-debt-repo-gaps`)
+
+A fresh re-scan against `develop` confirmed the carry list shrank further;
+this branch closed the remaining tractable code items:
+
+- **Invitations pagination** — the standing TODO in
+  `packages/api/src/services/invitations.ts` is closed. `GET /v1/invitations`
+  now takes `limit` + a `before` cursor and returns `nextCursor`/`hasMore`
+  (backward-compatible). The cheap `label`/cursor filters push down into
+  `store.listInvitationTokensByCreator`; the derived `state` filter stays in
+  the service and pagination is applied after it.
+- **Notification thread-level deep routing (client slice)** — the gap noted in
+  `KNOWN_LIMITATIONS.md` ("native-bridge contract carries `roomId` only") is
+  closed on the client: `NotificationInteractedEvent.threadRootEventId`,
+  mobile push forwarding, `NativeBridgeListener` `?thread=&event=` routing, and
+  `CommunitiesRoute` → `activeThreadRootIdAtom`. Remaining end-to-end work is
+  the Sygnal push payload (homeserver-config), tracked in `KNOWN_LIMITATIONS.md`.
+- **T4-04 composer call-site swap** — confirmed already CLOSED on `develop`:
+  `useAttachPhoto` calls `pickPhotoAttachment` on native viewports and falls
+  back to the hidden file input otherwise.
+- **Workstream B adoption** — one more production adopter landed:
+  `MutualAidPage` now consumes `@blackout/ui` primitives (Button/Input/
+  TextArea/Checkbox/Stack/Card), alongside `MessageComposer`.
+
+Still genuinely open (unchanged): **T2-01** (`QuestionSize.tsx` solarpunk SVGs,
+blocked on design delivery).
+
+---
+
 ## 1. Executive summary
 
 The repository is in unusually good shape for a project of this size:
@@ -170,7 +199,7 @@ Additional decisions captured the same session:
 These confirm the survey itself; rerun them on later branches to validate the open carry list has not grown:
 
 1. `grep -rE "\.skip\(|xit\(|xdescribe\(" --include='*.test.*'` over the repo — confirm 0 actual skipped test calls outside `legacy/`.
-2. `grep -rnE "TODO|FIXME|XXX|HACK" --include='*.ts' --include='*.tsx'` excluding `node_modules`, `legacy/`, `docs/`, `_port/`, and `*.test.*` — confirm only the 2 listed TODOs remain (T2-01, T2-02).
+2. `grep -rnE "TODO|FIXME|XXX|HACK" --include='*.ts' --include='*.tsx'` excluding `node_modules`, `legacy/`, `docs/`, `_port/`, and `*.test.*` — as of the `claude/code-debt-repo-gaps` branch only **1 production TODO remains**: T2-01 (`QuestionSize.tsx`, design-asset blocked). T2-02's `LivestreamViewer` TODO was resolved when the `StreamRecord.denId` association landed; the `invitations.ts` pagination TODO was closed on the code-debt branch (see the 2026-06 update below).
 3. `head apps/blackout-client/vitest.config.ts` — confirm exclude list is `[default vitest excludes]` only.
 4. `head docs/unfinished-code-checklist.md` — confirm "Open items: 0".
 5. Baseline gates (currently passing per `docs/rollout-readiness-status.md`): `pnpm install --no-frozen-lockfile && pnpm lint && pnpm test && pnpm audit --audit-level moderate`.
