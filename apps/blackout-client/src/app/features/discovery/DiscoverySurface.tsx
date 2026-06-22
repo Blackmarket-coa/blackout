@@ -6,6 +6,8 @@ import { useParams, useSearchParams } from 'react-router-dom';
 import { Avatar, Box, Button, Chip, Icon, Icons, Scroll, Text, color } from 'folds';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { useRoomNavigate } from '../../hooks/useRoomNavigate';
+import { useViewportWidth } from '../../hooks/useViewportWidth';
+import { isMobileViewport } from '../../pages/client/layoutMetrics';
 import { allRoomsAtom } from '../../state/room-list/roomList';
 import { roomToParentsAtom } from '../../state/room/roomToParents';
 import { mDirectAtom } from '../../state/mDirectList';
@@ -63,6 +65,12 @@ export function DiscoverySurface({ onSelectRoom, onSelectSpace }: DiscoverySurfa
   const [sort, setSort] = useState<DiscoverySort>('recency');
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
   const { navigateRoom, navigateSpace } = useRoomNavigate();
+  // DiscoverySurface lives in the AppShell tree (no ScreenSizeProvider), so use
+  // the provider-free viewport hook the rest of that tree uses. On phones the
+  // two-pane row squeezes the join action off-screen; stack it instead so the
+  // full-width "Join & Open" button sits directly under the results list.
+  const viewportWidth = useViewportWidth();
+  const isMobile = isMobileViewport(viewportWidth);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['discovery', server, searchTerm],
@@ -219,8 +227,18 @@ export function DiscoverySurface({ onSelectRoom, onSelectSpace }: DiscoverySurfa
               <Text style={{ color: color.Critical.Main }}>{friendlyError}</Text>
             )}
 
-            <Box gap="300" alignItems="Start">
-              <Box direction="Column" gap="100" style={{ flex: '2 1 0', minWidth: 0 }}>
+            <Box
+              gap="300"
+              direction={isMobile ? 'Column' : 'Row'}
+              alignItems={isMobile ? 'Stretch' : 'Start'}
+              data-testid="discovery-two-pane"
+            >
+              <Box
+                direction="Column"
+                gap="100"
+                data-testid="discovery-list-pane"
+                style={isMobile ? { minWidth: 0, width: '100%' } : { flex: '2 1 0', minWidth: 0 }}
+              >
                 <Scroll hideTrack visibility="Hover" size="0">
                   <Box direction="Column" gap="100" role="listbox" aria-label="Discovery results">
                     {isLoading && <Text>Loading discovery…</Text>}
@@ -252,7 +270,12 @@ export function DiscoverySurface({ onSelectRoom, onSelectSpace }: DiscoverySurfa
                 </Scroll>
               </Box>
 
-              <Box direction="Column" gap="200" style={{ flex: '1 1 0', minWidth: 0 }}>
+              <Box
+                direction="Column"
+                gap="200"
+                data-testid="discovery-preview-pane"
+                style={isMobile ? { minWidth: 0, width: '100%' } : { flex: '1 1 0', minWidth: 0 }}
+              >
                 <Text size="L400">Inline join preview</Text>
                 {selectedItem ? (
                   <Box direction="Column" gap="100">

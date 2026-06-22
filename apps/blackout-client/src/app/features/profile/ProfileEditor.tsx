@@ -124,13 +124,17 @@ export const ProfileEditor = ({ saveProfile = saveProfileDefault }: ProfileEdito
                 isFriend: profile.isFriend,
                 profile: profile.profile,
             });
-            // Publish the status to presence so other clients can see it.
-            await syncStatusToPresence(mx, profile.profile.status);
             setSaveState('saved');
         } catch (error) {
             setSaveError(error instanceof Error ? error.message : 'Failed to save profile.');
             setSaveState('error');
+            return;
         }
+        // Publishing the status to presence is best-effort and runs only after the
+        // save has been recorded as successful, so a presence failure can never
+        // flip a saved profile back to an error state ("something went wrong" while
+        // the edits were in fact saved).
+        void syncStatusToPresence(mx, profile.profile.status);
     }, [authenticatedUserId, mx, profile, saveProfile]);
 
     const onImageUpload = async (field: 'banner' | 'avatarUrl', file?: File) => {
