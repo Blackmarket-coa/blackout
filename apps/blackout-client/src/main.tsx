@@ -69,6 +69,7 @@ import { NotificationTokenBroker } from './platform/NotificationTokenBroker';
 import { UnreadCountBroadcaster } from './platform/UnreadCountBroadcaster';
 import { ConfirmProvider } from './app/components/confirm-dialog';
 import { CrashBoundary } from './app/components/CrashBoundary';
+import { SpecVersionsBootstrap } from './app/components/SpecVersionsBootstrap';
 import { ClientConfigLoader } from './app/hooks/ClientConfigLoader';
 
 enableMapSet();
@@ -312,8 +313,12 @@ const BootstrapStatus = () => {
     );
 
     if (authState === 'logged_in') {
+        // SpecVersionsBootstrap supplies the homeserver's spec versions to the
+        // whole authenticated tree. Without it, version-gated hooks
+        // (useMediaAuthentication, …) throw "Server versions are not provided!"
+        // and the first consumer to render (SelfProfileHydrator) crashes the app.
         return (
-            <>
+            <SpecVersionsBootstrap>
                 <RoomsAtomBinder />
                 <CapabilityHydrator />
                 <FeatureFlagOverrideHydrator />
@@ -321,7 +326,7 @@ const BootstrapStatus = () => {
                 <SelfProfileHydrator />
                 <PendingInviteRedeemer />
                 <RouterProvider router={router} />
-            </>
+            </SpecVersionsBootstrap>
         );
     }
 
