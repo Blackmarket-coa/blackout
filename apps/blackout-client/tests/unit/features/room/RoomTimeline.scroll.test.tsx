@@ -60,7 +60,8 @@ const render = (element: React.ReactElement) => {
 };
 
 beforeEach(() => {
-    mocks.loadMore.mockClear();
+    mocks.loadMore.mockReset();
+    mocks.loadMore.mockImplementation(() => Promise.resolve());
     mocks.events = [];
 });
 
@@ -71,6 +72,35 @@ afterEach(() => {
     document.body.innerHTML = '';
     vi.clearAllMocks();
 });
+
+// jsdom has no real layout: scrollTop/scrollHeight/clientHeight default to 0 and
+// writes don't reflow, so the measured-restore paths (open-at-bottom, prepend
+// delta, stick-to-bottom) can't be observed here — rendering message rows would
+// also require fully-fledged MatrixEvents. These tests cover the parts that are
+// deterministic in jsdom: that back-pagination fires once per burst and that the
+// in-flight guard is held until restoration rather than released the instant
+// loadMore resolves (the bug that made scrolling "stick" and reload repeatedly).
+const stubScroller = (
+    el: HTMLElement,
+    geometry: { scrollTop?: number; scrollHeight: number; clientHeight: number }
+) => {
+    let scrollTop = geometry.scrollTop ?? 0;
+    Object.defineProperty(el, 'scrollTop', {
+        configurable: true,
+        get: () => scrollTop,
+        set: (value: number) => {
+            scrollTop = value;
+        },
+    });
+    Object.defineProperty(el, 'scrollHeight', {
+        configurable: true,
+        get: () => geometry.scrollHeight,
+    });
+    Object.defineProperty(el, 'clientHeight', {
+        configurable: true,
+        get: () => geometry.clientHeight,
+    });
+};
 
 describe('RoomTimeline back-pagination', () => {
     it('triggers loadMore only once for a burst of scroll events near the top', () => {
@@ -86,5 +116,53 @@ describe('RoomTimeline back-pagination', () => {
         });
 
         expect(mocks.loadMore).toHaveBeenCalledTimes(1);
+    });
+
+    it('holds the guard until restoration: resolving loadMore alone does not re-arm', async () => {
+        // Defer loadMore so we control exactly when it resolves.
+        let resolveLoad: () => void = () => {};
+        mocks.loadMore.mockImplementation(
+            () =>
+                new Promise<void>((resolve) => {
+                    resolveLoad = resolve;
+                })
+        );
+
+        const container = render(<RoomTimeline roomId="!den:srv" hasMoreBackPagination />);
+        const scroller = container.querySelector('section > div') as HTMLDivElement;
+        stubScroller(scroller, { scrollTop: 0, scrollHeight: 1000, clientHeight: 500 });
+
+        act(() => {
+            scroller.dispatchEvent(new Event('scroll'));
+        });
+        expect(mocks.loadMore).toHaveBeenCalledTimes(1);
+
+        // Resolve the in-flight load and flush microtasks. With no re-render the
+        // restore effect never runs, so the guard must stay held (a re-fire here
+        // is exactly the "sticking"/repeated-reload regression).
+        await act(async () => {
+            resolveLoad();
+            await Promise.resolve();
+        });
+
+        act(() => {
+            for (let i = 0; i < 5; i += 1) {
+                scroller.dispatchEvent(new Event('scroll'));
+            }
+        });
+
+        expect(mocks.loadMore).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not paginate when the scroller is not near the top', () => {
+        const container = render(<RoomTimeline roomId="!den:srv" hasMoreBackPagination />);
+        const scroller = container.querySelector('section > div') as HTMLDivElement;
+        stubScroller(scroller, { scrollTop: 500, scrollHeight: 2000, clientHeight: 500 });
+
+        act(() => {
+            scroller.dispatchEvent(new Event('scroll'));
+        });
+
+        expect(mocks.loadMore).not.toHaveBeenCalled();
     });
 });
