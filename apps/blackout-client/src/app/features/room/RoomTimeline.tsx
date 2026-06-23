@@ -720,8 +720,11 @@ export const RoomTimeline = ({
     const [isAtBottom, setIsAtBottom] = useState(true);
     const isAtBottomRef = useRef(true);
     const initialScrollDoneRef = useRef(false);
-    const backPaginateAnchorRef = useRef<string | null>(null);
     const isPaginatingRef = useRef(false);
+    // Set when a back-pagination is awaiting its measurement-stable position
+    // restore. Holds the pagination guard until the prepended rows have settled.
+    const pendingRestoreRef = useRef<{ prevScrollHeight: number } | null>(null);
+    const restoreFrameRef = useRef<number | null>(null);
     const [profileTarget, setProfileTarget] = useState<MemberProfile | null>(null);
     const buildProfile = useCallback(
         (userId: string): MemberProfile => ({
@@ -787,53 +790,89 @@ export const RoomTimeline = ({
             setIsAtBottom(nearBottom);
         }
 
-        if (el.scrollTop < 80 && hasMoreBackPagination && !isPaginatingRef.current) {
+        if (
+            el.scrollTop < 80 &&
+            hasMoreBackPagination &&
+            !isPaginatingRef.current &&
+            !pendingRestoreRef.current
+        ) {
             isPaginatingRef.current = true;
-            const firstVisible = virtualizer
-                .getVirtualItems()
-                .find((vItem) => items[vItem.index]?.kind === 'message');
-            backPaginateAnchorRef.current = firstVisible
-                ? (items[firstVisible.index]?.id ?? null)
-                : null;
-            try {
-                await loadMore(40);
-            } finally {
-                isPaginatingRef.current = false;
-            }
+            // Capture the pre-prepend height so the restore effect can hold the
+            // reading position by scrollHeight delta (measurement-stable). The
+            // guard is released by that effect, not here, so a scroll tick while
+            // the prepended rows are still settling cannot re-fire loadMore.
+            pendingRestoreRef.current = { prevScrollHeight: el.scrollHeight };
+            await loadMore(40);
         }
-    }, [hasMoreBackPagination, items, loadMore, virtualizer]);
+    }, [hasMoreBackPagination, loadMore]);
 
     // Open the room at the newest message once items are available.
     useLayoutEffect(() => {
         initialScrollDoneRef.current = false;
         isPaginatingRef.current = false;
+        pendingRestoreRef.current = null;
+        if (restoreFrameRef.current !== null) {
+            cancelAnimationFrame(restoreFrameRef.current);
+            restoreFrameRef.current = null;
+        }
     }, [roomId]);
 
+    // Pin to the newest message on first open. Use raw scrollTop against the
+    // measured scrollHeight rather than scrollToIndex (which targets estimated
+    // row offsets and lands short of the bottom, flickering "Jump to latest").
     useLayoutEffect(() => {
         if (initialScrollDoneRef.current || items.length === 0) return;
-        virtualizer.scrollToIndex(items.length - 1, { align: 'end' });
-        isAtBottomRef.current = true;
-        setIsAtBottom(true);
+        const el = scrollerRef.current;
+        if (!el) return;
+        const pin = () => {
+            const node = scrollerRef.current;
+            if (!node) return;
+            node.scrollTop = node.scrollHeight;
+            isAtBottomRef.current = true;
+            setIsAtBottom(true);
+        };
+        pin();
+        // Re-pin after the visible rows re-measure taller than the estimate.
+        requestAnimationFrame(pin);
         initialScrollDoneRef.current = true;
-    }, [items.length, virtualizer]);
+    }, [items.length]);
 
-    // Hold the reading position when older messages are prepended.
+    // Hold the reading position when older messages are prepended. Restoring by
+    // scrollHeight delta is measurement-stable: it does not depend on the
+    // estimate→offset map being accurate while the prepended rows re-measure.
     useLayoutEffect(() => {
-        const anchorId = backPaginateAnchorRef.current;
-        if (!anchorId) return;
-        backPaginateAnchorRef.current = null;
-        const index = items.findIndex((item) => item.id === anchorId);
-        if (index >= 0) {
-            virtualizer.scrollToIndex(index, { align: 'start' });
+        const pending = pendingRestoreRef.current;
+        if (!pending) return;
+        const el = scrollerRef.current;
+        if (!el) {
+            pendingRestoreRef.current = null;
+            isPaginatingRef.current = false;
+            return;
         }
-    }, [items, virtualizer]);
+        el.scrollTop += el.scrollHeight - pending.prevScrollHeight;
+        // The prepended rows re-measure over the next frame; apply one more
+        // correction, then release the pagination guard so a near-top scroll can
+        // trigger the next page only once the position has settled.
+        const settledHeight = el.scrollHeight;
+        restoreFrameRef.current = requestAnimationFrame(() => {
+            restoreFrameRef.current = null;
+            const node = scrollerRef.current;
+            if (node) node.scrollTop += node.scrollHeight - settledHeight;
+            pendingRestoreRef.current = null;
+            isPaginatingRef.current = false;
+        });
+    }, [items.length]);
 
-    // Stick to the bottom for new messages only when already at the bottom.
+    // Stick to the bottom for new messages, and re-pin when rows grow via
+    // measurement (length unchanged), only when already at the bottom.
+    const totalSize = virtualizer.getTotalSize();
     useEffect(() => {
         if (!initialScrollDoneRef.current || !isAtBottomRef.current) return;
-        if (backPaginateAnchorRef.current || items.length === 0) return;
-        virtualizer.scrollToIndex(items.length - 1, { align: 'end' });
-    }, [items.length, virtualizer]);
+        if (pendingRestoreRef.current || items.length === 0) return;
+        const el = scrollerRef.current;
+        if (!el) return;
+        el.scrollTop = el.scrollHeight;
+    }, [items.length, totalSize]);
 
     const lastReceiptRef = useRef<string | null>(null);
     useEffect(() => {
@@ -930,11 +969,11 @@ export const RoomTimeline = ({
                     type="button"
                     style={styles.jumpButton}
                     onClick={() => {
-                        if (items.length === 0) return;
-                        virtualizer.scrollToIndex(items.length - 1, {
-                            align: 'end',
-                            behavior: 'smooth',
-                        });
+                        const el = scrollerRef.current;
+                        if (!el || items.length === 0) return;
+                        isAtBottomRef.current = true;
+                        setIsAtBottom(true);
+                        el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
                     }}
                 >
                     Jump to latest
