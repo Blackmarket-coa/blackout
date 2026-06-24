@@ -8,6 +8,7 @@ export * from './errors/sdkError';
 export * from './governance/actions';
 export * from './governance/matrixActions';
 export * from './playbook/matrixActions';
+export * from './objectives/matrixActions';
 export * from './rounds/matrixActions';
 export * from './roles/matrixActions';
 export * from './compost/matrixActions';

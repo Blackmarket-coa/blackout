@@ -26,6 +26,8 @@ export * from './governance/contracts';
 
 export * from './playbook';
 
+export * from './objectives';
+
 export * from './rounds';
 
 export * from './roles';

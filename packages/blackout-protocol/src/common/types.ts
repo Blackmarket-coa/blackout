@@ -34,6 +34,8 @@ export type BlackoutEventName =
     | 'blackout.deaddrop.share.submitted'
     | 'blackout.deaddrop.audit'
     | 'blackout.den.playbook.set'
+    | 'blackout.den.objective.set'
+    | 'blackout.den.objective.contributed'
     | 'blackout.governance.round.opened'
     | 'blackout.governance.round.closed'
     | 'blackout.governance.role.set'
