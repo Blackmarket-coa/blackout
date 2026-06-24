@@ -1,5 +1,6 @@
 import type {
     GovernanceMeetingPayload,
+    GovernanceTreasuryMilestonePayload,
     GovernanceTreasurySnapshotPayload,
 } from '@blackout/protocol';
 import { createAuthorizedApiClient } from '../../sdk/client';
@@ -14,6 +15,10 @@ export interface ListMeetingsResponse {
 export interface ListTreasurySnapshotsResponse {
     items: GovernanceTreasurySnapshotPayload[];
     nextCursor?: string;
+}
+
+export interface ListTreasuryMilestonesResponse {
+    items: GovernanceTreasuryMilestonePayload[];
 }
 
 function getJson<T>(path: string, token: string | null): Promise<T> {
@@ -89,6 +94,25 @@ export function publishTreasurySnapshot(
 ): Promise<GovernanceTreasurySnapshotPayload> {
     return postJson<GovernanceTreasurySnapshotPayload>(
         `${BASE}/treasury/snapshot`,
+        payload,
+        token,
+    );
+}
+
+export function listTreasuryMilestones(
+    options: { includeArchived?: boolean } = {},
+    token: string | null = readBlackoutApiToken(),
+): Promise<ListTreasuryMilestonesResponse> {
+    const qs = options.includeArchived ? '?includeArchived=1' : '';
+    return getJson<ListTreasuryMilestonesResponse>(`${BASE}/treasury/milestones${qs}`, token);
+}
+
+export function upsertTreasuryMilestone(
+    payload: GovernanceTreasuryMilestonePayload,
+    token: string | null = readBlackoutApiToken(),
+): Promise<GovernanceTreasuryMilestonePayload> {
+    return postJson<GovernanceTreasuryMilestonePayload>(
+        `${BASE}/treasury/milestones`,
         payload,
         token,
     );
