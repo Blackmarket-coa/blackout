@@ -28,6 +28,7 @@ import { buildNewObjective, useObjectiveActions } from '../../objectives';
  * The brief is firm that gamification stays inside its banlist carve-out:
  * party formation is *identity-forming, not status-conferring* — no
  * "party level," no XP, no leaderboards. Just a faster path to a room.
+ * See `GAMIFICATION_BANLIST` (@blackout/protocol) for the canonical rules.
  */
 export interface FormPartyObjectiveInput {
     /** Shared goal title. Seeding is skipped when blank. */

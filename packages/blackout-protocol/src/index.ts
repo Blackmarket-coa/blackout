@@ -28,6 +28,8 @@ export * from './playbook';
 
 export * from './objectives';
 
+export * from './gamification';
+
 export * from './rounds';
 
 export * from './roles';
