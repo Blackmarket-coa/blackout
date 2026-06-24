@@ -73,8 +73,9 @@ test('spatialHeatWeight takes the strongest of severity, activity, and liveness'
 });
 
 test('SPATIAL_LAYER_KEYS covers the canonical layers including the living-map additions', () => {
-    assert.equal(SPATIAL_LAYER_KEYS.length, 12);
+    assert.equal(SPATIAL_LAYER_KEYS.length, 13);
     for (const key of [
+        'video',
         'vendors',
         'aid',
         'votes',

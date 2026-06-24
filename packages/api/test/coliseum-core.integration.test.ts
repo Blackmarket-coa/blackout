@@ -309,7 +309,7 @@ test('rankColiseumTopics sorts by debateHeat desc', () => {
 test('isValidColiseumTab + resolveEnabledColiseumTabs respect config', () => {
     for (const tab of COLISEUM_TABS) assert.ok(isValidColiseumTab(tab));
     assert.equal(isValidColiseumTab('not-a-tab'), false);
-    assert.equal(DEFAULT_COLISEUM_TAB, 'topics');
+    assert.equal(DEFAULT_COLISEUM_TAB, 'reel');
 
     assert.deepEqual(resolveEnabledColiseumTabs(undefined), []);
     assert.deepEqual(resolveEnabledColiseumTabs({ enabled: false }), []);

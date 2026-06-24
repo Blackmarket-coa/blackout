@@ -1,4 +1,5 @@
 export const SPATIAL_LAYER_DEFINITIONS = [
+    { key: 'video', label: 'Stories', aliases: ['video', 'videos', 'stories'] },
     { key: 'vendors', label: 'Marketplace', aliases: ['vendors', 'marketplace', 'markets'] },
     { key: 'jobs', label: 'Jobs', aliases: ['jobs'] },
     { key: 'gardens', label: 'Gardens', aliases: ['gardens'] },
