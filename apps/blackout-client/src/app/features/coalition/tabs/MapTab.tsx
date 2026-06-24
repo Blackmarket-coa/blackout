@@ -14,13 +14,16 @@ import {
     type SpatialFeedItem,
     type SpatialLayerKey,
 } from '@blackout/core';
+import type { CoalitionFeedItem } from '@blackout/core';
 import {
+    useCoalitionFeed,
     useMutualAid,
     useSellerLocations,
     useSpatialFeed,
     type CoalitionScopeQuery,
 } from '../hooks/useCoalitionFeed';
 import { createCoalitionAidPost, type NearbyQuery } from '../coalitionClient';
+import { VideoReel, useVideoShare } from './VideoReel';
 import {
     buildLayerIconSvg,
     layerStyleFor,
@@ -72,6 +75,8 @@ interface PinDetails {
     heat?: number;
     /** Event start (ISO) for temporal filtering; absent for standing pins (aid, vendors). */
     startsAt?: string;
+    /** Present on `video` pins — tapping the pin opens the story reel (Snap Map style). */
+    mediaUrl?: string;
 }
 
 type TemporalMode = 'now' | 'today' | 'week' | 'all';
@@ -304,10 +309,25 @@ export function MapTab({ scope }: MapTabProps) {
         () => !isMobileViewport(typeof window === 'undefined' ? 1280 : window.innerWidth)
     );
 
+    const [reelStartId, setReelStartId] = useState<string | null>(null);
+    const { shareStatus, onShare } = useVideoShare();
+
     const layersArray = useMemo(() => [...activeLayers], [activeLayers]);
     const spatialState = useSpatialFeed(scope, layersArray);
     const aidState = useMutualAid(scope, nearby);
     const sellerState = useSellerLocations(nearby);
+    const videoState = useCoalitionFeed(scope, { kind: 'video', limit: 20 });
+
+    // Only geo-tagged videos belong on the map; others stay in the standalone reel.
+    const videoItems = useMemo<CoalitionFeedItem[]>(
+        () =>
+            (videoState.data?.items ?? []).filter(
+                (item) =>
+                    Number.isFinite(item.latitude) && Number.isFinite(item.longitude)
+            ),
+        [videoState.data]
+    );
+    const videosVisible = activeLayers.has('video');
 
     const requestNearby = (km: number) => {
         if (!navigator.geolocation) {
@@ -348,9 +368,10 @@ export function MapTab({ scope }: MapTabProps) {
             pinList(
                 spatialState.data?.items ?? [],
                 aidState.data?.posts ?? [],
-                sellerState.data?.locations ?? []
+                sellerState.data?.locations ?? [],
+                videosVisible ? videoItems : []
             ),
-        [spatialState.data, aidState.data, sellerState.data]
+        [spatialState.data, aidState.data, sellerState.data, videosVisible, videoItems]
     );
 
     // Apply the temporal window, then (when "Near me" is active) sort by distance.
@@ -399,6 +420,24 @@ export function MapTab({ scope }: MapTabProps) {
         });
     };
 
+    // A video pin opens the story reel (Snap Map tap-to-play); any other pin
+    // selects normally and shows its detail card.
+    const selectPin = (pin: PinDetails) => {
+        if (pin.layer === 'video') {
+            setReelStartId(pin.id);
+            return;
+        }
+        setSelectedPin(pin);
+    };
+
+    // Reel ordered so the tapped story leads, then the rest of the nearby stories.
+    const reelItems = useMemo<CoalitionFeedItem[]>(() => {
+        if (!reelStartId) return [];
+        const start = videoItems.filter((item) => item.id === reelStartId);
+        const rest = videoItems.filter((item) => item.id !== reelStartId);
+        return [...start, ...rest];
+    }, [reelStartId, videoItems]);
+
     return (
         <div style={{ height: mobile ? 'min(82vh, 820px)' : 'min(72vh, 820px)' }}>
             <section
@@ -434,7 +473,7 @@ export function MapTab({ scope }: MapTabProps) {
                         overlayInsets={{ top: 96, bottom: listExpanded ? 200 : 52 }}
                         onSelectPin={(id) => {
                             const pin = pins.find((candidate) => candidate.id === id);
-                            if (pin) setSelectedPin(pin);
+                            if (pin) selectPin(pin);
                         }}
                         onDeselect={() => setSelectedPin(null)}
                     />
@@ -725,7 +764,7 @@ export function MapTab({ scope }: MapTabProps) {
                                     <li key={`${pin.layer}-${pin.id}`}>
                                         <button
                                             type="button"
-                                            onClick={() => setSelectedPin(pin)}
+                                            onClick={() => selectPin(pin)}
                                             aria-current={active}
                                             style={{
                                                 width: '100%',
@@ -821,6 +860,46 @@ export function MapTab({ scope }: MapTabProps) {
                         </div>
                     </div>
                 ) : null}
+
+                {reelStartId && reelItems.length > 0 ? (
+                    <div
+                        data-testid="coalition-map-reel"
+                        style={{
+                            position: 'absolute',
+                            inset: 0,
+                            zIndex: 6,
+                            background: '#000',
+                        }}
+                    >
+                        <button
+                            type="button"
+                            onClick={() => setReelStartId(null)}
+                            aria-label="Close stories"
+                            data-testid="coalition-map-reel-close"
+                            style={{
+                                position: 'absolute',
+                                top: 12,
+                                right: 12,
+                                zIndex: 2,
+                                border: '1px solid rgba(255,255,255,0.3)',
+                                borderRadius: 999,
+                                background: 'rgba(0,0,0,0.55)',
+                                color: '#fff',
+                                padding: '4px 12px',
+                                fontSize: 13,
+                                cursor: 'pointer',
+                            }}
+                        >
+                            ✕ Map
+                        </button>
+                        <VideoReel
+                            items={reelItems}
+                            onShare={onShare}
+                            shareStatus={shareStatus}
+                            height="100%"
+                        />
+                    </div>
+                ) : null}
             </section>
         </div>
     );
@@ -829,10 +908,24 @@ export function MapTab({ scope }: MapTabProps) {
 function pinList(
     spatial: SpatialFeedItem[],
     aid: AidPost[],
-    sellers: SellerLocation[]
+    sellers: SellerLocation[],
+    videos: CoalitionFeedItem[]
 ): PinDetails[] {
     const nowMs = Date.now();
     const pins: PinDetails[] = [];
+    for (const item of videos) {
+        if (!Number.isFinite(item.latitude) || !Number.isFinite(item.longitude)) continue;
+        pins.push({
+            id: item.id,
+            title: item.title,
+            subtitle: `Story · ${item.authorId ?? 'Coalition'}`,
+            layer: 'video',
+            latitude: item.latitude as number,
+            longitude: item.longitude as number,
+            denId: item.denId,
+            mediaUrl: item.mediaUrl,
+        });
+    }
     for (const item of spatial) {
         const status =
             item.status ??

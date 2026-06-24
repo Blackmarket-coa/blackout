@@ -49,6 +49,9 @@ export interface CoalitionFeedItem {
     denId?: string;
     authorId?: string;
     mediaUrl?: string;
+    /** Optional location so a video can surface as a pin on the map (Snap Map style). */
+    latitude?: number;
+    longitude?: number;
     importance: number;
     impact: number;
     socialImpact: number;

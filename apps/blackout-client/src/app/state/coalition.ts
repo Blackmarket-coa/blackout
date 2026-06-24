@@ -16,9 +16,8 @@ export interface CoalitionScope {
 export const coalitionScopeAtom = atom<CoalitionScope>({ kind: 'standalone' });
 
 export const COALITION_TAB_LABELS: Record<CoalitionTabId, string> = {
+    map: 'Map',
     chat: 'Chat',
-    video: 'For You',
-    map: 'Local',
     events: 'Events',
     rings: 'Rings',
     shop: 'Shop',

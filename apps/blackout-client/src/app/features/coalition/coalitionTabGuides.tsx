@@ -14,11 +14,11 @@ export const COALITION_TAB_GUIDES: Record<CoalitionTabId, ReactNode> = {
             Type below to post.
         </>
     ),
-    video: <>Short clips for your community. Record or upload to share with the group.</>,
     map: (
         <>
-            Nearby events, mutual-aid, and vendors on one map. Use <strong>➕ Post aid</strong> to
-            offer or request help.
+            Nearby stories, events, mutual-aid, and vendors on one map. Tap a{' '}
+            <strong>Stories</strong> pin to watch, or use <strong>➕ Post aid</strong> to offer or
+            request help.
         </>
     ),
     events: (

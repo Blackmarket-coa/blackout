@@ -91,6 +91,7 @@ const T = PLAYBOOK_ACCENT_TOKENS;
 
 /** Per-layer solarpunk style, keyed by `SpatialLayerKey` (see core taxonomy). */
 export const SOLARPUNK_LAYER_STYLE: Record<string, SolarpunkLayerStyle> = {
+    video: { color: T.ember.solid, ink: T.ember.ink, icon: ICONS.play },
     gardens: { color: T.fern.solid, ink: T.fern.ink, icon: ICONS.sprout },
     communities: { color: T.moss.solid, ink: T.moss.ink, icon: ICONS.users },
     dens: { color: T.pine.solid, ink: T.pine.ink, icon: ICONS.tent },
