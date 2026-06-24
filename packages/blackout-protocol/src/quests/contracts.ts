@@ -7,7 +7,8 @@
  * Banlist carve-out (per the user override): RPG-style onboarding is in
  * scope, bounded by "personal not comparative, non-coercive, identity-
  * forming not status-conferring." Quests reward narrative beats — they
- * never trade for governance privileges.
+ * never trade for governance privileges. See `GAMIFICATION_BANLIST`
+ * (./gamification/banlist) for the canonical, machine-checked rule set.
  */
 
 import type { EventEnvelope } from '../common/types';

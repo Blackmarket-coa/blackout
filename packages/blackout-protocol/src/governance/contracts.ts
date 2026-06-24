@@ -1,4 +1,5 @@
 import type { EventEnvelope } from '../common/types';
+import type { PlaybookAccentToken } from '../playbook/contracts';
 
 export const GOVERNANCE_PROTOCOL_VERSION = 1 as const;
 
@@ -105,6 +106,61 @@ export interface GovernanceTreasurySnapshotPayload {
     /** Optional total in a fiat reference (e.g. USD); same string-precision rule. */
     totalReference?: { currency: string; amount: string };
 }
+
+/**
+ * A treasury milestone is a shared, cooperative *goal* the community advances
+ * toward — "fund the commons treasury to 50,000 USDC". It overlays the
+ * existing treasury snapshots: the milestone supplies the target, the latest
+ * snapshot's per-asset balance supplies the current value, and the two render
+ * as a "community thermometer".
+ *
+ * Banlist posture (System 5): this is a collective *goal*, not an individual
+ * status. Progress is the treasury balance vs. a target — there is no
+ * per-member contribution attribution or ranking here at all.
+ */
+export const TREASURY_MILESTONE_STATUSES = ['active', 'met', 'archived'] as const;
+export type TreasuryMilestoneStatus = (typeof TREASURY_MILESTONE_STATUSES)[number];
+
+export interface GovernanceTreasuryMilestonePayload {
+    /** Stable id. */
+    milestoneId: string;
+    /** Short human-readable goal, e.g. "Seed the mutual-aid fund". */
+    title: string;
+    /** Asset whose snapshot balance measures progress, e.g. "USDC". */
+    asset: string;
+    /**
+     * Target balance, as a number for thermometer math. Treasury balances are
+     * string-encoded for precision on the snapshot; the milestone target is a
+     * display goal, so a number is sufficient. Must be > 0.
+     */
+    target: number;
+    status: TreasuryMilestoneStatus;
+    /** Optional accent token (shared playbook palette). */
+    accent?: PlaybookAccentToken;
+    /** ISO-8601 timestamp the milestone was created. */
+    createdAt: string;
+    /** ISO-8601 timestamp the milestone was marked met, if it has been. */
+    metAt?: string;
+}
+
+export const isTreasuryMilestoneStatus = (value: unknown): value is TreasuryMilestoneStatus =>
+    typeof value === 'string' && (TREASURY_MILESTONE_STATUSES as readonly string[]).includes(value);
+
+export const isGovernanceTreasuryMilestonePayload = (
+    value: unknown,
+): value is GovernanceTreasuryMilestonePayload => {
+    if (!value || typeof value !== 'object') return false;
+    const p = value as Record<string, unknown>;
+    if (typeof p.milestoneId !== 'string' || p.milestoneId.length === 0) return false;
+    if (typeof p.title !== 'string') return false;
+    if (typeof p.asset !== 'string' || p.asset.length === 0) return false;
+    if (typeof p.target !== 'number' || !Number.isFinite(p.target) || p.target <= 0) return false;
+    if (!isTreasuryMilestoneStatus(p.status)) return false;
+    if (p.accent !== undefined && typeof p.accent !== 'string') return false;
+    if (typeof p.createdAt !== 'string') return false;
+    if (p.metAt !== undefined && typeof p.metAt !== 'string') return false;
+    return true;
+};
 
 export type GovernanceMeetingScheduledEvent = EventEnvelope<
     'blackout.governance.meeting.scheduled',

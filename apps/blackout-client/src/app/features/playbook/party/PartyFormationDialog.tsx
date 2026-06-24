@@ -78,6 +78,9 @@ export function PartyFormationDialog({
     const [name, setName] = useState('');
     const [domain, setDomain] = useState('');
     const [playbookId, setPlaybookId] = useState<PlaybookId>('confluence');
+    const [goalTitle, setGoalTitle] = useState('');
+    const [goalTarget, setGoalTarget] = useState('');
+    const [goalUnit, setGoalUnit] = useState('');
     const [busy, setBusy] = useState(false);
     const [err, setErr] = useState<string | null>(null);
 
@@ -89,10 +92,16 @@ export function PartyFormationDialog({
         setBusy(true);
         setErr(null);
         try {
+            const parsedTarget = Number(goalTarget);
+            const objective =
+                goalTitle.trim() && Number.isFinite(parsedTarget) && parsedTarget > 0
+                    ? { title: goalTitle, target: parsedTarget, unit: goalUnit || undefined }
+                    : undefined;
             const roomId = await formParty({
                 name: name || undefined,
                 domain: domain || undefined,
                 playbookId,
+                objective,
             });
             onFormed?.(roomId);
             onClose();
@@ -171,6 +180,49 @@ export function PartyFormationDialog({
                         data-testid="party-domain"
                     />
                 </label>
+
+                <fieldset
+                    style={{
+                        border: '1px solid var(--border-default)',
+                        borderRadius: 8,
+                        padding: 10,
+                        display: 'grid',
+                        gap: 8,
+                        margin: 0,
+                    }}
+                >
+                    <legend style={{ ...styles.helper, padding: '0 4px' }}>
+                        Shared goal (optional)
+                    </legend>
+                    <input
+                        value={goalTitle}
+                        onChange={(event) => setGoalTitle(event.target.value)}
+                        placeholder="A goal the whole party advances together"
+                        style={styles.input}
+                        disabled={busy || !available}
+                        data-testid="party-goal-title"
+                    />
+                    <div style={{ display: 'flex', gap: 8 }}>
+                        <input
+                            type="number"
+                            min={1}
+                            value={goalTarget}
+                            onChange={(event) => setGoalTarget(event.target.value)}
+                            placeholder="Target (e.g. 40)"
+                            style={{ ...styles.input, flex: 1 }}
+                            disabled={busy || !available}
+                            data-testid="party-goal-target"
+                        />
+                        <input
+                            value={goalUnit}
+                            onChange={(event) => setGoalUnit(event.target.value)}
+                            placeholder="Unit (e.g. hours)"
+                            style={{ ...styles.input, flex: 1 }}
+                            disabled={busy || !available}
+                            data-testid="party-goal-unit"
+                        />
+                    </div>
+                </fieldset>
 
                 {err && (
                     <p role="alert" style={{ color: 'var(--danger, #EF5350)', fontSize: 12 }}>

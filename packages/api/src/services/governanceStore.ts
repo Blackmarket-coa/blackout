@@ -34,8 +34,22 @@ export interface GovernanceTreasurySnapshot {
     totalReference?: { currency: string; amount: string };
 }
 
+export type TreasuryMilestoneStatus = 'active' | 'met' | 'archived';
+
+export interface GovernanceTreasuryMilestone {
+    milestoneId: string;
+    title: string;
+    asset: string;
+    target: number;
+    status: TreasuryMilestoneStatus;
+    accent?: string;
+    createdAt: string;
+    metAt?: string;
+}
+
 const meetings = new Map<string, GovernanceMeeting>();
 const treasurySnapshots: GovernanceTreasurySnapshot[] = [];
+const treasuryMilestones = new Map<string, GovernanceTreasuryMilestone>();
 
 export function listMeetings(filter: { proposalId?: string } = {}): GovernanceMeeting[] {
     const all = [...meetings.values()];
@@ -88,7 +102,37 @@ export function listTreasurySnapshots(options: { cursor?: string; limit?: number
     return { items: slice, nextCursor: next?.snapshotId };
 }
 
+/**
+ * Create or update a treasury milestone (keyed by `milestoneId`). Re-upserting
+ * the same id edits the goal — including flipping `status` to `met`/`archived`.
+ */
+export function upsertTreasuryMilestone(
+    input: GovernanceTreasuryMilestone,
+): GovernanceTreasuryMilestone {
+    if (!Number.isFinite(input.target) || input.target <= 0) {
+        throw new Error('target_must_be_positive');
+    }
+    treasuryMilestones.set(input.milestoneId, { ...input });
+    return treasuryMilestones.get(input.milestoneId)!;
+}
+
+/** List milestones, newest first. Archived ones are excluded unless requested. */
+export function listTreasuryMilestones(
+    options: { includeArchived?: boolean } = {},
+): GovernanceTreasuryMilestone[] {
+    const all = [...treasuryMilestones.values()];
+    const filtered = options.includeArchived
+        ? all
+        : all.filter((milestone) => milestone.status !== 'archived');
+    return filtered.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+export function getTreasuryMilestone(milestoneId: string): GovernanceTreasuryMilestone | null {
+    return treasuryMilestones.get(milestoneId) ?? null;
+}
+
 export function __resetGovernanceStoreForTests(): void {
     meetings.clear();
     treasurySnapshots.length = 0;
+    treasuryMilestones.clear();
 }

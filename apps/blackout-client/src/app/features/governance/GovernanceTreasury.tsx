@@ -5,6 +5,7 @@ import {
     listTreasurySnapshots as listTreasurySnapshotsDefault,
 } from './governanceClient';
 import { GardenView } from './GardenView';
+import { TreasuryMilestones } from './TreasuryMilestones';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 
 export type TreasuryView = 'list' | 'garden';
@@ -170,6 +171,10 @@ export function GovernanceTreasury({
                         )}
                     </>
                 )}
+            </section>
+
+            <section style={cardStyle} data-testid="governance-treasury-milestones">
+                <TreasuryMilestones snapshot={latest} />
             </section>
 
             <section style={{ display: 'grid', gap: 8 }}>

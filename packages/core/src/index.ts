@@ -21,5 +21,6 @@ export * from './search';
 export * from './coliseum';
 export * from './den';
 export * from './reputation';
+export * from './objectives';
 
 export * from './redaction';

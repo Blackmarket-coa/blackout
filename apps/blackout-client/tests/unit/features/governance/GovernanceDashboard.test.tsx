@@ -91,6 +91,10 @@ vi.mock('../../../../src/app/features/governance/ProposalDetail', () => ({
     ),
 }));
 
+vi.mock('../../../../src/app/features/objectives', () => ({
+    ObjectivesPanel: () => <div data-testid="objectives-panel">objectives panel</div>,
+}));
+
 vi.mock('../../../../src/app/features/governance/useProposals', () => ({
     useProposals: () => ({ data: mockProposals, loading: false, error: null }),
     useVotes: (proposalId: string) => ({

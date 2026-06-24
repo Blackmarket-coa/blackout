@@ -6,6 +6,7 @@ import { RegistryTabBar } from '../../core/features/RegistryTabBar';
 import { ProposalCard } from './ProposalCard';
 import { ProposalCreator } from './ProposalCreator';
 import { ProposalDetail } from './ProposalDetail';
+import { ObjectivesPanel } from '../objectives';
 import { useGovernanceDiagnostics, useProposalResult, useProposals, useVotes, type ProposalModel } from './useProposals';
 
 type GovernanceTab = 'active' | 'past' | 'create' | 'my-votes' | 'results';
@@ -275,6 +276,7 @@ export const GovernanceDashboard = ({ roomId }: { roomId: string }) => {
                             No active proposals.
                         </div>
                     ) : null}
+                    <ObjectivesPanel roomId={roomId} />
                 </section>
             ) : null}
 

@@ -10,9 +10,11 @@ import {
     cancelMeeting,
     getLatestTreasurySnapshot,
     listMeetings,
+    listTreasuryMilestones,
     listTreasurySnapshots,
     publishTreasurySnapshot,
     upsertMeeting,
+    upsertTreasuryMilestone,
 } from '../services/governanceStore';
 import type { FeatureModule } from './types';
 
@@ -69,6 +71,17 @@ const treasurySnapshotSchema = z.object({
   totalReference: z
     .object({ currency: z.string().min(1).max(20), amount: z.string().min(1).max(80) })
     .optional(),
+});
+
+const treasuryMilestoneSchema = z.object({
+  milestoneId: z.string().min(1).max(120),
+  title: z.string().min(1).max(200),
+  asset: z.string().min(1).max(40),
+  target: z.number().positive(),
+  status: z.enum(['active', 'met', 'archived']).default('active'),
+  accent: z.string().max(40).optional(),
+  createdAt: z.string().min(1),
+  metAt: z.string().min(1).optional(),
 });
 
 function createGovernanceRouter() {
@@ -244,6 +257,27 @@ function createGovernanceRouter() {
       limit: Number.isFinite(limit) ? limit : undefined,
     });
     return c.json(result);
+  });
+
+  governance.post('/treasury/milestones', async (c) => {
+    const denied = requireDomainCapability(c, 'governance', 'write');
+    if (denied) return denied;
+    const parsed = await readJsonBody(c, treasuryMilestoneSchema);
+    if (parsed instanceof Response) return parsed;
+    const milestone = upsertTreasuryMilestone(parsed);
+    const event = emitDomainEvent({
+      module: 'governance',
+      type: 'governance.treasury.milestone.set',
+      payload: milestone,
+    });
+    return c.json({ ...milestone, event }, 201);
+  });
+
+  governance.get('/treasury/milestones', (c) => {
+    const denied = requireDomainCapability(c, 'governance', 'read');
+    if (denied) return denied;
+    const includeArchived = c.req.query('includeArchived') === '1';
+    return c.json({ items: listTreasuryMilestones({ includeArchived }) });
   });
 
   return governance;

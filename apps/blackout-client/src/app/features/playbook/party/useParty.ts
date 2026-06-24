@@ -10,6 +10,7 @@ import {
     createRoom,
 } from '../../../components/create-room';
 import { useSetAnyPlaybook } from '../usePlaybook';
+import { buildNewObjective, useObjectiveActions } from '../../objectives';
 
 /**
  * J5 — Party formation.
@@ -27,7 +28,17 @@ import { useSetAnyPlaybook } from '../usePlaybook';
  * The brief is firm that gamification stays inside its banlist carve-out:
  * party formation is *identity-forming, not status-conferring* — no
  * "party level," no XP, no leaderboards. Just a faster path to a room.
+ * See `GAMIFICATION_BANLIST` (@blackout/protocol) for the canonical rules.
  */
+export interface FormPartyObjectiveInput {
+    /** Shared goal title. Seeding is skipped when blank. */
+    title: string;
+    /** Target the party advances toward. Must be > 0 to seed. */
+    target: number;
+    /** Free-text unit, e.g. "hours". Defaults to "units". */
+    unit?: string;
+}
+
 export interface FormPartyInput {
     /** Optional party name; defaults to "Party from <parent>". */
     name?: string;
@@ -37,6 +48,12 @@ export interface FormPartyInput {
     playbookId?: PlaybookId;
     /** Matrix user ids to invite. Defaults to the parent's joined members. */
     invitees?: ReadonlyArray<string>;
+    /**
+     * Optional shared goal seeded on the new den right after creation — a
+     * collective objective the whole party advances together. Aggregate-only,
+     * no per-member status (System-5 banlist).
+     */
+    objective?: FormPartyObjectiveInput;
 }
 
 export interface UsePartyResult {
@@ -52,6 +69,7 @@ export function useParty(parentRoomId: string | null | undefined): UsePartyResul
     const rooms = useAtomValue(joinedRoomsAtom);
     const mx = useMatrixClient();
     const setPlaybook = useSetAnyPlaybook();
+    const objectiveActions = useObjectiveActions();
 
     const parent: Room | undefined = useMemo(
         () => (parentRoomId ? rooms.find((r) => r.roomId === parentRoomId) : undefined),
@@ -91,6 +109,23 @@ export function useParty(parentRoomId: string | null | undefined): UsePartyResul
             });
             await setPlaybook(roomId, payload);
 
+            // Optional: seed a shared goal the whole party advances together.
+            // Same posture as the playbook seed above — fire-and-tolerate; the
+            // den is already created if this fails.
+            const objective = input.objective;
+            if (objective && objective.title.trim() && objective.target > 0) {
+                await objectiveActions.setObjective(
+                    roomId,
+                    buildNewObjective({
+                        title: objective.title,
+                        target: objective.target,
+                        unit: objective.unit ?? '',
+                        createdAt: new Date().toISOString(),
+                        objectiveId: crypto.randomUUID(),
+                    }),
+                );
+            }
+
             // Explicit invites for the chosen subset of members. Errors are
             // non-fatal — the room is created and the picker can re-invite.
             const me = mx.getUserId() ?? '';
@@ -105,7 +140,7 @@ export function useParty(parentRoomId: string | null | undefined): UsePartyResul
 
             return roomId;
         },
-        [available, mx, parent, setPlaybook],
+        [available, mx, parent, setPlaybook, objectiveActions],
     );
 
     return { available, memberCount, formParty };
