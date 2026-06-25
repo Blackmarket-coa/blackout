@@ -109,7 +109,7 @@ export const RoleEditor = ({ roomId }: { roomId: string }) => {
                         Color
                         <input
                             type="color"
-                            value={draft.color}
+                            value={draft.color || '#60A5FA'}
                             onChange={(event) =>
                                 setDraft((prev) => ({ ...prev, color: event.target.value }))
                             }
@@ -267,7 +267,7 @@ export const RoleEditor = ({ roomId }: { roomId: string }) => {
                         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                             <input
                                 type="color"
-                                value={role.color}
+                                value={role.color || '#9CA3AF'}
                                 onChange={(event) =>
                                     void updateRole(role.position, { color: event.target.value })
                                 }

@@ -19,6 +19,7 @@ import canaryTripwireRoutes from './routes/canaryTripwire';
 import meshRoutes from './routes/mesh';
 import marketplaceRoutes from './routes/marketplace';
 import threadRoutes from './routes/threads';
+import settingsRoutes from './routes/settings';
 import capabilityRoutes from './routes/capabilities';
 import pluginInstallationRoutes from './routes/pluginInstallations';
 import coalitionKitRoutes from './routes/coalitionKitManifests';
@@ -178,6 +179,7 @@ for (const root of legacyAliasEnabled ? [API_ROOTS.v1, API_ROOTS.legacyApiAlias]
   app.route(`${root}/mesh`, meshRoutes);
   app.route(`${root}/marketplace`, marketplaceRoutes);
   app.route(`${root}/threads`, threadRoutes);
+  app.route(`${root}/settings`, settingsRoutes);
   app.route(`${root}/capabilities`, capabilityRoutes);
   app.route(`${root}/plugin-installations`, pluginInstallationRoutes);
   app.route(`${root}/coalition-kit-manifests`, coalitionKitRoutes);

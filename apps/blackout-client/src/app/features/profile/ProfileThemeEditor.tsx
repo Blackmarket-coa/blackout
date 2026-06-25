@@ -22,6 +22,20 @@ const FIELDS: TokenField[] = [
     { key: 'fontFamily', label: 'Font family', inputType: 'text', placeholder: 'Inter, sans-serif' },
 ];
 
+// Display-only fallback for `<input type="color">` when a token is unset. The
+// control requires a `#rrggbb` value and errors on '' — the source of the
+// console flood ("does not conform to the required format … #rrggbb"). These
+// mirror the base dark theme (theme-engine.ts `baseDarkTokens`) so an unset
+// picker opens on a sensible color. Never persisted: `setToken` only runs on
+// user input, and the swatch/persisted value stay keyed on the actual token.
+const DEFAULT_COLOR_TOKENS: Partial<Record<ProfileThemeTokenKey, string>> = {
+    accent: '#D7FF3F', // bmcPalette.neonLeaf → --accent-primary
+    panelBg: '#0B0F10', // bmcPalette.black → --bg-surface
+    panelFg: '#F7FFF9', // bmcPalette.white → --text-primary
+    headerBg: '#1A2420', // baseDarkTokens.bg.input → --bg-input
+    linkColor: '#D7FF3F', // matches accent → --link-color
+};
+
 const rowStyle: CSSProperties = {
     display: 'grid',
     gridTemplateColumns: '160px 1fr auto',
@@ -68,7 +82,12 @@ export function ProfileThemeEditor({ theme, onChange }: ProfileThemeEditorProps)
             data-testid="profile-theme-editor"
         >
             {FIELDS.map(({ key, label, inputType, placeholder }) => {
-                const value = tokens[key] ?? '';
+                const token = tokens[key];
+                // Color inputs need a valid `#rrggbb` value even when unset; text
+                // inputs (fontFamily) keep ''. The swatch below stays keyed on the
+                // real `token` so an unset field still reads as unset.
+                const value =
+                    token ?? (inputType === 'color' ? DEFAULT_COLOR_TOKENS[key] ?? '#000000' : '');
                 return (
                     <label key={key} style={rowStyle}>
                         <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{label}</span>
@@ -79,8 +98,8 @@ export function ProfileThemeEditor({ theme, onChange }: ProfileThemeEditorProps)
                             onChange={(event) => setToken(key, event.target.value)}
                             style={inputStyle}
                         />
-                        {inputType === 'color' && value ? (
-                            <span style={{ ...previewStyle, background: value }} aria-hidden />
+                        {inputType === 'color' && token ? (
+                            <span style={{ ...previewStyle, background: token }} aria-hidden />
                         ) : (
                             <span style={{ width: 24 }} />
                         )}

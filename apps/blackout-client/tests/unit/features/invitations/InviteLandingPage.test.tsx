@@ -18,6 +18,7 @@ vi.mock('../../../../src/app/features/invitations/invitationsClient', () => ({
 
 vi.mock('../../../../src/client/blackoutApiSession', () => ({
     ensureBlackoutApiToken: (...args: unknown[]) => ensureBlackoutApiTokenMock(...args),
+    isBlackoutTokenExpired: () => false,
 }));
 
 import { InviteLandingPage } from '../../../../src/app/components/invite-landing/InviteLandingPage';

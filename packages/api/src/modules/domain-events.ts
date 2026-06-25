@@ -9,6 +9,7 @@ export interface DomainEvent<TPayload = unknown> {
     | 'streaming'
     | 'monetization'
     | 'profile'
+    | 'settings'
     | 'stego';
   type: string;
   payload: TPayload;

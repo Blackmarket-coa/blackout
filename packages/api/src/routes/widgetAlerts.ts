@@ -3,7 +3,7 @@ import { streamSSE } from 'hono/streaming';
 import { z } from 'zod';
 import { readJsonBody } from '../middleware/validate';
 import { requireUser } from '../middleware/require-user';
-import { authRateLimit } from '../middleware/rate-limit';
+import { integrationsRateLimit } from '../middleware/rate-limit';
 import {
   createWidgetAlertToken,
   listWidgetAlertTokens,
@@ -35,9 +35,9 @@ import { log } from '../telemetry/logger';
 
 const widgetAlerts = new Hono();
 
-widgetAlerts.use('/tokens', authRateLimit);
-widgetAlerts.use('/tokens/:id', authRateLimit);
-widgetAlerts.use('/test', authRateLimit);
+widgetAlerts.use('/tokens', integrationsRateLimit);
+widgetAlerts.use('/tokens/:id', integrationsRateLimit);
+widgetAlerts.use('/test', integrationsRateLimit);
 
 const createTokenSchema = z.object({
   label: z.string().min(1).max(64).optional(),

@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { readJsonBody } from '../middleware/validate';
 import { requireUser } from '../middleware/require-user';
-import { authRateLimit } from '../middleware/rate-limit';
+import { integrationsRateLimit } from '../middleware/rate-limit';
 import {
   listForUser,
   mint,
@@ -12,9 +12,9 @@ import {
 import { listSessionsForUser } from '../integrations/twitch-compat/ircServer';
 
 const router = new Hono();
-router.use('/', authRateLimit);
-router.use('/:id', authRateLimit);
-router.use('/sessions', authRateLimit);
+router.use('/', integrationsRateLimit);
+router.use('/:id', integrationsRateLimit);
+router.use('/sessions', integrationsRateLimit);
 
 router.get('/sessions', (c) => {
   const userOrResp = requireUser(c, 'Sign in required to list connected IRC bots');

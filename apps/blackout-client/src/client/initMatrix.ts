@@ -12,6 +12,7 @@ import { authStateAtom, matrixClientAtom, userIdAtom, type AuthState } from '../
 import { clearSession, restoreActiveSession, saveSession, type StoredSession } from './sessionManager';
 import { exchangeMatrixForBlackoutToken } from './blackoutApiSession';
 import { cryptoCallbacks } from './secretStorageKeys';
+import { filteredMatrixLogger } from './matrixLogger';
 
 type AtomStore = ReturnType<typeof createStore>;
 
@@ -228,6 +229,9 @@ const initClientForSession = async (session: StoredSession): Promise<MatrixClien
         timelineSupport: true,
         verificationMethods: ['m.sas.v1'],
         cryptoCallbacks,
+        // Filters matrix-js-sdk's benign per-sync push-rule WARN flood; all other
+        // logs pass through. See ./matrixLogger.
+        logger: filteredMatrixLogger,
     });
 
     await syncStore.startup();
