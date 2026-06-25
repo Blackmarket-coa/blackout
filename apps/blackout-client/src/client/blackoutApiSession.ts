@@ -25,6 +25,34 @@ interface MatrixExchangeResponse {
  */
 let inFlightExchange: Promise<string | null> | null = null;
 
+/**
+ * Clock-skew margin (seconds) so a token about to expire is refreshed proactively
+ * rather than firing one doomed request first.
+ */
+const TOKEN_EXPIRY_SKEW_SECONDS = 30;
+
+/**
+ * True when a Blackout API JWT is absent or (about to be) expired. Best-effort:
+ * a token we can't parse is treated as expired, so the caller re-exchanges
+ * rather than sending a known-dead credential that 401s in the browser console
+ * before the SDK self-heals. Reads only the `exp` claim — signature
+ * verification is the API's job, not the client's.
+ */
+export const isBlackoutTokenExpired = (token: string | null | undefined): boolean => {
+    if (!token) return true;
+    const payloadSegment = token.split('.')[1];
+    if (!payloadSegment) return true;
+    try {
+        const base64 = payloadSegment.replace(/-/g, '+').replace(/_/g, '/');
+        const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
+        const exp = (JSON.parse(atob(padded)) as { exp?: number }).exp;
+        if (typeof exp !== 'number') return true;
+        return exp <= Math.floor(Date.now() / 1000) + TOKEN_EXPIRY_SKEW_SECONDS;
+    } catch {
+        return true;
+    }
+};
+
 const writeToken = (token: string): void => {
     try {
         window.localStorage.setItem(BLACKOUT_API_TOKEN_KEY, token);
@@ -91,7 +119,9 @@ export const ensureBlackoutApiToken = (
     session: StoredSession | null = restoreActiveSession(),
 ): Promise<string | null> => {
     const existing = readBlackoutApiToken();
-    if (existing) return Promise.resolve(existing);
+    // Only reuse a cached token that is still valid. An expired one is skipped
+    // (runExchange overwrites it) so we never send a known-dead credential.
+    if (existing && !isBlackoutTokenExpired(existing)) return Promise.resolve(existing);
 
     if (!session) return Promise.resolve(null);
 

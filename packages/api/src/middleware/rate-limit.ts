@@ -158,3 +158,15 @@ export const clipWriteRateLimit = createRateLimit({
   windowMs: 60_000,
   maxRequests: Number.isFinite(clipWriteMax) && clipWriteMax > 0 ? clipWriteMax : 30,
 });
+
+// User-facing integration token endpoints (twitch-compat bot tokens, widget
+// alert tokens) are fetched on settings-page mount. They must NOT share the
+// tight `auth` bucket with login/exchange, or a normal page load competes with
+// sign-in traffic and 429s. Own bucket, more generous. Override with
+// INTEGRATIONS_RATE_LIMIT_MAX.
+const integrationsMax = Number.parseInt(process.env.INTEGRATIONS_RATE_LIMIT_MAX ?? '', 10);
+export const integrationsRateLimit = createRateLimit({
+  bucket: 'integrations',
+  windowMs: 60_000,
+  maxRequests: Number.isFinite(integrationsMax) && integrationsMax > 0 ? integrationsMax : 30,
+});

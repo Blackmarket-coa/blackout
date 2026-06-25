@@ -921,7 +921,7 @@ export function AppearanceSettings({ requestClose }: AppearanceSettingsProps = {
 
                           type="color"
 
-                          value={settings.accentColor}
+                          value={settings.accentColor || '#4ECDC4'}
 
                           onChange={(e) => {
 

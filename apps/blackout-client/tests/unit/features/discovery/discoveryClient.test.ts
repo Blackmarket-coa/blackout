@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../../../src/client/blackoutApiSession', () => ({
     ensureBlackoutApiToken: vi.fn(async () => 'lazy-token'),
+    isBlackoutTokenExpired: () => false,
 }));
 
 import { indexCanopy } from '../../../../src/app/features/discovery/discoveryClient';

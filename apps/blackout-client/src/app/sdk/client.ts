@@ -5,17 +5,26 @@ import { API_BASE_URL } from './apiBaseUrl';
 import {
     clearBlackoutApiToken,
     ensureBlackoutApiToken,
+    isBlackoutTokenExpired,
 } from '../../client/blackoutApiSession';
 
 // Re-export so existing importers (`import { API_BASE_URL } from '.../sdk/client'`)
 // keep working after the base URL moved to its own (cycle-free) module.
 export { API_BASE_URL };
 
+// 429s carry a `Retry-After` and must not be hammered: auto-retry only transient
+// server errors. The SDK's default (`withRetry`) treats 429 as retryable, which
+// turned one rate-limited request into three and stormed the shared auth bucket
+// (twitch-compat + widget-alert token endpoints). Excluding 429 here means we
+// surface the rate-limit to the caller instead of amplifying it.
+const RETRYABLE_STATUSES = [500, 502, 503, 504];
+
 const apiClient = createFetchApiClient({
     baseUrl: API_BASE_URL,
     defaultRetry: {
         attempts: 3,
         backoffMs: 100,
+        retryOnStatuses: RETRYABLE_STATUSES,
     },
 });
 
@@ -25,6 +34,7 @@ export const mediaClient = createMediaClient({
     defaultRetry: {
         attempts: 3,
         backoffMs: 120,
+        retryOnStatuses: RETRYABLE_STATUSES,
     },
 });
 
@@ -35,6 +45,7 @@ const buildClient = (token: string | null): ApiClient =>
         defaultRetry: {
             attempts: 3,
             backoffMs: 100,
+            retryOnStatuses: RETRYABLE_STATUSES,
         },
     });
 
@@ -58,7 +69,11 @@ const isUnauthorized = (err: unknown): boolean =>
  */
 export const createAuthorizedApiClient = (token: string | null): ApiClient => {
     const run = async <TResponse>(request: ApiRequest): Promise<TResponse> => {
-        const current = token ?? (await ensureBlackoutApiToken());
+        // A passed-in token may be the stale cached JWT (callers default to
+        // `readBlackoutApiToken()`); treat an expired one as absent so we
+        // re-exchange up front instead of firing a doomed 401-then-refresh.
+        const current =
+            token && !isBlackoutTokenExpired(token) ? token : await ensureBlackoutApiToken();
         try {
             return (await buildClient(current)(request)) as TResponse;
         } catch (err) {
@@ -97,7 +112,8 @@ export const fetchAuthorizedBlob = async (
             headers: bearer ? { authorization: `Bearer ${bearer}` } : {},
         });
 
-    const current = token ?? (await ensureBlackoutApiToken());
+    const current =
+        token && !isBlackoutTokenExpired(token) ? token : await ensureBlackoutApiToken();
     let res = await doFetch(current);
     if (res.status === 401) {
         clearBlackoutApiToken();
