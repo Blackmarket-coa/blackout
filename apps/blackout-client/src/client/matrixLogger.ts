@@ -19,14 +19,34 @@ const isPushRuleNoise = (args: unknown[]): boolean =>
     typeof args[0] === 'string' && PUSH_RULE_NOISE.test(args[0]);
 
 /**
- * Wrap a matrix-js-sdk `Logger` so `warn` drops the benign push-rule lines and
- * every other method delegates unchanged. `getChild` wraps recursively so
- * namespaced child loggers (e.g. crypto) keep the same filtering.
+ * matrix-js-sdk's `PerSessionKeyBackupDownloader` logs an INFO line on every
+ * sync when no usable server-side key backup exists:
+ *
+ *   [PerSessionKeyBackupDownloader] Unsupported algorithm undefined
+ *
+ * This is the SDK probing for a backup and finding none — purely informational
+ * and unactionable. It is the only `info`-level "Unsupported algorithm" line in
+ * the SDK (the other occurrence is a thrown Error, not a log), so dropping it at
+ * `info` is safe and leaves real decryption warnings/errors intact.
+ */
+export const KEY_BACKUP_PROBE_NOISE = /^Unsupported algorithm\b/;
+
+const isKeyBackupProbeNoise = (args: unknown[]): boolean =>
+    typeof args[0] === 'string' && KEY_BACKUP_PROBE_NOISE.test(args[0]);
+
+/**
+ * Wrap a matrix-js-sdk `Logger` so the benign push-rule (`warn`) and key-backup
+ * probe (`info`) lines are dropped while every other method delegates unchanged.
+ * `getChild` wraps recursively so namespaced child loggers (e.g. crypto) keep
+ * the same filtering.
  */
 export const wrapMatrixLogger = (base: Logger): Logger => ({
     trace: (...args: unknown[]) => base.trace(...args),
     debug: (...args: unknown[]) => base.debug(...args),
-    info: (...args: unknown[]) => base.info(...args),
+    info: (...args: unknown[]) => {
+        if (isKeyBackupProbeNoise(args)) return;
+        base.info(...args);
+    },
     warn: (...args: unknown[]) => {
         if (isPushRuleNoise(args)) return;
         base.warn(...args);

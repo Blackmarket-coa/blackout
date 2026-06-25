@@ -7,20 +7,36 @@ import {
 import { createBlamazonProvider } from './blamazon';
 import { createMayhemMarketplazeProvider } from './mayhemMarketplaze';
 import { createAntinAmazonProvider } from './antinAmazon';
+import { logEvent } from '../../services/marketplaceObservability';
 
 let cachedRegistry: Map<MarketplaceProviderId, MarketplaceProvider> | null = null;
 
 function buildRegistry(): Map<MarketplaceProviderId, MarketplaceProvider> {
-    const fbm = shouldUseFreeblackmarketStub()
-        ? createFreeblackmarketStubProvider()
-        : createFreeblackmarketProvider();
-    const providers: MarketplaceProvider[] = [
-        fbm,
-        createBlamazonProvider(),
-        createMayhemMarketplazeProvider(),
-        createAntinAmazonProvider(),
+    // Each provider is constructed independently. A factory that throws (e.g.
+    // freeblackmarket refusing to start in production without its secrets) must
+    // not take down the rest of the marketplace — skip the failed provider, log
+    // it, and keep the others.
+    const factories: Array<() => MarketplaceProvider> = [
+        () =>
+            shouldUseFreeblackmarketStub()
+                ? createFreeblackmarketStubProvider()
+                : createFreeblackmarketProvider(),
+        createBlamazonProvider,
+        createMayhemMarketplazeProvider,
+        createAntinAmazonProvider,
     ];
-    return new Map(providers.map((provider) => [provider.id, provider]));
+    const registry = new Map<MarketplaceProviderId, MarketplaceProvider>();
+    for (const factory of factories) {
+        try {
+            const provider = factory();
+            registry.set(provider.id, provider);
+        } catch (error) {
+            logEvent('marketplace.registry.provider_init_failed', {
+                error: error instanceof Error ? error.message : String(error),
+            });
+        }
+    }
+    return registry;
 }
 
 export function getMarketplaceRegistry(): Map<MarketplaceProviderId, MarketplaceProvider> {

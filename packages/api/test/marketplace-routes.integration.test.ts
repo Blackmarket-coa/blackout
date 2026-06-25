@@ -355,6 +355,40 @@ test('startup secret guard refuses production with missing freeblackmarket secre
     );
 });
 
+test('GET /providers degrades gracefully when a provider fails to construct', async () => {
+    const { resetMarketplaceRegistry } = await import('../src/integrations/marketplace');
+    const saved = {
+        nodeEnv: process.env.NODE_ENV,
+        apiKey: process.env.FREEBLACKMARKET_API_KEY,
+        webhookSecret: process.env.FREEBLACKMARKET_WEBHOOK_SECRET,
+    };
+    const restore = (key: string, value: string | undefined) => {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+    };
+    try {
+        // Force freeblackmarket's production secret-guard to throw at construction.
+        process.env.NODE_ENV = 'production';
+        delete process.env.FREEBLACKMARKET_API_KEY;
+        delete process.env.FREEBLACKMARKET_WEBHOOK_SECRET;
+        resetMarketplaceRegistry();
+
+        const res = await app.request('/v1/marketplace/providers');
+        // The endpoint must not 500 just because one provider can't initialize.
+        assert.equal(res.status, 200);
+        const body = (await res.json()) as { providers: Array<{ id: string }> };
+        const ids = body.providers.map((p) => p.id);
+        // The misconfigured provider is skipped; the others still load.
+        assert.equal(ids.includes('freeblackmarket'), false);
+        assert.equal(ids.includes('blamazon'), true);
+    } finally {
+        restore('NODE_ENV', saved.nodeEnv);
+        restore('FREEBLACKMARKET_API_KEY', saved.apiKey);
+        restore('FREEBLACKMARKET_WEBHOOK_SECRET', saved.webhookSecret);
+        resetMarketplaceRegistry();
+    }
+});
+
 test('entitlement persists across simulated process restart (BLACKOUT_DB_MODE=memory)', async () => {
     resetForEachTest();
     const body = purchaseEventBody({ eventId: 'evt-persist', listingId: 'listing-persist' });

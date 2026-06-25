@@ -50,4 +50,33 @@ describe('wrapMatrixLogger', () => {
         expect(child.warn).toHaveBeenCalledTimes(1);
         expect(child.warn).toHaveBeenCalledWith('real child warning');
     });
+
+    it('drops the benign key-backup probe INFO line', () => {
+        const base = makeBase();
+        const log = wrapMatrixLogger(base);
+        log.info('Unsupported algorithm undefined');
+        log.info('Unsupported algorithm m.megolm_backup.v1.unknown');
+        expect(base.info).not.toHaveBeenCalled();
+    });
+
+    it('passes through real INFO lines untouched', () => {
+        const base = makeBase();
+        const log = wrapMatrixLogger(base);
+        log.info('Checking key backup for session');
+        expect(base.info).toHaveBeenCalledWith('Checking key backup for session');
+    });
+
+    it('drops the key-backup probe noise on child loggers too', () => {
+        const child = makeBase();
+        const base = makeBase();
+        base.getChild.mockReturnValue(child);
+        const log = wrapMatrixLogger(base);
+
+        const childLog = log.getChild('[PerSessionKeyBackupDownloader]');
+        childLog.info('Unsupported algorithm undefined');
+        childLog.info('real child info');
+
+        expect(child.info).toHaveBeenCalledTimes(1);
+        expect(child.info).toHaveBeenCalledWith('real child info');
+    });
 });

@@ -73,7 +73,20 @@ const checkoutSchema = z.object({
 });
 
 marketplace.get('/providers', (c) => {
-    const providers = [...getMarketplaceRegistry().values()].map((provider) => {
+    // Building the registry can throw (e.g. a provider factory that requires
+    // missing config). Guard it so the endpoint degrades to an empty provider
+    // list instead of a 500 that repeats on every request — mirrors /listings.
+    let registry: ReturnType<typeof getMarketplaceRegistry>;
+    try {
+        registry = getMarketplaceRegistry();
+    } catch (error) {
+        logEvent('marketplace.providers.registry_failed', {
+            error: error instanceof Error ? error.message : String(error),
+        });
+        incrementCounter('marketplace_catalog_fetch_failed_total', { providerId: 'registry' });
+        return c.json({ providers: [] });
+    }
+    const providers = [...registry.values()].map((provider) => {
         const presentation = getMarketplaceProviderPresentation(provider.id, provider.displayName);
         return {
             id: provider.id,
