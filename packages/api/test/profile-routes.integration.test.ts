@@ -120,7 +120,7 @@ test('profile PUT accepts the owner addressed by their Matrix id (sub is a Black
 
 test('profile PUT still rejects a Matrix-id path that belongs to another user', async () => {
     __resetProfileStoreForTests();
-    // Same Matrix-id target, but the caller's token username does not derive it.
+    // Same Matrix-id target, but the caller's token username (localpart) differs.
     const response = await app.request(`/v1/profile/${encodeURIComponent('@crashdummy:blackout.local')}`, {
         method: 'PUT',
         headers: {
@@ -131,6 +131,29 @@ test('profile PUT still rejects a Matrix-id path that belongs to another user', 
         body: JSON.stringify({ displayName: 'Impostor' }),
     });
     assert.equal(response.status, 403);
+});
+
+test('profile PUT accepts the owner regardless of the MXID domain (no MATRIX_HOMESERVER_DOMAIN coupling)', async () => {
+    __resetProfileStoreForTests();
+    // Reproduces the production 403: the path MXID domain (`theblackout.app`) is
+    // NOT the server's configured homeserver domain (unset under test → the old
+    // code reconstructed `@crashdummy:blackout.local` and 403'd the real owner).
+    // Ownership now matches on the MXID localpart vs the token username, so the
+    // self-edit succeeds independent of MATRIX_HOMESERVER_DOMAIN.
+    const matrixId = '@crashdummy:theblackout.app';
+    const response = await app.request(`/v1/profile/${encodeURIComponent(matrixId)}`, {
+        method: 'PUT',
+        headers: {
+            authorization: `Bearer ${signJwt('blackout-user-uuid-3', 'crashdummy', 600)}`,
+            'content-type': 'application/json',
+            'x-blackout-capabilities': 'profile.read,profile.write',
+        },
+        body: JSON.stringify({ displayName: 'Crash Dummy' }),
+    });
+    assert.equal(response.status, 200);
+    const saved = (await response.json()) as { userId: string; displayName: string };
+    assert.equal(saved.userId, matrixId);
+    assert.equal(saved.displayName, 'Crash Dummy');
 });
 
 test('profile PUT strips dangerous theme tokens', async () => {

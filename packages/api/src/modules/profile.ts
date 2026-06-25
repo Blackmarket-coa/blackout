@@ -13,21 +13,28 @@ import {
 } from '../services/profileStore';
 import type { FeatureModule } from './types';
 
-const matrixHomeserverDomain = (): string =>
-    (process.env.MATRIX_HOMESERVER_DOMAIN ?? 'blackout.local').replace(/^@+/, '');
+/** MXID localpart extractor (`@localpart:domain` → `localpart`). */
+const MXID_LOCALPART_RE = /^@([^:]+):[^:]+$/;
 
 /**
  * Profiles are keyed in the Matrix-id space (`@user:domain`): the client edits
  * its own profile at `/v1/profile/@me:domain` (using `mx.getUserId()`), and
  * follows/search resolve other users' profiles the same way — see follows.ts,
  * "profile/status/wall are keyed in the Matrix-id space". Session JWTs, by
- * contrast, identify the caller by their Blackout user id (`sub`, a UUID), so a
- * literal `sub === userId` ownership check can never match a self-edit and
- * always returns 403 ("cannot save profile information"). Ownership instead
- * holds when the path id is the subject itself (blackout-id-keyed callers and
- * the integration tests) OR the subject's canonical Matrix id, derived from the
- * token username the same way as follows.ts/invitations.ts (with a store lookup
- * fallback for tokens minted without a username).
+ * contrast, identify the caller by their Blackout user id (`sub`, a UUID) plus
+ * their username (the Matrix localpart), so a literal `sub === userId` check can
+ * never match a self-edit and always 403s ("cannot save profile information").
+ *
+ * Ownership holds when the path is the subject itself (blackout-id-keyed callers
+ * and the integration tests) OR the path MXID's localpart equals the caller's
+ * username. We match on the localpart — not a reconstructed `@username:domain`
+ * — on purpose: the homeserver domain is a deploy-time env var
+ * (`MATRIX_HOMESERVER_DOMAIN`, set from `PRIMARY_DOMAIN`) that must equal
+ * Synapse's `server_name`; if it's unset or wrong, reconstructing the full MXID
+ * wrongly locks a user out of their OWN profile. The signed JWT already proves
+ * the caller is `username` on this homeserver, and on a single homeserver the
+ * localpart uniquely identifies them, so a localpart match is both sufficient
+ * and immune to that misconfiguration.
  */
 function subjectOwnsProfile(c: Context, userId: string): boolean {
     const claims = c.get('user') as { sub?: string; username?: string } | null;
@@ -35,7 +42,8 @@ function subjectOwnsProfile(c: Context, userId: string): boolean {
     if (!sub) return false;
     if (sub === userId) return true;
     const username = claims?.username ?? db.getUserById(sub)?.username;
-    return !!username && userId === `@${username}:${matrixHomeserverDomain()}`;
+    if (!username) return false;
+    return MXID_LOCALPART_RE.exec(userId)?.[1] === username;
 }
 
 const upsertSchema = z.object({
