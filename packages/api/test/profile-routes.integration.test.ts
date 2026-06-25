@@ -94,6 +94,45 @@ test('profile PUT to own profile is granted by default (profile.write)', async (
     assert.equal(response.status, 200);
 });
 
+test('profile PUT accepts the owner addressed by their Matrix id (sub is a Blackout id)', async () => {
+    __resetProfileStoreForTests();
+    // Production identity split: the session JWT subject is the Blackout user id
+    // (a UUID), while the client edits the profile keyed by Matrix id
+    // (mx.getUserId()). MATRIX_HOMESERVER_DOMAIN is unset under test, so the
+    // canonical id falls back to the `blackout.local` default.
+    const blackoutSub = 'blackout-user-uuid-1';
+    const username = 'crashdummy';
+    const matrixId = '@crashdummy:blackout.local';
+    const response = await app.request(`/v1/profile/${encodeURIComponent(matrixId)}`, {
+        method: 'PUT',
+        headers: {
+            authorization: `Bearer ${signJwt(blackoutSub, username, 600)}`,
+            'content-type': 'application/json',
+            'x-blackout-capabilities': 'profile.read,profile.write',
+        },
+        body: JSON.stringify({ displayName: 'Crash Dummy' }),
+    });
+    assert.equal(response.status, 200);
+    const saved = (await response.json()) as { userId: string; displayName: string };
+    assert.equal(saved.userId, matrixId);
+    assert.equal(saved.displayName, 'Crash Dummy');
+});
+
+test('profile PUT still rejects a Matrix-id path that belongs to another user', async () => {
+    __resetProfileStoreForTests();
+    // Same Matrix-id target, but the caller's token username does not derive it.
+    const response = await app.request(`/v1/profile/${encodeURIComponent('@crashdummy:blackout.local')}`, {
+        method: 'PUT',
+        headers: {
+            authorization: `Bearer ${signJwt('blackout-user-uuid-2', 'someoneelse', 600)}`,
+            'content-type': 'application/json',
+            'x-blackout-capabilities': 'profile.read,profile.write',
+        },
+        body: JSON.stringify({ displayName: 'Impostor' }),
+    });
+    assert.equal(response.status, 403);
+});
+
 test('profile PUT strips dangerous theme tokens', async () => {
     __resetProfileStoreForTests();
     const userId = 'profile-user-f';

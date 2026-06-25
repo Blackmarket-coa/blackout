@@ -1,8 +1,10 @@
 import { Hono } from 'hono';
+import type { Context } from 'hono';
 import { z } from 'zod';
 import { readJsonBody } from '../middleware/validate';
 import { requireAuthenticatedUser, requireDomainCapability } from './authz';
 import { emitDomainEvent } from './domain-events';
+import { db } from '../db/store';
 import {
     appendWallPost,
     getProfileOrDefault,
@@ -10,6 +12,31 @@ import {
     upsertProfile,
 } from '../services/profileStore';
 import type { FeatureModule } from './types';
+
+const matrixHomeserverDomain = (): string =>
+    (process.env.MATRIX_HOMESERVER_DOMAIN ?? 'blackout.local').replace(/^@+/, '');
+
+/**
+ * Profiles are keyed in the Matrix-id space (`@user:domain`): the client edits
+ * its own profile at `/v1/profile/@me:domain` (using `mx.getUserId()`), and
+ * follows/search resolve other users' profiles the same way — see follows.ts,
+ * "profile/status/wall are keyed in the Matrix-id space". Session JWTs, by
+ * contrast, identify the caller by their Blackout user id (`sub`, a UUID), so a
+ * literal `sub === userId` ownership check can never match a self-edit and
+ * always returns 403 ("cannot save profile information"). Ownership instead
+ * holds when the path id is the subject itself (blackout-id-keyed callers and
+ * the integration tests) OR the subject's canonical Matrix id, derived from the
+ * token username the same way as follows.ts/invitations.ts (with a store lookup
+ * fallback for tokens minted without a username).
+ */
+function subjectOwnsProfile(c: Context, userId: string): boolean {
+    const claims = c.get('user') as { sub?: string; username?: string } | null;
+    const sub = claims?.sub;
+    if (!sub) return false;
+    if (sub === userId) return true;
+    const username = claims?.username ?? db.getUserById(sub)?.username;
+    return !!username && userId === `@${username}:${matrixHomeserverDomain()}`;
+}
 
 const upsertSchema = z.object({
     displayName: z.string().min(1).max(120).optional(),
@@ -76,9 +103,8 @@ function createProfileRouter() {
         const denied = requireDomainCapability(c, 'profile', 'write');
         if (denied) return denied;
 
-        const subject = requireAuthenticatedUser(c);
         const { userId } = c.req.param();
-        if (subject !== userId) {
+        if (!subjectOwnsProfile(c, userId)) {
             return c.json(
                 { code: 'forbidden', message: 'Cannot edit another user\'s profile' },
                 403,
