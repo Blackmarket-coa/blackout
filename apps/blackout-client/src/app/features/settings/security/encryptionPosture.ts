@@ -39,7 +39,8 @@ export interface PostureVerdict {
 export type PostureActionId =
     | 'enable_cross_signing'
     | 'verify_current_device'
-    | 'review_unverified_members';
+    | 'review_unverified_members'
+    | 'enable_key_backup';
 
 export interface PostureAction {
     id: PostureActionId;
@@ -92,6 +93,33 @@ export const summarizePosture = (input: AccountPosture): PostureVerdict => {
         headline: 'End-to-end encrypted and verified',
         detail: 'Your device and every member in this conversation are verified.',
         actions: [],
+    };
+};
+
+/**
+ * Focused selector for the "set up message backup" nudge.
+ *
+ * Returns a verdict only when encryption isn't set up yet (no cross-signing)
+ * AND there's no key backup — the case where running the from-scratch
+ * DeviceVerificationSetup flow (which bootstraps secret storage + cross-signing
+ * + key backup) is the correct, non-destructive action. When cross-signing
+ * already exists, that flow would RESET existing secret storage, so we
+ * deliberately stay silent here and leave the rarer "verified but no backup"
+ * recovery to Settings → Security. Returns null when nothing should be shown.
+ */
+export const selectKeyBackupNudge = (input: {
+    crossSigningReady: boolean;
+    keyBackupReady: boolean;
+}): PostureVerdict | null => {
+    const { crossSigningReady, keyBackupReady } = input;
+    if (keyBackupReady) return null;
+    if (crossSigningReady) return null;
+    return {
+        severity: 'warn',
+        headline: 'Turn on encrypted message backup',
+        detail:
+            'Set up secure backup so you don’t lose access to your encrypted message history when you sign in on a new device.',
+        actions: [{ id: 'enable_key_backup', label: 'Set up backup' }],
     };
 };
 
