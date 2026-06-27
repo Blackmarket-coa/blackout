@@ -61,6 +61,9 @@ const CreatorHubContent = lazy(() =>
 const CreatorHubListings = lazy(() =>
     import('./sections/CreatorHubListings').then((mod) => ({ default: mod.CreatorHubListings }))
 );
+const SplitContracts = lazy(() =>
+    import('./sections/SplitContracts').then((mod) => ({ default: mod.SplitContracts }))
+);
 
 const contentStyle: CSSProperties = { minHeight: 0, overflow: 'auto' };
 
@@ -176,6 +179,13 @@ export function StreamingView({ initialTab }: StreamingViewProps) {
                             </Suspense>
                         ) : null}
                         <ChannelPointsRewards />
+                    </div>
+                ) : null}
+                {activeTab === 'splits' ? (
+                    <div data-testid="streaming-tab-splits-wrap">
+                        <Suspense fallback={null}>
+                            <SplitContracts />
+                        </Suspense>
                     </div>
                 ) : null}
                 {activeTab === 'broadcast' ? (

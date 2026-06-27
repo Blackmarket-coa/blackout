@@ -31,6 +31,7 @@ import voiceRoutes from './routes/voice';
 import subscriptionRoutes from './routes/subscriptions';
 import tipRoutes from './routes/tips';
 import creatorSubRoutes from './routes/creatorSubs';
+import splitContractRoutes from './routes/splitContracts';
 import giftRoutes from './routes/gifts';
 import communityBoostRoutes from './routes/communityBoosts';
 import roleRoutes from './routes/roles';
@@ -191,6 +192,7 @@ for (const root of legacyAliasEnabled ? [API_ROOTS.v1, API_ROOTS.legacyApiAlias]
   app.route(`${root}/subscriptions`, subscriptionRoutes);
   app.route(`${root}/tips`, tipRoutes);
   app.route(`${root}/creator-subs`, creatorSubRoutes);
+  app.route(`${root}/split-contracts`, splitContractRoutes);
   app.route(`${root}/channel-points`, channelPointsRoutes);
   app.route(`${root}/gifts`, giftRoutes);
   app.route(`${root}/community-boosts`, communityBoostRoutes);

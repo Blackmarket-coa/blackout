@@ -49,3 +49,5 @@ export * from './entitlements/schema';
 export * from './entitlements/fullyUnlocked';
 
 export * from './plugins';
+
+export * from './split-contract';
