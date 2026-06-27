@@ -55,3 +55,5 @@ export * from './split-contract';
 export * from './tip';
 
 export * from './boost';
+
+export * from './bounty-board';
