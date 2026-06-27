@@ -21,13 +21,25 @@ export type RoomTypeValue = (typeof ROOM_TYPES)[number];
 
 export interface RoomTypeContent {
     type: RoomTypeValue;
+    /**
+     * Declarative minimum subscription tier for this room, e.g. `tier_1`.
+     * Omitted = open. The actual membership ACL is applied by FBM entitlements
+     * via fbmAclSync (which maps a tier's entitlement to this room id); this
+     * marker just records the room's intended gate so the portal can wire it.
+     */
+    minTier?: string;
 }
 
 export const isRoomTypeValue = (value: unknown): value is RoomTypeValue =>
     typeof value === 'string' && (ROOM_TYPES as readonly string[]).includes(value);
 
-export const isRoomTypeContent = (value: unknown): value is RoomTypeContent =>
-    !!value && typeof value === 'object' && isRoomTypeValue((value as RoomTypeContent).type);
+export const isRoomTypeContent = (value: unknown): value is RoomTypeContent => {
+    if (!value || typeof value !== 'object') return false;
+    const c = value as RoomTypeContent;
+    if (!isRoomTypeValue(c.type)) return false;
+    if (c.minTier !== undefined && typeof c.minTier !== 'string') return false;
+    return true;
+};
 
 /** Convenience: is this `co.bmc.room_type` content a bounty board? */
 export const isBountyBoardRoomType = (value: unknown): boolean =>
