@@ -43,6 +43,7 @@ import {
 import { RoundCard } from '../rounds/RoundCard';
 import { normalizeMarketplaceEventContent } from '../marketplace/marketplaceEventSchemas';
 import { MarketplaceEventCard } from '../marketplace/MarketplaceEventCard';
+import { TipEventCard, normalizeTipEventContent } from './messages/TipEventCard';
 
 const ROW_ESTIMATE = 88;
 const OVERSCAN = 10;
@@ -540,6 +541,11 @@ const renderMessageType = (event: MatrixEvent): ReactNode => {
         event.getContent<Record<string, unknown>>()
     );
     if (marketplace) return <MarketplaceEventCard normalized={marketplace} />;
+
+    // In-room tips arrive as `m.notice` with an embedded `co.bmc.tip` block —
+    // render a compact tip card instead of the plain body.
+    const tip = normalizeTipEventContent(event.getContent<Record<string, unknown>>());
+    if (tip) return <TipEventCard tip={tip} />;
 
     switch (getMsgType(event)) {
         case 'm.image':

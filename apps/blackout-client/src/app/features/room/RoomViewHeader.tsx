@@ -75,6 +75,8 @@ import { rightPanelAtom } from '../../state/navigation';
 import { useDenPlaybook } from '../playbook/usePlaybook';
 import { TrialBanner } from '../playbook/TrialBanner';
 import { DenHeaderStrip } from '../../components/den-signature';
+import { RoomTipButton } from './RoomTipButton';
+import { runtimeFeatureFlags } from '../../core/features/featureFlags';
 import { useCompostAvailable } from '../compost/useCompost';
 import { CompostDialog } from '../compost/CompostDialog';
 import { useAwaitsMe } from '../notifications/hooks/useAwaitsMe';
@@ -596,6 +598,9 @@ export function RoomViewHeader() {
                 </IconButton>
               )}
             </TooltipProvider>
+          )}
+          {screenSize === ScreenSize.Desktop && runtimeFeatureFlags.monetization && (
+            <RoomTipButton roomId={room.roomId} />
           )}
           <TooltipProvider
             position="Bottom"
