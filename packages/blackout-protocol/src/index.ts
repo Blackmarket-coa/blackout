@@ -53,3 +53,5 @@ export * from './plugins';
 export * from './split-contract';
 
 export * from './tip';
+
+export * from './boost';
