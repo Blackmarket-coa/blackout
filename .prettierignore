@@ -4,7 +4,10 @@
 /node_modules
 /webapp
 /*.log
+# Upstream Element/Cinny fork — not formatted by the modern root config.
+/legacy
 yarn.lock
+pnpm-lock.yaml
 electron/dist
 electron/pub
 **/.idea
