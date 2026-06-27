@@ -34,11 +34,34 @@ export function isCoalitionKitArchetype(value: unknown): value is CoalitionKitAr
     );
 }
 
+/**
+ * Den render/role shape within a kit. `chat` is an ordinary room; `broadcast`
+ * is admin-send / all-read (announcements); `bounty_board` renders the
+ * structured Refrain board. Defaults to `chat` when unspecified.
+ */
+export const COALITION_KIT_DEN_KINDS = ['chat', 'broadcast', 'bounty_board'] as const;
+export type CoalitionKitDenKind = (typeof COALITION_KIT_DEN_KINDS)[number];
+
+export function isCoalitionKitDenKind(value: unknown): value is CoalitionKitDenKind {
+    return (
+        typeof value === 'string' &&
+        (COALITION_KIT_DEN_KINDS as readonly string[]).includes(value)
+    );
+}
+
 export interface CoalitionKitDenSpec {
     slug: string;
     denType: DenType;
     name: string;
     topic?: string;
+    /** Render/role shape; defaults to `chat`. */
+    kind?: CoalitionKitDenKind;
+    /**
+     * Minimum subscription tier required to access this den, e.g. `tier_1`.
+     * Omitted/empty = open to all (free tier). Maps to the existing tier→room
+     * ACL config on provision; no new ACL engine.
+     */
+    minTier?: string;
 }
 
 export interface CoalitionKitManifest {
@@ -73,6 +96,10 @@ function parseDens(input: unknown): CoalitionKitDenSpec[] {
             name,
             denType: isDenType(raw.denType) ? raw.denType : 'coalition',
             ...(typeof raw.topic === 'string' ? { topic: raw.topic } : {}),
+            ...(isCoalitionKitDenKind(raw.kind) ? { kind: raw.kind } : {}),
+            ...(typeof raw.minTier === 'string' && raw.minTier.trim()
+                ? { minTier: raw.minTier.trim() }
+                : {}),
         });
     }
     return dens;
@@ -113,3 +140,52 @@ export function parseCoalitionKitManifest(input: unknown): CoalitionKitManifest 
         bundledPluginIds,
     };
 }
+
+/**
+ * Canonical "creator" kit: a creator's public-facing home — a broadcast
+ * announcements den, an open community den, two tier-gated supporter dens, and
+ * a Refrain bounty board. Tier gates are declarative (`minTier`); the actual
+ * room ACL is applied by FBM entitlements via fbmAclSync. Parsed through the
+ * normal validator so it always satisfies `CoalitionKitManifest`.
+ */
+export const CREATOR_KIT_MANIFEST: CoalitionKitManifest = parseCoalitionKitManifest({
+    version: 1,
+    kitId: 'creator',
+    name: 'Creator',
+    archetype: 'creator',
+    customization: { activePreset: 'creator' },
+    dens: [
+        {
+            slug: 'announcements',
+            name: 'Announcements',
+            denType: 'public',
+            kind: 'broadcast',
+            topic: 'Updates, stream alerts, and important news',
+        },
+        { slug: 'community', name: 'Community', denType: 'public', kind: 'chat', topic: 'Open community chat' },
+        {
+            slug: 'supporters',
+            name: 'Supporters',
+            denType: 'coalition',
+            kind: 'chat',
+            minTier: 'tier_1',
+            topic: 'Exclusive channel for paying supporters',
+        },
+        {
+            slug: 'vip',
+            name: 'VIP',
+            denType: 'coalition',
+            kind: 'chat',
+            minTier: 'tier_2',
+            topic: 'Top-tier member exclusive access',
+        },
+        {
+            slug: 'refrain',
+            name: 'Bounty Board',
+            denType: 'public',
+            kind: 'bounty_board',
+            topic: 'Commission work from this creator',
+        },
+    ],
+    bundledPluginIds: [],
+});

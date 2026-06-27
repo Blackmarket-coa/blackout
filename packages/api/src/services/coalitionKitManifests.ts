@@ -17,6 +17,7 @@ import {
     type CoalitionKitDenSpec,
     type CoalitionKitManifest,
 } from '@blackout/core';
+import { ROOM_TYPE_EVENT_TYPE, type RoomTypeContent } from '@blackout/protocol';
 import { db } from '../db/store';
 import type { CoalitionKitManifestApplicationRecord } from '../db/types';
 import { matrixClient } from '../integrations/matrix-client';
@@ -62,11 +63,14 @@ function toModel(record: CoalitionKitManifestApplicationRecord): CoalitionKitMan
 
 /** Default den provisioner: create the room as the bot and stamp its classification. */
 export const defaultKitDenProvisioner: KitDenProvisioner = async (spec) => {
+    // Tier-gated dens are invite-only; FBM entitlements (via fbmAclSync) controls
+    // who is invited. Open dens follow their classification.
+    const gated = !!spec.minTier || spec.denType === 'private';
     const created = await matrixClient.createRoom({
         name: spec.name,
         topic: spec.topic,
-        visibility: spec.denType === 'private' ? 'private' : 'public',
-        preset: spec.denType === 'private' ? 'private_chat' : 'public_chat',
+        visibility: gated ? 'private' : 'public',
+        preset: gated ? 'private_chat' : 'public_chat',
     });
     if (!created.ok || !created.roomId) {
         return { ok: false, reason: created.reason ?? 'create_failed' };
@@ -77,6 +81,22 @@ export const defaultKitDenProvisioner: KitDenProvisioner = async (spec) => {
         { denType: spec.denType },
         '',
     );
+    // Record the room's shape + tier gate as a `co.bmc.room_type` marker when it
+    // is anything other than a plain open chat. This drives the bounty-board view
+    // and lets the FBM portal wire tier→room ACLs. No new ACL engine.
+    const kind = spec.kind ?? 'chat';
+    if (kind !== 'chat' || spec.minTier) {
+        const content: RoomTypeContent = {
+            type: kind,
+            ...(spec.minTier ? { minTier: spec.minTier } : {}),
+        };
+        await matrixClient.sendStateEvent(
+            created.roomId,
+            ROOM_TYPE_EVENT_TYPE,
+            content as unknown as Record<string, unknown>,
+            '',
+        );
+    }
     return { ok: true, denId: created.roomId };
 };
 

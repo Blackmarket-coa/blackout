@@ -777,6 +777,42 @@ export const matrixClient = {
     return { ok: true as const, status: response.status, content };
   },
 
+  /**
+   * Returns every current state event of `eventType` in a room (one per state
+   * key), using the full-room-state endpoint. Used to enumerate things like
+   * split contracts where each contract is its own state key. Soft-fails.
+   */
+  async getRoomStateEvents(roomId: string, eventType: string) {
+    const hs = homeserver();
+    const token = botToken();
+    if (!hs || !token || !roomId) {
+      return { ok: false as const, reason: 'matrix_not_configured' as const };
+    }
+    let response: Response;
+    try {
+      response = await fetch(
+        `${hs}/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/state`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+    } catch (error) {
+      return { ok: false as const, reason: 'network_error' as const, detail: (error as Error).message };
+    }
+    if (!response.ok) {
+      return { ok: false as const, status: response.status };
+    }
+    const raw = (await response.json().catch(() => [])) as Array<Record<string, unknown>>;
+    const events = Array.isArray(raw)
+      ? raw
+          .filter((ev) => ev?.type === eventType)
+          .map((ev) => ({
+            stateKey: typeof ev.state_key === 'string' ? ev.state_key : '',
+            eventId: typeof ev.event_id === 'string' ? ev.event_id : '',
+            content: (ev.content ?? {}) as Record<string, unknown>,
+          }))
+      : [];
+    return { ok: true as const, status: response.status, events };
+  },
+
   async sendStateEvent(
     roomId: string,
     eventType: string,

@@ -9,6 +9,7 @@ export type FbmBridgeMatrixClient = Pick<
     | 'createRoom'
     | 'sendEvent'
     | 'sendStateEvent'
+    | 'getRoomStateEvents'
     | 'inviteToRoom'
     | 'adminJoinUserToRoom'
     | 'kickFromRoom'

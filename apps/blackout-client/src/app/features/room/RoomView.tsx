@@ -8,8 +8,10 @@ import { StateEvent } from '../../../types/matrix/room';
 import { usePowerLevelsContext } from '../../hooks/usePowerLevels';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { useEditor } from '../../components/editor';
+import { ROOM_TYPE_EVENT_TYPE, isBountyBoardRoomType } from '@blackout/protocol';
 import { RoomInputPlaceholder } from './RoomInputPlaceholder';
 import { RoomTimeline } from './RoomTimeline';
+import { BountyBoardRoom } from './BountyBoardRoom';
 import { RoomViewTyping } from './RoomViewTyping';
 import { RoomTombstone } from './RoomTombstone';
 import { RoomInput } from './RoomInput';
@@ -69,6 +71,8 @@ export function RoomView({ room, eventId }: { room: Room; eventId?: string }) {
   const mx = useMatrixClient();
 
   const tombstoneEvent = useStateEvent(room, StateEvent.RoomTombstone);
+  const roomTypeEvent = useStateEvent(room, ROOM_TYPE_EVENT_TYPE as unknown as StateEvent, '');
+  const isBountyBoard = isBountyBoardRoomType(roomTypeEvent?.getContent());
   const powerLevels = usePowerLevelsContext();
   const creators = useRoomCreators(room);
 
@@ -99,16 +103,20 @@ export function RoomView({ room, eventId }: { room: Room; eventId?: string }) {
         <div style={{ padding: `0 ${config.space.S400}` }}>
           <QuestSheet />
         </div>
-        <RoomTimeline
-          key={roomId}
-          roomId={roomId}
-          jumpToEventId={eventId}
-        />
+        {isBountyBoard ? (
+          <BountyBoardRoom room={room} />
+        ) : (
+          <RoomTimeline
+            key={roomId}
+            roomId={roomId}
+            jumpToEventId={eventId}
+          />
+        )}
         <RoomViewTyping room={room} />
       </Box>
       <Box shrink="No" direction="Column">
         <div style={{ padding: `0 ${config.space.S400}` }}>
-          {tombstoneEvent ? (
+          {isBountyBoard ? null : tombstoneEvent ? (
             <RoomTombstone
               roomId={roomId}
               body={tombstoneEvent.getContent().body}

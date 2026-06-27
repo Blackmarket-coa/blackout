@@ -49,3 +49,11 @@ export * from './entitlements/schema';
 export * from './entitlements/fullyUnlocked';
 
 export * from './plugins';
+
+export * from './split-contract';
+
+export * from './tip';
+
+export * from './boost';
+
+export * from './bounty-board';

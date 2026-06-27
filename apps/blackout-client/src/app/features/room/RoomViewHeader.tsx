@@ -75,6 +75,9 @@ import { rightPanelAtom } from '../../state/navigation';
 import { useDenPlaybook } from '../playbook/usePlaybook';
 import { TrialBanner } from '../playbook/TrialBanner';
 import { DenHeaderStrip } from '../../components/den-signature';
+import { RoomTipButton } from './RoomTipButton';
+import { BoostBar } from './BoostBar';
+import { runtimeFeatureFlags } from '../../core/features/featureFlags';
 import { useCompostAvailable } from '../compost/useCompost';
 import { CompostDialog } from '../compost/CompostDialog';
 import { useAwaitsMe } from '../notifications/hooks/useAwaitsMe';
@@ -357,6 +360,7 @@ export function RoomViewHeader() {
     <>
       {playbook && playbook.mode === 'trial' && <TrialBanner roomId={room.roomId} />}
       {playbook && <DenHeaderStrip playbook={playbook} />}
+      {runtimeFeatureFlags.monetization && <BoostBar room={room} />}
     <PageHeader balance={screenSize === ScreenSize.Mobile}>
       <Box grow="Yes" gap="300">
         {screenSize === ScreenSize.Mobile && (
@@ -596,6 +600,9 @@ export function RoomViewHeader() {
                 </IconButton>
               )}
             </TooltipProvider>
+          )}
+          {screenSize === ScreenSize.Desktop && runtimeFeatureFlags.monetization && (
+            <RoomTipButton roomId={room.roomId} />
           )}
           <TooltipProvider
             position="Bottom"
