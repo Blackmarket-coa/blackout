@@ -44,6 +44,7 @@ import { buildSpaceGroups, getThreadRootIds } from '../../features/right-panel/r
 import { InviteUserPrompt } from '../../components/invite-user-prompt';
 import { InvitationsManager } from '../../components/invitations';
 import { ToastOutlet } from '../../components/toast/ToastOutlet';
+import { KeyBackupNudge } from '../../features/settings/security/KeyBackupNudge';
 import { useRoomCreators } from '../../hooks/useRoomCreators';
 import { useRoomPermissions } from '../../hooks/useRoomPermissions';
 import { usePowerLevels } from '../../hooks/usePowerLevels';
@@ -779,6 +780,7 @@ export const ClientLayout = () => {
             />
 
             <ToastOutlet />
+            <KeyBackupNudge />
 
             {desktop || !mobile ? (
                 <aside
