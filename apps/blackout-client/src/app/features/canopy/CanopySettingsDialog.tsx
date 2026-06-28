@@ -1,9 +1,11 @@
 import { type CSSProperties, useMemo, useState } from 'react';
 import type { Room } from 'matrix-js-sdk';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { readPowerLevel, usePowerLevels } from '../../hooks/usePowerLevels';
 import { runtimeFeatureFlags } from '../../core/features/featureFlags';
 import { RoleEditor } from '../roles/RoleEditor';
 import { AutoModPanel } from '../moderation/AutoModPanel';
+import { InvitationsManager } from '../../components/invitations';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 
 type Tab = 'overview' | 'roles' | 'invites' | 'moderation';
@@ -118,7 +120,12 @@ const OverviewTab = ({ canopy }: { canopy: Room }) => {
                 onChange={(event) => setTopic(event.target.value)}
             />
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 16 }}>
-                <button type="button" style={primaryButtonStyle} disabled={busy} onClick={() => void save()}>
+                <button
+                    type="button"
+                    style={primaryButtonStyle}
+                    disabled={busy}
+                    onClick={() => void save()}
+                >
                     {busy ? 'Saving…' : 'Save changes'}
                 </button>
                 {status ? <small style={{ color: 'var(--text-muted)' }}>{status}</small> : null}
@@ -127,11 +134,23 @@ const OverviewTab = ({ canopy }: { canopy: Room }) => {
     );
 };
 
+const secondaryButtonStyle: CSSProperties = {
+    border: '1px solid var(--border-default)',
+    background: 'var(--bg-input)',
+    color: 'var(--text-primary)',
+    borderRadius: 8,
+    padding: '8px 14px',
+    fontSize: 14,
+    fontWeight: 600,
+    cursor: 'pointer',
+};
+
 const InvitesTab = ({ canopy }: { canopy: Room }) => {
     const mx = useMatrixClient();
     const [mxid, setMxid] = useState('');
     const [status, setStatus] = useState<string | null>(null);
     const [busy, setBusy] = useState(false);
+    const [linksOpen, setLinksOpen] = useState(false);
 
     const invite = async () => {
         const target = mxid.trim();
@@ -177,6 +196,33 @@ const InvitesTab = ({ canopy }: { canopy: Room }) => {
                     {status}
                 </small>
             ) : null}
+
+            <hr
+                style={{
+                    border: 'none',
+                    borderTop: '1px solid var(--border-default)',
+                    margin: '20px 0 16px',
+                }}
+            />
+            <p style={{ marginTop: 0, color: 'var(--text-muted)', fontSize: 13 }}>
+                Or create a shareable link anyone can use to join this{' '}
+                {BLACKOUT_TERMS.canopy.singular}.
+            </p>
+            <button
+                type="button"
+                style={secondaryButtonStyle}
+                data-testid="canopy-invite-links-open"
+                onClick={() => setLinksOpen(true)}
+            >
+                Create shareable invite link
+            </button>
+
+            {linksOpen ? (
+                <InvitationsManager
+                    roomId={canopy.roomId}
+                    requestClose={() => setLinksOpen(false)}
+                />
+            ) : null}
         </div>
     );
 };
@@ -194,18 +240,22 @@ export const CanopySettingsDialog = ({
     canopy: Room;
     onClose: () => void;
 }) => {
+    const mx = useMatrixClient();
+    const powerLevels = usePowerLevels(canopy);
     const [tab, setTab] = useState<Tab>('overview');
     const moderationEnabled = runtimeFeatureFlags.moderation;
+    const canInvite =
+        readPowerLevel.user(powerLevels, mx.getUserId() ?? undefined) >=
+        readPowerLevel.action(powerLevels, 'invite');
 
     const tabs = useMemo(
-        () =>
-            [
-                { id: 'overview' as const, label: 'Overview' },
-                { id: 'roles' as const, label: 'Roles & permissions' },
-                { id: 'invites' as const, label: 'Invites' },
-                ...(moderationEnabled ? [{ id: 'moderation' as const, label: 'Moderation' }] : []),
-            ],
-        [moderationEnabled]
+        () => [
+            { id: 'overview' as const, label: 'Overview' },
+            { id: 'roles' as const, label: 'Roles & permissions' },
+            ...(canInvite ? [{ id: 'invites' as const, label: 'Invites' }] : []),
+            ...(moderationEnabled ? [{ id: 'moderation' as const, label: 'Moderation' }] : []),
+        ],
+        [canInvite, moderationEnabled]
     );
 
     return (

@@ -10,6 +10,7 @@ import { CanopyChannelSidebar } from './CanopyChannelSidebar';
 import { CanopyDenSurface, type RightDock } from './CanopyDenSurface';
 import { CanopyMemberPanel } from './CanopyMemberPanel';
 import { CanopyThreadsPanel } from './CanopyThreadsPanel';
+import { CanopyPinsPanel } from './CanopyPinsPanel';
 import { CanopySettingsDialog } from './CanopySettingsDialog';
 
 const ROW_STYLE: CSSProperties = {
@@ -106,12 +107,18 @@ export const CanopyServerPage = () => {
     }, [compact]);
 
     const canopy =
-        rooms.find((room) => room.roomId === selectedSpaceId && room.getType() === 'm.space') ?? null;
+        rooms.find((room) => room.roomId === selectedSpaceId && room.getType() === 'm.space') ??
+        null;
 
     if (!canopy) {
         return (
             <div
-                style={{ ...ROW_STYLE, alignItems: 'center', justifyContent: 'center', padding: 32 }}
+                style={{
+                    ...ROW_STYLE,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: 32,
+                }}
                 data-testid="canopy-server-page-empty"
             >
                 <div style={{ textAlign: 'center', maxWidth: 420 }}>
@@ -148,6 +155,8 @@ export const CanopyServerPage = () => {
             <CanopyMemberPanel room={memberRoom} />
         ) : rightDock === 'threads' && selectedRoomId ? (
             <CanopyThreadsPanel roomId={selectedRoomId} />
+        ) : rightDock === 'pins' && selectedRoomId ? (
+            <CanopyPinsPanel roomId={selectedRoomId} />
         ) : null;
 
     const channelRail = (
@@ -175,6 +184,7 @@ export const CanopyServerPage = () => {
                 onOpenChannels={() => setChannelsOpen(true)}
                 onToggleMembers={() => toggleDock('members')}
                 onToggleThreads={() => toggleDock('threads')}
+                onTogglePins={() => toggleDock('pins')}
             />
 
             {dockContent && dockInline ? dockContent : null}

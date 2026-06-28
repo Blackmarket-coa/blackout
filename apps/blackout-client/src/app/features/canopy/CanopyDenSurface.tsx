@@ -10,7 +10,7 @@ import { CallProvider, VoiceChannel } from '../call';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 import { useDenKind } from './denKind';
 
-export type RightDock = 'members' | 'threads' | null;
+export type RightDock = 'members' | 'threads' | 'pins' | null;
 
 const COLUMN_STYLE: CSSProperties = {
     flex: 1,
@@ -84,10 +84,12 @@ interface DenHeaderProps {
     topic?: string;
     rightDock: RightDock;
     showThreads: boolean;
+    showPins: boolean;
     compact: boolean;
     onOpenChannels: () => void;
     onToggleMembers: () => void;
     onToggleThreads: () => void;
+    onTogglePins: () => void;
 }
 
 const DenHeader = ({
@@ -95,10 +97,12 @@ const DenHeader = ({
     topic,
     rightDock,
     showThreads,
+    showPins,
     compact,
     onOpenChannels,
     onToggleMembers,
     onToggleThreads,
+    onTogglePins,
 }: DenHeaderProps) => (
     <header style={HEADER_STYLE}>
         {compact ? (
@@ -116,6 +120,18 @@ const DenHeader = ({
         <strong style={{ fontSize: 15, whiteSpace: 'nowrap' }}>{title}</strong>
         {topic && !compact ? <span style={topicStyle}>{topic}</span> : null}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+            {showPins ? (
+                <button
+                    type="button"
+                    onClick={onTogglePins}
+                    aria-pressed={rightDock === 'pins'}
+                    data-testid="canopy-pins-toggle"
+                    title="Toggle pinned messages"
+                    style={toggleStyle(rightDock === 'pins')}
+                >
+                    📌{compact ? '' : ' Pins'}
+                </button>
+            ) : null}
             {showThreads ? (
                 <button
                     type="button"
@@ -162,6 +178,7 @@ export const CanopyDenSurface = ({
     onOpenChannels,
     onToggleMembers,
     onToggleThreads,
+    onTogglePins,
 }: {
     denId: string | null;
     canopy: Room;
@@ -170,6 +187,7 @@ export const CanopyDenSurface = ({
     onOpenChannels: () => void;
     onToggleMembers: () => void;
     onToggleThreads: () => void;
+    onTogglePins: () => void;
 }) => {
     const mx = useMatrixClient();
     const jumpToEventId = useAtomValue(roomJumpTargetEventIdAtom);
@@ -193,10 +211,12 @@ export const CanopyDenSurface = ({
                     topic={getTopic(room)}
                     rightDock={rightDock}
                     showThreads={false}
+                    showPins={false}
                     compact={compact}
                     onOpenChannels={onOpenChannels}
                     onToggleMembers={onToggleMembers}
                     onToggleThreads={onToggleThreads}
+                    onTogglePins={onTogglePins}
                 />
                 <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: 16 }}>
                     <CallProvider>
@@ -219,10 +239,12 @@ export const CanopyDenSurface = ({
                 topic={getTopic(room)}
                 rightDock={rightDock}
                 showThreads
+                showPins
                 compact={compact}
                 onOpenChannels={onOpenChannels}
                 onToggleMembers={onToggleMembers}
                 onToggleThreads={onToggleThreads}
+                onTogglePins={onTogglePins}
             />
             <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
                 <RoomTimeline
