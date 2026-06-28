@@ -7,6 +7,7 @@ import { getUnreadMarkerEventId } from '../right-panel/rightPanelUtils';
 import { RoomTimeline } from '../room/RoomTimeline';
 import { MessageComposer } from '../room/MessageComposer';
 import { CallProvider, VoiceChannel } from '../call';
+import { ForumView } from '../forum/ForumView';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 import { useDenKind } from './denKind';
 
@@ -227,6 +228,28 @@ export const CanopyDenSurface = ({
                             activeRoomId={room.roomId}
                         />
                     </CallProvider>
+                </div>
+            </div>
+        );
+    }
+
+    if (kind === 'forum') {
+        return (
+            <div style={COLUMN_STYLE} data-testid="canopy-den-surface" data-den-kind="forum">
+                <DenHeader
+                    title={room.name}
+                    topic={getTopic(room)}
+                    rightDock={rightDock}
+                    showThreads={false}
+                    showPins={false}
+                    compact={compact}
+                    onOpenChannels={onOpenChannels}
+                    onToggleMembers={onToggleMembers}
+                    onToggleThreads={onToggleThreads}
+                    onTogglePins={onTogglePins}
+                />
+                <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: 16 }}>
+                    <ForumView roomId={room.roomId} />
                 </div>
             </div>
         );

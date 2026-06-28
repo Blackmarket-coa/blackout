@@ -426,7 +426,7 @@ const DenRow = ({
                 data-den-kind={kind}
                 style={{ ...channelStyle(active), paddingRight: showMenu ? 30 : 10 }}
             >
-                <span aria-hidden>{kind === 'voice' ? '🔊' : '💬'}</span>
+                <span aria-hidden>{kind === 'voice' ? '🔊' : kind === 'forum' ? '📋' : '💬'}</span>
                 <span
                     style={{
                         overflow: 'hidden',
@@ -528,6 +528,7 @@ export const CanopyChannelSidebar = ({
     const scrollRef = useRef<HTMLDivElement>(null);
     const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
     const [voiceDraft, setVoiceDraft] = useState<string | null>(null);
+    const [forumDraft, setForumDraft] = useState<string | null>(null);
     const [busy, setBusy] = useState(false);
 
     const myId = mx.getUserId() ?? undefined;
@@ -578,8 +579,9 @@ export const CanopyChannelSidebar = ({
             );
             if (!group) return;
 
-            const { text, voice } = partitionDensByKind(group.rooms);
-            const bucketRooms = source.kind === 'voice' ? voice : text;
+            const { text, voice, forum } = partitionDensByKind(group.rooms);
+            const bucketRooms =
+                source.kind === 'voice' ? voice : source.kind === 'forum' ? forum : text;
             const contentByDenId: Record<string, Record<string, unknown>> = {};
             const bucket = bucketRooms.map((entry) => {
                 const content = readChildContent(parent, entry.roomId);
@@ -641,6 +643,24 @@ export const CanopyChannelSidebar = ({
         }
     };
 
+    const addForumDen = async () => {
+        const name = (forumDraft ?? '').trim();
+        if (!name || busy) return;
+        setBusy(true);
+        try {
+            const denId = await createDenInCanopy(mx, {
+                canopyId: canopy.roomId,
+                name,
+                kind: 'forum',
+            });
+            setForumDraft(null);
+            navigateRoom(denId);
+            onNavigate?.();
+        } finally {
+            setBusy(false);
+        }
+    };
+
     return (
         <aside
             data-testid="canopy-channel-sidebar"
@@ -675,8 +695,12 @@ export const CanopyChannelSidebar = ({
             <div style={LIST_STYLE} ref={scrollRef}>
                 {groups.map((group) => {
                     const isCollapsed = collapsed[group.id] ?? false;
-                    const { text: textRooms, voice: voiceRooms } = partitionDensByKind(group.rooms);
-                    const ordered = [...textRooms, ...voiceRooms];
+                    const {
+                        text: textRooms,
+                        voice: voiceRooms,
+                        forum: forumRooms,
+                    } = partitionDensByKind(group.rooms);
+                    const ordered = [...textRooms, ...voiceRooms, ...forumRooms];
                     const groupParentId = parentIdForGroup(group.id);
                     return (
                         <section key={group.id}>
@@ -775,6 +799,54 @@ export const CanopyChannelSidebar = ({
                         <button
                             type="submit"
                             disabled={busy || voiceDraft.trim().length === 0}
+                            style={{ ...iconButtonStyle, width: 'auto', padding: '0 10px' }}
+                        >
+                            {busy ? '…' : 'Add'}
+                        </button>
+                    </form>
+                )}
+                {forumDraft === null ? (
+                    <button
+                        type="button"
+                        style={footerButtonStyle}
+                        data-testid="canopy-add-forum-den"
+                        onClick={() => setForumDraft('')}
+                    >
+                        <span aria-hidden>📋</span>
+                        <span>Add forum {BLACKOUT_TERMS.den.singular}</span>
+                    </button>
+                ) : (
+                    <form
+                        onSubmit={(event) => {
+                            event.preventDefault();
+                            void addForumDen();
+                        }}
+                        style={{ display: 'flex', gap: 6 }}
+                    >
+                        <input
+                            autoFocus
+                            value={forumDraft}
+                            onChange={(event) => setForumDraft(event.target.value)}
+                            onKeyDown={(event) => {
+                                if (event.key === 'Escape') setForumDraft(null);
+                            }}
+                            placeholder="Forum channel name"
+                            aria-label="Forum channel name"
+                            data-testid="canopy-forum-name"
+                            style={{
+                                flex: 1,
+                                minWidth: 0,
+                                border: '1px solid var(--border-default)',
+                                background: 'var(--bg-input)',
+                                color: 'var(--text-primary)',
+                                borderRadius: 8,
+                                padding: '6px 8px',
+                                fontSize: 13,
+                            }}
+                        />
+                        <button
+                            type="submit"
+                            disabled={busy || forumDraft.trim().length === 0}
                             style={{ ...iconButtonStyle, width: 'auto', padding: '0 10px' }}
                         >
                             {busy ? '…' : 'Add'}
