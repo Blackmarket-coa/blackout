@@ -1,11 +1,12 @@
-import { type CSSProperties, useMemo, useState } from 'react';
+import { type CSSProperties, useCallback, useMemo, useState } from 'react';
 import type { Room, RoomMember } from 'matrix-js-sdk';
 import { groupMembersByPresence } from '../right-panel/rightPanelUtils';
 import { usePowerLevels } from '../../hooks/usePowerLevels';
 import { getPowerLevelTag, usePowerLevelTags } from '../../hooks/usePowerLevelTags';
 import { Presence, useUserPresence } from '../../hooks/useUserPresence';
-import { ProfileModal } from '../profile/ProfileModal';
+import { ConnectedProfileModal } from '../profile/ConnectedProfileModal';
 import type { MemberProfile } from '../profile/profileTypes';
+import { FriendsDialog } from '../friends/FriendsDialog';
 
 const PANEL_WIDTH = 240;
 
@@ -31,6 +32,22 @@ const HEADER_STYLE: CSSProperties = {
     minHeight: 52,
     display: 'flex',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+};
+
+const friendsButtonStyle: CSSProperties = {
+    border: '1px solid var(--border-default)',
+    background: 'var(--bg-input)',
+    color: 'var(--text-primary)',
+    borderRadius: 8,
+    padding: '4px 10px',
+    fontSize: 11,
+    fontWeight: 700,
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+    cursor: 'pointer',
+    whiteSpace: 'nowrap',
 };
 
 const LIST_STYLE: CSSProperties = {
@@ -166,14 +183,6 @@ const MemberRow = ({
     );
 };
 
-const EMPTY_PROFILE: MemberProfile = {
-    userId: '',
-    displayName: '',
-    roleBadges: [],
-    mutualSpaces: [],
-    profile: {},
-};
-
 /**
  * Docked member list for the canopy server page. Intentionally lightweight
  * (presence grouping via the shared `groupMembersByPresence` + power-level
@@ -185,6 +194,8 @@ export const CanopyMemberPanel = ({ room }: { room: Room }) => {
     const powerLevels = usePowerLevels(room);
     const tags = usePowerLevelTags(room, powerLevels);
     const [profileTarget, setProfileTarget] = useState<MemberProfile | null>(null);
+    const closeProfile = useCallback(() => setProfileTarget(null), []);
+    const [friendsOpen, setFriendsOpen] = useState(false);
 
     const members = useMemo(() => room.getJoinedMembers(), [room]);
     const grouped = useMemo(() => groupMembersByPresence(members), [members]);
@@ -232,16 +243,25 @@ export const CanopyMemberPanel = ({ room }: { room: Room }) => {
             aria-label="Members"
             style={ASIDE_STYLE}
         >
-            <div style={HEADER_STYLE}>Members — {members.length}</div>
+            <div style={HEADER_STYLE}>
+                <span>Members — {members.length}</span>
+                <button
+                    type="button"
+                    style={friendsButtonStyle}
+                    data-testid="canopy-friends-open"
+                    onClick={() => setFriendsOpen(true)}
+                >
+                    Friends
+                </button>
+            </div>
             <div style={LIST_STYLE}>
                 {renderSection('Online', onlineMembers, true)}
                 {renderSection('Offline', offlineMembers, false)}
             </div>
-            <ProfileModal
-                open={Boolean(profileTarget)}
-                profile={profileTarget ?? EMPTY_PROFILE}
-                onClose={() => setProfileTarget(null)}
-            />
+            {profileTarget ? (
+                <ConnectedProfileModal profile={profileTarget} onClose={closeProfile} />
+            ) : null}
+            {friendsOpen ? <FriendsDialog onClose={() => setFriendsOpen(false)} /> : null}
         </aside>
     );
 };

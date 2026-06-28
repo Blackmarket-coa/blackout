@@ -1,6 +1,18 @@
-import { type CSSProperties, useMemo, useState } from 'react';
+import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
-import type { Room } from 'matrix-js-sdk';
+import type { MatrixClient, Room } from 'matrix-js-sdk';
+import {
+    draggable,
+    dropTargetForElements,
+    monitorForElements,
+} from '@atlaskit/pragmatic-drag-and-drop/element/adapter';
+import { autoScrollForElements } from '@atlaskit/pragmatic-drag-and-drop-auto-scroll/element';
+import { combine } from '@atlaskit/pragmatic-drag-and-drop/combine';
+import {
+    attachClosestEdge,
+    extractClosestEdge,
+    type Edge,
+} from '@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge';
 import { joinedRoomsAtom } from '../../state/rooms';
 import { roomToParentsAtom } from '../../state/room/roomToParents';
 import { mDirectAtom } from '../../state/mDirectList';
@@ -9,16 +21,81 @@ import { createRoomModalAtom } from '../../state/createRoomModal';
 import { buildSpaceGroups } from '../right-panel/rightPanelUtils';
 import { useRoomNavigate } from '../../hooks/useRoomNavigate';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { useConfirm, type ConfirmOptions } from '../../components/confirm-dialog';
 import { readPowerLevel, usePowerLevels } from '../../hooks/usePowerLevels';
 import { StateEvent } from '../../../types/matrix/room';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
+import { FORUM_EVENT_TYPE } from '../forum/useForum';
+import { ForumSettingsDialog } from '../forum/ForumSettingsDialog';
 import {
+    type DenKind,
     createDenInCanopy,
     partitionDensByKind,
     readDenKind,
     removeDenFromCanopy,
     renameDen,
 } from './denKind';
+import { computeBucketReorder, reorderDenInCanopy } from './denOrder';
+
+// Drag payload shared between a den row (draggable) and the rail-level monitor.
+// A drop is only honoured between dens of the same parent space and kind bucket.
+type DenDragData = {
+    type: 'canopy-den';
+    roomId: string;
+    parentId: string;
+    kind: DenKind;
+};
+
+const isDenDragData = (data: Record<string, unknown>): data is DenDragData =>
+    data.type === 'canopy-den';
+
+const denKindIcon = (kind: DenKind): string => {
+    switch (kind) {
+        case 'voice':
+            return '🔊';
+        case 'forum':
+            return '📋';
+        case 'stage':
+            return '🎤';
+        case 'announcement':
+            return '📢';
+        default:
+            return '💬';
+    }
+};
+
+const readChildContent = (parent: Room, denId: string): Record<string, unknown> => {
+    const content = parent.currentState
+        .getStateEvents('m.space.child', denId)
+        ?.getContent<Record<string, unknown>>();
+    return content && typeof content === 'object' ? content : {};
+};
+
+/**
+ * Build the confirm-dialog options for deleting a den. Extracted so the
+ * destructive-action wiring (delete only runs via `onConfirm`) is unit-testable
+ * without rendering the whole sidebar.
+ */
+export const buildDeleteDenConfirm = (
+    mx: MatrixClient,
+    {
+        canopyId,
+        canopyName,
+        denId,
+        denName,
+    }: {
+        canopyId: string;
+        canopyName: string;
+        denId: string;
+        denName: string;
+    }
+): ConfirmOptions => ({
+    title: `Delete ${denName}?`,
+    description: `This removes ${denName} from ${canopyName} and you’ll leave the channel. This can’t be undone.`,
+    confirmLabel: 'Delete',
+    variant: 'Critical',
+    onConfirm: () => removeDenFromCanopy(mx, { canopyId, denId }),
+});
 
 const SIDEBAR_WIDTH = 248;
 
@@ -137,6 +214,95 @@ const iconButtonStyle: CSSProperties = {
     fontSize: 14,
 };
 
+/**
+ * Footer control to create a den of a given kind: a labelled button that
+ * reveals an inline name form. Self-contained (own draft + busy state) so the
+ * voice/forum/stage/announcement create buttons are a single component instead
+ * of four copy-pasted blocks. `slug` drives the `canopy-add-${slug}-den` /
+ * `canopy-${slug}-name` test ids the rest of the suite expects.
+ */
+const AddDenControl = ({
+    slug,
+    icon,
+    label,
+    placeholder,
+    onCreate,
+}: {
+    slug: string;
+    icon: string;
+    label: string;
+    placeholder: string;
+    onCreate: (name: string) => Promise<void>;
+}) => {
+    const [draft, setDraft] = useState<string | null>(null);
+    const [busy, setBusy] = useState(false);
+
+    const submit = async () => {
+        const name = (draft ?? '').trim();
+        if (!name || busy) return;
+        setBusy(true);
+        try {
+            await onCreate(name);
+            setDraft(null);
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    if (draft === null) {
+        return (
+            <button
+                type="button"
+                style={footerButtonStyle}
+                data-testid={`canopy-add-${slug}-den`}
+                onClick={() => setDraft('')}
+            >
+                <span aria-hidden>{icon}</span>
+                <span>{label}</span>
+            </button>
+        );
+    }
+
+    return (
+        <form
+            onSubmit={(event) => {
+                event.preventDefault();
+                void submit();
+            }}
+            style={{ display: 'flex', gap: 6 }}
+        >
+            <input
+                autoFocus
+                value={draft}
+                onChange={(event) => setDraft(event.target.value)}
+                onKeyDown={(event) => {
+                    if (event.key === 'Escape') setDraft(null);
+                }}
+                placeholder={placeholder}
+                aria-label={placeholder}
+                data-testid={`canopy-${slug}-name`}
+                style={{
+                    flex: 1,
+                    minWidth: 0,
+                    border: '1px solid var(--border-default)',
+                    background: 'var(--bg-input)',
+                    color: 'var(--text-primary)',
+                    borderRadius: 8,
+                    padding: '6px 8px',
+                    fontSize: 13,
+                }}
+            />
+            <button
+                type="submit"
+                disabled={busy || draft.trim().length === 0}
+                style={{ ...iconButtonStyle, width: 'auto', padding: '0 10px' }}
+            >
+                {busy ? '…' : 'Add'}
+            </button>
+        </form>
+    );
+};
+
 const unreadCount = (room: Room): number => {
     try {
         return room.getUnreadNotificationCount?.() ?? 0;
@@ -204,6 +370,7 @@ const menuItemStyle = (danger = false): CSSProperties => ({
  */
 const DenRow = ({
     room,
+    parentId,
     active,
     canManage,
     myId,
@@ -211,6 +378,7 @@ const DenRow = ({
     onDeleted,
 }: {
     room: Room;
+    parentId: string;
     active: boolean;
     canManage: boolean;
     myId: string | undefined;
@@ -223,13 +391,58 @@ const DenRow = ({
     const [renaming, setRenaming] = useState(false);
     const [draft, setDraft] = useState(room.name ?? '');
     const [busy, setBusy] = useState(false);
+    const [forumSettingsOpen, setForumSettingsOpen] = useState(false);
+    const rowRef = useRef<HTMLDivElement>(null);
+    const [dropEdge, setDropEdge] = useState<Edge | null>(null);
 
     const kind = readDenKind(room);
     const unread = unreadCount(room);
     const canRename =
         readPowerLevel.user(powerLevels, myId) >=
         readPowerLevel.state(powerLevels, StateEvent.RoomName);
-    const showMenu = canRename || canManage;
+    // Forum settings live in the den's own `co.bmc.forum` state event.
+    const canEditForum =
+        kind === 'forum' &&
+        readPowerLevel.user(powerLevels, myId) >=
+            readPowerLevel.state(powerLevels, FORUM_EVENT_TYPE);
+    const showMenu = canRename || canManage || canEditForum;
+
+    // Drag-to-reorder: a den is both draggable and a drop target when the viewer
+    // can edit the parent's `m.space.child`. Drops are constrained to the same
+    // parent + kind bucket; the rail-level monitor performs the reorder.
+    useEffect(() => {
+        const element = rowRef.current;
+        if (!element || !canManage) return undefined;
+        const payload: DenDragData = { type: 'canopy-den', roomId: room.roomId, parentId, kind };
+        return combine(
+            draggable({
+                element,
+                getInitialData: () => payload,
+            }),
+            dropTargetForElements({
+                element,
+                canDrop: ({ source }) =>
+                    isDenDragData(source.data) &&
+                    source.data.parentId === parentId &&
+                    source.data.kind === kind,
+                getData: ({ input }) =>
+                    attachClosestEdge(payload, {
+                        element,
+                        input,
+                        allowedEdges: ['top', 'bottom'],
+                    }),
+                onDrag: ({ self, source }) => {
+                    if (source.element === element) {
+                        setDropEdge(null);
+                        return;
+                    }
+                    setDropEdge(extractClosestEdge(self.data));
+                },
+                onDragLeave: () => setDropEdge(null),
+                onDrop: () => setDropEdge(null),
+            })
+        );
+    }, [canManage, parentId, kind, room.roomId]);
 
     const closeMenu = () => setMenuOpen(false);
 
@@ -291,7 +504,8 @@ const DenRow = ({
 
     return (
         <div
-            style={rowWrapStyle}
+            ref={rowRef}
+            style={{ ...rowWrapStyle, cursor: canManage ? 'grab' : undefined }}
             onContextMenu={
                 showMenu
                     ? (event) => {
@@ -301,6 +515,21 @@ const DenRow = ({
                     : undefined
             }
         >
+            {dropEdge ? (
+                <span
+                    aria-hidden
+                    data-testid={`canopy-den-drop-${dropEdge}`}
+                    style={{
+                        position: 'absolute',
+                        left: 4,
+                        right: 4,
+                        height: 2,
+                        background: 'var(--accent-primary)',
+                        borderRadius: 2,
+                        ...(dropEdge === 'top' ? { top: -3 } : { bottom: -3 }),
+                    }}
+                />
+            ) : null}
             <button
                 type="button"
                 onClick={onSelect}
@@ -309,7 +538,7 @@ const DenRow = ({
                 data-den-kind={kind}
                 style={{ ...channelStyle(active), paddingRight: showMenu ? 30 : 10 }}
             >
-                <span aria-hidden>{kind === 'voice' ? '🔊' : '💬'}</span>
+                <span aria-hidden>{denKindIcon(kind)}</span>
                 <span
                     style={{
                         overflow: 'hidden',
@@ -362,6 +591,20 @@ const DenRow = ({
                                 Rename
                             </button>
                         ) : null}
+                        {canEditForum ? (
+                            <button
+                                type="button"
+                                role="menuitem"
+                                style={menuItemStyle()}
+                                data-testid={`canopy-den-forum-settings-${room.roomId}`}
+                                onClick={() => {
+                                    setForumSettingsOpen(true);
+                                    closeMenu();
+                                }}
+                            >
+                                Forum settings
+                            </button>
+                        ) : null}
                         {canManage ? (
                             <button
                                 type="button"
@@ -379,6 +622,13 @@ const DenRow = ({
                         ) : null}
                     </div>
                 </>
+            ) : null}
+
+            {forumSettingsOpen ? (
+                <ForumSettingsDialog
+                    roomId={room.roomId}
+                    onClose={() => setForumSettingsOpen(false)}
+                />
             ) : null}
         </div>
     );
@@ -406,10 +656,10 @@ export const CanopyChannelSidebar = ({
     const selectedRoomId = useAtomValue(selectedRoomIdAtom);
     const setCreateRoomModal = useSetAtom(createRoomModalAtom);
     const { navigateRoom } = useRoomNavigate();
+    const confirm = useConfirm();
     const canopyPowerLevels = usePowerLevels(canopy);
+    const scrollRef = useRef<HTMLDivElement>(null);
     const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
-    const [voiceDraft, setVoiceDraft] = useState<string | null>(null);
-    const [busy, setBusy] = useState(false);
 
     const myId = mx.getUserId() ?? undefined;
     // Removing a den clears the `m.space.child` edge on the canopy, so the
@@ -419,8 +669,16 @@ export const CanopyChannelSidebar = ({
         readPowerLevel.state(canopyPowerLevels, StateEvent.SpaceChild);
 
     const deleteDen = async (denId: string) => {
-        await removeDenFromCanopy(mx, { canopyId: canopy.roomId, denId });
-        if (selectedRoomId === denId) {
+        const denName = mx.getRoom(denId)?.name ?? `this ${BLACKOUT_TERMS.den.singular}`;
+        const confirmed = await confirm(
+            buildDeleteDenConfirm(mx, {
+                canopyId: canopy.roomId,
+                canopyName: canopy.name,
+                denId,
+                denName,
+            })
+        );
+        if (confirmed && selectedRoomId === denId) {
             navigateRoom(canopy.roomId);
             onNavigate?.();
         }
@@ -437,24 +695,78 @@ export const CanopyChannelSidebar = ({
         [canopy.roomId, rooms, roomToParents, mDirect]
     );
 
+    // A group's dens live on the canopy itself (the synthetic "general" group)
+    // or on the category sub-space (group.id is its roomId).
+    const parentIdForGroup = (groupId: string) => (groupId === 'general' ? canopy.roomId : groupId);
+
+    const onReorder = useCallback(
+        (source: DenDragData, targetRoomId: string, edge: Edge | null) => {
+            if (!canManageChildren || source.roomId === targetRoomId) return;
+            const parent = mx.getRoom(source.parentId);
+            if (!parent) return;
+            const group = groups.find(
+                (entry) => (entry.id === 'general' ? canopy.roomId : entry.id) === source.parentId
+            );
+            if (!group) return;
+
+            const { text, voice, forum, stage, announcement } = partitionDensByKind(group.rooms);
+            const bucketRooms =
+                source.kind === 'voice'
+                    ? voice
+                    : source.kind === 'forum'
+                    ? forum
+                    : source.kind === 'stage'
+                    ? stage
+                    : source.kind === 'announcement'
+                    ? announcement
+                    : text;
+            const contentByDenId: Record<string, Record<string, unknown>> = {};
+            const bucket = bucketRooms.map((entry) => {
+                const content = readChildContent(parent, entry.roomId);
+                contentByDenId[entry.roomId] = content;
+                return {
+                    roomId: entry.roomId,
+                    order: typeof content.order === 'string' ? content.order : undefined,
+                };
+            });
+
+            const fromIndex = bucket.findIndex((entry) => entry.roomId === source.roomId);
+            const targetIndex = bucket.findIndex((entry) => entry.roomId === targetRoomId);
+            if (fromIndex < 0 || targetIndex < 0) return;
+
+            const insertBefore = edge === 'bottom' ? targetIndex + 1 : targetIndex;
+            const toIndex = insertBefore > fromIndex ? insertBefore - 1 : insertBefore;
+            const changes = computeBucketReorder(bucket, fromIndex, toIndex);
+            if (changes.length === 0) return;
+            void reorderDenInCanopy(mx, { parentId: source.parentId, changes, contentByDenId });
+        },
+        [canManageChildren, groups, mx, canopy.roomId]
+    );
+
+    useEffect(() => {
+        const scrollEl = scrollRef.current;
+        if (!scrollEl || !canManageChildren) return undefined;
+        return combine(
+            monitorForElements({
+                canMonitor: ({ source }) => isDenDragData(source.data),
+                onDrop: ({ source, location }) => {
+                    const target = location.current.dropTargets[0];
+                    if (!target || !isDenDragData(source.data) || !isDenDragData(target.data)) {
+                        return;
+                    }
+                    onReorder(source.data, target.data.roomId, extractClosestEdge(target.data));
+                },
+            }),
+            autoScrollForElements({ element: scrollEl })
+        );
+    }, [canManageChildren, onReorder]);
+
     const toggle = (id: string) => setCollapsed((prev) => ({ ...prev, [id]: !prev[id] }));
 
-    const addVoiceDen = async () => {
-        const name = (voiceDraft ?? '').trim();
-        if (!name || busy) return;
-        setBusy(true);
-        try {
-            const denId = await createDenInCanopy(mx, {
-                canopyId: canopy.roomId,
-                name,
-                kind: 'voice',
-            });
-            setVoiceDraft(null);
-            navigateRoom(denId);
-            onNavigate?.();
-        } finally {
-            setBusy(false);
-        }
+    const createDen = async (name: string, kind: DenKind) => {
+        const denId = await createDenInCanopy(mx, { canopyId: canopy.roomId, name, kind });
+        navigateRoom(denId);
+        onNavigate?.();
     };
 
     return (
@@ -488,11 +800,24 @@ export const CanopyChannelSidebar = ({
                 </button>
             </div>
 
-            <div style={LIST_STYLE}>
+            <div style={LIST_STYLE} ref={scrollRef}>
                 {groups.map((group) => {
                     const isCollapsed = collapsed[group.id] ?? false;
-                    const { text: textRooms, voice: voiceRooms } = partitionDensByKind(group.rooms);
-                    const ordered = [...textRooms, ...voiceRooms];
+                    const {
+                        text: textRooms,
+                        voice: voiceRooms,
+                        forum: forumRooms,
+                        stage: stageRooms,
+                        announcement: announcementRooms,
+                    } = partitionDensByKind(group.rooms);
+                    const ordered = [
+                        ...textRooms,
+                        ...voiceRooms,
+                        ...forumRooms,
+                        ...stageRooms,
+                        ...announcementRooms,
+                    ];
+                    const groupParentId = parentIdForGroup(group.id);
                     return (
                         <section key={group.id}>
                             <button
@@ -521,6 +846,7 @@ export const CanopyChannelSidebar = ({
                                     <DenRow
                                         key={room.roomId}
                                         room={room}
+                                        parentId={groupParentId}
                                         active={selectedRoomId === room.roomId}
                                         canManage={canManageChildren}
                                         myId={myId}
@@ -547,54 +873,34 @@ export const CanopyChannelSidebar = ({
                     <span aria-hidden>＋</span>
                     <span>Add text {BLACKOUT_TERMS.den.singular}</span>
                 </button>
-                {voiceDraft === null ? (
-                    <button
-                        type="button"
-                        style={footerButtonStyle}
-                        data-testid="canopy-add-voice-den"
-                        onClick={() => setVoiceDraft('')}
-                    >
-                        <span aria-hidden>🔊</span>
-                        <span>Add voice {BLACKOUT_TERMS.den.singular}</span>
-                    </button>
-                ) : (
-                    <form
-                        onSubmit={(event) => {
-                            event.preventDefault();
-                            void addVoiceDen();
-                        }}
-                        style={{ display: 'flex', gap: 6 }}
-                    >
-                        <input
-                            autoFocus
-                            value={voiceDraft}
-                            onChange={(event) => setVoiceDraft(event.target.value)}
-                            onKeyDown={(event) => {
-                                if (event.key === 'Escape') setVoiceDraft(null);
-                            }}
-                            placeholder="Voice channel name"
-                            aria-label="Voice channel name"
-                            data-testid="canopy-voice-name"
-                            style={{
-                                flex: 1,
-                                minWidth: 0,
-                                border: '1px solid var(--border-default)',
-                                background: 'var(--bg-input)',
-                                color: 'var(--text-primary)',
-                                borderRadius: 8,
-                                padding: '6px 8px',
-                                fontSize: 13,
-                            }}
-                        />
-                        <button
-                            type="submit"
-                            disabled={busy || voiceDraft.trim().length === 0}
-                            style={{ ...iconButtonStyle, width: 'auto', padding: '0 10px' }}
-                        >
-                            {busy ? '…' : 'Add'}
-                        </button>
-                    </form>
-                )}
+                <AddDenControl
+                    slug="voice"
+                    icon="🔊"
+                    label={`Add voice ${BLACKOUT_TERMS.den.singular}`}
+                    placeholder="Voice channel name"
+                    onCreate={(name) => createDen(name, 'voice')}
+                />
+                <AddDenControl
+                    slug="forum"
+                    icon="📋"
+                    label={`Add forum ${BLACKOUT_TERMS.den.singular}`}
+                    placeholder="Forum channel name"
+                    onCreate={(name) => createDen(name, 'forum')}
+                />
+                <AddDenControl
+                    slug="stage"
+                    icon="🎤"
+                    label={`Add stage ${BLACKOUT_TERMS.den.singular}`}
+                    placeholder="Stage channel name"
+                    onCreate={(name) => createDen(name, 'stage')}
+                />
+                <AddDenControl
+                    slug="announcement"
+                    icon="📢"
+                    label={`Add announcement ${BLACKOUT_TERMS.den.singular}`}
+                    placeholder="Announcement channel name"
+                    onCreate={(name) => createDen(name, 'announcement')}
+                />
             </div>
         </aside>
     );

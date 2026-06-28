@@ -2,11 +2,14 @@ import { type CSSProperties, useMemo } from 'react';
 import { useAtomValue } from 'jotai';
 import type { Room } from 'matrix-js-sdk';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { usePowerLevels, readPowerLevel } from '../../hooks/usePowerLevels';
 import { roomJumpTargetEventIdAtom } from '../../state/navigation';
 import { getUnreadMarkerEventId } from '../right-panel/rightPanelUtils';
 import { RoomTimeline } from '../room/RoomTimeline';
 import { MessageComposer } from '../room/MessageComposer';
 import { CallProvider, VoiceChannel } from '../call';
+import { ForumView } from '../forum/ForumView';
+import { StageSurface } from './StageSurface';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 import { useDenKind } from './denKind';
 
@@ -166,9 +169,41 @@ const getTopic = (room: Room): string | undefined => {
 };
 
 /**
+ * Composer for an announcement den: shown only to members with enough power to
+ * send messages (announcement dens raise `events_default` to 50). Everyone else
+ * gets a read-only notice instead of a dead input. Mounted only on the
+ * announcement branch — where `room` is guaranteed non-null — so `usePowerLevels`
+ * never runs against a missing room.
+ */
+const AnnouncementComposerSlot = ({ room, denId }: { room: Room; denId: string }) => {
+    const mx = useMatrixClient();
+    const powerLevels = usePowerLevels(room);
+    const canPost =
+        readPowerLevel.user(powerLevels, mx.getUserId() ?? undefined) >=
+        readPowerLevel.event(powerLevels, 'm.room.message');
+
+    if (canPost) return <MessageComposer roomId={denId} />;
+    return (
+        <div
+            data-testid="announcement-readonly"
+            style={{
+                padding: '12px 16px',
+                borderTop: '1px solid var(--border-default)',
+                color: 'var(--text-muted)',
+                fontSize: 13,
+                textAlign: 'center',
+            }}
+        >
+            📢 Only moderators can post in this announcement {BLACKOUT_TERMS.den.singular}.
+        </div>
+    );
+};
+
+/**
  * Main column of the canopy server page. Switches by channel kind: text dens
- * reuse the proven `RoomTimeline` + `MessageComposer`; voice dens reuse the
- * LiveKit `CallProvider` + `VoiceChannel` stack.
+ * reuse the proven `RoomTimeline` + `MessageComposer`; voice and stage dens
+ * reuse the LiveKit `CallProvider` stack; announcement dens are read-only for
+ * non-moderators; forum dens render the forum view.
  */
 export const CanopyDenSurface = ({
     denId,
@@ -228,6 +263,77 @@ export const CanopyDenSurface = ({
                         />
                     </CallProvider>
                 </div>
+            </div>
+        );
+    }
+
+    if (kind === 'forum') {
+        return (
+            <div style={COLUMN_STYLE} data-testid="canopy-den-surface" data-den-kind="forum">
+                <DenHeader
+                    title={room.name}
+                    topic={getTopic(room)}
+                    rightDock={rightDock}
+                    showThreads={false}
+                    showPins={false}
+                    compact={compact}
+                    onOpenChannels={onOpenChannels}
+                    onToggleMembers={onToggleMembers}
+                    onToggleThreads={onToggleThreads}
+                    onTogglePins={onTogglePins}
+                />
+                <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: 16 }}>
+                    <ForumView roomId={room.roomId} />
+                </div>
+            </div>
+        );
+    }
+
+    if (kind === 'stage') {
+        return (
+            <div style={COLUMN_STYLE} data-testid="canopy-den-surface" data-den-kind="stage">
+                <DenHeader
+                    title={room.name}
+                    topic={getTopic(room)}
+                    rightDock={rightDock}
+                    showThreads={false}
+                    showPins={false}
+                    compact={compact}
+                    onOpenChannels={onOpenChannels}
+                    onToggleMembers={onToggleMembers}
+                    onToggleThreads={onToggleThreads}
+                    onTogglePins={onTogglePins}
+                />
+                <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: 16 }}>
+                    <StageSurface room={room} />
+                </div>
+            </div>
+        );
+    }
+
+    if (kind === 'announcement') {
+        return (
+            <div style={COLUMN_STYLE} data-testid="canopy-den-surface" data-den-kind="announcement">
+                <DenHeader
+                    title={room.name}
+                    topic={getTopic(room)}
+                    rightDock={rightDock}
+                    showThreads
+                    showPins
+                    compact={compact}
+                    onOpenChannels={onOpenChannels}
+                    onToggleMembers={onToggleMembers}
+                    onToggleThreads={onToggleThreads}
+                    onTogglePins={onTogglePins}
+                />
+                <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+                    <RoomTimeline
+                        roomId={denId}
+                        unreadEventId={unreadEventId ?? undefined}
+                        jumpToEventId={jumpToEventId ?? undefined}
+                    />
+                </div>
+                <AnnouncementComposerSlot room={room} denId={denId} />
             </div>
         );
     }

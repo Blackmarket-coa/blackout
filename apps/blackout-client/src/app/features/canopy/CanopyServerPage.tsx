@@ -12,6 +12,7 @@ import { CanopyMemberPanel } from './CanopyMemberPanel';
 import { CanopyThreadsPanel } from './CanopyThreadsPanel';
 import { CanopyPinsPanel } from './CanopyPinsPanel';
 import { CanopySettingsDialog } from './CanopySettingsDialog';
+import { CanopyWelcomeGate } from './CanopyWelcomeGate';
 
 const ROW_STYLE: CSSProperties = {
     position: 'relative',
@@ -197,6 +198,8 @@ export const CanopyServerPage = () => {
             {settingsOpen ? (
                 <CanopySettingsDialog canopy={canopy} onClose={() => setSettingsOpen(false)} />
             ) : null}
+
+            <CanopyWelcomeGate key={canopy.roomId} canopy={canopy} />
         </section>
     );
 };
