@@ -49,6 +49,21 @@ type DenDragData = {
 const isDenDragData = (data: Record<string, unknown>): data is DenDragData =>
     data.type === 'canopy-den';
 
+const denKindIcon = (kind: DenKind): string => {
+    switch (kind) {
+        case 'voice':
+            return '🔊';
+        case 'forum':
+            return '📋';
+        case 'stage':
+            return '🎤';
+        case 'announcement':
+            return '📢';
+        default:
+            return '💬';
+    }
+};
+
 const readChildContent = (parent: Room, denId: string): Record<string, unknown> => {
     const content = parent.currentState
         .getStateEvents('m.space.child', denId)
@@ -197,6 +212,95 @@ const iconButtonStyle: CSSProperties = {
     placeItems: 'center',
     cursor: 'pointer',
     fontSize: 14,
+};
+
+/**
+ * Footer control to create a den of a given kind: a labelled button that
+ * reveals an inline name form. Self-contained (own draft + busy state) so the
+ * voice/forum/stage/announcement create buttons are a single component instead
+ * of four copy-pasted blocks. `slug` drives the `canopy-add-${slug}-den` /
+ * `canopy-${slug}-name` test ids the rest of the suite expects.
+ */
+const AddDenControl = ({
+    slug,
+    icon,
+    label,
+    placeholder,
+    onCreate,
+}: {
+    slug: string;
+    icon: string;
+    label: string;
+    placeholder: string;
+    onCreate: (name: string) => Promise<void>;
+}) => {
+    const [draft, setDraft] = useState<string | null>(null);
+    const [busy, setBusy] = useState(false);
+
+    const submit = async () => {
+        const name = (draft ?? '').trim();
+        if (!name || busy) return;
+        setBusy(true);
+        try {
+            await onCreate(name);
+            setDraft(null);
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    if (draft === null) {
+        return (
+            <button
+                type="button"
+                style={footerButtonStyle}
+                data-testid={`canopy-add-${slug}-den`}
+                onClick={() => setDraft('')}
+            >
+                <span aria-hidden>{icon}</span>
+                <span>{label}</span>
+            </button>
+        );
+    }
+
+    return (
+        <form
+            onSubmit={(event) => {
+                event.preventDefault();
+                void submit();
+            }}
+            style={{ display: 'flex', gap: 6 }}
+        >
+            <input
+                autoFocus
+                value={draft}
+                onChange={(event) => setDraft(event.target.value)}
+                onKeyDown={(event) => {
+                    if (event.key === 'Escape') setDraft(null);
+                }}
+                placeholder={placeholder}
+                aria-label={placeholder}
+                data-testid={`canopy-${slug}-name`}
+                style={{
+                    flex: 1,
+                    minWidth: 0,
+                    border: '1px solid var(--border-default)',
+                    background: 'var(--bg-input)',
+                    color: 'var(--text-primary)',
+                    borderRadius: 8,
+                    padding: '6px 8px',
+                    fontSize: 13,
+                }}
+            />
+            <button
+                type="submit"
+                disabled={busy || draft.trim().length === 0}
+                style={{ ...iconButtonStyle, width: 'auto', padding: '0 10px' }}
+            >
+                {busy ? '…' : 'Add'}
+            </button>
+        </form>
+    );
 };
 
 const unreadCount = (room: Room): number => {
@@ -434,7 +538,7 @@ const DenRow = ({
                 data-den-kind={kind}
                 style={{ ...channelStyle(active), paddingRight: showMenu ? 30 : 10 }}
             >
-                <span aria-hidden>{kind === 'voice' ? '🔊' : kind === 'forum' ? '📋' : '💬'}</span>
+                <span aria-hidden>{denKindIcon(kind)}</span>
                 <span
                     style={{
                         overflow: 'hidden',
@@ -556,9 +660,6 @@ export const CanopyChannelSidebar = ({
     const canopyPowerLevels = usePowerLevels(canopy);
     const scrollRef = useRef<HTMLDivElement>(null);
     const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
-    const [voiceDraft, setVoiceDraft] = useState<string | null>(null);
-    const [forumDraft, setForumDraft] = useState<string | null>(null);
-    const [busy, setBusy] = useState(false);
 
     const myId = mx.getUserId() ?? undefined;
     // Removing a den clears the `m.space.child` edge on the canopy, so the
@@ -608,9 +709,17 @@ export const CanopyChannelSidebar = ({
             );
             if (!group) return;
 
-            const { text, voice, forum } = partitionDensByKind(group.rooms);
+            const { text, voice, forum, stage, announcement } = partitionDensByKind(group.rooms);
             const bucketRooms =
-                source.kind === 'voice' ? voice : source.kind === 'forum' ? forum : text;
+                source.kind === 'voice'
+                    ? voice
+                    : source.kind === 'forum'
+                    ? forum
+                    : source.kind === 'stage'
+                    ? stage
+                    : source.kind === 'announcement'
+                    ? announcement
+                    : text;
             const contentByDenId: Record<string, Record<string, unknown>> = {};
             const bucket = bucketRooms.map((entry) => {
                 const content = readChildContent(parent, entry.roomId);
@@ -654,40 +763,10 @@ export const CanopyChannelSidebar = ({
 
     const toggle = (id: string) => setCollapsed((prev) => ({ ...prev, [id]: !prev[id] }));
 
-    const addVoiceDen = async () => {
-        const name = (voiceDraft ?? '').trim();
-        if (!name || busy) return;
-        setBusy(true);
-        try {
-            const denId = await createDenInCanopy(mx, {
-                canopyId: canopy.roomId,
-                name,
-                kind: 'voice',
-            });
-            setVoiceDraft(null);
-            navigateRoom(denId);
-            onNavigate?.();
-        } finally {
-            setBusy(false);
-        }
-    };
-
-    const addForumDen = async () => {
-        const name = (forumDraft ?? '').trim();
-        if (!name || busy) return;
-        setBusy(true);
-        try {
-            const denId = await createDenInCanopy(mx, {
-                canopyId: canopy.roomId,
-                name,
-                kind: 'forum',
-            });
-            setForumDraft(null);
-            navigateRoom(denId);
-            onNavigate?.();
-        } finally {
-            setBusy(false);
-        }
+    const createDen = async (name: string, kind: DenKind) => {
+        const denId = await createDenInCanopy(mx, { canopyId: canopy.roomId, name, kind });
+        navigateRoom(denId);
+        onNavigate?.();
     };
 
     return (
@@ -728,8 +807,16 @@ export const CanopyChannelSidebar = ({
                         text: textRooms,
                         voice: voiceRooms,
                         forum: forumRooms,
+                        stage: stageRooms,
+                        announcement: announcementRooms,
                     } = partitionDensByKind(group.rooms);
-                    const ordered = [...textRooms, ...voiceRooms, ...forumRooms];
+                    const ordered = [
+                        ...textRooms,
+                        ...voiceRooms,
+                        ...forumRooms,
+                        ...stageRooms,
+                        ...announcementRooms,
+                    ];
                     const groupParentId = parentIdForGroup(group.id);
                     return (
                         <section key={group.id}>
@@ -786,102 +873,34 @@ export const CanopyChannelSidebar = ({
                     <span aria-hidden>＋</span>
                     <span>Add text {BLACKOUT_TERMS.den.singular}</span>
                 </button>
-                {voiceDraft === null ? (
-                    <button
-                        type="button"
-                        style={footerButtonStyle}
-                        data-testid="canopy-add-voice-den"
-                        onClick={() => setVoiceDraft('')}
-                    >
-                        <span aria-hidden>🔊</span>
-                        <span>Add voice {BLACKOUT_TERMS.den.singular}</span>
-                    </button>
-                ) : (
-                    <form
-                        onSubmit={(event) => {
-                            event.preventDefault();
-                            void addVoiceDen();
-                        }}
-                        style={{ display: 'flex', gap: 6 }}
-                    >
-                        <input
-                            autoFocus
-                            value={voiceDraft}
-                            onChange={(event) => setVoiceDraft(event.target.value)}
-                            onKeyDown={(event) => {
-                                if (event.key === 'Escape') setVoiceDraft(null);
-                            }}
-                            placeholder="Voice channel name"
-                            aria-label="Voice channel name"
-                            data-testid="canopy-voice-name"
-                            style={{
-                                flex: 1,
-                                minWidth: 0,
-                                border: '1px solid var(--border-default)',
-                                background: 'var(--bg-input)',
-                                color: 'var(--text-primary)',
-                                borderRadius: 8,
-                                padding: '6px 8px',
-                                fontSize: 13,
-                            }}
-                        />
-                        <button
-                            type="submit"
-                            disabled={busy || voiceDraft.trim().length === 0}
-                            style={{ ...iconButtonStyle, width: 'auto', padding: '0 10px' }}
-                        >
-                            {busy ? '…' : 'Add'}
-                        </button>
-                    </form>
-                )}
-                {forumDraft === null ? (
-                    <button
-                        type="button"
-                        style={footerButtonStyle}
-                        data-testid="canopy-add-forum-den"
-                        onClick={() => setForumDraft('')}
-                    >
-                        <span aria-hidden>📋</span>
-                        <span>Add forum {BLACKOUT_TERMS.den.singular}</span>
-                    </button>
-                ) : (
-                    <form
-                        onSubmit={(event) => {
-                            event.preventDefault();
-                            void addForumDen();
-                        }}
-                        style={{ display: 'flex', gap: 6 }}
-                    >
-                        <input
-                            autoFocus
-                            value={forumDraft}
-                            onChange={(event) => setForumDraft(event.target.value)}
-                            onKeyDown={(event) => {
-                                if (event.key === 'Escape') setForumDraft(null);
-                            }}
-                            placeholder="Forum channel name"
-                            aria-label="Forum channel name"
-                            data-testid="canopy-forum-name"
-                            style={{
-                                flex: 1,
-                                minWidth: 0,
-                                border: '1px solid var(--border-default)',
-                                background: 'var(--bg-input)',
-                                color: 'var(--text-primary)',
-                                borderRadius: 8,
-                                padding: '6px 8px',
-                                fontSize: 13,
-                            }}
-                        />
-                        <button
-                            type="submit"
-                            disabled={busy || forumDraft.trim().length === 0}
-                            style={{ ...iconButtonStyle, width: 'auto', padding: '0 10px' }}
-                        >
-                            {busy ? '…' : 'Add'}
-                        </button>
-                    </form>
-                )}
+                <AddDenControl
+                    slug="voice"
+                    icon="🔊"
+                    label={`Add voice ${BLACKOUT_TERMS.den.singular}`}
+                    placeholder="Voice channel name"
+                    onCreate={(name) => createDen(name, 'voice')}
+                />
+                <AddDenControl
+                    slug="forum"
+                    icon="📋"
+                    label={`Add forum ${BLACKOUT_TERMS.den.singular}`}
+                    placeholder="Forum channel name"
+                    onCreate={(name) => createDen(name, 'forum')}
+                />
+                <AddDenControl
+                    slug="stage"
+                    icon="🎤"
+                    label={`Add stage ${BLACKOUT_TERMS.den.singular}`}
+                    placeholder="Stage channel name"
+                    onCreate={(name) => createDen(name, 'stage')}
+                />
+                <AddDenControl
+                    slug="announcement"
+                    icon="📢"
+                    label={`Add announcement ${BLACKOUT_TERMS.den.singular}`}
+                    placeholder="Announcement channel name"
+                    onCreate={(name) => createDen(name, 'announcement')}
+                />
             </div>
         </aside>
     );

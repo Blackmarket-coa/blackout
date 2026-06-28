@@ -20,9 +20,11 @@ const makeRoom = (kind?: string): Room =>
     } as unknown as Room);
 
 describe('resolveDenKind', () => {
-    it('returns the explicit voice or forum marker', () => {
+    it('returns the explicit voice, forum, stage, or announcement marker', () => {
         expect(resolveDenKind({ kind: 'voice' })).toBe('voice');
         expect(resolveDenKind({ kind: 'forum' })).toBe('forum');
+        expect(resolveDenKind({ kind: 'stage' })).toBe('stage');
+        expect(resolveDenKind({ kind: 'announcement' })).toBe('announcement');
     });
 
     it('defaults to text for text, missing, or unknown markers', () => {
@@ -36,6 +38,8 @@ describe('readDenKind', () => {
     it('reads the den kind from room state', () => {
         expect(readDenKind(makeRoom('voice'))).toBe('voice');
         expect(readDenKind(makeRoom('forum'))).toBe('forum');
+        expect(readDenKind(makeRoom('stage'))).toBe('stage');
+        expect(readDenKind(makeRoom('announcement'))).toBe('announcement');
         expect(readDenKind(makeRoom('text'))).toBe('text');
     });
 
@@ -46,34 +50,53 @@ describe('readDenKind', () => {
 });
 
 describe('partitionDensByKind', () => {
-    it('splits dens into text, voice, and forum, preserving order', () => {
+    it('splits dens into each kind bucket, preserving order', () => {
         const a = makeRoom('text');
         const b = makeRoom('voice');
         const c = makeRoom(); // unmarked -> text
         const d = makeRoom('voice');
         const e = makeRoom('forum');
+        const f = makeRoom('stage');
+        const g = makeRoom('announcement');
 
-        const { text, voice, forum } = partitionDensByKind([a, b, c, d, e]);
+        const { text, voice, forum, stage, announcement } = partitionDensByKind([
+            a,
+            b,
+            c,
+            d,
+            e,
+            f,
+            g,
+        ]);
 
         expect(text.map((room) => room.roomId)).toEqual([a.roomId, c.roomId]);
         expect(voice.map((room) => room.roomId)).toEqual([b.roomId, d.roomId]);
         expect(forum.map((room) => room.roomId)).toEqual([e.roomId]);
+        expect(stage.map((room) => room.roomId)).toEqual([f.roomId]);
+        expect(announcement.map((room) => room.roomId)).toEqual([g.roomId]);
     });
 
     it('handles an empty list', () => {
-        expect(partitionDensByKind([])).toEqual({ text: [], voice: [], forum: [] });
+        expect(partitionDensByKind([])).toEqual({
+            text: [],
+            voice: [],
+            forum: [],
+            stage: [],
+            announcement: [],
+        });
     });
 });
 
 describe('createDenInCanopy', () => {
     const makeMx = () => {
         const sendStateEvent = vi.fn().mockResolvedValue(undefined);
+        const createRoom = vi.fn().mockResolvedValue({ room_id: '!new:server' });
         const mx = {
             getDomain: () => 'server',
-            createRoom: vi.fn().mockResolvedValue({ room_id: '!new:server' }),
+            createRoom,
             sendStateEvent,
         } as unknown as MatrixClient;
-        return { mx, sendStateEvent };
+        return { mx, sendStateEvent, createRoom };
     };
 
     const eventTypes = (sendStateEvent: ReturnType<typeof vi.fn>) =>
@@ -101,5 +124,41 @@ describe('createDenInCanopy', () => {
         const { mx, sendStateEvent } = makeMx();
         await createDenInCanopy(mx, { canopyId: '!canopy:server', name: 'general' });
         expect(eventTypes(sendStateEvent)).not.toContain('co.bmc.forum');
+    });
+
+    it('stamps a stage kind without a power override', async () => {
+        const { mx, sendStateEvent, createRoom } = makeMx();
+        await createDenInCanopy(mx, {
+            canopyId: '!canopy:server',
+            name: 'Town Hall',
+            kind: 'stage',
+        });
+
+        expect(sendStateEvent).toHaveBeenCalledWith(
+            '!new:server',
+            DEN_KIND_STATE_EVENT_TYPE,
+            { kind: 'stage' },
+            ''
+        );
+        expect(createRoom.mock.calls[0][0].power_level_content_override).toBeUndefined();
+    });
+
+    it('raises events_default to 50 for an announcement den', async () => {
+        const { mx, sendStateEvent, createRoom } = makeMx();
+        await createDenInCanopy(mx, {
+            canopyId: '!canopy:server',
+            name: 'Updates',
+            kind: 'announcement',
+        });
+
+        expect(sendStateEvent).toHaveBeenCalledWith(
+            '!new:server',
+            DEN_KIND_STATE_EVENT_TYPE,
+            { kind: 'announcement' },
+            ''
+        );
+        expect(createRoom.mock.calls[0][0].power_level_content_override).toEqual({
+            events_default: 50,
+        });
     });
 });
