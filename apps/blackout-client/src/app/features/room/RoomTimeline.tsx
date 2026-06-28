@@ -21,6 +21,9 @@ import { activeThreadRootIdAtom, rightPanelAtom } from '../../state/navigation';
 import { sanitizeMatrixHtml } from '../../plugins/markdown/matrixMarkdownUtils';
 import { designSpacing } from '../../../../../../packages/design/src';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { readPowerLevel, usePowerLevels } from '../../hooks/usePowerLevels';
+import { useRoomPinnedEvents } from '../../hooks/useRoomPinnedEvents';
+import { StateEvent } from '../../../types/matrix/room';
 import { useLegacyRoomAdapter as useRoom } from '../../plugins/matrix-adapters/hooks/useLegacyRoomAdapter';
 import { useLegacyRoomTimelineAdapter as useRoomTimeline } from '../../plugins/matrix-adapters/hooks/useLegacyTimelineAdapter';
 import { useLegacyTypingIndicatorAdapter as useTypingIndicator } from '../../plugins/matrix-adapters/hooks/useLegacyTypingAdapter';
@@ -36,10 +39,7 @@ import { ProfileModal } from '../profile/ProfileModal';
 import type { MemberProfile } from '../profile/profileTypes';
 import { useRegisterModalOpener } from '../../shell/modalOpenerRegistry';
 import { roomViewLayoutRhythm } from './roomViewLayoutContract';
-import {
-    ROUND_OPENED_EVENT_TYPE,
-    type RoundOpenedPayload,
-} from '@blackout/protocol';
+import { ROUND_OPENED_EVENT_TYPE, type RoundOpenedPayload } from '@blackout/protocol';
 import { RoundCard } from '../rounds/RoundCard';
 import { normalizeMarketplaceEventContent } from '../marketplace/marketplaceEventSchemas';
 import { MarketplaceEventCard } from '../marketplace/MarketplaceEventCard';
@@ -316,7 +316,9 @@ const resolveStateCopy = (event: MatrixEvent, room: Room | null): string => {
             return `${sender} ${membership}`;
         }
         case 'm.room.name':
-            return `Den name changed to “${typeof content.name === 'string' ? content.name : 'Unknown'}”`;
+            return `Den name changed to “${
+                typeof content.name === 'string' ? content.name : 'Unknown'
+            }”`;
         case 'm.room.topic':
             return `Topic changed: ${typeof content.topic === 'string' ? content.topic : ''}`;
         case 'm.room.avatar':
@@ -580,6 +582,53 @@ const renderMessageType = (event: MatrixEvent): ReactNode => {
     }
 };
 
+/**
+ * Pin/Unpin affordance for a single message. Lives in its own component so the
+ * room-dependent hooks (`useRoomPinnedEvents`/`usePowerLevels`) only run when a
+ * room is present, and is hidden unless the viewer has pin power. Toggling
+ * rewrites the same `m.room.pinned_events` state event that the canopy Pins
+ * dock reads, so pinning here surfaces there immediately. Mirrors the legacy
+ * `MessagePinItem` (features/room/message/Message.tsx).
+ */
+export const PinToggle = ({ room, eventId }: { room: Room; eventId: string }) => {
+    const mx = useMatrixClient();
+    const pinned = useRoomPinnedEvents(room);
+    const powerLevels = usePowerLevels(room);
+
+    const canPin =
+        readPowerLevel.user(powerLevels, mx.getUserId() ?? undefined) >=
+        readPowerLevel.state(powerLevels, StateEvent.RoomPinnedEvents);
+    if (!canPin) return null;
+
+    const isPinned = pinned.includes(eventId);
+    const toggle = () => {
+        const next = pinned.filter((id) => id !== eventId);
+        if (!isPinned) next.push(eventId);
+        void mx.sendStateEvent(room.roomId, StateEvent.RoomPinnedEvents as any, { pinned: next });
+    };
+
+    return (
+        <button
+            type="button"
+            onClick={toggle}
+            aria-pressed={isPinned}
+            data-testid="canopy-message-pin"
+            title={isPinned ? 'Unpin message' : 'Pin message'}
+            style={{
+                border: '1px solid var(--border-default)',
+                borderRadius: 999,
+                background: 'transparent',
+                color: 'var(--text-muted)',
+                fontSize: 12,
+                padding: '1px 8px',
+                cursor: 'pointer',
+            }}
+        >
+            📌 {isPinned ? 'Unpin' : 'Pin'}
+        </button>
+    );
+};
+
 const MessageBubble = ({
     event,
     groupedWithPrevious = false,
@@ -664,6 +713,9 @@ const MessageBubble = ({
 
                 <div style={styles.relationBar}>
                     <ThreadIndicator event={event} />
+                    {room && event.getId() ? (
+                        <PinToggle room={room} eventId={event.getId() as string} />
+                    ) : null}
                 </div>
                 {event.getId() ? (
                     <Reactions roomId={roomId} targetEventId={event.getId() ?? ''} />

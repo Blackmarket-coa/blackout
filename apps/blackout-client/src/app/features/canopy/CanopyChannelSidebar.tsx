@@ -1,6 +1,6 @@
 import { type CSSProperties, useMemo, useState } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
-import type { Room } from 'matrix-js-sdk';
+import type { MatrixClient, Room } from 'matrix-js-sdk';
 import { joinedRoomsAtom } from '../../state/rooms';
 import { roomToParentsAtom } from '../../state/room/roomToParents';
 import { mDirectAtom } from '../../state/mDirectList';
@@ -9,6 +9,7 @@ import { createRoomModalAtom } from '../../state/createRoomModal';
 import { buildSpaceGroups } from '../right-panel/rightPanelUtils';
 import { useRoomNavigate } from '../../hooks/useRoomNavigate';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { useConfirm, type ConfirmOptions } from '../../components/confirm-dialog';
 import { readPowerLevel, usePowerLevels } from '../../hooks/usePowerLevels';
 import { StateEvent } from '../../../types/matrix/room';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
@@ -19,6 +20,32 @@ import {
     removeDenFromCanopy,
     renameDen,
 } from './denKind';
+
+/**
+ * Build the confirm-dialog options for deleting a den. Extracted so the
+ * destructive-action wiring (delete only runs via `onConfirm`) is unit-testable
+ * without rendering the whole sidebar.
+ */
+export const buildDeleteDenConfirm = (
+    mx: MatrixClient,
+    {
+        canopyId,
+        canopyName,
+        denId,
+        denName,
+    }: {
+        canopyId: string;
+        canopyName: string;
+        denId: string;
+        denName: string;
+    }
+): ConfirmOptions => ({
+    title: `Delete ${denName}?`,
+    description: `This removes ${denName} from ${canopyName} and you’ll leave the channel. This can’t be undone.`,
+    confirmLabel: 'Delete',
+    variant: 'Critical',
+    onConfirm: () => removeDenFromCanopy(mx, { canopyId, denId }),
+});
 
 const SIDEBAR_WIDTH = 248;
 
@@ -406,6 +433,7 @@ export const CanopyChannelSidebar = ({
     const selectedRoomId = useAtomValue(selectedRoomIdAtom);
     const setCreateRoomModal = useSetAtom(createRoomModalAtom);
     const { navigateRoom } = useRoomNavigate();
+    const confirm = useConfirm();
     const canopyPowerLevels = usePowerLevels(canopy);
     const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
     const [voiceDraft, setVoiceDraft] = useState<string | null>(null);
@@ -419,8 +447,16 @@ export const CanopyChannelSidebar = ({
         readPowerLevel.state(canopyPowerLevels, StateEvent.SpaceChild);
 
     const deleteDen = async (denId: string) => {
-        await removeDenFromCanopy(mx, { canopyId: canopy.roomId, denId });
-        if (selectedRoomId === denId) {
+        const denName = mx.getRoom(denId)?.name ?? `this ${BLACKOUT_TERMS.den.singular}`;
+        const confirmed = await confirm(
+            buildDeleteDenConfirm(mx, {
+                canopyId: canopy.roomId,
+                canopyName: canopy.name,
+                denId,
+                denName,
+            })
+        );
+        if (confirmed && selectedRoomId === denId) {
             navigateRoom(canopy.roomId);
             onNavigate?.();
         }
