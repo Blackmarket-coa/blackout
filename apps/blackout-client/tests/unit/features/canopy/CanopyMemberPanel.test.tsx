@@ -5,11 +5,25 @@ import { act } from 'react-dom/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Room } from 'matrix-js-sdk';
 
-// Stub ProfileModal so the test is about the panel's open-on-click wiring, not
-// the heavy profile/character-sheet/markdown tree the real modal pulls in.
-vi.mock('../../../../src/app/features/profile/ProfileModal', () => ({
-    ProfileModal: ({ open, profile }: { open: boolean; profile: { userId: string } }) =>
-        open ? <div data-testid="profile-modal">{profile.userId}</div> : null,
+// Stub ConnectedProfileModal so the test is about the panel's open-on-click
+// wiring, not the matrix-client / friends / profile-action tree the real
+// connected modal pulls in.
+vi.mock('../../../../src/app/features/profile/ConnectedProfileModal', () => ({
+    ConnectedProfileModal: ({ profile }: { profile: { userId: string } }) => (
+        <div data-testid="profile-modal">{profile.userId}</div>
+    ),
+}));
+
+// The Friends dialog only renders when opened; stub it so its matrix/account-data
+// hooks never run in this isolated panel render.
+vi.mock('../../../../src/app/features/friends/FriendsDialog', () => ({
+    FriendsDialog: ({ onClose }: { onClose: () => void }) => (
+        <div data-testid="friends-dialog">
+            <button type="button" data-testid="friends-close" onClick={onClose}>
+                close
+            </button>
+        </div>
+    ),
 }));
 
 vi.mock('../../../../src/app/hooks/useUserPresence', () => ({
@@ -88,5 +102,26 @@ describe('CanopyMemberPanel', () => {
         const modal = container.querySelector('[data-testid="profile-modal"]');
         expect(modal).not.toBeNull();
         expect(modal?.textContent).toBe('@alice:server');
+    });
+
+    it('opens and closes the friends dialog from the header button', async () => {
+        const { container } = await mount();
+        expect(container.querySelector('[data-testid="friends-dialog"]')).toBeNull();
+
+        const open = container.querySelector<HTMLButtonElement>(
+            '[data-testid="canopy-friends-open"]'
+        );
+        await act(async () => {
+            open?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+            await Promise.resolve();
+        });
+        expect(container.querySelector('[data-testid="friends-dialog"]')).not.toBeNull();
+
+        const close = container.querySelector<HTMLButtonElement>('[data-testid="friends-close"]');
+        await act(async () => {
+            close?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+            await Promise.resolve();
+        });
+        expect(container.querySelector('[data-testid="friends-dialog"]')).toBeNull();
     });
 });

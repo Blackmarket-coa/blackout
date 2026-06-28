@@ -15,6 +15,8 @@ interface ProfileModalProps {
     onClose: () => void;
     onStartDm?: (userId: string) => void;
     onAddFriend?: (userId: string) => void;
+    /** A friend request to this user is already pending — show "Requested". */
+    requestPending?: boolean;
     onBlock?: (userId: string) => void;
 }
 
@@ -90,6 +92,7 @@ export const ProfileModal = ({
     onClose,
     onStartDm,
     onAddFriend,
+    requestPending = false,
     onBlock,
 }: ProfileModalProps) => {
     const [viewingSheet, setViewingSheet] = useState(false);
@@ -112,376 +115,413 @@ export const ProfileModal = ({
                 tabbableOptions: { displayCheck: 'none' },
             }}
         >
-        <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby={titleId}
-            data-testid="modal-profile"
-            style={{
-                position: 'fixed',
-                inset: 0,
-                background: 'rgba(0,0,0,.7)',
-                zIndex: 60,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-            }}
-            onClick={onClose}
-        >
             <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby={titleId}
+                data-testid="modal-profile"
                 style={{
-                    width: 480,
-                    maxWidth: '96vw',
-                    borderRadius: 8,
-                    background: dc.cardBg,
-                    overflow: 'hidden',
-                    boxShadow: '0 8px 16px rgba(0,0,0,0.24), 0 2px 4px rgba(0,0,0,0.18)',
-                    fontFamily: 'Whitney, "Helvetica Neue", Helvetica, Arial, sans-serif',
-                    position: 'relative',
+                    position: 'fixed',
+                    inset: 0,
+                    background: 'rgba(0,0,0,.7)',
+                    zIndex: 60,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
                 }}
-                onClick={(event) => event.stopPropagation()}
+                onClick={onClose}
             >
-                <button
-                    type="button"
-                    aria-label="Close"
-                    onClick={onClose}
-                    style={{
-                        position: 'absolute',
-                        top: 8,
-                        right: 8,
-                        zIndex: 1,
-                        background: 'rgba(0,0,0,0.4)',
-                        border: 'none',
-                        color: '#fff',
-                        fontSize: 20,
-                        lineHeight: 1,
-                        cursor: 'pointer',
-                        padding: '2px 8px',
-                        borderRadius: 999,
-                    }}
-                >
-                    ×
-                </button>
-                {/* Banner */}
                 <div
                     style={{
-                        height: 120,
-                        background: profile.profile.banner
-                            ? undefined
-                            : 'linear-gradient(135deg, #7289DA 0%, #5865F2 100%)',
+                        width: 480,
+                        maxWidth: '96vw',
+                        borderRadius: 8,
+                        background: dc.cardBg,
+                        overflow: 'hidden',
+                        boxShadow: '0 8px 16px rgba(0,0,0,0.24), 0 2px 4px rgba(0,0,0,0.18)',
+                        fontFamily: 'Whitney, "Helvetica Neue", Helvetica, Arial, sans-serif',
                         position: 'relative',
-                        flexShrink: 0,
                     }}
+                    onClick={(event) => event.stopPropagation()}
                 >
-                    {profile.profile.banner ? (
-                        <img
-                            src={profile.profile.banner}
-                            alt=""
-                            style={{
-                                width: '100%',
-                                height: '100%',
-                                objectFit: 'cover',
-                                display: 'block',
-                            }}
-                        />
-                    ) : null}
-
-                    {/* Action buttons top-right */}
-                    <div
+                    <button
+                        type="button"
+                        aria-label="Close"
+                        onClick={onClose}
                         style={{
                             position: 'absolute',
-                            top: 12,
-                            right: 12,
-                            display: 'flex',
-                            gap: 8,
+                            top: 8,
+                            right: 8,
+                            zIndex: 1,
+                            background: 'rgba(0,0,0,0.4)',
+                            border: 'none',
+                            color: '#fff',
+                            fontSize: 20,
+                            lineHeight: 1,
+                            cursor: 'pointer',
+                            padding: '2px 8px',
+                            borderRadius: 999,
                         }}
                     >
-                        {onStartDm && (
-                            <DcButton variant="secondary" onClick={() => onStartDm(profile.userId)}>
-                                Message
-                            </DcButton>
-                        )}
-                        {onAddFriend && (
-                            <DcButton
-                                variant={profile.isFriend ? 'secondary' : 'primary'}
-                                onClick={() => onAddFriend(profile.userId)}
-                            >
-                                {profile.isFriend ? 'Friends' : 'Add Friend'}
-                            </DcButton>
-                        )}
-                    </div>
-                </div>
-
-                {/* Avatar row */}
-                <div
-                    style={{ padding: '0 16px', position: 'relative', height: 52, marginBottom: 8 }}
-                >
-                    <div style={{ position: 'absolute', top: -40, left: 16 }}>
-                        <div
-                            style={{
-                                borderRadius: '50%',
-                                background: dc.avatarBorder,
-                                padding: 6,
-                                display: 'inline-block',
-                                lineHeight: 0,
-                            }}
-                        >
-                            <AvatarDecoration
-                                avatarUrl={profile.avatarUrl}
-                                displayName={profile.displayName}
-                                decorationId={profile.profile.decoration}
-                                size={80}
+                        ×
+                    </button>
+                    {/* Banner */}
+                    <div
+                        style={{
+                            height: 120,
+                            background: profile.profile.banner
+                                ? undefined
+                                : 'linear-gradient(135deg, #7289DA 0%, #5865F2 100%)',
+                            position: 'relative',
+                            flexShrink: 0,
+                        }}
+                    >
+                        {profile.profile.banner ? (
+                            <img
+                                src={profile.profile.banner}
+                                alt=""
+                                style={{
+                                    width: '100%',
+                                    height: '100%',
+                                    objectFit: 'cover',
+                                    display: 'block',
+                                }}
                             />
-                        </div>
+                        ) : null}
 
-                        {/* Online status dot */}
+                        {/* Action buttons top-right */}
                         <div
                             style={{
                                 position: 'absolute',
-                                bottom: 6,
-                                right: 6,
-                                width: 16,
-                                height: 16,
-                                borderRadius: '50%',
-                                background: dc.green,
-                                border: `3px solid ${dc.cardBg}`,
-                            }}
-                        />
-                    </div>
-                </div>
-
-                {/* Body */}
-                <div
-                    style={{
-                        padding: '0 16px 16px',
-                        display: 'grid',
-                        gap: 0,
-                        color: dc.textPrimary,
-                    }}
-                >
-                    {/* Name block */}
-                    <div style={{ marginBottom: 12 }}>
-                        <h2
-                            id={titleId}
-                            style={{
-                                margin: '0 0 2px',
-                                fontSize: 20,
-                                fontWeight: 700,
-                                color: dc.textPrimary,
+                                top: 12,
+                                right: 12,
+                                display: 'flex',
+                                gap: 8,
                             }}
                         >
-                            {profile.displayName}
-                        </h2>
-                        <div style={{ fontSize: 13, color: dc.textMuted, fontWeight: 400 }}>
-                            {profile.userId}
+                            {onStartDm && (
+                                <DcButton
+                                    variant="secondary"
+                                    onClick={() => onStartDm(profile.userId)}
+                                >
+                                    Message
+                                </DcButton>
+                            )}
+                            {onAddFriend && (
+                                <DcButton
+                                    variant={
+                                        profile.isFriend || requestPending ? 'secondary' : 'primary'
+                                    }
+                                    onClick={() => {
+                                        if (!profile.isFriend && !requestPending) {
+                                            onAddFriend(profile.userId);
+                                        }
+                                    }}
+                                >
+                                    {profile.isFriend
+                                        ? 'Friends'
+                                        : requestPending
+                                        ? 'Requested'
+                                        : 'Add Friend'}
+                                </DcButton>
+                            )}
                         </div>
-                        {profile.profile.pronouns ? (
-                            <div style={{ fontSize: 13, color: dc.textSecondary, marginTop: 2 }}>
-                                {profile.profile.pronouns}
-                            </div>
-                        ) : null}
                     </div>
 
-                    <div style={{ height: 1, background: dc.divider, margin: '0 0 12px' }} />
-
-                    {/* About Me */}
-                    {hasBio && (
-                        <>
-                            <p style={dc.sectionHeader}>About Me</p>
-                            <div
-                                style={{
-                                    fontSize: 14,
-                                    color: dc.textSecondary,
-                                    lineHeight: 1.5,
-                                    marginBottom: 12,
-                                }}
-                                dangerouslySetInnerHTML={{
-                                    __html: toSafeHtml(profile.profile.bio),
-                                }}
-                            />
-                            <div
-                                style={{ height: 1, background: dc.divider, margin: '0 0 12px' }}
-                            />
-                        </>
-                    )}
-
-                    {/* Connections */}
-                    {hasConnections && (
-                        <>
-                            <p style={dc.sectionHeader}>Connected Accounts</p>
-                            <div style={{ display: 'grid', gap: 6, marginBottom: 12 }}>
-                                {(profile.profile.connections ?? []).map((connection) => (
-                                    <a
-                                        key={`${connection.type}-${connection.url}`}
-                                        href={connection.url}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        style={{
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: 8,
-                                            color: dc.textSecondary,
-                                            textDecoration: 'none',
-                                            fontSize: 14,
-                                            padding: '6px 8px',
-                                            borderRadius: 4,
-                                            background: dc.panelBg,
-                                        }}
-                                    >
-                                        <span
-                                            style={{
-                                                color: dc.blurple,
-                                                fontWeight: 600,
-                                                textTransform: 'capitalize',
-                                            }}
-                                        >
-                                            {connection.type}
-                                        </span>
-                                        <span>
-                                            {connection.label ??
-                                                connection.username ??
-                                                connection.url}
-                                        </span>
-                                    </a>
-                                ))}
-                            </div>
-                            <div
-                                style={{ height: 1, background: dc.divider, margin: '0 0 12px' }}
-                            />
-                        </>
-                    )}
-
-                    {/* Roles */}
-                    {profile.roleBadges.length > 0 && (
-                        <>
-                            <p style={dc.sectionHeader}>Roles</p>
-                            <div
-                                style={{
-                                    display: 'flex',
-                                    gap: 6,
-                                    flexWrap: 'wrap',
-                                    marginBottom: 12,
-                                }}
-                            >
-                                {profile.roleBadges.map((badge, i) => (
-                                    <span
-                                        key={badge}
-                                        style={{
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: 6,
-                                            border: `1px solid ${dc.divider}`,
-                                            borderRadius: 4,
-                                            padding: '2px 8px 2px 6px',
-                                            fontSize: 12,
-                                            color: dc.textSecondary,
-                                            background: dc.panelBg,
-                                        }}
-                                    >
-                                        <span
-                                            style={{
-                                                width: 10,
-                                                height: 10,
-                                                borderRadius: '50%',
-                                                background: getRoleColor(i),
-                                                display: 'inline-block',
-                                                flexShrink: 0,
-                                            }}
-                                        />
-                                        {badge}
-                                    </span>
-                                ))}
-                            </div>
-                            <div
-                                style={{ height: 1, background: dc.divider, margin: '0 0 12px' }}
-                            />
-                        </>
-                    )}
-
-                    {/* Mutual canopies */}
-                    {profile.mutualSpaces.length > 0 && (
-                        <>
-                            <p style={dc.sectionHeader}>
-                                Mutual {BLACKOUT_TERMS.canopy.titlePlural} - {profile.mutualSpaces.length}
-                            </p>
-                            <div
-                                style={{
-                                    display: 'flex',
-                                    gap: 6,
-                                    flexWrap: 'wrap',
-                                    marginBottom: 12,
-                                }}
-                            >
-                                {profile.mutualSpaces.map((space) => (
-                                    <span
-                                        key={space}
-                                        style={{
-                                            background: dc.panelBg,
-                                            border: `1px solid ${dc.divider}`,
-                                            borderRadius: 4,
-                                            padding: '3px 8px',
-                                            fontSize: 12,
-                                            color: dc.textSecondary,
-                                        }}
-                                    >
-                                        {space}
-                                    </span>
-                                ))}
-                            </div>
-                            <div
-                                style={{ height: 1, background: dc.divider, margin: '0 0 12px' }}
-                            />
-                        </>
-                    )}
-
-                    {/* Inline character sheet — opens when the viewer has access. */}
-                    {viewingSheet && (
-                        <div
-                            data-testid="profile-modal-sheet"
-                            style={{
-                                marginTop: 4,
-                                marginBottom: 12,
-                                border: `1px solid ${dc.divider}`,
-                                borderRadius: 6,
-                                background: dc.panelBg,
-                                overflow: 'hidden',
-                                maxHeight: 360,
-                                overflowY: 'auto',
-                            }}
-                        >
-                            <CharacterSheet userId={profile.userId} />
-                        </div>
-                    )}
-
-                    {/* Footer buttons */}
+                    {/* Avatar row */}
                     <div
                         style={{
-                            display: 'flex',
-                            gap: 8,
-                            justifyContent: 'flex-end',
-                            marginTop: 4,
+                            padding: '0 16px',
+                            position: 'relative',
+                            height: 52,
+                            marginBottom: 8,
                         }}
                     >
-                        {canViewSheet && (
-                            <DcButton
-                                variant="secondary"
-                                onClick={() => setViewingSheet((prev) => !prev)}
+                        <div style={{ position: 'absolute', top: -40, left: 16 }}>
+                            <div
+                                style={{
+                                    borderRadius: '50%',
+                                    background: dc.avatarBorder,
+                                    padding: 6,
+                                    display: 'inline-block',
+                                    lineHeight: 0,
+                                }}
                             >
-                                {viewingSheet ? 'Hide sheet' : 'View character sheet'}
-                            </DcButton>
+                                <AvatarDecoration
+                                    avatarUrl={profile.avatarUrl}
+                                    displayName={profile.displayName}
+                                    decorationId={profile.profile.decoration}
+                                    size={80}
+                                />
+                            </div>
+
+                            {/* Online status dot */}
+                            <div
+                                style={{
+                                    position: 'absolute',
+                                    bottom: 6,
+                                    right: 6,
+                                    width: 16,
+                                    height: 16,
+                                    borderRadius: '50%',
+                                    background: dc.green,
+                                    border: `3px solid ${dc.cardBg}`,
+                                }}
+                            />
+                        </div>
+                    </div>
+
+                    {/* Body */}
+                    <div
+                        style={{
+                            padding: '0 16px 16px',
+                            display: 'grid',
+                            gap: 0,
+                            color: dc.textPrimary,
+                        }}
+                    >
+                        {/* Name block */}
+                        <div style={{ marginBottom: 12 }}>
+                            <h2
+                                id={titleId}
+                                style={{
+                                    margin: '0 0 2px',
+                                    fontSize: 20,
+                                    fontWeight: 700,
+                                    color: dc.textPrimary,
+                                }}
+                            >
+                                {profile.displayName}
+                            </h2>
+                            <div style={{ fontSize: 13, color: dc.textMuted, fontWeight: 400 }}>
+                                {profile.userId}
+                            </div>
+                            {profile.profile.pronouns ? (
+                                <div
+                                    style={{ fontSize: 13, color: dc.textSecondary, marginTop: 2 }}
+                                >
+                                    {profile.profile.pronouns}
+                                </div>
+                            ) : null}
+                        </div>
+
+                        <div style={{ height: 1, background: dc.divider, margin: '0 0 12px' }} />
+
+                        {/* About Me */}
+                        {hasBio && (
+                            <>
+                                <p style={dc.sectionHeader}>About Me</p>
+                                <div
+                                    style={{
+                                        fontSize: 14,
+                                        color: dc.textSecondary,
+                                        lineHeight: 1.5,
+                                        marginBottom: 12,
+                                    }}
+                                    dangerouslySetInnerHTML={{
+                                        __html: toSafeHtml(profile.profile.bio),
+                                    }}
+                                />
+                                <div
+                                    style={{
+                                        height: 1,
+                                        background: dc.divider,
+                                        margin: '0 0 12px',
+                                    }}
+                                />
+                            </>
                         )}
-                        {onBlock && (
-                            <DcButton variant="danger" onClick={() => onBlock(profile.userId)}>
-                                Block
-                            </DcButton>
+
+                        {/* Connections */}
+                        {hasConnections && (
+                            <>
+                                <p style={dc.sectionHeader}>Connected Accounts</p>
+                                <div style={{ display: 'grid', gap: 6, marginBottom: 12 }}>
+                                    {(profile.profile.connections ?? []).map((connection) => (
+                                        <a
+                                            key={`${connection.type}-${connection.url}`}
+                                            href={connection.url}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: 8,
+                                                color: dc.textSecondary,
+                                                textDecoration: 'none',
+                                                fontSize: 14,
+                                                padding: '6px 8px',
+                                                borderRadius: 4,
+                                                background: dc.panelBg,
+                                            }}
+                                        >
+                                            <span
+                                                style={{
+                                                    color: dc.blurple,
+                                                    fontWeight: 600,
+                                                    textTransform: 'capitalize',
+                                                }}
+                                            >
+                                                {connection.type}
+                                            </span>
+                                            <span>
+                                                {connection.label ??
+                                                    connection.username ??
+                                                    connection.url}
+                                            </span>
+                                        </a>
+                                    ))}
+                                </div>
+                                <div
+                                    style={{
+                                        height: 1,
+                                        background: dc.divider,
+                                        margin: '0 0 12px',
+                                    }}
+                                />
+                            </>
                         )}
-                        <DcButton variant="secondary" onClick={onClose}>
-                            Close
-                        </DcButton>
+
+                        {/* Roles */}
+                        {profile.roleBadges.length > 0 && (
+                            <>
+                                <p style={dc.sectionHeader}>Roles</p>
+                                <div
+                                    style={{
+                                        display: 'flex',
+                                        gap: 6,
+                                        flexWrap: 'wrap',
+                                        marginBottom: 12,
+                                    }}
+                                >
+                                    {profile.roleBadges.map((badge, i) => (
+                                        <span
+                                            key={badge}
+                                            style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: 6,
+                                                border: `1px solid ${dc.divider}`,
+                                                borderRadius: 4,
+                                                padding: '2px 8px 2px 6px',
+                                                fontSize: 12,
+                                                color: dc.textSecondary,
+                                                background: dc.panelBg,
+                                            }}
+                                        >
+                                            <span
+                                                style={{
+                                                    width: 10,
+                                                    height: 10,
+                                                    borderRadius: '50%',
+                                                    background: getRoleColor(i),
+                                                    display: 'inline-block',
+                                                    flexShrink: 0,
+                                                }}
+                                            />
+                                            {badge}
+                                        </span>
+                                    ))}
+                                </div>
+                                <div
+                                    style={{
+                                        height: 1,
+                                        background: dc.divider,
+                                        margin: '0 0 12px',
+                                    }}
+                                />
+                            </>
+                        )}
+
+                        {/* Mutual canopies */}
+                        {profile.mutualSpaces.length > 0 && (
+                            <>
+                                <p style={dc.sectionHeader}>
+                                    Mutual {BLACKOUT_TERMS.canopy.titlePlural} -{' '}
+                                    {profile.mutualSpaces.length}
+                                </p>
+                                <div
+                                    style={{
+                                        display: 'flex',
+                                        gap: 6,
+                                        flexWrap: 'wrap',
+                                        marginBottom: 12,
+                                    }}
+                                >
+                                    {profile.mutualSpaces.map((space) => (
+                                        <span
+                                            key={space}
+                                            style={{
+                                                background: dc.panelBg,
+                                                border: `1px solid ${dc.divider}`,
+                                                borderRadius: 4,
+                                                padding: '3px 8px',
+                                                fontSize: 12,
+                                                color: dc.textSecondary,
+                                            }}
+                                        >
+                                            {space}
+                                        </span>
+                                    ))}
+                                </div>
+                                <div
+                                    style={{
+                                        height: 1,
+                                        background: dc.divider,
+                                        margin: '0 0 12px',
+                                    }}
+                                />
+                            </>
+                        )}
+
+                        {/* Inline character sheet — opens when the viewer has access. */}
+                        {viewingSheet && (
+                            <div
+                                data-testid="profile-modal-sheet"
+                                style={{
+                                    marginTop: 4,
+                                    marginBottom: 12,
+                                    border: `1px solid ${dc.divider}`,
+                                    borderRadius: 6,
+                                    background: dc.panelBg,
+                                    overflow: 'hidden',
+                                    maxHeight: 360,
+                                    overflowY: 'auto',
+                                }}
+                            >
+                                <CharacterSheet userId={profile.userId} />
+                            </div>
+                        )}
+
+                        {/* Footer buttons */}
+                        <div
+                            style={{
+                                display: 'flex',
+                                gap: 8,
+                                justifyContent: 'flex-end',
+                                marginTop: 4,
+                            }}
+                        >
+                            {canViewSheet && (
+                                <DcButton
+                                    variant="secondary"
+                                    onClick={() => setViewingSheet((prev) => !prev)}
+                                >
+                                    {viewingSheet ? 'Hide sheet' : 'View character sheet'}
+                                </DcButton>
+                            )}
+                            {onBlock && (
+                                <DcButton variant="danger" onClick={() => onBlock(profile.userId)}>
+                                    Block
+                                </DcButton>
+                            )}
+                            <DcButton variant="secondary" onClick={onClose}>
+                                Close
+                            </DcButton>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
         </FocusTrap>
     );
 };
