@@ -1,10 +1,11 @@
-import { type CSSProperties, useMemo, useState } from 'react';
+import { type CSSProperties, useCallback, useMemo, useState } from 'react';
 import type { Room, RoomMember } from 'matrix-js-sdk';
 import { groupMembersByPresence } from '../right-panel/rightPanelUtils';
 import { usePowerLevels } from '../../hooks/usePowerLevels';
 import { getPowerLevelTag, usePowerLevelTags } from '../../hooks/usePowerLevelTags';
 import { Presence, useUserPresence } from '../../hooks/useUserPresence';
 import { ProfileModal } from '../profile/ProfileModal';
+import { useProfileActions } from '../profile/useProfileActions';
 import type { MemberProfile } from '../profile/profileTypes';
 
 const PANEL_WIDTH = 240;
@@ -185,6 +186,8 @@ export const CanopyMemberPanel = ({ room }: { room: Room }) => {
     const powerLevels = usePowerLevels(room);
     const tags = usePowerLevelTags(room, powerLevels);
     const [profileTarget, setProfileTarget] = useState<MemberProfile | null>(null);
+    const closeProfile = useCallback(() => setProfileTarget(null), []);
+    const { startDm, block } = useProfileActions(closeProfile);
 
     const members = useMemo(() => room.getJoinedMembers(), [room]);
     const grouped = useMemo(() => groupMembersByPresence(members), [members]);
@@ -240,7 +243,9 @@ export const CanopyMemberPanel = ({ room }: { room: Room }) => {
             <ProfileModal
                 open={Boolean(profileTarget)}
                 profile={profileTarget ?? EMPTY_PROFILE}
-                onClose={() => setProfileTarget(null)}
+                onClose={closeProfile}
+                onStartDm={startDm}
+                onBlock={block}
             />
         </aside>
     );

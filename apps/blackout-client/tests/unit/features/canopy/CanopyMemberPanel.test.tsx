@@ -30,6 +30,12 @@ vi.mock('../../../../src/app/features/right-panel/rightPanelUtils', () => ({
     groupMembersByPresence: (members: unknown[]) => ({ online: members, away: [], offline: [] }),
 }));
 
+// Profile actions use useRoomNavigate (react-router) + account data, neither of
+// which this isolated render provides; stub to keep the test about row → modal.
+vi.mock('../../../../src/app/features/profile/useProfileActions', () => ({
+    useProfileActions: () => ({ startDm: vi.fn(), block: vi.fn() }),
+}));
+
 import { CanopyMemberPanel } from '../../../../src/app/features/canopy/CanopyMemberPanel';
 
 const member = {
