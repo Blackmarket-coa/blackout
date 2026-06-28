@@ -25,6 +25,8 @@ import { useConfirm, type ConfirmOptions } from '../../components/confirm-dialog
 import { readPowerLevel, usePowerLevels } from '../../hooks/usePowerLevels';
 import { StateEvent } from '../../../types/matrix/room';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
+import { FORUM_EVENT_TYPE } from '../forum/useForum';
+import { ForumSettingsDialog } from '../forum/ForumSettingsDialog';
 import {
     type DenKind,
     createDenInCanopy,
@@ -285,6 +287,7 @@ const DenRow = ({
     const [renaming, setRenaming] = useState(false);
     const [draft, setDraft] = useState(room.name ?? '');
     const [busy, setBusy] = useState(false);
+    const [forumSettingsOpen, setForumSettingsOpen] = useState(false);
     const rowRef = useRef<HTMLDivElement>(null);
     const [dropEdge, setDropEdge] = useState<Edge | null>(null);
 
@@ -293,7 +296,12 @@ const DenRow = ({
     const canRename =
         readPowerLevel.user(powerLevels, myId) >=
         readPowerLevel.state(powerLevels, StateEvent.RoomName);
-    const showMenu = canRename || canManage;
+    // Forum settings live in the den's own `co.bmc.forum` state event.
+    const canEditForum =
+        kind === 'forum' &&
+        readPowerLevel.user(powerLevels, myId) >=
+            readPowerLevel.state(powerLevels, FORUM_EVENT_TYPE);
+    const showMenu = canRename || canManage || canEditForum;
 
     // Drag-to-reorder: a den is both draggable and a drop target when the viewer
     // can edit the parent's `m.space.child`. Drops are constrained to the same
@@ -479,6 +487,20 @@ const DenRow = ({
                                 Rename
                             </button>
                         ) : null}
+                        {canEditForum ? (
+                            <button
+                                type="button"
+                                role="menuitem"
+                                style={menuItemStyle()}
+                                data-testid={`canopy-den-forum-settings-${room.roomId}`}
+                                onClick={() => {
+                                    setForumSettingsOpen(true);
+                                    closeMenu();
+                                }}
+                            >
+                                Forum settings
+                            </button>
+                        ) : null}
                         {canManage ? (
                             <button
                                 type="button"
@@ -496,6 +518,13 @@ const DenRow = ({
                         ) : null}
                     </div>
                 </>
+            ) : null}
+
+            {forumSettingsOpen ? (
+                <ForumSettingsDialog
+                    roomId={room.roomId}
+                    onClose={() => setForumSettingsOpen(false)}
+                />
             ) : null}
         </div>
     );
