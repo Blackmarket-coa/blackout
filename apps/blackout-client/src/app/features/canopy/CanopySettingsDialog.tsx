@@ -5,10 +5,12 @@ import { readPowerLevel, usePowerLevels } from '../../hooks/usePowerLevels';
 import { runtimeFeatureFlags } from '../../core/features/featureFlags';
 import { RoleEditor } from '../roles/RoleEditor';
 import { AutoModPanel } from '../moderation/AutoModPanel';
+import { WelcomeEditor } from '../welcome/WelcomeEditor';
+import { WELCOME_EVENT_TYPE } from '../welcome/useWelcome';
 import { InvitationsManager } from '../../components/invitations';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 
-type Tab = 'overview' | 'roles' | 'invites' | 'moderation';
+type Tab = 'overview' | 'roles' | 'invites' | 'welcome' | 'moderation';
 
 const OVERLAY_STYLE: CSSProperties = {
     position: 'fixed',
@@ -244,18 +246,22 @@ export const CanopySettingsDialog = ({
     const powerLevels = usePowerLevels(canopy);
     const [tab, setTab] = useState<Tab>('overview');
     const moderationEnabled = runtimeFeatureFlags.moderation;
+    const myId = mx.getUserId() ?? undefined;
     const canInvite =
-        readPowerLevel.user(powerLevels, mx.getUserId() ?? undefined) >=
-        readPowerLevel.action(powerLevels, 'invite');
+        readPowerLevel.user(powerLevels, myId) >= readPowerLevel.action(powerLevels, 'invite');
+    const canEditWelcome =
+        readPowerLevel.user(powerLevels, myId) >=
+        readPowerLevel.state(powerLevels, WELCOME_EVENT_TYPE);
 
     const tabs = useMemo(
         () => [
             { id: 'overview' as const, label: 'Overview' },
             { id: 'roles' as const, label: 'Roles & permissions' },
             ...(canInvite ? [{ id: 'invites' as const, label: 'Invites' }] : []),
+            ...(canEditWelcome ? [{ id: 'welcome' as const, label: 'Welcome' }] : []),
             ...(moderationEnabled ? [{ id: 'moderation' as const, label: 'Moderation' }] : []),
         ],
-        [canInvite, moderationEnabled]
+        [canInvite, canEditWelcome, moderationEnabled]
     );
 
     return (
@@ -323,6 +329,9 @@ export const CanopySettingsDialog = ({
                         {tab === 'overview' ? <OverviewTab canopy={canopy} /> : null}
                         {tab === 'roles' ? <RoleEditor roomId={canopy.roomId} /> : null}
                         {tab === 'invites' ? <InvitesTab canopy={canopy} /> : null}
+                        {tab === 'welcome' && canEditWelcome ? (
+                            <WelcomeEditor spaceId={canopy.roomId} />
+                        ) : null}
                         {tab === 'moderation' && moderationEnabled ? (
                             <AutoModPanel roomId={canopy.roomId} />
                         ) : null}

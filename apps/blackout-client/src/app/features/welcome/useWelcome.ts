@@ -1,5 +1,6 @@
 import { useCallback, useMemo } from 'react';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { useAccountData } from '../../hooks/useAccountData';
 import {
     useLegacyRoomAdapter as useRoom,
     useLegacyRoomMembersAdapter as useRoomMembers,
@@ -86,7 +87,7 @@ export const DEFAULT_ONBOARDING_STEPS: OnboardingStep[] = [
             '• The left rail lists the dens you can post in.\n' +
             '• Type in the composer at the bottom; messages are end-to-end encrypted.\n' +
             '• Use the top bar for members, pins, search, and notifications.\n\n' +
-            "That’s it — finish up and you’ll drop straight into the den.",
+            'That’s it — finish up and you’ll drop straight into the den.',
         requireAccept: false,
     },
 ];
@@ -132,7 +133,7 @@ const parseOnboardingSteps = (value: unknown): OnboardingStep[] => {
                 : undefined,
             channels: Array.isArray(record.channels)
                 ? record.channels.filter(
-                      (channel): channel is string => typeof channel === 'string',
+                      (channel): channel is string => typeof channel === 'string'
                   )
                 : undefined,
         });
@@ -200,7 +201,7 @@ export const useSetWelcomeContent = (spaceId: string) => {
         async (content: WelcomeContent) => {
             await client.sendStateEvent(spaceId, WELCOME_EVENT_TYPE as never, content as never, '');
         },
-        [client, spaceId],
+        [client, spaceId]
     );
 };
 
@@ -213,10 +214,10 @@ export const useSetOnboardingContent = (spaceId: string) => {
                 spaceId,
                 ONBOARDING_EVENT_TYPE as never,
                 content as never,
-                '',
+                ''
             );
         },
-        [client, spaceId],
+        [client, spaceId]
     );
 };
 
@@ -254,6 +255,43 @@ export const useOnboardingCompletion = (spaceId: string) => {
     };
 };
 
+export const CANOPY_WELCOME_SEEN_ACCOUNT_DATA_KEY = 'co.bmc.canopy.welcome.seen.v1';
+
+/**
+ * Tracks whether the current user has already seen a given canopy's welcome
+ * screen, so it shows at most once. Mirrors `useOnboardingCompletion`'s
+ * per-space account-data shape (`{ spaces: { [spaceId]: true } }`) but reads
+ * reactively via `useAccountData` so the gate hides itself the moment it's
+ * marked seen.
+ */
+export const useCanopyWelcomeSeen = (spaceId: string) => {
+    const mx = useMatrixClient();
+    const event = useAccountData(CANOPY_WELCOME_SEEN_ACCOUNT_DATA_KEY);
+
+    const seen = useMemo(() => {
+        const spaces = (event?.getContent() as { spaces?: Record<string, boolean> } | undefined)
+            ?.spaces;
+        return spaces?.[spaceId] === true;
+    }, [event, spaceId]);
+
+    const markSeen = useCallback(async () => {
+        const accountDataClient = mx as unknown as {
+            getAccountData: (type: string) => { getContent: () => unknown } | undefined;
+            setAccountData: (type: string, content: Record<string, unknown>) => Promise<unknown>;
+        };
+        const content =
+            (accountDataClient
+                .getAccountData(CANOPY_WELCOME_SEEN_ACCOUNT_DATA_KEY)
+                ?.getContent() as { spaces?: Record<string, boolean> } | undefined) ?? {};
+        await accountDataClient.setAccountData(CANOPY_WELCOME_SEEN_ACCOUNT_DATA_KEY, {
+            ...content,
+            spaces: { ...(content.spaces ?? {}), [spaceId]: true },
+        });
+    }, [mx, spaceId]);
+
+    return { seen, markSeen };
+};
+
 export const useSpaceMemberStats = (spaceId: string) => {
     const members = useRoomMembers(spaceId);
 
@@ -261,7 +299,7 @@ export const useSpaceMemberStats = (spaceId: string) => {
         const joined = members.data.length;
         const online = members.data.filter(
             (member) =>
-                member.events.member?.getContent<Record<string, unknown>>()?.presence === 'online',
+                member.events.member?.getContent<Record<string, unknown>>()?.presence === 'online'
         ).length;
 
         return {
