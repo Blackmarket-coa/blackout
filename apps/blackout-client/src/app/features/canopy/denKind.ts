@@ -141,6 +141,30 @@ export const createDenInCanopy = async (
 };
 
 /**
+ * Create a category inside a canopy. A category is a Matrix **sub-space**
+ * (`type: 'm.space'`) linked to the canopy via the same `m.space.parent` /
+ * `m.space.child` edges as a den — `buildSpaceGroups` already renders any child
+ * sub-space as a category group. Dens are placed into a category by passing the
+ * category's room id as `canopyId` to `createDenInCanopy`. Returns the new
+ * category's room id.
+ */
+export const createCategoryInCanopy = async (
+    mx: MatrixClient,
+    { canopyId, name }: { canopyId: string; name: string }
+): Promise<string> => {
+    const via = localDomain(mx);
+    const { room_id: roomId } = await mx.createRoom({
+        name,
+        creation_content: { type: 'm.space' },
+        // Match the canopy's own space convention: only moderators add channels.
+        power_level_content_override: { events_default: 50 },
+    });
+    await mx.sendStateEvent(roomId, 'm.space.parent' as any, { via, canonical: true }, canopyId);
+    await mx.sendStateEvent(canopyId, 'm.space.child' as any, { via, suggested: true }, roomId);
+    return roomId;
+};
+
+/**
  * Remove a den from a canopy by clearing the `m.space.child` edge (empty
  * content unlinks the child — the inverse of the write in `createDenInCanopy`)
  * and leaving the room. Mirrors `createDenInCanopy` so the removal is a single,

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { MatrixClient, Room } from 'matrix-js-sdk';
 import {
     DEN_KIND_STATE_EVENT_TYPE,
+    createCategoryInCanopy,
     createDenInCanopy,
     partitionDensByKind,
     readDenKind,
@@ -160,5 +161,40 @@ describe('createDenInCanopy', () => {
         expect(createRoom.mock.calls[0][0].power_level_content_override).toEqual({
             events_default: 50,
         });
+    });
+});
+
+describe('createCategoryInCanopy', () => {
+    const makeMx = () => {
+        const sendStateEvent = vi.fn().mockResolvedValue(undefined);
+        const createRoom = vi.fn().mockResolvedValue({ room_id: '!cat:server' });
+        const mx = {
+            getDomain: () => 'server',
+            createRoom,
+            sendStateEvent,
+        } as unknown as MatrixClient;
+        return { mx, sendStateEvent, createRoom };
+    };
+
+    it('creates an m.space sub-room and links it to the canopy', async () => {
+        const { mx, sendStateEvent, createRoom } = makeMx();
+        const id = await createCategoryInCanopy(mx, { canopyId: '!canopy:server', name: 'Voice' });
+
+        expect(id).toBe('!cat:server');
+        expect(createRoom.mock.calls[0][0].creation_content).toEqual({ type: 'm.space' });
+
+        // parent edge on the new category, child edge on the canopy
+        expect(sendStateEvent).toHaveBeenCalledWith(
+            '!cat:server',
+            'm.space.parent',
+            expect.objectContaining({ canonical: true, via: ['server'] }),
+            '!canopy:server'
+        );
+        expect(sendStateEvent).toHaveBeenCalledWith(
+            '!canopy:server',
+            'm.space.child',
+            expect.objectContaining({ via: ['server'] }),
+            '!cat:server'
+        );
     });
 });

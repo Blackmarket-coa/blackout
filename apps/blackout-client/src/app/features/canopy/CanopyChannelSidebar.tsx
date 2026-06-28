@@ -18,7 +18,7 @@ import { roomToParentsAtom } from '../../state/room/roomToParents';
 import { mDirectAtom } from '../../state/mDirectList';
 import { selectedRoomIdAtom } from '../../state/navigation';
 import { createRoomModalAtom } from '../../state/createRoomModal';
-import { buildSpaceGroups } from '../right-panel/rightPanelUtils';
+import { buildSpaceGroups, type SpaceGroup } from '../right-panel/rightPanelUtils';
 import { useRoomNavigate } from '../../hooks/useRoomNavigate';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { useConfirm, type ConfirmOptions } from '../../components/confirm-dialog';
@@ -27,8 +27,10 @@ import { StateEvent } from '../../../types/matrix/room';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 import { FORUM_EVENT_TYPE } from '../forum/useForum';
 import { ForumSettingsDialog } from '../forum/ForumSettingsDialog';
+import { DenPermissionsDialog } from './DenPermissionsDialog';
 import {
     type DenKind,
+    createCategoryInCanopy,
     createDenInCanopy,
     partitionDensByKind,
     readDenKind,
@@ -392,6 +394,7 @@ const DenRow = ({
     const [draft, setDraft] = useState(room.name ?? '');
     const [busy, setBusy] = useState(false);
     const [forumSettingsOpen, setForumSettingsOpen] = useState(false);
+    const [permissionsOpen, setPermissionsOpen] = useState(false);
     const rowRef = useRef<HTMLDivElement>(null);
     const [dropEdge, setDropEdge] = useState<Edge | null>(null);
 
@@ -405,7 +408,11 @@ const DenRow = ({
         kind === 'forum' &&
         readPowerLevel.user(powerLevels, myId) >=
             readPowerLevel.state(powerLevels, FORUM_EVENT_TYPE);
-    const showMenu = canRename || canManage || canEditForum;
+    // Editing the den's permissions means writing its `m.room.power_levels`.
+    const canEditPermissions =
+        readPowerLevel.user(powerLevels, myId) >=
+        readPowerLevel.state(powerLevels, StateEvent.RoomPowerLevels);
+    const showMenu = canRename || canManage || canEditForum || canEditPermissions;
 
     // Drag-to-reorder: a den is both draggable and a drop target when the viewer
     // can edit the parent's `m.space.child`. Drops are constrained to the same
@@ -605,6 +612,20 @@ const DenRow = ({
                                 Forum settings
                             </button>
                         ) : null}
+                        {canEditPermissions ? (
+                            <button
+                                type="button"
+                                role="menuitem"
+                                style={menuItemStyle()}
+                                data-testid={`canopy-den-permissions-${room.roomId}`}
+                                onClick={() => {
+                                    setPermissionsOpen(true);
+                                    closeMenu();
+                                }}
+                            >
+                                Permissions
+                            </button>
+                        ) : null}
                         {canManage ? (
                             <button
                                 type="button"
@@ -630,7 +651,274 @@ const DenRow = ({
                     onClose={() => setForumSettingsOpen(false)}
                 />
             ) : null}
+
+            {permissionsOpen ? (
+                <DenPermissionsDialog room={room} onClose={() => setPermissionsOpen(false)} />
+            ) : null}
         </div>
+    );
+};
+
+const categoryHeaderInputStyle: CSSProperties = {
+    flex: 1,
+    minWidth: 0,
+    border: '1px solid var(--border-default)',
+    background: 'var(--bg-input)',
+    color: 'var(--text-primary)',
+    borderRadius: 8,
+    padding: '5px 8px',
+    fontSize: 12,
+};
+
+/**
+ * One category in the rail: a collapsible group of dens. The synthetic
+ * "general" group is just a labelled list; real categories (canopy sub-spaces)
+ * additionally get a ⋯ menu to add a channel, rename, or delete (delete only
+ * when empty, since removing the sub-space would orphan its dens). Each section
+ * owns its own menu / rename / add-channel state so the parent loop stays thin.
+ */
+const CategorySection = ({
+    group,
+    canopyId,
+    canManage,
+    isCollapsed,
+    onToggle,
+    selectedRoomId,
+    myId,
+    onSelectDen,
+    onDeleteDen,
+    onAddChannel,
+    onRenameCategory,
+    onDeleteCategory,
+}: {
+    group: SpaceGroup;
+    canopyId: string;
+    canManage: boolean;
+    isCollapsed: boolean;
+    onToggle: () => void;
+    selectedRoomId: string | null;
+    myId: string | undefined;
+    onSelectDen: (denId: string) => void;
+    onDeleteDen: (denId: string) => void;
+    onAddChannel: (categoryId: string, name: string) => Promise<void>;
+    onRenameCategory: (categoryId: string, name: string) => Promise<void>;
+    onDeleteCategory: (group: SpaceGroup) => void;
+}) => {
+    const isGeneral = group.id === 'general';
+    const isCategory = !isGeneral;
+    const canEdit = isCategory && canManage;
+
+    const [menuOpen, setMenuOpen] = useState(false);
+    const [renaming, setRenaming] = useState(false);
+    const [renameDraft, setRenameDraft] = useState(group.label);
+    const [channelDraft, setChannelDraft] = useState<string | null>(null);
+    const [busy, setBusy] = useState(false);
+
+    const ordered = useMemo(() => {
+        const { text, voice, forum, stage, announcement } = partitionDensByKind(group.rooms);
+        return [...text, ...voice, ...forum, ...stage, ...announcement];
+    }, [group.rooms]);
+
+    const parentId = isGeneral ? canopyId : group.id;
+    const closeMenu = () => setMenuOpen(false);
+
+    const submitRename = async () => {
+        const name = renameDraft.trim();
+        if (!name || busy) return;
+        setBusy(true);
+        try {
+            await onRenameCategory(group.id, name);
+            setRenaming(false);
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const submitChannel = async () => {
+        const name = (channelDraft ?? '').trim();
+        if (!name || busy) return;
+        setBusy(true);
+        try {
+            await onAddChannel(group.id, name);
+            setChannelDraft(null);
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    return (
+        <section>
+            {renaming ? (
+                <form
+                    onSubmit={(event) => {
+                        event.preventDefault();
+                        void submitRename();
+                    }}
+                    style={{ display: 'flex', gap: 6, padding: '6px 8px 2px' }}
+                >
+                    <input
+                        autoFocus
+                        value={renameDraft}
+                        onChange={(event) => setRenameDraft(event.target.value)}
+                        onKeyDown={(event) => {
+                            if (event.key === 'Escape') {
+                                setRenaming(false);
+                                setRenameDraft(group.label);
+                            }
+                        }}
+                        aria-label={`Rename ${group.label}`}
+                        data-testid={`canopy-category-rename-input-${group.id}`}
+                        style={categoryHeaderInputStyle}
+                    />
+                    <button
+                        type="submit"
+                        disabled={busy || renameDraft.trim().length === 0}
+                        style={{ ...menuItemStyle(), border: '1px solid var(--border-default)' }}
+                    >
+                        {busy ? '…' : 'Save'}
+                    </button>
+                </form>
+            ) : (
+                <div style={{ ...rowWrapStyle, paddingRight: canEdit ? 26 : 0 }}>
+                    <button
+                        type="button"
+                        style={{ ...groupLabelStyle, flex: 1 }}
+                        onClick={onToggle}
+                        aria-expanded={!isCollapsed}
+                    >
+                        <span aria-hidden>{isCollapsed ? '▶' : '▼'}</span>
+                        <span
+                            style={{
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                            }}
+                        >
+                            {group.label}
+                        </span>
+                    </button>
+                    {canEdit ? (
+                        <button
+                            type="button"
+                            onClick={(event) => {
+                                event.stopPropagation();
+                                setMenuOpen((open) => !open);
+                            }}
+                            aria-label={`${group.label} category options`}
+                            aria-haspopup="menu"
+                            aria-expanded={menuOpen}
+                            data-testid={`canopy-category-menu-${group.id}`}
+                            style={{ ...menuTriggerStyle, top: 8, transform: 'none' }}
+                        >
+                            ⋯
+                        </button>
+                    ) : null}
+                    {menuOpen ? (
+                        <>
+                            <div
+                                onClick={closeMenu}
+                                style={{ position: 'fixed', inset: 0, zIndex: 4 }}
+                                aria-hidden
+                            />
+                            <div role="menu" style={{ ...popoverStyle, top: 'calc(100% - 4px)' }}>
+                                <button
+                                    type="button"
+                                    role="menuitem"
+                                    style={menuItemStyle()}
+                                    data-testid={`canopy-category-add-channel-${group.id}`}
+                                    onClick={() => {
+                                        setChannelDraft('');
+                                        closeMenu();
+                                    }}
+                                >
+                                    Add channel
+                                </button>
+                                <button
+                                    type="button"
+                                    role="menuitem"
+                                    style={menuItemStyle()}
+                                    data-testid={`canopy-category-rename-${group.id}`}
+                                    onClick={() => {
+                                        setRenameDraft(group.label);
+                                        setRenaming(true);
+                                        closeMenu();
+                                    }}
+                                >
+                                    Rename
+                                </button>
+                                <button
+                                    type="button"
+                                    role="menuitem"
+                                    style={menuItemStyle(true)}
+                                    disabled={group.rooms.length > 0}
+                                    title={
+                                        group.rooms.length > 0
+                                            ? 'Remove or move its channels first'
+                                            : undefined
+                                    }
+                                    data-testid={`canopy-category-delete-${group.id}`}
+                                    onClick={() => {
+                                        closeMenu();
+                                        onDeleteCategory(group);
+                                    }}
+                                >
+                                    Delete
+                                </button>
+                            </div>
+                        </>
+                    ) : null}
+                </div>
+            )}
+
+            {channelDraft !== null ? (
+                <form
+                    onSubmit={(event) => {
+                        event.preventDefault();
+                        void submitChannel();
+                    }}
+                    style={{ display: 'flex', gap: 6, padding: '2px 8px 4px' }}
+                >
+                    <input
+                        autoFocus
+                        value={channelDraft}
+                        onChange={(event) => setChannelDraft(event.target.value)}
+                        onKeyDown={(event) => {
+                            if (event.key === 'Escape') setChannelDraft(null);
+                        }}
+                        placeholder="Channel name"
+                        aria-label={`Add channel to ${group.label}`}
+                        data-testid={`canopy-category-channel-name-${group.id}`}
+                        style={categoryHeaderInputStyle}
+                    />
+                    <button
+                        type="submit"
+                        disabled={busy || channelDraft.trim().length === 0}
+                        style={{ ...menuItemStyle(), border: '1px solid var(--border-default)' }}
+                    >
+                        {busy ? '…' : 'Add'}
+                    </button>
+                </form>
+            ) : null}
+
+            {isCollapsed ? null : ordered.length === 0 ? (
+                <small style={{ color: 'var(--text-muted)', padding: '2px 12px' }}>
+                    No {BLACKOUT_TERMS.den.plural}
+                </small>
+            ) : (
+                ordered.map((room) => (
+                    <DenRow
+                        key={room.roomId}
+                        room={room}
+                        parentId={parentId}
+                        active={selectedRoomId === room.roomId}
+                        canManage={canManage}
+                        myId={myId}
+                        onSelect={() => onSelectDen(room.roomId)}
+                        onDeleted={onDeleteDen}
+                    />
+                ))
+            )}
+        </section>
     );
 };
 
@@ -694,10 +982,6 @@ export const CanopyChannelSidebar = ({
             }),
         [canopy.roomId, rooms, roomToParents, mDirect]
     );
-
-    // A group's dens live on the canopy itself (the synthetic "general" group)
-    // or on the category sub-space (group.id is its roomId).
-    const parentIdForGroup = (groupId: string) => (groupId === 'general' ? canopy.roomId : groupId);
 
     const onReorder = useCallback(
         (source: DenDragData, targetRoomId: string, edge: Edge | null) => {
@@ -769,6 +1053,37 @@ export const CanopyChannelSidebar = ({
         onNavigate?.();
     };
 
+    const createCategory = async (name: string) => {
+        await createCategoryInCanopy(mx, { canopyId: canopy.roomId, name });
+    };
+
+    // Channels created from a category menu live on the category sub-space
+    // (`createDenInCanopy` writes the parent/child edges to whatever id it gets).
+    const addChannelToCategory = async (categoryId: string, name: string) => {
+        const denId = await createDenInCanopy(mx, { canopyId: categoryId, name, kind: 'text' });
+        navigateRoom(denId);
+        onNavigate?.();
+    };
+
+    const renameCategory = async (categoryId: string, name: string) => {
+        await renameDen(mx, { denId: categoryId, name });
+    };
+
+    const deleteCategory = (group: SpaceGroup) => {
+        void confirm({
+            title: `Delete ${group.label}?`,
+            description: `This removes the ${group.label} category from ${canopy.name}. This can’t be undone.`,
+            confirmLabel: 'Delete',
+            variant: 'Critical',
+            onConfirm: () => removeDenFromCanopy(mx, { canopyId: canopy.roomId, denId: group.id }),
+        });
+    };
+
+    const onSelectDen = (denId: string) => {
+        navigateRoom(denId);
+        onNavigate?.();
+    };
+
     return (
         <aside
             data-testid="canopy-channel-sidebar"
@@ -801,66 +1116,23 @@ export const CanopyChannelSidebar = ({
             </div>
 
             <div style={LIST_STYLE} ref={scrollRef}>
-                {groups.map((group) => {
-                    const isCollapsed = collapsed[group.id] ?? false;
-                    const {
-                        text: textRooms,
-                        voice: voiceRooms,
-                        forum: forumRooms,
-                        stage: stageRooms,
-                        announcement: announcementRooms,
-                    } = partitionDensByKind(group.rooms);
-                    const ordered = [
-                        ...textRooms,
-                        ...voiceRooms,
-                        ...forumRooms,
-                        ...stageRooms,
-                        ...announcementRooms,
-                    ];
-                    const groupParentId = parentIdForGroup(group.id);
-                    return (
-                        <section key={group.id}>
-                            <button
-                                type="button"
-                                style={groupLabelStyle}
-                                onClick={() => toggle(group.id)}
-                                aria-expanded={!isCollapsed}
-                            >
-                                <span aria-hidden>{isCollapsed ? '▶' : '▼'}</span>
-                                <span
-                                    style={{
-                                        overflow: 'hidden',
-                                        textOverflow: 'ellipsis',
-                                        whiteSpace: 'nowrap',
-                                    }}
-                                >
-                                    {group.label}
-                                </span>
-                            </button>
-                            {isCollapsed ? null : ordered.length === 0 ? (
-                                <small style={{ color: 'var(--text-muted)', padding: '2px 12px' }}>
-                                    No {BLACKOUT_TERMS.den.plural}
-                                </small>
-                            ) : (
-                                ordered.map((room) => (
-                                    <DenRow
-                                        key={room.roomId}
-                                        room={room}
-                                        parentId={groupParentId}
-                                        active={selectedRoomId === room.roomId}
-                                        canManage={canManageChildren}
-                                        myId={myId}
-                                        onSelect={() => {
-                                            navigateRoom(room.roomId);
-                                            onNavigate?.();
-                                        }}
-                                        onDeleted={deleteDen}
-                                    />
-                                ))
-                            )}
-                        </section>
-                    );
-                })}
+                {groups.map((group) => (
+                    <CategorySection
+                        key={group.id}
+                        group={group}
+                        canopyId={canopy.roomId}
+                        canManage={canManageChildren}
+                        isCollapsed={collapsed[group.id] ?? false}
+                        onToggle={() => toggle(group.id)}
+                        selectedRoomId={selectedRoomId}
+                        myId={myId}
+                        onSelectDen={onSelectDen}
+                        onDeleteDen={deleteDen}
+                        onAddChannel={addChannelToCategory}
+                        onRenameCategory={renameCategory}
+                        onDeleteCategory={deleteCategory}
+                    />
+                ))}
             </div>
 
             <div style={FOOTER_STYLE}>
@@ -901,6 +1173,15 @@ export const CanopyChannelSidebar = ({
                     placeholder="Announcement channel name"
                     onCreate={(name) => createDen(name, 'announcement')}
                 />
+                {canManageChildren ? (
+                    <AddDenControl
+                        slug="category"
+                        icon="🗂"
+                        label="Add category"
+                        placeholder="Category name"
+                        onCreate={createCategory}
+                    />
+                ) : null}
             </div>
         </aside>
     );
