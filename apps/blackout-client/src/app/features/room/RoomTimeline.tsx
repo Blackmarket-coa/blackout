@@ -35,7 +35,7 @@ import {
     VideoMessage as TimelineVideoMessage,
 } from '../../components/messages';
 import { Reactions } from './Reactions';
-import { ProfileModal } from '../profile/ProfileModal';
+import { ConnectedProfileModal } from '../profile/ConnectedProfileModal';
 import type { MemberProfile } from '../profile/profileTypes';
 import { useRegisterModalOpener } from '../../shell/modalOpenerRegistry';
 import { roomViewLayoutRhythm } from './roomViewLayoutContract';
@@ -1039,19 +1039,12 @@ export const RoomTimeline = ({
             ) : null}
 
             <TypingBar members={typingMembers} />
-            <ProfileModal
-                open={Boolean(profileTarget)}
-                profile={
-                    profileTarget ?? {
-                        userId: '',
-                        displayName: '',
-                        roleBadges: [],
-                        mutualSpaces: [],
-                        profile: {},
-                    }
-                }
-                onClose={() => setProfileTarget(null)}
-            />
+            {profileTarget ? (
+                <ConnectedProfileModal
+                    profile={profileTarget}
+                    onClose={() => setProfileTarget(null)}
+                />
+            ) : null}
         </section>
     );
 };

@@ -4,8 +4,7 @@ import { groupMembersByPresence } from '../right-panel/rightPanelUtils';
 import { usePowerLevels } from '../../hooks/usePowerLevels';
 import { getPowerLevelTag, usePowerLevelTags } from '../../hooks/usePowerLevelTags';
 import { Presence, useUserPresence } from '../../hooks/useUserPresence';
-import { ProfileModal } from '../profile/ProfileModal';
-import { useProfileActions } from '../profile/useProfileActions';
+import { ConnectedProfileModal } from '../profile/ConnectedProfileModal';
 import type { MemberProfile } from '../profile/profileTypes';
 
 const PANEL_WIDTH = 240;
@@ -167,14 +166,6 @@ const MemberRow = ({
     );
 };
 
-const EMPTY_PROFILE: MemberProfile = {
-    userId: '',
-    displayName: '',
-    roleBadges: [],
-    mutualSpaces: [],
-    profile: {},
-};
-
 /**
  * Docked member list for the canopy server page. Intentionally lightweight
  * (presence grouping via the shared `groupMembersByPresence` + power-level
@@ -187,7 +178,6 @@ export const CanopyMemberPanel = ({ room }: { room: Room }) => {
     const tags = usePowerLevelTags(room, powerLevels);
     const [profileTarget, setProfileTarget] = useState<MemberProfile | null>(null);
     const closeProfile = useCallback(() => setProfileTarget(null), []);
-    const { startDm, block } = useProfileActions(closeProfile);
 
     const members = useMemo(() => room.getJoinedMembers(), [room]);
     const grouped = useMemo(() => groupMembersByPresence(members), [members]);
@@ -240,13 +230,9 @@ export const CanopyMemberPanel = ({ room }: { room: Room }) => {
                 {renderSection('Online', onlineMembers, true)}
                 {renderSection('Offline', offlineMembers, false)}
             </div>
-            <ProfileModal
-                open={Boolean(profileTarget)}
-                profile={profileTarget ?? EMPTY_PROFILE}
-                onClose={closeProfile}
-                onStartDm={startDm}
-                onBlock={block}
-            />
+            {profileTarget ? (
+                <ConnectedProfileModal profile={profileTarget} onClose={closeProfile} />
+            ) : null}
         </aside>
     );
 };
