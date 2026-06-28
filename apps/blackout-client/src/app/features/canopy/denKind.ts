@@ -89,3 +89,30 @@ export const createDenInCanopy = async (
 
     return roomId;
 };
+
+/**
+ * Remove a den from a canopy by clearing the `m.space.child` edge (empty
+ * content unlinks the child — the inverse of the write in `createDenInCanopy`)
+ * and leaving the room. Mirrors `createDenInCanopy` so the removal is a single,
+ * unit-testable call. Requires `m.space.child` power on the *canopy*.
+ */
+export const removeDenFromCanopy = async (
+    mx: MatrixClient,
+    { canopyId, denId }: { canopyId: string; denId: string }
+): Promise<void> => {
+    await mx.sendStateEvent(canopyId, 'm.space.child' as any, {}, denId);
+    try {
+        await mx.leave(denId);
+    } catch {
+        // Unlinking the child is the meaningful action; leaving is best-effort
+        // (the user may lack membership, or already have left).
+    }
+};
+
+/** Rename a den via its `m.room.name` state event. Requires `m.room.name` power. */
+export const renameDen = async (
+    mx: MatrixClient,
+    { denId, name }: { denId: string; name: string }
+): Promise<void> => {
+    await mx.sendStateEvent(denId, 'm.room.name' as any, { name: name.trim() }, '');
+};

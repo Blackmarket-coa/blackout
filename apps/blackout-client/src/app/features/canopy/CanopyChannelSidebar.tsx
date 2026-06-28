@@ -9,8 +9,16 @@ import { createRoomModalAtom } from '../../state/createRoomModal';
 import { buildSpaceGroups } from '../right-panel/rightPanelUtils';
 import { useRoomNavigate } from '../../hooks/useRoomNavigate';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { readPowerLevel, usePowerLevels } from '../../hooks/usePowerLevels';
+import { StateEvent } from '../../../types/matrix/room';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
-import { createDenInCanopy, partitionDensByKind, readDenKind } from './denKind';
+import {
+    createDenInCanopy,
+    partitionDensByKind,
+    readDenKind,
+    removeDenFromCanopy,
+    renameDen,
+} from './denKind';
 
 const SIDEBAR_WIDTH = 248;
 
@@ -137,6 +145,245 @@ const unreadCount = (room: Room): number => {
     }
 };
 
+const rowWrapStyle: CSSProperties = {
+    position: 'relative',
+    display: 'flex',
+    alignItems: 'center',
+};
+
+const menuTriggerStyle: CSSProperties = {
+    position: 'absolute',
+    right: 4,
+    top: '50%',
+    transform: 'translateY(-50%)',
+    border: 'none',
+    background: 'var(--bg-nav)',
+    color: 'var(--text-muted)',
+    borderRadius: 6,
+    width: 22,
+    height: 22,
+    display: 'grid',
+    placeItems: 'center',
+    cursor: 'pointer',
+    fontSize: 14,
+    lineHeight: 1,
+};
+
+const popoverStyle: CSSProperties = {
+    position: 'absolute',
+    right: 4,
+    top: 'calc(100% - 2px)',
+    zIndex: 5,
+    minWidth: 140,
+    background: 'var(--bg-surface)',
+    border: '1px solid var(--border-default)',
+    borderRadius: 8,
+    boxShadow: '0 12px 32px rgba(0,0,0,0.4)',
+    padding: 4,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 2,
+};
+
+const menuItemStyle = (danger = false): CSSProperties => ({
+    border: 'none',
+    background: 'transparent',
+    color: danger ? 'var(--danger, #f04747)' : 'var(--text-primary)',
+    borderRadius: 6,
+    padding: '6px 10px',
+    fontSize: 13,
+    textAlign: 'left',
+    cursor: 'pointer',
+});
+
+/**
+ * Single den row in the channel rail. Owns its own rename/delete menu so the
+ * per-room rename power check (`usePowerLevels(room)`) stays out of the parent
+ * loop. Delete power is canopy-level (the `m.space.child` edge lives on the
+ * canopy) and is passed down as `canManage`.
+ */
+const DenRow = ({
+    room,
+    active,
+    canManage,
+    myId,
+    onSelect,
+    onDeleted,
+}: {
+    room: Room;
+    active: boolean;
+    canManage: boolean;
+    myId: string | undefined;
+    onSelect: () => void;
+    onDeleted: (denId: string) => void;
+}) => {
+    const mx = useMatrixClient();
+    const powerLevels = usePowerLevels(room);
+    const [menuOpen, setMenuOpen] = useState(false);
+    const [renaming, setRenaming] = useState(false);
+    const [draft, setDraft] = useState(room.name ?? '');
+    const [busy, setBusy] = useState(false);
+
+    const kind = readDenKind(room);
+    const unread = unreadCount(room);
+    const canRename =
+        readPowerLevel.user(powerLevels, myId) >=
+        readPowerLevel.state(powerLevels, StateEvent.RoomName);
+    const showMenu = canRename || canManage;
+
+    const closeMenu = () => setMenuOpen(false);
+
+    const submitRename = async () => {
+        const name = draft.trim();
+        if (!name || busy) return;
+        setBusy(true);
+        try {
+            await renameDen(mx, { denId: room.roomId, name });
+            setRenaming(false);
+            closeMenu();
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    if (renaming) {
+        return (
+            <form
+                onSubmit={(event) => {
+                    event.preventDefault();
+                    void submitRename();
+                }}
+                style={{ display: 'flex', gap: 6, padding: '2px 6px' }}
+            >
+                <input
+                    autoFocus
+                    value={draft}
+                    onChange={(event) => setDraft(event.target.value)}
+                    onKeyDown={(event) => {
+                        if (event.key === 'Escape') {
+                            setRenaming(false);
+                            setDraft(room.name ?? '');
+                        }
+                    }}
+                    aria-label={`Rename ${room.name}`}
+                    data-testid={`canopy-den-rename-input-${room.roomId}`}
+                    style={{
+                        flex: 1,
+                        minWidth: 0,
+                        border: '1px solid var(--border-default)',
+                        background: 'var(--bg-input)',
+                        color: 'var(--text-primary)',
+                        borderRadius: 8,
+                        padding: '5px 8px',
+                        fontSize: 13,
+                    }}
+                />
+                <button
+                    type="submit"
+                    disabled={busy || draft.trim().length === 0}
+                    style={{ ...menuItemStyle(), border: '1px solid var(--border-default)' }}
+                >
+                    {busy ? '…' : 'Save'}
+                </button>
+            </form>
+        );
+    }
+
+    return (
+        <div
+            style={rowWrapStyle}
+            onContextMenu={
+                showMenu
+                    ? (event) => {
+                          event.preventDefault();
+                          setMenuOpen(true);
+                      }
+                    : undefined
+            }
+        >
+            <button
+                type="button"
+                onClick={onSelect}
+                aria-current={active ? 'page' : undefined}
+                data-testid={`canopy-channel-${room.roomId}`}
+                data-den-kind={kind}
+                style={{ ...channelStyle(active), paddingRight: showMenu ? 30 : 10 }}
+            >
+                <span aria-hidden>{kind === 'voice' ? '🔊' : '💬'}</span>
+                <span
+                    style={{
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                    }}
+                >
+                    {room.name}
+                </span>
+                {unread > 0 ? <span style={badgeStyle}>{unread > 99 ? '99+' : unread}</span> : null}
+            </button>
+
+            {showMenu ? (
+                <button
+                    type="button"
+                    onClick={(event) => {
+                        event.stopPropagation();
+                        setMenuOpen((open) => !open);
+                    }}
+                    aria-label={`${room.name} options`}
+                    aria-haspopup="menu"
+                    aria-expanded={menuOpen}
+                    data-testid={`canopy-den-menu-${room.roomId}`}
+                    style={menuTriggerStyle}
+                >
+                    ⋯
+                </button>
+            ) : null}
+
+            {menuOpen ? (
+                <>
+                    <div
+                        onClick={closeMenu}
+                        style={{ position: 'fixed', inset: 0, zIndex: 4 }}
+                        aria-hidden
+                    />
+                    <div role="menu" style={popoverStyle}>
+                        {canRename ? (
+                            <button
+                                type="button"
+                                role="menuitem"
+                                style={menuItemStyle()}
+                                data-testid={`canopy-den-rename-${room.roomId}`}
+                                onClick={() => {
+                                    setDraft(room.name ?? '');
+                                    setRenaming(true);
+                                    closeMenu();
+                                }}
+                            >
+                                Rename
+                            </button>
+                        ) : null}
+                        {canManage ? (
+                            <button
+                                type="button"
+                                role="menuitem"
+                                style={menuItemStyle(true)}
+                                disabled={busy}
+                                data-testid={`canopy-den-delete-${room.roomId}`}
+                                onClick={() => {
+                                    closeMenu();
+                                    onDeleted(room.roomId);
+                                }}
+                            >
+                                Delete
+                            </button>
+                        ) : null}
+                    </div>
+                </>
+            ) : null}
+        </div>
+    );
+};
+
 /**
  * Discord-style channel rail for the open canopy. Reuses the proven
  * `buildSpaceGroups` categorizer (it orders dens by `m.space.child` and nests
@@ -159,9 +406,25 @@ export const CanopyChannelSidebar = ({
     const selectedRoomId = useAtomValue(selectedRoomIdAtom);
     const setCreateRoomModal = useSetAtom(createRoomModalAtom);
     const { navigateRoom } = useRoomNavigate();
+    const canopyPowerLevels = usePowerLevels(canopy);
     const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
     const [voiceDraft, setVoiceDraft] = useState<string | null>(null);
     const [busy, setBusy] = useState(false);
+
+    const myId = mx.getUserId() ?? undefined;
+    // Removing a den clears the `m.space.child` edge on the canopy, so the
+    // delete affordance is gated on canopy-level (not den-level) power.
+    const canManageChildren =
+        readPowerLevel.user(canopyPowerLevels, myId) >=
+        readPowerLevel.state(canopyPowerLevels, StateEvent.SpaceChild);
+
+    const deleteDen = async (denId: string) => {
+        await removeDenFromCanopy(mx, { canopyId: canopy.roomId, denId });
+        if (selectedRoomId === denId) {
+            navigateRoom(canopy.roomId);
+            onNavigate?.();
+        }
+    };
 
     const groups = useMemo(
         () =>
@@ -181,7 +444,11 @@ export const CanopyChannelSidebar = ({
         if (!name || busy) return;
         setBusy(true);
         try {
-            const denId = await createDenInCanopy(mx, { canopyId: canopy.roomId, name, kind: 'voice' });
+            const denId = await createDenInCanopy(mx, {
+                canopyId: canopy.roomId,
+                name,
+                kind: 'voice',
+            });
             setVoiceDraft(null);
             navigateRoom(denId);
             onNavigate?.();
@@ -250,39 +517,20 @@ export const CanopyChannelSidebar = ({
                                     No {BLACKOUT_TERMS.den.plural}
                                 </small>
                             ) : (
-                                ordered.map((room) => {
-                                    const active = selectedRoomId === room.roomId;
-                                    const kind = readDenKind(room);
-                                    const unread = unreadCount(room);
-                                    return (
-                                        <button
-                                            key={room.roomId}
-                                            type="button"
-                                            onClick={() => {
-                                                navigateRoom(room.roomId);
-                                                onNavigate?.();
-                                            }}
-                                            aria-current={active ? 'page' : undefined}
-                                            data-testid={`canopy-channel-${room.roomId}`}
-                                            data-den-kind={kind}
-                                            style={channelStyle(active)}
-                                        >
-                                            <span aria-hidden>{kind === 'voice' ? '🔊' : '💬'}</span>
-                                            <span
-                                                style={{
-                                                    overflow: 'hidden',
-                                                    textOverflow: 'ellipsis',
-                                                    whiteSpace: 'nowrap',
-                                                }}
-                                            >
-                                                {room.name}
-                                            </span>
-                                            {unread > 0 ? (
-                                                <span style={badgeStyle}>{unread > 99 ? '99+' : unread}</span>
-                                            ) : null}
-                                        </button>
-                                    );
-                                })
+                                ordered.map((room) => (
+                                    <DenRow
+                                        key={room.roomId}
+                                        room={room}
+                                        active={selectedRoomId === room.roomId}
+                                        canManage={canManageChildren}
+                                        myId={myId}
+                                        onSelect={() => {
+                                            navigateRoom(room.roomId);
+                                            onNavigate?.();
+                                        }}
+                                        onDeleted={deleteDen}
+                                    />
+                                ))
                             )}
                         </section>
                     );
