@@ -1,6 +1,18 @@
-import { type CSSProperties, useMemo, useState } from 'react';
+import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
 import type { MatrixClient, Room } from 'matrix-js-sdk';
+import {
+    draggable,
+    dropTargetForElements,
+    monitorForElements,
+} from '@atlaskit/pragmatic-drag-and-drop/element/adapter';
+import { autoScrollForElements } from '@atlaskit/pragmatic-drag-and-drop-auto-scroll/element';
+import { combine } from '@atlaskit/pragmatic-drag-and-drop/combine';
+import {
+    attachClosestEdge,
+    extractClosestEdge,
+    type Edge,
+} from '@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge';
 import { joinedRoomsAtom } from '../../state/rooms';
 import { roomToParentsAtom } from '../../state/room/roomToParents';
 import { mDirectAtom } from '../../state/mDirectList';
@@ -14,12 +26,33 @@ import { readPowerLevel, usePowerLevels } from '../../hooks/usePowerLevels';
 import { StateEvent } from '../../../types/matrix/room';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 import {
+    type DenKind,
     createDenInCanopy,
     partitionDensByKind,
     readDenKind,
     removeDenFromCanopy,
     renameDen,
 } from './denKind';
+import { computeBucketReorder, reorderDenInCanopy } from './denOrder';
+
+// Drag payload shared between a den row (draggable) and the rail-level monitor.
+// A drop is only honoured between dens of the same parent space and kind bucket.
+type DenDragData = {
+    type: 'canopy-den';
+    roomId: string;
+    parentId: string;
+    kind: DenKind;
+};
+
+const isDenDragData = (data: Record<string, unknown>): data is DenDragData =>
+    data.type === 'canopy-den';
+
+const readChildContent = (parent: Room, denId: string): Record<string, unknown> => {
+    const content = parent.currentState
+        .getStateEvents('m.space.child', denId)
+        ?.getContent<Record<string, unknown>>();
+    return content && typeof content === 'object' ? content : {};
+};
 
 /**
  * Build the confirm-dialog options for deleting a den. Extracted so the
@@ -231,6 +264,7 @@ const menuItemStyle = (danger = false): CSSProperties => ({
  */
 const DenRow = ({
     room,
+    parentId,
     active,
     canManage,
     myId,
@@ -238,6 +272,7 @@ const DenRow = ({
     onDeleted,
 }: {
     room: Room;
+    parentId: string;
     active: boolean;
     canManage: boolean;
     myId: string | undefined;
@@ -250,6 +285,8 @@ const DenRow = ({
     const [renaming, setRenaming] = useState(false);
     const [draft, setDraft] = useState(room.name ?? '');
     const [busy, setBusy] = useState(false);
+    const rowRef = useRef<HTMLDivElement>(null);
+    const [dropEdge, setDropEdge] = useState<Edge | null>(null);
 
     const kind = readDenKind(room);
     const unread = unreadCount(room);
@@ -257,6 +294,43 @@ const DenRow = ({
         readPowerLevel.user(powerLevels, myId) >=
         readPowerLevel.state(powerLevels, StateEvent.RoomName);
     const showMenu = canRename || canManage;
+
+    // Drag-to-reorder: a den is both draggable and a drop target when the viewer
+    // can edit the parent's `m.space.child`. Drops are constrained to the same
+    // parent + kind bucket; the rail-level monitor performs the reorder.
+    useEffect(() => {
+        const element = rowRef.current;
+        if (!element || !canManage) return undefined;
+        const payload: DenDragData = { type: 'canopy-den', roomId: room.roomId, parentId, kind };
+        return combine(
+            draggable({
+                element,
+                getInitialData: () => payload,
+            }),
+            dropTargetForElements({
+                element,
+                canDrop: ({ source }) =>
+                    isDenDragData(source.data) &&
+                    source.data.parentId === parentId &&
+                    source.data.kind === kind,
+                getData: ({ input }) =>
+                    attachClosestEdge(payload, {
+                        element,
+                        input,
+                        allowedEdges: ['top', 'bottom'],
+                    }),
+                onDrag: ({ self, source }) => {
+                    if (source.element === element) {
+                        setDropEdge(null);
+                        return;
+                    }
+                    setDropEdge(extractClosestEdge(self.data));
+                },
+                onDragLeave: () => setDropEdge(null),
+                onDrop: () => setDropEdge(null),
+            })
+        );
+    }, [canManage, parentId, kind, room.roomId]);
 
     const closeMenu = () => setMenuOpen(false);
 
@@ -318,7 +392,8 @@ const DenRow = ({
 
     return (
         <div
-            style={rowWrapStyle}
+            ref={rowRef}
+            style={{ ...rowWrapStyle, cursor: canManage ? 'grab' : undefined }}
             onContextMenu={
                 showMenu
                     ? (event) => {
@@ -328,6 +403,21 @@ const DenRow = ({
                     : undefined
             }
         >
+            {dropEdge ? (
+                <span
+                    aria-hidden
+                    data-testid={`canopy-den-drop-${dropEdge}`}
+                    style={{
+                        position: 'absolute',
+                        left: 4,
+                        right: 4,
+                        height: 2,
+                        background: 'var(--accent-primary)',
+                        borderRadius: 2,
+                        ...(dropEdge === 'top' ? { top: -3 } : { bottom: -3 }),
+                    }}
+                />
+            ) : null}
             <button
                 type="button"
                 onClick={onSelect}
@@ -435,6 +525,7 @@ export const CanopyChannelSidebar = ({
     const { navigateRoom } = useRoomNavigate();
     const confirm = useConfirm();
     const canopyPowerLevels = usePowerLevels(canopy);
+    const scrollRef = useRef<HTMLDivElement>(null);
     const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
     const [voiceDraft, setVoiceDraft] = useState<string | null>(null);
     const [busy, setBusy] = useState(false);
@@ -472,6 +563,63 @@ export const CanopyChannelSidebar = ({
             }),
         [canopy.roomId, rooms, roomToParents, mDirect]
     );
+
+    // A group's dens live on the canopy itself (the synthetic "general" group)
+    // or on the category sub-space (group.id is its roomId).
+    const parentIdForGroup = (groupId: string) => (groupId === 'general' ? canopy.roomId : groupId);
+
+    const onReorder = useCallback(
+        (source: DenDragData, targetRoomId: string, edge: Edge | null) => {
+            if (!canManageChildren || source.roomId === targetRoomId) return;
+            const parent = mx.getRoom(source.parentId);
+            if (!parent) return;
+            const group = groups.find(
+                (entry) => (entry.id === 'general' ? canopy.roomId : entry.id) === source.parentId
+            );
+            if (!group) return;
+
+            const { text, voice } = partitionDensByKind(group.rooms);
+            const bucketRooms = source.kind === 'voice' ? voice : text;
+            const contentByDenId: Record<string, Record<string, unknown>> = {};
+            const bucket = bucketRooms.map((entry) => {
+                const content = readChildContent(parent, entry.roomId);
+                contentByDenId[entry.roomId] = content;
+                return {
+                    roomId: entry.roomId,
+                    order: typeof content.order === 'string' ? content.order : undefined,
+                };
+            });
+
+            const fromIndex = bucket.findIndex((entry) => entry.roomId === source.roomId);
+            const targetIndex = bucket.findIndex((entry) => entry.roomId === targetRoomId);
+            if (fromIndex < 0 || targetIndex < 0) return;
+
+            const insertBefore = edge === 'bottom' ? targetIndex + 1 : targetIndex;
+            const toIndex = insertBefore > fromIndex ? insertBefore - 1 : insertBefore;
+            const changes = computeBucketReorder(bucket, fromIndex, toIndex);
+            if (changes.length === 0) return;
+            void reorderDenInCanopy(mx, { parentId: source.parentId, changes, contentByDenId });
+        },
+        [canManageChildren, groups, mx, canopy.roomId]
+    );
+
+    useEffect(() => {
+        const scrollEl = scrollRef.current;
+        if (!scrollEl || !canManageChildren) return undefined;
+        return combine(
+            monitorForElements({
+                canMonitor: ({ source }) => isDenDragData(source.data),
+                onDrop: ({ source, location }) => {
+                    const target = location.current.dropTargets[0];
+                    if (!target || !isDenDragData(source.data) || !isDenDragData(target.data)) {
+                        return;
+                    }
+                    onReorder(source.data, target.data.roomId, extractClosestEdge(target.data));
+                },
+            }),
+            autoScrollForElements({ element: scrollEl })
+        );
+    }, [canManageChildren, onReorder]);
 
     const toggle = (id: string) => setCollapsed((prev) => ({ ...prev, [id]: !prev[id] }));
 
@@ -524,11 +672,12 @@ export const CanopyChannelSidebar = ({
                 </button>
             </div>
 
-            <div style={LIST_STYLE}>
+            <div style={LIST_STYLE} ref={scrollRef}>
                 {groups.map((group) => {
                     const isCollapsed = collapsed[group.id] ?? false;
                     const { text: textRooms, voice: voiceRooms } = partitionDensByKind(group.rooms);
                     const ordered = [...textRooms, ...voiceRooms];
+                    const groupParentId = parentIdForGroup(group.id);
                     return (
                         <section key={group.id}>
                             <button
@@ -557,6 +706,7 @@ export const CanopyChannelSidebar = ({
                                     <DenRow
                                         key={room.roomId}
                                         room={room}
+                                        parentId={groupParentId}
                                         active={selectedRoomId === room.roomId}
                                         canManage={canManageChildren}
                                         myId={myId}
