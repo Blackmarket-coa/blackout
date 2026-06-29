@@ -12,6 +12,10 @@ import LiveTab from './tabs/LiveTab';
 import ChallengesTab from './tabs/ChallengesTab';
 import LeaderboardsTab from './tabs/LeaderboardsTab';
 import SourcesTab from './tabs/SourcesTab';
+import ArenaTab from './tabs/ArenaTab';
+import MatchTab from './tabs/MatchTab';
+import ShoutsTab from './tabs/ShoutsTab';
+import { coliseumArenaTheme } from './coliseumArenaTheme.css';
 
 export interface ColiseumViewProps {
     /**
@@ -66,6 +70,7 @@ export function ColiseumView({
 
     return (
         <section
+            className={coliseumArenaTheme}
             style={{
                 display: 'grid',
                 gridTemplateRows: 'auto auto 1fr',
@@ -83,6 +88,9 @@ export function ColiseumView({
             />
             <FeatureGuide>{COLISEUM_TAB_GUIDES[activeTab]}</FeatureGuide>
             <div style={{ minHeight: 0, overflow: 'auto' }}>
+                {activeTab === 'arena' ? <ArenaTab /> : null}
+                {activeTab === 'match' ? <MatchTab /> : null}
+                {activeTab === 'shouts' ? <ShoutsTab /> : null}
                 {activeTab === 'topics' ? <TopicsTab scope={scope} /> : null}
                 {activeTab === 'debate' ? <DebateTab /> : null}
                 {activeTab === 'reel' ? <ReelTab /> : null}

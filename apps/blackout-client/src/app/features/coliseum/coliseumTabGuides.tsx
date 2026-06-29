@@ -7,6 +7,24 @@ import type { ColiseumTabId } from '@blackout/core';
  * and how to take part.
  */
 export const COLISEUM_TAB_GUIDES: Record<ColiseumTabId, ReactNode> = {
+    arena: (
+        <>
+            The match arena. Issue a <strong>Callout</strong>, accept a challenge, and fight in
+            structured video rounds. Every match ends in a verdict and a permanent Brief.
+        </>
+    ),
+    match: (
+        <>
+            The match you're watching — fighter cards, video rounds, the crowd's round votes, the
+            Crucible, and the final Brief.
+        </>
+    ),
+    shouts: (
+        <>
+            Raw, unstructured video takes. Drop a response on any Shout; if a back-and-forth forms,
+            it can graduate into a full Match.
+        </>
+    ),
     topics: (
         <>
             Debates anchored to a news story. Open one to join in, or tap{' '}

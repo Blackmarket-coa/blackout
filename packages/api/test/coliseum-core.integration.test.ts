@@ -47,7 +47,8 @@ const NOW = Date.parse('2026-05-02T12:00:00Z');
 test('normalizeColiseumCategoryKey resolves aliases', () => {
     assert.equal(normalizeColiseumCategoryKey('political'), 'politics');
     assert.equal(normalizeColiseumCategoryKey('TECHNOLOGY'), 'tech');
-    assert.equal(normalizeColiseumCategoryKey('  finance '), 'economy');
+    assert.equal(normalizeColiseumCategoryKey('  finance '), 'finance');
+    assert.equal(normalizeColiseumCategoryKey('markets'), 'economy');
     assert.equal(normalizeColiseumCategoryKey(''), null);
     assert.equal(normalizeColiseumCategoryKey(undefined), null);
     assert.equal(normalizeColiseumCategoryKey('not-a-cat'), null);
@@ -67,23 +68,20 @@ test('COLISEUM_TOPIC_CATEGORY_KEYS includes core categories', () => {
 test('deriveColiseumTopicStatus handles emerging/active/closing/archived', () => {
     const createdAt = '2026-05-02T11:30:00Z';
     assert.equal(deriveColiseumTopicStatus({ createdAt }, NOW), 'emerging');
-    assert.equal(
-        deriveColiseumTopicStatus({ createdAt: '2026-05-02T08:00:00Z' }, NOW),
-        'active',
-    );
+    assert.equal(deriveColiseumTopicStatus({ createdAt: '2026-05-02T08:00:00Z' }, NOW), 'active');
     assert.equal(
         deriveColiseumTopicStatus(
             { createdAt: '2026-05-02T08:00:00Z', closesAt: '2026-05-02T11:00:00Z' },
-            NOW,
+            NOW
         ),
-        'closing',
+        'closing'
     );
     assert.equal(
         deriveColiseumTopicStatus(
             { createdAt: '2026-05-01T00:00:00Z', archivesAt: '2026-05-02T00:00:00Z' },
-            NOW,
+            NOW
         ),
-        'archived',
+        'archived'
     );
 });
 
@@ -96,18 +94,20 @@ test('isValidCitationKind enumerates supported kinds', () => {
 });
 
 test('validateCitation accepts well-formed shapes and rejects bad ones', () => {
-    assert.deepEqual(
-        validateCitation({ kind: 'live', roomId: '!abc:example.org' }),
-        { kind: 'live', roomId: '!abc:example.org', eventId: undefined },
-    );
-    assert.deepEqual(
-        validateCitation({ kind: 'townhall', meetingId: 'm-123' }),
-        { kind: 'townhall', meetingId: 'm-123' },
-    );
-    assert.deepEqual(
-        validateCitation({ kind: 'audio', mxc: 'mxc://example.org/abc-1' }),
-        { kind: 'audio', mxc: 'mxc://example.org/abc-1', durationMs: undefined },
-    );
+    assert.deepEqual(validateCitation({ kind: 'live', roomId: '!abc:example.org' }), {
+        kind: 'live',
+        roomId: '!abc:example.org',
+        eventId: undefined,
+    });
+    assert.deepEqual(validateCitation({ kind: 'townhall', meetingId: 'm-123' }), {
+        kind: 'townhall',
+        meetingId: 'm-123',
+    });
+    assert.deepEqual(validateCitation({ kind: 'audio', mxc: 'mxc://example.org/abc-1' }), {
+        kind: 'audio',
+        mxc: 'mxc://example.org/abc-1',
+        durationMs: undefined,
+    });
     assert.deepEqual(
         validateCitation({
             kind: 'article',
@@ -119,7 +119,7 @@ test('validateCitation accepts well-formed shapes and rejects bad ones', () => {
             sourceUrl: 'https://news.example/post',
             title: 'Headline',
             publishedAt: undefined,
-        },
+        }
     );
 
     assert.equal(validateCitation({ kind: 'live', roomId: 'not-a-room' }), null);
@@ -197,7 +197,7 @@ test('rankColiseumArguments sorts highest score first and is monotonic in voteSc
             { ...base, id: 'low', voteScore: 0.1 },
             { ...base, id: 'high', voteScore: 0.9 },
         ],
-        { nowMs: NOW },
+        { nowMs: NOW }
     );
     assert.equal(ranked[0]?.id, 'high');
     assert.equal(ranked[1]?.id, 'low');
@@ -219,7 +219,7 @@ test('rankColiseumArguments awards stance-balance bonus to nuance', () => {
             { ...base, id: 'for', stance: 'for' as const },
             { ...base, id: 'nuance', stance: 'nuance' as const, stanceWeight: 0 },
         ],
-        { nowMs: NOW },
+        { nowMs: NOW }
     );
     assert.equal(ranked[0]?.id, 'nuance');
 });
@@ -270,9 +270,9 @@ test('normalizeColiseumTopic fills status, debate heat, and category', () => {
             argumentCount: 4,
             voteCount: 20,
         },
-        NOW,
+        NOW
     );
-    assert.equal(topic.category, 'economy');
+    assert.equal(topic.category, 'finance');
     assert.equal(topic.status, 'emerging');
     assert.ok(topic.debateHeat >= 0 && topic.debateHeat <= 1);
 });
@@ -282,25 +282,33 @@ test('rankColiseumTopics sorts by debateHeat desc', () => {
         {
             id: 'hot',
             title: 'Hot',
-            newsAnchor: { sourceUrl: 'https://e/h', headline: 'h', publishedAt: '2026-05-02T11:50:00Z' },
+            newsAnchor: {
+                sourceUrl: 'https://e/h',
+                headline: 'h',
+                publishedAt: '2026-05-02T11:50:00Z',
+            },
             createdAt: '2026-05-02T11:50:00Z',
             tags: [],
             argumentCount: 30,
             voteCount: 200,
         },
-        NOW,
+        NOW
     );
     const cold = normalizeColiseumTopic(
         {
             id: 'cold',
             title: 'Cold',
-            newsAnchor: { sourceUrl: 'https://e/c', headline: 'c', publishedAt: '2026-04-01T00:00:00Z' },
+            newsAnchor: {
+                sourceUrl: 'https://e/c',
+                headline: 'c',
+                publishedAt: '2026-04-01T00:00:00Z',
+            },
             createdAt: '2026-04-01T00:00:00Z',
             tags: [],
             argumentCount: 0,
             voteCount: 0,
         },
-        NOW,
+        NOW
     );
     const ranked = rankColiseumTopics([cold, hot]);
     assert.equal(ranked[0]?.id, 'hot');
@@ -316,11 +324,11 @@ test('isValidColiseumTab + resolveEnabledColiseumTabs respect config', () => {
     assert.deepEqual(resolveEnabledColiseumTabs({ enabled: true }), [...COLISEUM_TABS]);
     assert.deepEqual(
         resolveEnabledColiseumTabs({ enabled: true, enabledTabs: ['topics', 'live'] }),
-        ['topics', 'live'],
+        ['topics', 'live']
     );
     assert.deepEqual(
         resolveEnabledColiseumTabs({ enabled: true, enabledTabs: ['topics', 'bogus' as never] }),
-        ['topics'],
+        ['topics']
     );
 });
 
@@ -329,14 +337,21 @@ test('COLISEUM_STANCES includes for/against/nuance', () => {
 });
 
 test('buildVoteMatrix builds a deterministic voter × argument matrix', () => {
-    const args: ColiseumArgument[] = [
-        argFixture('a1'),
-        argFixture('a2'),
-    ];
+    const args: ColiseumArgument[] = [argFixture('a1'), argFixture('a2')];
     const votes: ColiseumVote[] = [
         { argumentId: 'a1', voterId: '@u1:s', direction: 'up', createdAt: '2026-05-02T11:00:00Z' },
-        { argumentId: 'a2', voterId: '@u1:s', direction: 'down', createdAt: '2026-05-02T11:00:00Z' },
-        { argumentId: 'a1', voterId: '@u2:s', direction: 'down', createdAt: '2026-05-02T11:00:00Z' },
+        {
+            argumentId: 'a2',
+            voterId: '@u1:s',
+            direction: 'down',
+            createdAt: '2026-05-02T11:00:00Z',
+        },
+        {
+            argumentId: 'a1',
+            voterId: '@u2:s',
+            direction: 'down',
+            createdAt: '2026-05-02T11:00:00Z',
+        },
     ];
     const matrix = buildVoteMatrix(args, votes);
     assert.deepEqual(matrix.voterIds, ['@u1:s', '@u2:s']);
@@ -455,7 +470,7 @@ function argFixture(id: string): ColiseumArgument {
 function mkVotes(
     voterIds: readonly string[],
     argumentId: string,
-    direction: 'up' | 'down',
+    direction: 'up' | 'down'
 ): ColiseumVote[] {
     return voterIds.map((voterId) => ({
         voterId,
@@ -477,13 +492,13 @@ test('buildColiseumArgumentTree nests replies under parents and preserves order'
     assert.equal(tree.length, 2);
     assert.deepEqual(
         tree.map((n) => n.argument.id),
-        ['root1', 'root2'],
+        ['root1', 'root2']
     );
     const r1 = tree[0]!;
     assert.equal(r1.depth, 0);
     assert.deepEqual(
         r1.replies.map((n) => n.argument.id),
-        ['reply1', 'reply2'],
+        ['reply1', 'reply2']
     );
     assert.equal(r1.replies[0]!.depth, 1);
     assert.equal(r1.replies[0]!.replies[0]!.argument.id, 'nested');
@@ -506,7 +521,7 @@ test('rankCrossTopicArguments lets topic heat lift an equal-score argument', () 
             { argument: a, debateHeat: 0.1 },
             { argument: b, debateHeat: 0.9 },
         ],
-        { nowMs: NOW },
+        { nowMs: NOW }
     );
     assert.equal(ranked[0]!.id, 'hot');
     assert.equal(ranked[1]!.id, 'cool');
