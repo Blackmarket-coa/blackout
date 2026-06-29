@@ -4,7 +4,7 @@ import { COLISEUM_TABS, type ColiseumTabId, DEFAULT_COLISEUM_TAB } from '@blacko
 
 export const coliseumTabAtom = atomWithStorage<ColiseumTabId>(
     'bmc-coliseum-tab',
-    DEFAULT_COLISEUM_TAB,
+    DEFAULT_COLISEUM_TAB
 );
 
 export interface ColiseumScope {
@@ -17,13 +17,22 @@ export const coliseumScopeAtom = atom<ColiseumScope>({ kind: 'standalone' });
 
 export const selectedColiseumTopicIdAtom = atomWithStorage<string | null>(
     'bmc-coliseum-topic',
-    null,
+    null
+);
+
+/** The id of the currently-open match, surfaced in the Match tab. */
+export const selectedColiseumMatchIdAtom = atomWithStorage<string | null>(
+    'bmc-coliseum-match',
+    null
 );
 
 export const COLISEUM_TAB_LABELS: Record<ColiseumTabId, string> = {
+    reel: 'Reel',
+    arena: 'Arena',
+    match: 'Match',
+    shouts: 'Shouts',
     topics: 'Topics',
     debate: 'Debate',
-    reel: 'Reel',
     live: 'Live',
     challenges: 'Challenges',
     leaderboards: 'Leaderboards',

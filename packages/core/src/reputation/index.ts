@@ -15,7 +15,14 @@ export type ReputationEventType =
     | 'argument_endorsed'
     | 'proposal_passed'
     | 'dispute_won'
-    | 'vendor_transaction';
+    | 'vendor_transaction'
+    // Coliseum fighter events — credited per subject (domain) so a fighter's
+    // win/loss record builds up per domain alongside the overall standing.
+    | 'match_won'
+    | 'match_drawn'
+    | 'round_won'
+    | 'steelman_passed'
+    | 'credibility_strike';
 
 export const REPUTATION_EVENT_POINTS: Record<ReputationEventType, number> = {
     vote_cast: 1,
@@ -23,6 +30,11 @@ export const REPUTATION_EVENT_POINTS: Record<ReputationEventType, number> = {
     proposal_passed: 10,
     dispute_won: 7,
     vendor_transaction: 5,
+    match_won: 12,
+    match_drawn: 4,
+    round_won: 2,
+    steelman_passed: 3,
+    credibility_strike: -5,
 };
 
 export function pointsForReputationEvent(type: ReputationEventType): number {
