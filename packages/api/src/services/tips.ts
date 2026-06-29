@@ -4,6 +4,7 @@ import { db } from '../db/store';
 import type { TipContextKind, TipRecord, TipStatus } from '../db/types';
 import type { MarketplaceProviderIdString } from '../db/types';
 import { emitDomainEvent } from '../modules/domain-events';
+import { recordProjectSupport } from './coalitionProjectSupport';
 import { incrementCounter, logEvent } from './marketplaceObservability';
 import { dispatchEvent as dispatchOutboundEvent } from './outboundEventWebhooks';
 
@@ -219,6 +220,25 @@ export function captureTip(
         recipientUserId: updated.recipientUserId,
         netCents: updated.netCents,
     });
+    // Coalition project funding: a tip toward a project advances its progress bar
+    // on capture (money confirmed). `contextRef` is the project id; the project
+    // nets `netCents` toward its goal. recordProjectSupport is idempotent on the
+    // tip id, so a replayed capture never double-counts.
+    if (updated.contextKind === 'coalition_project' && updated.contextRef) {
+        try {
+            recordProjectSupport({
+                projectId: updated.contextRef,
+                supporterUserId: updated.senderUserId,
+                tipId: updated.id,
+                amountCents: updated.netCents,
+                currency: updated.currency,
+            });
+        } catch (err) {
+            // A funding-side failure must never block tip capture (money already
+            // moved); surface it for reconciliation instead.
+            logEvent('tip.coalition_support_threw', { tipId: updated.id, error: String(err) });
+        }
+    }
     // Fan out to the recipient's Discord-shape outbound webhooks. Capture
     // (not creation) is the right firing point because that's when the
     // money is actually confirmed; pending tips can still fail. The

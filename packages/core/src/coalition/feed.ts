@@ -52,6 +52,10 @@ export interface CoalitionFeedItem {
     /** Optional location so a video can surface as a pin on the map (Snap Map style). */
     latitude?: number;
     longitude?: number;
+    /** When set, this item is backed by a Coalition project and carries its Momentum. */
+    projectId?: string;
+    /** 0..1 — support Momentum of the linked project (see support.ts). */
+    momentum?: number;
     importance: number;
     impact: number;
     socialImpact: number;
@@ -76,22 +80,22 @@ export interface CoalitionFeedComment {
     createdAt: string;
 }
 
-export type CoalitionRankingModel =
-    | 'coalition_social_v1'
-    | 'recency_only'
-    | 'importance_only';
+export type CoalitionRankingModel = 'coalition_social_v1' | 'recency_only' | 'importance_only';
 
 export interface CoalitionRankingWeights {
     importance: number;
     impact: number;
     socialImpact: number;
+    /** Weight on a project-backed item's support Momentum — the prosocial "Heat". */
+    momentum: number;
     recencyHalfLifeHours: number;
 }
 
 export const DEFAULT_RANKING_WEIGHTS: CoalitionRankingWeights = {
-    importance: 0.5,
-    impact: 0.3,
-    socialImpact: 0.2,
+    importance: 0.4,
+    impact: 0.25,
+    socialImpact: 0.15,
+    momentum: 0.2,
     recencyHalfLifeHours: 12,
 };
 
@@ -115,10 +119,11 @@ export function spatialHeatWeight(
     item: Pick<SpatialFeedItem, 'severity' | 'activityLevel' | 'startsAt' | 'endsAt'> & {
         status?: SpatialEventStatus;
     },
-    nowEpochMs: number = Date.now(),
+    nowEpochMs: number = Date.now()
 ): number {
     const status =
-        item.status ?? deriveSpatialEventStatus({ startsAt: item.startsAt, endsAt: item.endsAt }, nowEpochMs);
+        item.status ??
+        deriveSpatialEventStatus({ startsAt: item.startsAt, endsAt: item.endsAt }, nowEpochMs);
     const liveWeight = status === 'live' ? 0.8 : 0;
     return clamp01(Math.max(severityToScore(item.severity), item.activityLevel ?? 0, liveWeight));
 }
@@ -136,7 +141,7 @@ export function scoreCoalitionItem(
         model?: CoalitionRankingModel;
         weights?: Partial<CoalitionRankingWeights>;
         nowMs?: number;
-    } = {},
+    } = {}
 ): number {
     const model = options.model ?? 'coalition_social_v1';
     const weights = { ...DEFAULT_RANKING_WEIGHTS, ...options.weights };
@@ -153,13 +158,14 @@ export function scoreCoalitionItem(
     return clamp01(
         weights.importance * clamp01(item.importance) +
             weights.impact * clamp01(item.impact) +
-            weights.socialImpact * clamp01(item.socialImpact) * recency,
+            weights.socialImpact * clamp01(item.socialImpact) * recency +
+            weights.momentum * clamp01(item.momentum ?? 0)
     );
 }
 
 export function rankCoalitionFeed(
     items: ReadonlyArray<Omit<CoalitionFeedItem, 'score'>>,
-    options: Parameters<typeof scoreCoalitionItem>[1] = {},
+    options: Parameters<typeof scoreCoalitionItem>[1] = {}
 ): CoalitionFeedItem[] {
     return items
         .map((item) => ({ ...item, score: scoreCoalitionItem(item, options) }))
@@ -173,14 +179,16 @@ function clamp01(value: number): number {
     return value;
 }
 
-export function normalizeSpatialFeedItem<T extends Omit<SpatialFeedItem, 'status'> & { status?: SpatialEventStatus }>(
-    item: T,
-): SpatialFeedItem | null {
+export function normalizeSpatialFeedItem<
+    T extends Omit<SpatialFeedItem, 'status'> & { status?: SpatialEventStatus }
+>(item: T): SpatialFeedItem | null {
     const layer = normalizeSpatialLayerKey(item.layer);
     if (!layer) return null;
     return {
         ...item,
         layer,
-        status: item.status ?? deriveSpatialEventStatus({ startsAt: item.startsAt, endsAt: item.endsAt }),
+        status:
+            item.status ??
+            deriveSpatialEventStatus({ startsAt: item.startsAt, endsAt: item.endsAt }),
     };
 }

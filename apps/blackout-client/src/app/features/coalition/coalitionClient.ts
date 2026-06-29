@@ -9,6 +9,8 @@ import type {
     CoalitionNeed,
     CoalitionProject,
     CoalitionResource,
+    EndowedProgressFraming,
+    ProjectMomentum,
     NeedStatus,
     ProjectStatus,
     ResourceAvailability,
@@ -329,6 +331,56 @@ export function updateCoalitionProjectStatus(
     return patchJson<{ project: CoalitionProject }>(
         `${COALITION_BASE}/projects/${encodeURIComponent(id)}`,
         { status },
+        token
+    );
+}
+
+export interface ProjectSupporter {
+    supporterUserId: string;
+    amountCents: number;
+    currency?: string;
+    createdAt: string;
+}
+
+export interface ProjectView {
+    project: CoalitionProject;
+    progress: number;
+    momentum: ProjectMomentum;
+    endowedProgress: EndowedProgressFraming | null;
+    recentSupporters: ProjectSupporter[];
+}
+
+export function fetchCoalitionProject(
+    id: string,
+    token: string | null = readBlackoutApiToken()
+): Promise<ProjectView> {
+    return getJson<ProjectView>(`${COALITION_BASE}/projects/${encodeURIComponent(id)}`, token);
+}
+
+export function fetchProjectSupporters(
+    id: string,
+    token: string | null = readBlackoutApiToken()
+): Promise<{ supporters: ProjectSupporter[] }> {
+    return getJson<{ supporters: ProjectSupporter[] }>(
+        `${COALITION_BASE}/projects/${encodeURIComponent(id)}/supporters`,
+        token
+    );
+}
+
+export interface SupportProjectInput {
+    grossCents: number;
+    currency: string;
+    note?: string;
+}
+
+export function supportCoalitionProject(
+    id: string,
+    input: SupportProjectInput,
+    token: string | null = readBlackoutApiToken()
+): Promise<{ tip: { id: string; status: string; grossCents: number } }> {
+    return postJson<{ tip: { id: string; status: string; grossCents: number } }>(
+        `${COALITION_BASE}/projects/${encodeURIComponent(id)}/support`,
+        input,
         token
     );
 }

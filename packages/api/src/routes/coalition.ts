@@ -84,8 +84,10 @@ import {
     newNeedId,
     updateNeed,
     createProject,
+    getProject,
     listProjects,
     newProjectId,
+    updateProject,
     updateProjectStatus,
     createResource,
     listResources,
@@ -93,6 +95,12 @@ import {
     updateResourceAvailability,
 } from '../services/coalitionStore';
 import { createTask, listTasks, newTaskId, updateTaskStatus } from '../services/taskStore';
+import {
+    getProjectView,
+    listProjectSupporters,
+    projectMomentum,
+} from '../services/coalitionProjectSupport';
+import { createTip, TipValidationError, TIP_LIMITS } from '../services/tips';
 import { authorizeScope, installPluginAtScope } from '../services/pluginInstallations';
 import { db } from '../db/store';
 import { matrixClient } from '../integrations/matrix-client';
@@ -105,9 +113,7 @@ const feedQuerySchema = z.object({
     canopyId: z.string().optional(),
     denId: z.string().optional(),
     kind: z.enum(['video', 'event', 'aid', 'listing', 'proposal']).optional(),
-    model: z
-        .enum(['coalition_social_v1', 'recency_only', 'importance_only'])
-        .optional(),
+    model: z.enum(['coalition_social_v1', 'recency_only', 'importance_only']).optional(),
     limit: z.coerce.number().int().min(1).max(100).optional(),
 });
 
@@ -120,7 +126,7 @@ coalition.get('/feed', (c) => {
                 message: 'Invalid feed query',
                 details: { issues: parsed.error.issues.map((i) => i.message) },
             },
-            400,
+            400
         );
     }
     const { canopyId, denId, kind, model, limit } = parsed.data;
@@ -135,7 +141,10 @@ coalition.get('/feed', (c) => {
 // --- feed engagement (likes + comments on feed items, surfaced on video) ---
 
 /** Active like count + whether the viewer currently likes the item. */
-function likeState(feedItemId: string, userId: string | undefined): { count: number; likedByMe: boolean } {
+function likeState(
+    feedItemId: string,
+    userId: string | undefined
+): { count: number; likedByMe: boolean } {
     const likes = listFeedLikes(feedItemId);
     return {
         count: countActive(likes),
@@ -223,9 +232,9 @@ const nearbyQuerySchema = z.object({
 });
 
 /** Returns the viewer coordinates + radius (m) when a full nearby filter is supplied. */
-function parseNearby(c: { req: { query: (key: string) => string | undefined } }):
-    | { viewer: { latitude: number; longitude: number }; radiusMeters: number }
-    | null {
+function parseNearby(c: {
+    req: { query: (key: string) => string | undefined };
+}): { viewer: { latitude: number; longitude: number }; radiusMeters: number } | null {
     const parsed = nearbyQuerySchema.safeParse({
         lat: c.req.query('lat'),
         lng: c.req.query('lng'),
@@ -243,7 +252,7 @@ coalition.get('/mutual-aid', (c) => {
     const nearby = parseNearby(c);
     if (nearby) {
         posts = posts.filter((post) =>
-            isWithinRadiusMeters(post.location, nearby.viewer, nearby.radiusMeters),
+            isWithinRadiusMeters(post.location, nearby.viewer, nearby.radiusMeters)
         );
     }
     return c.json({ posts });
@@ -293,7 +302,7 @@ coalition.get('/seller-locations', (c) => {
     const nearby = parseNearby(c);
     if (nearby) {
         locations = locations.filter((location) =>
-            isWithinRadiusMeters(location.coordinates, nearby.viewer, nearby.radiusMeters),
+            isWithinRadiusMeters(location.coordinates, nearby.viewer, nearby.radiusMeters)
         );
     }
     return c.json({ locations });
@@ -395,8 +404,29 @@ coalition.patch('/needs/:id', async (c) => {
 
 coalition.get('/projects', (c) => {
     const canopyId = c.req.query('canopyId');
-    return c.json({ projects: listProjects({ canopyId }) });
+    const nowMs = Date.now();
+    // Decorate each project-backed entry with its live Momentum so callers can
+    // rank surging + near-completion projects up (the prosocial "Heat").
+    const projects = listProjects({ canopyId }).map((project) => ({
+        ...project,
+        momentum: projectMomentum(project.id, nowMs),
+    }));
+    return c.json({ projects });
 });
+
+const milestoneInputSchema = z.object({
+    id: z.string().min(1).max(64).optional(),
+    label: z.string().min(1).max(200),
+    thresholdCents: z.number().int().min(0),
+});
+
+const fundingFields = {
+    fundingGoalCents: z.number().int().min(0).optional(),
+    currency: z.string().min(3).max(8).optional(),
+    useOfFunds: z.string().max(2000).optional(),
+    deadlineAt: z.string().datetime().optional(),
+    milestones: z.array(milestoneInputSchema).max(20).optional(),
+};
 
 const createProjectSchema = z.object({
     canopyId: z.string().min(1),
@@ -404,7 +434,19 @@ const createProjectSchema = z.object({
     category: z.string().min(1).max(64),
     description: z.string().max(2000).optional(),
     proposalEventId: z.string().optional(),
+    ...fundingFields,
 });
+
+function withMilestoneIds(
+    milestones: Array<{ id?: string; label: string; thresholdCents: number }> | undefined
+) {
+    if (!milestones) return undefined;
+    return milestones.map((m) => ({
+        id: m.id ?? `ms_${Math.random().toString(36).slice(2, 10)}`,
+        label: m.label,
+        thresholdCents: m.thresholdCents,
+    }));
+}
 
 coalition.post('/projects', async (c) => {
     const user = requireUser(c, 'Sign in to launch a project');
@@ -419,24 +461,113 @@ coalition.post('/projects', async (c) => {
         description: parsed.description,
         leadId: user.sub,
         proposalEventId: parsed.proposalEventId,
+        fundingGoalCents: parsed.fundingGoalCents,
+        currency: parsed.currency,
+        useOfFunds: parsed.useOfFunds,
+        deadlineAt: parsed.deadlineAt,
+        milestones: withMilestoneIds(parsed.milestones),
     });
     return c.json({ project }, 201);
 });
 
-const updateProjectSchema = z.object({
-    status: z.enum(PROJECT_STATUSES),
+// Full project view: progress, Momentum, endowed-progress framing, supporter wall.
+coalition.get('/projects/:id', (c) => {
+    const view = getProjectView(c.req.param('id'));
+    if (!view) {
+        return c.json({ code: 'not_found', message: 'Project not found' }, 404);
+    }
+    return c.json(view);
 });
+
+coalition.get('/projects/:id/supporters', (c) => {
+    if (!getProject(c.req.param('id'))) {
+        return c.json({ code: 'not_found', message: 'Project not found' }, 404);
+    }
+    const limit = Math.min(Number(c.req.query('limit') ?? '50') || 50, 200);
+    return c.json({ supporters: listProjectSupporters(c.req.param('id'), { limit }) });
+});
+
+const updateProjectSchema = z
+    .object({
+        status: z.enum(PROJECT_STATUSES).optional(),
+        title: z.string().min(1).max(200).optional(),
+        description: z.string().max(2000).optional(),
+        category: z.string().min(1).max(64).optional(),
+        ...fundingFields,
+    })
+    .refine((v) => Object.keys(v).length > 0, { message: 'No fields to update' });
 
 coalition.patch('/projects/:id', async (c) => {
     const user = requireUser(c, 'Sign in to update a project');
     if (user instanceof Response) return user;
     const parsed = await readJsonBody(c, updateProjectSchema);
     if (parsed instanceof Response) return parsed;
-    const project = updateProjectStatus(c.req.param('id'), parsed.status);
+
+    const existing = getProject(c.req.param('id'));
+    if (!existing) {
+        return c.json({ code: 'not_found', message: 'Project not found' }, 404);
+    }
+    // Only the project lead may edit it — the builder owns their journey.
+    if (existing.leadId !== user.sub) {
+        return c.json({ code: 'forbidden', message: 'Only the project lead can edit it' }, 403);
+    }
+
+    const { status, milestones, ...rest } = parsed;
+    let project = existing;
+    const fundingPatch = {
+        ...rest,
+        ...(milestones ? { milestones: withMilestoneIds(milestones) } : {}),
+    };
+    if (Object.keys(fundingPatch).length > 0) {
+        project = updateProject(existing.id, fundingPatch) ?? project;
+    }
+    if (status) {
+        project = updateProjectStatus(existing.id, status) ?? project;
+    }
+    return c.json({ project });
+});
+
+const supportProjectSchema = z.object({
+    grossCents: z.number().int().min(TIP_LIMITS.minCents).max(TIP_LIMITS.maxCents),
+    currency: z.string().min(3).max(8),
+    note: z.string().max(TIP_LIMITS.maxNoteLength).optional(),
+});
+
+// Support a project: records a tip toward it. Money capture flows through the
+// existing FBM pipeline; on capture the project's progress bar advances.
+coalition.post('/projects/:id/support', async (c) => {
+    const user = requireUser(c, 'Sign in to support a project');
+    if (user instanceof Response) return user;
+    const parsed = await readJsonBody(c, supportProjectSchema);
+    if (parsed instanceof Response) return parsed;
+
+    const project = getProject(c.req.param('id'));
     if (!project) {
         return c.json({ code: 'not_found', message: 'Project not found' }, 404);
     }
-    return c.json({ project });
+    try {
+        const tip = createTip({
+            senderUserId: user.sub,
+            recipientUserId: project.leadId,
+            contextKind: 'coalition_project',
+            contextRef: project.id,
+            grossCents: parsed.grossCents,
+            currency: parsed.currency,
+            note: parsed.note,
+        });
+        return c.json({ tip }, 201);
+    } catch (error) {
+        if (error instanceof TipValidationError) {
+            const status: 400 | 404 | 409 =
+                error.code === 'recipient_unknown'
+                    ? 404
+                    : error.code === 'duplicate_order'
+                    ? 409
+                    : 400;
+            return c.json({ code: error.code, message: error.message }, status);
+        }
+        throw error;
+    }
 });
 
 // --- Coalition Resource Registry ---
@@ -591,7 +722,10 @@ coalition.patch('/events/:id', async (c) => {
         return c.json({ code: 'not_found', message: 'Event not found' }, 404);
     }
     if (existing.organizerId !== user.sub) {
-        return c.json({ code: 'forbidden', message: 'Only the organizer can edit this event' }, 403);
+        return c.json(
+            { code: 'forbidden', message: 'Only the organizer can edit this event' },
+            403
+        );
     }
     const parsed = await readJsonBody(c, updateEventSchema);
     if (parsed instanceof Response) return parsed;
@@ -650,7 +784,7 @@ coalition.post('/events/:id/den', async (c) => {
     if (!result.ok) {
         return c.json(
             { code: 'matrix_unavailable', message: 'Could not create den', reason: result.reason },
-            502,
+            502
         );
     }
     const updated = saveEvent({ ...event, denId: result.roomId });
@@ -705,7 +839,7 @@ coalition.post('/events/:id/volunteer-slots/:slotId/signup', async (c) => {
         return c.json({ code: 'not_found', message: 'Volunteer slot not found' }, 404);
     }
     const othersActive = countActive(
-        listVolunteerSignups(eventId).filter((s) => s.slotId === slot.id && s.userId !== user.sub),
+        listVolunteerSignups(eventId).filter((s) => s.slotId === slot.id && s.userId !== user.sub)
     );
     if (othersActive >= slot.capacity) {
         return c.json({ code: 'slot_full', message: 'This slot is full' }, 409);
@@ -788,7 +922,7 @@ coalition.post('/events/:id/rides/:offerId/claim', async (c) => {
         return c.json({ code: 'not_found', message: 'Ride offer not found' }, 404);
     }
     const othersActive = countActive(
-        listRideClaims(eventId).filter((cl) => cl.offerId === offer.id && cl.riderId !== user.sub),
+        listRideClaims(eventId).filter((cl) => cl.offerId === offer.id && cl.riderId !== user.sub)
     );
     if (othersActive >= offer.seatsTotal) {
         return c.json({ code: 'ride_full', message: 'No seats remaining' }, 409);
@@ -823,8 +957,7 @@ coalition.post('/events/:id/rides/:offerId/release', async (c) => {
 
 // --- Coalition rings (trusted circles/crews/guilds) ---
 
-const memberCountFor = (ringId: string): number =>
-    countActiveMembers(listRingMemberships(ringId));
+const memberCountFor = (ringId: string): number => countActiveMembers(listRingMemberships(ringId));
 
 const ringLocationSchema = z.object({
     latitude: z.number().min(-90).max(90),
@@ -848,7 +981,7 @@ coalition.get('/rings', (c) => {
     if (memberId) {
         // A user's rings (for profile display) — exclude private rings of others.
         const ringIds = new Set(
-            memberships.filter((m) => m.userId === memberId && m.active).map((m) => m.ringId),
+            memberships.filter((m) => m.userId === memberId && m.active).map((m) => m.ringId)
         );
         rings = rings.filter((r) => ringIds.has(r.id) && r.visibility !== 'private');
     } else {
@@ -969,7 +1102,7 @@ coalition.get('/rings/invites/mine', (c) => {
     const user = requireUser(c, 'Sign in to view invitations');
     if (user instanceof Response) return user;
     const invitations = listRingInvitations({ inviteeId: user.sub }).filter(
-        (inv) => inv.status === 'pending',
+        (inv) => inv.status === 'pending'
     );
     return c.json({ invitations });
 });
@@ -1002,7 +1135,10 @@ coalition.get('/rings/:id/invites', (c) => {
     const ring = getRing(c.req.param('id'));
     if (!ring) return c.json({ code: 'not_found', message: 'Ring not found' }, 404);
     if (!canManageRing(listRingMemberships(ring.id), user.sub)) {
-        return c.json({ code: 'forbidden', message: 'Only owners/admins can view invitations' }, 403);
+        return c.json(
+            { code: 'forbidden', message: 'Only owners/admins can view invitations' },
+            403
+        );
     }
     return c.json({ invitations: listRingInvitations({ ringId: ring.id }) });
 });
@@ -1012,7 +1148,7 @@ coalition.post('/rings/:id/invites/accept', async (c) => {
     if (user instanceof Response) return user;
     const ringId = c.req.param('id');
     const invite = listRingInvitations({ ringId, inviteeId: user.sub }).find(
-        (inv) => inv.status === 'pending',
+        (inv) => inv.status === 'pending'
     );
     if (!invite) {
         return c.json({ code: 'not_found', message: 'No pending invitation' }, 404);
@@ -1033,7 +1169,7 @@ coalition.post('/rings/:id/invites/decline', async (c) => {
     if (user instanceof Response) return user;
     const ringId = c.req.param('id');
     const invite = listRingInvitations({ ringId, inviteeId: user.sub }).find(
-        (inv) => inv.status === 'pending',
+        (inv) => inv.status === 'pending'
     );
     if (!invite) {
         return c.json({ code: 'not_found', message: 'No pending invitation' }, 404);
@@ -1084,7 +1220,7 @@ coalition.post('/kits/:id/apply', async (c) => {
             artifactKind: plugin.artifactKind,
             domain: plugin.domain,
             manifest: { id: plugin.pluginId, name: kit.name, kit: kit.id, free: true },
-        }),
+        })
     );
 
     const application = recordKitApplication({

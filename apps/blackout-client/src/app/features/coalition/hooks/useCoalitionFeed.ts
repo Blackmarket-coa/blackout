@@ -4,6 +4,7 @@ import {
     fetchCoalitionEvents,
     fetchCoalitionFeed,
     fetchCoalitionNeeds,
+    fetchCoalitionProject,
     fetchCoalitionProjects,
     fetchCoalitionResources,
     fetchCoalitionTasks,
@@ -12,12 +13,16 @@ import {
     fetchKits,
     fetchMutualAid,
     fetchMyRingInvites,
+    fetchProjectSupporters,
     fetchRings,
     fetchSellerLocations,
     fetchSpatialFeed,
     postFeedComment,
     setFeedLike,
+    supportCoalitionProject,
     type CoalitionFeedResponse,
+    type ProjectView,
+    type SupportProjectInput,
     type FeedCommentsResponse,
     type FeedLikeState,
     type CoalitionScopeQuery,
@@ -127,6 +132,37 @@ export function useCoalitionNeeds(scope: CoalitionScopeQuery) {
 
 export function useCoalitionProjects(scope: CoalitionScopeQuery) {
     return useAsync<ProjectsResponse>(() => fetchCoalitionProjects(scope), [scope.canopyId]);
+}
+
+/**
+ * A single project's funding view (progress, Momentum, endowed framing, supporter
+ * wall) plus an imperative `support` mutator that refetches so the progress bar
+ * and supporter list stay live after a contribution.
+ */
+export function useCoalitionProject(projectId: string | null) {
+    const view = useAsync<ProjectView | null>(
+        () => (projectId ? fetchCoalitionProject(projectId) : Promise.resolve(null)),
+        [projectId]
+    );
+    const { refetch } = view;
+
+    const support = useCallback(
+        async (input: SupportProjectInput) => {
+            if (!projectId) return;
+            await supportCoalitionProject(projectId, input);
+            refetch();
+        },
+        [projectId, refetch]
+    );
+
+    return { ...view, support };
+}
+
+export function useProjectSupporters(projectId: string | null) {
+    return useAsync(
+        () => (projectId ? fetchProjectSupporters(projectId) : Promise.resolve({ supporters: [] })),
+        [projectId]
+    );
 }
 
 export function useCoalitionResources(scope: CoalitionScopeQuery) {

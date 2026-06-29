@@ -2,6 +2,7 @@ import React, { useCallback, useState } from 'react';
 import type { CoalitionFeedItem } from '@blackout/core';
 import { useCoalitionVideoEngagement } from '../hooks/useCoalitionFeed';
 import { buildCommunitiesPath } from '../../../pages/paths';
+import { ProjectSupportCard } from './ProjectSupportCard';
 
 export type ShareHandler = (id: string, title: string) => void | Promise<void>;
 
@@ -174,6 +175,7 @@ export function VideoReelItem({ item, onShare }: VideoReelItemProps) {
                 {item.body ? (
                     <div style={{ fontSize: 14, marginTop: 4, opacity: 0.9 }}>{item.body}</div>
                 ) : null}
+                {item.projectId ? <ProjectSupportCard projectId={item.projectId} /> : null}
                 <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
                     <button
                         type="button"
