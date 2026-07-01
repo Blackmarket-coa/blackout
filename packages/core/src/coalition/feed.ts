@@ -54,7 +54,9 @@ export interface CoalitionFeedItem {
     longitude?: number;
     /** When set, this item is backed by a Coalition project and carries its Momentum. */
     projectId?: string;
-    /** 0..1 — support Momentum of the linked project (see support.ts). */
+    /** When set, this item is a Milestone Broadcast video for the project's milestone. */
+    milestoneId?: string;
+    /** 0..1 — support Momentum of the linked project (see support.ts). Read-time only. */
     momentum?: number;
     importance: number;
     impact: number;

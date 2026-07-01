@@ -1454,6 +1454,44 @@ export interface CoalitionProjectSupportRecord {
     createdAt: string;
 }
 
+export type CoalitionSurgeStatus = 'open' | 'expired';
+
+/** A declared 24–48h support-spike event on a project (see support.ts detectSurge). */
+export interface CoalitionSurgeRecord {
+    id: string;
+    projectId: string;
+    status: CoalitionSurgeStatus;
+    surgeFactor: number;
+    supportsLast24h: number;
+    supportsPrev24h: number;
+    notifiedCount: number;
+    startedAt: string;
+    expiresAt: string;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export type CoalitionNotificationKind = 'surge' | 'milestone' | 'milestone_video';
+
+/**
+ * A Coalition-scoped notification for one recipient. The platform has no general
+ * push bus, so surge/milestone events are delivered as rows the client polls
+ * (plus a best-effort Matrix den post). `readAt` is set once acknowledged.
+ */
+export interface CoalitionNotificationRecord {
+    id: string;
+    recipientUserId: string;
+    kind: CoalitionNotificationKind;
+    projectId?: string;
+    surgeId?: string;
+    milestoneId?: string;
+    feedItemId?: string;
+    title: string;
+    body?: string;
+    readAt?: string;
+    createdAt: string;
+}
+
 /** A Coalition shared resource. CoalitionResource carries createdAt/updatedAt. */
 export type CoalitionResourceRecord = CoalitionResource;
 

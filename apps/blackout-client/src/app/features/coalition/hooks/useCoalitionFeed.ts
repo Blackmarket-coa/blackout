@@ -12,9 +12,11 @@ import {
     fetchFeedLikes,
     fetchKits,
     fetchMutualAid,
+    fetchCoalitionNotifications,
     fetchMyRingInvites,
     fetchProjectSupporters,
     fetchRings,
+    markCoalitionNotificationRead,
     fetchSellerLocations,
     fetchSpatialFeed,
     postFeedComment,
@@ -156,6 +158,26 @@ export function useCoalitionProject(projectId: string | null) {
     );
 
     return { ...view, support };
+}
+
+/**
+ * The signed-in user's Coalition notification inbox (surge + milestone events),
+ * with an imperative `markRead` that refetches so unread counts stay live.
+ */
+export function useCoalitionNotifications(options: { unreadOnly?: boolean; limit?: number } = {}) {
+    const state = useAsync(
+        () => fetchCoalitionNotifications(options),
+        [options.unreadOnly, options.limit]
+    );
+    const { refetch } = state;
+    const markRead = useCallback(
+        async (id: string) => {
+            await markCoalitionNotificationRead(id);
+            refetch();
+        },
+        [refetch]
+    );
+    return { ...state, markRead };
 }
 
 export function useProjectSupporters(projectId: string | null) {

@@ -24,6 +24,7 @@ import {
     isWithinRadiusMeters,
     nextOccurrence,
     rankCoalitionFeed,
+    scoreCoalitionItem,
     seatsRemaining,
     slotRemaining,
     NEED_STATUSES,
@@ -39,6 +40,8 @@ import {
     listEventRsvps,
     listEvents,
     listFeedItems,
+    saveFeedItem,
+    newFeedItemId,
     listRideClaims,
     listRideOffers,
     listSellerLocations,
@@ -100,6 +103,11 @@ import {
     listProjectSupporters,
     projectMomentum,
 } from '../services/coalitionProjectSupport';
+import {
+    listNotifications,
+    markNotificationRead,
+    notifyProjectContributors,
+} from '../services/coalitionNotifications';
 import { createTip, TipValidationError, TIP_LIMITS } from '../services/tips';
 import { authorizeScope, installPluginAtScope } from '../services/pluginInstallations';
 import { db } from '../db/store';
@@ -130,12 +138,84 @@ coalition.get('/feed', (c) => {
         );
     }
     const { canopyId, denId, kind, model, limit } = parsed.data;
-    const items = listFeedItems({ canopyId, denId, kind });
-    const ranked = rankCoalitionFeed(items, { model });
+    const nowMs = Date.now();
+    // Inject each project-backed item's live Momentum so surging + near-complete
+    // projects rise in the ranking (Momentum is read-time only, never stored).
+    const items = listFeedItems({ canopyId, denId, kind }).map((item) =>
+        item.projectId ? { ...item, momentum: projectMomentum(item.projectId, nowMs) } : item
+    );
+    const ranked = rankCoalitionFeed(items, { model, nowMs });
     return c.json({
         generatedAt: new Date().toISOString(),
         items: limit ? ranked.slice(0, limit) : ranked,
     });
+});
+
+// Post a feed item (a video/celebration/origin story). When projectId +
+// milestoneId are set, this is a Milestone Broadcast video — only the project
+// lead may post it, and its contributors are notified that the moment is content.
+const createFeedItemSchema = z.object({
+    kind: z.enum(['video', 'event', 'aid', 'listing', 'proposal']),
+    title: z.string().min(1).max(200),
+    body: z.string().max(2000).optional(),
+    canopyId: z.string().optional(),
+    denId: z.string().optional(),
+    mediaUrl: z.string().max(2048).optional(),
+    projectId: z.string().optional(),
+    milestoneId: z.string().optional(),
+    tags: z.array(z.string().max(64)).max(20).optional(),
+});
+
+coalition.post('/feed', async (c) => {
+    const user = requireUser(c, 'Sign in to post');
+    if (user instanceof Response) return user;
+    const parsed = await readJsonBody(c, createFeedItemSchema);
+    if (parsed instanceof Response) return parsed;
+
+    const isMilestoneVideo = Boolean(parsed.projectId && parsed.milestoneId);
+    if (isMilestoneVideo) {
+        const project = getProject(parsed.projectId!);
+        if (!project) {
+            return c.json({ code: 'not_found', message: 'Project not found' }, 404);
+        }
+        if (project.leadId !== user.sub) {
+            return c.json(
+                { code: 'forbidden', message: 'Only the project lead can post a milestone video' },
+                403
+            );
+        }
+    }
+
+    const base = {
+        id: newFeedItemId(),
+        kind: parsed.kind,
+        title: parsed.title,
+        body: parsed.body,
+        canopyId: parsed.canopyId,
+        denId: parsed.denId,
+        authorId: user.sub,
+        mediaUrl: parsed.mediaUrl,
+        projectId: parsed.projectId,
+        milestoneId: parsed.milestoneId,
+        importance: 0.5,
+        impact: 0.5,
+        socialImpact: 0.5,
+        tags: parsed.tags,
+        createdAt: new Date().toISOString(),
+    };
+    const score = scoreCoalitionItem(base, {});
+    const feedItem = saveFeedItem({ ...base, score });
+
+    if (isMilestoneVideo) {
+        notifyProjectContributors(parsed.projectId!, {
+            kind: 'milestone_video',
+            title: `New milestone update: ${parsed.title}`,
+            body: 'The builder posted a video about a milestone you helped reach.',
+            milestoneId: parsed.milestoneId,
+            feedItemId: feedItem.id,
+        });
+    }
+    return c.json({ feedItem }, 201);
 });
 
 // --- feed engagement (likes + comments on feed items, surfaced on video) ---
@@ -568,6 +648,32 @@ coalition.post('/projects/:id/support', async (c) => {
         }
         throw error;
     }
+});
+
+// --- Coalition Surges + notification inbox ---
+
+// Open surges across coalitions — the "Surging now" rail / feed-promotion source.
+coalition.get('/surges', (c) => {
+    return c.json({ surges: db.listCoalitionSurges({ status: 'open' }) });
+});
+
+// The signed-in user's Coalition notification inbox (surge + milestone events).
+coalition.get('/notifications', (c) => {
+    const user = requireUser(c, 'Sign in to view notifications');
+    if (user instanceof Response) return user;
+    const unreadOnly = c.req.query('unreadOnly') === 'true';
+    const limit = Math.min(Number(c.req.query('limit') ?? '100') || 100, 200);
+    return c.json({ notifications: listNotifications(user.sub, { unreadOnly, limit }) });
+});
+
+coalition.post('/notifications/:id/read', (c) => {
+    const user = requireUser(c, 'Sign in to update notifications');
+    if (user instanceof Response) return user;
+    const notification = markNotificationRead(c.req.param('id'), user.sub);
+    if (!notification) {
+        return c.json({ code: 'not_found', message: 'Notification not found' }, 404);
+    }
+    return c.json({ notification });
 });
 
 // --- Coalition Resource Registry ---

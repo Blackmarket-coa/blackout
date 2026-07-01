@@ -8,12 +8,14 @@ const mocks = vi.hoisted(() => ({
     fetchCoalitionProject: vi.fn(),
     fetchProjectSupporters: vi.fn(),
     supportCoalitionProject: vi.fn(),
+    postCoalitionFeedItem: vi.fn(),
 }));
 
 vi.mock('../../../../src/app/features/coalition/coalitionClient', () => ({
     fetchCoalitionProject: mocks.fetchCoalitionProject,
     fetchProjectSupporters: mocks.fetchProjectSupporters,
     supportCoalitionProject: mocks.supportCoalitionProject,
+    postCoalitionFeedItem: mocks.postCoalitionFeedItem,
 }));
 
 // eslint-disable-next-line import/first
@@ -47,6 +49,7 @@ const PROJECT_VIEW = {
     recentSupporters: [
         { supporterUserId: '@ada', amountCents: 1000, currency: 'USD', createdAt: 'now' },
     ],
+    activeSurge: null,
 };
 
 const mountedRoots: ReactDOM.Root[] = [];
@@ -102,6 +105,26 @@ describe('ProjectSupportCard', () => {
         expect(container.textContent).toContain('already part of 62%');
         // Social proof: supporter wall.
         expect(container.textContent).toContain('@ada');
+    });
+
+    it('shows a Surging badge when the project has an active surge', async () => {
+        mocks.fetchCoalitionProject.mockResolvedValue({
+            ...PROJECT_VIEW,
+            activeSurge: {
+                id: 'surge-1',
+                projectId: 'proj-1',
+                status: 'open',
+                surgeFactor: 0.82,
+                supportsLast24h: 9,
+                supportsPrev24h: 1,
+                startedAt: 'now',
+                expiresAt: 'later',
+            },
+        });
+        const container = await render(<ProjectSupportCard projectId="proj-1" />);
+        const badge = container.querySelector('[data-testid="coalition-project-surge-proj-1"]');
+        expect(badge).toBeTruthy();
+        expect(badge?.textContent).toContain('Surging');
     });
 
     it('submits a contribution via the client', async () => {

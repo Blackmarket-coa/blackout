@@ -16,8 +16,9 @@ import {
     type ProjectMomentum,
 } from '@blackout/core';
 import { db } from '../db/store';
-import type { CoalitionProjectSupportRecord } from '../db/types';
+import type { CoalitionProjectSupportRecord, CoalitionSurgeRecord } from '../db/types';
 import { emitDomainEvent } from '../modules/domain-events';
+import { notifyProjectContributors } from './coalitionNotifications';
 import { newProjectSupportId } from './coalitionStore';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -99,6 +100,15 @@ export function recordProjectSupport(
                 raisedCents: finalProject.raisedCents,
             },
         });
+        // Milestone Broadcast: tell every contributor the moment happened. Fires
+        // exactly once per milestone — capture is idempotent on tipId and a
+        // milestone is stamped reachedAt only on its first crossing.
+        notifyProjectContributors(finalProject.id, {
+            kind: 'milestone',
+            title: `${finalProject.title} hit a milestone: ${milestone.label}`,
+            body: `The community has raised enough to reach "${milestone.label}".`,
+            milestoneId: milestone.id,
+        });
     }
 
     return { project: finalProject, support, reachedMilestones: reached, deduped: false };
@@ -135,6 +145,8 @@ export interface ProjectView {
     /** Endowed-progress framing, or null when the project has no funding goal. */
     endowedProgress: EndowedProgressFraming | null;
     recentSupporters: ProjectSupporterView[];
+    /** The project's currently-open Surge, if any (drives the "🔥 Surging" badge). */
+    activeSurge: CoalitionSurgeRecord | null;
 }
 
 /** Read-side project view: progress, Momentum, endowed framing, social proof. */
@@ -170,6 +182,7 @@ export function getProjectView(projectId: string, nowMs: number = Date.now()): P
             goalCents: project.fundingGoalCents ?? 0,
         }),
         recentSupporters: listProjectSupporters(projectId, { limit: 20 }),
+        activeSurge: db.getOpenCoalitionSurge(projectId) ?? null,
     };
 }
 

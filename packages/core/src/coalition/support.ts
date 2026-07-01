@@ -93,6 +93,54 @@ export function computeProjectMomentum(input: ProjectMomentumInput): ProjectMome
     };
 }
 
+/** surgeFactor at/above which a project is declared surging. */
+export const SURGE_OPEN_THRESHOLD = 0.66;
+/** A project needs at least this many supports in the trailing 24h to surge — a
+ *  single first contribution (surgeFactor ≈ 0.67 from a standing start) must not
+ *  trip a Surge. */
+export const SURGE_MIN_SUPPORTS = 3;
+/** How long a declared Surge stays open — inside the design's 24–48h band. */
+export const SURGE_DURATION_HOURS = 36;
+
+export interface DetectSurgeInput {
+    /** Support events in the trailing 24h window. */
+    supportsLast24h: number;
+    /** Support events in the 24h window before that. */
+    supportsPrev24h: number;
+}
+
+export interface DetectSurgeOptions {
+    openThreshold?: number;
+    minSupports?: number;
+}
+
+export interface SurgeAssessment {
+    /** True when the project should be declared surging. */
+    surging: boolean;
+    /** 0..1 — the same acceleration signal as {@link computeProjectMomentum}. */
+    surgeFactor: number;
+}
+
+/**
+ * Decide whether a project is surging: support must be both accelerating
+ * (surgeFactor ≥ threshold) and non-trivial in volume (≥ minSupports in the
+ * trailing window), so a lone first contribution can't declare a Surge. Pure.
+ */
+export function detectSurge(
+    input: DetectSurgeInput,
+    options: DetectSurgeOptions = {}
+): SurgeAssessment {
+    const openThreshold = options.openThreshold ?? SURGE_OPEN_THRESHOLD;
+    const minSupports = options.minSupports ?? SURGE_MIN_SUPPORTS;
+    const cur = input.supportsLast24h;
+    const prev = input.supportsPrev24h;
+    const surgeFactor = clamp01((cur + 1) / (cur + prev + 2));
+    return {
+        surging: cur >= minSupports && surgeFactor >= openThreshold,
+        surgeFactor,
+    };
+}
+
 export interface EndowedProgressInput {
     /** Cumulative raised after (or before) the framed contribution, in cents. */
     raisedCents: number;

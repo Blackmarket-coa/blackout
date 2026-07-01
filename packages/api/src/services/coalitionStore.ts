@@ -344,6 +344,12 @@ export function newProjectId(): string {
 export function newProjectSupportId(): string {
     return `psup_${rand()}`;
 }
+export function newSurgeId(): string {
+    return `surge_${rand()}`;
+}
+export function newNotificationId(): string {
+    return `cnot_${rand()}`;
+}
 
 // --- coalition resource registry ---
 

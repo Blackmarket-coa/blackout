@@ -86,6 +86,8 @@ import type {
     CoalitionNeedRecord,
     CoalitionProjectRecord,
     CoalitionProjectSupportRecord,
+    CoalitionSurgeRecord,
+    CoalitionNotificationRecord,
     CoalitionResourceRecord,
     CreatorContentRecord,
     ContentDistributionRecord,
@@ -221,6 +223,8 @@ type PersistedState = {
     coalitionNeeds: CoalitionNeedRecord[];
     coalitionProjects: CoalitionProjectRecord[];
     coalitionProjectSupports: CoalitionProjectSupportRecord[];
+    coalitionSurges: CoalitionSurgeRecord[];
+    coalitionNotifications: CoalitionNotificationRecord[];
     coalitionResources: CoalitionResourceRecord[];
     creatorContent: CreatorContentRecord[];
     contentDistributions: ContentDistributionRecord[];
@@ -384,6 +388,8 @@ class InMemoryDb {
     /** Coalition projects, keyed by project id. */
     coalitionProjects = new Map<string, CoalitionProjectRecord>();
     coalitionProjectSupports = new Map<string, CoalitionProjectSupportRecord>();
+    coalitionSurges = new Map<string, CoalitionSurgeRecord>();
+    coalitionNotifications = new Map<string, CoalitionNotificationRecord>();
     /** Coalition shared resources, keyed by resource id. */
     coalitionResources = new Map<string, CoalitionResourceRecord>();
     /** Creator content items, keyed by content id. */
@@ -3268,6 +3274,78 @@ class InMemoryDb {
         return record;
     }
 
+    // --- coalition surges ---
+
+    listCoalitionSurges(
+        filter: { projectId?: string; status?: string } = {}
+    ): CoalitionSurgeRecord[] {
+        return [...this.coalitionSurges.values()]
+            .filter((s) => (filter.projectId ? s.projectId === filter.projectId : true))
+            .filter((s) => (filter.status ? s.status === filter.status : true))
+            .sort((a, b) => (a.startedAt < b.startedAt ? 1 : -1));
+    }
+
+    getOpenCoalitionSurge(projectId: string): CoalitionSurgeRecord | undefined {
+        return [...this.coalitionSurges.values()].find(
+            (s) => s.projectId === projectId && s.status === 'open'
+        );
+    }
+
+    upsertCoalitionSurge(
+        input: Omit<CoalitionSurgeRecord, 'createdAt' | 'updatedAt'> & {
+            createdAt?: string;
+            updatedAt?: string;
+        }
+    ): CoalitionSurgeRecord {
+        const now = nowIso();
+        const existing = this.coalitionSurges.get(input.id);
+        const record: CoalitionSurgeRecord = {
+            ...input,
+            createdAt: existing?.createdAt ?? input.createdAt ?? now,
+            updatedAt: now,
+        };
+        this.coalitionSurges.set(record.id, record);
+        return record;
+    }
+
+    // --- coalition notifications (Coalition-scoped inbox) ---
+
+    listCoalitionNotifications(filter: {
+        recipientUserId: string;
+        unreadOnly?: boolean;
+        limit?: number;
+    }): CoalitionNotificationRecord[] {
+        const rows = [...this.coalitionNotifications.values()]
+            .filter((n) => n.recipientUserId === filter.recipientUserId)
+            .filter((n) => (filter.unreadOnly ? !n.readAt : true))
+            .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+        return filter.limit ? rows.slice(0, filter.limit) : rows;
+    }
+
+    addCoalitionNotification(
+        input: Omit<CoalitionNotificationRecord, 'createdAt'> & { createdAt?: string }
+    ): CoalitionNotificationRecord {
+        const record: CoalitionNotificationRecord = {
+            ...input,
+            createdAt: input.createdAt ?? nowIso(),
+        };
+        this.coalitionNotifications.set(record.id, record);
+        return record;
+    }
+
+    /** Mark a notification read. Scoped by recipient so a user can't ack another's. */
+    markCoalitionNotificationRead(
+        id: string,
+        recipientUserId: string
+    ): CoalitionNotificationRecord | undefined {
+        const existing = this.coalitionNotifications.get(id);
+        if (!existing || existing.recipientUserId !== recipientUserId) return undefined;
+        if (existing.readAt) return existing;
+        const record: CoalitionNotificationRecord = { ...existing, readAt: nowIso() };
+        this.coalitionNotifications.set(id, record);
+        return record;
+    }
+
     // --- coalition resource registry ---
 
     listCoalitionResources(filter: { canopyId?: string } = {}): CoalitionResourceRecord[] {
@@ -4262,6 +4340,14 @@ export class FileBackedDb extends InMemoryDb {
                 parsed.coalitionProjectSupports.map((row) => [row.id, row])
             );
         }
+        if (parsed.coalitionSurges) {
+            this.coalitionSurges = new Map(parsed.coalitionSurges.map((row) => [row.id, row]));
+        }
+        if (parsed.coalitionNotifications) {
+            this.coalitionNotifications = new Map(
+                parsed.coalitionNotifications.map((row) => [row.id, row])
+            );
+        }
         if (parsed.coalitionResources) {
             this.coalitionResources = new Map(
                 parsed.coalitionResources.map((row) => [row.id, row])
@@ -4440,6 +4526,8 @@ export class FileBackedDb extends InMemoryDb {
             coalitionNeeds: [...this.coalitionNeeds.values()],
             coalitionProjects: [...this.coalitionProjects.values()],
             coalitionProjectSupports: [...this.coalitionProjectSupports.values()],
+            coalitionSurges: [...this.coalitionSurges.values()],
+            coalitionNotifications: [...this.coalitionNotifications.values()],
             coalitionResources: [...this.coalitionResources.values()],
             creatorContent: [...this.creatorContent.values()],
             contentDistributions: [...this.contentDistributions.values()],

@@ -2,7 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+    SURGE_MIN_SUPPORTS,
     computeProjectMomentum,
+    detectSurge,
     endowedProgressFraming,
     evaluateMilestones,
     nextMilestone,
@@ -11,6 +13,20 @@ import {
 } from '@blackout/core';
 
 const NOW = Date.parse('2026-05-02T12:00:00Z');
+
+test('detectSurge fires only when accelerating AND above the min-support floor', () => {
+    // Strong acceleration, enough volume → surging.
+    assert.equal(detectSurge({ supportsLast24h: 8, supportsPrev24h: 1 }).surging, true);
+    // Same acceleration shape but below the volume floor → not a surge.
+    assert.equal(
+        detectSurge({ supportsLast24h: SURGE_MIN_SUPPORTS - 1, supportsPrev24h: 0 }).surging,
+        false
+    );
+    // Steady support (no acceleration) → not surging even with volume.
+    assert.equal(detectSurge({ supportsLast24h: 10, supportsPrev24h: 10 }).surging, false);
+    // Cooling → not surging.
+    assert.equal(detectSurge({ supportsLast24h: 2, supportsPrev24h: 20 }).surging, false);
+});
 
 test('projectProgress clamps and handles missing/zero goals', () => {
     assert.equal(projectProgress({ fundingGoalCents: 10000, raisedCents: 2500 }), 0.25);
