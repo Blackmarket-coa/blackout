@@ -34,6 +34,14 @@ test('coliseum match records persist across a store reload', () => {
         roundWindowMs: 86400000,
         challengeToken: 'tok123',
         open: false,
+        positionStart: { agreeShare: 0.8, certainty: 0.6, sampleSize: 5 },
+    });
+    db.upsertColiseumPositionVote({
+        matchId: 'persist-match',
+        voterId: '@spec:server',
+        agree: true,
+        certain: false,
+        createdAt: '2026-05-02T09:20:00Z',
     });
     db.upsertColiseumRound({
         id: 'persist-round',
@@ -113,4 +121,6 @@ test('coliseum match records persist across a store reload', () => {
     assert.equal(reloaded.getColiseumBrief('persist-brief')?.winner, 'red');
     assert.equal(reloaded.listColiseumCrucibleStatements()[0]?.body, 'Closing');
     assert.equal(reloaded.listColiseumCrucibleVotes()[0]?.choice, 'red');
+    assert.equal(reloaded.getColiseumMatch('persist-match')?.positionStart?.sampleSize, 5);
+    assert.equal(reloaded.listColiseumPositionVotes()[0]?.agree, true);
 });

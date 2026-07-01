@@ -10,6 +10,7 @@ import type {
     ColiseumShout,
     ColiseumTopicCategoryKey,
     CrucibleChoice,
+    PositionSnapshot,
     RankedResponseDrop,
     RoundTally,
 } from '@blackout/core';
@@ -45,6 +46,7 @@ export interface MatchDetailResponse {
     tallies?: Array<RoundTally & { roundIndex: number }>;
     challengeStatus: ColiseumChallengeStatus;
     brief: ColiseumBrief | null;
+    position?: PositionSnapshot;
 }
 export interface MatchResponse {
     match: ColiseumMatch;
@@ -183,6 +185,40 @@ export function mintColiseumVerdict(
     return postJson<{ brief: ColiseumBrief }>(
         `${BASE}/matches/${encodeURIComponent(matchId)}/verdict`,
         {},
+        token
+    );
+}
+export function postColiseumFinalStatement(
+    matchId: string,
+    input: { body?: string; mediaMxc?: string },
+    token: string | null = readBlackoutApiToken()
+): Promise<{ ok: true }> {
+    return postJson<{ ok: true }>(
+        `${BASE}/matches/${encodeURIComponent(matchId)}/crucible/statement`,
+        input,
+        token
+    );
+}
+
+// --- Position map ---
+
+export function castColiseumPosition(
+    matchId: string,
+    input: { agree: boolean; certain: boolean },
+    token: string | null = readBlackoutApiToken()
+): Promise<{ position: PositionSnapshot }> {
+    return postJson<{ position: PositionSnapshot }>(
+        `${BASE}/matches/${encodeURIComponent(matchId)}/position`,
+        input,
+        token
+    );
+}
+export function fetchColiseumPosition(
+    matchId: string,
+    token: string | null = readBlackoutApiToken()
+): Promise<{ position: PositionSnapshot }> {
+    return getJson<{ position: PositionSnapshot }>(
+        `${BASE}/matches/${encodeURIComponent(matchId)}/position`,
         token
     );
 }

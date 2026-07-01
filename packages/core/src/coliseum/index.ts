@@ -10,6 +10,7 @@ export * from './leaderboards';
 export * from './match';
 export * from './crucible';
 export * from './brief';
+export * from './positionMap';
 export * from './shout';
 export * from './challengeLink';
 export * from './containment';

@@ -34,9 +34,11 @@ import {
     listBriefs,
     listMatches,
     listRounds,
+    castPositionVote,
     markChallengeSeen,
     mintVerdict,
     openCrucible,
+    positionSnapshot,
     postFinalStatement,
     postRound,
     roundTally,
@@ -721,7 +723,36 @@ coliseum.get('/matches/:id', (c) => {
         tallies,
         challengeStatus: challengeStatusFor(match),
         brief: getBriefForMatch(match.id),
+        position: positionSnapshot(match.id),
     });
+});
+
+const positionSchema = z.object({ agree: z.boolean(), certain: z.boolean() });
+
+coliseum.post('/matches/:id/position', roundRateLimit, async (c) => {
+    const user = requireUser(c, 'Sign in to place yourself on the map');
+    if (user instanceof Response) return user;
+    const parsed = await readJsonBody(c, positionSchema);
+    if (parsed instanceof Response) return parsed;
+    const snapshot = castPositionVote({
+        matchId: c.req.param('id') ?? '',
+        voterId: user.sub,
+        agree: parsed.agree,
+        certain: parsed.certain,
+    });
+    if (!snapshot) {
+        return c.json(
+            { code: 'forbidden', message: 'Match not open, not found, or you are a fighter' },
+            403
+        );
+    }
+    return c.json({ position: snapshot }, 201);
+});
+
+coliseum.get('/matches/:id/position', (c) => {
+    const match = getMatch(c.req.param('id') ?? '');
+    if (!match) return c.json({ code: 'not_found', message: 'Match not found' }, 404);
+    return c.json({ position: positionSnapshot(match.id) });
 });
 
 coliseum.get('/matches/:id/link', (c) => {

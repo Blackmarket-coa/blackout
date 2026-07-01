@@ -1,4 +1,5 @@
 import {
+    aggregatePosition,
     deriveColiseumMatchStatus,
     deriveCrucibleVerdict,
     deriveChallengeStatus,
@@ -10,6 +11,7 @@ import {
     type ColiseumBrief,
     type ColiseumMatch,
     type ColiseumMatchType,
+    type ColiseumPositionVote,
     type ColiseumRound,
     type ColiseumRoundChoice,
     type ColiseumRoundKind,
@@ -18,6 +20,7 @@ import {
     type ColiseumChallengeStatus,
     type ColiseumTopicCategoryKey,
     type CrucibleChoice,
+    type PositionSnapshot,
     type RoundTally,
 } from '@blackout/core';
 import type { ColiseumArgumentMedia, ColiseumCitation } from '@blackout/core';
@@ -390,6 +393,8 @@ export function mintVerdict(matchId: string, nowMs: number = Date.now()): Colise
         matchId,
         proposition: match.proposition,
         verdict,
+        positionStart: match.positionStart,
+        positionEnd: positionSnapshot(matchId),
         mintedAt: new Date(nowMs).toISOString(),
     });
     db.upsertColiseumBrief(brief);
@@ -399,6 +404,47 @@ export function mintVerdict(matchId: string, nowMs: number = Date.now()): Colise
     awardFighterReputation(match, verdict.winner);
 
     return brief;
+}
+
+// --- Live Position Map ---
+
+function positionVotesForMatch(matchId: string): ColiseumPositionVote[] {
+    return db.listColiseumPositionVotes().filter((v) => v.matchId === matchId);
+}
+
+/** The crowd's current position snapshot for a match. */
+export function positionSnapshot(matchId: string): PositionSnapshot {
+    return aggregatePosition(positionVotesForMatch(matchId));
+}
+
+/**
+ * Place a spectator on the position map. Only during the live/crucible window,
+ * and not by a fighter (the crowd, not the combatants, is measured). The first
+ * placement captures the match's start snapshot for the Shift Score.
+ */
+export function castPositionVote(
+    input: { matchId: string; voterId: string; agree: boolean; certain: boolean },
+    nowMs: number = Date.now()
+): PositionSnapshot | null {
+    const match = db.getColiseumMatch(input.matchId);
+    if (!match) return null;
+    const status = deriveColiseumMatchStatus(match, nowMs);
+    if (status !== 'live' && status !== 'crucible') return null;
+    if (sideForFighter(match, input.voterId)) return null;
+
+    db.upsertColiseumPositionVote({
+        matchId: input.matchId,
+        voterId: input.voterId,
+        agree: input.agree,
+        certain: input.certain,
+        createdAt: new Date(nowMs).toISOString(),
+    });
+
+    const snapshot = positionSnapshot(input.matchId);
+    if (!match.positionStart) {
+        db.upsertColiseumMatch({ ...match, positionStart: snapshot });
+    }
+    return snapshot;
 }
 
 export function getBrief(id: string): ColiseumBrief | null {
