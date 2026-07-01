@@ -1,7 +1,18 @@
 export const COLISEUM_STATE_EVENT_TYPE = 'co.bmc.coliseum' as const;
 
-export const COLISEUM_TABS = ['reel', 'topics', 'debate', 'live', 'challenges', 'leaderboards', 'sources'] as const;
-export type ColiseumTabId = (typeof COLISEUM_TABS)[number];
+export const COLISEUM_TABS = [
+    'reel',
+    'arena',
+    'match',
+    'shouts',
+    'topics',
+    'debate',
+    'live',
+    'challenges',
+    'leaderboards',
+    'sources',
+] as const;
+export type ColiseumTabId = typeof COLISEUM_TABS[number];
 
 // Coliseum is video-first: the vertical argument reel leads and is the default.
 export const DEFAULT_COLISEUM_TAB: ColiseumTabId = 'reel';
@@ -19,7 +30,7 @@ export function isValidColiseumTab(value: string): value is ColiseumTabId {
 }
 
 export function resolveEnabledColiseumTabs(
-    content: ColiseumStateEventContent | undefined,
+    content: ColiseumStateEventContent | undefined
 ): ColiseumTabId[] {
     if (!content || content.enabled === false) return [];
     if (!content.enabledTabs || content.enabledTabs.length === 0) {

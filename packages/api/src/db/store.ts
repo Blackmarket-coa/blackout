@@ -113,6 +113,15 @@ import type {
     ColiseumArgumentRecord,
     ColiseumVoteRecord,
     ColiseumLiveSessionRecord,
+    ColiseumMatchRecord,
+    ColiseumRoundRecord,
+    ColiseumRoundVoteRecord,
+    ColiseumShoutRecord,
+    ColiseumResponseDropRecord,
+    ColiseumResponseDropVoteRecord,
+    ColiseumBriefRecord,
+    ColiseumCrucibleStatementRecord,
+    ColiseumCrucibleVoteRecord,
     ReputationEventRecord,
     FbmVendorRoomRecord,
     FbmBuyerOrderRoomRecord,
@@ -248,6 +257,15 @@ type PersistedState = {
     coliseumArguments: ColiseumArgumentRecord[];
     coliseumVotes: ColiseumVoteRecord[];
     coliseumLiveSessions: ColiseumLiveSessionRecord[];
+    coliseumMatches: ColiseumMatchRecord[];
+    coliseumRounds: ColiseumRoundRecord[];
+    coliseumRoundVotes: ColiseumRoundVoteRecord[];
+    coliseumShouts: ColiseumShoutRecord[];
+    coliseumResponseDrops: ColiseumResponseDropRecord[];
+    coliseumResponseDropVotes: ColiseumResponseDropVoteRecord[];
+    coliseumBriefs: ColiseumBriefRecord[];
+    coliseumCrucibleStatements: ColiseumCrucibleStatementRecord[];
+    coliseumCrucibleVotes: ColiseumCrucibleVoteRecord[];
     reputationEvents: ReputationEventRecord[];
     referrals: ReferralRecord[];
     ambassadors: AmbassadorRecord[];
@@ -444,6 +462,24 @@ class InMemoryDb {
     coliseumVotes = new Map<string, ColiseumVoteRecord>();
     /** Coliseum live debate sessions, keyed by session id. */
     coliseumLiveSessions = new Map<string, ColiseumLiveSessionRecord>();
+    /** Coliseum matches, keyed by match id. */
+    coliseumMatches = new Map<string, ColiseumMatchRecord>();
+    /** Coliseum match rounds, keyed by round id. */
+    coliseumRounds = new Map<string, ColiseumRoundRecord>();
+    /** Round votes, keyed by `${matchId}::${roundIndex}::${voterId}`. */
+    coliseumRoundVotes = new Map<string, ColiseumRoundVoteRecord>();
+    /** Coliseum shouts, keyed by shout id. */
+    coliseumShouts = new Map<string, ColiseumShoutRecord>();
+    /** Response drops, keyed by drop id. */
+    coliseumResponseDrops = new Map<string, ColiseumResponseDropRecord>();
+    /** Response-drop votes, keyed by `${dropId}::${voterId}`. */
+    coliseumResponseDropVotes = new Map<string, ColiseumResponseDropVoteRecord>();
+    /** Minted briefs (immutable), keyed by brief id. */
+    coliseumBriefs = new Map<string, ColiseumBriefRecord>();
+    /** Crucible final statements, keyed by `${matchId}::${side}`. */
+    coliseumCrucibleStatements = new Map<string, ColiseumCrucibleStatementRecord>();
+    /** Crucible synthesis votes, keyed by `${matchId}::${questionId}::${voterId}`. */
+    coliseumCrucibleVotes = new Map<string, ColiseumCrucibleVoteRecord>();
     /** Subject-scoped reputation awards, keyed by event id. */
     reputationEvents = new Map<string, ReputationEventRecord>();
 
@@ -4066,6 +4102,150 @@ class InMemoryDb {
         return record;
     }
 
+    // --- Coliseum matches ---
+
+    private static coliseumRoundVoteKey(
+        matchId: string,
+        roundIndex: number,
+        voterId: string
+    ): string {
+        return `${matchId}::${roundIndex}::${voterId}`;
+    }
+
+    private static coliseumDropVoteKey(dropId: string, voterId: string): string {
+        return `${dropId}::${voterId}`;
+    }
+
+    private static coliseumStatementKey(matchId: string, side: string): string {
+        return `${matchId}::${side}`;
+    }
+
+    private static coliseumCrucibleVoteKey(
+        matchId: string,
+        questionId: string,
+        voterId: string
+    ): string {
+        return `${matchId}::${questionId}::${voterId}`;
+    }
+
+    listColiseumMatches(): ColiseumMatchRecord[] {
+        return [...this.coliseumMatches.values()];
+    }
+
+    getColiseumMatch(id: string): ColiseumMatchRecord | undefined {
+        return this.coliseumMatches.get(id);
+    }
+
+    upsertColiseumMatch(record: ColiseumMatchRecord): ColiseumMatchRecord {
+        this.coliseumMatches.set(record.id, record);
+        return record;
+    }
+
+    listColiseumRounds(): ColiseumRoundRecord[] {
+        return [...this.coliseumRounds.values()];
+    }
+
+    getColiseumRound(id: string): ColiseumRoundRecord | undefined {
+        return this.coliseumRounds.get(id);
+    }
+
+    upsertColiseumRound(record: ColiseumRoundRecord): ColiseumRoundRecord {
+        this.coliseumRounds.set(record.id, record);
+        return record;
+    }
+
+    listColiseumRoundVotes(): ColiseumRoundVoteRecord[] {
+        return [...this.coliseumRoundVotes.values()];
+    }
+
+    upsertColiseumRoundVote(record: ColiseumRoundVoteRecord): ColiseumRoundVoteRecord {
+        this.coliseumRoundVotes.set(
+            InMemoryDb.coliseumRoundVoteKey(record.matchId, record.roundIndex, record.voterId),
+            record
+        );
+        return record;
+    }
+
+    listColiseumShouts(): ColiseumShoutRecord[] {
+        return [...this.coliseumShouts.values()];
+    }
+
+    getColiseumShout(id: string): ColiseumShoutRecord | undefined {
+        return this.coliseumShouts.get(id);
+    }
+
+    upsertColiseumShout(record: ColiseumShoutRecord): ColiseumShoutRecord {
+        this.coliseumShouts.set(record.id, record);
+        return record;
+    }
+
+    listColiseumResponseDrops(): ColiseumResponseDropRecord[] {
+        return [...this.coliseumResponseDrops.values()];
+    }
+
+    getColiseumResponseDrop(id: string): ColiseumResponseDropRecord | undefined {
+        return this.coliseumResponseDrops.get(id);
+    }
+
+    upsertColiseumResponseDrop(record: ColiseumResponseDropRecord): ColiseumResponseDropRecord {
+        this.coliseumResponseDrops.set(record.id, record);
+        return record;
+    }
+
+    listColiseumResponseDropVotes(): ColiseumResponseDropVoteRecord[] {
+        return [...this.coliseumResponseDropVotes.values()];
+    }
+
+    upsertColiseumResponseDropVote(
+        record: ColiseumResponseDropVoteRecord
+    ): ColiseumResponseDropVoteRecord {
+        this.coliseumResponseDropVotes.set(
+            InMemoryDb.coliseumDropVoteKey(record.dropId, record.voterId),
+            record
+        );
+        return record;
+    }
+
+    listColiseumBriefs(): ColiseumBriefRecord[] {
+        return [...this.coliseumBriefs.values()];
+    }
+
+    getColiseumBrief(id: string): ColiseumBriefRecord | undefined {
+        return this.coliseumBriefs.get(id);
+    }
+
+    /** Briefs are immutable; this only ever writes a brief that did not exist. */
+    upsertColiseumBrief(record: ColiseumBriefRecord): ColiseumBriefRecord {
+        this.coliseumBriefs.set(record.id, record);
+        return record;
+    }
+
+    listColiseumCrucibleStatements(): ColiseumCrucibleStatementRecord[] {
+        return [...this.coliseumCrucibleStatements.values()];
+    }
+
+    upsertColiseumCrucibleStatement(
+        record: ColiseumCrucibleStatementRecord
+    ): ColiseumCrucibleStatementRecord {
+        this.coliseumCrucibleStatements.set(
+            InMemoryDb.coliseumStatementKey(record.matchId, record.side),
+            record
+        );
+        return record;
+    }
+
+    listColiseumCrucibleVotes(): ColiseumCrucibleVoteRecord[] {
+        return [...this.coliseumCrucibleVotes.values()];
+    }
+
+    upsertColiseumCrucibleVote(record: ColiseumCrucibleVoteRecord): ColiseumCrucibleVoteRecord {
+        this.coliseumCrucibleVotes.set(
+            InMemoryDb.coliseumCrucibleVoteKey(record.matchId, record.questionId, record.voterId),
+            record
+        );
+        return record;
+    }
+
     // --- Reputation ---
 
     listReputationEvents(): ReputationEventRecord[] {
@@ -4433,6 +4613,52 @@ export class FileBackedDb extends InMemoryDb {
                 parsed.coliseumLiveSessions.map((row) => [row.id, row])
             );
         }
+        if (parsed.coliseumMatches) {
+            this.coliseumMatches = new Map(parsed.coliseumMatches.map((row) => [row.id, row]));
+        }
+        if (parsed.coliseumRounds) {
+            this.coliseumRounds = new Map(parsed.coliseumRounds.map((row) => [row.id, row]));
+        }
+        if (parsed.coliseumRoundVotes) {
+            this.coliseumRoundVotes = new Map(
+                parsed.coliseumRoundVotes.map((row) => [
+                    `${row.matchId}::${row.roundIndex}::${row.voterId}`,
+                    row,
+                ])
+            );
+        }
+        if (parsed.coliseumShouts) {
+            this.coliseumShouts = new Map(parsed.coliseumShouts.map((row) => [row.id, row]));
+        }
+        if (parsed.coliseumResponseDrops) {
+            this.coliseumResponseDrops = new Map(
+                parsed.coliseumResponseDrops.map((row) => [row.id, row])
+            );
+        }
+        if (parsed.coliseumResponseDropVotes) {
+            this.coliseumResponseDropVotes = new Map(
+                parsed.coliseumResponseDropVotes.map((row) => [
+                    `${row.dropId}::${row.voterId}`,
+                    row,
+                ])
+            );
+        }
+        if (parsed.coliseumBriefs) {
+            this.coliseumBriefs = new Map(parsed.coliseumBriefs.map((row) => [row.id, row]));
+        }
+        if (parsed.coliseumCrucibleStatements) {
+            this.coliseumCrucibleStatements = new Map(
+                parsed.coliseumCrucibleStatements.map((row) => [`${row.matchId}::${row.side}`, row])
+            );
+        }
+        if (parsed.coliseumCrucibleVotes) {
+            this.coliseumCrucibleVotes = new Map(
+                parsed.coliseumCrucibleVotes.map((row) => [
+                    `${row.matchId}::${row.questionId}::${row.voterId}`,
+                    row,
+                ])
+            );
+        }
         if (parsed.reputationEvents) {
             this.reputationEvents = new Map(parsed.reputationEvents.map((row) => [row.id, row]));
         }
@@ -4551,6 +4777,15 @@ export class FileBackedDb extends InMemoryDb {
             coliseumArguments: [...this.coliseumArguments.values()],
             coliseumVotes: [...this.coliseumVotes.values()],
             coliseumLiveSessions: [...this.coliseumLiveSessions.values()],
+            coliseumMatches: [...this.coliseumMatches.values()],
+            coliseumRounds: [...this.coliseumRounds.values()],
+            coliseumRoundVotes: [...this.coliseumRoundVotes.values()],
+            coliseumShouts: [...this.coliseumShouts.values()],
+            coliseumResponseDrops: [...this.coliseumResponseDrops.values()],
+            coliseumResponseDropVotes: [...this.coliseumResponseDropVotes.values()],
+            coliseumBriefs: [...this.coliseumBriefs.values()],
+            coliseumCrucibleStatements: [...this.coliseumCrucibleStatements.values()],
+            coliseumCrucibleVotes: [...this.coliseumCrucibleVotes.values()],
             reputationEvents: [...this.reputationEvents.values()],
         };
     }
@@ -5939,6 +6174,68 @@ export class FileBackedDb extends InMemoryDb {
         record: ColiseumLiveSessionRecord
     ): ColiseumLiveSessionRecord {
         const saved = super.upsertColiseumLiveSession(record);
+        this.persist();
+        return saved;
+    }
+
+    override upsertColiseumMatch(record: ColiseumMatchRecord): ColiseumMatchRecord {
+        const saved = super.upsertColiseumMatch(record);
+        this.persist();
+        return saved;
+    }
+
+    override upsertColiseumRound(record: ColiseumRoundRecord): ColiseumRoundRecord {
+        const saved = super.upsertColiseumRound(record);
+        this.persist();
+        return saved;
+    }
+
+    override upsertColiseumRoundVote(record: ColiseumRoundVoteRecord): ColiseumRoundVoteRecord {
+        const saved = super.upsertColiseumRoundVote(record);
+        this.persist();
+        return saved;
+    }
+
+    override upsertColiseumShout(record: ColiseumShoutRecord): ColiseumShoutRecord {
+        const saved = super.upsertColiseumShout(record);
+        this.persist();
+        return saved;
+    }
+
+    override upsertColiseumResponseDrop(
+        record: ColiseumResponseDropRecord
+    ): ColiseumResponseDropRecord {
+        const saved = super.upsertColiseumResponseDrop(record);
+        this.persist();
+        return saved;
+    }
+
+    override upsertColiseumResponseDropVote(
+        record: ColiseumResponseDropVoteRecord
+    ): ColiseumResponseDropVoteRecord {
+        const saved = super.upsertColiseumResponseDropVote(record);
+        this.persist();
+        return saved;
+    }
+
+    override upsertColiseumBrief(record: ColiseumBriefRecord): ColiseumBriefRecord {
+        const saved = super.upsertColiseumBrief(record);
+        this.persist();
+        return saved;
+    }
+
+    override upsertColiseumCrucibleStatement(
+        record: ColiseumCrucibleStatementRecord
+    ): ColiseumCrucibleStatementRecord {
+        const saved = super.upsertColiseumCrucibleStatement(record);
+        this.persist();
+        return saved;
+    }
+
+    override upsertColiseumCrucibleVote(
+        record: ColiseumCrucibleVoteRecord
+    ): ColiseumCrucibleVoteRecord {
+        const saved = super.upsertColiseumCrucibleVote(record);
         this.persist();
         return saved;
     }

@@ -1,0 +1,9 @@
+DROP TABLE IF EXISTS coliseum_crucible_votes;
+DROP TABLE IF EXISTS coliseum_crucible_statements;
+DROP TABLE IF EXISTS coliseum_briefs;
+DROP TABLE IF EXISTS coliseum_response_drop_votes;
+DROP TABLE IF EXISTS coliseum_response_drops;
+DROP TABLE IF EXISTS coliseum_shouts;
+DROP TABLE IF EXISTS coliseum_round_votes;
+DROP TABLE IF EXISTS coliseum_rounds;
+DROP TABLE IF EXISTS coliseum_matches;

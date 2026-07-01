@@ -3,6 +3,14 @@ import { z } from 'zod';
 import {
     COLISEUM_STANCES,
     COLISEUM_TOPIC_CATEGORY_KEYS,
+    COLISEUM_ROUND_KINDS,
+    CRUCIBLE_CHOICES,
+    CRUCIBLE_QUESTIONS,
+    FINAL_STATEMENT_MAX_CHARS,
+    cooldownRemainingMs,
+    isColiseumMatchType,
+    isCrucibleQuestionId,
+    isUnderCooldown,
     isValidLiveRoomId,
     validateArgumentMedia,
     validateCitation,
@@ -12,6 +20,37 @@ import {
     type ColiseumTopicStatus,
     type PinnedEvidence,
 } from '@blackout/core';
+import {
+    acceptMatch,
+    castRoundVote,
+    castSynthesisVote,
+    challengeStatusFor,
+    createMatch,
+    declineMatch,
+    getBrief,
+    getBriefForMatch,
+    getMatch,
+    lastMatchEndedAt,
+    listBriefs,
+    listMatches,
+    listRounds,
+    markChallengeSeen,
+    mintVerdict,
+    openCrucible,
+    postFinalStatement,
+    postRound,
+    roundTally,
+} from '../services/coliseumMatchStore';
+import {
+    createShout,
+    getShout,
+    graduateToMatch,
+    listRankedResponseDrops,
+    listShouts,
+    detectShoutBilateral,
+    postResponseDrop,
+    voteResponseDrop,
+} from '../services/coliseumShoutStore';
 import {
     castVote,
     createArgument,
@@ -90,6 +129,24 @@ const liveRateLimit = createRateLimit({
     maxRequests: envMax('COLISEUM_LIVE_RATE_LIMIT_MAX', 30),
     identify: rateLimitUser,
 });
+const matchRateLimit = createRateLimit({
+    bucket: 'coliseum-match',
+    windowMs: 60_000,
+    maxRequests: envMax('COLISEUM_MATCH_RATE_LIMIT_MAX', 30),
+    identify: rateLimitUser,
+});
+const roundRateLimit = createRateLimit({
+    bucket: 'coliseum-round',
+    windowMs: 60_000,
+    maxRequests: envMax('COLISEUM_ROUND_RATE_LIMIT_MAX', 60),
+    identify: rateLimitUser,
+});
+const shoutRateLimit = createRateLimit({
+    bucket: 'coliseum-shout',
+    windowMs: 60_000,
+    maxRequests: envMax('COLISEUM_SHOUT_RATE_LIMIT_MAX', 30),
+    identify: rateLimitUser,
+});
 
 // All live-session mutations (create, request/grant/revoke speak, pin, end).
 coliseum.use('/live/*', liveRateLimit);
@@ -119,7 +176,7 @@ coliseum.get('/topics', (c) => {
                 message: 'Invalid topics query',
                 details: { issues: parsed.error.issues.map((i) => i.message) },
             },
-            400,
+            400
         );
     }
     const { canopyId, denId, category, tag, status, limit } = parsed.data;
@@ -208,7 +265,7 @@ coliseum.post('/arguments', argumentRateLimit, async (c) => {
     if (parsed instanceof Response) return parsed;
     const validatedCitations: ColiseumCitation[] = validateCitations(parsed.citations);
     const validatedMedia: ColiseumArgumentMedia | undefined =
-        parsed.media !== undefined ? (validateArgumentMedia(parsed.media) ?? undefined) : undefined;
+        parsed.media !== undefined ? validateArgumentMedia(parsed.media) ?? undefined : undefined;
     const created = createArgument({
         id: newArgumentId(),
         topicId: parsed.topicId,
@@ -280,7 +337,7 @@ coliseum.get('/reel', (c) => {
                 message: 'Invalid reel query',
                 details: { issues: parsed.error.issues.map((i) => i.message) },
             },
-            400,
+            400
         );
     }
     const { items, nextOffset } = listCrossTopicReel({
@@ -324,7 +381,7 @@ coliseum.get('/live/sessions/:topicId', (c) => {
 /** Map a store result (null = not found, 'forbidden' = not a moderator) to a Response, or return the session. */
 function liveResult<T extends { id: string }>(
     c: Parameters<typeof requireUser>[0],
-    result: T | null | 'forbidden',
+    result: T | null | 'forbidden'
 ) {
     if (result === null) {
         return c.json({ code: 'not_found', message: 'Live session not found' }, 404);
@@ -366,7 +423,9 @@ const pinSchema = z.union([
 
 function resolvePinnedEvidence(input: z.infer<typeof pinSchema>): PinnedEvidence | null {
     if ('argumentId' in input) {
-        return getArgument(input.argumentId) ? { kind: 'argument', argumentId: input.argumentId } : null;
+        return getArgument(input.argumentId)
+            ? { kind: 'argument', argumentId: input.argumentId }
+            : null;
     }
     const citation = validateCitation(input.citation);
     return citation ? { kind: 'citation', citation } : null;
@@ -411,7 +470,7 @@ coliseum.get('/challenges', (c) => {
     const status = c.req.query('status');
     const statusFilter =
         status && (CHALLENGE_STATUSES as readonly string[]).includes(status)
-            ? (status as (typeof CHALLENGE_STATUSES)[number])
+            ? (status as typeof CHALLENGE_STATUSES[number])
             : undefined;
     return c.json({ challenges: listChallenges({ status: statusFilter }) });
 });
@@ -471,7 +530,10 @@ coliseum.post('/challenges/:id/entries', async (c) => {
     const challenge = getChallenge(c.req.param('id'));
     if (!challenge) return c.json({ code: 'not_found', message: 'Challenge not found' }, 404);
     if (challenge.status !== 'open') {
-        return c.json({ code: 'challenge_closed', message: 'Challenge is not open for entries' }, 409);
+        return c.json(
+            { code: 'challenge_closed', message: 'Challenge is not open for entries' },
+            409
+        );
     }
     const parsed = await readJsonBody(c, createEntrySchema);
     if (parsed instanceof Response) return parsed;
@@ -501,8 +563,11 @@ coliseum.get('/leaderboards', (c) => {
     const category = c.req.query('category') ?? 'creators';
     if (!isLeaderboardCategory(category)) {
         return c.json(
-            { code: 'invalid_category', message: `category must be one of ${LEADERBOARD_CATEGORIES.join(', ')}` },
-            400,
+            {
+                code: 'invalid_category',
+                message: `category must be one of ${LEADERBOARD_CATEGORIES.join(', ')}`,
+            },
+            400
         );
     }
     const region = c.req.query('region');
@@ -544,8 +609,7 @@ coliseum.get('/creators/:userId', (c) => {
     }
     const wins = entries.filter((entry) => entry.rank === 1).length;
 
-    const placement =
-        leaderboard('creators', {}).find((entry) => entry.id === userId) ?? null;
+    const placement = leaderboard('creators', {}).find((entry) => entry.id === userId) ?? null;
 
     return c.json({
         userId,
@@ -554,6 +618,407 @@ coliseum.get('/creators/:userId', (c) => {
         wins,
         leaderboard: placement,
     });
+});
+
+// --- Matches (the gladiatorial layer) ---
+
+const domainEnum = z.enum(COLISEUM_TOPIC_CATEGORY_KEYS as [string, ...string[]]);
+
+const createMatchSchema = z.object({
+    proposition: z.string().min(1).max(500),
+    propositionTopicId: z.string().min(1).optional(),
+    domain: domainEnum.optional(),
+    type: z.string().optional(),
+    opponentId: z.string().min(1).optional(),
+    open: z.boolean().optional(),
+    denRoomId: z.string().min(1).optional(),
+    roundWindowMs: z
+        .number()
+        .int()
+        .min(60_000)
+        .max(7 * 24 * 60 * 60 * 1000)
+        .optional(),
+});
+
+coliseum.post('/matches', matchRateLimit, async (c) => {
+    const user = requireUser(c, 'Sign in to issue a Callout');
+    if (user instanceof Response) return user;
+    const parsed = await readJsonBody(c, createMatchSchema);
+    if (parsed instanceof Response) return parsed;
+
+    const lastEnded = lastMatchEndedAt(user.sub);
+    if (isUnderCooldown(lastEnded)) {
+        return c.json(
+            {
+                code: 'cooldown',
+                message: 'You are within the 48-hour cool-down after your last match.',
+                details: { remainingMs: cooldownRemainingMs(lastEnded) },
+            },
+            409
+        );
+    }
+
+    const match = createMatch({
+        challengerId: user.sub,
+        proposition: parsed.proposition,
+        propositionTopicId: parsed.propositionTopicId,
+        domain: parsed.domain as never,
+        type: isColiseumMatchType(parsed.type) ? parsed.type : 'callout',
+        opponentId: parsed.opponentId,
+        open: parsed.open,
+        denRoomId: parsed.denRoomId,
+        roundWindowMs: parsed.roundWindowMs,
+    });
+    return c.json({ match, challengeStatus: challengeStatusFor(match) }, 201);
+});
+
+const matchesQuerySchema = z.object({
+    domain: domainEnum.optional(),
+    status: z.enum(['pending', 'accepted', 'live', 'crucible', 'verdict', 'archived']).optional(),
+    fighterId: z.string().optional(),
+    limit: z.coerce.number().int().min(1).max(100).optional(),
+});
+
+coliseum.get('/matches', (c) => {
+    const parsed = matchesQuerySchema.safeParse(c.req.query());
+    if (!parsed.success) {
+        return c.json({ code: 'invalid_request', message: 'Invalid matches query' }, 400);
+    }
+    const matches = listMatches({
+        domain: parsed.data.domain as never,
+        status: parsed.data.status,
+        fighterId: parsed.data.fighterId,
+    });
+    return c.json({
+        generatedAt: new Date().toISOString(),
+        matches: parsed.data.limit ? matches.slice(0, parsed.data.limit) : matches,
+    });
+});
+
+/** True if the (optional) caller is one of the match's fighters. */
+function callerIsFighter(
+    c: Context,
+    match: { challengerId: string; opponentId?: string }
+): boolean {
+    const user = c.get('user') as { sub?: string } | null | undefined;
+    const sub = user?.sub;
+    return Boolean(sub && (match.challengerId === sub || match.opponentId === sub));
+}
+
+coliseum.get('/matches/:id', (c) => {
+    const match = getMatch(c.req.param('id'));
+    if (!match) return c.json({ code: 'not_found', message: 'Match not found' }, 404);
+    const rounds = listRounds(match.id);
+    // Fighters argue blind: withhold per-round tallies until the match ends.
+    const ended = match.status === 'verdict' || match.status === 'archived';
+    const showTallies = ended || !callerIsFighter(c, match);
+    const tallies = showTallies
+        ? rounds.map((r) => ({ roundIndex: r.index, ...roundTally(match.id, r.index) }))
+        : undefined;
+    return c.json({
+        match,
+        rounds,
+        tallies,
+        challengeStatus: challengeStatusFor(match),
+        brief: getBriefForMatch(match.id),
+    });
+});
+
+coliseum.get('/matches/:id/link', (c) => {
+    const match = getMatch(c.req.param('id'));
+    if (!match) return c.json({ code: 'not_found', message: 'Match not found' }, 404);
+    return c.json({
+        token: match.challengeToken ?? null,
+        status: challengeStatusFor(match),
+        path: match.challengeToken ? `/coliseum/c/${match.challengeToken}` : null,
+    });
+});
+
+// Public dodge ping — recorded when the Challenge Link preview is opened.
+coliseum.post('/matches/:id/seen', (c) => {
+    const match = markChallengeSeen(c.req.param('id'));
+    if (!match) return c.json({ code: 'not_found', message: 'Match not found' }, 404);
+    return c.json({ status: challengeStatusFor(match) });
+});
+
+function matchActionResult(
+    c: Context,
+    result: { challengerId: string } | 'not_found' | 'forbidden' | 'not_pending'
+) {
+    if (result === 'not_found')
+        return c.json({ code: 'not_found', message: 'Match not found' }, 404);
+    if (result === 'forbidden')
+        return c.json({ code: 'forbidden', message: 'Not your challenge' }, 403);
+    if (result === 'not_pending') {
+        return c.json({ code: 'conflict', message: 'Challenge is no longer pending' }, 409);
+    }
+    return c.json({ match: result });
+}
+
+coliseum.post('/matches/:id/accept', matchRateLimit, (c) => {
+    const user = requireUser(c, 'Sign in to accept a challenge');
+    if (user instanceof Response) return user;
+    return matchActionResult(c, acceptMatch(c.req.param('id') ?? '', user.sub));
+});
+
+coliseum.post('/matches/:id/decline', matchRateLimit, (c) => {
+    const user = requireUser(c, 'Sign in to decline a challenge');
+    if (user instanceof Response) return user;
+    return matchActionResult(c, declineMatch(c.req.param('id') ?? '', user.sub));
+});
+
+const createRoundSchema = z.object({
+    kind: z.enum(COLISEUM_ROUND_KINDS as unknown as [string, ...string[]]),
+    body: z.string().max(4000).optional(),
+    media: z.record(z.string(), z.unknown()).optional(),
+    citations: z.array(z.record(z.string(), z.unknown())).max(16).default([]),
+});
+
+coliseum.post('/matches/:id/rounds', roundRateLimit, async (c) => {
+    const user = requireUser(c, 'Sign in to post a round');
+    if (user instanceof Response) return user;
+    const parsed = await readJsonBody(c, createRoundSchema);
+    if (parsed instanceof Response) return parsed;
+    const media: ColiseumArgumentMedia | undefined =
+        parsed.media !== undefined ? validateArgumentMedia(parsed.media) ?? undefined : undefined;
+    const citations: ColiseumCitation[] = validateCitations(parsed.citations);
+    const result = postRound({
+        matchId: c.req.param('id') ?? '',
+        authorId: user.sub,
+        kind: parsed.kind as never,
+        body: parsed.body,
+        media,
+        citations,
+    });
+    if (!result.ok) {
+        const map: Record<string, [number, string]> = {
+            not_found: [404, 'Match not found'],
+            forbidden: [403, 'Only fighters can post rounds'],
+            not_live: [409, 'Match is not live'],
+            duration: [400, 'Round video exceeds the 3-minute cap'],
+            steelman_required: [409, 'Post a steel-man round before rebutting'],
+        };
+        const [status, message] = map[result.reason] ?? [400, 'Invalid round'];
+        return c.json({ code: result.reason, message }, status as never);
+    }
+    return c.json({ round: result.round }, 201);
+});
+
+const roundVoteSchema = z.object({ choice: z.enum(['red', 'blue', 'draw']) });
+
+coliseum.post('/matches/:id/rounds/:idx/vote', roundRateLimit, async (c) => {
+    const user = requireUser(c, 'Sign in to vote');
+    if (user instanceof Response) return user;
+    const roundIndex = Number.parseInt(c.req.param('idx') ?? '', 10);
+    if (!Number.isInteger(roundIndex) || roundIndex < 0) {
+        return c.json({ code: 'invalid_request', message: 'Invalid round index' }, 400);
+    }
+    const parsed = await readJsonBody(c, roundVoteSchema);
+    if (parsed instanceof Response) return parsed;
+    const vote = castRoundVote({
+        matchId: c.req.param('id') ?? '',
+        roundIndex,
+        voterId: user.sub,
+        choice: parsed.choice,
+    });
+    if (!vote) {
+        return c.json({ code: 'forbidden', message: 'Match not found or you are a fighter' }, 403);
+    }
+    return c.json({ vote }, 201);
+});
+
+coliseum.post('/matches/:id/crucible/open', matchRateLimit, (c) => {
+    const user = requireUser(c, 'Sign in to open the Crucible');
+    if (user instanceof Response) return user;
+    const match = getMatch(c.req.param('id') ?? '');
+    if (!match) return c.json({ code: 'not_found', message: 'Match not found' }, 404);
+    if (match.challengerId !== user.sub && match.opponentId !== user.sub) {
+        return c.json({ code: 'forbidden', message: 'Only fighters can open the Crucible' }, 403);
+    }
+    const updated = openCrucible(match.id);
+    return c.json({ match: updated });
+});
+
+coliseum.get('/crucible/questions', (c) => c.json({ questions: CRUCIBLE_QUESTIONS }));
+
+const statementSchema = z.object({
+    body: z.string().max(FINAL_STATEMENT_MAX_CHARS).optional(),
+    mediaMxc: z.string().max(2048).optional(),
+});
+
+coliseum.post('/matches/:id/crucible/statement', matchRateLimit, async (c) => {
+    const user = requireUser(c, 'Sign in to submit your final statement');
+    if (user instanceof Response) return user;
+    const parsed = await readJsonBody(c, statementSchema);
+    if (parsed instanceof Response) return parsed;
+    const result = postFinalStatement({
+        matchId: c.req.param('id') ?? '',
+        authorId: user.sub,
+        body: parsed.body,
+        mediaMxc: parsed.mediaMxc,
+    });
+    if (!result.ok) {
+        const map: Record<string, [number, string]> = {
+            not_found: [404, 'Match not found'],
+            forbidden: [403, 'Only fighters submit final statements'],
+            not_crucible: [409, 'The Crucible is not open'],
+        };
+        const [status, message] = map[result.reason] ?? [400, 'Invalid statement'];
+        return c.json({ code: result.reason, message }, status as never);
+    }
+    return c.json({ ok: true }, 201);
+});
+
+const synthesisSchema = z.object({
+    questionId: z.string().min(1),
+    choice: z.enum(CRUCIBLE_CHOICES as unknown as [string, ...string[]]),
+});
+
+coliseum.post('/matches/:id/crucible/synthesis', roundRateLimit, async (c) => {
+    const user = requireUser(c, 'Sign in to vote in the Crucible');
+    if (user instanceof Response) return user;
+    const parsed = await readJsonBody(c, synthesisSchema);
+    if (parsed instanceof Response) return parsed;
+    if (!isCrucibleQuestionId(parsed.questionId)) {
+        return c.json({ code: 'invalid_request', message: 'Unknown synthesis question' }, 400);
+    }
+    const result = castSynthesisVote({
+        matchId: c.req.param('id') ?? '',
+        questionId: parsed.questionId,
+        voterId: user.sub,
+        choice: parsed.choice as never,
+    });
+    if (!result.ok) {
+        const map: Record<string, [number, string]> = {
+            not_found: [404, 'Match not found'],
+            forbidden: [403, 'Fighters do not vote on their own match'],
+            not_crucible: [409, 'The Crucible is not open'],
+        };
+        const [status, message] = map[result.reason] ?? [400, 'Invalid vote'];
+        return c.json({ code: result.reason, message }, status as never);
+    }
+    return c.json({ ok: true }, 201);
+});
+
+coliseum.post('/matches/:id/verdict', matchRateLimit, (c) => {
+    const user = requireUser(c, 'Sign in to close the match');
+    if (user instanceof Response) return user;
+    const match = getMatch(c.req.param('id') ?? '');
+    if (!match) return c.json({ code: 'not_found', message: 'Match not found' }, 404);
+    if (match.challengerId !== user.sub && match.opponentId !== user.sub) {
+        return c.json({ code: 'forbidden', message: 'Only fighters can close the match' }, 403);
+    }
+    const brief = mintVerdict(match.id);
+    if (!brief) return c.json({ code: 'not_found', message: 'Match not found' }, 404);
+    return c.json({ brief }, 201);
+});
+
+// --- Briefs (permanent public record) ---
+
+coliseum.get('/briefs', (c) => {
+    const fighterId = c.req.query('fighter');
+    return c.json({
+        briefs: listBriefs({ fighterId: fighterId ? decodeURIComponent(fighterId) : undefined }),
+    });
+});
+
+coliseum.get('/briefs/:id', (c) => {
+    const brief = getBrief(c.req.param('id'));
+    if (!brief) return c.json({ code: 'not_found', message: 'Brief not found' }, 404);
+    return c.json({ brief });
+});
+
+// --- Shouts (unstructured intake) ---
+
+const createShoutSchema = z.object({
+    domain: domainEnum.optional(),
+    body: z.string().max(2000).optional(),
+    media: z.record(z.string(), z.unknown()),
+    denRoomId: z.string().min(1).optional(),
+});
+
+coliseum.post('/shouts', shoutRateLimit, async (c) => {
+    const user = requireUser(c, 'Sign in to post a Shout');
+    if (user instanceof Response) return user;
+    const parsed = await readJsonBody(c, createShoutSchema);
+    if (parsed instanceof Response) return parsed;
+    const media = validateArgumentMedia(parsed.media);
+    if (!media)
+        return c.json({ code: 'invalid_request', message: 'A valid video is required' }, 400);
+    const shout = createShout({
+        authorId: user.sub,
+        domain: parsed.domain as never,
+        body: parsed.body,
+        media,
+        denRoomId: parsed.denRoomId,
+    });
+    return c.json({ shout }, 201);
+});
+
+const shoutsQuerySchema = z.object({ domain: domainEnum.optional() });
+
+coliseum.get('/shouts', (c) => {
+    const parsed = shoutsQuerySchema.safeParse(c.req.query());
+    if (!parsed.success) return c.json({ code: 'invalid_request', message: 'Invalid query' }, 400);
+    return c.json({ shouts: listShouts({ domain: parsed.data.domain as never }) });
+});
+
+coliseum.get('/shouts/:id', (c) => {
+    const shout = getShout(c.req.param('id'));
+    if (!shout) return c.json({ code: 'not_found', message: 'Shout not found' }, 404);
+    return c.json({
+        shout,
+        drops: listRankedResponseDrops(shout.id),
+        bilateral: detectShoutBilateral(shout.id),
+    });
+});
+
+const dropSchema = z.object({
+    body: z.string().max(2000).optional(),
+    media: z.record(z.string(), z.unknown()),
+});
+
+coliseum.post('/shouts/:id/drops', shoutRateLimit, async (c) => {
+    const user = requireUser(c, 'Sign in to drop a response');
+    if (user instanceof Response) return user;
+    const parsed = await readJsonBody(c, dropSchema);
+    if (parsed instanceof Response) return parsed;
+    const media = validateArgumentMedia(parsed.media);
+    if (!media)
+        return c.json({ code: 'invalid_request', message: 'A valid video is required' }, 400);
+    const drop = postResponseDrop({
+        shoutId: c.req.param('id') ?? '',
+        authorId: user.sub,
+        body: parsed.body,
+        media,
+    });
+    if (!drop) return c.json({ code: 'not_found', message: 'Shout not found' }, 404);
+    return c.json({ drop }, 201);
+});
+
+const dropVoteSchema = z.object({ direction: z.enum(['up', 'down']) });
+
+coliseum.post('/shouts/drops/:dropId/vote', shoutRateLimit, async (c) => {
+    const user = requireUser(c, 'Sign in to vote');
+    if (user instanceof Response) return user;
+    const parsed = await readJsonBody(c, dropVoteSchema);
+    if (parsed instanceof Response) return parsed;
+    const drop = voteResponseDrop(c.req.param('dropId') ?? '', user.sub, parsed.direction);
+    if (!drop) return c.json({ code: 'not_found', message: 'Response drop not found' }, 404);
+    return c.json({ drop }, 201);
+});
+
+coliseum.post('/shouts/:id/graduate', shoutRateLimit, (c) => {
+    const user = requireUser(c, 'Sign in to formalize a match');
+    if (user instanceof Response) return user;
+    const match = graduateToMatch(c.req.param('id') ?? '');
+    if (!match) {
+        return c.json(
+            { code: 'not_bilateral', message: 'This shout has not become a bilateral fight yet' },
+            409
+        );
+    }
+    return c.json({ match }, 201);
 });
 
 export default coliseum;

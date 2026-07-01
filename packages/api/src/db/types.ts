@@ -32,6 +32,15 @@ import type {
     ColiseumLiveSession,
     ColiseumTopic,
     ColiseumVote,
+    ColiseumMatch,
+    ColiseumRound,
+    ColiseumRoundVote,
+    ColiseumShout,
+    ColiseumResponseDrop,
+    ColiseumResponseDropVote,
+    ColiseumBrief,
+    CrucibleFinalStatement,
+    CrucibleSynthesisVote,
     ProductReview,
     ProductVersion,
     ReputationEventType,
@@ -1571,6 +1580,21 @@ export type ColiseumTopicRecord = ColiseumTopic;
 export type ColiseumArgumentRecord = ColiseumArgument;
 export type ColiseumVoteRecord = ColiseumVote;
 export type ColiseumLiveSessionRecord = ColiseumLiveSession;
+
+/**
+ * Coliseum match records — the structured gladiatorial layer. Matches reuse a
+ * proposition topic; rounds carry the video content; round/synthesis votes are
+ * keyed by composite keys (see pgDescriptors); briefs are immutable once minted.
+ */
+export type ColiseumMatchRecord = ColiseumMatch;
+export type ColiseumRoundRecord = ColiseumRound;
+export type ColiseumRoundVoteRecord = ColiseumRoundVote;
+export type ColiseumShoutRecord = ColiseumShout;
+export type ColiseumResponseDropRecord = ColiseumResponseDrop;
+export type ColiseumResponseDropVoteRecord = ColiseumResponseDropVote;
+export type ColiseumBriefRecord = ColiseumBrief;
+export type ColiseumCrucibleStatementRecord = CrucibleFinalStatement;
+export type ColiseumCrucibleVoteRecord = CrucibleSynthesisVote;
 
 /**
  * A subject-scoped reputation award. Persisted so per-subject standing survives
