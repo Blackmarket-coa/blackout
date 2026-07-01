@@ -35,7 +35,13 @@ test('normalizeSpatialLayerKey resolves aliases', () => {
 });
 
 test('normalizeSpatialLayerKeys deduplicates and discards unknowns', () => {
-    const keys = normalizeSpatialLayerKeys(['vendors', 'marketplace', 'aid', 'mutual aid', 'bogus']);
+    const keys = normalizeSpatialLayerKeys([
+        'vendors',
+        'marketplace',
+        'aid',
+        'mutual aid',
+        'bogus',
+    ]);
     assert.deepEqual(keys, ['vendors', 'aid']);
 });
 
@@ -49,24 +55,31 @@ test('normalizeSpatialLayerKey resolves the new living-map aliases', () => {
 test('spatialHeatWeight takes the strongest of severity, activity, and liveness', () => {
     // A live event with no other signal still radiates the live floor (0.8).
     assert.equal(
-        spatialHeatWeight({ startsAt: '2026-05-02T11:00:00Z', endsAt: '2026-05-02T13:00:00Z' }, NOW),
-        0.8,
+        spatialHeatWeight(
+            { startsAt: '2026-05-02T11:00:00Z', endsAt: '2026-05-02T13:00:00Z' },
+            NOW
+        ),
+        0.8
     );
     // High activity beats the live floor.
     assert.equal(
         spatialHeatWeight(
-            { startsAt: '2026-05-02T11:00:00Z', endsAt: '2026-05-02T13:00:00Z', activityLevel: 0.95 },
-            NOW,
+            {
+                startsAt: '2026-05-02T11:00:00Z',
+                endsAt: '2026-05-02T13:00:00Z',
+                activityLevel: 0.95,
+            },
+            NOW
         ),
-        0.95,
+        0.95
     );
     // A past pin with only low severity radiates just that.
     assert.equal(
         spatialHeatWeight(
             { startsAt: '2026-05-01T00:00:00Z', endsAt: '2026-05-01T01:00:00Z', severity: 'low' },
-            NOW,
+            NOW
         ),
-        severityToScore('low'),
+        severityToScore('low')
     );
     // Nothing notable → no heat.
     assert.equal(spatialHeatWeight({ startsAt: '2026-05-03T00:00:00Z' }, NOW), 0);
@@ -94,14 +107,14 @@ test('SPATIAL_LAYER_KEYS covers the canonical layers including the living-map ad
 test('deriveSpatialEventStatus handles upcoming/live/past', () => {
     const startsAt = '2026-05-02T11:00:00Z';
     const endsAt = '2026-05-02T13:00:00Z';
-    assert.equal(
-        deriveSpatialEventStatus({ startsAt: '2026-05-03T00:00:00Z' }, NOW),
-        'upcoming',
-    );
+    assert.equal(deriveSpatialEventStatus({ startsAt: '2026-05-03T00:00:00Z' }, NOW), 'upcoming');
     assert.equal(deriveSpatialEventStatus({ startsAt, endsAt }, NOW), 'live');
     assert.equal(
-        deriveSpatialEventStatus({ startsAt: '2026-05-01T00:00:00Z', endsAt: '2026-05-01T01:00:00Z' }, NOW),
-        'past',
+        deriveSpatialEventStatus(
+            { startsAt: '2026-05-01T00:00:00Z', endsAt: '2026-05-01T01:00:00Z' },
+            NOW
+        ),
+        'past'
     );
     assert.equal(deriveSpatialEventStatus({ startsAt: 'not-a-date' }, NOW), 'upcoming');
 });
@@ -133,7 +146,7 @@ test('normalizeSpatialFeedItem fills status and rejects unknown layers', () => {
             eventType: 'other',
             startsAt: '2026-05-02T11:00:00Z',
         }),
-        null,
+        null
     );
 });
 
@@ -165,10 +178,26 @@ test('scoreCoalitionItem applies ranking model', () => {
 test('rankCoalitionFeed sorts highest score first', () => {
     const ranked = rankCoalitionFeed(
         [
-            { id: 'old', kind: 'event', title: '', createdAt: '2026-04-01T00:00:00Z', importance: 0.1, impact: 0.1, socialImpact: 0.1 },
-            { id: 'new', kind: 'event', title: '', createdAt: '2026-05-02T11:00:00Z', importance: 0.9, impact: 0.9, socialImpact: 0.9 },
+            {
+                id: 'old',
+                kind: 'event',
+                title: '',
+                createdAt: '2026-04-01T00:00:00Z',
+                importance: 0.1,
+                impact: 0.1,
+                socialImpact: 0.1,
+            },
+            {
+                id: 'new',
+                kind: 'event',
+                title: '',
+                createdAt: '2026-05-02T11:00:00Z',
+                importance: 0.9,
+                impact: 0.9,
+                socialImpact: 0.9,
+            },
         ],
-        { nowMs: NOW },
+        { nowMs: NOW }
     );
     assert.equal(ranked[0]?.id, 'new');
 });
@@ -177,7 +206,8 @@ test('DEFAULT_RANKING_WEIGHTS sum reasonable', () => {
     const total =
         DEFAULT_RANKING_WEIGHTS.importance +
         DEFAULT_RANKING_WEIGHTS.impact +
-        DEFAULT_RANKING_WEIGHTS.socialImpact;
+        DEFAULT_RANKING_WEIGHTS.socialImpact +
+        DEFAULT_RANKING_WEIGHTS.momentum;
     assert.ok(Math.abs(total - 1) < 1e-9);
 });
 
@@ -226,9 +256,9 @@ test('haversineDistanceMeters and isWithinDisplayRadius', () => {
                 isVisible: true,
                 locationType: 'storefront',
             },
-            b,
+            b
         ),
-        true,
+        true
     );
 });
 
@@ -236,12 +266,12 @@ test('resolveEnabledTabs respects config', () => {
     assert.deepEqual(resolveEnabledTabs(undefined), []);
     assert.deepEqual(resolveEnabledTabs({ enabled: false }), []);
     assert.deepEqual(resolveEnabledTabs({ enabled: true }), [...COALITION_TABS]);
-    assert.deepEqual(
-        resolveEnabledTabs({ enabled: true, enabledTabs: ['chat', 'shop'] }),
-        ['chat', 'shop'],
-    );
+    assert.deepEqual(resolveEnabledTabs({ enabled: true, enabledTabs: ['chat', 'shop'] }), [
+        'chat',
+        'shop',
+    ]);
     assert.deepEqual(
         resolveEnabledTabs({ enabled: true, enabledTabs: ['chat', 'bogus' as never] }),
-        ['chat'],
+        ['chat']
     );
 });

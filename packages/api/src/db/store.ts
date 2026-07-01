@@ -85,6 +85,9 @@ import type {
     CoalitionTaskRecord,
     CoalitionNeedRecord,
     CoalitionProjectRecord,
+    CoalitionProjectSupportRecord,
+    CoalitionSurgeRecord,
+    CoalitionNotificationRecord,
     CoalitionResourceRecord,
     CreatorContentRecord,
     ContentDistributionRecord,
@@ -228,6 +231,9 @@ type PersistedState = {
     coalitionTasks: CoalitionTaskRecord[];
     coalitionNeeds: CoalitionNeedRecord[];
     coalitionProjects: CoalitionProjectRecord[];
+    coalitionProjectSupports: CoalitionProjectSupportRecord[];
+    coalitionSurges: CoalitionSurgeRecord[];
+    coalitionNotifications: CoalitionNotificationRecord[];
     coalitionResources: CoalitionResourceRecord[];
     creatorContent: CreatorContentRecord[];
     contentDistributions: ContentDistributionRecord[];
@@ -399,6 +405,9 @@ class InMemoryDb {
     coalitionNeeds = new Map<string, CoalitionNeedRecord>();
     /** Coalition projects, keyed by project id. */
     coalitionProjects = new Map<string, CoalitionProjectRecord>();
+    coalitionProjectSupports = new Map<string, CoalitionProjectSupportRecord>();
+    coalitionSurges = new Map<string, CoalitionSurgeRecord>();
+    coalitionNotifications = new Map<string, CoalitionNotificationRecord>();
     /** Coalition shared resources, keyed by resource id. */
     coalitionResources = new Map<string, CoalitionResourceRecord>();
     /** Creator content items, keyed by content id. */
@@ -3192,17 +3201,28 @@ class InMemoryDb {
     }
 
     createCoalitionProject(
-        input: Omit<CoalitionProjectRecord, 'status' | 'createdAt' | 'updatedAt'>
+        input: Omit<
+            CoalitionProjectRecord,
+            'status' | 'createdAt' | 'updatedAt' | 'raisedCents' | 'supporterCount' | 'milestones'
+        > &
+            Partial<Pick<CoalitionProjectRecord, 'raisedCents' | 'supporterCount' | 'milestones'>>
     ): CoalitionProjectRecord {
         const now = nowIso();
         const record: CoalitionProjectRecord = {
             ...input,
             status: 'proposed',
+            raisedCents: input.raisedCents ?? 0,
+            supporterCount: input.supporterCount ?? 0,
+            milestones: input.milestones ?? [],
             createdAt: now,
             updatedAt: now,
         };
         this.coalitionProjects.set(record.id, record);
         return record;
+    }
+
+    getCoalitionProject(id: string): CoalitionProjectRecord | undefined {
+        return this.coalitionProjects.get(id);
     }
 
     updateCoalitionProjectStatus(
@@ -3213,6 +3233,152 @@ class InMemoryDb {
         if (!existing) return undefined;
         const record: CoalitionProjectRecord = { ...existing, status, updatedAt: nowIso() };
         this.coalitionProjects.set(id, record);
+        return record;
+    }
+
+    /** Patch a project's funding config (goal, use-of-funds, deadline, milestones). */
+    updateCoalitionProject(
+        id: string,
+        patch: Partial<
+            Pick<
+                CoalitionProjectRecord,
+                | 'title'
+                | 'description'
+                | 'category'
+                | 'fundingGoalCents'
+                | 'currency'
+                | 'useOfFunds'
+                | 'deadlineAt'
+                | 'milestones'
+            >
+        >
+    ): CoalitionProjectRecord | undefined {
+        const existing = this.coalitionProjects.get(id);
+        if (!existing) return undefined;
+        const record: CoalitionProjectRecord = { ...existing, ...patch, updatedAt: nowIso() };
+        this.coalitionProjects.set(id, record);
+        return record;
+    }
+
+    // --- coalition project support ledger ---
+
+    listCoalitionProjectSupports(
+        filter: { projectId?: string; sinceIso?: string } = {}
+    ): CoalitionProjectSupportRecord[] {
+        return [...this.coalitionProjectSupports.values()]
+            .filter((s) => (filter.projectId ? s.projectId === filter.projectId : true))
+            .filter((s) => (filter.sinceIso ? s.createdAt >= filter.sinceIso! : true))
+            .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+    }
+
+    getCoalitionProjectSupportByTip(tipId: string): CoalitionProjectSupportRecord | undefined {
+        return [...this.coalitionProjectSupports.values()].find((s) => s.tipId === tipId);
+    }
+
+    addCoalitionProjectSupport(
+        input: Omit<CoalitionProjectSupportRecord, 'createdAt'> & { createdAt?: string }
+    ): CoalitionProjectSupportRecord {
+        const record: CoalitionProjectSupportRecord = {
+            ...input,
+            createdAt: input.createdAt ?? nowIso(),
+        };
+        this.coalitionProjectSupports.set(record.id, record);
+        return record;
+    }
+
+    /**
+     * Apply a captured contribution to a project: bump raised + supporter count and
+     * persist the milestone list (already evaluated by the service so this layer
+     * stays free of domain logic). Returns the updated project, or undefined if it
+     * no longer exists.
+     */
+    applyCoalitionProjectSupport(
+        id: string,
+        amountCents: number,
+        milestones: CoalitionProjectRecord['milestones']
+    ): CoalitionProjectRecord | undefined {
+        const existing = this.coalitionProjects.get(id);
+        if (!existing) return undefined;
+        const record: CoalitionProjectRecord = {
+            ...existing,
+            raisedCents: existing.raisedCents + amountCents,
+            supporterCount: existing.supporterCount + 1,
+            milestones,
+            updatedAt: nowIso(),
+        };
+        this.coalitionProjects.set(id, record);
+        return record;
+    }
+
+    // --- coalition surges ---
+
+    listCoalitionSurges(
+        filter: { projectId?: string; status?: string } = {}
+    ): CoalitionSurgeRecord[] {
+        return [...this.coalitionSurges.values()]
+            .filter((s) => (filter.projectId ? s.projectId === filter.projectId : true))
+            .filter((s) => (filter.status ? s.status === filter.status : true))
+            .sort((a, b) => (a.startedAt < b.startedAt ? 1 : -1));
+    }
+
+    getOpenCoalitionSurge(projectId: string): CoalitionSurgeRecord | undefined {
+        return [...this.coalitionSurges.values()].find(
+            (s) => s.projectId === projectId && s.status === 'open'
+        );
+    }
+
+    upsertCoalitionSurge(
+        input: Omit<CoalitionSurgeRecord, 'createdAt' | 'updatedAt'> & {
+            createdAt?: string;
+            updatedAt?: string;
+        }
+    ): CoalitionSurgeRecord {
+        const now = nowIso();
+        const existing = this.coalitionSurges.get(input.id);
+        const record: CoalitionSurgeRecord = {
+            ...input,
+            createdAt: existing?.createdAt ?? input.createdAt ?? now,
+            updatedAt: now,
+        };
+        this.coalitionSurges.set(record.id, record);
+        return record;
+    }
+
+    // --- coalition notifications (Coalition-scoped inbox) ---
+
+    listCoalitionNotifications(filter: {
+        recipientUserId: string;
+        unreadOnly?: boolean;
+        limit?: number;
+    }): CoalitionNotificationRecord[] {
+        const rows = [...this.coalitionNotifications.values()]
+            .filter((n) => n.recipientUserId === filter.recipientUserId)
+            .filter((n) => (filter.unreadOnly ? !n.readAt : true))
+            .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+        return filter.limit ? rows.slice(0, filter.limit) : rows;
+    }
+
+    addCoalitionNotification(
+        input: Omit<CoalitionNotificationRecord, 'createdAt'> & { createdAt?: string }
+    ): CoalitionNotificationRecord {
+        const record: CoalitionNotificationRecord = {
+            ...input,
+            createdAt: input.createdAt ?? nowIso(),
+        };
+        this.coalitionNotifications.set(record.id, record);
+        return record;
+    }
+
+    /** Mark a notification read. Scoped by recipient so a user can't ack another's. */
+    markCoalitionNotificationRead(
+        id: string,
+        recipientUserId: string
+    ): CoalitionNotificationRecord | undefined {
+        const existing = this.coalitionNotifications.get(id);
+        if (!existing || existing.recipientUserId !== recipientUserId) return undefined;
+        if (existing.readAt) return existing;
+        const record: CoalitionNotificationRecord = { ...existing, readAt: nowIso() };
+        this.coalitionNotifications.set(id, record);
         return record;
     }
 
@@ -4349,6 +4515,19 @@ export class FileBackedDb extends InMemoryDb {
         if (parsed.coalitionProjects) {
             this.coalitionProjects = new Map(parsed.coalitionProjects.map((row) => [row.id, row]));
         }
+        if (parsed.coalitionProjectSupports) {
+            this.coalitionProjectSupports = new Map(
+                parsed.coalitionProjectSupports.map((row) => [row.id, row])
+            );
+        }
+        if (parsed.coalitionSurges) {
+            this.coalitionSurges = new Map(parsed.coalitionSurges.map((row) => [row.id, row]));
+        }
+        if (parsed.coalitionNotifications) {
+            this.coalitionNotifications = new Map(
+                parsed.coalitionNotifications.map((row) => [row.id, row])
+            );
+        }
         if (parsed.coalitionResources) {
             this.coalitionResources = new Map(
                 parsed.coalitionResources.map((row) => [row.id, row])
@@ -4572,6 +4751,9 @@ export class FileBackedDb extends InMemoryDb {
             coalitionTasks: [...this.coalitionTasks.values()],
             coalitionNeeds: [...this.coalitionNeeds.values()],
             coalitionProjects: [...this.coalitionProjects.values()],
+            coalitionProjectSupports: [...this.coalitionProjectSupports.values()],
+            coalitionSurges: [...this.coalitionSurges.values()],
+            coalitionNotifications: [...this.coalitionNotifications.values()],
             coalitionResources: [...this.coalitionResources.values()],
             creatorContent: [...this.creatorContent.values()],
             contentDistributions: [...this.contentDistributions.values()],

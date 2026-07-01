@@ -30,7 +30,9 @@ export function listFeedItems(filter: FeedFilter = {}): CoalitionFeedItem[] {
     return db.listCoalitionFeedItems(filter);
 }
 
-export function saveFeedItem(input: Parameters<typeof db.upsertCoalitionFeedItem>[0]): CoalitionFeedItem {
+export function saveFeedItem(
+    input: Parameters<typeof db.upsertCoalitionFeedItem>[0]
+): CoalitionFeedItem {
     return db.upsertCoalitionFeedItem(input);
 }
 
@@ -94,10 +96,8 @@ function eventToSpatialItem(event: CoalitionEvent, nowMs: number): SpatialFeedIt
 export function listSpatialItems(filter: SpatialFilter = {}): SpatialFeedItem[] {
     const allowed = new Set(
         filter.layers && filter.layers.length > 0
-            ? filter.layers.filter((key) =>
-                  (SPATIAL_LAYER_KEYS as readonly string[]).includes(key),
-              )
-            : SPATIAL_LAYER_KEYS,
+            ? filter.layers.filter((key) => (SPATIAL_LAYER_KEYS as readonly string[]).includes(key))
+            : SPATIAL_LAYER_KEYS
     );
     const items: SpatialFeedItem[] = db
         .listCoalitionSpatialItems()
@@ -114,9 +114,7 @@ export function listSpatialItems(filter: SpatialFilter = {}): SpatialFeedItem[] 
         const memberships = db.listRingMemberships();
         for (const ring of db.listCoalitionRings()) {
             if (!ring.location || ring.visibility !== 'public') continue;
-            const memberCount = countActiveMembers(
-                memberships.filter((m) => m.ringId === ring.id),
-            );
+            const memberCount = countActiveMembers(memberships.filter((m) => m.ringId === ring.id));
             items.push({
                 id: `ring:${ring.id}`,
                 layer: 'communities',
@@ -152,7 +150,7 @@ export function listSellerLocations(filter: { onlyVisible?: boolean } = {}): Sel
 }
 
 export function saveSellerLocation(
-    input: Parameters<typeof db.upsertSellerLocation>[0],
+    input: Parameters<typeof db.upsertSellerLocation>[0]
 ): SellerLocation {
     return db.upsertSellerLocation(input);
 }
@@ -293,7 +291,7 @@ export function listKitApplications(filter: { scopeType?: string; scopeId?: stri
     return db.listCoalitionKitApplications(filter);
 }
 export function recordKitApplication(
-    input: Parameters<typeof db.recordCoalitionKitApplication>[0],
+    input: Parameters<typeof db.recordCoalitionKitApplication>[0]
 ) {
     return db.recordCoalitionKitApplication(input);
 }
@@ -328,14 +326,29 @@ export function listProjects(filter: { canopyId?: string } = {}) {
 export function createProject(input: Parameters<typeof db.createCoalitionProject>[0]) {
     return db.createCoalitionProject(input);
 }
+export function getProject(id: string) {
+    return db.getCoalitionProject(id) ?? null;
+}
 export function updateProjectStatus(
     id: string,
-    status: Parameters<typeof db.updateCoalitionProjectStatus>[1],
+    status: Parameters<typeof db.updateCoalitionProjectStatus>[1]
 ) {
     return db.updateCoalitionProjectStatus(id, status) ?? null;
 }
+export function updateProject(id: string, patch: Parameters<typeof db.updateCoalitionProject>[1]) {
+    return db.updateCoalitionProject(id, patch) ?? null;
+}
 export function newProjectId(): string {
     return `proj_${rand()}`;
+}
+export function newProjectSupportId(): string {
+    return `psup_${rand()}`;
+}
+export function newSurgeId(): string {
+    return `surge_${rand()}`;
+}
+export function newNotificationId(): string {
+    return `cnot_${rand()}`;
 }
 
 // --- coalition resource registry ---
@@ -348,7 +361,7 @@ export function createResource(input: Parameters<typeof db.createCoalitionResour
 }
 export function updateResourceAvailability(
     id: string,
-    availability: Parameters<typeof db.updateCoalitionResourceAvailability>[1],
+    availability: Parameters<typeof db.updateCoalitionResourceAvailability>[1]
 ) {
     return db.updateCoalitionResourceAvailability(id, availability) ?? null;
 }

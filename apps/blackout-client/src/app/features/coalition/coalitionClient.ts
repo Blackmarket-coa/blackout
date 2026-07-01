@@ -9,6 +9,8 @@ import type {
     CoalitionNeed,
     CoalitionProject,
     CoalitionResource,
+    EndowedProgressFraming,
+    ProjectMomentum,
     NeedStatus,
     ProjectStatus,
     ResourceAvailability,
@@ -331,6 +333,131 @@ export function updateCoalitionProjectStatus(
         { status },
         token
     );
+}
+
+export interface ProjectSupporter {
+    supporterUserId: string;
+    amountCents: number;
+    currency?: string;
+    createdAt: string;
+}
+
+export interface CoalitionSurge {
+    id: string;
+    projectId: string;
+    status: 'open' | 'expired';
+    surgeFactor: number;
+    supportsLast24h: number;
+    supportsPrev24h: number;
+    startedAt: string;
+    expiresAt: string;
+}
+
+export interface ProjectView {
+    project: CoalitionProject;
+    progress: number;
+    momentum: ProjectMomentum;
+    endowedProgress: EndowedProgressFraming | null;
+    recentSupporters: ProjectSupporter[];
+    activeSurge: CoalitionSurge | null;
+}
+
+export interface CoalitionNotification {
+    id: string;
+    recipientUserId: string;
+    kind: 'surge' | 'milestone' | 'milestone_video';
+    projectId?: string;
+    surgeId?: string;
+    milestoneId?: string;
+    feedItemId?: string;
+    title: string;
+    body?: string;
+    readAt?: string;
+    createdAt: string;
+}
+
+export function fetchCoalitionProject(
+    id: string,
+    token: string | null = readBlackoutApiToken()
+): Promise<ProjectView> {
+    return getJson<ProjectView>(`${COALITION_BASE}/projects/${encodeURIComponent(id)}`, token);
+}
+
+export function fetchProjectSupporters(
+    id: string,
+    token: string | null = readBlackoutApiToken()
+): Promise<{ supporters: ProjectSupporter[] }> {
+    return getJson<{ supporters: ProjectSupporter[] }>(
+        `${COALITION_BASE}/projects/${encodeURIComponent(id)}/supporters`,
+        token
+    );
+}
+
+export interface SupportProjectInput {
+    grossCents: number;
+    currency: string;
+    note?: string;
+}
+
+export function supportCoalitionProject(
+    id: string,
+    input: SupportProjectInput,
+    token: string | null = readBlackoutApiToken()
+): Promise<{ tip: { id: string; status: string; grossCents: number } }> {
+    return postJson<{ tip: { id: string; status: string; grossCents: number } }>(
+        `${COALITION_BASE}/projects/${encodeURIComponent(id)}/support`,
+        input,
+        token
+    );
+}
+
+// --- surges + notification inbox (Surge / Milestone Broadcasts) ---
+
+export function fetchActiveSurges(
+    token: string | null = readBlackoutApiToken()
+): Promise<{ surges: CoalitionSurge[] }> {
+    return getJson<{ surges: CoalitionSurge[] }>(`${COALITION_BASE}/surges`, token);
+}
+
+export function fetchCoalitionNotifications(
+    options: { unreadOnly?: boolean; limit?: number } = {},
+    token: string | null = readBlackoutApiToken()
+): Promise<{ notifications: CoalitionNotification[] }> {
+    const path = appendQuery(`${COALITION_BASE}/notifications`, {
+        unreadOnly: options.unreadOnly ? 'true' : undefined,
+        limit: options.limit ? String(options.limit) : undefined,
+    });
+    return getJson<{ notifications: CoalitionNotification[] }>(path, token);
+}
+
+export function markCoalitionNotificationRead(
+    id: string,
+    token: string | null = readBlackoutApiToken()
+): Promise<{ notification: CoalitionNotification }> {
+    return postJson<{ notification: CoalitionNotification }>(
+        `${COALITION_BASE}/notifications/${encodeURIComponent(id)}/read`,
+        {},
+        token
+    );
+}
+
+export interface CreateFeedItemInput {
+    kind: 'video' | 'event' | 'aid' | 'listing' | 'proposal';
+    title: string;
+    body?: string;
+    canopyId?: string;
+    denId?: string;
+    mediaUrl?: string;
+    projectId?: string;
+    milestoneId?: string;
+    tags?: string[];
+}
+
+export function postCoalitionFeedItem(
+    input: CreateFeedItemInput,
+    token: string | null = readBlackoutApiToken()
+): Promise<{ feedItem: CoalitionFeedItem }> {
+    return postJson<{ feedItem: CoalitionFeedItem }>(`${COALITION_BASE}/feed`, input, token);
 }
 
 // --- coalition resource registry ---
