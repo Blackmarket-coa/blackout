@@ -119,6 +119,7 @@ import type {
     ColiseumBriefRecord,
     ColiseumCrucibleStatementRecord,
     ColiseumCrucibleVoteRecord,
+    ColiseumPositionVoteRecord,
     ReputationEventRecord,
     FbmVendorRoomRecord,
     FbmBuyerOrderRoomRecord,
@@ -260,6 +261,7 @@ type PersistedState = {
     coliseumBriefs: ColiseumBriefRecord[];
     coliseumCrucibleStatements: ColiseumCrucibleStatementRecord[];
     coliseumCrucibleVotes: ColiseumCrucibleVoteRecord[];
+    coliseumPositionVotes: ColiseumPositionVoteRecord[];
     reputationEvents: ReputationEventRecord[];
     referrals: ReferralRecord[];
     ambassadors: AmbassadorRecord[];
@@ -471,6 +473,8 @@ class InMemoryDb {
     coliseumCrucibleStatements = new Map<string, ColiseumCrucibleStatementRecord>();
     /** Crucible synthesis votes, keyed by `${matchId}::${questionId}::${voterId}`. */
     coliseumCrucibleVotes = new Map<string, ColiseumCrucibleVoteRecord>();
+    /** Position-map votes, keyed by `${matchId}::${voterId}`. */
+    coliseumPositionVotes = new Map<string, ColiseumPositionVoteRecord>();
     /** Subject-scoped reputation awards, keyed by event id. */
     reputationEvents = new Map<string, ReputationEventRecord>();
 
@@ -4080,6 +4084,15 @@ class InMemoryDb {
         return record;
     }
 
+    listColiseumPositionVotes(): ColiseumPositionVoteRecord[] {
+        return [...this.coliseumPositionVotes.values()];
+    }
+
+    upsertColiseumPositionVote(record: ColiseumPositionVoteRecord): ColiseumPositionVoteRecord {
+        this.coliseumPositionVotes.set(`${record.matchId}::${record.voterId}`, record);
+        return record;
+    }
+
     // --- Reputation ---
 
     listReputationEvents(): ReputationEventRecord[] {
@@ -4480,6 +4493,11 @@ export class FileBackedDb extends InMemoryDb {
                 ])
             );
         }
+        if (parsed.coliseumPositionVotes) {
+            this.coliseumPositionVotes = new Map(
+                parsed.coliseumPositionVotes.map((row) => [`${row.matchId}::${row.voterId}`, row])
+            );
+        }
         if (parsed.reputationEvents) {
             this.reputationEvents = new Map(parsed.reputationEvents.map((row) => [row.id, row]));
         }
@@ -4604,6 +4622,7 @@ export class FileBackedDb extends InMemoryDb {
             coliseumBriefs: [...this.coliseumBriefs.values()],
             coliseumCrucibleStatements: [...this.coliseumCrucibleStatements.values()],
             coliseumCrucibleVotes: [...this.coliseumCrucibleVotes.values()],
+            coliseumPositionVotes: [...this.coliseumPositionVotes.values()],
             reputationEvents: [...this.reputationEvents.values()],
         };
     }
@@ -6054,6 +6073,14 @@ export class FileBackedDb extends InMemoryDb {
         record: ColiseumCrucibleVoteRecord
     ): ColiseumCrucibleVoteRecord {
         const saved = super.upsertColiseumCrucibleVote(record);
+        this.persist();
+        return saved;
+    }
+
+    override upsertColiseumPositionVote(
+        record: ColiseumPositionVoteRecord
+    ): ColiseumPositionVoteRecord {
+        const saved = super.upsertColiseumPositionVote(record);
         this.persist();
         return saved;
     }

@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
     COOLDOWN_MS,
     CRUCIBLE_QUESTIONS,
+    aggregatePosition,
     computeShiftScore,
     cooldownRemainingMs,
     deriveChallengeStatus,
@@ -16,6 +17,7 @@ import {
     mintBrief,
     rankResponseDrops,
     tallyRoundVotes,
+    type ColiseumPositionVote,
     type ColiseumResponseDrop,
     type ColiseumRoundVote,
     type ColiseumShout,
@@ -126,6 +128,17 @@ test('computeShiftScore measures crowd movement; mintBrief is immutable assembly
     });
     assert.equal(brief.proposition, 'P');
     assert.ok(brief.shiftScore > 0);
+});
+
+test('aggregatePosition folds placements into agree/certainty shares', () => {
+    const votes: ColiseumPositionVote[] = [
+        { matchId: 'm', voterId: 'a', agree: true, certain: true, createdAt: '' },
+        { matchId: 'm', voterId: 'b', agree: true, certain: false, createdAt: '' },
+        { matchId: 'm', voterId: 'c', agree: false, certain: false, createdAt: '' },
+        { matchId: 'm', voterId: 'd', agree: false, certain: true, createdAt: '' },
+    ];
+    assert.deepEqual(aggregatePosition(votes), { agreeShare: 0.5, certainty: 0.5, sampleSize: 4 });
+    assert.deepEqual(aggregatePosition([]), { agreeShare: 0, certainty: 0, sampleSize: 0 });
 });
 
 test('cooldown blocks within 48h and clears after', () => {

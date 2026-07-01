@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState, type CSSProperties } from 'rea
 import { useSetAtom } from 'jotai';
 import {
     COLISEUM_TOPIC_CATEGORIES,
+    type ColiseumArgumentMedia,
     type ColiseumShout,
     type ColiseumTopicCategoryKey,
 } from '@blackout/core';
@@ -14,6 +15,7 @@ import {
     postColiseumResponseDrop,
     type ShoutDetailResponse,
 } from '../coliseumMatchClient';
+import { VideoComposer } from '../VideoComposer';
 
 const containerStyle: CSSProperties = {
     display: 'flex',
@@ -58,12 +60,6 @@ const ghostButton: CSSProperties = {
     fontWeight: 500,
 };
 
-// Phase 1 accepts an mxc reference for the video; the in-app recorder/upload
-// pipeline (app/state/upload.ts) is wired in a follow-up.
-function isMxc(value: string): boolean {
-    return /^mxc:\/\/[^/]+\/[A-Za-z0-9_-]+$/.test(value);
-}
-
 function ShoutCard({
     shout,
     onGraduated,
@@ -72,8 +68,6 @@ function ShoutCard({
     onGraduated: (matchId: string) => void;
 }) {
     const [detail, setDetail] = useState<ShoutDetailResponse | null>(null);
-    const [dropBody, setDropBody] = useState('');
-    const [dropMxc, setDropMxc] = useState('');
 
     const open = useCallback(() => {
         fetchColiseumShout(shout.id)
@@ -81,16 +75,17 @@ function ShoutCard({
             .catch(() => setDetail(null));
     }, [shout.id]);
 
-    const onDrop = useCallback(async () => {
-        if (!isMxc(dropMxc)) return;
-        await postColiseumResponseDrop(shout.id, {
-            body: dropBody.trim() || undefined,
-            media: { kind: 'video', mxc: dropMxc },
-        }).catch(() => undefined);
-        setDropBody('');
-        setDropMxc('');
-        open();
-    }, [shout.id, dropBody, dropMxc, open]);
+    const onDrop = useCallback(
+        async (payload: { body?: string; media?: ColiseumArgumentMedia }) => {
+            if (!payload.media) return;
+            await postColiseumResponseDrop(shout.id, {
+                body: payload.body,
+                media: payload.media,
+            }).catch(() => undefined);
+            open();
+        },
+        [shout.id, open]
+    );
 
     const onGraduate = useCallback(async () => {
         const res = await graduateColiseumShout(shout.id).catch(() => null);
@@ -127,28 +122,11 @@ function ShoutCard({
                             #{drop.rank} · {drop.authorId}: {drop.body ?? '(video)'}
                         </div>
                     ))}
-                    <div style={{ display: 'flex', gap: 6 }}>
-                        <input
-                            value={dropBody}
-                            onChange={(e) => setDropBody(e.target.value)}
-                            placeholder="Response…"
-                            style={{ ...inputStyle, flex: 1 }}
-                        />
-                        <input
-                            value={dropMxc}
-                            onChange={(e) => setDropMxc(e.target.value)}
-                            placeholder="video mxc://…"
-                            style={{ ...inputStyle, flex: 1 }}
-                        />
-                        <button
-                            type="button"
-                            style={primaryButton}
-                            disabled={!isMxc(dropMxc)}
-                            onClick={onDrop}
-                        >
-                            Drop
-                        </button>
-                    </div>
+                    <VideoComposer
+                        onSubmit={onDrop}
+                        submitLabel="Drop response"
+                        bodyPlaceholder="Response…"
+                    />
                 </div>
             ) : null}
         </article>
@@ -157,8 +135,6 @@ function ShoutCard({
 
 export function ShoutsTab() {
     const [shouts, setShouts] = useState<ColiseumShout[]>([]);
-    const [body, setBody] = useState('');
-    const [mxc, setMxc] = useState('');
     const [domain, setDomain] = useState<ColiseumTopicCategoryKey | ''>('');
     const setTab = useSetAtom(coliseumTabAtom);
     const setSelectedMatch = useSetAtom(selectedColiseumMatchIdAtom);
@@ -173,17 +149,18 @@ export function ShoutsTab() {
         load();
     }, [load]);
 
-    const onShout = useCallback(async () => {
-        if (!isMxc(mxc)) return;
-        await createColiseumShout({
-            body: body.trim() || undefined,
-            domain: domain || undefined,
-            media: { kind: 'video', mxc },
-        }).catch(() => undefined);
-        setBody('');
-        setMxc('');
-        load();
-    }, [body, mxc, domain, load]);
+    const onShout = useCallback(
+        async (payload: { body?: string; media?: ColiseumArgumentMedia }) => {
+            if (!payload.media) return;
+            await createColiseumShout({
+                body: payload.body,
+                domain: domain || undefined,
+                media: payload.media,
+            }).catch(() => undefined);
+            load();
+        },
+        [domain, load]
+    );
 
     const onGraduated = useCallback(
         (matchId: string) => {
@@ -197,40 +174,23 @@ export function ShoutsTab() {
         <div style={containerStyle} data-testid="coliseum-shouts-tab">
             <section style={cardStyle}>
                 <strong>Shout into the wind</strong>
-                <input
-                    value={body}
-                    onChange={(e) => setBody(e.target.value)}
-                    placeholder="What set you off?"
+                <select
+                    value={domain}
+                    onChange={(e) => setDomain(e.target.value as ColiseumTopicCategoryKey | '')}
                     style={inputStyle}
-                />
-                <div style={{ display: 'flex', gap: 8 }}>
-                    <select
-                        value={domain}
-                        onChange={(e) => setDomain(e.target.value as ColiseumTopicCategoryKey | '')}
-                        style={{ ...inputStyle, flex: 1 }}
-                    >
-                        <option value="">Any domain</option>
-                        {COLISEUM_TOPIC_CATEGORIES.map((cat) => (
-                            <option key={cat.key} value={cat.key}>
-                                {cat.label}
-                            </option>
-                        ))}
-                    </select>
-                    <input
-                        value={mxc}
-                        onChange={(e) => setMxc(e.target.value)}
-                        placeholder="video mxc://…"
-                        style={{ ...inputStyle, flex: 1 }}
-                    />
-                </div>
-                <button
-                    type="button"
-                    style={primaryButton}
-                    disabled={!isMxc(mxc)}
-                    onClick={onShout}
                 >
-                    Post Shout
-                </button>
+                    <option value="">Any domain</option>
+                    {COLISEUM_TOPIC_CATEGORIES.map((cat) => (
+                        <option key={cat.key} value={cat.key}>
+                            {cat.label}
+                        </option>
+                    ))}
+                </select>
+                <VideoComposer
+                    onSubmit={onShout}
+                    submitLabel="Post Shout"
+                    bodyPlaceholder="What set you off?"
+                />
             </section>
             {shouts.length === 0 ? (
                 <p style={{ color: 'var(--text-secondary)' }}>

@@ -12,6 +12,7 @@
  * `crucible` once the clock expires, and `verdict`/`archived` after that.
  */
 
+import type { PositionSnapshot } from './brief';
 import type { ColiseumArgumentMedia, ColiseumCitation } from './citations';
 import type { ColiseumTopicCategoryKey } from './taxonomy';
 
@@ -125,6 +126,12 @@ export interface ColiseumMatch {
     declinedAt?: string;
     /** Open Challenge: no specific opponent target, any taker may accept. */
     open?: boolean;
+    /**
+     * The crowd's position snapshot captured the first time a spectator places
+     * themselves on the map. Compared against the end-of-match snapshot to
+     * compute the Brief's Shift Score.
+     */
+    positionStart?: PositionSnapshot;
 }
 
 export interface ColiseumRound {

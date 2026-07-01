@@ -39,6 +39,7 @@ import type {
     ColiseumResponseDrop,
     ColiseumResponseDropVote,
     ColiseumBrief,
+    ColiseumPositionVote,
     CrucibleFinalStatement,
     CrucibleSynthesisVote,
     ProductReview,
@@ -1541,6 +1542,7 @@ export type ColiseumResponseDropVoteRecord = ColiseumResponseDropVote;
 export type ColiseumBriefRecord = ColiseumBrief;
 export type ColiseumCrucibleStatementRecord = CrucibleFinalStatement;
 export type ColiseumCrucibleVoteRecord = CrucibleSynthesisVote;
+export type ColiseumPositionVoteRecord = ColiseumPositionVote;
 
 /**
  * A subject-scoped reputation award. Persisted so per-subject standing survives
