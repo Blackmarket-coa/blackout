@@ -1929,6 +1929,27 @@ class InMemoryDb {
         return [...this.voteEntries.values()].filter((entry) => entry.voteId === voteId);
     }
 
+    /**
+     * Transition a vote to a terminal `closed` state, capturing the winning
+     * `result` and a `resolvedAt` timestamp. Idempotent: if the vote is already
+     * resolved (has `resolvedAt`), the stored record is returned unchanged so a
+     * repeated resolve does not re-tally or move the terminal state. Returns
+     * `undefined` when the vote does not exist.
+     */
+    resolveVote(voteId: string, result: string | null): VoteRecord | undefined {
+        const vote = this.votes.get(voteId);
+        if (!vote) return undefined;
+        if (vote.resolvedAt) return vote;
+        const updated: VoteRecord = {
+            ...vote,
+            status: 'closed',
+            result,
+            resolvedAt: nowIso(),
+        };
+        this.votes.set(voteId, updated);
+        return updated;
+    }
+
     createFederationLink(input: Omit<FederationLinkRecord, 'createdAt'>): FederationLinkRecord {
         const record: FederationLinkRecord = { ...input, createdAt: nowIso() };
         this.federationLinks.set(record.id, record);
