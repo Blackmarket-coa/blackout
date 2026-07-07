@@ -36,21 +36,42 @@ export function resolveProposalAndNotifyFbm(proposalId: string): ProposalResolut
     if (!vote) return null;
 
     const tally = tallyVotes(db.getVoteEntries(proposalId));
+
+    // Idempotency: a proposal resolves exactly once. If it is already resolved,
+    // return the stored resolution WITHOUT re-tallying the terminal state or
+    // re-firing the outbound FBM webhook. Previously `/resolve` had no
+    // write-back or guard, so every call re-dispatched a fresh event.
+    if (vote.resolvedAt) {
+        return {
+            proposalId,
+            communityId: vote.communityId,
+            result: vote.result ?? null,
+            tally,
+            resolvedAt: vote.resolvedAt,
+        };
+    }
+
     const result = winningChoice(tally);
+    // Persist the terminal state + result so the proposal actually closes and
+    // subsequent resolves are idempotent. (Casting votes is already rejected once
+    // the vote is no longer `active` — see the governance `/votes` handler.)
+    const resolved = db.resolveVote(proposalId, result);
     const resolution: ProposalResolution = {
         proposalId,
         communityId: vote.communityId,
         result,
         tally,
-        resolvedAt: new Date().toISOString(),
+        resolvedAt: resolved?.resolvedAt ?? new Date().toISOString(),
     };
 
     // Fire-and-forget outbound webhook to FBM (owned by the proposer's account so
     // it routes to that user's registered outbound subscriptions, e.g. an FBM
-    // coalition-admin connector). Never blocks or fails the resolution.
+    // coalition-admin connector). Never blocks or fails the resolution. A stable
+    // `dedupeKey` derived from the resolution lets the receiver dedupe retries.
     void dispatchEvent({
         type: 'governance.proposal.resolved',
         blackoutUserId: vote.proposerId,
+        dedupeKey: `${proposalId}.resolved`,
         data: {
             proposalId,
             communityId: vote.communityId,
@@ -67,6 +88,10 @@ export function resolveProposalAndNotifyFbm(proposalId: string): ProposalResolut
     );
 
     incrementCounter('governance_proposal_resolved_total', {});
-    logEvent('governance.fbm_bridge.resolved', { proposalId, communityId: vote.communityId, result });
+    logEvent('governance.fbm_bridge.resolved', {
+        proposalId,
+        communityId: vote.communityId,
+        result,
+    });
     return resolution;
 }

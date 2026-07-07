@@ -26,6 +26,7 @@
  */
 
 import http from 'node:http';
+import { randomInt } from 'node:crypto';
 import { isOpaqueEnvelope } from './envelope.mjs';
 import { DeadDropStore } from './storage.mjs';
 import { generateDecoy } from './decoys.mjs';
@@ -90,7 +91,10 @@ const runSchedulerTick = async () => {
         if (!bucket.config.enabled) continue;
         if (bucket.config.schedule.type === 'manual') continue;
         if (bucket.config.schedule.type === 'interval') {
-            const intervalMinutes = Math.max(1, Number(bucket.config.schedule.intervalMinutes || 60));
+            const intervalMinutes = Math.max(
+                1,
+                Number(bucket.config.schedule.intervalMinutes || 60)
+            );
             const intervalMs = intervalMinutes * 60_000;
             const due = bucket.lastFlushAt ? now - bucket.lastFlushAt >= intervalMs : true;
             if (due) {
@@ -155,7 +159,10 @@ const handleFetch = async (body) => {
         return { code: 400, body: { error: 'roomId and clue are required' } };
     }
     const real = store.fetchByClue(clue);
-    const desiredDecoys = Math.max(0, Number.isFinite(decoyCount) ? Number(decoyCount) : DEFAULT_DECOYS);
+    const desiredDecoys = Math.max(
+        0,
+        Number.isFinite(decoyCount) ? Number(decoyCount) : DEFAULT_DECOYS
+    );
     const seed = store.getOrCreateDecoySeed(roomId);
     const decoys = [];
     if (desiredDecoys > 0) {
@@ -176,10 +183,12 @@ const handleFetch = async (body) => {
             );
         }
     }
-    // Shuffle so position doesn't reveal real-vs-decoy.
+    // Shuffle so position doesn't reveal real-vs-decoy. Use a CSPRNG
+    // (`crypto.randomInt`) rather than `Math.random`, which is not
+    // cryptographically secure and could leak the permutation.
     const all = [...real, ...decoys];
     for (let i = all.length - 1; i > 0; i -= 1) {
-        const j = Math.floor(Math.random() * (i + 1));
+        const j = randomInt(i + 1);
         [all[i], all[j]] = [all[j], all[i]];
     }
     return { code: 200, body: { envelopes: all, decoyCount: decoys.length } };

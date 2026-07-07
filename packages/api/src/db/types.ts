@@ -704,6 +704,10 @@ export interface VoteRecord {
     startsAt: string;
     endsAt: string;
     createdAt: string;
+    /** Winning option id captured when the proposal was resolved; null on a tie/no votes. */
+    result?: string | null;
+    /** ISO timestamp the proposal was resolved; set once, then immutable. */
+    resolvedAt?: string;
 }
 
 export interface VoteEntryRecord {

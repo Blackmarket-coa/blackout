@@ -15,11 +15,7 @@ import { parseNormalizedLifecycleEvent, parseNormalizedListing } from '@blackout
 
 const PROVIDER_ID = 'freeblackmarket' as const;
 
-function envBool(
-    key: string,
-    fallback: boolean,
-    env: NodeJS.ProcessEnv = process.env
-): boolean {
+function envBool(key: string, fallback: boolean, env: NodeJS.ProcessEnv = process.env): boolean {
     const raw = env[key];
     if (raw === undefined) return fallback;
     return raw === '1' || raw.toLowerCase() === 'true';
@@ -59,7 +55,9 @@ function toNormalized(raw: UpstreamListing): NormalizedListing {
     });
 }
 
-export function assertFreeblackmarketSecretsForProduction(env: NodeJS.ProcessEnv = process.env): void {
+export function assertFreeblackmarketSecretsForProduction(
+    env: NodeJS.ProcessEnv = process.env
+): void {
     if (env.NODE_ENV !== 'production') return;
     if (envBool('FREEBLACKMARKET_ENABLED', true, env) === false) return;
     const missing: string[] = [];
@@ -67,8 +65,9 @@ export function assertFreeblackmarketSecretsForProduction(env: NodeJS.ProcessEnv
     if (!env.FREEBLACKMARKET_WEBHOOK_SECRET) missing.push('FREEBLACKMARKET_WEBHOOK_SECRET');
     if (missing.length > 0) {
         throw new Error(
-            `[freeblackmarket] Refusing to start in production with missing secrets: ${missing.join(', ')}. ` +
-                `Set FREEBLACKMARKET_ENABLED=false to opt out, or supply both secrets.`
+            `[freeblackmarket] Refusing to start in production with missing secrets: ${missing.join(
+                ', '
+            )}. ` + `Set FREEBLACKMARKET_ENABLED=false to opt out, or supply both secrets.`
         );
     }
 }
@@ -81,11 +80,23 @@ export function createFreeblackmarketProvider(): MarketplaceProvider {
     assertFreeblackmarketSecretsForProduction();
 
     async function call<T>(path: string, init?: RequestInit): Promise<T> {
+        // Refuse to egress when the provider is not configured. The read paths
+        // (fetchCatalog/getListing) already early-return before reaching here;
+        // this closes the mutating paths (checkout, creator-write, onboarding),
+        // which previously called out to the production host with an empty
+        // `authorization` header when no API key was set.
+        if (!enabled || !apiKey) {
+            throw new Error(
+                `[freeblackmarket] refusing to call ${path}: provider not configured ` +
+                    `(set FREEBLACKMARKET_API_KEY and FREEBLACKMARKET_ENABLED, or use the ` +
+                    `stub via FREEBLACKMARKET_STUB=1)`
+            );
+        }
         const response = await fetch(new URL(path, baseUrl), {
             ...init,
             headers: {
                 'content-type': 'application/json',
-                'authorization': apiKey ? `Bearer ${apiKey}` : '',
+                authorization: apiKey ? `Bearer ${apiKey}` : '',
                 ...(init?.headers ?? {}),
             },
         });
@@ -122,18 +133,13 @@ export function createFreeblackmarketProvider(): MarketplaceProvider {
                     // Match the stub: never surface drafts / pending review / rejected /
                     // archived listings in the public catalog, even if the upstream API
                     // mistakenly returns them.
-                    .filter(
-                        (raw) =>
-                            raw.status === undefined ||
-                            raw.status === 'published',
-                    )
+                    .filter((raw) => raw.status === undefined || raw.status === 'published')
                     .map(toNormalized)
                     // Apply the artifact-kind filter once we've normalized (the upstream
                     // call may not support it yet).
                     .filter(
                         (listing) =>
-                            !query.artifactKind ||
-                            listing.artifactKind === query.artifactKind,
+                            !query.artifactKind || listing.artifactKind === query.artifactKind
                     )
             );
         },
@@ -213,7 +219,10 @@ export function createFreeblackmarketProvider(): MarketplaceProvider {
             return { onboardingUrl: raw.url, expiresAt: raw.expiresAt };
         },
 
-        verifyWebhook(rawBody: string, headers: Record<string, string | undefined>): WebhookVerification {
+        verifyWebhook(
+            rawBody: string,
+            headers: Record<string, string | undefined>
+        ): WebhookVerification {
             const signature = headers['x-fbm-signature'];
             const eventId = headers['x-fbm-event-id'] ?? null;
             if (!webhookSecret) return { ok: false, eventId, reason: 'webhook-secret-missing' };
@@ -224,9 +233,7 @@ export function createFreeblackmarketProvider(): MarketplaceProvider {
                 .digest('hex');
             const sigBuf = Buffer.from(signature, 'hex');
             const expBuf = Buffer.from(expected, 'hex');
-            const ok =
-                sigBuf.length === expBuf.length &&
-                crypto.timingSafeEqual(sigBuf, expBuf);
+            const ok = sigBuf.length === expBuf.length && crypto.timingSafeEqual(sigBuf, expBuf);
             return { ok, eventId, reason: ok ? undefined : 'signature-mismatch' };
         },
 
