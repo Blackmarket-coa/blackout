@@ -52,6 +52,7 @@ import {
     PublicProfileStandalone,
 } from './app/features/creators/CreatorStorefront';
 import { ONBOARDING_PATH, SWIPE_FEED_PATH } from './app/pages/paths';
+import { NotFoundPage, RouteErrorFallback } from './app/pages/RouteErrorPage';
 import { trimTrailingSlash } from './app/utils/common';
 
 // HomeFeed is gated behind two flags and a small Matrix-tied data path
@@ -273,11 +274,20 @@ const buildAppRouter = (capabilityContext: {
             : []),
         ...authRedirectRoutes,
         ...registryRoutes,
+        // Catch-all: registry routes only exist once capabilities hydrate, so
+        // an unmatched URL is either a genuine typo or a gated destination
+        // that isn't (yet) available. Render the branded not-found card either
+        // way instead of react-router's default error screen.
+        { path: '*', element: <NotFoundPage /> },
     ];
 
     return createBrowserRouter([
         {
             element: <RouterRoot />,
+            // Last-resort surface for route errors (thrown Responses, render
+            // crashes that escape PluginRouteBoundary). Without it react-router
+            // renders its unstyled "Unexpected Application Error!" screen.
+            errorElement: <RouteErrorFallback />,
             children: [
                 // OAuth popup landing page. Mounted OUTSIDE the AppShell so
                 // a popup window doesn't render the full app chrome before
