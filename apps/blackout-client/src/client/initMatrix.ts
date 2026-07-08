@@ -1,6 +1,7 @@
 import '@matrix-org/matrix-sdk-crypto-wasm';
 import {
     createClient,
+    HttpApiEvent,
     IndexedDBCryptoStore,
     IndexedDBStore,
     type MatrixClient,
@@ -9,8 +10,13 @@ import {
 import { type AccessTokens, type TokenRefreshFunction } from 'matrix-js-sdk/lib/http-api';
 import { createStore } from 'jotai/vanilla';
 import { authStateAtom, matrixClientAtom, userIdAtom, type AuthState } from '../app/state/auth';
-import { clearSession, restoreActiveSession, saveSession, type StoredSession } from './sessionManager';
-import { exchangeMatrixForBlackoutToken } from './blackoutApiSession';
+import {
+    clearSession,
+    restoreActiveSession,
+    saveSession,
+    type StoredSession,
+} from './sessionManager';
+import { clearBlackoutApiToken, exchangeMatrixForBlackoutToken } from './blackoutApiSession';
 import { cryptoCallbacks } from './secretStorageKeys';
 import { filteredMatrixLogger } from './matrixLogger';
 
@@ -112,10 +118,7 @@ const deleteIndexedDb = (name: string): Promise<void> =>
  * stores by deviceId, and (2) best-effort prune stale stores belonging to other
  * device_ids for the same user, plus the legacy un-suffixed databases.
  */
-const cleanupStaleStoresForUser = async (
-    userId: string,
-    activeDeviceId: string,
-): Promise<void> => {
+const cleanupStaleStoresForUser = async (userId: string, activeDeviceId: string): Promise<void> => {
     const targetCryptoDb = cryptoStoreDbName(userId, activeDeviceId);
     const targetSyncDb = syncStoreDbName(userId, activeDeviceId);
 
@@ -137,8 +140,7 @@ const cleanupStaleStoresForUser = async (
                     (name) =>
                         (name.startsWith(`${CRYPTO_STORE_PREFIX}${userId}:`) &&
                             name !== targetCryptoDb) ||
-                        (name.startsWith(`${SYNC_STORE_PREFIX}${userId}:`) &&
-                            name !== targetSyncDb),
+                        (name.startsWith(`${SYNC_STORE_PREFIX}${userId}:`) && name !== targetSyncDb)
                 );
         } catch {
             // indexedDB.databases() can throw in some browsers; fall through.
@@ -165,7 +167,7 @@ const buildTokenRefreshFunction = (session: StoredSession): TokenRefreshFunction
         if (!response.ok) {
             throw new MatrixInitError(
                 response.status === 429 ? 'rate_limited' : 'invalid_credentials',
-                `Token refresh failed (${response.status}).`,
+                `Token refresh failed (${response.status}).`
             );
         }
         const data = (await response.json()) as {
@@ -176,7 +178,7 @@ const buildTokenRefreshFunction = (session: StoredSession): TokenRefreshFunction
         if (!data.access_token) {
             throw new MatrixInitError(
                 'invalid_credentials',
-                'Refresh response missing access token.',
+                'Refresh response missing access token.'
             );
         }
 
@@ -212,7 +214,7 @@ const initClientForSession = async (session: StoredSession): Promise<MatrixClien
 
     const cryptoStore = new IndexedDBCryptoStore(
         window.indexedDB,
-        cryptoStoreDbName(session.userId, session.deviceId),
+        cryptoStoreDbName(session.userId, session.deviceId)
     );
 
     const client = createClient({
@@ -221,9 +223,7 @@ const initClientForSession = async (session: StoredSession): Promise<MatrixClien
         deviceId: session.deviceId,
         accessToken: session.accessToken,
         refreshToken: session.refreshToken,
-        tokenRefreshFunction: session.refreshToken
-            ? buildTokenRefreshFunction(session)
-            : undefined,
+        tokenRefreshFunction: session.refreshToken ? buildTokenRefreshFunction(session) : undefined,
         store: syncStore,
         cryptoStore,
         timelineSupport: true,
@@ -262,8 +262,30 @@ export const startSyncWithRetry = async (client: MatrixClient): Promise<void> =>
     }
 };
 
+/**
+ * Local teardown for a session the homeserver has invalidated
+ * (M_UNKNOWN_TOKEN with no way to refresh). matrix-js-sdk emits
+ * `HttpApiEvent.SessionLoggedOut` in that case and stops syncing; without a
+ * handler the app zombies along on cached data while every authenticated
+ * request (homeserver + `/v1/*` via the Matrix→Blackout exchange) 401s.
+ *
+ * Mirrors the local-cleanup half of `auth.ts`'s `logout()` — but deliberately
+ * skips `client.logout()` (the token is already dead) and `clearStores()`
+ * (keeping the IndexedDB crypto store preserves megolm keys for the next
+ * login; stale stores are pruned by `cleanupStaleStoresForUser` anyway).
+ * Dropping the stored session means a reload lands on the sign-in card
+ * instead of re-entering the zombie state.
+ */
+export const handleSessionLoggedOut = (store: AtomStore, client: MatrixClient): void => {
+    stopMatrixClient(client);
+    clearBlackoutApiToken();
+    const userId = client.getUserId();
+    clearSession(userId ?? undefined);
+    applyAuthAtoms(store, null, 'logged_out');
+};
+
 export const initMatrixFromStoredSession = async (
-    store: AtomStore,
+    store: AtomStore
 ): Promise<MatrixClient | null> => {
     applyAuthAtoms(store, null, 'loading');
 
@@ -275,6 +297,7 @@ export const initMatrixFromStoredSession = async (
 
     try {
         const client = await initClientForSession(session);
+        client.once(HttpApiEvent.SessionLoggedOut, () => handleSessionLoggedOut(store, client));
         await startSyncWithRetry(client);
         applyAuthAtoms(store, client, 'logged_in');
         // Bridge the Matrix session into a Blackout API JWT so /v1/* features

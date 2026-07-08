@@ -35,8 +35,26 @@ const isKeyBackupProbeNoise = (args: unknown[]): boolean =>
     typeof args[0] === 'string' && KEY_BACKUP_PROBE_NOISE.test(args[0]);
 
 /**
- * Wrap a matrix-js-sdk `Logger` so the benign push-rule (`warn`) and key-backup
- * probe (`info`) lines are dropped while every other method delegates unchanged.
+ * matrix-sdk-crypto (the rust layer) emits a WARN for every event it cannot
+ * decrypt because the room key is missing:
+ *
+ *   Failed to decrypt a room event: Can't find the room key to decrypt the event, withheld code: None
+ *
+ * On a fresh device with no server-side key backup this fires for every
+ * historical message — expected, unactionable, and a duplicate: the js-sdk
+ * logs its own `DecryptionError` line per event (with room/event ids), and the
+ * timeline shows a per-event "unable to decrypt" state. Dropping only the rust
+ * duplicate keeps real UTD diagnostics visible while halving the flood.
+ */
+export const DECRYPT_UTD_NOISE = /Failed to decrypt a room event: Can't find the room key/;
+
+const isDecryptUtdNoise = (args: unknown[]): boolean =>
+    typeof args[0] === 'string' && DECRYPT_UTD_NOISE.test(args[0]);
+
+/**
+ * Wrap a matrix-js-sdk `Logger` so the benign push-rule (`warn`), key-backup
+ * probe (`info`), and missing-room-key decrypt (`warn`) lines are dropped while
+ * every other method delegates unchanged.
  * `getChild` wraps recursively so namespaced child loggers (e.g. crypto) keep
  * the same filtering.
  */
@@ -49,6 +67,7 @@ export const wrapMatrixLogger = (base: Logger): Logger => ({
     },
     warn: (...args: unknown[]) => {
         if (isPushRuleNoise(args)) return;
+        if (isDecryptUtdNoise(args)) return;
         base.warn(...args);
     },
     error: (...args: unknown[]) => base.error(...args),

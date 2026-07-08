@@ -26,6 +26,32 @@ interface MatrixExchangeResponse {
 let inFlightExchange: Promise<string | null> | null = null;
 
 /**
+ * Last failed exchange, keyed by the Matrix access token that failed. While the
+ * same token is still active and the cooldown hasn't elapsed, further exchange
+ * attempts resolve `null` immediately instead of re-firing a doomed request.
+ *
+ * Without this, a dead Matrix session turns every `/v1/*` feature call into up
+ * to two 401ing exchanges (`ensureBlackoutApiToken` up front, then the
+ * authorized client's 401-retry path), flooding the console. Keying by token
+ * means a fresh login (new access token) bypasses the cooldown naturally, and
+ * `clearBlackoutApiToken()` — called from that 401-retry path — intentionally
+ * does not reset it.
+ */
+let lastFailedExchange: { accessToken: string; at: number } | null = null;
+
+const EXCHANGE_FAILURE_COOLDOWN_MS = 30_000;
+
+/** Test-only: forget the last failed exchange so cases start clean. */
+export const resetExchangeFailureCooldownForTests = (): void => {
+    lastFailedExchange = null;
+};
+
+const isExchangeCoolingDown = (accessToken: string): boolean =>
+    lastFailedExchange !== null &&
+    lastFailedExchange.accessToken === accessToken &&
+    Date.now() - lastFailedExchange.at < EXCHANGE_FAILURE_COOLDOWN_MS;
+
+/**
  * Clock-skew margin (seconds) so a token about to expire is refreshed proactively
  * rather than firing one doomed request first.
  */
@@ -93,15 +119,18 @@ const runExchange = async (session: StoredSession): Promise<string | null> => {
         })) as MatrixExchangeResponse;
 
         if (result?.token) {
+            lastFailedExchange = null;
             writeToken(result.token);
             return result.token;
         }
+        lastFailedExchange = { accessToken: session.accessToken, at: Date.now() };
         return null;
     } catch (error) {
+        lastFailedExchange = { accessToken: session.accessToken, at: Date.now() };
         // eslint-disable-next-line no-console
         console.warn(
             '[blackout] could not exchange Matrix session for an API token; /v1 features will be unauthenticated until the next attempt.',
-            error,
+            error
         );
         return null;
     }
@@ -116,7 +145,7 @@ const runExchange = async (session: StoredSession): Promise<string | null> => {
  * whether to proceed unauthenticated.
  */
 export const ensureBlackoutApiToken = (
-    session: StoredSession | null = restoreActiveSession(),
+    session: StoredSession | null = restoreActiveSession()
 ): Promise<string | null> => {
     const existing = readBlackoutApiToken();
     // Only reuse a cached token that is still valid. An expired one is skipped
@@ -124,6 +153,11 @@ export const ensureBlackoutApiToken = (
     if (existing && !isBlackoutTokenExpired(existing)) return Promise.resolve(existing);
 
     if (!session) return Promise.resolve(null);
+
+    // A recent exchange with this exact Matrix token already failed — don't
+    // hammer the API (and the console) again until the cooldown elapses or the
+    // session is replaced by a re-login.
+    if (isExchangeCoolingDown(session.accessToken)) return Promise.resolve(null);
 
     if (!inFlightExchange) {
         inFlightExchange = runExchange(session).finally(() => {

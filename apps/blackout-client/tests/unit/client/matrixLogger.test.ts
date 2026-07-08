@@ -10,12 +10,12 @@ const makeBase = () =>
         warn: vi.fn(),
         error: vi.fn(),
         getChild: vi.fn(),
-    }) as unknown as Logger & {
+    } as unknown as Logger & {
         warn: ReturnType<typeof vi.fn>;
         error: ReturnType<typeof vi.fn>;
         info: ReturnType<typeof vi.fn>;
         getChild: ReturnType<typeof vi.fn>;
-    };
+    });
 
 describe('wrapMatrixLogger', () => {
     it('drops the benign push-rule WARN flood', () => {
@@ -45,6 +45,40 @@ describe('wrapMatrixLogger', () => {
 
         const childLog = log.getChild('crypto');
         childLog.warn('Adding default global override push rule .m.rule.reaction');
+        childLog.warn('real child warning');
+
+        expect(child.warn).toHaveBeenCalledTimes(1);
+        expect(child.warn).toHaveBeenCalledWith('real child warning');
+    });
+
+    it('drops the missing-room-key decrypt WARN duplicate (rust-sdk UTD noise)', () => {
+        const base = makeBase();
+        const log = wrapMatrixLogger(base);
+        log.warn(
+            "Failed to decrypt a room event: Can't find the room key to decrypt the event, withheld code: None"
+        );
+        expect(base.warn).not.toHaveBeenCalled();
+    });
+
+    it('keeps other decrypt warnings (only the missing-room-key variant is noise)', () => {
+        const base = makeBase();
+        const log = wrapMatrixLogger(base);
+        log.warn('Failed to decrypt a room event: malformed ciphertext');
+        expect(base.warn).toHaveBeenCalledWith(
+            'Failed to decrypt a room event: malformed ciphertext'
+        );
+    });
+
+    it('drops the UTD noise on child loggers too', () => {
+        const child = makeBase();
+        const base = makeBase();
+        base.getChild.mockReturnValue(child);
+        const log = wrapMatrixLogger(base);
+
+        const childLog = log.getChild('matrix_sdk_crypto::machine');
+        childLog.warn(
+            "Failed to decrypt a room event: Can't find the room key to decrypt the event"
+        );
         childLog.warn('real child warning');
 
         expect(child.warn).toHaveBeenCalledTimes(1);
