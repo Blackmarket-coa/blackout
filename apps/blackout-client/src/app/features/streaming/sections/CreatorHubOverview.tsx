@@ -11,7 +11,7 @@ import { fetchMyAmbassador, fetchMyReferrals } from '../../growth';
 import { creatorSubsApi } from '../../monetization/monetizationApi';
 import { readBlackoutApiToken } from '../../monetization/marketplace/useMarketplaceAuth';
 import { fetchMyContent } from '../../creators/contentClient';
-import type { StreamingTabId } from '../../../state/streaming';
+import type { StreamingHubViewId, StreamingTabId } from '../../../state/streaming';
 import {
     HubSection,
     hubCardMetaStyle,
@@ -22,11 +22,12 @@ import {
 
 export interface CreatorHubOverviewProps {
     /**
-     * Switches the hub's active tab. Provided by `StreamingView` so the
-     * overview cards can deep-link into sibling hub tabs (Live, Clips,
-     * Rewards) without owning router state.
+     * Switches the hub's active tab (and optionally a sub-view inside a
+     * consolidated tab). Provided by `StreamingView` so the overview cards
+     * can deep-link into sibling hub tabs (Live, Clips, Rewards) without
+     * owning router state.
      */
-    onSelectTab?: (tab: StreamingTabId) => void;
+    onSelectTab?: (tab: StreamingTabId, view?: StreamingHubViewId) => void;
 }
 
 const cardButtonStyle: CSSProperties = {
@@ -100,7 +101,7 @@ export const CreatorHubOverview = ({ onSelectTab }: CreatorHubOverviewProps): JS
             .then((response) => {
                 if (cancelled) return;
                 setActiveSubscribers(
-                    response.subscriptions.filter((sub) => sub.status === 'active').length,
+                    response.subscriptions.filter((sub) => sub.status === 'active').length
                 );
             })
             .catch(() => undefined);
@@ -149,7 +150,7 @@ export const CreatorHubOverview = ({ onSelectTab }: CreatorHubOverviewProps): JS
                 <button
                     type="button"
                     style={cardButtonStyle}
-                    onClick={() => onSelectTab?.('live')}
+                    onClick={() => onSelectTab?.('content', 'live')}
                     data-testid="creator-hub-overview-live"
                 >
                     <CardInner label="Streaming" title="Live & replays" meta={liveMeta} />
@@ -157,7 +158,7 @@ export const CreatorHubOverview = ({ onSelectTab }: CreatorHubOverviewProps): JS
                 <button
                     type="button"
                     style={cardButtonStyle}
-                    onClick={() => onSelectTab?.('clips')}
+                    onClick={() => onSelectTab?.('content', 'clips')}
                     data-testid="creator-hub-overview-clips"
                 >
                     <CardInner
@@ -169,7 +170,7 @@ export const CreatorHubOverview = ({ onSelectTab }: CreatorHubOverviewProps): JS
                 <button
                     type="button"
                     style={cardButtonStyle}
-                    onClick={() => onSelectTab?.('rewards')}
+                    onClick={() => onSelectTab?.('earnings', 'rewards')}
                     data-testid="creator-hub-overview-rewards"
                 >
                     <CardInner label="Program" title="Rewards" meta={rewardMeta} />
@@ -179,11 +180,7 @@ export const CreatorHubOverview = ({ onSelectTab }: CreatorHubOverviewProps): JS
                     style={hubCardStyle}
                     data-testid="creator-hub-overview-dashboard"
                 >
-                    <CardInner
-                        label="Storefront"
-                        title="Creator dashboard"
-                        meta={dashboardMeta}
-                    />
+                    <CardInner label="Storefront" title="Creator dashboard" meta={dashboardMeta} />
                 </Link>
                 <Link
                     to={MONETIZATION_EARNINGS_PATH}
