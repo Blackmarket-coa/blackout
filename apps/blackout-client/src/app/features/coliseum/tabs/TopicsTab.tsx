@@ -6,7 +6,11 @@ import {
 } from '@blackout/core';
 import { useColiseumTopics, type ColiseumScopeQuery } from '../hooks/useColiseumTopics';
 import { createColiseumTopic } from '../coliseumClient';
-import { coliseumTabAtom, selectedColiseumTopicIdAtom } from '../../../state/coliseum';
+import {
+    coliseumReturnTabAtom,
+    coliseumTabAtom,
+    selectedColiseumTopicIdAtom,
+} from '../../../state/coliseum';
 import { useAtom } from 'jotai';
 
 export interface TopicsTabProps {
@@ -177,6 +181,7 @@ export function TopicsTab({ scope }: TopicsTabProps) {
     const { data, loading, error, refetch } = useColiseumTopics(scope, { limit: 50 });
     const [, setSelectedTopicId] = useAtom(selectedColiseumTopicIdAtom);
     const [, setTab] = useAtom(coliseumTabAtom);
+    const [, setReturnTab] = useAtom(coliseumReturnTabAtom);
 
     const [showForm, setShowForm] = useState(false);
     const [form, setForm] = useState({ ...EMPTY_FORM });
@@ -192,9 +197,10 @@ export function TopicsTab({ scope }: TopicsTabProps) {
     const handleSelect = useCallback(
         (topicId: string) => {
             setSelectedTopicId(topicId);
+            setReturnTab('topics');
             setTab('debate');
         },
-        [setSelectedTopicId, setTab]
+        [setSelectedTopicId, setReturnTab, setTab]
     );
 
     const submit = useCallback(async () => {

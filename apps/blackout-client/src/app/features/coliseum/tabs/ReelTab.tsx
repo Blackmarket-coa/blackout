@@ -2,7 +2,11 @@ import React, { useCallback, useRef, useState, type CSSProperties } from 'react'
 import { useAtom } from 'jotai';
 import type { ColiseumStance, RankedColiseumArgument } from '@blackout/core';
 import { useColiseumReel, useColiseumTopic, useColiseumVerdict } from '../hooks/useColiseumTopics';
-import { coliseumTabAtom, selectedColiseumTopicIdAtom } from '../../../state/coliseum';
+import {
+    coliseumReturnTabAtom,
+    coliseumTabAtom,
+    selectedColiseumTopicIdAtom,
+} from '../../../state/coliseum';
 import { useMatrixClientOrNull } from '../../../hooks/useMatrixClient';
 import { mxcUrlToHttp } from '../../../utils/matrix';
 import ColiseumCitationChip from '../ColiseumCitationChip';
@@ -362,6 +366,7 @@ function TopicReel({ topicId, client }: { topicId: string; client: ReelTabClient
 function GlobalReel({ client }: { client: ReelTabClient }) {
     const [, setSelectedTopicId] = useAtom(selectedColiseumTopicIdAtom);
     const [, setTab] = useAtom(coliseumTabAtom);
+    const [, setReturnTab] = useAtom(coliseumReturnTabAtom);
     const { items, loading, error, hasMore, loadMore } = useColiseumReel(20);
     // Votes here are fire-and-forget; don't refetch (it would reset pagination).
     const { flashes, onVote } = useReelVote(client, () => {});
@@ -420,6 +425,7 @@ function GlobalReel({ client }: { client: ReelTabClient }) {
                     topicTitle={item.topicTitle}
                     onOpenTopic={() => {
                         setSelectedTopicId(item.topicId);
+                        setReturnTab('reel');
                         setTab('debate');
                     }}
                 />
