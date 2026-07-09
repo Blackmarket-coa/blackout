@@ -12,6 +12,7 @@ import { createColiseumMatch, fetchColiseumMatches } from '../coliseumMatchClien
 import { ColiseumFab } from '../components/ColiseumFab';
 import { RelativeTime } from '../components/RelativeTime';
 import * as ui from '../components/coliseumUi.css';
+import { coliseumSheetTheme } from '../coliseumArenaTheme.css';
 
 const inputStyle: CSSProperties = {
     padding: '10px 12px',
@@ -133,7 +134,7 @@ function CalloutSheet({
     onCallout: () => void;
 }) {
     return (
-        <Sheet open={open} onClose={onClose} title="Issue a Callout">
+        <Sheet open={open} onClose={onClose} title="Issue a Callout" className={coliseumSheetTheme}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <label style={labelStyle}>Proposition</label>
                 <input

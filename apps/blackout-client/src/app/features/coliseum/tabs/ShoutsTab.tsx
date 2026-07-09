@@ -19,6 +19,7 @@ import { AuthorLine } from '../components/AuthorLine';
 import { ColiseumFab } from '../components/ColiseumFab';
 import { HeatBadge } from '../components/HeatBadge';
 import * as ui from '../components/coliseumUi.css';
+import { coliseumSheetTheme } from '../coliseumArenaTheme.css';
 
 const inputStyle: CSSProperties = {
     padding: '10px 12px',
@@ -186,7 +187,12 @@ function ShoutComposerSheet({
     onShout: () => void;
 }) {
     return (
-        <Sheet open={open} onClose={onClose} title="Shout into the wind">
+        <Sheet
+            open={open}
+            onClose={onClose}
+            title="Shout into the wind"
+            className={coliseumSheetTheme}
+        >
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <label style={labelStyle}>What set you off?</label>
                 <input

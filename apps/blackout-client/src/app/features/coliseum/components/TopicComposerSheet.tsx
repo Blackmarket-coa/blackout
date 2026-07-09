@@ -1,6 +1,7 @@
 import React, { useCallback, useState, type CSSProperties } from 'react';
 import { COLISEUM_TOPIC_CATEGORIES, type ColiseumTopicCategoryKey } from '@blackout/core';
 import { Sheet } from '../../../../../../../packages/ui/src/primitives';
+import { coliseumSheetTheme } from '../coliseumArenaTheme.css';
 import { createColiseumTopic } from '../coliseumClient';
 import type { ColiseumScopeQuery } from '../hooks/useColiseumTopics';
 
@@ -117,7 +118,7 @@ export function TopicComposerSheet({
     }, [form, scope.canopyId, scope.denId, onClose, onCreated]);
 
     return (
-        <Sheet open={open} onClose={onClose} title="Start a debate">
+        <Sheet open={open} onClose={onClose} title="Start a debate" className={coliseumSheetTheme}>
             <div
                 style={{ display: 'flex', flexDirection: 'column', gap: 8 }}
                 data-testid="coliseum-topic-form"

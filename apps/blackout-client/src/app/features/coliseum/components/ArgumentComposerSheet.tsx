@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { ColiseumArgumentMedia, ColiseumStance } from '@blackout/core';
 import { Sheet } from '../../../../../../../packages/ui/src/primitives';
+import { coliseumSheetTheme } from '../coliseumArenaTheme.css';
 import type { CreateColiseumArgumentInput } from '../coliseumClient';
 import { STANCE_LABEL, STANCE_ORDER } from './stance';
 
@@ -191,6 +192,7 @@ export function ArgumentComposerSheet({
             onClose={onClose}
             title={replyingTo ? 'Rebut' : 'Add your argument'}
             backdropTestId="coliseum-debate-composer-backdrop"
+            className={coliseumSheetTheme}
         >
             <form
                 data-testid="coliseum-debate-composer"
