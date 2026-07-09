@@ -74,13 +74,16 @@ describe('TopicsTab topic creation', () => {
         const { container, store } = renderTopics();
         await flush();
 
-        (
-            container.querySelector('[data-testid="coliseum-new-topic"]') as HTMLButtonElement
-        ).click();
+        act(() => {
+            (
+                container.querySelector('[data-testid="coliseum-new-topic"]') as HTMLButtonElement
+            ).click();
+        });
         await flush();
 
+        // The composer sheet portals to document.body.
         act(() => {
-            const inputs = container.querySelectorAll(
+            const inputs = document.querySelectorAll(
                 '[data-testid="coliseum-topic-form"] input'
             ) as NodeListOf<HTMLInputElement>;
             setReactValue(inputs[0], 'Should we ratify?');
@@ -90,7 +93,7 @@ describe('TopicsTab topic creation', () => {
 
         await act(async () => {
             (
-                container.querySelector(
+                document.querySelector(
                     '[data-testid="coliseum-topic-form-submit"]'
                 ) as HTMLButtonElement
             ).click();
@@ -115,13 +118,15 @@ describe('TopicsTab topic creation', () => {
         const { container } = renderTopics();
         await flush();
 
-        (
-            container.querySelector('[data-testid="coliseum-new-topic"]') as HTMLButtonElement
-        ).click();
+        act(() => {
+            (
+                container.querySelector('[data-testid="coliseum-new-topic"]') as HTMLButtonElement
+            ).click();
+        });
         await flush();
 
         act(() => {
-            const inputs = container.querySelectorAll(
+            const inputs = document.querySelectorAll(
                 '[data-testid="coliseum-topic-form"] input'
             ) as NodeListOf<HTMLInputElement>;
             setReactValue(inputs[0], 'Title');
@@ -131,7 +136,7 @@ describe('TopicsTab topic creation', () => {
 
         await act(async () => {
             (
-                container.querySelector(
+                document.querySelector(
                     '[data-testid="coliseum-topic-form-submit"]'
                 ) as HTMLButtonElement
             ).click();
@@ -140,7 +145,7 @@ describe('TopicsTab topic creation', () => {
 
         expect(createColiseumTopic).not.toHaveBeenCalled();
         expect(
-            container.querySelector('[data-testid="coliseum-topic-form-error"]')?.textContent
+            document.querySelector('[data-testid="coliseum-topic-form-error"]')?.textContent
         ).toContain('valid');
     });
 });
