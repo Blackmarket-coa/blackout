@@ -5,6 +5,7 @@ import {
     type ColiseumShout,
     type ColiseumTopicCategoryKey,
 } from '@blackout/core';
+import { EmptyState, Sheet } from '../../../../../../../packages/ui/src/primitives';
 import { coliseumTabAtom, selectedColiseumMatchIdAtom } from '../../../state/coliseum';
 import {
     createColiseumShout,
@@ -14,48 +15,34 @@ import {
     postColiseumResponseDrop,
     type ShoutDetailResponse,
 } from '../coliseumMatchClient';
-
-const containerStyle: CSSProperties = {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 14,
-    padding: 16,
-    height: '100%',
-    minHeight: 0,
-    overflowY: 'auto',
-};
-
-const cardStyle: CSSProperties = {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 8,
-    padding: 12,
-    border: '1px solid var(--border-default)',
-    background: 'var(--bg-surface)',
-};
+import { AuthorLine } from '../components/AuthorLine';
+import { ColiseumFab } from '../components/ColiseumFab';
+import { HeatBadge } from '../components/HeatBadge';
+import * as ui from '../components/coliseumUi.css';
+import { coliseumSheetTheme } from '../coliseumArenaTheme.css';
 
 const inputStyle: CSSProperties = {
-    padding: 8,
+    padding: '10px 12px',
+    borderRadius: 10,
     border: '1px solid var(--border-default)',
     background: 'var(--bg-input)',
     color: 'var(--text-primary)',
+    fontSize: 14,
+    width: '100%',
+    boxSizing: 'border-box',
 };
 
-const primaryButton: CSSProperties = {
-    padding: '8px 14px',
-    border: '1px solid var(--accent-primary)',
-    background: 'var(--accent-primary)',
+const labelStyle: CSSProperties = { fontSize: 12, color: 'var(--text-secondary)', fontWeight: 600 };
+
+const pillButton: CSSProperties = {
+    padding: '10px 18px',
+    borderRadius: 999,
+    border: 'none',
+    background: 'var(--accent-primary, #1ABC9C)',
     color: '#fff',
-    cursor: 'pointer',
     fontWeight: 700,
-};
-
-const ghostButton: CSSProperties = {
-    ...primaryButton,
-    background: 'transparent',
-    color: 'var(--text-primary)',
-    borderColor: 'var(--border-default)',
-    fontWeight: 500,
+    fontSize: 14,
+    cursor: 'pointer',
 };
 
 // Phase 1 accepts an mxc reference for the video; the in-app recorder/upload
@@ -98,53 +85,75 @@ function ShoutCard({
     }, [shout.id, onGraduated]);
 
     return (
-        <article style={cardStyle} data-testid="coliseum-shout" data-shout-id={shout.id}>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                {shout.domain ? (
-                    <span style={{ fontSize: 11, color: 'var(--border-active)' }}>
-                        {shout.domain}
-                    </span>
-                ) : null}
-                <span style={{ flex: 1, fontWeight: 600 }}>{shout.body ?? 'Untitled shout'}</span>
-                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                    🔥 {(shout.heat * 100).toFixed(0)}
+        <article className={ui.card} data-testid="coliseum-shout" data-shout-id={shout.id}>
+            <AuthorLine userId={shout.authorId} timestamp={shout.createdAt}>
+                <span style={{ marginLeft: 'auto' }}>
+                    <HeatBadge heat={shout.heat} />
                 </span>
-            </div>
-            <div style={{ display: 'flex', gap: 8 }}>
-                <button type="button" style={ghostButton} onClick={open}>
-                    {detail ? 'Refresh' : 'Open thread'}
+            </AuthorLine>
+            {shout.domain ? (
+                <div className={ui.tagRow}>
+                    <span className={ui.tagChip}>{shout.domain}</span>
+                </div>
+            ) : null}
+            <h3 className={ui.cardTitle}>{shout.body ?? 'Untitled shout'}</h3>
+            <div className={ui.actionRow}>
+                <button type="button" className={ui.actionButton} onClick={open}>
+                    {detail ? '↻ Refresh' : '💬 Open thread'}
                 </button>
                 {detail?.bilateral ? (
-                    <button type="button" style={primaryButton} onClick={onGraduate}>
-                        Formalize into a Match
+                    <button
+                        type="button"
+                        className={ui.chipActive}
+                        onClick={() => void onGraduate()}
+                    >
+                        ⚔️ Formalize into a Match
                     </button>
                 ) : null}
             </div>
             {detail ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    {detail.drops.map((drop) => (
-                        <div key={drop.id} style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-                            #{drop.rank} · {drop.authorId}: {drop.body ?? '(video)'}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {detail.drops.length > 0 ? (
+                        <div className={ui.threadChildren}>
+                            {detail.drops.map((drop) => (
+                                <div
+                                    key={drop.id}
+                                    style={{ display: 'flex', flexDirection: 'column', gap: 4 }}
+                                >
+                                    <AuthorLine userId={drop.authorId} timestamp={drop.createdAt}>
+                                        <span className={ui.tagChip} style={{ marginLeft: 'auto' }}>
+                                            #{drop.rank}
+                                        </span>
+                                    </AuthorLine>
+                                    <p style={{ margin: 0, fontSize: 14, lineHeight: 1.5 }}>
+                                        {drop.body ?? '(video)'}
+                                    </p>
+                                </div>
+                            ))}
                         </div>
-                    ))}
-                    <div style={{ display: 'flex', gap: 6 }}>
+                    ) : null}
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                         <input
                             value={dropBody}
                             onChange={(e) => setDropBody(e.target.value)}
                             placeholder="Response…"
-                            style={{ ...inputStyle, flex: 1 }}
+                            style={{ ...inputStyle, flex: 1, width: 'auto', minWidth: 120 }}
                         />
                         <input
                             value={dropMxc}
                             onChange={(e) => setDropMxc(e.target.value)}
                             placeholder="video mxc://…"
-                            style={{ ...inputStyle, flex: 1 }}
+                            style={{ ...inputStyle, flex: 1, width: 'auto', minWidth: 120 }}
                         />
                         <button
                             type="button"
-                            style={primaryButton}
+                            style={{
+                                ...pillButton,
+                                padding: '8px 16px',
+                                opacity: isMxc(dropMxc) ? 1 : 0.6,
+                            }}
                             disabled={!isMxc(dropMxc)}
-                            onClick={onDrop}
+                            onClick={() => void onDrop()}
                         >
                             Drop
                         </button>
@@ -155,11 +164,92 @@ function ShoutCard({
     );
 }
 
+/** Bottom-sheet composer for a new Shout (was an inline card on this tab). */
+function ShoutComposerSheet({
+    open,
+    onClose,
+    body,
+    setBody,
+    mxc,
+    setMxc,
+    domain,
+    setDomain,
+    onShout,
+}: {
+    open: boolean;
+    onClose: () => void;
+    body: string;
+    setBody: (value: string) => void;
+    mxc: string;
+    setMxc: (value: string) => void;
+    domain: ColiseumTopicCategoryKey | '';
+    setDomain: (value: ColiseumTopicCategoryKey | '') => void;
+    onShout: () => void;
+}) {
+    return (
+        <Sheet
+            open={open}
+            onClose={onClose}
+            title="Shout into the wind"
+            className={coliseumSheetTheme}
+        >
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <label style={labelStyle}>What set you off?</label>
+                <input
+                    value={body}
+                    onChange={(e) => setBody(e.target.value)}
+                    placeholder="What set you off?"
+                    style={inputStyle}
+                />
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <div style={{ flex: 1, minWidth: 160 }}>
+                        <label style={labelStyle}>Domain</label>
+                        <select
+                            value={domain}
+                            onChange={(e) =>
+                                setDomain(e.target.value as ColiseumTopicCategoryKey | '')
+                            }
+                            style={inputStyle}
+                        >
+                            <option value="">Any domain</option>
+                            {COLISEUM_TOPIC_CATEGORIES.map((cat) => (
+                                <option key={cat.key} value={cat.key}>
+                                    {cat.label}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+                    <div style={{ flex: 1, minWidth: 160 }}>
+                        <label style={labelStyle}>Video</label>
+                        <input
+                            value={mxc}
+                            onChange={(e) => setMxc(e.target.value)}
+                            placeholder="video mxc://…"
+                            style={inputStyle}
+                        />
+                    </div>
+                </div>
+                <div style={{ marginTop: 4 }}>
+                    <button
+                        type="button"
+                        style={{ ...pillButton, opacity: isMxc(mxc) ? 1 : 0.6 }}
+                        disabled={!isMxc(mxc)}
+                        onClick={onShout}
+                    >
+                        Post Shout
+                    </button>
+                </div>
+            </div>
+        </Sheet>
+    );
+}
+
 export function ShoutsTab() {
     const [shouts, setShouts] = useState<ColiseumShout[]>([]);
     const [body, setBody] = useState('');
     const [mxc, setMxc] = useState('');
     const [domain, setDomain] = useState<ColiseumTopicCategoryKey | ''>('');
+    const [composerOpen, setComposerOpen] = useState(false);
     const setTab = useSetAtom(coliseumTabAtom);
     const setSelectedMatch = useSetAtom(selectedColiseumMatchIdAtom);
 
@@ -182,6 +272,7 @@ export function ShoutsTab() {
         }).catch(() => undefined);
         setBody('');
         setMxc('');
+        setComposerOpen(false);
         load();
     }, [body, mxc, domain, load]);
 
@@ -194,51 +285,43 @@ export function ShoutsTab() {
     );
 
     return (
-        <div style={containerStyle} data-testid="coliseum-shouts-tab">
-            <section style={cardStyle}>
-                <strong>Shout into the wind</strong>
-                <input
-                    value={body}
-                    onChange={(e) => setBody(e.target.value)}
-                    placeholder="What set you off?"
-                    style={inputStyle}
-                />
-                <div style={{ display: 'flex', gap: 8 }}>
-                    <select
-                        value={domain}
-                        onChange={(e) => setDomain(e.target.value as ColiseumTopicCategoryKey | '')}
-                        style={{ ...inputStyle, flex: 1 }}
-                    >
-                        <option value="">Any domain</option>
-                        {COLISEUM_TOPIC_CATEGORIES.map((cat) => (
-                            <option key={cat.key} value={cat.key}>
-                                {cat.label}
-                            </option>
-                        ))}
-                    </select>
-                    <input
-                        value={mxc}
-                        onChange={(e) => setMxc(e.target.value)}
-                        placeholder="video mxc://…"
-                        style={{ ...inputStyle, flex: 1 }}
+        <div data-testid="coliseum-shouts-tab" style={{ minHeight: '100%' }}>
+            <div className={ui.feedColumn}>
+                {shouts.length === 0 ? (
+                    <EmptyState
+                        title="No shouts yet"
+                        description="Be the first into the wind — drop a video take and see who answers back."
+                        action={
+                            <button
+                                type="button"
+                                className={ui.chipActive}
+                                onClick={() => setComposerOpen(true)}
+                            >
+                                Post a Shout
+                            </button>
+                        }
                     />
-                </div>
-                <button
-                    type="button"
-                    style={primaryButton}
-                    disabled={!isMxc(mxc)}
-                    onClick={onShout}
-                >
-                    Post Shout
-                </button>
-            </section>
-            {shouts.length === 0 ? (
-                <p style={{ color: 'var(--text-secondary)' }}>
-                    No shouts yet. Be the first into the wind.
-                </p>
-            ) : (
-                shouts.map((s) => <ShoutCard key={s.id} shout={s} onGraduated={onGraduated} />)
-            )}
+                ) : (
+                    shouts.map((s) => <ShoutCard key={s.id} shout={s} onGraduated={onGraduated} />)
+                )}
+            </div>
+
+            <ColiseumFab
+                label="Post a Shout"
+                data-testid="coliseum-new-shout"
+                onClick={() => setComposerOpen(true)}
+            />
+            <ShoutComposerSheet
+                open={composerOpen}
+                onClose={() => setComposerOpen(false)}
+                body={body}
+                setBody={setBody}
+                mxc={mxc}
+                setMxc={setMxc}
+                domain={domain}
+                setDomain={setDomain}
+                onShout={() => void onShout()}
+            />
         </div>
     );
 }

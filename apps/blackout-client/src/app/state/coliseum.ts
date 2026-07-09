@@ -26,8 +26,18 @@ export const selectedColiseumMatchIdAtom = atomWithStorage<string | null>(
     null
 );
 
+/**
+ * Where the debate drill-in's back button returns to. Set by whichever surface
+ * navigates into the debate (topics feed, reel comments, …); session-scoped on
+ * purpose — a reload lands back on the default.
+ */
+export const coliseumReturnTabAtom = atom<ColiseumTabId>('topics');
+
+/** Reel starts muted (autoplay policy); the user's unmute choice persists. */
+export const coliseumReelMutedAtom = atomWithStorage<boolean>('bmc-coliseum-reel-muted', true);
+
 export const COLISEUM_TAB_LABELS: Record<ColiseumTabId, string> = {
-    reel: 'Reel',
+    reel: 'For You',
     arena: 'Arena',
     match: 'Match',
     shouts: 'Shouts',

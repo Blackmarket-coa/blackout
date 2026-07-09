@@ -11,65 +11,37 @@ import {
     submitEntry,
     voteForEntry,
 } from '../challengesClient';
-
-const containerStyle: CSSProperties = {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 12,
-    padding: 16,
-    height: '100%',
-    minHeight: 0,
-    overflowY: 'auto',
-};
-
-const cardStyle: CSSProperties = {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 8,
-    padding: 12,
-    borderRadius: 10,
-    border: '1px solid var(--border-default, rgba(255,255,255,0.12))',
-    background: 'var(--bg-surface, rgba(255,255,255,0.03))',
-};
+import { EmptyState } from '../../../../../../../packages/ui/src/primitives';
+import { AuthorLine } from '../components/AuthorLine';
+import * as ui from '../components/coliseumUi.css';
 
 const inputStyle: CSSProperties = {
     flex: 1,
-    padding: 8,
-    borderRadius: 8,
+    minWidth: 0,
+    padding: '8px 12px',
+    borderRadius: 10,
     border: '1px solid var(--border-default, rgba(255,255,255,0.12))',
     background: 'var(--bg-input, rgba(0,0,0,0.2))',
     color: 'var(--text-primary, #fff)',
+    fontSize: 14,
 };
 
-const badgeStyle: CSSProperties = {
-    fontSize: 11,
-    fontWeight: 700,
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
-    padding: '2px 8px',
+const submitButtonStyle: CSSProperties = {
+    padding: '8px 16px',
     borderRadius: 999,
-    border: '1px solid var(--border-default, rgba(255,255,255,0.12))',
-    color: 'var(--text-secondary, #aaa)',
-};
-
-const buttonStyle: CSSProperties = {
-    padding: '8px 14px',
-    borderRadius: 8,
     border: '1px solid var(--accent-primary, #1ABC9C)',
     background: 'var(--accent-primary, #1ABC9C)',
     color: '#fff',
+    fontSize: 13,
+    fontWeight: 600,
     cursor: 'pointer',
 };
 
-const ghostButtonStyle: CSSProperties = {
-    padding: '6px 12px',
-    borderRadius: 8,
-    border: '1px solid var(--border-default, rgba(255,255,255,0.12))',
-    background: 'transparent',
-    color: 'var(--text-primary, #fff)',
-    cursor: 'pointer',
-    fontSize: 12,
-};
+const MEDALS = ['🥇', '🥈', '🥉'] as const;
+
+function rankLabel(rank: number): string {
+    return MEDALS[rank - 1] ?? `#${rank}`;
+}
 
 function ChallengeCard({ challenge }: { challenge: ColiseumChallenge }) {
     const [open, setOpen] = useState(false);
@@ -100,31 +72,42 @@ function ChallengeCard({ challenge }: { challenge: ColiseumChallenge }) {
         }
     }, [challenge.id, entryTitle, busy, loadEntries]);
 
-    const onVote = useCallback(
-        async (entryId: string) => {
-            const res = await voteForEntry(entryId);
-            setEntries(res.entries);
-        },
-        [],
-    );
+    const onVote = useCallback(async (entryId: string) => {
+        const res = await voteForEntry(entryId);
+        setEntries(res.entries);
+    }, []);
 
     return (
-        <article style={cardStyle} data-testid="coliseum-challenge-card" data-challenge-id={challenge.id}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={badgeStyle}>{challenge.category}</span>
-                <span style={{ fontSize: 15, fontWeight: 600, flex: 1 }}>{challenge.title}</span>
-                <span style={badgeStyle}>{challenge.status}</span>
+        <article
+            className={ui.card}
+            data-testid="coliseum-challenge-card"
+            data-challenge-id={challenge.id}
+        >
+            <div className={ui.cardHeaderRow}>
+                <span className={ui.tagChip}>{challenge.category}</span>
+                <span className={ui.tagChip} style={{ textTransform: 'uppercase' }}>
+                    {challenge.status}
+                </span>
             </div>
+            <h3 className={ui.cardTitle}>{challenge.title}</h3>
             {challenge.description ? (
-                <p style={{ fontSize: 13, color: 'var(--text-secondary, #aaa)', margin: 0 }}>
+                <p className={ui.mutedText} style={{ margin: 0 }}>
                     {challenge.description}
                 </p>
             ) : null}
-            <button type="button" style={ghostButtonStyle} onClick={() => setOpen((v) => !v)}>
-                {open ? 'Hide entries' : 'View entries'}
-            </button>
+            <AuthorLine userId={challenge.creatorId} timestamp={challenge.createdAt} />
+            <div className={ui.actionRow}>
+                <button
+                    type="button"
+                    className={ui.actionButton}
+                    onClick={() => setOpen((v) => !v)}
+                    aria-expanded={open}
+                >
+                    {open ? 'Hide entries' : 'View entries'}
+                </button>
+            </div>
             {open ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                     {challenge.status === 'open' ? (
                         <div style={{ display: 'flex', gap: 8 }}>
                             <input
@@ -136,7 +119,7 @@ function ChallengeCard({ challenge }: { challenge: ColiseumChallenge }) {
                             />
                             <button
                                 type="button"
-                                style={buttonStyle}
+                                style={submitButtonStyle}
                                 disabled={busy || entryTitle.trim().length === 0}
                                 onClick={onEnter}
                             >
@@ -145,24 +128,55 @@ function ChallengeCard({ challenge }: { challenge: ColiseumChallenge }) {
                         </div>
                     ) : null}
                     {entries.length === 0 ? (
-                        <span style={{ fontSize: 13, color: 'var(--text-secondary, #aaa)' }}>
-                            No entries yet.
-                        </span>
+                        <EmptyState
+                            title="No entries yet"
+                            description={
+                                challenge.status === 'open'
+                                    ? 'Be the first to enter your attempt.'
+                                    : 'Nobody entered this challenge.'
+                            }
+                        />
                     ) : (
                         entries.map((entry) => (
                             <div
                                 key={entry.id}
-                                style={{ display: 'flex', alignItems: 'center', gap: 8 }}
+                                style={{ display: 'flex', alignItems: 'center', gap: 10 }}
                                 data-testid="coliseum-challenge-entry"
                             >
-                                <span style={badgeStyle}>#{entry.rank}</span>
-                                <span style={{ flex: 1, fontSize: 14 }}>{entry.title}</span>
-                                <span style={{ fontSize: 13, color: 'var(--text-secondary, #aaa)' }}>
-                                    {entry.votes} ▲
+                                <span
+                                    style={{
+                                        width: 30,
+                                        flexShrink: 0,
+                                        textAlign: 'center',
+                                        fontSize: entry.rank <= MEDALS.length ? 18 : 13,
+                                        fontWeight: 700,
+                                        color: 'var(--text-secondary, #aaa)',
+                                    }}
+                                    aria-label={`Rank ${entry.rank}`}
+                                >
+                                    {rankLabel(entry.rank)}
                                 </span>
+                                <div
+                                    style={{
+                                        flex: 1,
+                                        minWidth: 0,
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        gap: 2,
+                                    }}
+                                >
+                                    <span style={{ fontSize: 14, fontWeight: 600 }}>
+                                        {entry.title}
+                                    </span>
+                                    <AuthorLine
+                                        userId={entry.entrantId}
+                                        timestamp={entry.createdAt}
+                                    />
+                                </div>
+                                <span className={ui.mutedText}>{entry.votes} ▲</span>
                                 <button
                                     type="button"
-                                    style={ghostButtonStyle}
+                                    className={ui.actionButton}
                                     onClick={() => onVote(entry.id)}
                                 >
                                     Vote
@@ -190,7 +204,7 @@ export function ChallengesTab() {
                 setError(null);
             })
             .catch((err: unknown) =>
-                setError(err instanceof Error ? err.message : 'Failed to load challenges'),
+                setError(err instanceof Error ? err.message : 'Failed to load challenges')
             );
     }, []);
 
@@ -212,44 +226,67 @@ export function ChallengesTab() {
                 setBusy(false);
             }
         },
-        [title, category, busy, refetch],
+        [title, category, busy, refetch]
     );
 
     return (
-        <div style={containerStyle} data-testid="coliseum-challenges">
-            <form onSubmit={onCreate} style={{ display: 'flex', gap: 8 }} data-testid="coliseum-challenge-composer">
-                <select
-                    value={category}
-                    onChange={(event) => setCategory(event.target.value)}
-                    style={{ ...inputStyle, flex: '0 0 auto' }}
-                    aria-label="Challenge category"
+        <div data-testid="coliseum-challenges" style={{ minHeight: '100%' }}>
+            <div className={ui.feedColumn}>
+                <form
+                    onSubmit={onCreate}
+                    style={{ display: 'flex', gap: 8 }}
+                    data-testid="coliseum-challenge-composer"
                 >
-                    {SUGGESTED_CHALLENGE_CATEGORIES.map((c) => (
-                        <option key={c} value={c}>
-                            {c}
-                        </option>
-                    ))}
-                </select>
-                <input
-                    value={title}
-                    onChange={(event) => setTitle(event.target.value)}
-                    placeholder="Start a challenge…"
-                    style={inputStyle}
-                    data-testid="coliseum-challenge-input"
-                />
-                <button type="submit" style={buttonStyle} disabled={busy || title.trim().length === 0}>
-                    Create
-                </button>
-            </form>
+                    <select
+                        value={category}
+                        onChange={(event) => setCategory(event.target.value)}
+                        style={{ ...inputStyle, flex: '0 0 auto' }}
+                        aria-label="Challenge category"
+                    >
+                        {SUGGESTED_CHALLENGE_CATEGORIES.map((c) => (
+                            <option key={c} value={c}>
+                                {c}
+                            </option>
+                        ))}
+                    </select>
+                    <input
+                        value={title}
+                        onChange={(event) => setTitle(event.target.value)}
+                        placeholder="Start a challenge…"
+                        style={inputStyle}
+                        data-testid="coliseum-challenge-input"
+                    />
+                    <button
+                        type="submit"
+                        style={submitButtonStyle}
+                        disabled={busy || title.trim().length === 0}
+                    >
+                        Create
+                    </button>
+                </form>
 
-            {error ? <div style={{ color: 'var(--danger, #e74c3c)', fontSize: 13 }}>{error}</div> : null}
-            {challenges.length === 0 ? (
-                <span style={{ fontSize: 13, color: 'var(--text-secondary, #aaa)' }}>
-                    No challenges yet. Start the first one.
-                </span>
-            ) : (
-                challenges.map((challenge) => <ChallengeCard key={challenge.id} challenge={challenge} />)
-            )}
+                {error ? (
+                    <EmptyState
+                        title="Couldn't load challenges"
+                        description={error}
+                        action={
+                            <button type="button" className={ui.chipActive} onClick={refetch}>
+                                Retry
+                            </button>
+                        }
+                    />
+                ) : null}
+                {!error && challenges.length === 0 ? (
+                    <EmptyState
+                        title="No challenges yet"
+                        description="Start the first one — grow food, launch a business, build something."
+                    />
+                ) : (
+                    challenges.map((challenge) => (
+                        <ChallengeCard key={challenge.id} challenge={challenge} />
+                    ))
+                )}
+            </div>
         </div>
     );
 }

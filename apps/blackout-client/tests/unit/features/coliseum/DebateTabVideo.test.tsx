@@ -84,6 +84,17 @@ const renderDebate = (client: DebateTabClient) => {
     return container;
 };
 
+/** The composer lives in a bottom sheet portaled to document.body. */
+const openComposer = (container: HTMLElement) => {
+    act(() => {
+        (
+            container.querySelector(
+                '[data-testid="coliseum-debate-composer-open"]'
+            ) as HTMLButtonElement
+        ).click();
+    });
+};
+
 afterEach(() => {
     act(() => {
         mountedRoots.splice(0).forEach((root) => root.unmount());
@@ -99,9 +110,8 @@ describe('DebateTab video attachment', () => {
             createColiseumArgument: vi.fn(),
         });
         await flush();
-        expect(
-            container.querySelector('[data-testid="coliseum-debate-composer-video"]')
-        ).toBeNull();
+        openComposer(container);
+        expect(document.querySelector('[data-testid="coliseum-debate-composer-video"]')).toBeNull();
     });
 
     it('uploads the picked video and posts the argument with its mxc media', async () => {
@@ -113,8 +123,9 @@ describe('DebateTab video attachment', () => {
             uploadArgumentVideo,
         });
         await flush();
+        openComposer(container);
 
-        const fileInput = container.querySelector(
+        const fileInput = document.querySelector(
             '[data-testid="coliseum-debate-composer-video"]'
         ) as HTMLInputElement;
         expect(fileInput).toBeTruthy();
@@ -128,15 +139,15 @@ describe('DebateTab video attachment', () => {
 
         // The staged-video chip should appear.
         expect(
-            container.querySelector('[data-testid="coliseum-debate-composer-video-preview"]')
+            document.querySelector('[data-testid="coliseum-debate-composer-video-preview"]')
         ).toBeTruthy();
 
-        const body = container.querySelector(
+        const body = document.querySelector(
             '[data-testid="coliseum-debate-composer-body"]'
         ) as HTMLTextAreaElement;
         act(() => setReactValue(body, 'Watch my clip.'));
 
-        const submit = container.querySelector(
+        const submit = document.querySelector(
             '[data-testid="coliseum-debate-composer-submit"]'
         ) as HTMLButtonElement;
         await act(async () => {
@@ -155,9 +166,9 @@ describe('DebateTab video attachment', () => {
             })
         );
 
-        // Staged video is cleared after a successful post.
+        // The sheet closes after a successful post (staged video cleared with it).
         expect(
-            container.querySelector('[data-testid="coliseum-debate-composer-video-preview"]')
+            document.querySelector('[data-testid="coliseum-debate-composer-video-preview"]')
         ).toBeNull();
     });
 
@@ -170,8 +181,9 @@ describe('DebateTab video attachment', () => {
             uploadArgumentVideo,
         });
         await flush();
+        openComposer(container);
 
-        const fileInput = container.querySelector(
+        const fileInput = document.querySelector(
             '[data-testid="coliseum-debate-composer-video"]'
         ) as HTMLInputElement;
         const file = new File(['x'], 'clip.mp4', { type: 'video/mp4' });
@@ -180,12 +192,12 @@ describe('DebateTab video attachment', () => {
             fileInput.dispatchEvent(new Event('change', { bubbles: true }));
         });
 
-        const body = container.querySelector(
+        const body = document.querySelector(
             '[data-testid="coliseum-debate-composer-body"]'
         ) as HTMLTextAreaElement;
         act(() => setReactValue(body, 'Body text'));
 
-        const submit = container.querySelector(
+        const submit = document.querySelector(
             '[data-testid="coliseum-debate-composer-submit"]'
         ) as HTMLButtonElement;
         await act(async () => {
@@ -197,7 +209,7 @@ describe('DebateTab video attachment', () => {
 
         expect(createColiseumArgument).not.toHaveBeenCalled();
         expect(
-            container.querySelector('[data-testid="coliseum-debate-composer-error"]')?.textContent
+            document.querySelector('[data-testid="coliseum-debate-composer-error"]')?.textContent
         ).toContain('upload boom');
     });
 });

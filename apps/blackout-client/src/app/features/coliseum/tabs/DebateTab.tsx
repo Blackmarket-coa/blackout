@@ -1,17 +1,8 @@
-import React, {
-    useCallback,
-    useEffect,
-    useMemo,
-    useRef,
-    useState,
-    type CSSProperties,
-} from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { useAtom } from 'jotai';
 import {
     buildColiseumArgumentTree,
-    type ColiseumArgumentMedia,
     type ColiseumArgumentTreeNode,
-    type ColiseumStance,
     type RankedColiseumArgument,
 } from '@blackout/core';
 import { useColiseumTopic, useColiseumVerdict } from '../hooks/useColiseumTopics';
@@ -19,6 +10,13 @@ import { coliseumTabAtom, selectedColiseumTopicIdAtom } from '../../../state/col
 import { useMatrixClientOrNull } from '../../../hooks/useMatrixClient';
 import { uploadMedia } from '../../media/utils/matrixMedia';
 import ColiseumCitationChip from '../ColiseumCitationChip';
+import { StanceBadge } from '../components/StanceBadge';
+import { StanceBar } from '../components/StanceBar';
+import { AuthorLine } from '../components/AuthorLine';
+import { ArgumentComposerSheet } from '../components/ArgumentComposerSheet';
+import { useArgumentShare } from '../components/useArgumentShare';
+import { STANCE_COLOR } from '../components/stance';
+import * as ui from '../components/coliseumUi.css';
 import {
     castColiseumVote as castColiseumVoteDefault,
     createColiseumArgument as createColiseumArgumentDefault,
@@ -38,553 +36,152 @@ const defaultClient: DebateTabClient = {
     createColiseumArgument: (input) => createColiseumArgumentDefault(input),
 };
 
-const STANCES: ColiseumStance[] = ['for', 'against', 'nuance'];
-
-const STANCE_LABEL: Record<ColiseumStance, string> = {
-    for: 'For',
-    against: 'Against',
-    nuance: 'Nuance',
-};
-
-const STANCE_COLOR: Record<ColiseumStance, string> = {
-    for: '#1ABC9C',
-    against: '#E74C3C',
-    nuance: '#F1C40F',
-};
-
-const containerStyle: CSSProperties = {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 16,
-    padding: 16,
-};
-
-const headerStyle: CSSProperties = {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 8,
-    padding: 16,
-    border: '1px solid var(--border-default)',
-    borderRadius: 12,
-    background: 'var(--bg-surface)',
-};
-
-const stancePieStyle: CSSProperties = {
-    display: 'flex',
-    height: 6,
-    borderRadius: 999,
-    overflow: 'hidden',
-    background: 'var(--bg-input)',
-};
-
-const argumentCardStyle: CSSProperties = {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 8,
-    padding: 16,
-    border: '1px solid var(--border-default)',
-    borderRadius: 12,
-    background: 'var(--bg-surface)',
-};
-
-const stanceTagStyle = (stance: ColiseumStance): CSSProperties => ({
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: 6,
-    padding: '2px 10px',
-    borderRadius: 999,
-    background: `${STANCE_COLOR[stance]}1a`,
-    color: STANCE_COLOR[stance],
-    fontSize: 12,
-    fontWeight: 700,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-});
-
-const verdictStyle: CSSProperties = {
-    padding: 16,
-    border: '1px solid var(--accent-primary, #1ABC9C)',
-    borderRadius: 12,
-    background: 'rgba(26, 188, 156, 0.08)',
-};
+/** Maximum indentation steps so deep rebuttal chains don't run off-screen. */
+const MAX_THREAD_INDENT = 5;
 
 function ArgumentCard({
     argument,
     isWinner,
     onVote,
     onRebut,
+    onShare,
     pendingDirection,
 }: {
     argument: RankedColiseumArgument;
     isWinner: boolean;
     onVote: (argumentId: string, direction: 'up' | 'down') => Promise<void>;
     onRebut: (argument: RankedColiseumArgument) => void;
+    onShare?: (argument: RankedColiseumArgument) => void;
     pendingDirection: 'up' | 'down' | null;
 }) {
     return (
         <article
-            style={{
-                ...argumentCardStyle,
-                outline: isWinner ? `2px solid ${STANCE_COLOR[argument.stance]}` : 'none',
-            }}
+            className={ui.card}
+            style={isWinner ? { outline: `2px solid ${STANCE_COLOR[argument.stance]}` } : undefined}
             data-coliseum-argument-id={argument.id}
         >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={stanceTagStyle(argument.stance)}>{STANCE_LABEL[argument.stance]}</span>
-                {isWinner ? (
-                    <span
-                        style={{
-                            fontSize: 12,
-                            color: 'var(--accent-primary, #1ABC9C)',
-                            fontWeight: 700,
-                        }}
-                    >
-                        🏆 Winner
-                    </span>
-                ) : null}
-                <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text-secondary)' }}>
-                    {Math.round(argument.voteScore * 100)}% support · consensus{' '}
-                    {Math.round(argument.nuanceScore * 100)}%
+            <AuthorLine userId={argument.authorId} timestamp={argument.createdAt}>
+                <span style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}>
+                    {isWinner ? (
+                        <span
+                            style={{
+                                fontSize: 12,
+                                color: 'var(--accent-primary, #1ABC9C)',
+                                fontWeight: 700,
+                            }}
+                        >
+                            🏆 Winner
+                        </span>
+                    ) : null}
+                    <StanceBadge stance={argument.stance} />
                 </span>
-            </div>
-            <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{argument.authorId}</div>
+            </AuthorLine>
             <p style={{ margin: 0, fontSize: 15, lineHeight: 1.5 }}>{argument.body}</p>
             {argument.citations.length > 0 ? (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                <div className={ui.tagRow}>
                     {argument.citations.map((citation, index) => (
                         <ColiseumCitationChip key={index} citation={citation} />
                     ))}
                 </div>
             ) : null}
-            <div
-                style={{ display: 'flex', gap: 8, marginTop: 4 }}
-                data-testid="coliseum-debate-vote-controls"
-            >
+            <div className={ui.actionRow} data-testid="coliseum-debate-vote-controls">
                 <button
                     type="button"
+                    className={ui.actionButton}
                     data-testid={`coliseum-vote-up-${argument.id}`}
                     onClick={() => void onVote(argument.id, 'up')}
                     disabled={pendingDirection !== null}
-                    style={{
-                        padding: '4px 10px',
-                        borderRadius: 999,
-                        border: '1px solid var(--border-default)',
-                        background: 'transparent',
-                        cursor: pendingDirection ? 'progress' : 'pointer',
-                        color: 'var(--text-primary)',
-                    }}
+                    aria-label="Agree"
                 >
                     {pendingDirection === 'up' ? 'Voting…' : '👍 Agree'}
+                    <span style={{ fontVariantNumeric: 'tabular-nums' }}>
+                        {Math.round(argument.voteScore * 100)}%
+                    </span>
                 </button>
                 <button
                     type="button"
+                    className={ui.actionButton}
                     data-testid={`coliseum-vote-down-${argument.id}`}
                     onClick={() => void onVote(argument.id, 'down')}
                     disabled={pendingDirection !== null}
-                    style={{
-                        padding: '4px 10px',
-                        borderRadius: 999,
-                        border: '1px solid var(--border-default)',
-                        background: 'transparent',
-                        cursor: pendingDirection ? 'progress' : 'pointer',
-                        color: 'var(--text-primary)',
-                    }}
+                    aria-label="Disagree"
                 >
                     {pendingDirection === 'down' ? 'Voting…' : '👎 Disagree'}
                 </button>
                 <button
                     type="button"
+                    className={ui.actionButton}
                     data-testid={`coliseum-rebut-${argument.id}`}
                     onClick={() => onRebut(argument)}
-                    style={{
-                        padding: '4px 10px',
-                        borderRadius: 999,
-                        border: '1px solid var(--border-default)',
-                        background: 'transparent',
-                        cursor: 'pointer',
-                        color: 'var(--text-primary)',
-                    }}
                 >
                     ↪ Rebut
                 </button>
+                {onShare ? (
+                    <button
+                        type="button"
+                        className={ui.actionButton}
+                        data-testid={`coliseum-share-${argument.id}`}
+                        onClick={() => onShare(argument)}
+                        aria-label="Share"
+                    >
+                        ↗ Share
+                    </button>
+                ) : null}
+                <span className={ui.mutedText} style={{ marginLeft: 'auto' }}>
+                    consensus {Math.round(argument.nuanceScore * 100)}%
+                </span>
             </div>
         </article>
     );
 }
-
-function safeCreateObjectUrl(file: File): string | null {
-    try {
-        if (typeof URL?.createObjectURL !== 'function') return null;
-        return URL.createObjectURL(file);
-    } catch {
-        return null;
-    }
-}
-
-/**
- * Best-effort, non-blocking read of a video file's duration. Resolves
- * `undefined` (rather than rejecting) when metadata can't be loaded — the
- * field is optional and playback does not depend on it.
- */
-function readVideoDurationMs(file: File): Promise<number | undefined> {
-    if (typeof document === 'undefined') return Promise.resolve(undefined);
-    const url = safeCreateObjectUrl(file);
-    if (!url) return Promise.resolve(undefined);
-    return new Promise((resolve) => {
-        const video = document.createElement('video');
-        let settled = false;
-        const done = (ms?: number) => {
-            if (settled) return;
-            settled = true;
-            URL.revokeObjectURL(url);
-            resolve(ms);
-        };
-        video.preload = 'metadata';
-        video.onloadedmetadata = () =>
-            done(Number.isFinite(video.duration) ? Math.round(video.duration * 1000) : undefined);
-        video.onerror = () => done(undefined);
-        window.setTimeout(() => done(undefined), 8000);
-        video.src = url;
-    });
-}
-
-function ArgumentComposer({
-    topicId,
-    onCreate,
-    onUploadVideo,
-    replyingTo,
-    onCancelReply,
-}: {
-    topicId: string;
-    onCreate: (input: CreateColiseumArgumentInput) => Promise<void>;
-    onUploadVideo?: (file: File) => Promise<string>;
-    replyingTo?: { id: string; authorId: string } | null;
-    onCancelReply?: () => void;
-}) {
-    const [stance, setStance] = useState<ColiseumStance>('for');
-    const [body, setBody] = useState('');
-    const [pending, setPending] = useState(false);
-    const [uploading, setUploading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    const [videoFile, setVideoFile] = useState<File | null>(null);
-    const [videoPreviewUrl, setVideoPreviewUrl] = useState<string | null>(null);
-    const videoDurationRef = useRef<number | undefined>(undefined);
-    const fileInputRef = useRef<HTMLInputElement | null>(null);
-
-    const clearVideo = useCallback(() => {
-        setVideoFile(null);
-        videoDurationRef.current = undefined;
-        setVideoPreviewUrl((prev) => {
-            if (prev) URL.revokeObjectURL(prev);
-            return null;
-        });
-        if (fileInputRef.current) fileInputRef.current.value = '';
-    }, []);
-
-    // Revoke the object URL when the component unmounts.
-    useEffect(
-        () => () => {
-            if (videoPreviewUrl) URL.revokeObjectURL(videoPreviewUrl);
-        },
-        [videoPreviewUrl]
-    );
-
-    // A rebuttal defaults to the opposing stance, but stays editable.
-    useEffect(() => {
-        if (replyingTo) setStance('against');
-    }, [replyingTo?.id]);
-
-    const onPickVideo = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-        const file = event.target.files?.[0] ?? null;
-        setError(null);
-        videoDurationRef.current = undefined;
-        setVideoPreviewUrl((prev) => {
-            if (prev) URL.revokeObjectURL(prev);
-            return file ? safeCreateObjectUrl(file) : null;
-        });
-        setVideoFile(file);
-        if (file) {
-            // Fire-and-forget; submit uses whatever has resolved by then.
-            void readVideoDurationMs(file).then((ms) => {
-                videoDurationRef.current = ms;
-            });
-        }
-    }, []);
-
-    const onSubmit = useCallback(
-        async (event: React.FormEvent<HTMLFormElement>) => {
-            event.preventDefault();
-            const trimmed = body.trim();
-            if (!trimmed) {
-                setError('Argument body is required.');
-                return;
-            }
-            setPending(true);
-            setError(null);
-            try {
-                let media: ColiseumArgumentMedia | undefined;
-                if (videoFile) {
-                    if (!onUploadVideo) {
-                        throw new Error('Video upload is unavailable right now.');
-                    }
-                    setUploading(true);
-                    const mxc = await onUploadVideo(videoFile);
-                    setUploading(false);
-                    media = { kind: 'video', mxc, durationMs: videoDurationRef.current };
-                }
-                await onCreate({
-                    topicId,
-                    stance,
-                    body: trimmed,
-                    ...(replyingTo ? { parentArgumentId: replyingTo.id } : {}),
-                    ...(media ? { media } : {}),
-                });
-                setBody('');
-                clearVideo();
-                onCancelReply?.();
-            } catch (err) {
-                setError(err instanceof Error ? err.message : 'Failed to post argument.');
-            } finally {
-                setPending(false);
-                setUploading(false);
-            }
-        },
-        [
-            body,
-            clearVideo,
-            onCreate,
-            onCancelReply,
-            onUploadVideo,
-            replyingTo,
-            stance,
-            topicId,
-            videoFile,
-        ]
-    );
-
-    return (
-        <form
-            data-testid="coliseum-debate-composer"
-            onSubmit={onSubmit}
-            style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 8,
-                padding: 12,
-                border: '1px solid var(--border-default)',
-                borderRadius: 12,
-                background: 'var(--bg-surface)',
-            }}
-        >
-            {replyingTo ? (
-                <div
-                    data-testid="coliseum-composer-replying-to"
-                    style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 8,
-                        fontSize: 13,
-                    }}
-                >
-                    <strong>↪ Rebutting {replyingTo.authorId}</strong>
-                    <button
-                        type="button"
-                        data-testid="coliseum-composer-cancel-reply"
-                        onClick={onCancelReply}
-                        style={{
-                            padding: '2px 8px',
-                            borderRadius: 999,
-                            border: '1px solid var(--border-default)',
-                            background: 'transparent',
-                            color: 'var(--text-primary)',
-                            cursor: 'pointer',
-                        }}
-                    >
-                        Cancel
-                    </button>
-                </div>
-            ) : (
-                <strong style={{ fontSize: 13 }}>Add your argument</strong>
-            )}
-            <label
-                style={{ display: 'grid', gap: 4, fontSize: 12, color: 'var(--text-secondary)' }}
-            >
-                Stance
-                <select
-                    data-testid="coliseum-debate-composer-stance"
-                    value={stance}
-                    onChange={(event) => setStance(event.target.value as ColiseumStance)}
-                >
-                    {STANCES.map((value) => (
-                        <option key={value} value={value}>
-                            {STANCE_LABEL[value]}
-                        </option>
-                    ))}
-                </select>
-            </label>
-            <textarea
-                data-testid="coliseum-debate-composer-body"
-                value={body}
-                onChange={(event) => setBody(event.target.value)}
-                placeholder="Make your case…"
-                rows={3}
-                style={{
-                    padding: 8,
-                    borderRadius: 8,
-                    border: '1px solid var(--border-default)',
-                    background: 'var(--bg-input)',
-                    color: 'var(--text-primary)',
-                }}
-            />
-            {onUploadVideo ? (
-                <div style={{ display: 'grid', gap: 6 }}>
-                    <label
-                        style={{
-                            display: 'grid',
-                            gap: 4,
-                            fontSize: 12,
-                            color: 'var(--text-secondary)',
-                        }}
-                    >
-                        Short video (optional) — record on mobile or attach a clip
-                        <input
-                            ref={fileInputRef}
-                            data-testid="coliseum-debate-composer-video"
-                            type="file"
-                            accept="video/*"
-                            onChange={onPickVideo}
-                        />
-                    </label>
-                    {videoFile ? (
-                        <div
-                            data-testid="coliseum-debate-composer-video-preview"
-                            style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 8,
-                                fontSize: 12,
-                                color: 'var(--text-secondary)',
-                            }}
-                        >
-                            {videoPreviewUrl ? (
-                                <video
-                                    src={videoPreviewUrl}
-                                    muted
-                                    controls
-                                    style={{ maxHeight: 96, borderRadius: 8 }}
-                                />
-                            ) : null}
-                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                {videoFile.name}
-                            </span>
-                            <button
-                                type="button"
-                                data-testid="coliseum-debate-composer-video-remove"
-                                onClick={clearVideo}
-                                style={{
-                                    padding: '2px 8px',
-                                    borderRadius: 999,
-                                    border: '1px solid var(--border-default)',
-                                    background: 'transparent',
-                                    color: 'var(--text-primary)',
-                                    cursor: 'pointer',
-                                }}
-                            >
-                                Remove
-                            </button>
-                        </div>
-                    ) : null}
-                </div>
-            ) : null}
-            {error ? (
-                <p
-                    role="alert"
-                    data-testid="coliseum-debate-composer-error"
-                    style={{ margin: 0, color: 'var(--danger)', fontSize: 12 }}
-                >
-                    {error}
-                </p>
-            ) : null}
-            <button
-                type="submit"
-                data-testid="coliseum-debate-composer-submit"
-                disabled={pending}
-                style={{
-                    alignSelf: 'flex-start',
-                    padding: '6px 14px',
-                    borderRadius: 8,
-                    border: '1px solid var(--accent-primary, #1ABC9C)',
-                    background: 'var(--accent-primary, #1ABC9C)',
-                    color: '#fff',
-                    cursor: pending ? 'progress' : 'pointer',
-                }}
-            >
-                {uploading ? 'Uploading video…' : pending ? 'Posting…' : 'Post argument'}
-            </button>
-        </form>
-    );
-}
-
-function StancePie({ args }: { args: ReadonlyArray<RankedColiseumArgument> }) {
-    const totals = useMemo(() => {
-        const counts: Record<ColiseumStance, number> = { for: 0, against: 0, nuance: 0 };
-        for (const arg of args) counts[arg.stance] += 1;
-        const total = counts.for + counts.against + counts.nuance;
-        if (total === 0) return null;
-        return {
-            for: (counts.for / total) * 100,
-            against: (counts.against / total) * 100,
-            nuance: (counts.nuance / total) * 100,
-        };
-    }, [args]);
-
-    if (!totals) return null;
-
-    return (
-        <div style={stancePieStyle} aria-label="Stance distribution">
-            <span style={{ width: `${totals.for}%`, background: STANCE_COLOR.for }} />
-            <span style={{ width: `${totals.nuance}%`, background: STANCE_COLOR.nuance }} />
-            <span style={{ width: `${totals.against}%`, background: STANCE_COLOR.against }} />
-        </div>
-    );
-}
-
-/** Maximum indentation steps so deep rebuttal chains don't run off-screen. */
-const MAX_THREAD_INDENT = 5;
 
 function ThreadedArgument({
     node,
     winnerId,
     onVote,
     onRebut,
+    onShare,
     pendingVotes,
 }: {
     node: ColiseumArgumentTreeNode<RankedColiseumArgument>;
     winnerId: string | null;
     onVote: (argumentId: string, direction: 'up' | 'down') => Promise<void>;
     onRebut: (argument: RankedColiseumArgument) => void;
+    onShare?: (argument: RankedColiseumArgument) => void;
     pendingVotes: Record<string, 'up' | 'down' | null>;
 }) {
-    const indent = Math.min(node.depth, MAX_THREAD_INDENT) * 16;
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginLeft: indent }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <ArgumentCard
                 argument={node.argument}
                 isWinner={node.argument.id === winnerId}
                 onVote={onVote}
                 onRebut={onRebut}
+                onShare={onShare}
                 pendingDirection={pendingVotes[node.argument.id] ?? null}
             />
-            {node.replies.map((reply) => (
-                <ThreadedArgument
-                    key={reply.argument.id}
-                    node={reply}
-                    winnerId={winnerId}
-                    onVote={onVote}
-                    onRebut={onRebut}
-                    pendingVotes={pendingVotes}
-                />
-            ))}
+            {node.replies.length > 0 ? (
+                <div
+                    className={node.depth < MAX_THREAD_INDENT ? ui.threadChildren : undefined}
+                    style={
+                        node.depth >= MAX_THREAD_INDENT
+                            ? { display: 'flex', flexDirection: 'column', gap: 12 }
+                            : undefined
+                    }
+                >
+                    {node.replies.map((reply) => (
+                        <ThreadedArgument
+                            key={reply.argument.id}
+                            node={reply}
+                            winnerId={winnerId}
+                            onVote={onVote}
+                            onRebut={onRebut}
+                            onShare={onShare}
+                            pendingVotes={pendingVotes}
+                        />
+                    ))}
+                </div>
+            ) : null}
         </div>
     );
 }
@@ -602,10 +199,13 @@ export function DebateTab({ client = defaultClient }: { client?: DebateTabClient
     const [pendingVotes, setPendingVotes] = useState<Record<string, 'up' | 'down' | null>>({});
     const [voteError, setVoteError] = useState<string | null>(null);
     const [replyingTo, setReplyingTo] = useState<{ id: string; authorId: string } | null>(null);
+    const [composerOpen, setComposerOpen] = useState(false);
+    const { shareStatus, onShare } = useArgumentShare();
     const mx = useMatrixClientOrNull();
 
     const onRebut = useCallback((argument: RankedColiseumArgument) => {
         setReplyingTo({ id: argument.id, authorId: argument.authorId });
+        setComposerOpen(true);
     }, []);
 
     const uploadVideo = useMemo<((file: File) => Promise<string>) | undefined>(() => {
@@ -640,6 +240,11 @@ export function DebateTab({ client = defaultClient }: { client?: DebateTabClient
         [client, refetchTopic, refetchVerdict]
     );
 
+    const closeComposer = useCallback(() => {
+        setComposerOpen(false);
+        setReplyingTo(null);
+    }, []);
+
     if (!selectedTopicId) {
         return (
             <div style={{ padding: 24, color: 'var(--text-secondary)' }}>
@@ -664,7 +269,13 @@ export function DebateTab({ client = defaultClient }: { client?: DebateTabClient
     }
 
     if (loading && !topicData) {
-        return <div style={{ padding: 24 }}>Loading debate...</div>;
+        return (
+            <div className={ui.feedColumn} aria-busy="true">
+                <div className={ui.skeleton} style={{ height: 120 }} aria-hidden />
+                <div className={ui.skeleton} style={{ height: 160 }} aria-hidden />
+                <div className={ui.skeleton} style={{ height: 160 }} aria-hidden />
+            </div>
+        );
     }
     if (error) {
         return <div style={{ padding: 24, color: 'var(--danger)' }}>Couldn't load: {error}</div>;
@@ -674,68 +285,116 @@ export function DebateTab({ client = defaultClient }: { client?: DebateTabClient
     }
 
     const { topic, arguments: args } = topicData;
-    const winnerId = verdictData?.verdict?.winningArgumentId ?? null;
+    const verdict = verdictData?.verdict ?? null;
+    const hasVerdict = Boolean(
+        verdict?.winningArgumentId && (verdict?.consensusArgumentIds.length ?? 0) > 0
+    );
+    const winnerId = verdict?.winningArgumentId ?? null;
 
     return (
-        <div style={containerStyle} data-testid="coliseum-debate">
-            <header style={headerStyle}>
-                <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>{topic.title}</h2>
-                <a
-                    href={topic.newsAnchor.sourceUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{ fontSize: 13, color: 'var(--text-secondary)' }}
-                >
-                    📰 {topic.newsAnchor.headline}
-                </a>
-                <StancePie args={args} />
-            </header>
+        <div
+            style={{ display: 'flex', flexDirection: 'column', minHeight: '100%' }}
+            data-testid="coliseum-debate"
+        >
+            <div className={ui.feedColumn} style={{ flex: 1, paddingBottom: 16 }}>
+                <header className={ui.card}>
+                    <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800, lineHeight: 1.3 }}>
+                        {topic.title}
+                    </h2>
+                    <a
+                        href={topic.newsAnchor.sourceUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={ui.mutedLink}
+                    >
+                        📰 {topic.newsAnchor.headline}
+                    </a>
+                    <StanceBar items={args} />
+                    <span className={ui.mutedText}>
+                        {args.length} argument{args.length === 1 ? '' : 's'}
+                    </span>
+                </header>
 
-            {verdictData?.verdict?.winningArgumentId ? (
-                <section style={verdictStyle}>
-                    <strong>Community verdict</strong>
-                    <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>
-                        Highest cross-cluster consensus among{' '}
-                        {verdictData.verdict.consensusArgumentIds.length} broadly-endorsed argument
-                        {verdictData.verdict.consensusArgumentIds.length === 1 ? '' : 's'}.
+                {hasVerdict ? (
+                    <section
+                        className={ui.card}
+                        style={{
+                            borderColor: 'var(--accent-primary, #1ABC9C)',
+                            background: 'rgba(26, 188, 156, 0.08)',
+                        }}
+                        data-testid="coliseum-debate-verdict"
+                    >
+                        <strong>Community verdict</strong>
+                        <span className={ui.mutedText}>
+                            Highest cross-cluster consensus among{' '}
+                            {verdict!.consensusArgumentIds.length} broadly-endorsed argument
+                            {verdict!.consensusArgumentIds.length === 1 ? '' : 's'}.
+                        </span>
+                    </section>
+                ) : args.length > 0 ? (
+                    <span className={ui.mutedText} data-testid="coliseum-debate-no-verdict">
+                        No community verdict yet — voting continues.
+                    </span>
+                ) : null}
+
+                {voteError ? (
+                    <div
+                        role="alert"
+                        data-testid="coliseum-debate-vote-error"
+                        style={{ color: 'var(--danger)', fontSize: 12 }}
+                    >
+                        {voteError}
                     </div>
-                </section>
-            ) : null}
+                ) : null}
 
-            <ArgumentComposer
+                {shareStatus ? (
+                    <div role="status" className={ui.mutedText}>
+                        {shareStatus}
+                    </div>
+                ) : null}
+
+                {args.length === 0 ? (
+                    <div className={ui.card} style={{ alignItems: 'flex-start' }}>
+                        <strong>No arguments yet.</strong>
+                        <span className={ui.mutedText}>
+                            Be first to take a stance — every debate starts with one voice.
+                        </span>
+                    </div>
+                ) : (
+                    buildColiseumArgumentTree(args).map((node) => (
+                        <ThreadedArgument
+                            key={node.argument.id}
+                            node={node}
+                            winnerId={winnerId}
+                            onVote={onVote}
+                            onRebut={onRebut}
+                            onShare={(argument) => void onShare(argument.topicId, topic.title)}
+                            pendingVotes={pendingVotes}
+                        />
+                    ))
+                )}
+            </div>
+
+            <div className={ui.stickyComposerBar}>
+                <button
+                    type="button"
+                    className={ui.composerBarPrompt}
+                    data-testid="coliseum-debate-composer-open"
+                    onClick={() => setComposerOpen(true)}
+                >
+                    Make your case…
+                </button>
+            </div>
+
+            <ArgumentComposerSheet
+                open={composerOpen}
+                onClose={closeComposer}
                 topicId={selectedTopicId}
                 onCreate={onCreateArgument}
                 onUploadVideo={uploadVideo}
                 replyingTo={replyingTo}
                 onCancelReply={() => setReplyingTo(null)}
             />
-
-            {voteError ? (
-                <div
-                    role="alert"
-                    data-testid="coliseum-debate-vote-error"
-                    style={{ padding: 8, color: 'var(--danger)', fontSize: 12 }}
-                >
-                    {voteError}
-                </div>
-            ) : null}
-
-            {args.length === 0 ? (
-                <div style={{ padding: 16, color: 'var(--text-secondary)' }}>
-                    No arguments yet. Be first to take a stance.
-                </div>
-            ) : (
-                buildColiseumArgumentTree(args).map((node) => (
-                    <ThreadedArgument
-                        key={node.argument.id}
-                        node={node}
-                        winnerId={winnerId}
-                        onVote={onVote}
-                        onRebut={onRebut}
-                        pendingVotes={pendingVotes}
-                    />
-                ))
-            )}
         </div>
     );
 }
