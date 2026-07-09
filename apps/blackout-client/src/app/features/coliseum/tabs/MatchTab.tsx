@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState, type CSSProperties } from 'react';
 import { useAtomValue } from 'jotai';
 import { CRUCIBLE_QUESTIONS, challengeStatusLabel, type ColiseumRoundChoice } from '@blackout/core';
+import { EmptyState } from '../../../../../../../packages/ui/src/primitives';
 import { selectedColiseumMatchIdAtom } from '../../../state/coliseum';
 import {
     acceptColiseumMatch,
@@ -11,43 +12,50 @@ import {
     openColiseumCrucible,
     type MatchDetailResponse,
 } from '../coliseumMatchClient';
+import * as ui from '../components/coliseumUi.css';
 
-const containerStyle: CSSProperties = {
+const RED = 'var(--accent-primary, #E74C3C)';
+const BLUE = 'var(--border-active, #3498DB)';
+
+const fighterCard: CSSProperties = {
+    flex: 1,
     display: 'flex',
     flexDirection: 'column',
-    gap: 14,
-    padding: 16,
-    height: '100%',
-    minHeight: 0,
-    overflowY: 'auto',
+    alignItems: 'center',
+    gap: 4,
+    padding: '12px 8px',
+    borderRadius: 12,
+    fontWeight: 700,
+    fontSize: 14,
+    minWidth: 0,
+    textAlign: 'center',
+    overflowWrap: 'anywhere',
 };
 
-const cardStyle: CSSProperties = {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 8,
-    padding: 12,
-    border: '1px solid var(--border-default)',
-    background: 'var(--bg-surface)',
+const redFighter: CSSProperties = {
+    ...fighterCard,
+    color: RED,
+    border: `1px solid ${RED}`,
+    background: `color-mix(in srgb, ${RED} 10%, transparent)`,
 };
 
-const button: CSSProperties = {
-    padding: '6px 12px',
-    border: '1px solid var(--border-default)',
-    background: 'var(--bg-input)',
-    color: 'var(--text-primary)',
+const blueFighter: CSSProperties = {
+    ...fighterCard,
+    color: BLUE,
+    border: `1px solid ${BLUE}`,
+    background: `color-mix(in srgb, ${BLUE} 10%, transparent)`,
+};
+
+const pillButton: CSSProperties = {
+    padding: '10px 18px',
+    borderRadius: 999,
+    border: 'none',
+    background: 'var(--accent-primary, #1ABC9C)',
+    color: '#fff',
+    fontWeight: 700,
+    fontSize: 14,
     cursor: 'pointer',
-};
-
-const redButton: CSSProperties = {
-    ...button,
-    borderColor: 'var(--accent-primary)',
-    color: 'var(--accent-primary)',
-};
-const blueButton: CSSProperties = {
-    ...button,
-    borderColor: 'var(--border-active)',
-    color: 'var(--border-active)',
+    alignSelf: 'flex-start',
 };
 
 export function MatchTab() {
@@ -90,23 +98,26 @@ export function MatchTab() {
 
     if (!matchId) {
         return (
-            <div style={containerStyle}>
-                <p style={{ color: 'var(--text-secondary)' }}>
-                    Pick a match in the Arena to watch it here.
-                </p>
+            <div className={ui.feedColumn}>
+                <EmptyState
+                    title="No match selected"
+                    description="Pick a match in the Arena to watch it here."
+                />
             </div>
         );
     }
     if (error)
         return (
-            <div style={containerStyle}>
-                <p style={{ color: 'var(--danger)' }}>{error}</p>
+            <div className={ui.feedColumn}>
+                <EmptyState title="Couldn't load this match" description={error} />
             </div>
         );
     if (!detail)
         return (
-            <div style={containerStyle}>
-                <p>Loading match…</p>
+            <div className={ui.feedColumn} aria-busy="true">
+                <div className={ui.skeleton} style={{ height: 140 }} aria-hidden />
+                <div className={ui.skeleton} style={{ height: 120 }} aria-hidden />
+                <div className={ui.skeleton} style={{ height: 120 }} aria-hidden />
             </div>
         );
 
@@ -114,99 +125,129 @@ export function MatchTab() {
     const tallyFor = (index: number) => tallies?.find((t) => t.roundIndex === index);
 
     return (
-        <div style={containerStyle} data-testid="coliseum-match-tab" data-match-id={match.id}>
-            <section style={cardStyle}>
-                <div style={{ display: 'flex', gap: 12 }}>
-                    <div style={{ flex: 1, color: 'var(--accent-primary)', fontWeight: 700 }}>
-                        🔴 {match.challengerId}
+        <div
+            data-testid="coliseum-match-tab"
+            data-match-id={match.id}
+            style={{ minHeight: '100%' }}
+        >
+            <div className={ui.feedColumn}>
+                <header className={ui.card}>
+                    <div style={{ display: 'flex', alignItems: 'stretch', gap: 10 }}>
+                        <div style={redFighter}>
+                            <span aria-hidden style={{ fontSize: 20, lineHeight: 1 }}>
+                                🔴
+                            </span>
+                            {match.challengerId}
+                        </div>
+                        <span
+                            aria-hidden
+                            style={{
+                                alignSelf: 'center',
+                                fontSize: 12,
+                                fontWeight: 800,
+                                letterSpacing: 1,
+                                color: 'var(--text-secondary)',
+                            }}
+                        >
+                            VS
+                        </span>
+                        <div style={blueFighter}>
+                            <span aria-hidden style={{ fontSize: 20, lineHeight: 1 }}>
+                                🔵
+                            </span>
+                            {match.opponentId ?? 'Open'}
+                        </div>
                     </div>
-                    <div
-                        style={{
-                            flex: 1,
-                            textAlign: 'right',
-                            color: 'var(--border-active)',
-                            fontWeight: 700,
-                        }}
-                    >
-                        {match.opponentId ?? 'Open'} 🔵
-                    </div>
-                </div>
-                <strong style={{ fontSize: 16 }}>{match.proposition}</strong>
-                <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                    Status: {match.status} · Challenge: {challengeStatusLabel(challengeStatus)}
-                </div>
-                {match.status === 'pending' ? (
-                    <button
-                        type="button"
-                        style={redButton}
-                        onClick={() =>
-                            matchId &&
-                            acceptColiseumMatch(matchId)
-                                .then(load)
-                                .catch(() => undefined)
-                        }
-                    >
-                        Accept challenge
-                    </button>
-                ) : null}
-                {match.status === 'live' ? (
-                    <button
-                        type="button"
-                        style={button}
-                        onClick={() =>
-                            matchId &&
-                            openColiseumCrucible(matchId)
-                                .then(load)
-                                .catch(() => undefined)
-                        }
-                    >
-                        Open the Crucible
-                    </button>
-                ) : null}
-            </section>
+                    <h2 className={ui.cardTitle}>{match.proposition}</h2>
+                    <span className={ui.mutedText}>
+                        Status: {match.status} · Challenge: {challengeStatusLabel(challengeStatus)}
+                    </span>
+                    {match.status === 'pending' ? (
+                        <button
+                            type="button"
+                            style={pillButton}
+                            onClick={() =>
+                                matchId &&
+                                acceptColiseumMatch(matchId)
+                                    .then(load)
+                                    .catch(() => undefined)
+                            }
+                        >
+                            Accept challenge
+                        </button>
+                    ) : null}
+                    {match.status === 'live' ? (
+                        <button
+                            type="button"
+                            style={pillButton}
+                            onClick={() =>
+                                matchId &&
+                                openColiseumCrucible(matchId)
+                                    .then(load)
+                                    .catch(() => undefined)
+                            }
+                        >
+                            Open the Crucible
+                        </button>
+                    ) : null}
+                </header>
 
-            <section style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <strong style={{ letterSpacing: 0.5 }}>Rounds</strong>
+                <h3 className={ui.sectionTitle}>Rounds</h3>
                 {rounds.length === 0 ? (
-                    <p style={{ color: 'var(--text-secondary)' }}>No rounds posted yet.</p>
+                    <EmptyState
+                        title="No rounds posted yet"
+                        description="The fighters haven't traded blows — rounds land here as soon as they do."
+                    />
                 ) : null}
                 {rounds.map((round) => {
                     const tally = tallyFor(round.index);
                     return (
-                        <article key={round.id} style={cardStyle} data-testid="coliseum-round">
-                            <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                                Round {round.index + 1} · {round.kind} ·{' '}
-                                {round.side === 'red' ? '🔴' : '🔵'}
+                        <article key={round.id} className={ui.card} data-testid="coliseum-round">
+                            <div className={ui.cardHeaderRow}>
+                                <span className={ui.tagChip} style={{ textTransform: 'uppercase' }}>
+                                    Round {round.index + 1}
+                                </span>
+                                <span className={ui.tagChip}>{round.kind}</span>
+                                <span aria-hidden>{round.side === 'red' ? '🔴' : '🔵'}</span>
                             </div>
-                            {round.body ? <p style={{ margin: 0 }}>{round.body}</p> : null}
-                            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                            {round.body ? (
+                                <p style={{ margin: 0, fontSize: 15, lineHeight: 1.5 }}>
+                                    {round.body}
+                                </p>
+                            ) : null}
+                            <div className={ui.actionRow}>
                                 <button
                                     type="button"
-                                    style={redButton}
-                                    onClick={() => onRoundVote(round.index, 'red')}
+                                    className={ui.actionButton}
+                                    style={{ color: RED, fontWeight: 700 }}
+                                    onClick={() => void onRoundVote(round.index, 'red')}
                                 >
                                     Red
                                 </button>
                                 <button
                                     type="button"
-                                    style={button}
-                                    onClick={() => onRoundVote(round.index, 'draw')}
+                                    className={ui.actionButton}
+                                    onClick={() => void onRoundVote(round.index, 'draw')}
                                 >
                                     Draw
                                 </button>
                                 <button
                                     type="button"
-                                    style={blueButton}
-                                    onClick={() => onRoundVote(round.index, 'blue')}
+                                    className={ui.actionButton}
+                                    style={{ color: BLUE, fontWeight: 700 }}
+                                    onClick={() => void onRoundVote(round.index, 'blue')}
                                 >
                                     Blue
                                 </button>
                                 {tally ? (
-                                    <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                                    <span className={ui.mutedText} style={{ marginLeft: 'auto' }}>
                                         🔴 {tally.red} · {tally.draw} · {tally.blue} 🔵
                                     </span>
                                 ) : (
-                                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                                    <span
+                                        className={ui.mutedText}
+                                        style={{ marginLeft: 'auto', fontSize: 11 }}
+                                    >
                                         Tallies hidden (you argue blind)
                                     </span>
                                 )}
@@ -214,83 +255,98 @@ export function MatchTab() {
                         </article>
                     );
                 })}
-            </section>
 
-            {match.status === 'crucible' ? (
-                <section style={cardStyle} data-testid="coliseum-crucible">
-                    <strong>The Crucible</strong>
-                    {CRUCIBLE_QUESTIONS.map((q) => (
-                        <div
-                            key={q.id}
-                            style={{ display: 'flex', flexDirection: 'column', gap: 4 }}
-                        >
-                            <span style={{ fontSize: 13 }}>{q.prompt}</span>
-                            <div style={{ display: 'flex', gap: 6 }}>
-                                <button
-                                    type="button"
-                                    style={redButton}
-                                    onClick={() => onSynthesis(q.id, 'red')}
-                                >
-                                    Red
-                                </button>
-                                <button
-                                    type="button"
-                                    style={blueButton}
-                                    onClick={() => onSynthesis(q.id, 'blue')}
-                                >
-                                    Blue
-                                </button>
-                                <button
-                                    type="button"
-                                    style={button}
-                                    onClick={() => onSynthesis(q.id, 'neither')}
-                                >
-                                    Neither
-                                </button>
-                                <button
-                                    type="button"
-                                    style={button}
-                                    onClick={() => onSynthesis(q.id, 'both')}
-                                >
-                                    Both
-                                </button>
+                {match.status === 'crucible' ? (
+                    <section className={ui.card} data-testid="coliseum-crucible">
+                        <h3 className={ui.sectionTitle}>The Crucible</h3>
+                        {CRUCIBLE_QUESTIONS.map((q) => (
+                            <div
+                                key={q.id}
+                                style={{ display: 'flex', flexDirection: 'column', gap: 4 }}
+                            >
+                                <span style={{ fontSize: 14, fontWeight: 600 }}>{q.prompt}</span>
+                                <div className={ui.actionRow}>
+                                    <button
+                                        type="button"
+                                        className={ui.actionButton}
+                                        style={{ color: RED, fontWeight: 700 }}
+                                        onClick={() => void onSynthesis(q.id, 'red')}
+                                    >
+                                        Red
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className={ui.actionButton}
+                                        style={{ color: BLUE, fontWeight: 700 }}
+                                        onClick={() => void onSynthesis(q.id, 'blue')}
+                                    >
+                                        Blue
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className={ui.actionButton}
+                                        onClick={() => void onSynthesis(q.id, 'neither')}
+                                    >
+                                        Neither
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className={ui.actionButton}
+                                        onClick={() => void onSynthesis(q.id, 'both')}
+                                    >
+                                        Both
+                                    </button>
+                                </div>
                             </div>
-                        </div>
-                    ))}
-                    <button
-                        type="button"
-                        style={{ ...redButton, fontWeight: 700 }}
-                        onClick={() =>
-                            matchId &&
-                            mintColiseumVerdict(matchId)
-                                .then(load)
-                                .catch(() => undefined)
-                        }
-                    >
-                        Drop the Verdict
-                    </button>
-                </section>
-            ) : null}
-
-            {brief ? (
-                <section style={cardStyle} data-testid="coliseum-brief">
-                    <strong style={{ color: 'var(--border-active)' }}>Coliseum Brief</strong>
-                    <div>
-                        Winner:{' '}
-                        {brief.winner ? (brief.winner === 'red' ? '🔴 Red' : '🔵 Blue') : 'Draw'}
-                    </div>
-                    <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                        Shift Score: {(brief.shiftScore * 100).toFixed(0)}%
-                    </div>
-                    <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13 }}>
-                        {brief.questionBreakdown.map((b) => (
-                            <li key={b.questionId}>
-                                {b.prompt} — <strong>{b.winner}</strong>
-                            </li>
                         ))}
-                    </ul>
-                </section>
-            ) : null}
+                        <button
+                            type="button"
+                            style={pillButton}
+                            onClick={() =>
+                                matchId &&
+                                mintColiseumVerdict(matchId)
+                                    .then(load)
+                                    .catch(() => undefined)
+                            }
+                        >
+                            Drop the Verdict
+                        </button>
+                    </section>
+                ) : null}
+
+                {brief ? (
+                    <section
+                        className={ui.card}
+                        style={{
+                            borderColor: BLUE,
+                            background: `color-mix(in srgb, ${BLUE} 6%, transparent)`,
+                        }}
+                        data-testid="coliseum-brief"
+                    >
+                        <h3 className={ui.sectionTitle} style={{ color: BLUE }}>
+                            Coliseum Brief
+                        </h3>
+                        <span style={{ fontSize: 15, fontWeight: 700 }}>
+                            Winner:{' '}
+                            {brief.winner
+                                ? brief.winner === 'red'
+                                    ? '🔴 Red'
+                                    : '🔵 Blue'
+                                : 'Draw'}
+                        </span>
+                        <span className={ui.mutedText}>
+                            Shift Score: {(brief.shiftScore * 100).toFixed(0)}%
+                        </span>
+                        <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13 }}>
+                            {brief.questionBreakdown.map((b) => (
+                                <li key={b.questionId}>
+                                    {b.prompt} — <strong>{b.winner}</strong>
+                                </li>
+                            ))}
+                        </ul>
+                    </section>
+                ) : null}
+            </div>
         </div>
     );
 }

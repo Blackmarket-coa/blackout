@@ -27,17 +27,22 @@ export const COLISEUM_TAB_GUIDES: Record<ColiseumTabId, ReactNode> = {
     ),
     topics: (
         <>
-            Debates anchored to a news story. Open one to join in, or tap{' '}
-            <strong>+ New topic</strong> to start your own.
+            Debates anchored to a news story. Tap a topic to open its debate, or tap the{' '}
+            <strong>+</strong> button to start a new one.
         </>
     ),
     debate: (
         <>
-            Post arguments (For / Against / Nuance), cite sources, vote, and reply.{' '}
-            <strong>Post argument</strong> to add yours.
+            Vote on arguments and fire back with rebuttals. Tap <strong>Make your case…</strong> at
+            the bottom to post your own argument — For, Against, or Nuance.
         </>
     ),
-    reel: <>A vertical feed of the strongest arguments across every debate — swipe to browse.</>,
+    reel: (
+        <>
+            <strong>For You</strong> — a vertical feed of the strongest arguments. Swipe up for the
+            next one; double-tap or swipe right to agree, swipe left to disagree.
+        </>
+    ),
     live: <>Real-time town halls. Join, request to speak, and follow the pinned evidence.</>,
     challenges: (
         <>
