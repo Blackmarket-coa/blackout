@@ -104,6 +104,17 @@ const renderDebate = (client: DebateTabClient) => {
     return container;
 };
 
+/** The composer lives in a bottom sheet portaled to document.body. */
+const openComposer = (container: HTMLElement) => {
+    act(() => {
+        (
+            container.querySelector(
+                '[data-testid="coliseum-debate-composer-open"]'
+            ) as HTMLButtonElement
+        ).click();
+    });
+};
+
 describe('DebateTab interactions', () => {
     beforeEach(() => {
         // reset module-level mocks where needed
@@ -159,14 +170,15 @@ describe('DebateTab interactions', () => {
         const container = renderDebate({ castColiseumVote, createColiseumArgument });
 
         await flush();
+        openComposer(container);
 
-        const stance = container.querySelector(
+        const stance = document.querySelector(
             '[data-testid="coliseum-debate-composer-stance"]'
         ) as HTMLSelectElement;
-        const body = container.querySelector(
+        const body = document.querySelector(
             '[data-testid="coliseum-debate-composer-body"]'
         ) as HTMLTextAreaElement;
-        const submit = container.querySelector(
+        const submit = document.querySelector(
             '[data-testid="coliseum-debate-composer-submit"]'
         ) as HTMLButtonElement;
 
@@ -206,12 +218,12 @@ describe('DebateTab interactions', () => {
         });
         await flush();
 
-        // The composer now shows the rebuttal context.
+        // Rebut opens the composer sheet with the rebuttal context.
         expect(
-            container.querySelector('[data-testid="coliseum-composer-replying-to"]')?.textContent
+            document.querySelector('[data-testid="coliseum-composer-replying-to"]')?.textContent
         ).toContain('@alice:example.org');
 
-        const body = container.querySelector(
+        const body = document.querySelector(
             '[data-testid="coliseum-debate-composer-body"]'
         ) as HTMLTextAreaElement;
         act(() => {
@@ -220,7 +232,7 @@ describe('DebateTab interactions', () => {
 
         await act(async () => {
             (
-                container.querySelector(
+                document.querySelector(
                     '[data-testid="coliseum-debate-composer-submit"]'
                 ) as HTMLButtonElement
             )
@@ -243,8 +255,9 @@ describe('DebateTab interactions', () => {
         const container = renderDebate({ castColiseumVote, createColiseumArgument });
 
         await flush();
+        openComposer(container);
 
-        const submit = container.querySelector(
+        const submit = document.querySelector(
             '[data-testid="coliseum-debate-composer-submit"]'
         ) as HTMLButtonElement;
 
@@ -257,7 +270,7 @@ describe('DebateTab interactions', () => {
 
         expect(createColiseumArgument).not.toHaveBeenCalled();
         expect(
-            container.querySelector('[data-testid="coliseum-debate-composer-error"]')?.textContent
+            document.querySelector('[data-testid="coliseum-debate-composer-error"]')?.textContent
         ).toContain('required');
     });
 });
