@@ -3,9 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 // The module under test links @ffmpeg/ffmpeg at the top level; stub it so the
 // pure argv builder can be imported without wasm/worker machinery.
 vi.mock('@ffmpeg/ffmpeg', () => ({ FFmpeg: class {} }));
-vi.mock('@ffmpeg/util', () => ({ fetchFile: vi.fn() }));
-vi.mock('@ffmpeg/core?url', () => ({ default: 'core.js' }));
-vi.mock('@ffmpeg/core/wasm?url', () => ({ default: 'core.wasm' }));
+vi.mock('@ffmpeg/util', () => ({ fetchFile: vi.fn(), toBlobURL: vi.fn() }));
 
 import { buildClipArgs } from './clipTranscode';
 

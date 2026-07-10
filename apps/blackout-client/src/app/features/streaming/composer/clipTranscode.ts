@@ -1,7 +1,5 @@
 import { FFmpeg } from '@ffmpeg/ffmpeg';
-import { fetchFile } from '@ffmpeg/util';
-import coreURL from '@ffmpeg/core?url';
-import wasmURL from '@ffmpeg/core/wasm?url';
+import { fetchFile, toBlobURL } from '@ffmpeg/util';
 
 /**
  * Browser-side clip editing via ffmpeg.wasm (OSS gap-fill WS3, composer
@@ -9,11 +7,19 @@ import wasmURL from '@ffmpeg/core/wasm?url';
  * until the creator uploads the finished clip.
  *
  * Licensing/bundle posture: `@ffmpeg/ffmpeg` (MIT) is the only module linked
- * into app code; the LGPL ffmpeg core loads at runtime as separate assets
- * (`?url` imports of the single-threaded @ffmpeg/core build, which needs no
- * SharedArrayBuffer/COOP headers). This module must only ever be imported
- * dynamically so none of it lands in the main bundle.
+ * into app code. The ~32 MB LGPL core is deliberately NOT bundled — it would
+ * blow the CI dist-size gate and force every deployment to ship it — and is
+ * instead fetched at runtime from FFMPEG_CORE_BASE (default `/ffmpeg-core`,
+ * override with VITE_FFMPEG_CORE_BASE_URL). Deployments enable the composer
+ * by publishing `@ffmpeg/core/dist/esm/ffmpeg-core.{js,wasm}` at that path
+ * (see infra/single-server-baseline). The single-threaded core needs no
+ * SharedArrayBuffer/COOP headers; toBlobURL keeps worker loading working even
+ * when the base is cross-origin.
  */
+
+const FFMPEG_CORE_BASE = (
+    (import.meta.env.VITE_FFMPEG_CORE_BASE_URL as string | undefined) ?? '/ffmpeg-core'
+).replace(/\/+$/, '');
 
 export interface ClipEditOptions {
     /** Trim window, in seconds of the source video. */
@@ -30,7 +36,17 @@ let ffmpegInstance: FFmpeg | null = null;
 const loadFFmpeg = async (): Promise<FFmpeg> => {
     if (ffmpegInstance) return ffmpegInstance;
     const ffmpeg = new FFmpeg();
-    await ffmpeg.load({ coreURL, wasmURL });
+    try {
+        await ffmpeg.load({
+            coreURL: await toBlobURL(`${FFMPEG_CORE_BASE}/ffmpeg-core.js`, 'text/javascript'),
+            wasmURL: await toBlobURL(`${FFMPEG_CORE_BASE}/ffmpeg-core.wasm`, 'application/wasm'),
+        });
+    } catch {
+        throw new Error(
+            'Clip editing engine is not installed on this deployment ' +
+                `(ffmpeg core assets missing under ${FFMPEG_CORE_BASE}).`
+        );
+    }
     ffmpegInstance = ffmpeg;
     return ffmpeg;
 };

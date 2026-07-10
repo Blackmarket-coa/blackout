@@ -69,6 +69,15 @@ services:
             - '8080'
         environment:
             - NODE_ENV=production
+        # Optional: the in-browser clip composer fetches the ffmpeg.wasm core
+        # (~32 MB, deliberately not bundled in the frontend build) from
+        # /ffmpeg-core/ffmpeg-core.{js,wasm}. To enable it, publish
+        # @ffmpeg/core/dist/esm/* at that path — e.g. mount it into the web
+        # root:
+        # volumes:
+        #     - ./ffmpeg-core:/usr/share/nginx/html/ffmpeg-core:ro
+        # Without the assets the composer degrades to a clear "editing engine
+        # not installed" message; everything else works.
         healthcheck:
             test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1:8080/healthz || exit 1']
             interval: 30s
