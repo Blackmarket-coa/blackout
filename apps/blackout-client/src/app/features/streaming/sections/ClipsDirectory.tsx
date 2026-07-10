@@ -1,4 +1,4 @@
-import React, { type CSSProperties, useEffect, useState } from 'react';
+import React, { lazy, Suspense, type CSSProperties, useEffect, useState } from 'react';
 import { listClips, type ClipSummary } from '../../streams';
 import { useMatrixClientOrNull } from '../../../hooks/useMatrixClient';
 import { mxcUrlToHttp } from '../../../utils/matrix';
@@ -10,6 +10,10 @@ import {
     hubGridStyle,
 } from '../components/HubSection';
 import ClipViewer from './ClipViewer';
+
+// The composer chains to ffmpeg.wasm; keep every byte of it out of the hub's
+// initial load — it mounts only when a creator opens "New clip".
+const ClipComposerLazy = lazy(() => import('../composer/ClipComposer'));
 
 /**
  * Resolves a clip media/thumbnail pointer to a displayable URL. `mxc://`
@@ -79,6 +83,7 @@ export const ClipsDirectory = (): JSX.Element => {
     const [forbidden, setForbidden] = useState(false);
     const [loaded, setLoaded] = useState(false);
     const [openClipId, setOpenClipId] = useState<string | null>(null);
+    const [composing, setComposing] = useState(false);
 
     useEffect(() => {
         let cancelled = false;
@@ -119,6 +124,37 @@ export const ClipsDirectory = (): JSX.Element => {
             testId="clips-directory"
             shellRegion="clips-directory"
         >
+            {!forbidden && !composing ? (
+                <button
+                    type="button"
+                    style={{
+                        justifySelf: 'start',
+                        padding: '6px 14px',
+                        borderRadius: 999,
+                        border: '1px solid var(--border-default, #374151)',
+                        background: 'transparent',
+                        color: 'inherit',
+                        fontSize: 12,
+                        cursor: 'pointer',
+                        marginBottom: 10,
+                    }}
+                    data-testid="clips-directory-new"
+                    onClick={() => setComposing(true)}
+                >
+                    ＋ New clip — trim & crop in your browser
+                </button>
+            ) : null}
+            {composing ? (
+                <Suspense fallback={<p style={hubEmptyStyle}>Loading composer…</p>}>
+                    <ClipComposerLazy
+                        onClose={() => setComposing(false)}
+                        onCreated={(clip) => {
+                            setClips((prev) => [clip, ...prev]);
+                            setComposing(false);
+                        }}
+                    />
+                </Suspense>
+            ) : null}
             {forbidden ? (
                 <p style={hubEmptyStyle} data-testid="clips-directory-forbidden">
                     Clips aren’t available on your account yet.
