@@ -1,6 +1,7 @@
 import React, { type CSSProperties, useEffect, useRef } from 'react';
 import type { ClipSummary } from '../../streams';
 import { useMatrixClientOrNull } from '../../../hooks/useMatrixClient';
+import { recordViewEvent } from '../../../sdk/viewEvents';
 import { mxcUrlToHttp } from '../../../utils/matrix';
 
 /**
@@ -91,6 +92,13 @@ function ClipReelCard({ clip }: { clip: ClipSummary }): JSX.Element {
                     loop
                     controls={false}
                     data-testid="clip-reel-video"
+                    onPlay={() =>
+                        recordViewEvent(
+                            'clip_play_started',
+                            { clipId: clip.id, creatorId: clip.creatorId },
+                            { dedupeKey: `clip-play:${clip.id}` }
+                        )
+                    }
                 />
             ) : (
                 <div

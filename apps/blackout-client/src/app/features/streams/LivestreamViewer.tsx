@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useState, type CSSProperties } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { recordViewEvent } from '../../sdk/viewEvents';
 import { LIVE_PATH, CREATOR_STOREFRONT_PATH, buildCommunitiesPath } from '../../pages/paths';
 import {
     buildOwncastPlaylistUrl,
@@ -207,6 +208,28 @@ export const LivestreamViewer = (): JSX.Element => {
             cancelled = true;
         };
     }, [streamId]);
+
+    // View start (once per stream per session) + a watch-time heartbeat every
+    // 15s while the viewer stays mounted. The player is an Owncast iframe, so
+    // wall-clock-on-page is the closest available proxy for watch time.
+    useEffect(() => {
+        if (!stream) return;
+        const mode = stream.state === 'live' ? 'live' : 'replay';
+        recordViewEvent(
+            'stream_view_started',
+            { streamId: stream.id, creatorId: stream.creatorId, mode },
+            { dedupeKey: `stream-view:${stream.id}` }
+        );
+        const heartbeat = setInterval(() => {
+            recordViewEvent('stream_view_heartbeat', {
+                streamId: stream.id,
+                creatorId: stream.creatorId,
+                mode,
+                seconds: 15,
+            });
+        }, 15_000);
+        return () => clearInterval(heartbeat);
+    }, [stream]);
 
     if (forbidden) {
         return (

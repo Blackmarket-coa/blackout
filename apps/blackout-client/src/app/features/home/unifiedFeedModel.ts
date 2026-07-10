@@ -122,6 +122,13 @@ const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 const SEVEN_DAYS_MS = 7 * ONE_DAY_MS;
 const UNIFIED_FEED_DEFAULT_LIMIT = 50;
 const LIVE_RAIL_DEFAULT_LIMIT = 8;
+/**
+ * Default per-source ceiling inside a ranked page. Keeps one prolific surface
+ * (e.g. a user joined to dozens of dens) from crowding every other source out
+ * of the cut; overflow items backfill only when the feed would otherwise run
+ * short of `limit`.
+ */
+export const UNIFIED_FEED_DEFAULT_MAX_PER_SOURCE = 12;
 
 const clamp01 = (value: number): number => {
     if (!Number.isFinite(value)) return 0;
@@ -260,7 +267,10 @@ export const mapGovernance = (
             title: entry.title,
             subtitle: active
                 ? `${GOVERNANCE_STATUS_LABEL.active} · ${GOVERNANCE_TYPE_LABEL[entry.proposalType]}`
-                : `${GOVERNANCE_STATUS_LABEL[entry.status]} · ${relativeSubtitle(entry.createdAt, now)}`,
+                : `${GOVERNANCE_STATUS_LABEL[entry.status]} · ${relativeSubtitle(
+                      entry.createdAt,
+                      now
+                  )}`,
             canopyId: entry.canopyId,
             denId: null,
             timestamp: entry.createdAt,
@@ -407,10 +417,40 @@ const rankValue = (
 };
 
 /**
+ * Diversity cap: walk the ranked list keeping at most `maxPerSource` items per
+ * source until `limit` is reached. Overflow items backfill trailing slots only
+ * when the capped walk comes up short of `limit`, so the cap changes the
+ * composition of a full page but never shrinks a scarce one.
+ */
+const capBySource = (
+    ranked: readonly UnifiedFeedItem[],
+    maxPerSource: number,
+    limit: number
+): UnifiedFeedItem[] => {
+    const perSource = new Map<UnifiedFeedSource, number>();
+    const kept: UnifiedFeedItem[] = [];
+    const overflow: UnifiedFeedItem[] = [];
+    for (const item of ranked) {
+        if (kept.length >= limit) break;
+        const count = perSource.get(item.source) ?? 0;
+        if (count < maxPerSource) {
+            perSource.set(item.source, count + 1);
+            kept.push(item);
+        } else {
+            overflow.push(item);
+        }
+    }
+    if (kept.length >= limit) return kept;
+    return kept.concat(overflow.slice(0, limit - kept.length));
+};
+
+/**
  * Stable merge: dedupe by id (first occurrence wins), sort per `sort` mode,
  * then slice to `limit`. `boostTags` lifts items matching the viewer's
  * interests (drives the onboarding interest picker). With no `sort`, ordering
- * is score desc / timestamp desc — the historical default.
+ * is score desc / timestamp desc — the historical default. `maxPerSource`
+ * applies the diversity cap; it only kicks in when there are more candidates
+ * than `limit`, since with a short list capping would merely reorder.
  */
 export const mergeAndRank = (
     items: readonly UnifiedFeedItem[],
@@ -419,10 +459,11 @@ export const mergeAndRank = (
         boostTags?: ReadonlySet<string>;
         sort?: FeedSort;
         now?: number;
+        maxPerSource?: number;
     } = {}
 ): UnifiedFeedItem[] => {
     const limit = options.limit ?? UNIFIED_FEED_DEFAULT_LIMIT;
-    const { boostTags, sort } = options;
+    const { boostTags, sort, maxPerSource } = options;
     const now = options.now ?? Date.now();
     const seen = new Set<string>();
     const deduped: UnifiedFeedItem[] = [];
@@ -443,6 +484,9 @@ export const mergeAndRank = (
         if (rankA !== rankB) return rankB - rankA;
         return (b.timestamp ?? -Infinity) - (a.timestamp ?? -Infinity);
     });
+    if (maxPerSource !== undefined && maxPerSource > 0 && deduped.length > limit) {
+        return capBySource(deduped, maxPerSource, limit);
+    }
     return deduped.slice(0, limit);
 };
 

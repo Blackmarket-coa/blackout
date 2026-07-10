@@ -22,6 +22,7 @@ import {
     mergeAndRank,
     partitionFollowing,
     selectLiveRail,
+    UNIFIED_FEED_DEFAULT_MAX_PER_SOURCE,
     withSeriesBadges,
     type CoalitionFeedCardItem,
     type ColiseumFeedCardItem,
@@ -91,10 +92,10 @@ const collectGovernanceProposals = (rooms: readonly Room[]): GovernanceProposalE
         const canopyId =
             roomLike.getType?.() === 'm.space'
                 ? room.roomId
-                : (roomLike.getCanonicalParent?.() ?? null);
+                : roomLike.getCanonicalParent?.() ?? null;
         for (const event of events) {
             const normalized = normalizeProposalEventContent(
-                event.getContent<Record<string, unknown>>(),
+                event.getContent<Record<string, unknown>>()
             );
             if (!normalized.data) continue;
             entries.push({
@@ -215,11 +216,13 @@ export function useUnifiedFeed(sort?: FeedSort): UnifiedFeedResult {
         ];
         const combined = flags.seriesTag ? withSeriesBadges(merged) : merged;
 
-        const discover = mergeAndRank(combined, { boostTags, sort, now });
+        const maxPerSource = UNIFIED_FEED_DEFAULT_MAX_PER_SOURCE;
+        const discover = mergeAndRank(combined, { boostTags, sort, now, maxPerSource });
         const following = mergeAndRank(partitionFollowing(combined, joinedCanopyIds), {
             boostTags,
             sort,
             now,
+            maxPerSource,
         });
         const liveRail = selectLiveRail(discover);
 

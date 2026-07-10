@@ -7,6 +7,7 @@ import React, {
     type CSSProperties,
     type KeyboardEvent as ReactKeyboardEvent,
 } from 'react';
+import { recordViewEvent } from '../../sdk/viewEvents';
 import { UnifiedFeedCard } from './UnifiedFeedCard';
 import { useReducedMotion } from './useReducedMotion';
 import { useUnifiedFeed } from './hooks/useUnifiedFeed';
@@ -111,6 +112,18 @@ export const MobileSwipeFeed = ({ sort }: MobileSwipeFeedProps = {}): JSX.Elemen
         setActiveIndex((prev) => (items.length === 0 ? 0 : Math.min(prev, items.length - 1)));
     }, [items.length]);
 
+    // Each slide that becomes active counts as a swipe view — once per item
+    // per session (the card's own impression event dedupes separately).
+    useEffect(() => {
+        const item = items[activeIndex];
+        if (!item) return;
+        recordViewEvent(
+            'swipe_item_viewed',
+            { itemId: item.id, source: item.source, index: activeIndex },
+            { coalitionId: item.canopyId ?? undefined, dedupeKey: `swipe:${item.id}` }
+        );
+    }, [items, activeIndex]);
+
     const goTo = useCallback(
         (index: number) => {
             const clamped = Math.max(0, Math.min(index, items.length - 1));
@@ -129,7 +142,7 @@ export const MobileSwipeFeed = ({ sort }: MobileSwipeFeedProps = {}): JSX.Elemen
                 }
             }
         },
-        [items.length, reducedMotion],
+        [items.length, reducedMotion]
     );
 
     const onKeyDown = useCallback(
@@ -160,7 +173,7 @@ export const MobileSwipeFeed = ({ sort }: MobileSwipeFeedProps = {}): JSX.Elemen
                     break;
             }
         },
-        [activeIndex, goTo, items.length],
+        [activeIndex, goTo, items.length]
     );
 
     // Mirror manual swipe/scroll into the active index so the pill + a11y stay

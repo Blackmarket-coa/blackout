@@ -1,6 +1,9 @@
 import { createElement, useState, type FormEvent } from 'react';
+import { feeForProvider } from '@blackout/core';
 import { tipsApi, formatCents, type TipContextKind, type Tip } from '../monetizationApi';
 import { readBlackoutApiToken } from '../marketplace/useMarketplaceAuth';
+
+const FBM_FEE_PERCENT = feeForProvider('freeblackmarket').displayFeePercent;
 
 interface TipButtonProps {
     /** User receiving the tip. */
@@ -112,17 +115,17 @@ export function TipButton({
             );
             const display = formatCents(finalCents);
             setConfirmation(
-                `Sent ${display}${recipientLabel ? ` to ${recipientLabel}` : ''} — they'll receive ${formatCents(tip.netCents)} after the 3% platform fee.`
+                `Sent ${display}${
+                    recipientLabel ? ` to ${recipientLabel}` : ''
+                } — they'll receive ${formatCents(
+                    tip.netCents
+                )} after the ${FBM_FEE_PERCENT}% platform fee.`
             );
             setNote('');
             setCustomCents('');
             onTipCreated?.(tip);
         } catch (err) {
-            setError(
-                err instanceof Error
-                    ? err.message
-                    : 'Could not send tip. Please try again.'
-            );
+            setError(err instanceof Error ? err.message : 'Could not send tip. Please try again.');
         } finally {
             setSubmitting(false);
         }
@@ -160,7 +163,7 @@ export function TipButton({
                   createElement(
                       'div',
                       { style: { fontSize: 11, color: 'var(--text-secondary)' } },
-                      'FreeBlackMarket takes a flat 3%. The rest goes straight to the recipient.'
+                      `FreeBlackMarket takes a flat ${FBM_FEE_PERCENT}%. The rest goes straight to the recipient.`
                   ),
                   createElement(
                       'div',
@@ -231,7 +234,11 @@ export function TipButton({
                           'button',
                           {
                               type: 'button',
-                              style: { ...buttonStyle, background: 'var(--bg-input)', color: 'var(--text-primary)' },
+                              style: {
+                                  ...buttonStyle,
+                                  background: 'var(--bg-input)',
+                                  color: 'var(--text-primary)',
+                              },
                               onClick: () => setOpen(false),
                           },
                           'Close'
