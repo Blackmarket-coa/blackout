@@ -18,6 +18,7 @@ import activeDefenseRoutes from './routes/activedefense';
 import canaryTripwireRoutes from './routes/canaryTripwire';
 import meshRoutes from './routes/mesh';
 import marketplaceRoutes from './routes/marketplace';
+import { assertPlaceholderMarketplacesDisabledForProduction } from './integrations/marketplace';
 import threadRoutes from './routes/threads';
 import settingsRoutes from './routes/settings';
 import capabilityRoutes from './routes/capabilities';
@@ -350,6 +351,12 @@ if (shouldListen) {
         log.warn('error reporter init failed', { error: String(err) })
     );
     bootstrapMailer();
+
+    // Refuse to boot if a placeholder marketplace (blamazon / mayhem-marketplaze /
+    // antin-amazon) is enabled in production. These have no real adapter, so a deploy
+    // with `*_ENABLED=true` would silently pretend to be a marketplace. Throwing here
+    // surfaces in the process supervisor before the server starts listening.
+    assertPlaceholderMarketplacesDisabledForProduction();
 
     // Probe the Matrix admin dependency once at boot. Invites/redemption need the
     // bot token to hold Synapse admin rights; without this check a misconfigured

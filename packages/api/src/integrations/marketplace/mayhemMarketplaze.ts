@@ -1,5 +1,15 @@
 import type { MarketplaceProvider } from '@blackout/core';
-import { createStubProvider } from './stubProvider';
+import { assertStubProviderDisabledForProduction, createStubProvider } from './stubProvider';
+
+export function assertMayhemMarketplazeDisabledForProduction(
+    env: NodeJS.ProcessEnv = process.env
+): void {
+    assertStubProviderDisabledForProduction(
+        'mayhem-marketplaze',
+        'MAYHEM_MARKETPLAZE_ENABLED',
+        env
+    );
+}
 
 export function createMayhemMarketplazeProvider(): MarketplaceProvider {
     return createStubProvider({

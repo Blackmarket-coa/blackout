@@ -1,5 +1,9 @@
 import type { MarketplaceProvider } from '@blackout/core';
-import { createStubProvider } from './stubProvider';
+import { assertStubProviderDisabledForProduction, createStubProvider } from './stubProvider';
+
+export function assertAntinAmazonDisabledForProduction(env: NodeJS.ProcessEnv = process.env): void {
+    assertStubProviderDisabledForProduction('antin-amazon', 'ANTIN_AMAZON_ENABLED', env);
+}
 
 export function createAntinAmazonProvider(): MarketplaceProvider {
     return createStubProvider({

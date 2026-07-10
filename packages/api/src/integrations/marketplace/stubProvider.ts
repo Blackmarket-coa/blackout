@@ -21,10 +21,32 @@ interface StubProviderConfig {
     capabilities: readonly MarketplaceCapability[];
 }
 
-function envBool(key: string, fallback: boolean): boolean {
-    const raw = process.env[key];
+function envBool(key: string, fallback: boolean, env: NodeJS.ProcessEnv = process.env): boolean {
+    const raw = env[key];
     if (raw === undefined) return fallback;
     return raw === '1' || raw.toLowerCase() === 'true';
+}
+
+/**
+ * Placeholder marketplace providers (blamazon / mayhem-marketplaze / antin-amazon)
+ * have no real adapter: they return empty catalogs, throw on checkout, and reject
+ * webhook verification. Enabling one in production would let a deploy pretend to be a
+ * marketplace while silently no-op'ing. This guard refuses to start in that case.
+ *
+ * Mirrors `assertFreeblackmarketSecretsForProduction` in `./freeblackmarket.ts`.
+ */
+export function assertStubProviderDisabledForProduction(
+    id: MarketplaceProviderId,
+    envEnabledKey: string,
+    env: NodeJS.ProcessEnv = process.env
+): void {
+    if (env.NODE_ENV !== 'production') return;
+    if (envBool(envEnabledKey, false, env) === false) return;
+    throw new Error(
+        `[${id}] Refusing to start in production: ${envEnabledKey}=true but ${id} is a ` +
+            `placeholder integration with no real adapter. Unset ${envEnabledKey} (or set it ` +
+            `to false) until a real adapter is implemented.`
+    );
 }
 
 export function createStubProvider(config: StubProviderConfig): MarketplaceProvider {
@@ -51,7 +73,10 @@ export function createStubProvider(config: StubProviderConfig): MarketplaceProvi
             throw new Error(`${config.id} checkout not yet implemented`);
         },
 
-        verifyWebhook(_rawBody: string, headers: Record<string, string | undefined>): WebhookVerification {
+        verifyWebhook(
+            _rawBody: string,
+            headers: Record<string, string | undefined>
+        ): WebhookVerification {
             return {
                 ok: false,
                 eventId: headers['x-event-id'] ?? null,
