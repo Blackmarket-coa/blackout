@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { readJsonBody } from '../middleware/validate';
 import { requireUser } from '../middleware/require-user';
+import { isAdminUser } from '../services/auth';
 import { requireDomainCapability } from './authz';
 import {
     ReferralValidationError,
@@ -137,10 +138,27 @@ function createGrowthRouter() {
         if (denied) return denied;
         const parsed = await readJsonBody(c, questCreateSchema);
         if (parsed instanceof Response) return parsed;
+
+        // Creator-authored quests: any signed-in creator may mint quests, but
+        // only of the `creator` kind and only attributed to themselves — the
+        // server stamps sourceRef so nobody can author on another creator's
+        // (or the platform's) behalf. `system`/`canopy` stay admin-only.
+        const admin = isAdminUser(user.sub, user.username ?? '');
+        if (!admin && parsed.sourceKind !== 'creator') {
+            return c.json(
+                {
+                    code: 'admin_required',
+                    message: 'Only creator quests can be self-authored',
+                },
+                403
+            );
+        }
+        const sourceRef = admin ? parsed.sourceRef ?? null : user.sub;
+
         try {
             const record = questsService.create({
                 sourceKind: parsed.sourceKind as QuestSourceKind,
-                sourceRef: parsed.sourceRef ?? null,
+                sourceRef,
                 title: parsed.title,
                 description: parsed.description,
                 rewardKind: parsed.rewardKind as QuestRewardKind,
@@ -156,6 +174,36 @@ function createGrowthRouter() {
             }
             throw error;
         }
+    });
+
+    // The caller's own authored quests (active or ended), each with its
+    // completion count — the creator-side management view.
+    growth.get('/quests/mine', (c) => {
+        const user = requireUser(c, 'Sign in to list your quests');
+        if (user instanceof Response) return user;
+        const denied = requireDomainCapability(c, 'growth', 'read');
+        if (denied) return denied;
+        const items = questsService.listBySource('creator', user.sub).map((quest) => ({
+            ...quest,
+            completions: questsService.completionCount(quest.id),
+        }));
+        return c.json({ items });
+    });
+
+    // End one of the caller's own quests now (admins may end any quest).
+    growth.post('/quests/:id/end', (c) => {
+        const user = requireUser(c, 'Sign in to end a quest');
+        if (user instanceof Response) return user;
+        const denied = requireDomainCapability(c, 'growth', 'write');
+        if (denied) return denied;
+        const id = c.req.param('id');
+        const quest = questsService.get(id);
+        if (!quest) return c.json({ code: 'quest_not_found', message: 'quest not found' }, 404);
+        const ownsQuest = quest.sourceKind === 'creator' && quest.sourceRef === user.sub;
+        if (!ownsQuest && !isAdminUser(user.sub, user.username ?? '')) {
+            return c.json({ code: 'forbidden', message: 'You can only end your own quests' }, 403);
+        }
+        return c.json({ quest: questsService.end(id) });
     });
 
     growth.post('/quests/:id/complete', (c) => {

@@ -121,17 +121,26 @@ test('growth quests: create + list active + complete + dedupe completion', async
     const writeHeaders = buildHeaders(author.token, ['growth.read', 'growth.write']);
     const playerHeaders = buildHeaders(player.token, ['growth.read', 'growth.write']);
 
-    const create = await app.request('/v1/growth/quests', {
-        method: 'POST',
-        headers: writeHeaders,
-        body: JSON.stringify({
-            sourceKind: 'system',
-            title: 'Welcome streak',
-            description: 'Sign in three days in a row',
-            rewardKind: 'tip',
-            rewardCents: 500,
-        }),
-    });
+    // `system` quests are admin-only; grant the author admin for the create.
+    const previousAdmins = process.env.BLACKOUT_ADMIN_USERS;
+    process.env.BLACKOUT_ADMIN_USERS = author.sub;
+    let create: Response;
+    try {
+        create = await app.request('/v1/growth/quests', {
+            method: 'POST',
+            headers: writeHeaders,
+            body: JSON.stringify({
+                sourceKind: 'system',
+                title: 'Welcome streak',
+                description: 'Sign in three days in a row',
+                rewardKind: 'tip',
+                rewardCents: 500,
+            }),
+        });
+    } finally {
+        if (previousAdmins === undefined) delete process.env.BLACKOUT_ADMIN_USERS;
+        else process.env.BLACKOUT_ADMIN_USERS = previousAdmins;
+    }
     assert.equal(create.status, 201);
     const createBody = (await create.json()) as { quest: { id: string; rewardCents: number } };
     assert.equal(createBody.quest.rewardCents, 500);
@@ -141,10 +150,10 @@ test('growth quests: create + list active + complete + dedupe completion', async
     const listBody = (await list.json()) as { items: { id: string }[] };
     assert.ok(listBody.items.some((item) => item.id === createBody.quest.id));
 
-    const complete = await app.request(
-        `/v1/growth/quests/${createBody.quest.id}/complete`,
-        { method: 'POST', headers: playerHeaders },
-    );
+    const complete = await app.request(`/v1/growth/quests/${createBody.quest.id}/complete`, {
+        method: 'POST',
+        headers: playerHeaders,
+    });
     assert.equal(complete.status, 201);
     const completeBody = (await complete.json()) as {
         completion: { id: string; questId: string };
@@ -152,10 +161,10 @@ test('growth quests: create + list active + complete + dedupe completion', async
     assert.equal(completeBody.completion.questId, createBody.quest.id);
 
     // Re-completing returns the same record (idempotent).
-    const recomplete = await app.request(
-        `/v1/growth/quests/${createBody.quest.id}/complete`,
-        { method: 'POST', headers: playerHeaders },
-    );
+    const recomplete = await app.request(`/v1/growth/quests/${createBody.quest.id}/complete`, {
+        method: 'POST',
+        headers: playerHeaders,
+    });
     assert.equal(recomplete.status, 201);
     const recompleteBody = (await recomplete.json()) as { completion: { id: string } };
     assert.equal(recompleteBody.completion.id, completeBody.completion.id);
