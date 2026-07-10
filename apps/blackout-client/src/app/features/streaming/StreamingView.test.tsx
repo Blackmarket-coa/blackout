@@ -120,6 +120,7 @@ describe('StreamingView', () => {
             'kits',
             'listings',
             'rewards',
+            'splits',
             'broadcast',
             'connections',
             'bridges',
