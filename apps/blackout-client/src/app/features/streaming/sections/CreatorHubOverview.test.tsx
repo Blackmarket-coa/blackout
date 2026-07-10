@@ -73,11 +73,7 @@ describe('CreatorHubOverview', () => {
 
     it('surfaces active-subscriber and published-content metrics on the cards', async () => {
         listMySubscribersMock.mockResolvedValue({
-            subscriptions: [
-                { status: 'active' },
-                { status: 'active' },
-                { status: 'canceled' },
-            ],
+            subscriptions: [{ status: 'active' }, { status: 'active' }, { status: 'canceled' }],
         });
         fetchMyContentMock.mockResolvedValue({ content: [{}, {}, {}] });
         const { container } = await mount();
@@ -103,6 +99,6 @@ describe('CreatorHubOverview', () => {
             clips?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
             await Promise.resolve();
         });
-        expect(onSelectTab).toHaveBeenCalledWith('clips');
+        expect(onSelectTab).toHaveBeenCalledWith('content', 'clips');
     });
 });
