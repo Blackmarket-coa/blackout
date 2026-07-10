@@ -188,6 +188,32 @@ export function fetchMutualAid(
     return getJson<MutualAidResponse>(path, token);
 }
 
+export interface NearbySignal {
+    kind: string;
+    id: string;
+    title: string;
+}
+
+export interface NearbySignalsResponse {
+    generatedAt: string;
+    count: number;
+    signals: NearbySignal[];
+}
+
+/**
+ * Wraps `GET /v1/coalition/nearby` — unified count of located signals
+ * (mutual aid, events, sellers, spatial pins) around the viewer. Callers are
+ * expected to pass privacy-coarsened coordinates; the response carries no
+ * locations at all.
+ */
+export function fetchNearbySignals(
+    nearby: NearbyQuery,
+    token: string | null = readBlackoutApiToken()
+): Promise<NearbySignalsResponse> {
+    const path = appendQuery(`${COALITION_BASE}/nearby`, nearbyParams(nearby));
+    return getJson<NearbySignalsResponse>(path, token);
+}
+
 export function fetchSellerLocations(
     nearby?: NearbyQuery,
     token: string | null = readBlackoutApiToken()
