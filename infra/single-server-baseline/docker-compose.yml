@@ -139,6 +139,12 @@ services:
             # reachable OWNCAST_BASE_URL; recordings land on the api-data volume.
             # - BLACKOUT_VOD_RECORDING=1
             # - BLACKOUT_VOD_STORAGE_DIR=/var/lib/blackout/vods
+            # Auto-captions for server-cut clips (services/clipCutterWorker):
+            # whisper.cpp transcribes each cut clip to a WebVTT sidecar.
+            # Opt-in — needs the whisper.cpp CLI + a ggml model in the image.
+            # - BLACKOUT_CLIP_CAPTIONS=1
+            # - WHISPER_CPP_BIN=whisper-cli
+            # - WHISPER_CPP_MODEL=/var/lib/blackout/models/ggml-base.en.bin
         volumes:
             - blackout-api-data:/var/lib/blackout
         depends_on:

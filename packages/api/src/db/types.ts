@@ -850,6 +850,8 @@ export interface ClipRecord {
     mediaPointer: string;
     /** Optional poster/thumbnail pointer. */
     thumbnailPointer?: string;
+    /** Optional WebVTT captions pointer (auto-generated for server-cut clips). */
+    captionsPointer?: string;
     durationSeconds: number;
     visibility: 'public' | 'private' | 'member_only';
     tags: string[];

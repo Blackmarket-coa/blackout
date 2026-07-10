@@ -52,6 +52,8 @@ export interface ClipSummary {
     title: string;
     mediaPointer: string;
     thumbnailPointer?: string;
+    /** WebVTT sidecar for server-cut clips (whisper.cpp auto-captions). */
+    captionsPointer?: string;
     durationSeconds: number;
     visibility: StreamVisibility;
     tags: string[];
@@ -70,6 +72,16 @@ export interface CreateClipInput {
     sourceStreamId?: string;
     thumbnailPointer?: string;
     durationSeconds?: number;
+    visibility?: StreamVisibility;
+    tags?: string[];
+}
+
+export interface CreateClipFromSessionInput {
+    title: string;
+    /** Offset into the recording where the clip starts. */
+    startSeconds: number;
+    /** 1..180 — server-enforced ceiling. */
+    durationSeconds: number;
     visibility?: StreamVisibility;
     tags?: string[];
 }
@@ -261,3 +273,23 @@ export const createClip = (
     input: CreateClipInput,
     token: string | null = readBlackoutApiToken()
 ): Promise<ClipSummary> => callJson<ClipSummary>('POST', `${STREAMING_BASE}/clips`, token, input);
+
+/**
+ * Wraps `POST /v1/streaming/streams/:streamId/sessions/:sessionId/clips` —
+ * cut a clip server-side out of an ended session's recording (owner-only).
+ * Resolves with the finished clip; auto-captions attach in the background.
+ */
+export const createClipFromSession = (
+    streamId: string,
+    sessionId: string,
+    input: CreateClipFromSessionInput,
+    token: string | null = readBlackoutApiToken()
+): Promise<ClipSummary> =>
+    callJson<ClipSummary>(
+        'POST',
+        `${STREAMING_BASE}/streams/${encodeURIComponent(streamId)}/sessions/${encodeURIComponent(
+            sessionId
+        )}/clips`,
+        token,
+        input
+    );

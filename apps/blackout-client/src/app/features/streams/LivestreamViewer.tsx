@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useState, type CSSProperties } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { useMatrixClientOrNull } from '../../hooks/useMatrixClient';
 import { recordViewEvent } from '../../sdk/viewEvents';
 import { LIVE_PATH, CREATOR_STOREFRONT_PATH, buildCommunitiesPath } from '../../pages/paths';
 import {
@@ -184,6 +185,9 @@ export const LivestreamViewer = (): JSX.Element => {
     const [origin, setOrigin] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [forbidden, setForbidden] = useState(false);
+    // A creator's id is their Matrix user id; owning the stream unlocks the
+    // replay Clip cutter in the past-broadcasts list.
+    const ownUserId = useMatrixClientOrNull()?.getUserId() ?? null;
 
     useEffect(() => {
         if (!streamId) return;
@@ -333,7 +337,10 @@ export const LivestreamViewer = (): JSX.Element => {
                 <ChannelPointsWidgetLazy channelId={stream.creatorId} />
             </Suspense>
             <Suspense fallback={null}>
-                <StreamVodsLazy streamId={stream.id} />
+                <StreamVodsLazy
+                    streamId={stream.id}
+                    canClip={ownUserId !== null && ownUserId === stream.creatorId}
+                />
             </Suspense>
         </section>
     );

@@ -24,6 +24,14 @@ import {
     vodFilePathForSession,
 } from '../services/vodRecorderWorker';
 import {
+    clipCaptionsFilePath,
+    clipFilePath,
+    clipMediaPointer,
+    cutClipFromRecording,
+    generateClipCaptions,
+    MAX_CLIP_DURATION_SECONDS,
+} from '../services/clipCutterWorker';
+import {
     notifyStreamStarted as notifyObsWsStreamStarted,
     notifyStreamEnded as notifyObsWsStreamEnded,
 } from '../integrations/obs-ws-compat/server';
@@ -457,35 +465,25 @@ function createStreamingRouter() {
         return c.json({ items: vods });
     });
 
-    // GET /v1/streaming/vod-files/:sessionId — serve a locally recorded VOD
-    // mp4 (produced by services/vodRecorderWorker) with HTTP Range support so
-    // <video> seeking works. Served WITHOUT bearer auth because the client
-    // plays replayPointer as a media/iframe src, which cannot attach headers —
-    // so only public streams' recordings are served here; non-public streams
-    // 404 like the other viewer-facing surfaces. Session ids are UUIDs; the
-    // strict format check doubles as path-traversal protection.
-    streaming.get('/vod-files/:sessionId', (c) => {
-        const sessionId = c.req.param('sessionId');
-        if (!/^[0-9a-f-]{36}$/i.test(sessionId)) {
-            return c.json({ code: 'vod_not_found', message: 'Recording not found' }, 404);
-        }
-        const session = db.getStreamSession(sessionId);
-        if (!session) return c.json({ code: 'vod_not_found', message: 'Recording not found' }, 404);
-        const stream = db.getStream(session.streamId);
-        if (!stream || stream.visibility !== 'public') {
-            return c.json({ code: 'vod_not_found', message: 'Recording not found' }, 404);
-        }
-
-        const filePath = vodFilePathForSession(sessionId);
+    // Serve a local media file with HTTP Range support so <video> seeking
+    // works. Returns null when the file is missing so callers can 404 with
+    // their own error shape. These media routes are served WITHOUT bearer auth
+    // because media/iframe/track src attributes cannot attach headers — so
+    // callers must gate on public visibility before invoking this.
+    const serveLocalMediaFile = (
+        c: Context,
+        filePath: string,
+        contentType: string
+    ): Response | null => {
         let size: number;
         try {
             size = statSync(filePath).size;
         } catch {
-            return c.json({ code: 'vod_not_found', message: 'Recording not found' }, 404);
+            return null;
         }
 
         const baseHeaders: Record<string, string> = {
-            'content-type': 'video/mp4',
+            'content-type': contentType,
             'accept-ranges': 'bytes',
             'cache-control': 'public, max-age=3600',
         };
@@ -522,6 +520,52 @@ function createStreamingRouter() {
             status: 200,
             headers: { ...baseHeaders, 'content-length': String(size) },
         });
+    };
+
+    const UUID_ISH = /^[0-9a-f-]{36}$/i;
+
+    // GET /v1/streaming/vod-files/:sessionId — serve a locally recorded VOD
+    // mp4 (produced by services/vodRecorderWorker). Only public streams'
+    // recordings are served; session ids are UUIDs, and the strict format
+    // check doubles as path-traversal protection.
+    streaming.get('/vod-files/:sessionId', (c) => {
+        const sessionId = c.req.param('sessionId');
+        const notFound = () =>
+            c.json({ code: 'vod_not_found', message: 'Recording not found' }, 404);
+        if (!UUID_ISH.test(sessionId)) return notFound();
+        const session = db.getStreamSession(sessionId);
+        if (!session) return notFound();
+        const stream = db.getStream(session.streamId);
+        if (!stream || stream.visibility !== 'public') return notFound();
+
+        return serveLocalMediaFile(c, vodFilePathForSession(sessionId), 'video/mp4') ?? notFound();
+    });
+
+    // A publicly playable, locally stored clip (cut by clipCutterWorker), or
+    // null. Shared gate for the clip media + captions routes below.
+    const publicLocalClip = (clipId: string) => {
+        if (!UUID_ISH.test(clipId)) return null;
+        const clip = db.getClip(clipId);
+        if (!clip || clip.visibility !== 'public') return null;
+        return clip;
+    };
+
+    // GET /v1/streaming/clip-files/:clipId — serve a server-cut clip mp4.
+    streaming.get('/clip-files/:clipId', (c) => {
+        const notFound = () => c.json({ code: 'clip_not_found', message: 'Clip not found' }, 404);
+        const clip = publicLocalClip(c.req.param('clipId'));
+        if (!clip) return notFound();
+        return serveLocalMediaFile(c, clipFilePath(clip.id), 'video/mp4') ?? notFound();
+    });
+
+    // GET /v1/streaming/clip-files/:clipId/captions — the WebVTT sidecar
+    // whisper.cpp produced for a server-cut clip (see clipCutterWorker).
+    streaming.get('/clip-files/:clipId/captions', (c) => {
+        const notFound = () =>
+            c.json({ code: 'captions_not_found', message: 'Captions not found' }, 404);
+        const clip = publicLocalClip(c.req.param('clipId'));
+        if (!clip) return notFound();
+        return serveLocalMediaFile(c, clipCaptionsFilePath(clip.id), 'text/vtt') ?? notFound();
     });
 
     // --- Twitch extension registry (creator-owned) ---
@@ -603,6 +647,7 @@ function createStreamingRouter() {
         title: clip.title,
         mediaPointer: clip.mediaPointer,
         thumbnailPointer: clip.thumbnailPointer,
+        captionsPointer: clip.captionsPointer,
         durationSeconds: clip.durationSeconds,
         visibility: clip.visibility,
         tags: clip.tags,
@@ -700,6 +745,90 @@ function createStreamingRouter() {
         if (!updated) return c.json({ code: 'clip_not_found', message: 'Clip not found' }, 404);
         return c.json(clipToJson(updated));
     });
+
+    // POST /v1/streaming/streams/:streamId/sessions/:sessionId/clips — cut a
+    // clip out of the session's local recording (WS2 vodRecorderWorker) and
+    // register it as a first-class clip. The ffmpeg stream-copy cut completes
+    // in well under a second, so this endpoint waits for it and returns the
+    // finished clip. Captions (when enabled) generate in the background and
+    // attach to the clip record when done.
+    const clipFromSessionSchema = z.object({
+        title: z.string().min(1),
+        startSeconds: z.number().min(0),
+        durationSeconds: z.number().int().min(1).max(MAX_CLIP_DURATION_SECONDS),
+        tags: z.array(z.string()).optional(),
+        visibility: z.enum(['public', 'private', 'member_only']).optional(),
+    });
+    streaming.post(
+        '/streams/:streamId/sessions/:sessionId/clips',
+        clipWriteRateLimit,
+        async (c) => {
+            const denied = requireDomainCapability(c, 'streaming', 'write');
+            if (denied) return denied;
+
+            const { streamId, sessionId } = c.req.param();
+            const ownerDenied = requireStreamOwner(c, streamId);
+            if (ownerDenied) return ownerDenied;
+
+            const session = db.getStreamSession(sessionId);
+            if (!session || session.streamId !== streamId) {
+                return c.json({ code: 'session_not_found', message: 'Session not found' }, 404);
+            }
+            if (!session.endedAt) {
+                return c.json(
+                    {
+                        code: 'session_still_live',
+                        message: 'Clips can be cut once the broadcast has ended',
+                    },
+                    409
+                );
+            }
+
+            const parsed = await readJsonBody(c, clipFromSessionSchema);
+            if (parsed instanceof Response) return parsed;
+
+            const clipId = crypto.randomUUID();
+            const cut = await cutClipFromRecording({
+                sessionId,
+                clipId,
+                startSeconds: parsed.startSeconds,
+                durationSeconds: parsed.durationSeconds,
+            });
+            if (!cut.ok) {
+                const status = cut.reason === 'recording_missing' ? 404 : 422;
+                return c.json(
+                    {
+                        code: cut.reason,
+                        message:
+                            cut.reason === 'recording_missing'
+                                ? 'This session has no local recording to cut from'
+                                : 'ffmpeg could not cut the requested segment',
+                    },
+                    status
+                );
+            }
+
+            // requireStreamOwner above guarantees the stream exists and the
+            // caller is its creator, so attribute the clip to the stream owner.
+            const clip = db.upsertClip({
+                id: clipId,
+                creatorId: db.getStream(streamId)!.creatorId,
+                sourceStreamId: streamId,
+                title: parsed.title,
+                mediaPointer: clipMediaPointer(clipId),
+                durationSeconds: parsed.durationSeconds,
+                visibility: parsed.visibility ?? 'public',
+                tags: parsed.tags ?? [],
+            });
+
+            // Best-effort background captions; attaches captionsPointer on success.
+            void generateClipCaptions(clipId).catch((err) =>
+                log.warn('clip_captions_threw', { clipId, error: String(err) })
+            );
+
+            return c.json(clipToJson(clip), 201);
+        }
+    );
 
     // DELETE /v1/streaming/clips/:clipId — owner-only.
     streaming.delete('/clips/:clipId', clipWriteRateLimit, (c) => {
