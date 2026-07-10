@@ -11,6 +11,7 @@ import {
     type QuestDefinitionRecord,
     type ReferralRecord,
 } from '../../growth';
+import CreatorQuestsPanel from './CreatorQuestsPanel';
 import {
     HubSection,
     hubCardLabelStyle,
@@ -158,6 +159,7 @@ export const RewardsSection = (): JSX.Element => {
             testId="rewards-section"
             shellRegion="rewards-section"
         >
+            <CreatorQuestsPanel />
             <div style={hubGridStyle} data-testid="rewards-stats">
                 <div style={statCardStyle}>
                     <span style={hubCardLabelStyle}>Ambassador tier</span>

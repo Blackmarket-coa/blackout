@@ -10,6 +10,9 @@ const fetchActiveQuestsMock = vi.fn();
 const fetchMyMigrationCreditsMock = vi.fn();
 const completeQuestMock = vi.fn();
 const redeemMigrationCreditMock = vi.fn();
+const fetchMyQuestsMock = vi.fn();
+const createCreatorQuestMock = vi.fn();
+const endQuestMock = vi.fn();
 
 vi.mock('../../growth', () => ({
     fetchMyAmbassador: (...a: unknown[]) => fetchMyAmbassadorMock(...a),
@@ -18,6 +21,9 @@ vi.mock('../../growth', () => ({
     fetchMyMigrationCredits: (...a: unknown[]) => fetchMyMigrationCreditsMock(...a),
     completeQuest: (...a: unknown[]) => completeQuestMock(...a),
     redeemMigrationCredit: (...a: unknown[]) => redeemMigrationCreditMock(...a),
+    fetchMyQuests: (...a: unknown[]) => fetchMyQuestsMock(...a),
+    createCreatorQuest: (...a: unknown[]) => createCreatorQuestMock(...a),
+    endQuest: (...a: unknown[]) => endQuestMock(...a),
 }));
 
 import RewardsSection from './RewardsSection';
@@ -52,6 +58,8 @@ describe('RewardsSection', () => {
         ]) {
             m.mockReset();
         }
+        fetchMyQuestsMock.mockReset();
+        fetchMyQuestsMock.mockResolvedValue({ items: [] });
     });
 
     it('renders the stat cards and an active quest with a claim action', async () => {

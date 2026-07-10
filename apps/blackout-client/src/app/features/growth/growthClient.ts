@@ -128,6 +128,45 @@ export const fetchMyQuestCompletions = (
 ): Promise<{ items: QuestCompletionRecord[] }> =>
     callJson('GET', `${GROWTH_BASE}/quests/me/completions`, undefined, token);
 
+// --- Creator-authored quests -----------------------------------------
+
+export interface CreateCreatorQuestInput {
+    title: string;
+    description: string;
+    rewardKind: QuestRewardKind;
+    rewardCents: number;
+    endsAt?: string | null;
+}
+
+/** A quest the caller authored, annotated with how many users completed it. */
+export interface MyQuestRecord extends QuestDefinitionRecord {
+    completions: number;
+}
+
+/**
+ * Wraps `POST /v1/growth/quests` for creators. The server forces
+ * `sourceKind: 'creator'` and stamps `sourceRef` with the caller, so this
+ * only carries the fields a creator can actually set.
+ */
+export const createCreatorQuest = (
+    input: CreateCreatorQuestInput,
+    token: string | null = readBlackoutApiToken()
+): Promise<{ quest: QuestDefinitionRecord }> =>
+    callJson('POST', `${GROWTH_BASE}/quests`, { sourceKind: 'creator', ...input }, token);
+
+/** Wraps `GET /v1/growth/quests/mine` — own quests with completion counts. */
+export const fetchMyQuests = (
+    token: string | null = readBlackoutApiToken()
+): Promise<{ items: MyQuestRecord[] }> =>
+    callJson('GET', `${GROWTH_BASE}/quests/mine`, undefined, token);
+
+/** Wraps `POST /v1/growth/quests/:id/end` — end one of the caller's quests now. */
+export const endQuest = (
+    questId: string,
+    token: string | null = readBlackoutApiToken()
+): Promise<{ quest: QuestDefinitionRecord }> =>
+    callJson('POST', `${GROWTH_BASE}/quests/${encodeURIComponent(questId)}/end`, undefined, token);
+
 // --- Migration credits (PR 7) ---------------------------------------
 
 export type MigrationCreditSourceKind =

@@ -2603,6 +2603,11 @@ class InMemoryDb {
         return record;
     }
 
+    updateQuest(record: QuestDefinitionRecord): QuestDefinitionRecord {
+        this.quests.set(record.id, record);
+        return record;
+    }
+
     getQuest(id: string): QuestDefinitionRecord | undefined {
         return this.quests.get(id);
     }
@@ -2633,6 +2638,10 @@ class InMemoryDb {
 
     listQuestCompletionsByUser(userId: string): QuestCompletionRecord[] {
         return [...this.questCompletions.values()].filter((row) => row.userId === userId);
+    }
+
+    listQuestCompletionsByQuest(questId: string): QuestCompletionRecord[] {
+        return [...this.questCompletions.values()].filter((row) => row.questId === questId);
     }
 
     resetQuestsForTest(): void {
@@ -5335,6 +5344,12 @@ export class FileBackedDb extends InMemoryDb {
         const created = super.insertQuest(record);
         this.persist();
         return created;
+    }
+
+    override updateQuest(record: QuestDefinitionRecord): QuestDefinitionRecord {
+        const updated = super.updateQuest(record);
+        this.persist();
+        return updated;
     }
 
     override insertQuestCompletion(record: QuestCompletionRecord): QuestCompletionRecord {
