@@ -1,9 +1,10 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { readJsonBody } from '../middleware/validate';
+import { readJsonBody, readQuery } from '../middleware/validate';
 import { getAuthUser, requireUser } from '../middleware/require-user';
 import { createRateLimit } from '../middleware/rate-limit';
 import { insertAnalyticsEvents, type AnalyticsEventInput } from '../services/analyticsEvents';
+import { queryCreatorSummary } from '../services/analyticsQueries';
 
 const telemetry = new Hono();
 
@@ -77,6 +78,28 @@ telemetry.post('/events', async (c) => {
         },
         202
     );
+});
+
+const summaryQuerySchema = z.object({
+    days: z.coerce.number().int().min(1).max(90).default(7),
+});
+
+/**
+ * Creator-facing aggregates over the caller's own content (streams keyed by
+ * `payload.creatorId`, clips likewise) plus the instance-wide Owncast viewer
+ * snapshots. `available: false` means the warehouse is unconfigured or
+ * unreachable — the client hides the insights UI rather than erroring.
+ */
+telemetry.get('/creator/summary', async (c) => {
+    const user = requireUser(c, 'Sign in to read creator insights');
+    if (user instanceof Response) return user;
+
+    const parsed = readQuery(c, summaryQuerySchema);
+    if (parsed instanceof Response) return parsed;
+
+    const summary = await queryCreatorSummary(user.sub, parsed.days);
+    if (summary === null) return c.json({ available: false });
+    return c.json({ available: true, summary });
 });
 
 export default telemetry;

@@ -10,6 +10,7 @@ const fetchMyReferralsMock = vi.fn();
 const fetchMyAmbassadorMock = vi.fn();
 const listMySubscribersMock = vi.fn();
 const fetchMyContentMock = vi.fn();
+const fetchCreatorInsightsMock = vi.fn();
 
 vi.mock('../../streams', () => ({
     listStreams: (...a: unknown[]) => listStreamsMock(...a),
@@ -26,6 +27,9 @@ vi.mock('../../monetization/marketplace/useMarketplaceAuth', () => ({
 }));
 vi.mock('../../creators/contentClient', () => ({
     fetchMyContent: (...a: unknown[]) => fetchMyContentMock(...a),
+}));
+vi.mock('../insightsClient', () => ({
+    fetchCreatorInsights: (...a: unknown[]) => fetchCreatorInsightsMock(...a),
 }));
 
 import CreatorHubOverview from './CreatorHubOverview';
@@ -57,11 +61,13 @@ describe('CreatorHubOverview', () => {
         fetchMyAmbassadorMock.mockReset();
         listMySubscribersMock.mockReset();
         fetchMyContentMock.mockReset();
+        fetchCreatorInsightsMock.mockReset();
         listStreamsMock.mockResolvedValue({ items: [] });
         fetchMyReferralsMock.mockResolvedValue({ items: [] });
         fetchMyAmbassadorMock.mockResolvedValue({ ambassador: null });
         listMySubscribersMock.mockResolvedValue({ subscriptions: [] });
         fetchMyContentMock.mockResolvedValue({ content: [] });
+        fetchCreatorInsightsMock.mockResolvedValue({ available: false });
     });
 
     it('renders the overview grid with external deep-links', async () => {

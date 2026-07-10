@@ -86,6 +86,26 @@ export function startBackgroundLoops(): void {
         );
     }
 
+    // Owncast concurrent-viewer snapshots → analytics warehouse. Polls the
+    // origin's public /api/status; feeds the Creator Hub insights time series.
+    // Opt-in (needs both an Owncast origin and CLICKHOUSE_URL to be useful).
+    if (process.env.BLACKOUT_OWNCAST_METRICS === '1') {
+        const intervalSeconds = Number.parseInt(
+            process.env.BLACKOUT_OWNCAST_METRICS_INTERVAL_SECONDS ?? '',
+            10
+        );
+        const intervalMs =
+            Number.isFinite(intervalSeconds) && intervalSeconds > 0
+                ? intervalSeconds * 1000
+                : undefined;
+        void import('./services/owncastMetricsScheduler').then(
+            ({ startOwncastMetricsScheduler }) => {
+                startOwncastMetricsScheduler(intervalMs);
+                log.info('owncast_metrics_scheduler_started', { intervalMs });
+            }
+        );
+    }
+
     // Scheduled-message dispatcher. Delivers messages whose deliverAt has
     // passed into their Matrix room, so a scheduled send fires even when the
     // author's client is closed. On by default (it backs a first-party
