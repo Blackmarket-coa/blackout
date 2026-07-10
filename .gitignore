@@ -104,3 +104,4 @@ apps/blackout-client/docs/release/staging-signoff.report.json
 /playwright/test-results
 /playwright/blob-report
 /playwright/snapshots/**/*-actual*
+/packages/plugins-sdk/dist

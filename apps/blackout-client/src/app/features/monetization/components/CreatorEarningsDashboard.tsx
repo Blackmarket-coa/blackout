@@ -1,4 +1,5 @@
 import { createElement, useEffect, useMemo, useState } from 'react';
+import { feeForProvider } from '@blackout/core';
 import {
     adRevenueApi,
     creatorSubsApi,
@@ -9,6 +10,9 @@ import {
     type Tip,
 } from '../monetizationApi';
 import { readBlackoutApiToken } from '../marketplace/useMarketplaceAuth';
+
+/** Fee schedule of the live marketplace provider — single source of truth. */
+const FBM_FEES = feeForProvider('freeblackmarket');
 
 const cardStyle: Record<string, string | number> = {
     border: '1px solid var(--border-default)',
@@ -86,7 +90,14 @@ function StatBlock(props: { label: string; value: string; sub?: string }) {
         { style: statBlockStyle },
         createElement(
             'div',
-            { style: { fontSize: 10, textTransform: 'uppercase', color: 'var(--text-secondary)', letterSpacing: 0.5 } },
+            {
+                style: {
+                    fontSize: 10,
+                    textTransform: 'uppercase',
+                    color: 'var(--text-secondary)',
+                    letterSpacing: 0.5,
+                },
+            },
             props.label
         ),
         createElement('div', { style: { fontSize: 18, fontWeight: 700 } }, props.value),
@@ -124,7 +135,8 @@ export function CreatorEarningsDashboard() {
                 setShares(sharesResp.shares);
                 setTiers(new Map(tiersResp.tiers.map((t) => [t.id, t.priceCents])));
             } catch (err) {
-                if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load earnings');
+                if (!cancelled)
+                    setError(err instanceof Error ? err.message : 'Failed to load earnings');
             }
         })();
         return () => {
@@ -180,17 +192,52 @@ export function CreatorEarningsDashboard() {
             createElement(StatBlock, {
                 label: 'Platform fee paid',
                 value: formatCents(totals.tipsCapturedFeeCents),
-                sub: 'Tips only — subs/ad-rev fees apply at FBM settlement',
+                sub: `${FBM_FEES.displayFeePercent}% flat · tips only — subs/ad-rev fees apply at FBM settlement`,
             })
         ),
         createElement(
             'div',
-            { style: cardStyle },
+            { style: cardStyle, 'data-testid': 'payout-terms' },
+            createElement('div', { style: { fontSize: 13, fontWeight: 600 } }, 'How payouts work'),
             createElement(
-                'div',
-                { style: { fontSize: 13, fontWeight: 600 } },
-                'Recent tips'
-            ),
+                'ul',
+                {
+                    style: {
+                        display: 'grid',
+                        gap: 4,
+                        margin: 0,
+                        padding: 0,
+                        listStyle: 'none',
+                        fontSize: 12,
+                        color: 'var(--text-secondary)',
+                    },
+                },
+                createElement(
+                    'li',
+                    { key: 'fee' },
+                    `Platform fee: a flat ${FBM_FEES.displayFeePercent}% on every tip, subscription, gift, and boost. The rest is yours.`
+                ),
+                createElement(
+                    'li',
+                    { key: 'cadence' },
+                    `Payout cadence: FreeBlackMarket settles ${FBM_FEES.payoutCadence}.`
+                ),
+                createElement(
+                    'li',
+                    { key: 'mor' },
+                    'FreeBlackMarket is the merchant of record — it processes payments and sends payouts; Blackout never holds your funds.'
+                ),
+                createElement(
+                    'li',
+                    { key: 'states' },
+                    'Pending = checkout started, awaiting confirmation. Captured = confirmed and counted in your net.'
+                )
+            )
+        ),
+        createElement(
+            'div',
+            { style: cardStyle },
+            createElement('div', { style: { fontSize: 13, fontWeight: 600 } }, 'Recent tips'),
             recentTips.length === 0
                 ? createElement(
                       'div',
@@ -199,7 +246,15 @@ export function CreatorEarningsDashboard() {
                   )
                 : createElement(
                       'ul',
-                      { style: { display: 'grid', gap: 4, margin: 0, padding: 0, listStyle: 'none' } },
+                      {
+                          style: {
+                              display: 'grid',
+                              gap: 4,
+                              margin: 0,
+                              padding: 0,
+                              listStyle: 'none',
+                          },
+                      },
                       ...recentTips.map((tip) =>
                           createElement(
                               'li',
@@ -221,7 +276,11 @@ export function CreatorEarningsDashboard() {
                                   tip.giftSku ? `🎁 ${tip.giftSku}` : `${tip.contextKind}`,
                                   tip.note ? ` — ${tip.note}` : ''
                               ),
-                              createElement('span', undefined, formatCents(tip.netCents, tip.currency)),
+                              createElement(
+                                  'span',
+                                  undefined,
+                                  formatCents(tip.netCents, tip.currency)
+                              ),
                               createElement(
                                   'span',
                                   { style: { color: 'var(--text-secondary)' } },

@@ -11,6 +11,7 @@ import { fetchMyAmbassador, fetchMyReferrals } from '../../growth';
 import { creatorSubsApi } from '../../monetization/monetizationApi';
 import { readBlackoutApiToken } from '../../monetization/marketplace/useMarketplaceAuth';
 import { fetchMyContent } from '../../creators/contentClient';
+import { fetchCreatorInsights, type CreatorInsightsSummary } from '../insightsClient';
 import type { StreamingHubViewId, StreamingTabId } from '../../../state/streaming';
 import {
     HubSection,
@@ -43,6 +44,62 @@ interface OverviewCardProps {
     meta: string;
 }
 
+const insightsStripStyle: CSSProperties = {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
+    gap: 10,
+    marginBottom: 12,
+};
+
+const insightStatStyle: CSSProperties = {
+    display: 'grid',
+    gap: 2,
+    padding: 10,
+    borderRadius: 10,
+    border: '1px solid var(--border-default, rgba(255,255,255,0.12))',
+    background: 'var(--bg-input, rgba(255,255,255,0.04))',
+};
+
+const formatWatchTime = (seconds: number): string => {
+    if (seconds < 60) return `${seconds}s`;
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.round((seconds % 3600) / 60);
+    return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+};
+
+const InsightStat = ({ label, value }: { label: string; value: string }): JSX.Element => (
+    <div style={insightStatStyle}>
+        <span
+            style={{
+                fontSize: 10,
+                textTransform: 'uppercase',
+                letterSpacing: 0.5,
+                color: 'var(--text-muted, #9ca3af)',
+            }}
+        >
+            {label}
+        </span>
+        <span style={{ fontSize: 17, fontWeight: 700 }}>{value}</span>
+    </div>
+);
+
+/**
+ * 7-day audience numbers from the analytics warehouse. Renders nothing when
+ * the deployment has no warehouse (`available: false`) — zeros would read as
+ * "nobody watched" on installs that simply don't measure.
+ */
+const InsightsStrip = ({ summary }: { summary: CreatorInsightsSummary }): JSX.Element => (
+    <div style={insightsStripStyle} data-testid="creator-hub-insights">
+        <InsightStat label="Unique viewers · 7d" value={String(summary.uniqueViewers)} />
+        <InsightStat label="Stream views · 7d" value={String(summary.streamViews)} />
+        <InsightStat label="Watch time · 7d" value={formatWatchTime(summary.watchSeconds)} />
+        <InsightStat label="Clip plays · 7d" value={String(summary.clipPlays)} />
+        {summary.liveViewersNow !== null ? (
+            <InsightStat label="Watching now" value={String(summary.liveViewersNow)} />
+        ) : null}
+    </div>
+);
+
 const CardInner = ({ label, title, meta }: OverviewCardProps): JSX.Element => (
     <>
         <span
@@ -74,10 +131,17 @@ export const CreatorHubOverview = ({ onSelectTab }: CreatorHubOverviewProps): JS
     const [ambassadorTier, setAmbassadorTier] = useState<string | null>(null);
     const [activeSubscribers, setActiveSubscribers] = useState<number | null>(null);
     const [publishedContent, setPublishedContent] = useState<number | null>(null);
+    const [insights, setInsights] = useState<CreatorInsightsSummary | null>(null);
 
     useEffect(() => {
         let cancelled = false;
         const token = readBlackoutApiToken();
+        fetchCreatorInsights()
+            .then((response) => {
+                if (cancelled) return;
+                if (response.available && response.summary) setInsights(response.summary);
+            })
+            .catch(() => undefined);
         listStreams({ state: 'live', limit: 60 })
             .then((response) => {
                 if (cancelled) return;
@@ -146,6 +210,7 @@ export const CreatorHubOverview = ({ onSelectTab }: CreatorHubOverviewProps): JS
             testId="creator-hub-overview"
             shellRegion="creator-hub-overview"
         >
+            {insights ? <InsightsStrip summary={insights} /> : null}
             <div style={hubGridStyle} data-testid="creator-hub-overview-grid">
                 <button
                     type="button"

@@ -1,5 +1,7 @@
 import classNames from 'classnames';
+import { useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
+import { recordViewEvent } from '../../sdk/viewEvents';
 import * as css from './UnifiedFeedCard.css';
 import type { UnifiedFeedItem, UnifiedFeedSource } from './unifiedFeedModel';
 
@@ -47,14 +49,47 @@ export const UnifiedFeedCard = ({
             ? item.emoji
             : SOURCE_GLYPH[item.source];
     const emberRing = item.source === 'den' && !reducedMotion;
+    const cardRef = useRef<HTMLAnchorElement>(null);
+
+    // One impression per item per session, fired when at least half the card
+    // has actually been on screen (not merely rendered below the fold).
+    useEffect(() => {
+        const node = cardRef.current;
+        if (!node || typeof IntersectionObserver === 'undefined') return;
+        const observer = new IntersectionObserver(
+            (entries) => {
+                if (!entries.some((entry) => entry.isIntersecting)) return;
+                recordViewEvent(
+                    'feed_item_impression',
+                    { itemId: item.id, source: item.source },
+                    {
+                        coalitionId: item.canopyId ?? undefined,
+                        dedupeKey: `impression:${item.id}`,
+                    }
+                );
+                observer.disconnect();
+            },
+            { threshold: 0.5 }
+        );
+        observer.observe(node);
+        return () => observer.disconnect();
+    }, [item.id, item.source, item.canopyId]);
 
     return (
         <Link
+            ref={cardRef}
             to={item.href}
             className={css.card({ source: item.source })}
             data-testid="home-feed-card"
             data-source={item.source}
             data-den-id={item.denId ?? undefined}
+            onClick={() =>
+                recordViewEvent(
+                    'feed_item_opened',
+                    { itemId: item.id, source: item.source },
+                    { coalitionId: item.canopyId ?? undefined }
+                )
+            }
         >
             {item.mediaUrl ? (
                 <img

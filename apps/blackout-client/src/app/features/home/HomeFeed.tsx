@@ -41,6 +41,7 @@ import { UnifiedFeedCard } from './UnifiedFeedCard';
 import { AmbientBackdrop } from './AmbientBackdrop';
 import { EcosystemCanvas } from './EcosystemCanvas';
 import { ContextSidebar } from './context/ContextSidebar';
+import { useNearbySignals } from './useNearbySignals';
 import { useTimeOfDay } from './useTimeOfDay';
 import { useReducedMotion } from './useReducedMotion';
 import { useAmbientSound } from './useAmbientSound';
@@ -158,6 +159,7 @@ export const HomeFeed = (): JSX.Element => {
     const streak = useStreak(streakEnabled);
     const atmosphere = useTimeOfDay();
     const reducedMotion = useReducedMotion();
+    const nearby = useNearbySignals();
     const ambientSound = useAmbientSound();
     const tourEnabled = runtimeFeatureFlags.onboardingHomeTour;
     const homeTour = useHomeTour();
@@ -225,8 +227,15 @@ export const HomeFeed = (): JSX.Element => {
         tourEnabled &&
         (homeTour.state.status === 'completed' || homeTour.state.status === 'dismissed');
 
-    const signalCount = followingItems.length + discoverItems.length;
     const greeting = greetingForHour(new Date().getHours());
+
+    const nearbyChipLabel = nearby.enabled
+        ? nearby.loading
+            ? 'finding signals…'
+            : nearby.error
+            ? 'nearby unavailable'
+            : `${nearby.count ?? 0} signal${nearby.count === 1 ? '' : 's'} nearby`
+        : 'nearby off';
 
     const renderCards = (items: readonly UnifiedFeedItem[]): JSX.Element[] =>
         filterFeedByQuery(items, query).map((item) => (
@@ -250,7 +259,22 @@ export const HomeFeed = (): JSX.Element => {
                             <span className={css.chip}>
                                 {PHASE_ICON[atmosphere.phase]} {atmosphere.label}
                             </span>
-                            <span className={css.chip}>🌱 {signalCount} signals nearby</span>
+                            <button
+                                type="button"
+                                className={css.chip}
+                                data-testid="home-nearby-chip"
+                                title={
+                                    nearby.enabled
+                                        ? 'Real located signals within 10 km. Click to turn off.'
+                                        : 'Opt in to count mutual-aid, events & market signals near you. Only a ~1 km-coarse position ever leaves this device.'
+                                }
+                                style={{ cursor: 'pointer', font: 'inherit', border: 'none' }}
+                                onClick={() =>
+                                    nearby.enabled ? nearby.disable() : nearby.enable()
+                                }
+                            >
+                                🌱 {nearbyChipLabel}
+                            </button>
                             {streakEnabled && streak.count > 0 ? (
                                 <span className={css.chip} data-testid="home-streak-chip">
                                     <span aria-hidden="true">🔥</span> {streak.count}-day streak

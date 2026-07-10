@@ -388,6 +388,49 @@ coalition.get('/seller-locations', (c) => {
     return c.json({ locations });
 });
 
+// GET /v1/coalition/nearby — unified "signals nearby" count for the Home
+// chip (OSS gap-fill WS4): everything located within radiusKm of the viewer,
+// aggregated across mutual-aid posts, events, seller locations, and the
+// spatial feed. The response deliberately carries no coordinates — kind,
+// id, and title only — so the coarse viewer position the client sends is the
+// only location that ever crosses this endpoint. lat/lng/radiusKm required.
+coalition.get('/nearby', (c) => {
+    const nearby = parseNearby(c);
+    if (!nearby) {
+        return c.json(
+            { code: 'invalid_request', message: 'lat, lng, and radiusKm are required' },
+            400
+        );
+    }
+
+    const within = (location: { latitude: number; longitude: number }): boolean =>
+        isWithinRadiusMeters(location, nearby.viewer, nearby.radiusMeters);
+
+    // The spatial feed already projects events and public rings onto pins, so
+    // one pass over it covers those layers without double-counting listEvents.
+    const signals = [
+        ...listAidPosts({})
+            .filter((post) => post.status === 'open' && within(post.location))
+            .map((post) => ({ kind: 'aid' as const, id: post.id, title: post.title })),
+        ...listSellerLocations({ onlyVisible: true })
+            .filter((location) => within(location.coordinates))
+            .map((location) => ({
+                kind: 'seller' as const,
+                id: location.id,
+                title: location.city ? `${location.city} stall` : 'Local stall',
+            })),
+        ...listSpatialItems({})
+            .filter((item) => within(item))
+            .map((item) => ({ kind: item.layer, id: item.id, title: item.title })),
+    ];
+
+    return c.json({
+        generatedAt: new Date().toISOString(),
+        count: signals.length,
+        signals: signals.slice(0, 50),
+    });
+});
+
 coalition.get('/tasks', (c) => {
     const denId = c.req.query('denId');
     return c.json({ tasks: listTasks({ denId }) });

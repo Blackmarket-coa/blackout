@@ -276,6 +276,60 @@ describe('mergeAndRank', () => {
         const ranked = mergeAndRank(items, { sort: 'hot', now: NOW });
         expect(ranked.map((i) => i.id)).toEqual(['coalition:fresh', 'coalition:stale']);
     });
+
+    it('caps a flooding source so lower-scored other sources still make the cut', () => {
+        const items: UnifiedFeedItem[] = [
+            ...mapCoalition(
+                [
+                    coalition({ id: 'c1', score: 0.9 }),
+                    coalition({ id: 'c2', score: 0.8 }),
+                    coalition({ id: 'c3', score: 0.7 }),
+                    coalition({ id: 'c4', score: 0.6 }),
+                ],
+                NOW
+            ),
+            ...mapColiseum([topic({ id: 't1', debateHeat: 0.5 })], NOW),
+        ];
+        const ranked = mergeAndRank(items, { limit: 3, maxPerSource: 2, now: NOW });
+        // Without the cap the top 3 would be all-coalition.
+        expect(ranked.map((i) => i.id)).toEqual(['coalition:c1', 'coalition:c2', 'coliseum:t1']);
+    });
+
+    it('backfills capped overflow rather than shrinking a scarce feed', () => {
+        const items = mapCoalition(
+            [
+                coalition({ id: 'c1', score: 0.9 }),
+                coalition({ id: 'c2', score: 0.8 }),
+                coalition({ id: 'c3', score: 0.7 }),
+                coalition({ id: 'c4', score: 0.6 }),
+            ],
+            NOW
+        );
+        const ranked = mergeAndRank(items, { limit: 3, maxPerSource: 2, now: NOW });
+        // Only one source exists, so overflow fills the remaining slot in rank order.
+        expect(ranked.map((i) => i.id)).toEqual(['coalition:c1', 'coalition:c2', 'coalition:c3']);
+    });
+
+    it('skips the cap when all candidates already fit within the limit', () => {
+        const items: UnifiedFeedItem[] = [
+            ...mapCoalition(
+                [
+                    coalition({ id: 'c1', score: 0.9 }),
+                    coalition({ id: 'c2', score: 0.8 }),
+                    coalition({ id: 'c3', score: 0.7 }),
+                ],
+                NOW
+            ),
+            ...mapColiseum([topic({ id: 't1', debateHeat: 0.5 })], NOW),
+        ];
+        const ranked = mergeAndRank(items, { limit: 10, maxPerSource: 2, now: NOW });
+        expect(ranked.map((i) => i.id)).toEqual([
+            'coalition:c1',
+            'coalition:c2',
+            'coalition:c3',
+            'coliseum:t1',
+        ]);
+    });
 });
 
 describe('mapWallPosts', () => {
