@@ -133,6 +133,12 @@ services:
             - CLICKHOUSE_URL=http://clickhouse:8123
             - CLICKHOUSE_USER=${CLICKHOUSE_USER:-default}
             - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD}
+            # Session VOD recording (services/vodRecorderWorker): ffmpeg copies
+            # the Owncast HLS feed to an mp4 per live session and auto-registers
+            # the replay pointer. Opt-in — needs ffmpeg in the api image plus a
+            # reachable OWNCAST_BASE_URL; recordings land on the api-data volume.
+            # - BLACKOUT_VOD_RECORDING=1
+            # - BLACKOUT_VOD_STORAGE_DIR=/var/lib/blackout/vods
         volumes:
             - blackout-api-data:/var/lib/blackout
         depends_on:
