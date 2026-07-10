@@ -2524,8 +2524,12 @@ class InMemoryDb {
         );
     }
 
+    // createdAt has millisecond resolution, so tips created in the same tick
+    // tie. The Map iterates in insertion order and Array#sort is stable, so
+    // reversing first keeps most-recent-inserted ahead within a tied timestamp.
     listTipsByRecipient(recipientUserId: string, limit = 100): TipRecord[] {
         return [...this.tips.values()]
+            .reverse()
             .filter((row) => row.recipientUserId === recipientUserId)
             .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
             .slice(0, limit);
@@ -2533,6 +2537,7 @@ class InMemoryDb {
 
     listTipsBySender(senderUserId: string, limit = 100): TipRecord[] {
         return [...this.tips.values()]
+            .reverse()
             .filter((row) => row.senderUserId === senderUserId)
             .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
             .slice(0, limit);
