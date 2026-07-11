@@ -56,3 +56,4 @@ export { Sheet } from './Sheet';
 export type { SheetProps } from './Sheet';
 export { ToastProvider, useToast } from './Toast';
 export type { ToastOptions, ToastTone } from './Toast';
+export { useFocusTrap } from './useFocusTrap';

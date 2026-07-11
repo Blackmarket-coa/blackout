@@ -1,6 +1,7 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
 import { cx } from './cx';
+import { useFocusTrap } from './useFocusTrap';
 import * as styles from './Modal.css';
 
 let modalSeq = 0;
@@ -16,7 +17,8 @@ export interface ModalProps {
 
 /**
  * Portal dialog with a dimmed backdrop. Closes on Escape and backdrop click,
- * moves focus to the dialog on open, and restores it on close.
+ * moves focus to the dialog on open, traps Tab inside it while open, and
+ * restores focus on close.
  */
 export const Modal = ({
     open,
@@ -29,6 +31,8 @@ export const Modal = ({
     const dialogRef = React.useRef<HTMLDivElement>(null);
     const titleIdRef = React.useRef<string>();
     if (!titleIdRef.current) titleIdRef.current = `modal-title-${(modalSeq += 1)}`;
+
+    useFocusTrap(open, dialogRef);
 
     React.useEffect(() => {
         if (!open) return;
@@ -70,6 +74,6 @@ export const Modal = ({
                 {children}
             </div>
         </div>,
-        document.body,
+        document.body
     );
 };
