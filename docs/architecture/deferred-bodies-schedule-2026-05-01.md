@@ -359,6 +359,37 @@ XL (~4 weeks). AutoMod alone is L; depends heavily on appservice readiness.
 
 Per `discord_parity_blueprint.md` §8 weeks 13–16. Closing pass.
 
+### Status update — 2026-07-11
+
+Five of the six F items landed on `claude/stubs-placeholders-4xqu8t`:
+
+- **Quick switcher — recent-messages source: DONE.** `collectRecentMessages`
+  taps each room's live timeline (last-N `m.room.message`, per-room + total
+  caps), feeds `buildQuickSwitcherIndex`, rebuilds on `Room.timeline`, and a
+  new `Messages` activate branch opens the room via the mention-inbox jump
+  path (`openRoomWithContext` → `roomJumpTargetEventIdAtom`).
+- **Themes — no-flash boot: DONE.** `index.html` pre-hydration guard paints
+  the persisted theme (light_grove / amoled_night / legacy aliases) before
+  first paint; `applyThemeToRoot` clears the boot seeds when the real
+  vanilla-extract class lands. Parity + behavior suites lock the inline map
+  to `theme-engine.ts`.
+- **Accessibility — overlay primitives: DONE.** `@blackout/ui` gains a
+  dependency-free `useFocusTrap` (Modal/Sheet), Menu focus-restore + Home/End,
+  Tooltip Escape, Popover non-modal focus contract, tone-aware Toast live
+  regions. 10-case a11y suite.
+- **Profiles: DONE.** Server-stamped immutable `memberSince` on the profile
+  record, exposed on the public projection and rendered on ProfilePage +
+  MiniProfile ("Member since …").
+- **Advanced notification controls: DONE.** `NotificationRulePayload.roomId`
+  (protocol), the previously-missing `/v1/notifications/rules` backend
+  (per-subject store, room-scoped keys), SDK `roomId` on delete plus
+  `resolveEffectiveNotificationRule` precedence helper, and a room-override
+  field in the rules editor.
+- **Stage channels: CARVED OUT to a Phase 5** — resolving open question Q4
+  below. They depend on Workstream D's RTC baseline (MatrixRTC + LiveKit group
+  surface), which is not started; shipping F's pure-code polish without them
+  was the useful cut. Re-scope stage channels together with D.
+
 ### Scope
 
 - Quick switcher: cmd-K palette across rooms, members, recent messages, settings. **Index + ranking slice landed 2026-05-07** on `claude/code-debt-cleanup-QW0bb`: `buildQuickSwitcherIndex` and `rankQuickSwitcherResults` are exported with deterministic exact > recent > unread > fuzzy ordering, the unit test file is un-quarantined, and the smoke `it.skip` is re-enabled. Remaining: recent-messages search source.
@@ -548,5 +579,5 @@ suite.
 1. **UI Primitives styling:** vanilla-extract vs CSS-in-JS vs pure CSS? (Recommended: vanilla-extract for consistency with `apps/blackout-client`.)
 2. **GIF picker provider:** Tenor or Giphy? (Affects API contract + ToS.)
 3. **AutoMod appservice ownership:** which team stands up the policy-engine appservice that Workstream E depends on?
-4. **Stage channels deferral:** worth landing Phase 4 with stage channels, or carve them out as Phase 5?
+4. **Stage channels deferral:** worth landing Phase 4 with stage channels, or carve them out as Phase 5? — **Resolved 2026-07-11: carved out as Phase 5**, re-scoped alongside Workstream D's RTC baseline (see the F status update above).
 5. **Should Workstream B (UI primitives) split into v1.0 (essential 8 primitives) and v1.1 (full set)?** v1.0 is L, v1.1 is L on top.

@@ -73,8 +73,9 @@ For the source-of-truth triage with tier/owner detail see
 
 These are tracked in
 [`docs/architecture/deferred-bodies-schedule-2026-05-01.md`](docs/architecture/deferred-bodies-schedule-2026-05-01.md).
-Workstreams A (Ports 1–5) and C are closed; B's primitive set has shipped
-(only incremental adoption remains); D–F remain post-beta scope.
+Workstreams A (Ports 1–5), C, and F (minus stage channels, carved out to a
+Phase 5) are closed; B's primitive set has shipped (only incremental adoption
+remains); D–E remain post-beta scope.
 
 | Workstream | Scope | Status |
 | --- | --- | --- |
@@ -82,7 +83,7 @@ Workstreams A (Ports 1–5) and C are closed; B's primitive set has shipped
 | **C** | Reactions / threading hardening: `ThreadPanel` slot mount in `panelSlots.tsx`, sidebar `ThreadUnreadBadge` mount, integration coverage. | **Closed (2026-06-13).** `ThreadPanel` wired into the `panelSlots.tsx` `threads` slot, `ThreadUnreadBadgeMount` in `CanopySidebar.tsx`, and the round-trip test landed (`apps/blackout-client/tests/unit/features/threading-parity/workstreamC.roundtrip.test.tsx`). |
 | **D** | Discord parity P2: GIF picker (Giphy), voice/video polish, screen-sharing polish, media player controls. | Scoped, not started. |
 | **E** | Discord parity P3: AutoMod via Draupnir sidecar, raid protection, verification gates, slowmode. | Scoped, not started. |
-| **F** | Discord parity P4: theme engine (light/AMOLED), stage channels, accessibility audit, profile-card polish. Recent-messages quick-switcher source landed. | Partial. |
+| **F** | Discord parity P4: theme engine (light/AMOLED), quick switcher, accessibility audit, profile-card polish, advanced notification controls. | **Closed (2026-07-11)** except stage channels, which are carved out to a Phase 5 alongside Workstream D's RTC baseline (see the schedule doc's F status update). |
 
 ---
 
