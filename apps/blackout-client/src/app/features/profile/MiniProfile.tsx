@@ -1,5 +1,6 @@
 import { mdToHtml, sanitizeMatrixHtml } from '../../plugins/markdown/matrixMarkdownUtils';
 import AvatarDecoration from './AvatarDecoration';
+import { formatMemberSince } from './profileDisplay';
 import type { MemberProfile } from './profileTypes';
 
 // Old Discord color palette
@@ -115,6 +116,14 @@ export const MiniProfile = ({
                     {profile.primaryRole ? (
                         <div style={{ fontSize: 12, color: dc.textSecondary }}>
                             {profile.primaryRole}
+                        </div>
+                    ) : null}
+                    {formatMemberSince(profile.memberSince) ? (
+                        <div
+                            style={{ fontSize: 12, color: dc.textMuted }}
+                            data-testid="mini-profile-member-since"
+                        >
+                            Member since {formatMemberSince(profile.memberSince)}
                         </div>
                     ) : null}
                 </div>

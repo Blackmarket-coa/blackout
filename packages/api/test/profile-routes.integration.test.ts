@@ -14,7 +14,11 @@ const { __resetProfileStoreForTests } = await import('../src/services/profileSto
 
 function authHeaders(userId: string, capabilities: string[] = ['profile.read', 'profile.write']) {
     return {
-        authorization: `Bearer ${signJwt(userId, userId.replace(/[^a-z0-9]/gi, '') || 'user', 600)}`,
+        authorization: `Bearer ${signJwt(
+            userId,
+            userId.replace(/[^a-z0-9]/gi, '') || 'user',
+            600
+        )}`,
         'content-type': 'application/json',
         'x-blackout-capabilities': capabilities.join(','),
     };
@@ -121,15 +125,18 @@ test('profile PUT accepts the owner addressed by their Matrix id (sub is a Black
 test('profile PUT still rejects a Matrix-id path that belongs to another user', async () => {
     __resetProfileStoreForTests();
     // Same Matrix-id target, but the caller's token username (localpart) differs.
-    const response = await app.request(`/v1/profile/${encodeURIComponent('@crashdummy:blackout.local')}`, {
-        method: 'PUT',
-        headers: {
-            authorization: `Bearer ${signJwt('blackout-user-uuid-2', 'someoneelse', 600)}`,
-            'content-type': 'application/json',
-            'x-blackout-capabilities': 'profile.read,profile.write',
-        },
-        body: JSON.stringify({ displayName: 'Impostor' }),
-    });
+    const response = await app.request(
+        `/v1/profile/${encodeURIComponent('@crashdummy:blackout.local')}`,
+        {
+            method: 'PUT',
+            headers: {
+                authorization: `Bearer ${signJwt('blackout-user-uuid-2', 'someoneelse', 600)}`,
+                'content-type': 'application/json',
+                'x-blackout-capabilities': 'profile.read,profile.write',
+            },
+            body: JSON.stringify({ displayName: 'Impostor' }),
+        }
+    );
     assert.equal(response.status, 403);
 });
 
@@ -247,7 +254,11 @@ test('public profile GET returns safe fields and strips contact connections, no 
                 badgeIds: ['founder'],
                 connections: [
                     { type: 'github', url: 'https://github.com/test' },
-                    { type: 'fbm', username: 'creator-store', url: 'https://freeblackmarket.com/creator-store' },
+                    {
+                        type: 'fbm',
+                        username: 'creator-store',
+                        url: 'https://freeblackmarket.com/creator-store',
+                    },
                     { type: 'email', url: 'mailto:secret@example.com' },
                     { type: 'phone', url: 'tel:+15551234' },
                 ],
@@ -274,4 +285,52 @@ test('public profile GET returns safe fields and strips contact connections, no 
     assert.deepEqual(body.profile.badgeIds, ['founder']);
     const types = (body.profile.connections ?? []).map((c) => c.type).sort();
     assert.deepEqual(types, ['fbm', 'github']);
+});
+
+test('memberSince: absent on synthesized defaults, stamped on first write, immutable after', async () => {
+    __resetProfileStoreForTests();
+    const userId = 'member-since-user';
+
+    // Never-written profiles carry no memberSince.
+    const before = await app.request(`/v1/profile/${userId}`, { headers: authHeaders(userId) });
+    assert.equal(((await before.json()) as { memberSince?: string }).memberSince, undefined);
+
+    // First write stamps a parseable server-side timestamp.
+    const firstWrite = await app.request(`/v1/profile/${userId}`, {
+        method: 'PUT',
+        headers: authHeaders(userId),
+        body: JSON.stringify({ displayName: 'Member Since' }),
+    });
+    assert.equal(firstWrite.status, 200);
+    const stamped = ((await firstWrite.json()) as { memberSince?: string }).memberSince;
+    assert.equal(typeof stamped, 'string');
+    assert.equal(Number.isNaN(Date.parse(stamped as string)), false);
+
+    // Later writes keep the original stamp; a client-supplied value is ignored
+    // (the field is not part of the upsert schema).
+    const secondWrite = await app.request(`/v1/profile/${userId}`, {
+        method: 'PUT',
+        headers: authHeaders(userId),
+        body: JSON.stringify({ displayName: 'Renamed', memberSince: '1999-01-01T00:00:00.000Z' }),
+    });
+    assert.equal(secondWrite.status, 200);
+    assert.equal(((await secondWrite.json()) as { memberSince?: string }).memberSince, stamped);
+
+    const readBack = await app.request(`/v1/profile/${userId}`, { headers: authHeaders(userId) });
+    assert.equal(((await readBack.json()) as { memberSince?: string }).memberSince, stamped);
+});
+
+test('memberSince: included in the public projection once the owner opts in', async () => {
+    __resetProfileStoreForTests();
+    const userId = 'member-since-public';
+    await app.request(`/v1/profile/${userId}`, {
+        method: 'PUT',
+        headers: authHeaders(userId),
+        body: JSON.stringify({ profile: { public: true, bio: 'hello' } }),
+    });
+
+    const response = await app.request(`/v1/profile/${userId}/public`);
+    assert.equal(response.status, 200);
+    const body = (await response.json()) as { memberSince?: string };
+    assert.equal(typeof body.memberSince, 'string');
 });

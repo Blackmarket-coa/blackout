@@ -1,7 +1,7 @@
 import React, { type CSSProperties } from 'react';
 import { useAtomValue } from 'jotai';
 import { myProfileAtom } from './profileAtoms';
-import { profileDisplayLabel } from './profileDisplay';
+import { formatMemberSince, profileDisplayLabel } from './profileDisplay';
 import AvatarDecoration from './AvatarDecoration';
 import Nameplate from './Nameplate';
 import ProfileEffect from './ProfileEffect';
@@ -91,6 +91,7 @@ export function ProfilePage({ profile, viewerId, viewerIsFriend = false }: Profi
     const target = profile ?? ownProfile;
     const { profile: profileEvent } = target;
     const displayLabel = profileDisplayLabel(target);
+    const memberSinceLabel = formatMemberSince(target.memberSince);
 
     return (
         <ProfileThemeScope profileId={target.userId} theme={profileEvent.customTheme}>
@@ -123,6 +124,14 @@ export function ProfilePage({ profile, viewerId, viewerIsFriend = false }: Profi
                             {target.userId}
                             {profileEvent.pronouns ? ` · ${profileEvent.pronouns}` : ''}
                         </div>
+                        {memberSinceLabel ? (
+                            <div
+                                style={{ fontSize: 12, color: 'var(--text-muted)' }}
+                                data-testid="profile-member-since"
+                            >
+                                Member since {memberSinceLabel}
+                            </div>
+                        ) : null}
                         <CosmeticBadges badgeIds={profileEvent.badgeIds} />
                         <ProfileStatusBar status={profileEvent.status} />
                     </div>

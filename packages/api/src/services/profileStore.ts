@@ -82,6 +82,12 @@ export interface MemberProfile {
     mutualSpaces: string[];
     isFriend?: boolean;
     profile: BmcProfileEvent;
+    /**
+     * ISO timestamp stamped by the server the first time this profile is
+     * written; immutable afterwards (never client-supplied). Absent for
+     * synthesized defaults the store has never seen a write for.
+     */
+    memberSince?: string;
 }
 
 export interface WallPost {
@@ -292,7 +298,10 @@ export function sanitizeProfileEvent(input: unknown): BmcProfileEvent {
                   .slice(0, 12)
             : undefined,
         badgeIds: Array.isArray(data.badgeIds)
-            ? data.badgeIds.filter(isString).map((id) => id.slice(0, 64)).slice(0, 6)
+            ? data.badgeIds
+                  .filter(isString)
+                  .map((id) => id.slice(0, 64))
+                  .slice(0, 6)
             : undefined,
     };
 }
@@ -342,9 +351,11 @@ export function upsertProfile(userId: string, input: UpsertProfileInput): Member
         roleBadges: input.roleBadges ?? existing?.roleBadges ?? [],
         mutualSpaces: input.mutualSpaces ?? existing?.mutualSpaces ?? [],
         isFriend: input.isFriend ?? existing?.isFriend,
-        profile: input.profile !== undefined
-            ? sanitizeProfileEvent(input.profile)
-            : existing?.profile ?? {},
+        profile:
+            input.profile !== undefined
+                ? sanitizeProfileEvent(input.profile)
+                : existing?.profile ?? {},
+        memberSince: existing?.memberSince ?? new Date().toISOString(),
     };
     profiles.set(userId, next);
     return next;
@@ -352,7 +363,7 @@ export function upsertProfile(userId: string, input: UpsertProfileInput): Member
 
 export function listWallPosts(userId: string): WallPost[] {
     return [...(wallPosts.get(userId) ?? [])].sort((a, b) =>
-        b.createdAt.localeCompare(a.createdAt),
+        b.createdAt.localeCompare(a.createdAt)
     );
 }
 
