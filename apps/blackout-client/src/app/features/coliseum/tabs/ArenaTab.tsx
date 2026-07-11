@@ -6,7 +6,7 @@ import {
     type ColiseumMatch,
     type ColiseumTopicCategoryKey,
 } from '@blackout/core';
-import { EmptyState, Sheet } from '../../../../../../../packages/ui/src/primitives';
+import { EmptyState, Sheet } from '@blackout/ui/primitives';
 import { coliseumTabAtom, selectedColiseumMatchIdAtom } from '../../../state/coliseum';
 import { createColiseumMatch, fetchColiseumMatches } from '../coliseumMatchClient';
 import { ColiseumFab } from '../components/ColiseumFab';

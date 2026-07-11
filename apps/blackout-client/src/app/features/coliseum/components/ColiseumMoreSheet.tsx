@@ -1,6 +1,6 @@
 import React from 'react';
 import type { ColiseumTabId } from '@blackout/core';
-import { Sheet } from '../../../../../../../packages/ui/src/primitives';
+import { Sheet } from '@blackout/ui/primitives';
 import { coliseumSheetTheme } from '../coliseumArenaTheme.css';
 import { COLISEUM_TAB_LABELS } from '../../../state/coliseum';
 import { COLISEUM_TAB_GUIDES } from '../coliseumTabGuides';

@@ -9,6 +9,9 @@
     "esModuleInterop": true,
     "moduleResolution": "Bundler",
     "resolveJsonModule": true,
+    "paths": {
+      "@blackout/ui/primitives": ["../../packages/ui/src/primitives/index.ts"]
+    },
     "outDir": "dist",
     "skipLibCheck": true,
     "lib": ["ES2021", "DOM"]

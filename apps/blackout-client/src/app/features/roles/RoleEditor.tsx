@@ -1,4 +1,5 @@
 import { type DragEvent, useMemo, useState } from 'react';
+import { Badge, Button, Card, Checkbox, Input } from '@blackout/ui/primitives';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { useManageRoles, type RoleDefinition } from './useRoles';
 import { useConfirm } from '../../components/confirm-dialog';
@@ -63,30 +64,15 @@ export const RoleEditor = ({ roomId }: { roomId: string }) => {
                 </p>
             </header>
 
-            <div
-                style={{
-                    border: '1px solid var(--border-default)',
-                    borderRadius: 12,
-                    padding: 10,
-                    display: 'grid',
-                    gap: 10,
-                }}
-            >
+            <Card style={{ display: 'grid', gap: 10 }}>
                 <strong>Create role</strong>
                 <div style={{ display: 'grid', gap: 8 }}>
-                    <input
+                    <Input
                         value={draft.name}
                         onChange={(event) =>
                             setDraft((prev) => ({ ...prev, name: event.target.value }))
                         }
                         placeholder="Role name"
-                        style={{
-                            border: '1px solid var(--border-default)',
-                            borderRadius: 8,
-                            background: 'var(--bg-input)',
-                            color: 'var(--text-primary)',
-                            padding: '6px 8px',
-                        }}
                     />
 
                     <label style={{ display: 'grid', gap: 4, fontSize: 12 }}>
@@ -149,42 +135,39 @@ export const RoleEditor = ({ roomId }: { roomId: string }) => {
                             {AVAILABLE_PERMISSIONS.map((permission) => {
                                 const checked = draft.permissions.includes(permission);
                                 return (
-                                    <label key={permission} style={{ fontSize: 12 }}>
-                                        <input
-                                            type="checkbox"
-                                            checked={checked}
-                                            onChange={(event) => {
-                                                const next = event.target.checked
-                                                    ? [...draft.permissions, permission]
-                                                    : draft.permissions.filter(
-                                                          (item) => item !== permission,
-                                                      );
-                                                setDraft((prev) => ({
-                                                    ...prev,
-                                                    permissions: next,
-                                                }));
-                                            }}
-                                        />{' '}
-                                        {permission}
-                                    </label>
+                                    <Checkbox
+                                        key={permission}
+                                        label={permission}
+                                        checked={checked}
+                                        onChange={(event) => {
+                                            const next = event.target.checked
+                                                ? [...draft.permissions, permission]
+                                                : draft.permissions.filter(
+                                                      (item) => item !== permission
+                                                  );
+                                            setDraft((prev) => ({
+                                                ...prev,
+                                                permissions: next,
+                                            }));
+                                        }}
+                                    />
                                 );
                             })}
                         </div>
                     </fieldset>
 
-                    <label style={{ fontSize: 12 }}>
-                        <input
-                            type="checkbox"
-                            checked={Boolean(draft.isDefault)}
-                            onChange={(event) =>
-                                setDraft((prev) => ({ ...prev, isDefault: event.target.checked }))
-                            }
-                        />{' '}
-                        Auto-assign on join
-                    </label>
+                    <Checkbox
+                        label="Auto-assign on join"
+                        checked={Boolean(draft.isDefault)}
+                        onChange={(event) =>
+                            setDraft((prev) => ({ ...prev, isDefault: event.target.checked }))
+                        }
+                    />
 
-                    <button
-                        type="button"
+                    <Button
+                        tone="primary"
+                        loading={saving}
+                        disabled={saving || !draft.name.trim()}
                         onClick={() => {
                             setSaving(true);
                             void createRole(draft).finally(() => {
@@ -192,19 +175,11 @@ export const RoleEditor = ({ roomId }: { roomId: string }) => {
                                 setSaving(false);
                             });
                         }}
-                        disabled={saving || !draft.name.trim()}
-                        style={{
-                            border: '1px solid var(--border-default)',
-                            borderRadius: 8,
-                            background: 'var(--accent-primary)',
-                            color: 'var(--bg-surface)',
-                            padding: '6px 10px',
-                        }}
                     >
                         {saving ? 'Saving…' : 'Create role'}
-                    </button>
+                    </Button>
                 </div>
-            </div>
+            </Card>
 
             <div
                 style={{
@@ -250,17 +225,7 @@ export const RoleEditor = ({ roomId }: { roomId: string }) => {
 
                         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                             {role.permissions.map((permission) => (
-                                <span
-                                    key={permission}
-                                    style={{
-                                        fontSize: 11,
-                                        border: '1px solid var(--border-default)',
-                                        borderRadius: 999,
-                                        padding: '2px 6px',
-                                    }}
-                                >
-                                    {permission}
-                                </span>
+                                <Badge key={permission}>{permission}</Badge>
                             ))}
                         </div>
 
@@ -273,22 +238,16 @@ export const RoleEditor = ({ roomId }: { roomId: string }) => {
                                 }
                                 title="Role color"
                             />
-                            <input
+                            <Input
                                 value={role.name}
                                 onChange={(event) =>
                                     void updateRole(role.position, { name: event.target.value })
                                 }
-                                style={{
-                                    flex: 1,
-                                    border: '1px solid var(--border-default)',
-                                    borderRadius: 8,
-                                    background: 'var(--bg-surface)',
-                                    color: 'var(--text-primary)',
-                                    padding: '4px 8px',
-                                }}
+                                style={{ flex: 1 }}
                             />
-                            <button
-                                type="button"
+                            <Button
+                                tone="danger"
+                                size="sm"
                                 onClick={() => {
                                     void (async () => {
                                         const confirmed = await confirm({
@@ -306,16 +265,9 @@ export const RoleEditor = ({ roomId }: { roomId: string }) => {
                                         void deleteRole(role.position);
                                     })();
                                 }}
-                                style={{
-                                    border: '1px solid var(--border-default)',
-                                    borderRadius: 8,
-                                    background: 'var(--danger)',
-                                    color: '#fff',
-                                    padding: '4px 8px',
-                                }}
                             >
                                 Delete
-                            </button>
+                            </Button>
                         </div>
 
                         <label style={{ display: 'grid', gap: 4, fontSize: 12 }}>
@@ -367,26 +319,21 @@ export const RoleEditor = ({ roomId }: { roomId: string }) => {
                                 {AVAILABLE_PERMISSIONS.map((permission) => {
                                     const checked = role.permissions.includes(permission);
                                     return (
-                                        <label
+                                        <Checkbox
                                             key={`${role.position}-${permission}`}
-                                            style={{ fontSize: 12 }}
-                                        >
-                                            <input
-                                                type="checkbox"
-                                                checked={checked}
-                                                onChange={(event) => {
-                                                    const next = event.target.checked
-                                                        ? [...role.permissions, permission]
-                                                        : role.permissions.filter(
-                                                              (item) => item !== permission,
-                                                          );
-                                                    void updateRole(role.position, {
-                                                        permissions: next,
-                                                    });
-                                                }}
-                                            />{' '}
-                                            {permission}
-                                        </label>
+                                            label={permission}
+                                            checked={checked}
+                                            onChange={(event) => {
+                                                const next = event.target.checked
+                                                    ? [...role.permissions, permission]
+                                                    : role.permissions.filter(
+                                                          (item) => item !== permission
+                                                      );
+                                                void updateRole(role.position, {
+                                                    permissions: next,
+                                                });
+                                            }}
+                                        />
                                     );
                                 })}
                             </div>

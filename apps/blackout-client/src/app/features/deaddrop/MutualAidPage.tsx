@@ -16,7 +16,7 @@ import {
     Input,
     Stack,
     TextArea,
-} from '../../../../../../packages/ui/src/primitives';
+} from '@blackout/ui/primitives';
 
 export type MutualAidFetcher = {
     listThreads: () => Promise<{ threads: MutualAidThreadPayload[] }>;

@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState, type CSSProperties } from 'react';
 import { useAtomValue } from 'jotai';
 import { CRUCIBLE_QUESTIONS, challengeStatusLabel, type ColiseumRoundChoice } from '@blackout/core';
-import { EmptyState } from '../../../../../../../packages/ui/src/primitives';
+import { EmptyState } from '@blackout/ui/primitives';
 import { selectedColiseumMatchIdAtom } from '../../../state/coliseum';
 import {
     acceptColiseumMatch,

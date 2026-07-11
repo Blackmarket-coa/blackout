@@ -63,9 +63,11 @@ B1.1 tests + fixtures: `apps/blackout-client/tests/unit/ui-primitives/primitives
 Because the primitives are styled with vanilla-extract, they are consumed
 **from source** so the consumer's vanilla-extract bundler plugin compiles the
 `.css.ts` files (the same way the repo already consumes `@blackout/design`).
-The canonical client imports them via the workspace source path and dedupes
-React to its single app instance (see the `resolve.dedupe` entries in the
-client's `vite.config.ts` / `vitest.config.ts`).
+The canonical client aliases `@blackout/ui/primitives` to the workspace
+source (`resolve.alias` in its `vite.config.ts` / `vitest.config.ts`, plus a
+tsconfig `paths` entry) and dedupes React to its single app instance (see the
+`resolve.dedupe` entries in the same configs), so the import below is exactly
+what production code writes.
 
 ```tsx
 import { Button, Badge, IconButton, Stack } from '@blackout/ui/primitives';

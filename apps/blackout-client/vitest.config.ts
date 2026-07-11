@@ -40,6 +40,12 @@ export default defineConfig({
             // `@blackout/ui` primitives import `@blackout/design` by package
             // name; resolve it to source so tests don't depend on its dist.
             '@blackout/design': path.resolve(rootDir, '../../packages/design/src/index.ts'),
+            // Same source-alias as vite.config.ts so production code and tests
+            // can use the canonical '@blackout/ui/primitives' specifier.
+            '@blackout/ui/primitives': path.resolve(
+                rootDir,
+                '../../packages/ui/src/primitives/index.ts'
+            ),
         },
     },
     test: {

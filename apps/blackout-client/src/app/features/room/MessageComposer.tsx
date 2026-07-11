@@ -28,7 +28,7 @@ import {
     Button,
     IconButton,
     Stack,
-} from '../../../../../../packages/ui/src/primitives';
+} from '@blackout/ui/primitives';
 import { useLegacyRoomMembersAdapter as useRoomMembers } from '../../plugins/matrix-adapters/hooks/useLegacyRoomAdapter';
 import { useNavigationSpaceTree } from '../../plugins/navigation';
 import {

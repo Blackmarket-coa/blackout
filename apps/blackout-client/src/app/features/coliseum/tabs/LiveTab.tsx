@@ -7,7 +7,7 @@ import {
     type ColiseumLiveSession,
     type RankedColiseumArgument,
 } from '@blackout/core';
-import { EmptyState } from '../../../../../../../packages/ui/src/primitives';
+import { EmptyState } from '@blackout/ui/primitives';
 import { useColiseumTopic } from '../hooks/useColiseumTopics';
 import { useColiseumLive } from '../hooks/useColiseumLive';
 import { coliseumTabAtom, selectedColiseumTopicIdAtom } from '../../../state/coliseum';

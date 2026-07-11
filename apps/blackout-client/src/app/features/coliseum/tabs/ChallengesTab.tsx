@@ -11,7 +11,7 @@ import {
     submitEntry,
     voteForEntry,
 } from '../challengesClient';
-import { EmptyState } from '../../../../../../../packages/ui/src/primitives';
+import { EmptyState } from '@blackout/ui/primitives';
 import { AuthorLine } from '../components/AuthorLine';
 import * as ui from '../components/coliseumUi.css';
 

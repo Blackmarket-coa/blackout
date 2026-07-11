@@ -1,5 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
+    Badge,
+    Button,
+    Card,
+    IconButton,
+    Input,
+    Select,
+    Stack,
+    TextArea,
+} from '@blackout/ui/primitives';
+import {
     useCreateProposal,
     type ProposalContent,
     type ProposalOption,
@@ -36,6 +46,8 @@ const defaultDraft = (initialType: ProposalType = 'binary'): ProposalContent => 
     eligibility: 'all',
     status: 'active',
 });
+
+const fieldLabelStyle = { display: 'grid', gap: 4, fontSize: 12 } as const;
 
 export const ProposalCreator = ({
     roomId,
@@ -106,46 +118,18 @@ export const ProposalCreator = ({
     };
 
     return (
-        <section
-            style={{
-                border: '1px solid var(--border-default)',
-                borderRadius: 12,
-                background: 'var(--bg-surface)',
-                padding: 12,
-                display: 'grid',
-                gap: 10,
-            }}
-        >
+        <Card style={{ display: 'grid', gap: 10 }}>
             <header
                 style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
             >
                 <strong>Create Proposal</strong>
-                <button
-                    type="button"
-                    onClick={() => setPreview((prev) => !prev)}
-                    style={{
-                        border: '1px solid var(--border-default)',
-                        borderRadius: 8,
-                        background: 'var(--bg-input)',
-                        color: 'var(--text-primary)',
-                        padding: '4px 8px',
-                    }}
-                >
+                <Button tone="neutral" size="sm" onClick={() => setPreview((prev) => !prev)}>
                     {preview ? 'Edit' : 'Preview'}
-                </button>
+                </Button>
             </header>
 
             {preview ? (
-                <article
-                    style={{
-                        border: '1px solid var(--border-default)',
-                        borderRadius: 10,
-                        background: 'var(--bg-input)',
-                        padding: 10,
-                        display: 'grid',
-                        gap: 8,
-                    }}
-                >
+                <Card style={{ display: 'grid', gap: 8 }}>
                     <h3 style={{ margin: 0 }}>{draft.title || 'Untitled proposal'}</h3>
                     <pre
                         style={{
@@ -166,209 +150,158 @@ export const ProposalCreator = ({
                     <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
                         Deadline: {new Date(draft.deadline).toLocaleString()}
                     </div>
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    <Stack direction="row" gap={6} style={{ flexWrap: 'wrap' }}>
                         {draft.options.map((option) => (
-                            <span
-                                key={option.id}
-                                style={{
-                                    border: '1px solid var(--border-default)',
-                                    borderRadius: 999,
-                                    padding: '2px 8px',
-                                    fontSize: 12,
-                                }}
-                            >
-                                {option.label}
-                            </span>
+                            <Badge key={option.id}>{option.label}</Badge>
                         ))}
-                    </div>
-                </article>
+                    </Stack>
+                </Card>
             ) : (
                 <>
-                    <input
+                    <Input
                         value={draft.title}
                         onChange={(event) =>
                             setDraft((prev) => ({ ...prev, title: event.target.value }))
                         }
                         placeholder="Proposal title"
-                        style={{
-                            border: '1px solid var(--border-default)',
-                            borderRadius: 8,
-                            background: 'var(--bg-input)',
-                            color: 'var(--text-primary)',
-                            padding: '8px 10px',
-                        }}
                     />
 
-                    <textarea
+                    <TextArea
                         value={draft.description}
                         onChange={(event) =>
                             setDraft((prev) => ({ ...prev, description: event.target.value }))
                         }
                         placeholder="Description (Markdown)"
                         rows={6}
-                        style={{
-                            border: '1px solid var(--border-default)',
-                            borderRadius: 8,
-                            background: 'var(--bg-input)',
-                            color: 'var(--text-primary)',
-                            padding: 8,
-                        }}
                     />
 
-                    <label style={{ display: 'grid', gap: 4, fontSize: 12 }}>
+                    <label style={fieldLabelStyle}>
                         Vote type
-                        <select
+                        <Select
                             value={draft.type}
                             onChange={(event) => onChangeType(event.target.value as ProposalType)}
-                            style={{
-                                border: '1px solid var(--border-default)',
-                                borderRadius: 8,
-                                background: 'var(--bg-input)',
-                                color: 'var(--text-primary)',
-                                padding: '6px 8px',
-                            }}
                         >
                             <option value="consent">Consent (🌱 / 🌾 / 🪨)</option>
                             <option value="binary">Binary</option>
                             <option value="multiple_choice">Multiple choice</option>
                             <option value="ranked">Ranked</option>
-                        </select>
+                        </Select>
                     </label>
 
                     {draft.type === 'consent' ? (
                         <p style={{ margin: 0, fontSize: 12, color: 'var(--text-secondary)' }}>
                             Consent proposals carry no options — the circle reacts with{' '}
-                            <span aria-hidden>🌱 / 🌾 / 🪨</span> and concerns or objections
-                            open inline. Any paramount objection blocks until resolved.
+                            <span aria-hidden>🌱 / 🌾 / 🪨</span> and concerns or objections open
+                            inline. Any paramount objection blocks until resolved.
                         </p>
                     ) : (
-                    <div style={{ display: 'grid', gap: 6 }}>
-                        <div
-                            style={{
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                alignItems: 'center',
-                            }}
-                        >
-                            <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                                Options
-                            </span>
-                            {draft.type !== 'binary' ? (
-                                <button
-                                    type="button"
-                                    onClick={() =>
-                                        setDraft((prev) => ({
-                                            ...prev,
-                                            options: [
-                                                ...prev.options,
-                                                {
-                                                    id: crypto.randomUUID(),
-                                                    label: `Option ${prev.options.length + 1}`,
-                                                },
-                                            ],
-                                        }))
-                                    }
-                                    style={{
-                                        border: '1px solid var(--border-default)',
-                                        borderRadius: 8,
-                                        background: 'var(--bg-input)',
-                                        color: 'var(--text-primary)',
-                                        padding: '2px 8px',
-                                    }}
-                                >
-                                    Add option
-                                </button>
-                            ) : null}
-                        </div>
-
-                        {draft.options.map((option, index) => (
+                        <div style={{ display: 'grid', gap: 6 }}>
                             <div
-                                key={option.id}
                                 style={{
-                                    display: 'grid',
-                                    gridTemplateColumns: '1fr auto auto auto',
-                                    gap: 6,
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center',
                                 }}
                             >
-                                <input
-                                    value={option.label}
-                                    onChange={(event) => {
-                                        const value = event.target.value;
-                                        setDraft((prev) => {
-                                            const options = [...prev.options];
-                                            options[index] = { ...options[index], label: value };
-                                            return { ...prev, options };
-                                        });
-                                    }}
-                                    style={{
-                                        border: '1px solid var(--border-default)',
-                                        borderRadius: 8,
-                                        background: 'var(--bg-input)',
-                                        color: 'var(--text-primary)',
-                                        padding: '6px 8px',
-                                    }}
-                                />
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        if (index === 0) return;
-                                        setDraft((prev) => {
-                                            const options = [...prev.options];
-                                            const [moved] = options.splice(index, 1);
-                                            options.splice(index - 1, 0, moved);
-                                            return { ...prev, options };
-                                        });
-                                    }}
-                                    style={{
-                                        border: '1px solid var(--border-default)',
-                                        borderRadius: 8,
-                                        background: 'var(--bg-input)',
-                                    }}
-                                >
-                                    ↑
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        if (index >= draft.options.length - 1) return;
-                                        setDraft((prev) => {
-                                            const options = [...prev.options];
-                                            const [moved] = options.splice(index, 1);
-                                            options.splice(index + 1, 0, moved);
-                                            return { ...prev, options };
-                                        });
-                                    }}
-                                    style={{
-                                        border: '1px solid var(--border-default)',
-                                        borderRadius: 8,
-                                        background: 'var(--bg-input)',
-                                    }}
-                                >
-                                    ↓
-                                </button>
-                                <button
-                                    type="button"
-                                    disabled={draft.type === 'binary' || draft.options.length <= 2}
-                                    onClick={() => {
-                                        setDraft((prev) => ({
-                                            ...prev,
-                                            options: prev.options.filter(
-                                                (candidate) => candidate.id !== option.id,
-                                            ),
-                                        }));
-                                    }}
-                                    style={{
-                                        border: '1px solid var(--border-default)',
-                                        borderRadius: 8,
-                                        background: 'var(--danger)',
-                                        color: '#fff',
-                                    }}
-                                >
-                                    ✕
-                                </button>
+                                <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                                    Options
+                                </span>
+                                {draft.type !== 'binary' ? (
+                                    <Button
+                                        tone="neutral"
+                                        size="sm"
+                                        onClick={() =>
+                                            setDraft((prev) => ({
+                                                ...prev,
+                                                options: [
+                                                    ...prev.options,
+                                                    {
+                                                        id: crypto.randomUUID(),
+                                                        label: `Option ${prev.options.length + 1}`,
+                                                    },
+                                                ],
+                                            }))
+                                        }
+                                    >
+                                        Add option
+                                    </Button>
+                                ) : null}
                             </div>
-                        ))}
-                    </div>
+
+                            {draft.options.map((option, index) => (
+                                <div
+                                    key={option.id}
+                                    style={{
+                                        display: 'grid',
+                                        gridTemplateColumns: '1fr auto auto auto',
+                                        gap: 6,
+                                    }}
+                                >
+                                    <Input
+                                        value={option.label}
+                                        onChange={(event) => {
+                                            const value = event.target.value;
+                                            setDraft((prev) => {
+                                                const options = [...prev.options];
+                                                options[index] = {
+                                                    ...options[index],
+                                                    label: value,
+                                                };
+                                                return { ...prev, options };
+                                            });
+                                        }}
+                                    />
+                                    <IconButton
+                                        size="sm"
+                                        aria-label={`Move ${option.label} up`}
+                                        onClick={() => {
+                                            if (index === 0) return;
+                                            setDraft((prev) => {
+                                                const options = [...prev.options];
+                                                const [moved] = options.splice(index, 1);
+                                                options.splice(index - 1, 0, moved);
+                                                return { ...prev, options };
+                                            });
+                                        }}
+                                    >
+                                        ↑
+                                    </IconButton>
+                                    <IconButton
+                                        size="sm"
+                                        aria-label={`Move ${option.label} down`}
+                                        onClick={() => {
+                                            if (index >= draft.options.length - 1) return;
+                                            setDraft((prev) => {
+                                                const options = [...prev.options];
+                                                const [moved] = options.splice(index, 1);
+                                                options.splice(index + 1, 0, moved);
+                                                return { ...prev, options };
+                                            });
+                                        }}
+                                    >
+                                        ↓
+                                    </IconButton>
+                                    <Button
+                                        tone="danger"
+                                        size="sm"
+                                        aria-label={`Remove ${option.label}`}
+                                        disabled={
+                                            draft.type === 'binary' || draft.options.length <= 2
+                                        }
+                                        onClick={() => {
+                                            setDraft((prev) => ({
+                                                ...prev,
+                                                options: prev.options.filter(
+                                                    (candidate) => candidate.id !== option.id
+                                                ),
+                                            }));
+                                        }}
+                                    >
+                                        ✕
+                                    </Button>
+                                </div>
+                            ))}
+                        </div>
                     )}
 
                     <div
@@ -378,9 +311,9 @@ export const ProposalCreator = ({
                             gap: 8,
                         }}
                     >
-                        <label style={{ display: 'grid', gap: 4, fontSize: 12 }}>
+                        <label style={fieldLabelStyle}>
                             Quorum
-                            <input
+                            <Input
                                 type="number"
                                 min={1}
                                 value={draft.quorum}
@@ -390,19 +323,12 @@ export const ProposalCreator = ({
                                         quorum: Number(event.target.value) || 1,
                                     }))
                                 }
-                                style={{
-                                    border: '1px solid var(--border-default)',
-                                    borderRadius: 8,
-                                    background: 'var(--bg-input)',
-                                    color: 'var(--text-primary)',
-                                    padding: '6px 8px',
-                                }}
                             />
                         </label>
 
-                        <label style={{ display: 'grid', gap: 4, fontSize: 12 }}>
+                        <label style={fieldLabelStyle}>
                             Deadline
-                            <input
+                            <Input
                                 type="datetime-local"
                                 value={draft.deadline.slice(0, 16)}
                                 onChange={(event) =>
@@ -411,19 +337,12 @@ export const ProposalCreator = ({
                                         deadline: new Date(event.target.value).toISOString(),
                                     }))
                                 }
-                                style={{
-                                    border: '1px solid var(--border-default)',
-                                    borderRadius: 8,
-                                    background: 'var(--bg-input)',
-                                    color: 'var(--text-primary)',
-                                    padding: '6px 8px',
-                                }}
                             />
                         </label>
 
-                        <label style={{ display: 'grid', gap: 4, fontSize: 12 }}>
+                        <label style={fieldLabelStyle}>
                             Eligibility
-                            <select
+                            <Select
                                 value={draft.eligibility}
                                 onChange={(event) =>
                                     setDraft((prev) => ({
@@ -432,41 +351,28 @@ export const ProposalCreator = ({
                                             .value as ProposalContent['eligibility'],
                                     }))
                                 }
-                                style={{
-                                    border: '1px solid var(--border-default)',
-                                    borderRadius: 8,
-                                    background: 'var(--bg-input)',
-                                    color: 'var(--text-primary)',
-                                    padding: '6px 8px',
-                                }}
                             >
                                 <option value="all">All members</option>
                                 <option value="role:Moderator">Role: Moderator</option>
                                 <option value="role:Admin">Role: Admin</option>
                                 <option value="power:50+">Power: 50+</option>
-                            </select>
+                            </Select>
                         </label>
                     </div>
                 </>
             )}
 
             <footer style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                <button
-                    type="button"
-                    onClick={() => void submit()}
+                <Button
+                    tone="primary"
+                    loading={saving}
                     disabled={!canSubmit || saving}
-                    style={{
-                        border: '1px solid var(--border-default)',
-                        borderRadius: 8,
-                        background: 'var(--accent-primary)',
-                        color: 'var(--bg-surface)',
-                        padding: '6px 10px',
-                    }}
+                    onClick={() => void submit()}
                 >
                     {saving ? 'Submitting…' : 'Submit proposal'}
-                </button>
+                </Button>
             </footer>
-        </section>
+        </Card>
     );
 };
 

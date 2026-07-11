@@ -5,7 +5,7 @@ import {
     type ColiseumShout,
     type ColiseumTopicCategoryKey,
 } from '@blackout/core';
-import { EmptyState, Sheet } from '../../../../../../../packages/ui/src/primitives';
+import { EmptyState, Sheet } from '@blackout/ui/primitives';
 import { coliseumTabAtom, selectedColiseumMatchIdAtom } from '../../../state/coliseum';
 import {
     createColiseumShout,
