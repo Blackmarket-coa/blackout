@@ -8,12 +8,18 @@ import type { Room } from 'matrix-js-sdk';
 import {
     QuickSwitcher,
     buildQuickSwitcherIndex,
+    collectRecentMessages,
     rankQuickSwitcherResults,
 } from '../../../../src/app/features/navigation/QuickSwitcher';
+import {
+    selectedRoomIdAtom,
+    roomJumpTargetEventIdAtom,
+} from '../../../../src/app/state/navigation';
 
 const mockClient = {
     getRooms: () => [] as Room[],
     createRoom: vi.fn().mockResolvedValue({ room_id: '!dm:example.org' }),
+    getUserId: () => '@self:example.org',
     on: vi.fn(),
     off: vi.fn(),
 };
@@ -24,6 +30,27 @@ vi.mock('../../../../src/app/hooks/useMatrixClient', () => ({
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
+/** Minimal m.room.message timeline-event stub for the recent-messages source. */
+const makeMessageEvent = ({
+    id,
+    body,
+    sender = '@alice:example.org',
+    ts = 0,
+    type = 'm.room.message',
+}: {
+    id: string;
+    body?: string;
+    sender?: string;
+    ts?: number;
+    type?: string;
+}) => ({
+    getType: () => type,
+    getId: () => id,
+    getSender: () => sender,
+    getTs: () => ts,
+    getContent: () => (body === undefined ? {} : { body }),
+});
+
 const makeRoom = ({
     roomId,
     name,
@@ -31,6 +58,8 @@ const makeRoom = ({
     unread = 0,
     lastActive = 0,
     dm = false,
+    timelineEvents = [],
+    members = {},
 }: {
     roomId: string;
     name: string;
@@ -38,6 +67,8 @@ const makeRoom = ({
     unread?: number;
     lastActive?: number;
     dm?: boolean;
+    timelineEvents?: ReturnType<typeof makeMessageEvent>[];
+    members?: Record<string, string>;
 }): Room =>
     ({
         roomId,
@@ -48,7 +79,9 @@ const makeRoom = ({
         getCanonicalAlias: () => `#${name}:example.org`,
         getUnreadNotificationCount: () => unread,
         getJoinedMembers: () => [],
-    }) as unknown as Room;
+        getLiveTimeline: () => ({ getEvents: () => timelineEvents }),
+        getMember: (userId: string) => (members[userId] ? { name: members[userId] } : null),
+    } as unknown as Room);
 
 describe('QuickSwitcher keyboard behavior', () => {
     afterEach(() => {
@@ -71,7 +104,7 @@ describe('QuickSwitcher keyboard behavior', () => {
             root.render(
                 <Provider store={store}>
                     <QuickSwitcher open onClose={onClose} />
-                </Provider>,
+                </Provider>
             );
         });
 
@@ -80,16 +113,16 @@ describe('QuickSwitcher keyboard behavior', () => {
         });
 
         const input = container.querySelector(
-            'input[placeholder="Search rooms, spaces, DMs, members, settings, actions"]',
+            'input[placeholder="Search rooms, spaces, DMs, messages, members, settings, actions"]'
         ) as HTMLInputElement;
         expect(input).toBeTruthy();
         expect(document.activeElement).toBe(input);
 
         const roomButton = Array.from(container.querySelectorAll('button')).find((button) =>
-            button.textContent?.includes('Room A'),
+            button.textContent?.includes('Room A')
         ) as HTMLButtonElement;
         const spaceButton = Array.from(container.querySelectorAll('button')).find((button) =>
-            button.textContent?.includes('Space A'),
+            button.textContent?.includes('Space A')
         ) as HTMLButtonElement;
 
         expect(roomButton.style.background).toBe('var(--accent-muted)');
@@ -132,12 +165,12 @@ describe('QuickSwitcher keyboard behavior', () => {
             root.render(
                 <Provider store={createStore()}>
                     <QuickSwitcher open onClose={onClose} onCommandPicked={onCommandPicked} />
-                </Provider>,
+                </Provider>
             );
         });
 
         const input = container.querySelector(
-            'input[placeholder="Search rooms, spaces, DMs, members, settings, actions"]',
+            'input[placeholder="Search rooms, spaces, DMs, messages, members, settings, actions"]'
         ) as HTMLInputElement;
         await act(async () => {
             input.value = '/nick';
@@ -146,7 +179,7 @@ describe('QuickSwitcher keyboard behavior', () => {
         });
 
         const commandButton = Array.from(container.querySelectorAll('button')).find((button) =>
-            button.textContent?.includes('/nick'),
+            button.textContent?.includes('/nick')
         ) as HTMLButtonElement;
         act(() => {
             commandButton.click();
@@ -172,7 +205,7 @@ describe('QuickSwitcher keyboard behavior', () => {
             root.render(
                 <Provider store={createStore()}>
                     <QuickSwitcher open onClose={onClose} onActionPicked={onActionPicked} />
-                </Provider>,
+                </Provider>
             );
         });
 
@@ -181,7 +214,7 @@ describe('QuickSwitcher keyboard behavior', () => {
         });
 
         const actionButton = Array.from(container.querySelectorAll('button')).find((button) =>
-            button.textContent?.includes('Open inbox'),
+            button.textContent?.includes('Open inbox')
         ) as HTMLButtonElement;
 
         act(() => {
@@ -210,13 +243,15 @@ describe('QuickSwitcher ranking model', () => {
         const ranked = rankQuickSwitcherResults(buildQuickSwitcherIndex(rooms), 'inbo');
         expect(ranked[0]?.title).toBe('Inbox');
 
-        const actions = buildQuickSwitcherIndex(rooms).filter((entry) => entry.category === 'Actions');
+        const actions = buildQuickSwitcherIndex(rooms).filter(
+            (entry) => entry.category === 'Actions'
+        );
         const settings = buildQuickSwitcherIndex(rooms).filter(
-            (entry) => entry.category === 'Settings' && Boolean(entry.route),
+            (entry) => entry.category === 'Settings' && Boolean(entry.route)
         );
 
         expect(actions.map((entry) => entry.title)).toEqual(
-            expect.arrayContaining(['Mark all mentions read', 'Open inbox', 'Jump to mentions']),
+            expect.arrayContaining(['Mark all mentions read', 'Open inbox', 'Jump to mentions'])
         );
         expect(settings.length).toBeGreaterThan(0);
     });
@@ -385,13 +420,171 @@ describe('QuickSwitcher recent-messages source (Workstream F closing pass)', () 
         const index = buildQuickSwitcherIndex(rooms, [], undefined, messages);
 
         const byRoom = rankQuickSwitcherResults(index, 'engineer').filter(
-            (e) => e.category === 'Messages',
+            (e) => e.category === 'Messages'
         );
         expect(byRoom.length).toBeGreaterThan(0);
 
         const byPreview = rankQuickSwitcherResults(index, 'registry').filter(
-            (e) => e.category === 'Messages',
+            (e) => e.category === 'Messages'
         );
         expect(byPreview.map((e) => e.id)).toContain('message-$by-preview');
+    });
+});
+
+describe('collectRecentMessages', () => {
+    it('takes only m.room.message events with a non-empty string body', () => {
+        const room = makeRoom({
+            roomId: '!gen:example.org',
+            name: 'General',
+            timelineEvents: [
+                makeMessageEvent({ id: '$text', body: 'a real message', ts: 10 }),
+                makeMessageEvent({ id: '$reaction', body: 'x', ts: 20, type: 'm.reaction' }),
+                makeMessageEvent({ id: '$no-body', ts: 30 }),
+                makeMessageEvent({ id: '$blank', body: '   ', ts: 40 }),
+            ],
+        });
+
+        const messages = collectRecentMessages([room]);
+        expect(messages.map((m) => m.id)).toEqual(['$text']);
+        expect(messages[0]).toMatchObject({
+            roomId: '!gen:example.org',
+            roomName: 'General',
+            preview: 'a real message',
+            timestamp: 10,
+        });
+    });
+
+    it('caps per room, walking the timeline newest-first', () => {
+        const events = Array.from({ length: 8 }, (_, i) =>
+            makeMessageEvent({ id: `$m${i}`, body: `message ${i}`, ts: i })
+        );
+        const room = makeRoom({
+            roomId: '!busy:example.org',
+            name: 'Busy',
+            timelineEvents: events,
+        });
+
+        const messages = collectRecentMessages([room], { perRoom: 3 });
+        expect(messages.map((m) => m.id)).toEqual(['$m7', '$m6', '$m5']);
+    });
+
+    it('merges rooms newest-first and honors the total cap', () => {
+        const roomA = makeRoom({
+            roomId: '!a:example.org',
+            name: 'A',
+            timelineEvents: [makeMessageEvent({ id: '$a', body: 'from a', ts: 100 })],
+        });
+        const roomB = makeRoom({
+            roomId: '!b:example.org',
+            name: 'B',
+            timelineEvents: [
+                makeMessageEvent({ id: '$b-old', body: 'older b', ts: 50 }),
+                makeMessageEvent({ id: '$b-new', body: 'newer b', ts: 200 }),
+            ],
+        });
+
+        const merged = collectRecentMessages([roomA, roomB]);
+        expect(merged.map((m) => m.id)).toEqual(['$b-new', '$a', '$b-old']);
+
+        const capped = collectRecentMessages([roomA, roomB], { total: 2 });
+        expect(capped.map((m) => m.id)).toEqual(['$b-new', '$a']);
+    });
+
+    it('resolves the sender display name via room membership, falling back to the mxid', () => {
+        const room = makeRoom({
+            roomId: '!named:example.org',
+            name: 'Named',
+            members: { '@alice:example.org': 'Alice' },
+            timelineEvents: [
+                makeMessageEvent({ id: '$named', body: 'hi', sender: '@alice:example.org', ts: 1 }),
+                makeMessageEvent({ id: '$anon', body: 'yo', sender: '@bob:example.org', ts: 2 }),
+            ],
+        });
+
+        const messages = collectRecentMessages([room]);
+        expect(messages.find((m) => m.id === '$named')?.sender).toBe('Alice');
+        expect(messages.find((m) => m.id === '$anon')?.sender).toBe('@bob:example.org');
+    });
+
+    it('tolerates rooms without a live timeline', () => {
+        const bare = {
+            roomId: '!bare:example.org',
+            name: 'Bare',
+        } as unknown as Room;
+        expect(collectRecentMessages([bare])).toEqual([]);
+    });
+});
+
+describe('QuickSwitcher recent-messages wiring (component)', () => {
+    afterEach(() => {
+        document.body.innerHTML = '';
+    });
+
+    const mountSwitcher = async (store: ReturnType<typeof createStore>, onClose = vi.fn()) => {
+        const container = document.createElement('div');
+        document.body.appendChild(container);
+        const root = ReactDOM.createRoot(container);
+        act(() => {
+            root.render(
+                <Provider store={store}>
+                    <QuickSwitcher open onClose={onClose} />
+                </Provider>
+            );
+        });
+        await act(async () => {
+            await Promise.resolve();
+        });
+        return { container, onClose };
+    };
+
+    it('renders timeline messages in the Messages group', async () => {
+        mockClient.getRooms = () => [
+            makeRoom({
+                roomId: '!gen:example.org',
+                name: 'General',
+                members: { '@alice:example.org': 'Alice' },
+                timelineEvents: [
+                    makeMessageEvent({
+                        id: '$evt-render',
+                        body: 'deploy is green',
+                        sender: '@alice:example.org',
+                        ts: 42,
+                    }),
+                ],
+            }),
+        ];
+
+        const { container } = await mountSwitcher(createStore());
+        const messageButton = Array.from(container.querySelectorAll('button')).find((button) =>
+            button.textContent?.includes('deploy is green')
+        );
+        expect(messageButton).toBeTruthy();
+        expect(messageButton?.textContent).toContain('In General · Alice');
+    });
+
+    it('activating a message opens the room with the event as jump target', async () => {
+        mockClient.getRooms = () => [
+            makeRoom({
+                roomId: '!gen:example.org',
+                name: 'General',
+                timelineEvents: [makeMessageEvent({ id: '$evt-jump', body: 'jump to me', ts: 42 })],
+            }),
+        ];
+
+        const store = createStore();
+        const { container, onClose } = await mountSwitcher(store);
+        const messageButton = Array.from(container.querySelectorAll('button')).find((button) =>
+            button.textContent?.includes('jump to me')
+        ) as HTMLButtonElement;
+        expect(messageButton).toBeTruthy();
+
+        await act(async () => {
+            messageButton.click();
+            await Promise.resolve();
+        });
+
+        expect(store.get(selectedRoomIdAtom)).toBe('!gen:example.org');
+        expect(store.get(roomJumpTargetEventIdAtom)).toBe('$evt-jump');
+        expect(onClose).toHaveBeenCalled();
     });
 });
