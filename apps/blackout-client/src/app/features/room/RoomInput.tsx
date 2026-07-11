@@ -96,6 +96,7 @@ import {
     registerGifShare,
     type GifPickerItem,
 } from './gifClient';
+import { addGifRecent } from './gifRecents';
 import { readBlackoutApiToken } from '../monetization/marketplace/useMarketplaceAuth';
 import { safeFile } from '../../utils/mimeTypes';
 import { fulfilledPromiseSettledResult } from '../../utils/common';
@@ -547,6 +548,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                 } as any);
                 // Best-effort share registration (Tenor TOS; no-op for Giphy).
                 registerGifShare(item, query || undefined).catch(() => undefined);
+                addGifRecent(item);
             } catch (err) {
                 // Console for devtools (CSP block, homeserver upload refusal,
                 // expired token) plus a user-facing toast so the failure isn't

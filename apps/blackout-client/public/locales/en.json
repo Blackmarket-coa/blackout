@@ -10,7 +10,8 @@
       "attribution": "Powered by {{provider}}",
       "no_results": "No GIFs found for \"{{query}}\".",
       "load_error": "Could not load GIFs. Check your connection and try again.",
-      "send_error": "Could not send GIF. Try again."
+      "send_error": "Could not send GIF. Try again.",
+      "recents": "Recents"
     }
   }
 }

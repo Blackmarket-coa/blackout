@@ -307,7 +307,9 @@ Per `discord_parity_blueprint.md` §8 phased roadmap weeks 5–8.
   proxy); the client's provider-agnostic `gifClient.ts` prefers Giphy and falls back
   to Tenor when `GIPHY_API_KEY` is unset, with provider-aware attribution in the
   picker panel. Send-as-image + search-as-you-type were already live via the Tenor
-  slice; per-device recents remain open.
+  slice, and per-device recents landed alongside (localStorage-backed
+  `gifRecents.ts`, Recents section in the picker) — the GIF-picker exit criteria
+  are met in full.
 - 1:1 RTC baseline: MatrixRTC + LiveKit signal — partial today; needs canonical-client launcher (Port 4 covers Element Call) and call-state UI.
 - Group RTC baseline: same stack, larger UX surface (call rail, screen-share preview).
 

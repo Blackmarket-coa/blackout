@@ -11,6 +11,7 @@ import {
     type GifPickerItem,
     type GifProvider,
 } from '../../../features/room/gifClient';
+import { readGifRecents } from '../../../features/room/gifRecents';
 import {
     TenorAttributionStyle,
     TenorEmptyStyle,
@@ -52,6 +53,9 @@ export function TenorPanel({ onSelect, onDisabled }: TenorPanelProps) {
     const [query, setQuery] = useState('');
     const [state, setState] = useState<LoadState>({ kind: 'idle' });
     const [provider, setProvider] = useState<GifProvider>('giphy');
+    // Read once per panel open — the panel unmounts on select, so the
+    // next open picks up the newly recorded recent.
+    const [recents] = useState<GifPickerItem[]>(() => readGifRecents());
     // Track the latest in-flight request so debounced fast typing doesn't
     // race ahead of slower earlier responses.
     const requestSeqRef = useRef(0);
@@ -169,6 +173,32 @@ export function TenorPanel({ onSelect, onDisabled }: TenorPanelProps) {
             </Box>
             <Box grow="Yes" style={{ position: 'relative', minHeight: 0 }}>
                 <Scroll ref={scrollRef} onScroll={handleScroll} size="400" hideTrack>
+                    {recents.length > 0 && query.trim().length === 0 && (
+                        <Box direction="Column" gap="100">
+                            <Text
+                                size="L400"
+                                style={{
+                                    padding: config.space.S300,
+                                    paddingBottom: 0,
+                                }}
+                            >
+                                {t('Features.GifPicker.recents')}
+                            </Text>
+                            <div
+                                className={TenorGridStyle}
+                                role="grid"
+                                aria-label={t('Features.GifPicker.recents')}
+                            >
+                                {recents.map((item) => (
+                                    <TenorTile
+                                        key={`recent-${item.provider}-${item.id}`}
+                                        item={item}
+                                        onSelect={() => onSelect(item, '')}
+                                    />
+                                ))}
+                            </div>
+                        </Box>
+                    )}
                     <TenorGrid state={state} query={query} onSelect={onSelect} />
                 </Scroll>
             </Box>
