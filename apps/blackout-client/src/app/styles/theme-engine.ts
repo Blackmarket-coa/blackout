@@ -124,10 +124,21 @@ export const themeColorSchemeByPreference: Record<BlackoutThemeId, 'light' | 'da
 export const applyThemeToRoot = (
     root: HTMLElement,
     preference: string | null | undefined,
-    classByPreference: Record<BlackoutThemeId, string>,
+    classByPreference: Record<BlackoutThemeId, string>
 ) => {
     const normalizedPreference = normalizeThemeId(preference);
     const allClasses = Object.values(classByPreference);
+
+    // The index.html pre-hydration guard seeds --bg-surface/--text-primary as
+    // inline styles so the first paint matches the persisted theme. Inline
+    // styles outrank the theme class, so clear the seeds the moment the real
+    // class lands — otherwise runtime theme switches would keep the boot
+    // theme's surface/text colors forever.
+    if (root.dataset.themeBoot) {
+        delete root.dataset.themeBoot;
+        root.style.removeProperty('--bg-surface');
+        root.style.removeProperty('--text-primary');
+    }
 
     root.classList.remove(...allClasses);
     root.classList.add(classByPreference[normalizedPreference]);

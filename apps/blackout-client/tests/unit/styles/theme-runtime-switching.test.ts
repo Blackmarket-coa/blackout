@@ -1,6 +1,9 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
-import { applyThemeToRoot, themeColorSchemeByPreference } from '../../../src/app/styles/theme-engine';
+import {
+    applyThemeToRoot,
+    themeColorSchemeByPreference,
+} from '../../../src/app/styles/theme-engine';
 
 const classByPreference = {
     dark_canopy: 'theme-dark',
@@ -22,7 +25,7 @@ describe('runtime theme switching', () => {
         expect(root.dataset.theme).toBe('light_grove');
         expect(root.style.colorScheme).toBe(themeColorSchemeByPreference.light_grove);
         expect(
-            Object.values(classByPreference).filter((name) => root.classList.contains(name)),
+            Object.values(classByPreference).filter((name) => root.classList.contains(name))
         ).toEqual([classByPreference.light_grove]);
     });
 
@@ -32,5 +35,31 @@ describe('runtime theme switching', () => {
 
         expect(normalized).toBe('dark_canopy');
         expect(root.classList.contains(classByPreference.dark_canopy)).toBe(true);
+    });
+
+    it('clears the index.html boot seeds when the real theme class lands', () => {
+        const root = document.createElement('html');
+        // Simulate the pre-hydration guard from index.html.
+        root.dataset.themeBoot = '1';
+        root.style.setProperty('--bg-surface', '#EFFFD1');
+        root.style.setProperty('--text-primary', '#102017');
+
+        applyThemeToRoot(root, 'amoled_night', classByPreference);
+
+        expect(root.dataset.themeBoot).toBeUndefined();
+        expect(root.style.getPropertyValue('--bg-surface')).toBe('');
+        expect(root.style.getPropertyValue('--text-primary')).toBe('');
+        expect(root.classList.contains(classByPreference.amoled_night)).toBe(true);
+    });
+
+    it('leaves inline styles untouched when no boot seed marker is present', () => {
+        const root = document.createElement('html');
+        // An unrelated inline var (e.g. the custom accent set by
+        // RuntimeSettingsBridge) must survive a theme switch.
+        root.style.setProperty('--accent-primary', '#4ECDC4');
+
+        applyThemeToRoot(root, 'light_grove', classByPreference);
+
+        expect(root.style.getPropertyValue('--accent-primary')).toBe('#4ECDC4');
     });
 });
