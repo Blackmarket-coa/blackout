@@ -25,22 +25,30 @@ export const createNotificationActions = (client: ApiClient) => ({
             path: '/v1/notifications/rules',
         }),
     /**
-     * Upsert a single notification rule keyed by `<feature>:<category>`.
-     * The server enforces uniqueness on that pair; PUT is idempotent.
+     * Upsert a single notification rule keyed by `<feature>:<category>` plus
+     * the optional room scope carried in the body (`rule.roomId`). The server
+     * enforces uniqueness on that tuple; PUT is idempotent. A room-scoped rule
+     * coexists with (and overrides) the category-wide rule for that room.
      */
     upsertNotificationRule: (rule: NotificationRulePayload) =>
         client<NotificationRulePayload>({
             method: 'PUT',
-            path: `/v1/notifications/rules/${encodeURIComponent(rule.feature)}/${encodeURIComponent(rule.category)}`,
+            path: `/v1/notifications/rules/${encodeURIComponent(rule.feature)}/${encodeURIComponent(
+                rule.category
+            )}`,
             body: rule,
         }),
     /**
-     * Delete a notification rule by `<feature>:<category>`.
+     * Delete a notification rule by `<feature>:<category>`, optionally scoped
+     * to a room override (`roomId`). Omitting `roomId` deletes the
+     * category-wide rule and leaves room overrides in place.
      */
-    deleteNotificationRule: (feature: string, category: string) =>
+    deleteNotificationRule: (feature: string, category: string, roomId?: string) =>
         client<void>({
             method: 'DELETE',
-            path: `/v1/notifications/rules/${encodeURIComponent(feature)}/${encodeURIComponent(category)}`,
+            path: `/v1/notifications/rules/${encodeURIComponent(feature)}/${encodeURIComponent(
+                category
+            )}${roomId ? `?roomId=${encodeURIComponent(roomId)}` : ''}`,
         }),
     /**
      * Fetch the most recent presence digest for the subject. Optional
@@ -68,6 +76,29 @@ export const createNotificationActions = (client: ApiClient) => ({
             body: {},
         }),
 });
+
+/**
+ * Resolve which rule governs an event in `roomId` for a `<feature>:<category>`
+ * pair: a room-scoped rule wins over the category-wide rule; with no room
+ * match the category-wide rule applies; null when neither exists. Pure so the
+ * client (mute previews, editor hints) and any server-side enforcement share
+ * one precedence definition.
+ */
+export const resolveEffectiveNotificationRule = (
+    rules: readonly NotificationRulePayload[],
+    feature: string,
+    category: string,
+    roomId?: string
+): NotificationRulePayload | null => {
+    const candidates = rules.filter(
+        (rule) => rule.feature === feature && rule.category === category
+    );
+    if (roomId) {
+        const scoped = candidates.find((rule) => rule.roomId === roomId);
+        if (scoped) return scoped;
+    }
+    return candidates.find((rule) => !rule.roomId) ?? null;
+};
 
 /**
  * Pure builder for a presence digest. Mirrors the legacy

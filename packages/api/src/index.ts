@@ -18,6 +18,7 @@ import activeDefenseRoutes from './routes/activedefense';
 import canaryTripwireRoutes from './routes/canaryTripwire';
 import meshRoutes from './routes/mesh';
 import marketplaceRoutes from './routes/marketplace';
+import notificationRoutes from './routes/notifications';
 import { assertPlaceholderMarketplacesDisabledForProduction } from './integrations/marketplace';
 import threadRoutes from './routes/threads';
 import settingsRoutes from './routes/settings';
@@ -185,6 +186,7 @@ for (const root of legacyAliasEnabled ? [API_ROOTS.v1, API_ROOTS.legacyApiAlias]
     app.route(`${root}/activedefense`, activeDefenseRoutes);
     app.route(`${root}/mesh`, meshRoutes);
     app.route(`${root}/marketplace`, marketplaceRoutes);
+    app.route(`${root}/notifications`, notificationRoutes);
     app.route(`${root}/threads`, threadRoutes);
     app.route(`${root}/settings`, settingsRoutes);
     app.route(`${root}/capabilities`, capabilityRoutes);

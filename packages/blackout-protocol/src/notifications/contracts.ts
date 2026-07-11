@@ -18,13 +18,20 @@ export const NOTIFICATIONS_EVENT_NAMES = {
 } as const;
 
 export type NotificationsEventName =
-    (typeof NOTIFICATIONS_EVENT_NAMES)[keyof typeof NOTIFICATIONS_EVENT_NAMES];
+    typeof NOTIFICATIONS_EVENT_NAMES[keyof typeof NOTIFICATIONS_EVENT_NAMES];
 
 export interface NotificationRulePayload {
     /** Feature surface the rule applies to (e.g. `mentions`, `reactions`). */
     feature: string;
     /** Subject category within the feature (e.g. `dm`, `room`, `space`). */
     category: string;
+    /**
+     * Optional Matrix room id narrowing the rule to a single room (Workstream
+     * F "advanced notification controls"). A room-scoped rule overrides the
+     * category-wide rule for events in that room; rules without `roomId`
+     * remain the category-wide default, so pre-existing rules are unaffected.
+     */
+    roomId?: string;
     /** Hard cap of notifications per UTC day. */
     hardCapPerDay: number;
     /** Minimum spacing between consecutive notifications within the category. */

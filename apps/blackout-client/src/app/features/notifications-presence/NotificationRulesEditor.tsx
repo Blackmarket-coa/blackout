@@ -29,12 +29,15 @@ const fieldStyle: CSSProperties = {
     color: 'var(--text-secondary)',
 };
 
-const ruleKey = (rule: Pick<NotificationRulePayload, 'feature' | 'category'>): string =>
-    `${rule.feature}:${rule.category}`;
+const ruleKey = (rule: Pick<NotificationRulePayload, 'feature' | 'category' | 'roomId'>): string =>
+    rule.roomId
+        ? `${rule.feature}:${rule.category}:${rule.roomId}`
+        : `${rule.feature}:${rule.category}`;
 
 const emptyForm = {
     feature: '',
     category: '',
+    roomId: '',
     hardCapPerDay: 50,
     cooldownMinutes: 5,
     quietEnabled: false,
@@ -64,7 +67,7 @@ export function NotificationRulesEditor({
             setRules(response.rules);
         } catch (error) {
             setLoadError(
-                error instanceof Error ? error.message : 'Failed to load notification rules.',
+                error instanceof Error ? error.message : 'Failed to load notification rules.'
             );
         } finally {
             setLoading(false);
@@ -85,9 +88,11 @@ export function NotificationRulesEditor({
                 setSubmitError('Feature and category are required.');
                 return;
             }
+            const roomId = form.roomId.trim();
             const payload: NotificationRulePayload = {
                 feature,
                 category,
+                ...(roomId ? { roomId } : {}),
                 hardCapPerDay: Math.max(0, form.hardCapPerDay | 0),
                 cooldownMinutes: Math.max(0, form.cooldownMinutes | 0),
                 ...(form.quietEnabled
@@ -114,14 +119,12 @@ export function NotificationRulesEditor({
                 setForm(emptyForm);
             } catch (error) {
                 setRules(previous);
-                setSubmitError(
-                    error instanceof Error ? error.message : 'Failed to save rule.',
-                );
+                setSubmitError(error instanceof Error ? error.message : 'Failed to save rule.');
             } finally {
                 setSubmitPending(false);
             }
         },
-        [form, rules, upsertNotificationRule],
+        [form, rules, upsertNotificationRule]
     );
 
     const onDelete = useCallback(
@@ -130,7 +133,7 @@ export function NotificationRulesEditor({
             const previous = rules;
             setRules((current) => current.filter((r) => ruleKey(r) !== key));
             try {
-                await deleteNotificationRule(rule.feature, rule.category);
+                await deleteNotificationRule(rule.feature, rule.category, rule.roomId);
             } catch {
                 // Rollback on failure; surface via load error so the rest of
                 // the UI stays usable.
@@ -138,13 +141,14 @@ export function NotificationRulesEditor({
                 setLoadError(`Failed to delete rule ${key}.`);
             }
         },
-        [deleteNotificationRule, rules],
+        [deleteNotificationRule, rules]
     );
 
     const onEdit = useCallback((rule: NotificationRulePayload) => {
         setForm({
             feature: rule.feature,
             category: rule.category,
+            roomId: rule.roomId ?? '',
             hardCapPerDay: rule.hardCapPerDay,
             cooldownMinutes: rule.cooldownMinutes,
             quietEnabled: Boolean(rule.quietHours),
@@ -160,7 +164,8 @@ export function NotificationRulesEditor({
                 <h2 style={{ margin: 0 }}>Notification rules</h2>
                 <p style={{ margin: '4px 0 0', color: 'var(--text-secondary)' }}>
                     Per-feature rate limits and quiet hours. Each rule is keyed by{' '}
-                    <code>feature:category</code>.
+                    <code>feature:category</code>; add a room id to override the category-wide rule
+                    for just that room.
                 </p>
             </header>
 
@@ -178,9 +183,7 @@ export function NotificationRulesEditor({
                         <input
                             data-testid="notification-rules-feature"
                             value={form.feature}
-                            onChange={(event) =>
-                                setForm({ ...form, feature: event.target.value })
-                            }
+                            onChange={(event) => setForm({ ...form, feature: event.target.value })}
                             placeholder="mentions"
                             required
                         />
@@ -190,14 +193,21 @@ export function NotificationRulesEditor({
                         <input
                             data-testid="notification-rules-category"
                             value={form.category}
-                            onChange={(event) =>
-                                setForm({ ...form, category: event.target.value })
-                            }
+                            onChange={(event) => setForm({ ...form, category: event.target.value })}
                             placeholder="dm"
                             required
                         />
                     </label>
                 </div>
+                <label style={fieldStyle}>
+                    Room override (optional)
+                    <input
+                        data-testid="notification-rules-room"
+                        value={form.roomId}
+                        onChange={(event) => setForm({ ...form, roomId: event.target.value })}
+                        placeholder="!room:example.org — leave empty for the category-wide rule"
+                    />
+                </label>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                     <label style={fieldStyle}>
                         Hard cap per day
@@ -209,8 +219,7 @@ export function NotificationRulesEditor({
                             onChange={(event) =>
                                 setForm({
                                     ...form,
-                                    hardCapPerDay:
-                                        Number.parseInt(event.target.value, 10) || 0,
+                                    hardCapPerDay: Number.parseInt(event.target.value, 10) || 0,
                                 })
                             }
                         />
@@ -225,8 +234,7 @@ export function NotificationRulesEditor({
                             onChange={(event) =>
                                 setForm({
                                     ...form,
-                                    cooldownMinutes:
-                                        Number.parseInt(event.target.value, 10) || 0,
+                                    cooldownMinutes: Number.parseInt(event.target.value, 10) || 0,
                                 })
                             }
                         />
@@ -358,7 +366,9 @@ export function NotificationRulesEditor({
                                         }}
                                     >
                                         <strong>{key}</strong>
-                                        <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                                        <span
+                                            style={{ fontSize: 12, color: 'var(--text-secondary)' }}
+                                        >
                                             cap {rule.hardCapPerDay}/day · cooldown{' '}
                                             {rule.cooldownMinutes}m
                                         </span>
