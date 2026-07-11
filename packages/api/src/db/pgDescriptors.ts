@@ -515,6 +515,7 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
     insertAmbassador: upsert('ambassadors'),
     updateAmbassador: upsert('ambassadors'),
     insertQuest: upsert('quests'),
+    updateQuest: upsert('quests'),
     insertQuestCompletion: upsert('questCompletions'),
     updateQuestCompletion: upsert('questCompletions'),
     insertMigrationCredit: upsert('migrationCredits'),

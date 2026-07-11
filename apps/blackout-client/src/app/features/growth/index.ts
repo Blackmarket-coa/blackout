@@ -15,6 +15,11 @@ export {
     fetchActiveQuests,
     completeQuest,
     fetchMyQuestCompletions,
+    createCreatorQuest,
+    fetchMyQuests,
+    endQuest,
+    type CreateCreatorQuestInput,
+    type MyQuestRecord,
     type ReferralRecord,
     type ReferralSourceKind,
     type ReferralStatus,
@@ -31,16 +36,8 @@ export {
     type MigrationCreditSourceKind,
 } from './growthClient';
 
-export {
-    growthReferralsFeature,
-    growthAmbassadorsFeature,
-    growthQuestsFeature,
-} from './manifest';
-export {
-    growthReferralsRoutes,
-    growthAmbassadorRoutes,
-    growthQuestsRoutes,
-} from './routes';
+export { growthReferralsFeature, growthAmbassadorsFeature, growthQuestsFeature } from './manifest';
+export { growthReferralsRoutes, growthAmbassadorRoutes, growthQuestsRoutes } from './routes';
 export { ReferralsPage } from './ReferralsPage';
 export { AmbassadorPage } from './AmbassadorPage';
 export { QuestsPage } from './QuestsPage';

@@ -79,7 +79,7 @@ class ReferralService {
         if (!input.referrerUserId || !input.refereeUserId) {
             throw new ReferralValidationError(
                 'invalid_referral',
-                'referrer and referee user ids are required',
+                'referrer and referee user ids are required'
             );
         }
         if (input.referrerUserId === input.refereeUserId) {
@@ -126,7 +126,7 @@ class ReferralService {
      */
     markSettled(
         referralId: string,
-        params: { rewardTipId: string; rewardCents?: number | null; settledAt?: string },
+        params: { rewardTipId: string; rewardCents?: number | null; settledAt?: string }
     ): ReferralRecord | undefined {
         const record = db.getReferral(referralId);
         if (!record) return undefined;
@@ -238,13 +238,13 @@ class QuestsService {
         if (!input.title || !input.description) {
             throw new ReferralValidationError(
                 'invalid_quest',
-                'title and description are required',
+                'title and description are required'
             );
         }
         if (!Number.isFinite(input.rewardCents) || input.rewardCents < 0) {
             throw new ReferralValidationError(
                 'invalid_reward',
-                'rewardCents must be a non-negative integer',
+                'rewardCents must be a non-negative integer'
             );
         }
         const ts = nowIso();
@@ -267,6 +267,33 @@ class QuestsService {
 
     get(id: string): QuestDefinitionRecord | undefined {
         return db.getQuest(id);
+    }
+
+    /** Every quest a given source authored, active or not, newest first. */
+    listBySource(sourceKind: QuestSourceKind, sourceRef: string): QuestDefinitionRecord[] {
+        return db
+            .listQuests()
+            .filter((quest) => quest.sourceKind === sourceKind && quest.sourceRef === sourceRef)
+            .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id));
+    }
+
+    /** How many users have completed a quest. */
+    completionCount(questId: string): number {
+        return db.listQuestCompletionsByQuest(questId).length;
+    }
+
+    /**
+     * Ends a quest now (sets `endsAt`), removing it from active listings
+     * without erasing completion history. Idempotent for already-ended quests.
+     */
+    end(questId: string): QuestDefinitionRecord {
+        const quest = db.getQuest(questId);
+        if (!quest) {
+            throw new ReferralValidationError('quest_not_found', 'quest not found');
+        }
+        const ts = nowIso();
+        if (quest.endsAt && Date.parse(quest.endsAt) <= Date.parse(ts)) return quest;
+        return db.updateQuest({ ...quest, endsAt: ts, updatedAt: ts });
     }
 
     list(filter: { sourceKind?: QuestSourceKind; activeAt?: Date } = {}): QuestDefinitionRecord[] {
@@ -315,7 +342,7 @@ class QuestsService {
      */
     markCompletionSettled(
         completionId: string,
-        params: { rewardTipId: string },
+        params: { rewardTipId: string }
     ): QuestCompletionRecord | undefined {
         const record = db.getQuestCompletionById(completionId);
         if (!record) return undefined;
@@ -357,7 +384,7 @@ class MigrationCreditService {
         if (!Number.isFinite(input.valueCents) || input.valueCents < 0) {
             throw new ReferralValidationError(
                 'invalid_value',
-                'valueCents must be a non-negative integer',
+                'valueCents must be a non-negative integer'
             );
         }
         const handle = input.sourceHandle?.trim() || null;
@@ -383,10 +410,7 @@ class MigrationCreditService {
     redeem(id: string, userId: string): MigrationCreditRecord {
         const record = db.getMigrationCredit(id);
         if (!record || record.userId !== userId) {
-            throw new ReferralValidationError(
-                'credit_not_found',
-                'migration credit not found',
-            );
+            throw new ReferralValidationError('credit_not_found', 'migration credit not found');
         }
         if (record.redeemedAt) return record;
         const ts = nowIso();
@@ -478,7 +502,7 @@ class BountyRewardService {
     /** Idempotent settlement hook (mirrors `referralService.markSettled`). */
     settle(
         bountyId: string,
-        params: { ref: string; settledAt?: string },
+        params: { ref: string; settledAt?: string }
     ): BountyRewardRecord | undefined {
         const record = db.getBountyRewardByBounty(bountyId);
         if (!record) return undefined;
