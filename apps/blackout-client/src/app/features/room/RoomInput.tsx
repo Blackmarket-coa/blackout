@@ -92,10 +92,10 @@ import {
 import { getImageUrlBlob, loadImageElement } from '../../utils/dom';
 import { API_BASE_URL, fetchAuthorizedBlob } from '../../sdk/client';
 import {
-    buildTenorBinaryUrl,
-    registerTenorShare,
-    type TenorPickerItem,
-} from './tenorClient';
+    buildGifBinaryUrl,
+    registerGifShare,
+    type GifPickerItem,
+} from './gifClient';
 import { readBlackoutApiToken } from '../monetization/marketplace/useMarketplaceAuth';
 import { safeFile } from '../../utils/mimeTypes';
 import { fulfilledPromiseSettledResult } from '../../utils/common';
@@ -516,15 +516,15 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
             } as any);
         };
 
-        const handleTenorGifSelect = async (item: TenorPickerItem, query: string) => {
+        const handleTenorGifSelect = async (item: GifPickerItem, query: string) => {
             // Pull the binary through the Blackout API proxy so the
-            // browser never contacts Tenor's CDN directly, then upload to
-            // the homeserver and send as a standard m.image. This makes
-            // GIFs behave identically to other image messages (works in
-            // E2EE rooms, receivers never hit Tenor, etc.).
+            // browser never contacts the provider's CDN directly, then
+            // upload to the homeserver and send as a standard m.image.
+            // This makes GIFs behave identically to other image messages
+            // (works in E2EE rooms, receivers never hit the provider, etc.).
             try {
                 const token = readBlackoutApiToken();
-                const proxyPath = buildTenorBinaryUrl(item.gif.url, API_BASE_URL);
+                const proxyPath = buildGifBinaryUrl(item.provider, item.gif.url, API_BASE_URL);
                 const blob = await fetchAuthorizedBlob(proxyPath, token);
                 const file = new File([blob], `${item.id}.gif`, { type: 'image/gif' });
                 const upload = await mx.uploadContent(file, {
@@ -545,14 +545,14 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                         h: item.gif.height,
                     },
                 } as any);
-                // Best-effort Tenor share registration (TOS requirement).
-                registerTenorShare(item.id, query || undefined).catch(() => undefined);
+                // Best-effort share registration (Tenor TOS; no-op for Giphy).
+                registerGifShare(item, query || undefined).catch(() => undefined);
             } catch (err) {
                 // Console for devtools (CSP block, homeserver upload refusal,
                 // expired token) plus a user-facing toast so the failure isn't
                 // silent — the picker has already closed by this point.
                 // eslint-disable-next-line no-console
-                console.warn('tenor: failed to send GIF', err);
+                console.warn('gif picker: failed to send GIF', err);
                 showToast(t('Features.GifPicker.send_error'), { variant: 'Critical' });
             }
         };

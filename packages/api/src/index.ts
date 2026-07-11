@@ -53,6 +53,7 @@ import integrationsHealthRoutes from './routes/integrationsHealth';
 import simulcastRoutes from './routes/simulcastDestinations';
 import kickChatBridgeRoutes from './routes/kickChatBridges';
 import tenorRoutes from './routes/tenor';
+import giphyRoutes from './routes/giphy';
 import {
     authedRouter as discordCompatWebhookRoutes,
     publicExecuteRouter as discordCompatWebhookExecuteRoutes,
@@ -221,6 +222,7 @@ for (const root of legacyAliasEnabled ? [API_ROOTS.v1, API_ROOTS.legacyApiAlias]
     app.route(`${root}/integrations/simulcast/destinations`, simulcastRoutes);
     app.route(`${root}/integrations/kick/chat-bridges`, kickChatBridgeRoutes);
     app.route(`${root}/integrations/tenor`, tenorRoutes);
+    app.route(`${root}/integrations/giphy`, giphyRoutes);
     app.route(`${root}/integrations/discord-compat/webhooks`, discordCompatWebhookRoutes);
     app.route(`${root}/integrations/discord/import`, discordServerImportRoutes);
     app.route(`${root}/integrations/discord/bridges`, discordBridgeActivationRoutes);

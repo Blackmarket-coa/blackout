@@ -6,8 +6,8 @@
   },
   "Features": {
     "GifPicker": {
-      "search_placeholder": "GIFs auf Tenor suchen",
-      "attribution": "Bereitgestellt von Tenor",
+      "search_placeholder": "GIFs auf {{provider}} suchen",
+      "attribution": "Bereitgestellt von {{provider}}",
       "no_results": "Keine GIFs für \"{{query}}\" gefunden.",
       "load_error": "GIFs konnten nicht geladen werden. Bitte Verbindung prüfen und erneut versuchen.",
       "send_error": "GIF konnte nicht gesendet werden. Bitte erneut versuchen."

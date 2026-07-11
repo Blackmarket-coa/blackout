@@ -300,6 +300,14 @@ Per `discord_parity_blueprint.md` §8 phased roadmap weeks 5–8.
 - Rich-media uploads: image / video / audio / file with preview + drag-drop. Largely covered by Workstream A Port 4 (BKL-006 media pipeline rewire) plus UI Primitives v1 `Modal` / `Sheet`.
 - Voice messages: capacitor-bridged native recording (already prototyped in `MessageComposer.startVoiceRecording`); needs polished waveform UI, server upload, playback inline.
 - GIF picker: Tenor or Giphy integration (3rd-party, requires API key + service config).
+  **Status update (2026-07-11):** shipped with **Giphy as the decided provider** (open
+  question 2 below). `packages/api/src/routes/giphy.ts` +
+  `integrations/giphy/client.ts` proxy Giphy behind the same wire contract as the
+  existing Tenor proxy (search/featured/binary, server-held key, SSRF-guarded CDN
+  proxy); the client's provider-agnostic `gifClient.ts` prefers Giphy and falls back
+  to Tenor when `GIPHY_API_KEY` is unset, with provider-aware attribution in the
+  picker panel. Send-as-image + search-as-you-type were already live via the Tenor
+  slice; per-device recents remain open.
 - 1:1 RTC baseline: MatrixRTC + LiveKit signal — partial today; needs canonical-client launcher (Port 4 covers Element Call) and call-state UI.
 - Group RTC baseline: same stack, larger UX surface (call rail, screen-share preview).
 
@@ -605,7 +613,10 @@ suite.
 ## Open scope questions for the next session
 
 1. **UI Primitives styling:** vanilla-extract vs CSS-in-JS vs pure CSS? (Recommended: vanilla-extract for consistency with `apps/blackout-client`.)
-2. **GIF picker provider:** Tenor or Giphy? (Affects API contract + ToS.)
+2. **GIF picker provider:** Tenor or Giphy? (Affects API contract + ToS.) —
+   **Resolved 2026-07-11: Giphy**, proxied at `/v1/integrations/giphy` with the
+   Tenor proxy retained as a fallback for deployments that only hold a Tenor key
+   (the client resolves Giphy → Tenor at runtime; see the D scope status update).
 3. **AutoMod appservice ownership:** which team stands up the policy-engine appservice that Workstream E depends on?
 4. **Stage channels deferral:** worth landing Phase 4 with stage channels, or carve them out as Phase 5? — **Resolved 2026-07-11: carved out as Phase 5**, re-scoped alongside Workstream D's RTC baseline (see the F status update above).
 5. **Should Workstream B (UI primitives) split into v1.0 (essential 8 primitives) and v1.1 (full set)?** v1.0 is L, v1.1 is L on top.

@@ -4,11 +4,13 @@ import { useTranslation } from 'react-i18next';
 import { useDebounce } from '../../../hooks/useDebounce';
 import { mobileOrTablet } from '../../../utils/user-agent';
 import {
-    fetchTenorFeatured,
-    searchTenor,
-    TenorDisabledError,
-    type TenorPickerItem,
-} from '../../../features/room/tenorClient';
+    fetchFeaturedGifs,
+    searchGifs,
+    GifDisabledError,
+    GIF_PROVIDER_LABELS,
+    type GifPickerItem,
+    type GifProvider,
+} from '../../../features/room/gifClient';
 import {
     TenorAttributionStyle,
     TenorEmptyStyle,
@@ -18,13 +20,14 @@ import {
 } from './TenorPanel.css';
 
 /**
- * Online GIF picker backed by the Tenor v2 API proxy at
- * `/v1/integrations/tenor`. Renders inside the existing EmojiBoard Gif
- * tab. When the server is not configured (TENOR_API_KEY unset), the
+ * Online GIF picker backed by the provider-agnostic proxies at
+ * `/v1/integrations/{giphy,tenor}` (Giphy preferred, Tenor fallback —
+ * see `gifClient.ts`). Renders inside the existing EmojiBoard Gif tab.
+ * When no provider is configured server-side (both API keys unset), the
  * panel renders nothing so the surrounding EmojiBoard can fall back to
  * its "No GIF Packs!" empty state.
  *
- * The grid uses the small `tinygif` preview for thumbnails; the
+ * The grid uses the small preview rendition for thumbnails; the
  * full-size `gif` URL is passed to `onSelect` only when the user picks
  * an item.
  */
@@ -33,14 +36,14 @@ const PAGE_LIMIT = 24;
 const SEARCH_DEBOUNCE_MS = 300;
 
 export type TenorPanelProps = {
-    onSelect: (item: TenorPickerItem, query: string) => void;
+    onSelect: (item: GifPickerItem, query: string) => void;
     onDisabled?: () => void;
 };
 
 type LoadState =
     | { kind: 'idle' }
     | { kind: 'loading' }
-    | { kind: 'loaded'; items: TenorPickerItem[]; next: string | null; query: string }
+    | { kind: 'loaded'; items: GifPickerItem[]; next: string | null; query: string }
     | { kind: 'error' }
     | { kind: 'disabled' };
 
@@ -48,6 +51,7 @@ export function TenorPanel({ onSelect, onDisabled }: TenorPanelProps) {
     const { t } = useTranslation();
     const [query, setQuery] = useState('');
     const [state, setState] = useState<LoadState>({ kind: 'idle' });
+    const [provider, setProvider] = useState<GifProvider>('giphy');
     // Track the latest in-flight request so debounced fast typing doesn't
     // race ahead of slower earlier responses.
     const requestSeqRef = useRef(0);
@@ -60,9 +64,10 @@ export function TenorPanel({ onSelect, onDisabled }: TenorPanelProps) {
             try {
                 const result =
                     nextQuery.trim().length === 0
-                        ? await fetchTenorFeatured({ limit: PAGE_LIMIT })
-                        : await searchTenor(nextQuery, { limit: PAGE_LIMIT });
+                        ? await fetchFeaturedGifs({ limit: PAGE_LIMIT })
+                        : await searchGifs(nextQuery, { limit: PAGE_LIMIT });
                 if (seq !== requestSeqRef.current) return;
+                setProvider(result.provider);
                 setState({
                     kind: 'loaded',
                     items: result.items,
@@ -71,13 +76,13 @@ export function TenorPanel({ onSelect, onDisabled }: TenorPanelProps) {
                 });
             } catch (err) {
                 if (seq !== requestSeqRef.current) return;
-                if (err instanceof TenorDisabledError) {
+                if (err instanceof GifDisabledError) {
                     setState({ kind: 'disabled' });
                     onDisabled?.();
                     return;
                 }
                 // eslint-disable-next-line no-console
-                console.warn('tenor: load failed', err);
+                console.warn('gif picker: load failed', err);
                 setState({ kind: 'error' });
             }
         },
@@ -114,8 +119,8 @@ export function TenorPanel({ onSelect, onDisabled }: TenorPanelProps) {
         try {
             const result =
                 state.query.trim().length === 0
-                    ? await fetchTenorFeatured({ limit: PAGE_LIMIT, pos: state.next })
-                    : await searchTenor(state.query, { limit: PAGE_LIMIT, pos: state.next });
+                    ? await fetchFeaturedGifs({ limit: PAGE_LIMIT, pos: state.next })
+                    : await searchGifs(state.query, { limit: PAGE_LIMIT, pos: state.next });
             if (seq !== requestSeqRef.current) return;
             setState((prev) =>
                 prev.kind === 'loaded'
@@ -149,8 +154,12 @@ export function TenorPanel({ onSelect, onDisabled }: TenorPanelProps) {
                 <Input
                     variant="SurfaceVariant"
                     size="400"
-                    placeholder={t('Features.GifPicker.search_placeholder')}
-                    aria-label={t('Features.GifPicker.search_placeholder')}
+                    placeholder={t('Features.GifPicker.search_placeholder', {
+                        provider: GIF_PROVIDER_LABELS[provider],
+                    })}
+                    aria-label={t('Features.GifPicker.search_placeholder', {
+                        provider: GIF_PROVIDER_LABELS[provider],
+                    })}
                     maxLength={80}
                     value={query}
                     onChange={handleChange}
@@ -164,7 +173,7 @@ export function TenorPanel({ onSelect, onDisabled }: TenorPanelProps) {
                 </Scroll>
             </Box>
             <Text className={TenorAttributionStyle} size="T200">
-                {t('Features.GifPicker.attribution')}
+                {t('Features.GifPicker.attribution', { provider: GIF_PROVIDER_LABELS[provider] })}
             </Text>
         </Box>
     );
@@ -173,7 +182,7 @@ export function TenorPanel({ onSelect, onDisabled }: TenorPanelProps) {
 type TenorGridProps = {
     state: LoadState;
     query: string;
-    onSelect: (item: TenorPickerItem, query: string) => void;
+    onSelect: (item: GifPickerItem, query: string) => void;
 };
 
 function TenorGrid({ state, query, onSelect }: TenorGridProps) {
@@ -226,7 +235,7 @@ function TenorGrid({ state, query, onSelect }: TenorGridProps) {
 }
 
 type TenorTileProps = {
-    item: TenorPickerItem;
+    item: GifPickerItem;
     onSelect: () => void;
 };
 
