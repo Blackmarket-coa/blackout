@@ -328,6 +328,34 @@ Per `discord_parity_blueprint.md` §8 weeks 9–12. Covers custom-emoji /
 sticker packs, onboarding/welcome flow, AutoMod, raid protection, audit
 tooling.
 
+### Status update — 2026-07-11
+
+An on-disk audit found this workstream substantially built despite the
+"scoped, not started" status below; two gaps were closed on
+`claude/stubs-placeholders-4xqu8t`:
+
+- **Custom emoji/stickers (MSC2545): DONE.** Full `im.ponies` plugin, pack
+  CRUD UI (user/room/global), and composer emoji board already existed. The
+  one open seam — the reactions picker only read the current room's state,
+  missing user/global packs — is closed: `useReactionCustomEmoji` resolves
+  through `useRelevantImagePacks` with room-state entries winning shortcode
+  conflicts.
+- **Welcome/onboarding: already built** (`co.bmc.welcome` /
+  `co.bmc.onboarding` events, `WelcomeEditor`, `OnboardingWizard`,
+  account-data gating).
+- **Mjolnir UI (BKL-009): backend landed.** The `/v1/moderation/mjolnir/*`
+  REST surface the SDK targeted never existed in `packages/api`; it now does
+  (banlists + protections module, per-subject store, changed-event
+  envelopes).
+- **AutoMod / raid protection: config surfaces already built**
+  (`AutoModPanel` writes `co.bmc.automod`; Draupnir console + `ModActionLog`
+  audit view ship). Enforcement — a bot/appservice that *reads*
+  `co.bmc.automod` and actuates raid lockdown — remains genuinely external
+  (Draupnir sidecar), the only true cross-team dependency left here.
+- **Slowmode: already built + client-enforced** (`co.bmc.slowmode`).
+- **Verification/join gates: still genuinely unstarted** — the one remaining
+  pure-code E item (only `newAccountRestrictions` config exists today).
+
 ### Scope
 
 - Custom emoji + sticker packs (MSC2545): space-managed pack lifecycle, UI to create/edit/delete packs, picker integration.
