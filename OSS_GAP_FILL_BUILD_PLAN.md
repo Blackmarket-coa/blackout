@@ -1,10 +1,34 @@
 # OSS Gap-Fill Build Plan
 
-**Status:** Proposed (July 2026). Companion to
+**Status:** Largely implemented (updated 2026-07-11). Companion to
 [`docs/audits/competitor_depth_analysis_verification_2026_07.md`](docs/audits/competitor_depth_analysis_verification_2026_07.md),
 which verified the competitive depth gaps against this repo. This plan fills those gaps by
 adopting and modifying open-source software instead of building from scratch, grounded in what
 the repo already runs.
+
+## Status update — 2026-07-11
+
+Workstreams WS1–WS5 have landed on disk; the "Status in repo" column below is
+updated to match. Each capability ships behind an env gate and is off by default:
+
+- **WS1 — Analytics:** client transport `apps/blackout-client/src/app/sdk/viewEvents.ts`
+  → `POST /v1/telemetry/events` (`packages/api/src/routes/telemetry.ts`); Owncast
+  metrics poller `packages/api/src/services/owncastMetricsScheduler.ts`, registered in
+  `backgroundLoops.ts` behind `BLACKOUT_OWNCAST_METRICS`. Remaining: Creator Hub
+  Insights panel polish.
+- **WS2 — VOD recording:** `packages/api/src/services/vodRecorderWorker.ts`
+  (`isVodRecordingEnabled`, `BLACKOUT_VOD_RECORDING`), invoked from
+  `modules/streaming.ts` on session start.
+- **WS3 — Clips:** client composer
+  `apps/blackout-client/src/app/features/streaming/composer/ClipComposer.tsx`
+  (`@ffmpeg/ffmpeg`); server cut + captions `packages/api/src/services/clipCutterWorker.ts`
+  (captions gated `BLACKOUT_CLIP_CAPTIONS=1` **and** a `WHISPER_CPP_MODEL` on disk).
+- **WS4 — Proximity:** `GET /v1/coalition/nearby` (`packages/api/src/routes/coalition.ts`)
+  surfaced on the Home chip via `useNearbySignals` (`HomeFeed.tsx`).
+- **WS5 — Quick wins:** feed diversity cap `capBySource` / `maxPerSource` in
+  `unifiedFeedModel.ts`; payout-transparency surfacing shipped.
+
+The workstream write-ups below are retained as the design/rationale record.
 
 ## Principles
 
@@ -27,14 +51,14 @@ the repo already runs.
 
 | Gap (audit finding) | OSS | License | Integration mode | Status in repo |
 | --- | --- | --- | --- | --- |
-| Creator/audience analytics (ABSENT) | ClickHouse + Cube | Apache-2.0 | Already-deployed services; add ingestion + query routes | Scaffolded, unwired |
-| Live viewer metrics (ABSENT) | Owncast admin API (`/api/admin/viewersOverTime`, `/api/admin/viewers`, `/api/admin/prometheus`) | MIT | HTTP poller scheduler | Owncast referenced (`OWNCAST_BASE_URL`) but never deployed or admin-called |
-| VOD recording (pointer-only) | ffmpeg (phase 1), MediaMTX (phase 2 option) | GPL/LGPL spawned; MIT | Spawned recorder job; optional ingest/record/playback server | ffmpeg already spawned for RTMP fanout |
-| Clips editing (ABSENT) | ffmpeg.wasm (client trim/crop), ffmpeg (server cut) | MIT wrapper / LGPL core; GPL/LGPL spawned | Browser wasm asset; spawned job | Greenfield |
-| Auto-captions (ABSENT) | whisper.cpp (`--output-srt`/`--output-vtt`) | MIT | Spawned job, SRT/VTT sidecar | Greenfield |
-| Proximity discovery (SHELL-ONLY) | PostGIS + martin + MapLibre; h3-js if cell-bucketing needed | GPL (separate DB service) / MIT / BSD / Apache-2.0 | Already-deployed DB + tiles; add opt-in coarse location + nearby query | Deployed, unused by feed |
-| Payout transparency (surfacing) | — none needed | — | Surface `packages/core/src/marketplace/fees.ts` constants + FBM data in UI | Code exists |
-| Feed diversity caps (missing) | — none needed | — | Pure code in `unifiedFeedModel.ts` `mergeAndRank` | Days of work |
+| Creator/audience analytics (ABSENT) | ClickHouse + Cube | Apache-2.0 | Already-deployed services; add ingestion + query routes | **Shipped** — transport + `/v1/telemetry/events` ingest; Insights panel remains |
+| Live viewer metrics (ABSENT) | Owncast admin API (`/api/admin/viewersOverTime`, `/api/admin/viewers`, `/api/admin/prometheus`) | MIT | HTTP poller scheduler | **Shipped** — `owncastMetricsScheduler.ts`, gated `BLACKOUT_OWNCAST_METRICS` |
+| VOD recording (pointer-only) | ffmpeg (phase 1), MediaMTX (phase 2 option) | GPL/LGPL spawned; MIT | Spawned recorder job; optional ingest/record/playback server | **Shipped (phase 1)** — `vodRecorderWorker.ts`, gated `BLACKOUT_VOD_RECORDING` |
+| Clips editing (ABSENT) | ffmpeg.wasm (client trim/crop), ffmpeg (server cut) | MIT wrapper / LGPL core; GPL/LGPL spawned | Browser wasm asset; spawned job | **Shipped** — `ClipComposer.tsx` + `clipCutterWorker.ts` |
+| Auto-captions (ABSENT) | whisper.cpp (`--output-srt`/`--output-vtt`) | MIT | Spawned job, SRT/VTT sidecar | **Shipped, gated** — `clipCutterWorker.ts`, needs `BLACKOUT_CLIP_CAPTIONS=1` + `WHISPER_CPP_MODEL` |
+| Proximity discovery (SHELL-ONLY) | PostGIS + martin + MapLibre; h3-js if cell-bucketing needed | GPL (separate DB service) / MIT / BSD / Apache-2.0 | Already-deployed DB + tiles; add opt-in coarse location + nearby query | **Shipped** — `GET /v1/coalition/nearby` + `useNearbySignals` on Home chip |
+| Payout transparency (surfacing) | — none needed | — | Surface `packages/core/src/marketplace/fees.ts` constants + FBM data in UI | **Shipped** |
+| Feed diversity caps (missing) | — none needed | — | Pure code in `unifiedFeedModel.ts` `mergeAndRank` | **Shipped** — `capBySource` / `maxPerSource` |
 
 ## Workstream 1 — Analytics layer (top gap; mostly wiring)
 

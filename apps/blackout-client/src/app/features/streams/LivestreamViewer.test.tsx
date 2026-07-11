@@ -33,6 +33,11 @@ vi.mock('../monetization/components/TipButton', () => ({
     ),
 }));
 
+const recordViewEventMock = vi.fn();
+vi.mock('../../sdk/viewEvents', () => ({
+    recordViewEvent: (...args: unknown[]) => recordViewEventMock(...args),
+}));
+
 import LivestreamViewer from './LivestreamViewer';
 
 const flush = async () => {
@@ -61,6 +66,7 @@ describe('LivestreamViewer', () => {
         document.body.innerHTML = '';
         fetchStreamMock.mockReset();
         fetchOwncastOriginMock.mockReset();
+        recordViewEventMock.mockReset();
     });
 
     it('renders the stream title, live badge, and tip context bound to the stream id', async () => {
@@ -124,9 +130,41 @@ describe('LivestreamViewer', () => {
         );
         expect(link).not.toBeNull();
         expect(link?.getAttribute('data-den-id')).toBe('!den:blackout.coop');
-        expect(link?.getAttribute('href')).toContain(
-            encodeURIComponent('!den:blackout.coop')
+        expect(link?.getAttribute('href')).toContain(encodeURIComponent('!den:blackout.coop'));
+    });
+
+    it('emits the den-chat deep-link analytics event when the CTA is clicked', async () => {
+        fetchStreamMock.mockResolvedValue({
+            id: 'stream-click',
+            creatorId: 'creator-click',
+            state: 'live',
+            title: 'Click-through',
+            tags: [],
+            visibility: 'public',
+            latencyProfile: 'normal',
+            denId: '!den:blackout.coop',
+            updatedAt: '2025-02-04T00:00:00Z',
+        });
+        fetchOwncastOriginMock.mockResolvedValue({ origin: 'https://owncast.example.com' });
+
+        const { container } = await mountViewer('stream-click');
+        const link = container.querySelector<HTMLAnchorElement>(
+            '[data-testid="livestream-den-chat-link"]'
         );
+        await act(async () => {
+            link?.click();
+            await flush();
+        });
+
+        const call = recordViewEventMock.mock.calls.find(
+            (args: unknown[]) => args[0] === 'livestream.deeplink.den_chat.click'
+        );
+        expect(call).toBeDefined();
+        expect(call?.[1]).toMatchObject({
+            streamId: 'stream-click',
+            denId: '!den:blackout.coop',
+            creatorId: 'creator-click',
+        });
     });
 
     it('omits the den chat link when the stream has no den association', async () => {
@@ -143,9 +181,7 @@ describe('LivestreamViewer', () => {
         fetchOwncastOriginMock.mockResolvedValue({ origin: 'https://owncast.example.com' });
 
         const { container } = await mountViewer('stream-no-den');
-        expect(
-            container.querySelector('[data-testid="livestream-den-chat-link"]')
-        ).toBeNull();
+        expect(container.querySelector('[data-testid="livestream-den-chat-link"]')).toBeNull();
     });
 
     it('shows the error region with a link back to the directory on fetch failure', async () => {

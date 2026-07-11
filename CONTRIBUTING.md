@@ -114,7 +114,8 @@ blackout notes: Fix a bug where the 'Herd' button only worked on Tuesdays
 Scopes you can specify:
 
 - `blackout` — main client / web
-- `blackout-desktop` — Tauri wrapper
+- `blackout-desktop` — Tauri wrapper (testers: verify a downloaded build with
+  [`blackout-desktop/docs/signing-verification.md`](blackout-desktop/docs/signing-verification.md))
 - `blackout-mobile` — Capacitor mobile build
 
 If your PR introduces a breaking change, add the `X-Breaking-Change` label.

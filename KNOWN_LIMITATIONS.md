@@ -73,12 +73,13 @@ For the source-of-truth triage with tier/owner detail see
 
 These are tracked in
 [`docs/architecture/deferred-bodies-schedule-2026-05-01.md`](docs/architecture/deferred-bodies-schedule-2026-05-01.md).
-Workstream A (Ports 1–5) is closed; B–F remain post-beta scope.
+Workstreams A (Ports 1–5) and C are closed; B's primitive set has shipped
+(only incremental adoption remains); D–F remain post-beta scope.
 
 | Workstream | Scope | Status |
 | --- | --- | --- |
 | **B** | `@blackout/ui` v1 primitives (Button/Input/Select/etc.) using `vanilla-extract`. | Primitive set shipped (B1 + B1.1). Incremental production adoption ongoing — `MessageComposer` and `MutualAidPage` consume them today. |
-| **C** | Reactions / threading hardening: `ThreadPanel` slot mount in `panelSlots.tsx`, sidebar `ThreadUnreadBadge` mount, integration coverage. Helpers and components landed; final wiring pending. | ~60% complete. |
+| **C** | Reactions / threading hardening: `ThreadPanel` slot mount in `panelSlots.tsx`, sidebar `ThreadUnreadBadge` mount, integration coverage. | **Closed (2026-06-13).** `ThreadPanel` wired into the `panelSlots.tsx` `threads` slot, `ThreadUnreadBadgeMount` in `CanopySidebar.tsx`, and the round-trip test landed (`apps/blackout-client/tests/unit/features/threading-parity/workstreamC.roundtrip.test.tsx`). |
 | **D** | Discord parity P2: GIF picker (Giphy), voice/video polish, screen-sharing polish, media player controls. | Scoped, not started. |
 | **E** | Discord parity P3: AutoMod via Draupnir sidecar, raid protection, verification gates, slowmode. | Scoped, not started. |
 | **F** | Discord parity P4: theme engine (light/AMOLED), stage channels, accessibility audit, profile-card polish. Recent-messages quick-switcher source landed. | Partial. |

@@ -3,6 +3,7 @@ import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { PushNotifications } from '@capacitor/push-notifications';
 import { SplashScreen } from '@capacitor/splash-screen';
 import { dispatchNativeBridgeEvent } from '../../apps/blackout-client/src/platform/native-bridge-contract';
+import { notificationDataToInteractedEvent } from '../../apps/blackout-client/src/platform/notification-routing';
 
 /**
  * Initialize all Capacitor native bridges.
@@ -89,17 +90,17 @@ export async function initBlackoutMobileBridge() {
         // Navigate to the room if the notification contains a room_id. When
         // the push payload also identifies a thread root, forward it so the
         // listener can open that thread (Sygnal must emit thread_root_event_id).
-        const data = notification.notification?.data;
-        if (data?.room_id) {
-          dispatchNativeBridgeEvent({
-            type: 'notification_interacted',
-            source: 'mobile',
-            roomId: data.room_id,
-            threadRootEventId: data.thread_root_event_id || undefined,
-          });
+        // The payload → bridge-event mapping is shared with the routing harness
+        // (notification-routing.ts) so tests exercise the same contract.
+        const bridgeEvent = notificationDataToInteractedEvent(
+          notification.notification?.data,
+          'mobile'
+        );
+        if (bridgeEvent) {
+          dispatchNativeBridgeEvent(bridgeEvent);
           window.dispatchEvent(
             new CustomEvent('blackout:navigate-room', {
-              detail: { roomId: data.room_id },
+              detail: { roomId: bridgeEvent.roomId },
             })
           );
         }
