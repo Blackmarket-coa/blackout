@@ -299,6 +299,17 @@ Per `discord_parity_blueprint.md` §8 phased roadmap weeks 5–8.
 
 - Rich-media uploads: image / video / audio / file with preview + drag-drop. Largely covered by Workstream A Port 4 (BKL-006 media pipeline rewire) plus UI Primitives v1 `Modal` / `Sheet`.
 - Voice messages: capacitor-bridged native recording (already prototyped in `MessageComposer.startVoiceRecording`); needs polished waveform UI, server upload, playback inline.
+  **Status update (2026-07-12):** the record → preview → cancel → send → inline-playback
+  loop is closed. The composer now consumes the shared `useVoiceRecorder` hook (inline
+  duplicate removed) and sends voice notes as `m.audio` + `org.matrix.msc3245.voice`
+  via the shared `features/room/voiceMessage.ts` builder (previously they fell through
+  the legacy adapter as `m.file` and never hit the waveform player). Real peaks are
+  computed at attach time (WebAudio → 48 RMS buckets, 0..1024) and transmitted in
+  `org.matrix.msc1767.audio`; `AudioMessage` renders transmitted peaks and falls back
+  to placeholder bars for old events. Media players gained speed (audio+video) and
+  audio-volume controls (`useMediaPlaybackRate` is now consumed). Screen sharing gained
+  a local `ScreenSharePreview` tile in `VoiceChannel` bound to the reactive
+  `displayStream` on the call context.
 - GIF picker: Tenor or Giphy integration (3rd-party, requires API key + service config).
   **Status update (2026-07-11):** shipped with **Giphy as the decided provider** (open
   question 2 below). `packages/api/src/routes/giphy.ts` +

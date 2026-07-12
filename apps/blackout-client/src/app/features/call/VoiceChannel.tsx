@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { RoomMember } from 'matrix-js-sdk';
 import { useCall } from './CallProvider';
 import { CallControls } from './CallControls';
+import { ScreenSharePreview } from './ScreenSharePreview';
 import { CallWidget } from './CallWidget';
 import { SpeakingIndicator } from './SpeakingIndicator';
 
@@ -208,7 +209,8 @@ export const VoiceChannel = ({
             </div>
 
             {joined && activeCallRoomId === roomId ? (
-                <div style={{ marginTop: 12 }}>
+                <div style={{ marginTop: 12, display: 'grid', gap: 8 }}>
+                    <ScreenSharePreview />
                     <CallControls
                         onDisconnect={() => void leaveCall()}
                         audioDevices={audioDevices}

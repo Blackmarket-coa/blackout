@@ -11,6 +11,7 @@ import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { useLegacyRoomTimelineAdapter as useRoomTimeline } from '../../plugins/matrix-adapters/hooks/useLegacyTimelineAdapter';
 import { useCompleteQuest } from '../quests/useQuests';
 import { uploadMedia } from '../media/utils/matrixMedia';
+import { buildVoiceMessageContent } from '../room/voiceMessage';
 
 export interface OpenRoundModel extends RoundOpenedPayload {
     /** Matrix event id of the opening event. Required to anchor replies. */
@@ -243,22 +244,15 @@ export interface VoiceReplyContentInput {
 export function buildVoiceReplyContent(
     input: VoiceReplyContentInput,
 ): Record<string, unknown> {
-    return {
-        msgtype: 'm.audio',
-        body: input.fileName,
+    // Delegates to the shared MSC3245 builder (features/room/voiceMessage)
+    // so the round-reply shape can't drift from the main composer's.
+    return buildVoiceMessageContent({
         url: input.url,
-        info: {
-            mimetype: input.mimeType,
-            size: input.size,
-        },
-        // AudioMessage detection: org.matrix.msc3245.voice flags the
-        // message as a voice note so the waveform renderer kicks in.
-        'org.matrix.msc3245.voice': {},
-        'org.matrix.msc1767.audio': {},
-        'm.relates_to': {
-            'm.in_reply_to': { event_id: input.roundEventId },
-        },
-    };
+        fileName: input.fileName,
+        mimeType: input.mimeType,
+        size: input.size,
+        replyToEventId: input.roundEventId,
+    });
 }
 
 export const useSendVoiceRoundReply = (roomId: string) => {

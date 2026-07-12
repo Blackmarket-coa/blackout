@@ -1,6 +1,8 @@
-import { useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import type { MatrixEvent } from 'matrix-js-sdk';
 import { baseStyles, getInfo, useInViewport, useResolvedMediaSource } from './mediaShared';
+import { useMediaPlaybackRate } from '../../hooks/media/useMediaPlaybackRate';
+import { PLAYBACK_RATES } from './AudioMessage';
 
 interface VideoMessageProps {
     event: MatrixEvent;
@@ -14,6 +16,13 @@ export const VideoMessage = ({ event }: VideoMessageProps) => {
     const [progress, setProgress] = useState(0);
     const [volume, setVolume] = useState(1);
     const info = getInfo(event);
+
+    const getVideoElement = useCallback(() => videoRef.current, []);
+    const { playbackRate, setPlaybackRate } = useMediaPlaybackRate(getVideoElement);
+    const cyclePlaybackRate = useCallback(() => {
+        const idx = PLAYBACK_RATES.indexOf(playbackRate as (typeof PLAYBACK_RATES)[number]);
+        setPlaybackRate(PLAYBACK_RATES[(idx + 1) % PLAYBACK_RATES.length]);
+    }, [playbackRate, setPlaybackRate]);
 
     const poster = useMemo(
         () => (typeof info.thumbnail_url === 'string' ? info.thumbnail_url : undefined),
@@ -88,6 +97,16 @@ export const VideoMessage = ({ event }: VideoMessageProps) => {
                                 setVolume(next);
                             }}
                         />
+
+                        <button
+                            type="button"
+                            onClick={cyclePlaybackRate}
+                            aria-label="Playback speed"
+                            title="Playback speed"
+                            style={{ fontSize: 12, minWidth: 44 }}
+                        >
+                            {playbackRate}×
+                        </button>
 
                         <button
                             type="button"

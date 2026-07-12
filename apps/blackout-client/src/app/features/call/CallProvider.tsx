@@ -81,6 +81,12 @@ interface CallContextValue {
     deafened: boolean;
     cameraEnabled: boolean;
     screenSharing: boolean;
+    /**
+     * The live display-capture stream while screen sharing is active,
+     * null otherwise. Reactive (unlike the internal ref) so preview
+     * surfaces can bind a <video> element to it.
+     */
+    displayStream: MediaStream | null;
     focusUrl: string | null;
     focusStatus: CallFocusResolution['status'];
     focusReason: string;
@@ -178,6 +184,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     const [deafened, setDeafened] = useState(false);
     const [cameraEnabled, setCameraEnabled] = useState(false);
     const [screenSharing, setScreenSharing] = useState(false);
+    const [displayStream, setDisplayStream] = useState<MediaStream | null>(null);
     const [focusUrl, setFocusUrl] = useState<string | null>(null);
     const [focusStatus, setFocusStatus] = useState<CallFocusResolution['status']>('unconfigured');
     const [focusReason, setFocusReason] = useState('not loaded');
@@ -315,6 +322,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
                     return;
                 }
                 activeDisplayStreamRef.current = displayStream;
+                setDisplayStream(displayStream);
                 void activeSessionRef.current?.setLocalMediaStream?.(displayStream);
                 displayStream.getVideoTracks().forEach((track) => {
                     track.addEventListener('ended', () => setScreenSharing(false), { once: true });
@@ -327,6 +335,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
         return () => {
             cancelled = true;
+            setDisplayStream(null);
             const displayStream = activeDisplayStreamRef.current;
             if (!displayStream) return;
             displayStream.getTracks().forEach((track) => track.stop());
@@ -368,6 +377,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         activeDeviceStreamRef.current = null;
         activeDisplayStreamRef.current?.getTracks().forEach((track) => track.stop());
         activeDisplayStreamRef.current = null;
+        setDisplayStream(null);
         setJoined(false);
         setRoomId(null);
         setMembership({});
@@ -464,6 +474,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             deafened,
             cameraEnabled,
             screenSharing,
+            displayStream,
             focusUrl,
             focusStatus,
             focusReason,
@@ -487,6 +498,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             audioLevels,
             cameraEnabled,
             deafened,
+            displayStream,
             e2ee,
             focusReason,
             focusStatus,
