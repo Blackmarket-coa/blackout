@@ -393,6 +393,12 @@ An on-disk audit found this workstream substantially built despite the
   audit view ship). Enforcement — a bot/appservice that *reads*
   `co.bmc.automod` and actuates raid lockdown — remains genuinely external
   (Draupnir sidecar), the only true cross-team dependency left here.
+  **Update (2026-07-12):** the sidecar's deployment manifests now ship in
+  `infra/single-server-baseline/` (Draupnir 3.1.0 compose service +
+  `draupnir/production.yaml.template` + RUNBOOK §11.1 bot/management-room
+  bootstrap, wired to the client console's `co.bmc.draupnir` config event).
+  What's left is the operator step: bot account, token, management room,
+  deploy.
 - **Slowmode: already built + client-enforced** (`co.bmc.slowmode`).
 - **Verification/join gates: shipped (2026-07-11)** — `co.bmc.verification_gate`
   room state event (schema in

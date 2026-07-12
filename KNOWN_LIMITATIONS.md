@@ -74,18 +74,18 @@ For the source-of-truth triage with tier/owner detail see
 
 These are tracked in
 [`docs/architecture/deferred-bodies-schedule-2026-05-01.md`](docs/architecture/deferred-bodies-schedule-2026-05-01.md).
-Workstreams A (Ports 1–5), C, and F (minus stage channels, carved out to a
-Phase 5) are closed; E is closed client-side (only the external Draupnir
-sidecar enforcement remains); B's primitive set has shipped (only incremental
-adoption remains); D's GIF picker has shipped — its voice/video/media-controls
-polish remains post-beta scope.
+Workstreams A (Ports 1–5), C, D, and F are closed (stage channels and the
+LiveKit runtime binding form Phase 5, whose deployment manifests now ship
+in-repo); E is closed client-side with the Draupnir sidecar manifests also
+in-repo (deployment is the remaining operator step); B's primitive set has
+shipped (only incremental adoption remains).
 
 | Workstream | Scope | Status |
 | --- | --- | --- |
 | **B** | `@blackout/ui` v1 primitives (Button/Input/Select/etc.) using `vanilla-extract`. | Primitive set shipped (B1 + B1.1). Incremental production adoption ongoing — 15 files consume the now-real `@blackout/ui/primitives` specifier (MessageComposer, MutualAidPage, coliseum tabs, ProposalCreator, RoleEditor). |
 | **C** | Reactions / threading hardening: `ThreadPanel` slot mount in `panelSlots.tsx`, sidebar `ThreadUnreadBadge` mount, integration coverage. | **Closed (2026-06-13).** `ThreadPanel` wired into the `panelSlots.tsx` `threads` slot, `ThreadUnreadBadgeMount` in `CanopySidebar.tsx`, and the round-trip test landed (`apps/blackout-client/tests/unit/features/threading-parity/workstreamC.roundtrip.test.tsx`). |
 | **D** | Discord parity P2: GIF picker (Giphy), voice/video polish, screen-sharing polish, media player controls. | **Closed (2026-07-12)** except the LiveKit runtime binding, carved to Phase 5 with stage channels. GIF picker shipped in full (Giphy provider + Tenor fallback + per-device recents). Voice messages round-trip: the composer sends `m.audio` + MSC3245 with real waveform/duration metadata (previously fell through as `m.file`), and the timeline player renders transmitted peaks. Pasted/dropped attachments now send with mimetype-inferred msgtypes (inline images/video/audio instead of generic files). Media players gained playback-speed (audio+video) and audio volume controls; screen sharing gained a local preview tile. |
-| **E** | Discord parity P3: custom emoji packs, welcome flow, AutoMod, raid protection, verification gates, slowmode, audit log. | **Closed client-side (2026-07-11).** MSC2545 packs (incl. reactions-picker unification), welcome/onboarding, slowmode, verification/join gates (`co.bmc.verification_gate`: membership-period rule enforced in the composer, account-age rule carried for the server-side enforcer), AutoMod config editor, Draupnir console, mod-action audit log, and the Mjolnir REST backend all ship. Remaining: the external Draupnir sidecar that enforces `co.bmc.automod` / raid lockdown / account-age server-side. |
+| **E** | Discord parity P3: custom emoji packs, welcome flow, AutoMod, raid protection, verification gates, slowmode, audit log. | **Closed client-side (2026-07-11).** MSC2545 packs (incl. reactions-picker unification), welcome/onboarding, slowmode, verification/join gates (`co.bmc.verification_gate`: membership-period rule enforced in the composer, account-age rule carried for the server-side enforcer), AutoMod config editor, Draupnir console, mod-action audit log, and the Mjolnir REST backend all ship. Remaining: deploying the external Draupnir sidecar that enforces `co.bmc.automod` / raid lockdown / account-age server-side — its manifests now ship in `infra/single-server-baseline/` (Draupnir 3.1.0 service + config template + RUNBOOK §11.1 bootstrap), so what's left is the operator step. |
 | **F** | Discord parity P4: theme engine (light/AMOLED), quick switcher, accessibility audit, profile-card polish, advanced notification controls. | **Closed (2026-07-11)** except stage channels, which are carved out to a Phase 5 alongside Workstream D's RTC baseline (see the schedule doc's F status update). |
 
 ---

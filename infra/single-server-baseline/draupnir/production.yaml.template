@@ -1,0 +1,41 @@
+# Draupnir moderation bot configuration for the single-server baseline.
+#
+# Render with the other templated configs (RUNBOOK step 6):
+#   envsubst < draupnir/production.yaml.template > draupnir/production.yaml
+#   chmod 600 draupnir/production.yaml
+#
+# Prerequisites (RUNBOOK "Draupnir moderation sidecar" section): a
+# dedicated bot account on the homeserver, an access token for it, and a
+# private management room the bot and your moderators share.
+#
+# Full option reference:
+# https://the-draupnir-project.github.io/draupnir-documentation/
+
+# In-cluster URL — the bot talks to Synapse over the app network.
+homeserverUrl: "http://synapse:8008"
+# Public URL, used when the bot needs to hand out links.
+rawHomeserverUrl: "https://matrix.theblackout.app"
+
+accessToken: "${DRAUPNIR_ACCESS_TOKEN}"
+
+dataPath: "/data"
+
+# Room ID or alias of the private management room. The Blackout client's
+# moderation console (features/moderation/draupnir) reads the same room:
+# point it there via the `co.bmc.draupnir` account-data event
+# ({"managementRoomId": "..."} or {"managementRoomAlias": "..."}).
+managementRoom: "${DRAUPNIR_MANAGEMENT_ROOM}"
+
+# Enforce in every room the bot is joined to. Moderators invite the bot
+# (and give it moderator power) in the rooms they want protected.
+protectAllJoinedRooms: true
+
+# Only accept invites coming from the management room's members.
+autojoinOnlyIfManager: true
+
+logLevel: "INFO"
+verboseLogging: false
+
+# Never dry-run in production: `noop: true` would log enforcement
+# decisions without acting on them.
+noop: false

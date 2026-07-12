@@ -554,6 +554,34 @@ services:
             - no-new-privileges:true
         <<: *common-logging
 
+    # Draupnir moderation sidecar: enforces the policy lists, protections,
+    # and raid lockdowns that the client's moderation console and the
+    # `co.bmc.automod` config describe. Driven entirely over Matrix via a
+    # private management room — see the RUNBOOK "Draupnir moderation
+    # sidecar" section for the bot-account/management-room bootstrap, and
+    # render draupnir/production.yaml from the template first.
+    draupnir:
+        image: ghcr.io/the-draupnir-project/draupnir:3.1.0
+        container_name: blackout-draupnir
+        restart: unless-stopped
+        command: ['bot', '--draupnir-config', '/data/config/production.yaml']
+        volumes:
+            # Persistent state on /data, with the rendered config file
+            # nested read-only inside it (docker resolves the more
+            # specific mount second).
+            - draupnir-data:/data
+            - ./draupnir/production.yaml:/data/config/production.yaml:ro
+        depends_on:
+            - synapse
+        # Container FS read-only; Draupnir writes only under /data, which
+        # stays writable as a named volume.
+        read_only: true
+        networks:
+            - app
+        security_opt:
+            - no-new-privileges:true
+        <<: *common-logging
+
     coturn:
         image: coturn/coturn:4.6.3-r0
         container_name: blackout-coturn
@@ -605,6 +633,8 @@ volumes:
         name: blackout-synapse-media
     coturn-data:
         name: blackout-coturn-data
+    draupnir-data:
+        name: blackout-draupnir-data
     clickhouse-data:
         name: blackout-clickhouse-data
     clickhouse-logs:

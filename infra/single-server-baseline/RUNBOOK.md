@@ -63,7 +63,8 @@ set +a
 envsubst < synapse/homeserver.yaml.template > synapse/homeserver.yaml
 envsubst < coturn/turnserver.conf.template > coturn/turnserver.conf
 envsubst < livekit/livekit.yaml.template > livekit/livekit.yaml
-chmod 600 synapse/homeserver.yaml coturn/turnserver.conf livekit/livekit.yaml
+envsubst < draupnir/production.yaml.template > draupnir/production.yaml
+chmod 600 synapse/homeserver.yaml coturn/turnserver.conf livekit/livekit.yaml draupnir/production.yaml
 ```
 
 MatrixRTC calls need the `LIVEKIT_*` variables set in `.env` (see
@@ -267,6 +268,39 @@ When abuse indicators spike (signup bursts, login spray, upload floods, federati
 4. **Block**: apply IP/ASN temporary deny rules with expiry notes.
 5. **Recover**: normalize limits after attack subsides; monitor for 24h.
 6. **Review**: publish incident notes, add IoCs, and update limit thresholds/runbook.
+
+## 11.1) Draupnir moderation sidecar
+
+The `draupnir` service enforces policy lists, protections, and raid
+lockdowns; the Blackout client's moderation console
+(`features/moderation/draupnir`) is a front-end for the same management
+room. One-time bootstrap:
+
+1. Register a dedicated bot account (e.g. `@draupnir:theblackout.app`)
+   using a registration token or the admin API, and mint it a
+   non-expiring access token:
+
+```bash
+curl -s -XPOST https://matrix.theblackout.app/_matrix/client/v3/login \
+  -d '{"type":"m.login.password","identifier":{"type":"m.id.user","user":"draupnir"},"password":"<bot password>"}' | jq -r .access_token
+```
+
+2. Create a **private** management room, invite the bot and your
+   moderators, and give the bot moderator power (PL 50+) there and in
+   every room it should protect.
+3. Set `DRAUPNIR_ACCESS_TOKEN` and `DRAUPNIR_MANAGEMENT_ROOM` in `.env`,
+   render the config (step 6 in the pre-deploy checklist), and
+   `docker compose up -d draupnir`.
+4. Point the client console at the same room: each moderator sets the
+   `co.bmc.draupnir` account-data event to
+   `{"managementRoomId": "!...:theblackout.app"}` (or
+   `managementRoomAlias`) — the console's setup screen does this.
+5. Verify: send `!draupnir status` in the management room; the bot
+   should reply. `docker logs blackout-draupnir` shows enforcement
+   decisions.
+
+Draupnir state lives in the `blackout-draupnir-data` volume; include it
+in the backup schedule alongside the Synapse volumes.
 
 ## 12) Verification steps with commands
 
