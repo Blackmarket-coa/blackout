@@ -25,8 +25,9 @@ For the source-of-truth triage with tier/owner detail see
   `PUT /v1/streaming/streams/:streamId/metadata`. The embedded chat (the
   associated Matrix den mounted in-page below the player) is lazy-loaded via
   `EmbeddedDenChat` whenever the stream has a `denId`; the deep link remains
-  as the "open full den" path. Further Workstream D polish (richer overlay
-  controls) is still scoped.
+  as the "open full den" path. The Workstream D media-player polish (playback
+  speed + volume controls) shipped 2026-07-12; any further overlay work rides
+  with the Phase 5 LiveKit runtime binding.
 
 ### Playbook Q1 icons
 - **Where:** Q1 ("How many of us are in this den?") in the playbook

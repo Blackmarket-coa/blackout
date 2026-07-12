@@ -464,6 +464,15 @@ Five of the six F items landed on `claude/stubs-placeholders-4xqu8t`:
   below. They depend on Workstream D's RTC baseline (MatrixRTC + LiveKit group
   surface), which is not started; shipping F's pure-code polish without them
   was the useful cut. Re-scope stage channels together with D.
+  **Update (2026-07-12):** the pure-code half of Phase 5 has landed.
+  `StageSurface` (speakers/audience two-tier layout on the call stack) shipped
+  earlier than this note assumed, and the raise-hand slice is now in:
+  `co.bmc.stage.hand` timeline signals (`features/canopy/stageHands.ts` —
+  latest-per-sender fold, moderator `for` lowering at PL ≥ 50, speakers
+  auto-cleared), an oldest-first queue with moderator Lower controls, and ✋
+  badges on audience avatars. What remains of Phase 5 is the infra half:
+  the real LiveKit runtime binding, which also unlocks *enforced*
+  listen-only audience (today the speaker/audience split is presentational).
 
 ### Scope
 
