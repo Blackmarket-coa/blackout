@@ -68,6 +68,7 @@ import {
     buildVoiceMessageContent,
     type VoiceNoteMetadata,
 } from './voiceMessage';
+import { buildAttachmentContent, measureImageAttachment } from './attachmentContent';
 
 const MAX_SUGGESTIONS = 8;
 const MAX_MESSAGE_LENGTH = 8000;
@@ -1030,7 +1031,23 @@ export const MessageComposer = ({
                 ? { expiresAtMs: Date.now() + 24 * 60 * 60 * 1000, maxViews: 1 }
                 : null;
             for (const file of attachments) {
-                await sendMedia(file, { ephemeral: ephemeralPolicy });
+                // Images are measured up front so the m.image content can
+                // carry w/h; the msgtype is inferred from the mimetype so
+                // pasted/dropped media renders inline instead of as m.file.
+                const dims = file.type.startsWith('image/')
+                    ? await measureImageAttachment(file)
+                    : undefined;
+                await sendMedia(file, {
+                    ephemeral: ephemeralPolicy,
+                    buildContent: (url) =>
+                        buildAttachmentContent({
+                            url,
+                            fileName: file.name,
+                            mimeType: file.type,
+                            size: file.size,
+                            dims,
+                        }),
+                });
             }
             if (voiceAttachment) {
                 // Voice notes send as m.audio + MSC3245 (not the generic

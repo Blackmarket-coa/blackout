@@ -295,6 +295,26 @@ L (5–7 days). Reactions and threading can ship as two PRs.
 
 Per `discord_parity_blueprint.md` §8 phased roadmap weeks 5–8.
 
+### Status update — 2026-07-12: CLOSED (RTC baseline carved to Phase 5)
+
+All four exit criteria are met on the pure-code side:
+
+- **Drag-drop + paste-image**: both handlers ship in `MessageComposer`
+  (`onDropFiles` / `onPaste` → `prepareAttachments`), and attachments now send
+  with mimetype-inferred msgtypes via `features/room/attachmentContent.ts`
+  (m.image with measured w/h, m.video, m.audio; m.file fallback) instead of the
+  previous everything-as-`m.file` behavior — pasted images render inline.
+- **Voice messages**: full record → preview → cancel → send → inline-playback
+  loop (see the voice-messages scope note below).
+- **GIF picker**: shipped in full (Giphy + Tenor fallback + per-device recents).
+- **RTC**: MatrixRTC + Element Call integration, call controls (mute / camera /
+  screen-share + preview / deafen / PTT / device pickers), voice-channel UI,
+  call rail, E2EE modes, and health probes all ship (`features/call/`). The
+  remaining piece — binding a real LiveKit runtime instead of the duck-typed
+  `client.matrixRTC` session with degraded fallback — is **infra-coupled** and
+  was re-scoped to Phase 5 alongside stage channels (see the Workstream F
+  status update).
+
 ### Scope
 
 - Rich-media uploads: image / video / audio / file with preview + drag-drop. Largely covered by Workstream A Port 4 (BKL-006 media pipeline rewire) plus UI Primitives v1 `Modal` / `Sheet`.
