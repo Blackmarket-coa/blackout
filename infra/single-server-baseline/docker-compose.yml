@@ -546,6 +546,7 @@ services:
         # surfaces failures via 502s on /livekit/jwt.
         depends_on:
             - livekit
+        read_only: true
         networks:
             - edge
             - app
