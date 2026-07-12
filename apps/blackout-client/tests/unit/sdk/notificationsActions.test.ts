@@ -10,6 +10,7 @@ import {
 import {
     buildPresenceDigest,
     createNotificationActions,
+    resolveEffectiveNotificationRule,
 } from '@blackout/sdk';
 import type { ApiClient, ApiRequest } from '@blackout/sdk';
 
@@ -167,5 +168,70 @@ describe('buildPresenceDigest', () => {
 
     it('clamps a negative windowMinutes to zero (no entries qualify)', () => {
         expect(buildPresenceDigest(activities, now, { windowMinutes: -10 })).toEqual([]);
+    });
+});
+
+describe('per-room notification rule scoping (Workstream F)', () => {
+    const wide: NotificationRulePayload = {
+        feature: 'mentions',
+        category: 'room',
+        hardCapPerDay: 50,
+        cooldownMinutes: 5,
+    };
+    const scoped: NotificationRulePayload = {
+        ...wide,
+        roomId: '!busy:example.org',
+        hardCapPerDay: 3,
+    };
+
+    it('deleteNotificationRule appends the roomId query only when scoped', async () => {
+        const { apiClient, calls } = buildClient(undefined);
+        const actions = createNotificationActions(apiClient);
+
+        await actions.deleteNotificationRule('mentions', 'room');
+        await actions.deleteNotificationRule('mentions', 'room', '!busy:example.org');
+
+        expect(calls[0]?.path).toBe('/v1/notifications/rules/mentions/room');
+        expect(calls[1]?.path).toBe(
+            `/v1/notifications/rules/mentions/room?roomId=${encodeURIComponent(
+                '!busy:example.org'
+            )}`
+        );
+    });
+
+    it('resolveEffectiveNotificationRule prefers the room override', () => {
+        expect(
+            resolveEffectiveNotificationRule(
+                [wide, scoped],
+                'mentions',
+                'room',
+                '!busy:example.org'
+            )
+        ).toBe(scoped);
+    });
+
+    it('falls back to the category-wide rule for other rooms and no-room lookups', () => {
+        expect(
+            resolveEffectiveNotificationRule(
+                [wide, scoped],
+                'mentions',
+                'room',
+                '!quiet:example.org'
+            )
+        ).toBe(wide);
+        expect(resolveEffectiveNotificationRule([wide, scoped], 'mentions', 'room')).toBe(wide);
+    });
+
+    it('returns null when no rule matches the feature/category', () => {
+        expect(resolveEffectiveNotificationRule([wide], 'reactions', 'room')).toBeNull();
+        expect(
+            resolveEffectiveNotificationRule([scoped], 'mentions', 'dm', '!busy:example.org')
+        ).toBeNull();
+    });
+
+    it('a room-scoped rule alone does not govern other rooms', () => {
+        expect(
+            resolveEffectiveNotificationRule([scoped], 'mentions', 'room', '!quiet:example.org')
+        ).toBeNull();
     });
 });

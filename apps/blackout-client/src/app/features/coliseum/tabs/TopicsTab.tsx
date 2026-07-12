@@ -5,7 +5,7 @@ import {
     type ColiseumTopicCategoryKey,
 } from '@blackout/core';
 import { useAtom } from 'jotai';
-import { EmptyState } from '../../../../../../../packages/ui/src/primitives';
+import { EmptyState } from '@blackout/ui/primitives';
 import { useColiseumTopics, type ColiseumScopeQuery } from '../hooks/useColiseumTopics';
 import {
     coliseumReturnTabAtom,

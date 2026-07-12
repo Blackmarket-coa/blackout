@@ -31,11 +31,25 @@ export const Popover = ({
             if (controlledOpen === undefined) setInternalOpen(next);
             onOpenChange?.(next);
         },
-        [controlledOpen, onOpenChange],
+        [controlledOpen, onOpenChange]
     );
 
     const close = React.useCallback(() => setOpen(false), [setOpen]);
     useDismiss(open, wrapperRef, close);
+
+    const surfaceRef = React.useRef<HTMLDivElement>(null);
+
+    // Non-modal dialog focus contract: move focus into the surface on open,
+    // hand it back to whatever opened the popover on close. No trap — Tab is
+    // allowed to leave a non-modal dialog.
+    React.useEffect(() => {
+        if (!open) return;
+        const previouslyFocused = document.activeElement as HTMLElement | null;
+        surfaceRef.current?.focus();
+        return () => {
+            previouslyFocused?.focus?.();
+        };
+    }, [open]);
 
     const triggerEl = React.cloneElement(trigger, {
         onClick: (event: React.MouseEvent) => {
@@ -50,7 +64,12 @@ export const Popover = ({
         <span ref={wrapperRef} className={cx(styles.anchor, className)}>
             {triggerEl}
             {open ? (
-                <div role="dialog" className={cx(styles.surface, styles.placements[placement])}>
+                <div
+                    ref={surfaceRef}
+                    role="dialog"
+                    tabIndex={-1}
+                    className={cx(styles.surface, styles.placements[placement])}
+                >
                     {children}
                 </div>
             ) : null}

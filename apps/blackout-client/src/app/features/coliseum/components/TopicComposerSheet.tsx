@@ -1,6 +1,6 @@
 import React, { useCallback, useState, type CSSProperties } from 'react';
 import { COLISEUM_TOPIC_CATEGORIES, type ColiseumTopicCategoryKey } from '@blackout/core';
-import { Sheet } from '../../../../../../../packages/ui/src/primitives';
+import { Sheet } from '@blackout/ui/primitives';
 import { coliseumSheetTheme } from '../coliseumArenaTheme.css';
 import { createColiseumTopic } from '../coliseumClient';
 import type { ColiseumScopeQuery } from '../hooks/useColiseumTopics';

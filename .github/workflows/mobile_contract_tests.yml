@@ -40,3 +40,6 @@ jobs:
 
       - name: Run mobile harness tests
         run: pnpm web:test:mobile
+
+      - name: Run notification-routing harness (Capacitor)
+        run: pnpm --filter blackout-mobile test:unit

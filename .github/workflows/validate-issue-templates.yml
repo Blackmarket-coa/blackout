@@ -1,0 +1,41 @@
+name: Validate issue templates
+
+# Parses every YAML file under .github/ISSUE_TEMPLATE/ and
+# .github/DISCUSSION_TEMPLATE/ on PRs that touch those directories (or this
+# workflow), failing if any file is not valid YAML. This is a lightweight
+# parse check — it does NOT validate the GitHub issue-form schema, only that
+# the files load. A malformed template silently breaks the "New issue" /
+# "New discussion" chooser in the GitHub UI, so catching it at PR time keeps
+# the seeded-issue + tester onboarding flow working.
+
+on:
+    pull_request:
+        paths:
+            - '.github/ISSUE_TEMPLATE/**'
+            - '.github/DISCUSSION_TEMPLATE/**'
+            - '.github/workflows/validate-issue-templates.yml'
+
+permissions:
+    contents: read
+
+jobs:
+    validate-templates:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+
+            - name: Set up Node
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+
+            # Installed into an isolated prefix so npm doesn't try to resolve
+            # the pnpm workspace root (which it can't parse).
+            - name: Install a lightweight YAML parser
+              run: npm install --no-save --prefix "$RUNNER_TEMP/yaml-validator" js-yaml@4
+
+            - name: Parse every template YAML
+              run: node .github/workflows/scripts/validate-issue-templates.mjs
+              env:
+                  NODE_PATH: ${{ runner.temp }}/yaml-validator/node_modules

@@ -295,11 +295,52 @@ L (5–7 days). Reactions and threading can ship as two PRs.
 
 Per `discord_parity_blueprint.md` §8 phased roadmap weeks 5–8.
 
+### Status update — 2026-07-12: CLOSED (RTC baseline carved to Phase 5)
+
+All four exit criteria are met on the pure-code side:
+
+- **Drag-drop + paste-image**: both handlers ship in `MessageComposer`
+  (`onDropFiles` / `onPaste` → `prepareAttachments`), and attachments now send
+  with mimetype-inferred msgtypes via `features/room/attachmentContent.ts`
+  (m.image with measured w/h, m.video, m.audio; m.file fallback) instead of the
+  previous everything-as-`m.file` behavior — pasted images render inline.
+- **Voice messages**: full record → preview → cancel → send → inline-playback
+  loop (see the voice-messages scope note below).
+- **GIF picker**: shipped in full (Giphy + Tenor fallback + per-device recents).
+- **RTC**: MatrixRTC + Element Call integration, call controls (mute / camera /
+  screen-share + preview / deafen / PTT / device pickers), voice-channel UI,
+  call rail, E2EE modes, and health probes all ship (`features/call/`). The
+  remaining piece — binding a real LiveKit runtime instead of the duck-typed
+  `client.matrixRTC` session with degraded fallback — is **infra-coupled** and
+  was re-scoped to Phase 5 alongside stage channels (see the Workstream F
+  status update).
+
 ### Scope
 
 - Rich-media uploads: image / video / audio / file with preview + drag-drop. Largely covered by Workstream A Port 4 (BKL-006 media pipeline rewire) plus UI Primitives v1 `Modal` / `Sheet`.
 - Voice messages: capacitor-bridged native recording (already prototyped in `MessageComposer.startVoiceRecording`); needs polished waveform UI, server upload, playback inline.
+  **Status update (2026-07-12):** the record → preview → cancel → send → inline-playback
+  loop is closed. The composer now consumes the shared `useVoiceRecorder` hook (inline
+  duplicate removed) and sends voice notes as `m.audio` + `org.matrix.msc3245.voice`
+  via the shared `features/room/voiceMessage.ts` builder (previously they fell through
+  the legacy adapter as `m.file` and never hit the waveform player). Real peaks are
+  computed at attach time (WebAudio → 48 RMS buckets, 0..1024) and transmitted in
+  `org.matrix.msc1767.audio`; `AudioMessage` renders transmitted peaks and falls back
+  to placeholder bars for old events. Media players gained speed (audio+video) and
+  audio-volume controls (`useMediaPlaybackRate` is now consumed). Screen sharing gained
+  a local `ScreenSharePreview` tile in `VoiceChannel` bound to the reactive
+  `displayStream` on the call context.
 - GIF picker: Tenor or Giphy integration (3rd-party, requires API key + service config).
+  **Status update (2026-07-11):** shipped with **Giphy as the decided provider** (open
+  question 2 below). `packages/api/src/routes/giphy.ts` +
+  `integrations/giphy/client.ts` proxy Giphy behind the same wire contract as the
+  existing Tenor proxy (search/featured/binary, server-held key, SSRF-guarded CDN
+  proxy); the client's provider-agnostic `gifClient.ts` prefers Giphy and falls back
+  to Tenor when `GIPHY_API_KEY` is unset, with provider-aware attribution in the
+  picker panel. Send-as-image + search-as-you-type were already live via the Tenor
+  slice, and per-device recents landed alongside (localStorage-backed
+  `gifRecents.ts`, Recents section in the picker) — the GIF-picker exit criteria
+  are met in full.
 - 1:1 RTC baseline: MatrixRTC + LiveKit signal — partial today; needs canonical-client launcher (Port 4 covers Element Call) and call-state UI.
 - Group RTC baseline: same stack, larger UX surface (call rail, screen-share preview).
 
@@ -327,6 +368,40 @@ XL (~3–4 weeks).
 Per `discord_parity_blueprint.md` §8 weeks 9–12. Covers custom-emoji /
 sticker packs, onboarding/welcome flow, AutoMod, raid protection, audit
 tooling.
+
+### Status update — 2026-07-11
+
+An on-disk audit found this workstream substantially built despite the
+"scoped, not started" status below; two gaps were closed on
+`claude/stubs-placeholders-4xqu8t`:
+
+- **Custom emoji/stickers (MSC2545): DONE.** Full `im.ponies` plugin, pack
+  CRUD UI (user/room/global), and composer emoji board already existed. The
+  one open seam — the reactions picker only read the current room's state,
+  missing user/global packs — is closed: `useReactionCustomEmoji` resolves
+  through `useRelevantImagePacks` with room-state entries winning shortcode
+  conflicts.
+- **Welcome/onboarding: already built** (`co.bmc.welcome` /
+  `co.bmc.onboarding` events, `WelcomeEditor`, `OnboardingWizard`,
+  account-data gating).
+- **Mjolnir UI (BKL-009): backend landed.** The `/v1/moderation/mjolnir/*`
+  REST surface the SDK targeted never existed in `packages/api`; it now does
+  (banlists + protections module, per-subject store, changed-event
+  envelopes).
+- **AutoMod / raid protection: config surfaces already built**
+  (`AutoModPanel` writes `co.bmc.automod`; Draupnir console + `ModActionLog`
+  audit view ship). Enforcement — a bot/appservice that *reads*
+  `co.bmc.automod` and actuates raid lockdown — remains genuinely external
+  (Draupnir sidecar), the only true cross-team dependency left here.
+- **Slowmode: already built + client-enforced** (`co.bmc.slowmode`).
+- **Verification/join gates: shipped (2026-07-11)** — `co.bmc.verification_gate`
+  room state event (schema in
+  `apps/blackout-client/src/app/features/room/verificationGate.ts`, mirroring
+  the slowmode pattern): a minimum-membership-period rule enforced client-side
+  in the composer, plus a minimum-account-age rule carried in the same config
+  for the server-side enforcer (clients cannot observe account creation time —
+  same appservice bucket as `co.bmc.automod`'s newAccountRestrictions). Settings
+  editor (`RoomVerificationGate`) sits next to Slow Mode in room settings.
 
 ### Scope
 
@@ -358,6 +433,46 @@ XL (~4 weeks). AutoMod alone is L; depends heavily on appservice readiness.
 ## Workstream F — Discord Parity Phase 4 (polish + parity)
 
 Per `discord_parity_blueprint.md` §8 weeks 13–16. Closing pass.
+
+### Status update — 2026-07-11
+
+Five of the six F items landed on `claude/stubs-placeholders-4xqu8t`:
+
+- **Quick switcher — recent-messages source: DONE.** `collectRecentMessages`
+  taps each room's live timeline (last-N `m.room.message`, per-room + total
+  caps), feeds `buildQuickSwitcherIndex`, rebuilds on `Room.timeline`, and a
+  new `Messages` activate branch opens the room via the mention-inbox jump
+  path (`openRoomWithContext` → `roomJumpTargetEventIdAtom`).
+- **Themes — no-flash boot: DONE.** `index.html` pre-hydration guard paints
+  the persisted theme (light_grove / amoled_night / legacy aliases) before
+  first paint; `applyThemeToRoot` clears the boot seeds when the real
+  vanilla-extract class lands. Parity + behavior suites lock the inline map
+  to `theme-engine.ts`.
+- **Accessibility — overlay primitives: DONE.** `@blackout/ui` gains a
+  dependency-free `useFocusTrap` (Modal/Sheet), Menu focus-restore + Home/End,
+  Tooltip Escape, Popover non-modal focus contract, tone-aware Toast live
+  regions. 10-case a11y suite.
+- **Profiles: DONE.** Server-stamped immutable `memberSince` on the profile
+  record, exposed on the public projection and rendered on ProfilePage +
+  MiniProfile ("Member since …").
+- **Advanced notification controls: DONE.** `NotificationRulePayload.roomId`
+  (protocol), the previously-missing `/v1/notifications/rules` backend
+  (per-subject store, room-scoped keys), SDK `roomId` on delete plus
+  `resolveEffectiveNotificationRule` precedence helper, and a room-override
+  field in the rules editor.
+- **Stage channels: CARVED OUT to a Phase 5** — resolving open question Q4
+  below. They depend on Workstream D's RTC baseline (MatrixRTC + LiveKit group
+  surface), which is not started; shipping F's pure-code polish without them
+  was the useful cut. Re-scope stage channels together with D.
+  **Update (2026-07-12):** the pure-code half of Phase 5 has landed.
+  `StageSurface` (speakers/audience two-tier layout on the call stack) shipped
+  earlier than this note assumed, and the raise-hand slice is now in:
+  `co.bmc.stage.hand` timeline signals (`features/canopy/stageHands.ts` —
+  latest-per-sender fold, moderator `for` lowering at PL ≥ 50, speakers
+  auto-cleared), an oldest-first queue with moderator Lower controls, and ✋
+  badges on audience avatars. What remains of Phase 5 is the infra half:
+  the real LiveKit runtime binding, which also unlocks *enforced*
+  listen-only audience (today the speaker/audience split is presentational).
 
 ### Scope
 
@@ -546,7 +661,10 @@ suite.
 ## Open scope questions for the next session
 
 1. **UI Primitives styling:** vanilla-extract vs CSS-in-JS vs pure CSS? (Recommended: vanilla-extract for consistency with `apps/blackout-client`.)
-2. **GIF picker provider:** Tenor or Giphy? (Affects API contract + ToS.)
+2. **GIF picker provider:** Tenor or Giphy? (Affects API contract + ToS.) —
+   **Resolved 2026-07-11: Giphy**, proxied at `/v1/integrations/giphy` with the
+   Tenor proxy retained as a fallback for deployments that only hold a Tenor key
+   (the client resolves Giphy → Tenor at runtime; see the D scope status update).
 3. **AutoMod appservice ownership:** which team stands up the policy-engine appservice that Workstream E depends on?
-4. **Stage channels deferral:** worth landing Phase 4 with stage channels, or carve them out as Phase 5?
+4. **Stage channels deferral:** worth landing Phase 4 with stage channels, or carve them out as Phase 5? — **Resolved 2026-07-11: carved out as Phase 5**, re-scoped alongside Workstream D's RTC baseline (see the F status update above).
 5. **Should Workstream B (UI primitives) split into v1.0 (essential 8 primitives) and v1.1 (full set)?** v1.0 is L, v1.1 is L on top.

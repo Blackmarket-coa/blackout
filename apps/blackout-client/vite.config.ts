@@ -13,6 +13,14 @@ export default defineConfig({
         alias: {
             '@blackout/sdk': path.resolve(rootDir, '../../packages/blackout-sdk/src/index.ts'),
             '@blackout/design': path.resolve(rootDir, '../../packages/design/src/index.ts'),
+            // Primitives are consumed from source so the vanilla-extract plugin
+            // compiles their .css.ts files (the package's dist export would
+            // bypass it). This alias makes the README's canonical specifier
+            // real instead of deep ../../ relative paths.
+            '@blackout/ui/primitives': path.resolve(
+                rootDir,
+                '../../packages/ui/src/primitives/index.ts'
+            ),
         },
         // Ensure `@blackout/ui` primitives (consumed from source) share the
         // app's single React instance rather than the ui package's own react.

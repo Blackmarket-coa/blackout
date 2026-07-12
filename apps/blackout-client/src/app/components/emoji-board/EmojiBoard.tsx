@@ -51,7 +51,7 @@ import {
     EmojiBoardLayout,
     TenorPanel,
 } from './components';
-import { TenorPickerItem } from '../../features/room/tenorClient';
+import { GifPickerItem } from '../../features/room/gifClient';
 import { EmojiBoardTab, EmojiType } from './types';
 import { VirtualTile } from '../virtualizer';
 
@@ -396,7 +396,7 @@ type EmojiBoardProps = {
     onCustomEmojiSelect?: (mxc: string, shortcode: string) => void;
     onStickerSelect?: (mxc: string, shortcode: string, label: string) => void;
     onGifSelect?: (mxc: string, shortcode: string, label: string) => void;
-    onTenorGifSelect?: (item: TenorPickerItem, query: string) => void;
+    onTenorGifSelect?: (item: GifPickerItem, query: string) => void;
     allowTextCustomEmoji?: boolean;
     addToRecentEmoji?: boolean;
 };
@@ -534,11 +534,13 @@ export function EmojiBoard({
         }
     }, [tab, virtualizer, groups]);
 
-    // Tenor takes over the Gif tab when:
+    // The online GIF panel (Giphy preferred, Tenor fallback) takes over
+    // the Gif tab when:
     //   - the host provides an `onTenorGifSelect` handler, AND
-    //   - the server-side proxy hasn't reported itself disabled (503).
-    // When false (Tenor not wired or 503), we fall back to the existing
-    // user-pack-based Gif grid + "No GIF Packs!" empty state.
+    //   - the panel hasn't reported every provider disabled (503 from
+    //     both proxies — see gifClient.ts).
+    // When false (not wired or all disabled), we fall back to the
+    // existing user-pack-based Gif grid + "No GIF Packs!" empty state.
     const tenorActive =
         tab === EmojiBoardTab.Gif && !!onTenorGifSelect && !tenorDisabled;
 

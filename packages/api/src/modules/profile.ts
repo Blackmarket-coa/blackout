@@ -93,6 +93,7 @@ function createProfileRouter() {
             avatarUrl: member.avatarUrl,
             primaryRole: member.primaryRole,
             roleBadges: member.roleBadges,
+            memberSince: member.memberSince,
             profile: {
                 bio: p.bio,
                 pronouns: p.pronouns,
@@ -114,8 +115,8 @@ function createProfileRouter() {
         const { userId } = c.req.param();
         if (!subjectOwnsProfile(c, userId)) {
             return c.json(
-                { code: 'forbidden', message: 'Cannot edit another user\'s profile' },
-                403,
+                { code: 'forbidden', message: "Cannot edit another user's profile" },
+                403
             );
         }
 
@@ -164,10 +165,7 @@ function createProfileRouter() {
             });
             return c.json({ ...post, event }, 201);
         } catch (error) {
-            return c.json(
-                { code: 'invalid_request', message: (error as Error).message },
-                400,
-            );
+            return c.json({ code: 'invalid_request', message: (error as Error).message }, 400);
         }
     });
 

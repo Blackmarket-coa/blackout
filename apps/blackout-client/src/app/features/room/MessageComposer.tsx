@@ -28,7 +28,7 @@ import {
     Button,
     IconButton,
     Stack,
-} from '../../../../../../packages/ui/src/primitives';
+} from '@blackout/ui/primitives';
 import { useLegacyRoomMembersAdapter as useRoomMembers } from '../../plugins/matrix-adapters/hooks/useLegacyRoomAdapter';
 import { useNavigationSpaceTree } from '../../plugins/navigation';
 import {
@@ -56,6 +56,19 @@ import {
     evaluateSlowmode,
     parseSlowmodeConfig,
 } from './slowmode';
+import {
+    VERIFICATION_GATE_STATE_EVENT_TYPE,
+    evaluateVerificationGate,
+    formatGateWait,
+    parseVerificationGateConfig,
+} from './verificationGate';
+import { useVoiceRecorder } from '../../hooks/useVoiceRecorder';
+import {
+    analyzeVoiceNote,
+    buildVoiceMessageContent,
+    type VoiceNoteMetadata,
+} from './voiceMessage';
+import { buildAttachmentContent, measureImageAttachment } from './attachmentContent';
 
 const MAX_SUGGESTIONS = 8;
 const MAX_MESSAGE_LENGTH = 8000;
@@ -610,8 +623,7 @@ export const MessageComposer = ({
     const [voteEnabled, setVoteEnabled] = useState(false);
     const [voteDurationHours, setVoteDurationHours] = useState(24);
     const [voiceAttachment, setVoiceAttachment] = useState<File | null>(null);
-    const [voiceRecording, setVoiceRecording] = useState(false);
-    const [voiceRecordingSupported, setVoiceRecordingSupported] = useState(false);
+    const [voiceMetadata, setVoiceMetadata] = useState<VoiceNoteMetadata>({});
     const [voiceEnabled, setVoiceEnabled] = useState(false);
     const [signatureEnabled, setSignatureEnabled] = useState(false);
     const [commandEnabled, setCommandEnabled] = useState(false);
@@ -631,9 +643,7 @@ export const MessageComposer = ({
     const featureMenuRef = useRef<HTMLDivElement | null>(null);
     const attachmentInputRef = useRef<HTMLInputElement | null>(null);
     const voiceInputRef = useRef<HTMLInputElement | null>(null);
-    const recorderRef = useRef<MediaRecorder | null>(null);
-    const recorderChunksRef = useRef<Blob[]>([]);
-    const recorderStreamRef = useRef<MediaStream | null>(null);
+    const voiceMetadataForRef = useRef<File | null>(null);
     const editableRef = useRef<HTMLDivElement | null>(null);
     const attachPhoto = useAttachPhoto({ setAttachments, attachmentInputRef });
 
@@ -704,61 +714,38 @@ export const MessageComposer = ({
         return () => window.removeEventListener('keydown', onShortcut);
     }, []);
 
-    useEffect(() => {
-        setVoiceRecordingSupported(
-            typeof window !== 'undefined' &&
-                !!navigator.mediaDevices?.getUserMedia &&
-                typeof MediaRecorder !== 'undefined'
-        );
-        return () => {
-            recorderRef.current?.stop();
-            recorderStreamRef.current?.getTracks().forEach((track) => track.stop());
-        };
-    }, []);
-
     const recordRecentAction = useCallback((actionLabel: string) => {
         setRecentActions((current) =>
             [actionLabel, ...current.filter((item) => item !== actionLabel)].slice(0, 3)
         );
     }, []);
 
-    const startVoiceRecording = useCallback(async () => {
-        if (!voiceRecordingSupported || voiceRecording) return;
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        const recorder = new MediaRecorder(stream);
-        recorderChunksRef.current = [];
-        recorder.ondataavailable = (event) => {
-            if (event.data.size > 0) recorderChunksRef.current.push(event.data);
-        };
-        recorder.onstop = () => {
-            const voiceBlob = new Blob(recorderChunksRef.current, {
-                type: recorder.mimeType || 'audio/webm',
-            });
-            const extension = voiceBlob.type.includes('ogg')
-                ? 'ogg'
-                : voiceBlob.type.includes('mp4')
-                ? 'm4a'
-                : 'webm';
-            const voiceFile = new File([voiceBlob], `voice-note-${Date.now()}.${extension}`, {
-                type: voiceBlob.type,
-            });
-            setVoiceAttachment(voiceFile);
-            setVoiceEnabled(true);
-            recorderStreamRef.current?.getTracks().forEach((track) => track.stop());
-            recorderStreamRef.current = null;
-            recorderRef.current = null;
-            setVoiceRecording(false);
-        };
-        recorderRef.current = recorder;
-        recorderStreamRef.current = stream;
-        recorder.start();
-        setVoiceRecording(true);
-    }, [voiceRecording, voiceRecordingSupported]);
+    // Shared recorder hook — the same lifecycle the round-reply surface
+    // uses (it was extracted from this file; the inline copy is gone).
+    const {
+        supported: voiceRecordingSupported,
+        recording: voiceRecording,
+        file: recordedVoiceFile,
+        start: startVoiceRecording,
+        stop: stopVoiceRecording,
+        reset: resetVoiceRecorder,
+    } = useVoiceRecorder();
 
-    const stopVoiceRecording = useCallback(() => {
-        if (!voiceRecording) return;
-        recorderRef.current?.stop();
-    }, [voiceRecording]);
+    const attachVoiceNote = useCallback((voiceFile: File) => {
+        setVoiceAttachment(voiceFile);
+        setVoiceEnabled(true);
+        setVoiceMetadata({});
+        // Analysis is best-effort and async; the ref guards against a
+        // stale result landing after the user re-records or replaces.
+        voiceMetadataForRef.current = voiceFile;
+        void analyzeVoiceNote(voiceFile).then((meta) => {
+            if (voiceMetadataForRef.current === voiceFile) setVoiceMetadata(meta);
+        });
+    }, []);
+
+    useEffect(() => {
+        if (recordedVoiceFile) attachVoiceNote(recordedVoiceFile);
+    }, [recordedVoiceFile, attachVoiceNote]);
 
     const roomIsGovernance = useMemo(() => /gov|vote|proposal|council|dao/i.test(roomId), [roomId]);
     const primaryTier2Actions = useMemo(
@@ -900,6 +887,31 @@ export const MessageComposer = ({
         if (!plainBody && attachments.length === 0 && !voiceAttachment) return;
         if (plainBody.length > MAX_MESSAGE_LENGTH) return;
 
+        // Verification gate: block brand-new members per the room's
+        // co.bmc.verification_gate config (Discord-parity verification
+        // level). Edits aren't new posts, so they're never gated.
+        if (room && target?.mode !== 'edit') {
+            const member = room.getMember(matrixClient.getUserId() ?? '');
+            const gateContent = room.currentState
+                .getStateEvents(VERIFICATION_GATE_STATE_EVENT_TYPE as never, '')
+                ?.getContent<Record<string, unknown>>();
+            const gateVerdict = evaluateVerificationGate({
+                config: parseVerificationGateConfig(gateContent),
+                joinedAtTs: member?.events?.member?.getTs() ?? null,
+                // Account creation time isn't visible client-side; the
+                // account-age rule is enforced by the server-side enforcer.
+                accountCreatedTs: null,
+                now: Date.now(),
+                userPowerLevel: member?.powerLevel ?? 0,
+            });
+            if (!gateVerdict.allowed) {
+                setSlowmodeNotice(
+                    `This den requires a short membership period before posting — try again in ${formatGateWait(gateVerdict.retryAfterMs)}.`
+                );
+                return;
+            }
+        }
+
         // Slow mode: throttle non-exempt senders per the room's co.bmc.slowmode
         // config. Edits aren't new posts, so they're never throttled.
         if (room && target?.mode !== 'edit') {
@@ -976,6 +988,8 @@ export const MessageComposer = ({
                     clearComposer();
                     setAttachments([]);
                     setVoiceAttachment(null);
+                    setVoiceMetadata({});
+                    voiceMetadataForRef.current = null;
                     setStegoAttachment(null);
                     setScheduledEnabled(false);
                     onSent?.();
@@ -1017,10 +1031,41 @@ export const MessageComposer = ({
                 ? { expiresAtMs: Date.now() + 24 * 60 * 60 * 1000, maxViews: 1 }
                 : null;
             for (const file of attachments) {
-                await sendMedia(file, { ephemeral: ephemeralPolicy });
+                // Images are measured up front so the m.image content can
+                // carry w/h; the msgtype is inferred from the mimetype so
+                // pasted/dropped media renders inline instead of as m.file.
+                const dims = file.type.startsWith('image/')
+                    ? await measureImageAttachment(file)
+                    : undefined;
+                await sendMedia(file, {
+                    ephemeral: ephemeralPolicy,
+                    buildContent: (url) =>
+                        buildAttachmentContent({
+                            url,
+                            fileName: file.name,
+                            mimeType: file.type,
+                            size: file.size,
+                            dims,
+                        }),
+                });
             }
             if (voiceAttachment) {
-                await sendMedia(voiceAttachment, { ephemeral: ephemeralPolicy });
+                // Voice notes send as m.audio + MSC3245 (not the generic
+                // m.file fallback) so the timeline's waveform player
+                // renders them; buildVoiceMessageContent is the same
+                // builder the round-reply surface uses.
+                await sendMedia(voiceAttachment, {
+                    ephemeral: ephemeralPolicy,
+                    buildContent: (url) =>
+                        buildVoiceMessageContent({
+                            url,
+                            fileName: voiceAttachment.name,
+                            mimeType: voiceAttachment.type,
+                            size: voiceAttachment.size,
+                            durationMs: voiceMetadata.durationMs,
+                            waveform: voiceMetadata.waveform,
+                        }),
+                });
             }
 
             if (stegoAttachment) {
@@ -1055,6 +1100,9 @@ export const MessageComposer = ({
             clearComposer();
             setAttachments([]);
             setVoiceAttachment(null);
+            setVoiceMetadata({});
+            voiceMetadataForRef.current = null;
+            resetVoiceRecorder();
             setStegoAttachment(null);
             setEphemeralEnabled(false);
             onSent?.();
@@ -1084,6 +1132,8 @@ export const MessageComposer = ({
         target,
         value,
         voiceAttachment,
+        voiceMetadata,
+        resetVoiceRecorder,
         voteDurationHours,
         voteEnabled,
     ]);
@@ -1298,8 +1348,7 @@ export const MessageComposer = ({
                         onChange={(event) => {
                             const voiceFile = event.currentTarget.files?.[0];
                             if (!voiceFile) return;
-                            setVoiceAttachment(voiceFile);
-                            setVoiceEnabled(true);
+                            attachVoiceNote(voiceFile);
                             event.currentTarget.value = '';
                         }}
                     />
@@ -1687,6 +1736,9 @@ export const MessageComposer = ({
                                     onClick={() => {
                                         setVoiceEnabled(false);
                                         setVoiceAttachment(null);
+                                        setVoiceMetadata({});
+                                        voiceMetadataForRef.current = null;
+                                        resetVoiceRecorder();
                                     }}
                                     style={{
                                         border: 'none',

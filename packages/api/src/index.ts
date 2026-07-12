@@ -18,6 +18,8 @@ import activeDefenseRoutes from './routes/activedefense';
 import canaryTripwireRoutes from './routes/canaryTripwire';
 import meshRoutes from './routes/mesh';
 import marketplaceRoutes from './routes/marketplace';
+import notificationRoutes from './routes/notifications';
+import { assertPlaceholderMarketplacesDisabledForProduction } from './integrations/marketplace';
 import threadRoutes from './routes/threads';
 import settingsRoutes from './routes/settings';
 import capabilityRoutes from './routes/capabilities';
@@ -51,6 +53,7 @@ import integrationsHealthRoutes from './routes/integrationsHealth';
 import simulcastRoutes from './routes/simulcastDestinations';
 import kickChatBridgeRoutes from './routes/kickChatBridges';
 import tenorRoutes from './routes/tenor';
+import giphyRoutes from './routes/giphy';
 import {
     authedRouter as discordCompatWebhookRoutes,
     publicExecuteRouter as discordCompatWebhookExecuteRoutes,
@@ -184,6 +187,7 @@ for (const root of legacyAliasEnabled ? [API_ROOTS.v1, API_ROOTS.legacyApiAlias]
     app.route(`${root}/activedefense`, activeDefenseRoutes);
     app.route(`${root}/mesh`, meshRoutes);
     app.route(`${root}/marketplace`, marketplaceRoutes);
+    app.route(`${root}/notifications`, notificationRoutes);
     app.route(`${root}/threads`, threadRoutes);
     app.route(`${root}/settings`, settingsRoutes);
     app.route(`${root}/capabilities`, capabilityRoutes);
@@ -218,6 +222,7 @@ for (const root of legacyAliasEnabled ? [API_ROOTS.v1, API_ROOTS.legacyApiAlias]
     app.route(`${root}/integrations/simulcast/destinations`, simulcastRoutes);
     app.route(`${root}/integrations/kick/chat-bridges`, kickChatBridgeRoutes);
     app.route(`${root}/integrations/tenor`, tenorRoutes);
+    app.route(`${root}/integrations/giphy`, giphyRoutes);
     app.route(`${root}/integrations/discord-compat/webhooks`, discordCompatWebhookRoutes);
     app.route(`${root}/integrations/discord/import`, discordServerImportRoutes);
     app.route(`${root}/integrations/discord/bridges`, discordBridgeActivationRoutes);
@@ -350,6 +355,12 @@ if (shouldListen) {
         log.warn('error reporter init failed', { error: String(err) })
     );
     bootstrapMailer();
+
+    // Refuse to boot if a placeholder marketplace (blamazon / mayhem-marketplaze /
+    // antin-amazon) is enabled in production. These have no real adapter, so a deploy
+    // with `*_ENABLED=true` would silently pretend to be a marketplace. Throwing here
+    // surfaces in the process supervisor before the server starts listening.
+    assertPlaceholderMarketplacesDisabledForProduction();
 
     // Probe the Matrix admin dependency once at boot. Invites/redemption need the
     // bot token to hold Synapse admin rights; without this check a misconfigured

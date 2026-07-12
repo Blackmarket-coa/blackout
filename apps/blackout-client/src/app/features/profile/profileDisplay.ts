@@ -16,3 +16,19 @@ export const profileDisplayLabel = (profile: { displayName?: string; userId: str
     if (localPart) return localPart;
     return 'You';
 };
+
+/**
+ * "Member since March 2026" label from the server-stamped `memberSince`
+ * timestamp. Month + year only — the exact day is noise on a profile card.
+ * Returns null for absent/invalid values so callers can skip the row entirely
+ * (profiles that pre-date the stamp have no memberSince).
+ */
+export const formatMemberSince = (memberSince: string | undefined): string | null => {
+    if (!memberSince) return null;
+    const parsed = Date.parse(memberSince);
+    if (Number.isNaN(parsed)) return null;
+    return new Date(parsed).toLocaleDateString(undefined, {
+        month: 'long',
+        year: 'numeric',
+    });
+};

@@ -51,7 +51,7 @@ const mountEditor = async (fetcher: RulesFetcher) => {
                         typeof NotificationRulesEditor
                     >['deleteNotificationRule']
                 }
-            />,
+            />
         );
         await Promise.resolve();
         await Promise.resolve();
@@ -106,20 +106,18 @@ describe('NotificationRulesEditor (BKL-004 Port 3 — rule CRUD)', () => {
 
         const { container } = await mountEditor(fetcher);
 
-        const dmRow = container.querySelector(
-            '[data-testid="notification-rules-row-mentions:dm"]',
-        );
+        const dmRow = container.querySelector('[data-testid="notification-rules-row-mentions:dm"]');
         expect(dmRow?.textContent).toContain('mentions:dm');
         expect(dmRow?.textContent).toContain('cap 50/day');
         expect(
-            dmRow?.querySelector('[data-testid="notification-rules-edit-mentions:dm"]'),
+            dmRow?.querySelector('[data-testid="notification-rules-edit-mentions:dm"]')
         ).not.toBeNull();
         expect(
-            dmRow?.querySelector('[data-testid="notification-rules-delete-mentions:dm"]'),
+            dmRow?.querySelector('[data-testid="notification-rules-delete-mentions:dm"]')
         ).not.toBeNull();
 
         const reactionsRow = container.querySelector(
-            '[data-testid="notification-rules-row-reactions:room"]',
+            '[data-testid="notification-rules-row-reactions:room"]'
         );
         expect(reactionsRow?.textContent).toContain('cap 25/day');
         expect(reactionsRow?.textContent).toContain('cooldown 10m');
@@ -131,7 +129,7 @@ describe('NotificationRulesEditor (BKL-004 Port 3 — rule CRUD)', () => {
         const { container } = await mountEditor(fetcher);
 
         const form = container.querySelector(
-            '[data-testid="notification-rules-form"]',
+            '[data-testid="notification-rules-form"]'
         ) as HTMLFormElement;
         await act(async () => {
             form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
@@ -155,10 +153,10 @@ describe('NotificationRulesEditor (BKL-004 Port 3 — rule CRUD)', () => {
         const { container } = await mountEditor(fetcher);
 
         const featureInput = container.querySelector(
-            '[data-testid="notification-rules-feature"]',
+            '[data-testid="notification-rules-feature"]'
         ) as HTMLInputElement;
         const categoryInput = container.querySelector(
-            '[data-testid="notification-rules-category"]',
+            '[data-testid="notification-rules-category"]'
         ) as HTMLInputElement;
 
         await act(async () => {
@@ -168,7 +166,7 @@ describe('NotificationRulesEditor (BKL-004 Port 3 — rule CRUD)', () => {
         });
 
         const form = container.querySelector(
-            '[data-testid="notification-rules-form"]',
+            '[data-testid="notification-rules-form"]'
         ) as HTMLFormElement;
 
         await act(async () => {
@@ -178,7 +176,7 @@ describe('NotificationRulesEditor (BKL-004 Port 3 — rule CRUD)', () => {
 
         // Row appears immediately, before resolveUpsert() is called.
         expect(
-            container.querySelector('[data-testid="notification-rules-row-mentions:space"]'),
+            container.querySelector('[data-testid="notification-rules-row-mentions:space"]')
         ).not.toBeNull();
 
         await act(async () => {
@@ -206,10 +204,10 @@ describe('NotificationRulesEditor (BKL-004 Port 3 — rule CRUD)', () => {
         const { container } = await mountEditor(fetcher);
 
         const featureInput = container.querySelector(
-            '[data-testid="notification-rules-feature"]',
+            '[data-testid="notification-rules-feature"]'
         ) as HTMLInputElement;
         const categoryInput = container.querySelector(
-            '[data-testid="notification-rules-category"]',
+            '[data-testid="notification-rules-category"]'
         ) as HTMLInputElement;
 
         await act(async () => {
@@ -219,7 +217,7 @@ describe('NotificationRulesEditor (BKL-004 Port 3 — rule CRUD)', () => {
         });
 
         const form = container.querySelector(
-            '[data-testid="notification-rules-form"]',
+            '[data-testid="notification-rules-form"]'
         ) as HTMLFormElement;
 
         await act(async () => {
@@ -230,7 +228,7 @@ describe('NotificationRulesEditor (BKL-004 Port 3 — rule CRUD)', () => {
 
         // Optimistic row is gone (rollback).
         expect(
-            container.querySelector('[data-testid="notification-rules-row-mentions:dm"]'),
+            container.querySelector('[data-testid="notification-rules-row-mentions:dm"]')
         ).toBeNull();
         // Alert surfaced.
         const error = container.querySelector('[data-testid="notification-rules-submit-error"]');
@@ -248,11 +246,11 @@ describe('NotificationRulesEditor (BKL-004 Port 3 — rule CRUD)', () => {
         const { container } = await mountEditor(fetcher);
 
         expect(
-            container.querySelector('[data-testid="notification-rules-row-mentions:dm"]'),
+            container.querySelector('[data-testid="notification-rules-row-mentions:dm"]')
         ).not.toBeNull();
 
         const deleteBtn = container.querySelector(
-            '[data-testid="notification-rules-delete-mentions:dm"]',
+            '[data-testid="notification-rules-delete-mentions:dm"]'
         ) as HTMLButtonElement;
         expect(deleteBtn).not.toBeNull();
 
@@ -262,10 +260,76 @@ describe('NotificationRulesEditor (BKL-004 Port 3 — rule CRUD)', () => {
             await Promise.resolve();
         });
 
-        expect(fetcher.deleteNotificationRule).toHaveBeenCalledWith('mentions', 'dm');
+        expect(fetcher.deleteNotificationRule).toHaveBeenCalledWith('mentions', 'dm', undefined);
         expect(
-            container.querySelector('[data-testid="notification-rules-row-mentions:dm"]'),
+            container.querySelector('[data-testid="notification-rules-row-mentions:dm"]')
         ).toBeNull();
+    });
+
+    it('saves and deletes room-scoped overrides alongside the category-wide rule', async () => {
+        const ROOM = '!busy:example.org';
+        const fetcher = createFetcher({
+            fetchNotificationRules: vi.fn(async () => ({
+                subject: '@me:example.org',
+                rules: [rule({ feature: 'mentions', category: 'room' })],
+            })),
+        });
+
+        const { container } = await mountEditor(fetcher);
+
+        // Fill the form with a room-scoped override for the same key.
+        setInputValue(
+            container.querySelector(
+                '[data-testid="notification-rules-feature"]'
+            ) as HTMLInputElement,
+            'mentions'
+        );
+        setInputValue(
+            container.querySelector(
+                '[data-testid="notification-rules-category"]'
+            ) as HTMLInputElement,
+            'room'
+        );
+        setInputValue(
+            container.querySelector('[data-testid="notification-rules-room"]') as HTMLInputElement,
+            ROOM
+        );
+
+        const form = container.querySelector(
+            '[data-testid="notification-rules-form"]'
+        ) as HTMLFormElement;
+        await act(async () => {
+            form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+
+        expect(fetcher.upsertNotificationRule).toHaveBeenCalledWith(
+            expect.objectContaining({ feature: 'mentions', category: 'room', roomId: ROOM })
+        );
+
+        // Both the category-wide row and the room-scoped row render (distinct keys).
+        expect(
+            container.querySelector('[data-testid="notification-rules-row-mentions:room"]')
+        ).not.toBeNull();
+        const scopedRow = container.querySelector(
+            `[data-testid="notification-rules-row-mentions:room:${ROOM}"]`
+        );
+        expect(scopedRow).not.toBeNull();
+
+        // Deleting the scoped row passes the roomId and leaves the wide rule.
+        const scopedDelete = scopedRow?.querySelector(
+            `[data-testid="notification-rules-delete-mentions:room:${ROOM}"]`
+        ) as HTMLButtonElement;
+        await act(async () => {
+            scopedDelete.click();
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+        expect(fetcher.deleteNotificationRule).toHaveBeenCalledWith('mentions', 'room', ROOM);
+        expect(
+            container.querySelector('[data-testid="notification-rules-row-mentions:room"]')
+        ).not.toBeNull();
     });
 
     it('populates the form with the rule values when Edit is clicked', async () => {
@@ -287,7 +351,7 @@ describe('NotificationRulesEditor (BKL-004 Port 3 — rule CRUD)', () => {
         const { container } = await mountEditor(fetcher);
 
         const editBtn = container.querySelector(
-            '[data-testid="notification-rules-edit-reactions:room"]',
+            '[data-testid="notification-rules-edit-reactions:room"]'
         ) as HTMLButtonElement;
         await act(async () => {
             editBtn.click();
@@ -295,19 +359,19 @@ describe('NotificationRulesEditor (BKL-004 Port 3 — rule CRUD)', () => {
         });
 
         const featureInput = container.querySelector(
-            '[data-testid="notification-rules-feature"]',
+            '[data-testid="notification-rules-feature"]'
         ) as HTMLInputElement;
         const categoryInput = container.querySelector(
-            '[data-testid="notification-rules-category"]',
+            '[data-testid="notification-rules-category"]'
         ) as HTMLInputElement;
         const capInput = container.querySelector(
-            '[data-testid="notification-rules-hardcap"]',
+            '[data-testid="notification-rules-hardcap"]'
         ) as HTMLInputElement;
         const cooldownInput = container.querySelector(
-            '[data-testid="notification-rules-cooldown"]',
+            '[data-testid="notification-rules-cooldown"]'
         ) as HTMLInputElement;
         const quietToggle = container.querySelector(
-            '[data-testid="notification-rules-quiet-toggle"]',
+            '[data-testid="notification-rules-quiet-toggle"]'
         ) as HTMLInputElement;
 
         expect(featureInput.value).toBe('reactions');
@@ -317,10 +381,10 @@ describe('NotificationRulesEditor (BKL-004 Port 3 — rule CRUD)', () => {
         expect(quietToggle.checked).toBe(true);
 
         const quietStart = container.querySelector(
-            '[data-testid="notification-rules-quiet-start"]',
+            '[data-testid="notification-rules-quiet-start"]'
         ) as HTMLInputElement;
         const quietEnd = container.querySelector(
-            '[data-testid="notification-rules-quiet-end"]',
+            '[data-testid="notification-rules-quiet-end"]'
         ) as HTMLInputElement;
         expect(quietStart.value).toBe('22:00');
         expect(quietEnd.value).toBe('07:00');
@@ -331,13 +395,13 @@ describe('NotificationRulesEditor (BKL-004 Port 3 — rule CRUD)', () => {
         const { container } = await mountEditor(fetcher);
 
         const featureInput = container.querySelector(
-            '[data-testid="notification-rules-feature"]',
+            '[data-testid="notification-rules-feature"]'
         ) as HTMLInputElement;
         const categoryInput = container.querySelector(
-            '[data-testid="notification-rules-category"]',
+            '[data-testid="notification-rules-category"]'
         ) as HTMLInputElement;
         const quietToggle = container.querySelector(
-            '[data-testid="notification-rules-quiet-toggle"]',
+            '[data-testid="notification-rules-quiet-toggle"]'
         ) as HTMLInputElement;
 
         await act(async () => {
@@ -348,7 +412,7 @@ describe('NotificationRulesEditor (BKL-004 Port 3 — rule CRUD)', () => {
         });
 
         const form = container.querySelector(
-            '[data-testid="notification-rules-form"]',
+            '[data-testid="notification-rules-form"]'
         ) as HTMLFormElement;
 
         await act(async () => {
@@ -357,8 +421,7 @@ describe('NotificationRulesEditor (BKL-004 Port 3 — rule CRUD)', () => {
             await Promise.resolve();
         });
 
-        const payload = fetcher.upsertNotificationRule.mock
-            .calls[0][0] as NotificationRulePayload;
+        const payload = fetcher.upsertNotificationRule.mock.calls[0][0] as NotificationRulePayload;
         expect(payload.quietHours).toEqual({ startUtc: '22:00', endUtc: '07:00' });
     });
 

@@ -25,10 +25,13 @@ interface FetchCall {
 const fetchCalls: FetchCall[] = [];
 type FetchHandler = (url: string, init?: RequestInit) => Response | Promise<Response>;
 let fetchHandler: FetchHandler = () =>
-    new Response(JSON.stringify({ listings: [] }), { headers: { 'content-type': 'application/json' } });
+    new Response(JSON.stringify({ listings: [] }), {
+        headers: { 'content-type': 'application/json' },
+    });
 const originalFetch = globalThis.fetch;
 globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+    const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
     fetchCalls.push({ url, init });
     return await fetchHandler(url, init);
 }) as typeof fetch;
@@ -154,8 +157,7 @@ test('webhook with bad signature is rejected with 401 and grants nothing', async
         headers: {
             'content-type': 'application/json',
             'x-fbm-event-id': 'evt-bad',
-            'x-fbm-signature':
-                '0000000000000000000000000000000000000000000000000000000000000000',
+            'x-fbm-signature': '0000000000000000000000000000000000000000000000000000000000000000',
         },
         body,
     });
@@ -227,10 +229,9 @@ test('software_license purchase generates a license key surfaced via fulfillment
     assert.equal(entitlements.length, 1);
     const entitlement = entitlements[0]!;
 
-    const fulfillment = await app.request(
-        `/v1/marketplace/fulfillment/${entitlement.id}/asset`,
-        { headers: authHeaders() }
-    );
+    const fulfillment = await app.request(`/v1/marketplace/fulfillment/${entitlement.id}/asset`, {
+        headers: authHeaders(),
+    });
     assert.equal(fulfillment.status, 200);
     const fulfillmentJson = (await fulfillment.json()) as {
         licenseKey?: string;
@@ -271,9 +272,7 @@ test('catalog falls back to last known snapshot when freeblackmarket is unreacha
     assert.equal(okBody.listings.length, 1);
     assert.equal(okBody.listings[0]!.providerListingId, 'listing-cached');
 
-    const cached = db.getMarketplaceListingsCache(
-        'freeblackmarket|||||'
-    );
+    const cached = db.getMarketplaceListingsCache('freeblackmarket|||||');
     assert.notEqual(cached, undefined);
     cached!.refreshedAt = new Date(Date.now() - 5 * 60_000).toISOString();
     db.upsertMarketplaceListingsCache(cached!);
@@ -282,10 +281,9 @@ test('catalog falls back to last known snapshot when freeblackmarket is unreacha
         throw new Error('freeblackmarket unreachable');
     };
 
-    const fallback = await app.request(
-        '/v1/marketplace/listings?providerId=freeblackmarket',
-        { headers: authHeaders() }
-    );
+    const fallback = await app.request('/v1/marketplace/listings?providerId=freeblackmarket', {
+        headers: authHeaders(),
+    });
     assert.equal(fallback.status, 200);
     const fallbackBody = (await fallback.json()) as {
         listings: Array<{ providerListingId: string }>;
@@ -299,7 +297,10 @@ test('checkout records counter and returns redirect from freeblackmarket', async
     resetForEachTest();
     fetchHandler = () =>
         new Response(
-            JSON.stringify({ id: 'sess-1', url: 'https://api.freeblackmarket.test/checkout/sess-1' }),
+            JSON.stringify({
+                id: 'sess-1',
+                url: 'https://api.freeblackmarket.test/checkout/sess-1',
+            }),
             { headers: { 'content-type': 'application/json' } }
         );
 
@@ -351,6 +352,52 @@ test('startup secret guard refuses production with missing freeblackmarket secre
             NODE_ENV: 'production',
             FREEBLACKMARKET_API_KEY: 'present',
             FREEBLACKMARKET_WEBHOOK_SECRET: 'present',
+        } as NodeJS.ProcessEnv)
+    );
+});
+
+test('startup guard refuses production when a placeholder marketplace is enabled', async () => {
+    const {
+        assertBlamazonDisabledForProduction,
+        assertMayhemMarketplazeDisabledForProduction,
+        assertAntinAmazonDisabledForProduction,
+        assertPlaceholderMarketplacesDisabledForProduction,
+    } = await import('../src/integrations/marketplace');
+
+    const cases: Array<[(env: NodeJS.ProcessEnv) => void, string]> = [
+        [assertBlamazonDisabledForProduction, 'BLAMAZON_ENABLED'],
+        [assertMayhemMarketplazeDisabledForProduction, 'MAYHEM_MARKETPLAZE_ENABLED'],
+        [assertAntinAmazonDisabledForProduction, 'ANTIN_AMAZON_ENABLED'],
+    ];
+
+    for (const [guard, key] of cases) {
+        // production + enabled → hard fail
+        assert.throws(
+            () => guard({ NODE_ENV: 'production', [key]: 'true' } as NodeJS.ProcessEnv),
+            /Refusing to start in production/
+        );
+        // production + explicitly disabled → ok
+        assert.doesNotThrow(() =>
+            guard({ NODE_ENV: 'production', [key]: 'false' } as NodeJS.ProcessEnv)
+        );
+        // production + unset → ok (placeholders default to disabled)
+        assert.doesNotThrow(() => guard({ NODE_ENV: 'production' } as NodeJS.ProcessEnv));
+        // non-production never guards, even when enabled
+        assert.doesNotThrow(() => guard({ NODE_ENV: 'test', [key]: 'true' } as NodeJS.ProcessEnv));
+    }
+
+    // The aggregate throws if ANY placeholder is enabled in production.
+    assert.throws(
+        () =>
+            assertPlaceholderMarketplacesDisabledForProduction({
+                NODE_ENV: 'production',
+                MAYHEM_MARKETPLAZE_ENABLED: '1',
+            } as NodeJS.ProcessEnv),
+        /mayhem-marketplaze/
+    );
+    assert.doesNotThrow(() =>
+        assertPlaceholderMarketplacesDisabledForProduction({
+            NODE_ENV: 'production',
         } as NodeJS.ProcessEnv)
     );
 });

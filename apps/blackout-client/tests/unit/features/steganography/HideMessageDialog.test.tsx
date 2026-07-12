@@ -6,6 +6,7 @@ import { Provider, createStore } from 'jotai';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { HideMessageDialog } from '../../../../src/app/features/steganography';
+import { expectFocusTrapWired } from '../../helpers/modalReliability';
 
 describe('HideMessageDialog advanced gating', () => {
     beforeEach(() => {
@@ -101,11 +102,12 @@ describe('HideMessageDialog advanced gating', () => {
 
     it('traps focus inside the dialog on open so returnFocus fires on close (audit C row 6)', async () => {
         // focus-trap-react's default `returnFocusOnDeactivate: true` is the
-        // contract this slice delivers. We verify the trap actually
-        // activated by asserting focus moved inside the dialog; once
-        // activated, focus-trap-react's unmount path returns focus to the
-        // previously focused element (asserting that side directly is
-        // fragile under JSDOM, so the audit row's full behaviour is
+        // contract this slice delivers. The trap's *initial* focus is
+        // scheduled on a setTimeout(0) (delayInitialFocus), so asserting
+        // `document.activeElement` right after render races that timer —
+        // instead probe the trap's synchronous focusin snap-back contract
+        // via the shared helper. Once activated, focus-trap-react's unmount
+        // path returns focus to the previously focused element (that side is
         // pinned by focus-trap-react's own tests + our e2e pass).
         const container = document.createElement('div');
         document.body.appendChild(container);
@@ -124,9 +126,9 @@ describe('HideMessageDialog advanced gating', () => {
             await Promise.resolve();
         });
 
-        const dialog = container.querySelector('[role="dialog"]');
+        const dialog = container.querySelector('[role="dialog"]') as HTMLElement | null;
         expect(dialog).toBeTruthy();
-        expect(dialog?.contains(document.activeElement)).toBe(true);
+        expectFocusTrapWired(dialog!);
 
         root.unmount();
     });

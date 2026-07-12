@@ -1,98 +1,150 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
-    <meta http-equiv="X-Content-Type-Options" content="nosniff" />
-    <meta name="referrer" content="no-referrer" />
-    <title>Blackout Client</title>
-    <meta name="name" content="Blackout Client" />
-    <meta name="author" content="Blackout" />
-    <meta
-      name="description"
-      content="Blackout Client is the modern Matrix workspace for secure communities, custom roles, and preset-driven collaboration."
-    />
-    <meta
-      name="keywords"
-      content="blackout, blackout client, matrix, secure collaboration, governance, customization"
-    />
+    <head>
+        <meta charset="UTF-8" />
+        <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+        <meta http-equiv="X-Content-Type-Options" content="nosniff" />
+        <meta name="referrer" content="no-referrer" />
+        <title>Blackout Client</title>
+        <meta name="name" content="Blackout Client" />
+        <meta name="author" content="Blackout" />
+        <meta
+            name="description"
+            content="Blackout Client is the modern Matrix workspace for secure communities, custom roles, and preset-driven collaboration."
+        />
+        <meta
+            name="keywords"
+            content="blackout, blackout client, matrix, secure collaboration, governance, customization"
+        />
 
-    <meta property="og:title" content="Blackout Client" />
-    <meta property="og:url" content="https://theblackout.app" />
-    <meta property="og:image" content="https://theblackout.app/assets/favicon-48x48.png" />
-    <meta
-      property="og:description"
-      content="Blackout Client is the modern Matrix workspace for secure communities, custom roles, and preset-driven collaboration."
-    />
-    <meta name="theme-color" content="#000000" />
+        <meta property="og:title" content="Blackout Client" />
+        <meta property="og:url" content="https://theblackout.app" />
+        <meta property="og:image" content="https://theblackout.app/assets/favicon-48x48.png" />
+        <meta
+            property="og:description"
+            content="Blackout Client is the modern Matrix workspace for secure communities, custom roles, and preset-driven collaboration."
+        />
+        <meta name="theme-color" content="#000000" />
 
-    <link id="favicon" rel="shortcut icon" href="./public/favicon.ico" />
+        <script>
+            // Pre-hydration theme guard (Workstream F): paint the persisted theme's
+            // critical colors before the app bundle loads so switching to light /
+            // AMOLED doesn't flash the dark default on every boot. Only the surface
+            // and primary text colors are seeded here as inline variables; the real
+            // vanilla-extract theme class (applied by ThemeProvider) replaces them —
+            // applyThemeToRoot clears these inline seeds when it runs.
+            //
+            // BOOT_THEMES and BOOT_LEGACY MUST stay in sync with
+            // src/app/styles/theme-engine.ts (themeTokenMap / colorScheme) and
+            // normalizeThemeId's legacy map. The sync is enforced by
+            // tests/unit/styles/theme-boot-parity.test.ts.
+            (function () {
+                var BOOT_THEMES = {
+                    dark_canopy: { bg: '#0B0F10', text: '#F7FFF9', scheme: 'dark' },
+                    light_grove: { bg: '#EFFFD1', text: '#102017', scheme: 'light' },
+                    amoled_night: { bg: '#000000', text: '#F7FFF9', scheme: 'dark' },
+                    storybook_meadow: { bg: '#FFFBEF', text: '#1D2C24', scheme: 'light' },
+                    adventure_spectrum: { bg: '#121D1A', text: '#F4FFF8', scheme: 'dark' },
+                };
+                var BOOT_LEGACY = {
+                    dark: 'dark_canopy',
+                    light: 'light_grove',
+                    amoled: 'amoled_night',
+                };
+                var id = 'dark_canopy';
+                try {
+                    var read = function (key) {
+                        var raw = window.localStorage.getItem(key);
+                        if (!raw) return null;
+                        var parsed = JSON.parse(raw);
+                        return parsed && typeof parsed.theme === 'string' ? parsed.theme : null;
+                    };
+                    var stored =
+                        read('blackout.settings.v1') || read('blackout.settings.appearance.v1');
+                    if (stored) id = BOOT_LEGACY[stored] || stored;
+                } catch (e) {
+                    // Storage unavailable or corrupt — keep the dark default.
+                }
+                if (!BOOT_THEMES[id]) id = 'dark_canopy';
+                var theme = BOOT_THEMES[id];
+                var root = document.documentElement;
+                root.dataset.theme = id;
+                root.dataset.themeBoot = '1';
+                root.style.colorScheme = theme.scheme;
+                root.style.setProperty('--bg-surface', theme.bg);
+                root.style.setProperty('--text-primary', theme.text);
+                var meta = document.querySelector('meta[name="theme-color"]');
+                if (meta) meta.setAttribute('content', theme.bg);
+            })();
+        </script>
 
-    <link rel="manifest" href="/manifest.json" />
-    <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="application-name" content="Blackout Client" />
-    <meta name="apple-mobile-web-app-title" content="Blackout Client" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <link id="favicon" rel="shortcut icon" href="./public/favicon.ico" />
 
-    <link
-      rel="apple-touch-icon"
-      sizes="57x57"
-      href="./public/res/apple/apple-touch-icon-57x57.png"
-    />
-    <link
-      rel="apple-touch-icon"
-      sizes="60x60"
-      href="./public/res/apple/apple-touch-icon-60x60.png"
-    />
-    <link
-      rel="apple-touch-icon"
-      sizes="72x72"
-      href="./public/res/apple/apple-touch-icon-72x72.png"
-    />
-    <link
-      rel="apple-touch-icon"
-      sizes="76x76"
-      href="./public/res/apple/apple-touch-icon-76x76.png"
-    />
-    <link
-      rel="apple-touch-icon"
-      sizes="114x114"
-      href="./public/res/apple/apple-touch-icon-114x114.png"
-    />
-    <link
-      rel="apple-touch-icon"
-      sizes="120x120"
-      href="./public/res/apple/apple-touch-icon-120x120.png"
-    />
-    <link
-      rel="apple-touch-icon"
-      sizes="144x144"
-      href="./public/res/apple/apple-touch-icon-144x144.png"
-    />
-    <link
-      rel="apple-touch-icon"
-      sizes="152x152"
-      href="./public/res/apple/apple-touch-icon-152x152.png"
-    />
-    <link
-      rel="apple-touch-icon"
-      sizes="167x167"
-      href="./public/res/apple/apple-touch-icon-167x167.png"
-    />
-    <link
-      rel="apple-touch-icon"
-      sizes="180x180"
-      href="./public/res/apple/apple-touch-icon-180x180.png"
-    />
-  </head>
-  <body id="appBody">
-    <script>
-      window.global ||= window;
-    </script>
-    <div id="root"></div>
-    <div id="portalContainer"></div>
-    <script type="module" src="./src/main.tsx"></script>
-  </body>
+        <link rel="manifest" href="/manifest.json" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="application-name" content="Blackout Client" />
+        <meta name="apple-mobile-web-app-title" content="Blackout Client" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
+        <link
+            rel="apple-touch-icon"
+            sizes="57x57"
+            href="./public/res/apple/apple-touch-icon-57x57.png"
+        />
+        <link
+            rel="apple-touch-icon"
+            sizes="60x60"
+            href="./public/res/apple/apple-touch-icon-60x60.png"
+        />
+        <link
+            rel="apple-touch-icon"
+            sizes="72x72"
+            href="./public/res/apple/apple-touch-icon-72x72.png"
+        />
+        <link
+            rel="apple-touch-icon"
+            sizes="76x76"
+            href="./public/res/apple/apple-touch-icon-76x76.png"
+        />
+        <link
+            rel="apple-touch-icon"
+            sizes="114x114"
+            href="./public/res/apple/apple-touch-icon-114x114.png"
+        />
+        <link
+            rel="apple-touch-icon"
+            sizes="120x120"
+            href="./public/res/apple/apple-touch-icon-120x120.png"
+        />
+        <link
+            rel="apple-touch-icon"
+            sizes="144x144"
+            href="./public/res/apple/apple-touch-icon-144x144.png"
+        />
+        <link
+            rel="apple-touch-icon"
+            sizes="152x152"
+            href="./public/res/apple/apple-touch-icon-152x152.png"
+        />
+        <link
+            rel="apple-touch-icon"
+            sizes="167x167"
+            href="./public/res/apple/apple-touch-icon-167x167.png"
+        />
+        <link
+            rel="apple-touch-icon"
+            sizes="180x180"
+            href="./public/res/apple/apple-touch-icon-180x180.png"
+        />
+    </head>
+    <body id="appBody">
+        <script>
+            window.global ||= window;
+        </script>
+        <div id="root"></div>
+        <div id="portalContainer"></div>
+        <script type="module" src="./src/main.tsx"></script>
+    </body>
 </html>

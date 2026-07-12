@@ -1,7 +1,7 @@
 import React from 'react';
 import { useAtom } from 'jotai';
 import type { ColiseumCitation } from '@blackout/core';
-import { EmptyState } from '../../../../../../../packages/ui/src/primitives';
+import { EmptyState } from '@blackout/ui/primitives';
 import { useColiseumTopic } from '../hooks/useColiseumTopics';
 import { coliseumTabAtom, selectedColiseumTopicIdAtom } from '../../../state/coliseum';
 import ColiseumCitationChip from '../ColiseumCitationChip';

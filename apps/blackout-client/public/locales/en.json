@@ -6,11 +6,12 @@
   },
   "Features": {
     "GifPicker": {
-      "search_placeholder": "Search GIFs on Tenor",
-      "attribution": "Powered by Tenor",
+      "search_placeholder": "Search GIFs on {{provider}}",
+      "attribution": "Powered by {{provider}}",
       "no_results": "No GIFs found for \"{{query}}\".",
       "load_error": "Could not load GIFs. Check your connection and try again.",
-      "send_error": "Could not send GIF. Try again."
+      "send_error": "Could not send GIF. Try again.",
+      "recents": "Recents"
     }
   }
 }

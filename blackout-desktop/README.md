@@ -41,3 +41,9 @@ cross-platform release build runs in CI via
 > Note: `pnpm build` is an intentional no-op used to keep the monorepo-wide
 > `turbo run build` portable (it does not require the Rust/Tauri toolchain). Use
 > `pnpm bundle` for actual packaging.
+
+## Verifying a signed build
+
+Before running a downloaded build, verify the signing chain for your platform
+(macOS Gatekeeper/`codesign`, Windows Authenticode, Linux GPG) and the Tauri
+auto-updater signature. See [`docs/signing-verification.md`](docs/signing-verification.md).

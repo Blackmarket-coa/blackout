@@ -40,16 +40,21 @@ export const Menu = ({
         .filter((index) => index >= 0);
 
     React.useEffect(() => {
-        if (open) itemRefs.current[enabledIndexes[0] ?? 0]?.focus();
+        if (!open) return;
+        // Restore focus to whatever opened the menu (normally the trigger)
+        // once it closes, mirroring the Modal/Sheet restore contract.
+        const previouslyFocused = document.activeElement as HTMLElement | null;
+        itemRefs.current[enabledIndexes[0] ?? 0]?.focus();
+        return () => {
+            previouslyFocused?.focus?.();
+        };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open]);
 
     const focusByOffset = (from: number, delta: number) => {
         const pos = enabledIndexes.indexOf(from);
         const nextIndex =
-            enabledIndexes[
-                (pos + delta + enabledIndexes.length) % enabledIndexes.length
-            ];
+            enabledIndexes[(pos + delta + enabledIndexes.length) % enabledIndexes.length];
         itemRefs.current[nextIndex]?.focus();
     };
 
@@ -93,6 +98,14 @@ export const Menu = ({
                                 } else if (event.key === 'ArrowUp') {
                                     event.preventDefault();
                                     focusByOffset(index, -1);
+                                } else if (event.key === 'Home') {
+                                    event.preventDefault();
+                                    itemRefs.current[enabledIndexes[0] ?? 0]?.focus();
+                                } else if (event.key === 'End') {
+                                    event.preventDefault();
+                                    itemRefs.current[
+                                        enabledIndexes[enabledIndexes.length - 1] ?? 0
+                                    ]?.focus();
                                 }
                             }}
                         >

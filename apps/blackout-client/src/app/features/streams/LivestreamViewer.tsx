@@ -315,6 +315,18 @@ export const LivestreamViewer = (): JSX.Element => {
                         style={chatCtaStyle}
                         data-testid="livestream-den-chat-link"
                         data-den-id={stream.denId}
+                        onClick={() =>
+                            // Instruments how often viewers leave the in-page
+                            // embed for the standalone den. This click-through
+                            // rate is the V1.1 decision input for whether the
+                            // livestream needs a richer embedded chat overlay
+                            // (Workstream D) or the deep link is sufficient.
+                            recordViewEvent('livestream.deeplink.den_chat.click', {
+                                streamId: stream.id,
+                                denId: stream.denId,
+                                creatorId: stream.creatorId,
+                            })
+                        }
                     >
                         Open full den ↗
                     </Link>

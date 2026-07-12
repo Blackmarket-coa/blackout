@@ -28,15 +28,9 @@ const ToastContext = React.createContext<ToastContextValue | null>(null);
 
 let toastSeq = 0;
 
-export const ToastProvider = ({
-    children,
-}: {
-    children: React.ReactNode;
-}): React.ReactElement => {
+export const ToastProvider = ({ children }: { children: React.ReactNode }): React.ReactElement => {
     const [records, setRecords] = React.useState<ToastRecord[]>([]);
-    const timers = React.useRef<Map<string, ReturnType<typeof setTimeout>>>(
-        new Map(),
-    );
+    const timers = React.useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
     const dismiss = React.useCallback((id: string) => {
         setRecords((current) => current.filter((record) => record.id !== id));
@@ -57,12 +51,12 @@ export const ToastProvider = ({
             if (duration > 0) {
                 timers.current.set(
                     toastId,
-                    setTimeout(() => dismiss(toastId), duration),
+                    setTimeout(() => dismiss(toastId), duration)
                 );
             }
             return toastId;
         },
-        [dismiss],
+        [dismiss]
     );
 
     React.useEffect(
@@ -70,7 +64,7 @@ export const ToastProvider = ({
             timers.current.forEach((timer) => clearTimeout(timer));
             timers.current.clear();
         },
-        [],
+        []
     );
 
     const value = React.useMemo(() => ({ toast, dismiss }), [toast, dismiss]);
@@ -84,7 +78,10 @@ export const ToastProvider = ({
                           {records.map((record) => (
                               <div
                                   key={record.id}
-                                  role="status"
+                                  // Danger toasts announce assertively; the
+                                  // rest stay polite status updates.
+                                  role={record.tone === 'danger' ? 'alert' : 'status'}
+                                  aria-atomic="true"
                                   className={cx(styles.toast, styles.tones[record.tone])}
                               >
                                   <span className={styles.message}>{record.message}</span>
@@ -99,7 +96,7 @@ export const ToastProvider = ({
                               </div>
                           ))}
                       </div>,
-                      document.body,
+                      document.body
                   )
                 : null}
         </ToastContext.Provider>

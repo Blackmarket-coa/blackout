@@ -178,7 +178,18 @@ export const useLegacySendMessageAdapter = (roomId: string) => {
     );
 
     const sendMedia = useCallback(
-        async (file: File, options?: { ephemeral?: EphemeralPolicy | null }) => {
+        async (
+            file: File,
+            options?: {
+                ephemeral?: EphemeralPolicy | null;
+                /**
+                 * Shape the message content from the uploaded mxc URL.
+                 * Voice notes use this to emit `m.audio` + MSC3245 markers
+                 * instead of the generic `m.file` fallback below.
+                 */
+                buildContent?: (url: string) => Record<string, unknown>;
+            }
+        ) => {
             setLoading(true);
             setError(null);
             try {
@@ -186,14 +197,19 @@ export const useLegacySendMessageAdapter = (roomId: string) => {
                 const ephemeralBlock = options?.ephemeral
                     ? buildEphemeralContent(options.ephemeral)
                     : null;
+                const baseContent = options?.buildContent
+                    ? options.buildContent(url)
+                    : {
+                          msgtype: 'm.file',
+                          body: file.name,
+                          url,
+                          info: {
+                              mimetype: file.type,
+                              size: file.size,
+                          },
+                      };
                 await sendEvent(roomId, 'm.room.message', {
-                    msgtype: 'm.file',
-                    body: file.name,
-                    url,
-                    info: {
-                        mimetype: file.type,
-                        size: file.size,
-                    },
+                    ...baseContent,
                     ...(ephemeralBlock ?? {}),
                 });
             } catch (err) {

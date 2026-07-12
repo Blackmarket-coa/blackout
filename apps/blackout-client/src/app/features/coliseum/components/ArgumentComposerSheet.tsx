@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { ColiseumArgumentMedia, ColiseumStance } from '@blackout/core';
-import { Sheet } from '../../../../../../../packages/ui/src/primitives';
+import { Sheet } from '@blackout/ui/primitives';
 import { coliseumSheetTheme } from '../coliseumArenaTheme.css';
 import type { CreateColiseumArgumentInput } from '../coliseumClient';
 import { STANCE_LABEL, STANCE_ORDER } from './stance';

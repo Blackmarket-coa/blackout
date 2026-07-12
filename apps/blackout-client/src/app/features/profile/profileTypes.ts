@@ -1,13 +1,6 @@
 export const BMC_PROFILE_EVENT_TYPE = 'co.bmc.profile';
 
-export type ConnectionType =
-    | 'github'
-    | 'website'
-    | 'x'
-    | 'linkedin'
-    | 'matrix'
-    | 'fbm'
-    | 'other';
+export type ConnectionType = 'github' | 'website' | 'x' | 'linkedin' | 'matrix' | 'fbm' | 'other';
 
 export interface ProfileConnection {
     type: ConnectionType;
@@ -105,6 +98,12 @@ export interface MemberProfile {
     mutualSpaces: string[];
     isFriend?: boolean;
     profile: BmcProfileEvent;
+    /**
+     * ISO timestamp stamped server-side on first profile write (see
+     * `packages/api/src/services/profileStore.ts`); never client-supplied.
+     * Absent for accounts the store has never seen a write for.
+     */
+    memberSince?: string;
 }
 
 /**
@@ -121,7 +120,7 @@ export const MEMBER_PRIMARY_ROLES = [
     'Moderator',
     'Developer',
 ] as const;
-export type MemberPrimaryRole = (typeof MEMBER_PRIMARY_ROLES)[number];
+export type MemberPrimaryRole = typeof MEMBER_PRIMARY_ROLES[number];
 
 export interface DecorationOption {
     id: string;
@@ -160,7 +159,7 @@ function isString(value: unknown): value is string {
  */
 export function sanitizeProfileThemeTokenValue(
     key: ProfileThemeTokenKey,
-    raw: unknown,
+    raw: unknown
 ): string | null {
     if (!isString(raw)) return null;
     const value = raw.trim().slice(0, 200);
@@ -337,7 +336,10 @@ export const sanitizeProfileEvent = (input: unknown): BmcProfileEvent => {
             ? data.profileEffectId.slice(0, 64)
             : undefined,
         badgeIds: Array.isArray(data.badgeIds)
-            ? data.badgeIds.filter(isString).map((id) => id.slice(0, 64)).slice(0, 6)
+            ? data.badgeIds
+                  .filter(isString)
+                  .map((id) => id.slice(0, 64))
+                  .slice(0, 6)
             : undefined,
         wall: sanitizeWall(data.wall),
         topFriends: sanitizeTopFriends(data.topFriends),

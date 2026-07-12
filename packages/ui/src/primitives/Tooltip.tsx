@@ -27,6 +27,16 @@ export const Tooltip = ({
     if (!idRef.current) idRef.current = `tooltip-${(tooltipSeq += 1)}`;
     const id = idRef.current;
 
+    // WAI-ARIA tooltip pattern: Escape hides the tooltip without moving focus.
+    React.useEffect(() => {
+        if (!open) return;
+        const onKey = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') setOpen(false);
+        };
+        document.addEventListener('keydown', onKey);
+        return () => document.removeEventListener('keydown', onKey);
+    }, [open]);
+
     const trigger = React.cloneElement(children, {
         'aria-describedby': open ? id : undefined,
     });

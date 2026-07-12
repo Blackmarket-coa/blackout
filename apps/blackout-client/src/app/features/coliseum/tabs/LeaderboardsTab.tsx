@@ -5,7 +5,7 @@ import {
     type LeaderboardEntry,
 } from '@blackout/core';
 import { fetchLeaderboard } from '../challengesClient';
-import { EmptyState } from '../../../../../../../packages/ui/src/primitives';
+import { EmptyState } from '@blackout/ui/primitives';
 import { cx } from '../components/cx';
 import * as ui from '../components/coliseumUi.css';
 

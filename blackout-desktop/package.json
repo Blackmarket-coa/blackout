@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "icons:generate": "./scripts/generate-icons.sh",
+    "test": "pnpm test:unit",
+    "test:unit": "node --import tsx --test test/**/*.test.ts",
     "dev": "pnpm icons:generate && tauri dev",
     "build": "node -e \"console.log('blackout-desktop: monorepo parity build (no native toolchain). Run \\'pnpm bundle\\' to produce installers.')\"",
     "bundle": "pnpm icons:generate && tauri build",

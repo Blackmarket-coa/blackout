@@ -13,6 +13,7 @@ import {
   RoomPublish,
   RoomSlowmode,
   RoomUpgrade,
+  RoomVerificationGate,
 } from '../../common-settings/general';
 import { useRoomCreators } from '../../../hooks/useRoomCreators';
 import { useRoomPermissions } from '../../../hooks/useRoomPermissions';
@@ -53,6 +54,7 @@ export function General({ requestClose }: GeneralProps) {
                 <RoomHistoryVisibility permissions={permissions} />
                 <RoomEncryption permissions={permissions} />
                 <RoomSlowmode permissions={permissions} />
+                <RoomVerificationGate permissions={permissions} />
                 <RoomPublish permissions={permissions} />
               </Box>
               <Box direction="Column" gap="100">

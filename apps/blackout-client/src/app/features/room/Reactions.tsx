@@ -6,6 +6,8 @@ import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { useLegacyRoomAdapter as useRoom } from '../../plugins/matrix-adapters/hooks/useLegacyRoomAdapter';
 import { useLegacyRoomTimelineAdapter as useRoomTimeline } from '../../plugins/matrix-adapters/hooks/useLegacyTimelineAdapter';
 import { mxcToUrl } from '../media/utils/matrixMedia';
+import { useRelevantImagePacks } from '../../hooks/useImagePacks';
+import { ImageUsage } from '../../plugins/custom-emoji';
 import { EmojiPicker } from './EmojiPicker';
 import {
     loadRecentReactions,
@@ -71,11 +73,42 @@ const collectCustomEmoji = (room: Room | null, homeserverUrl: string): Record<st
     return entries;
 };
 
+/**
+ * Custom emoji for the reactions surface, resolved through the full MSC2545
+ * pack model (user pack + globally-subscribed packs + the room's packs via
+ * `useRelevantImagePacks`) — the same source the composer's emoji board uses —
+ * merged with the direct room-state reader above. Before this, the reaction
+ * picker only saw the current room's state events, so user/global packs were
+ * available in the composer but silently missing from reactions (the
+ * Workstream E "custom-emoji picker uses MSC2545 packs end-to-end" gap).
+ * Room-state entries win shortcode conflicts: a room's own emotes are more
+ * specific than user/global packs.
+ */
+export const useReactionCustomEmoji = (
+    room: Room | null,
+    homeserverUrl: string
+): Record<string, string> => {
+    const roomList = useMemo(() => (room ? [room] : []), [room]);
+    const packs = useRelevantImagePacks(ImageUsage.Emoticon, roomList);
+
+    return useMemo(() => {
+        const entries: Record<string, string> = {};
+        packs.forEach((pack) => {
+            pack.getImages(ImageUsage.Emoticon).forEach((image) => {
+                const resolved = mxcToUrl(image.url, homeserverUrl);
+                if (resolved) entries[`:${image.shortcode}:`] = resolved;
+            });
+        });
+        Object.assign(entries, collectCustomEmoji(room, homeserverUrl));
+        return entries;
+    }, [homeserverUrl, packs, room]);
+};
+
 const aggregateReactions = (
     timeline: MatrixEvent[],
     targetEventId: string,
     myUserId: string,
-    customEmoji: Record<string, string>,
+    customEmoji: Record<string, string>
 ): ReactionSummary[] => {
     const map = new Map<string, ReactionSummary>();
 
@@ -128,13 +161,10 @@ export const Reactions = memo(({ roomId, targetEventId, defaultPalette }: Reacti
 
     const homeserverUrl =
         (client as unknown as { getHomeserverUrl?: () => string }).getHomeserverUrl?.() ?? '';
-    const customEmoji = useMemo(
-        () => collectCustomEmoji(room, homeserverUrl),
-        [homeserverUrl, room],
-    );
+    const customEmoji = useReactionCustomEmoji(room, homeserverUrl);
     const reactions = useMemo(
         () => aggregateReactions(timeline, targetEventId, myUserId ?? '', customEmoji),
-        [customEmoji, myUserId, targetEventId, timeline],
+        [customEmoji, myUserId, targetEventId, timeline]
     );
 
     const visibleReactions =
@@ -151,7 +181,7 @@ export const Reactions = memo(({ roomId, targetEventId, defaultPalette }: Reacti
                         event_id: targetEventId,
                         key: emoji,
                     },
-                } as never,
+                } as never
             );
 
             setRecent((prev) => {
@@ -160,7 +190,7 @@ export const Reactions = memo(({ roomId, targetEventId, defaultPalette }: Reacti
                 return next;
             });
         },
-        [client, roomId, targetEventId],
+        [client, roomId, targetEventId]
     );
 
     const toggleReaction = useCallback(
@@ -172,7 +202,7 @@ export const Reactions = memo(({ roomId, targetEventId, defaultPalette }: Reacti
             }
             await sendReaction(reaction.key);
         },
-        [client, myUserId, roomId, sendReaction],
+        [client, myUserId, roomId, sendReaction]
     );
 
     if (reactions.length === 0 && !pickerOpen) {
@@ -271,7 +301,7 @@ export const Reactions = memo(({ roomId, targetEventId, defaultPalette }: Reacti
                     type="button"
                     onClick={() =>
                         setWindowStart((prev) =>
-                            Math.min(prev + 10, Math.max(reactions.length - 20, 0)),
+                            Math.min(prev + 10, Math.max(reactions.length - 20, 0))
                         )
                     }
                     style={{

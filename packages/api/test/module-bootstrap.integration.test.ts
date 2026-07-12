@@ -41,6 +41,7 @@ test('feature module registry contains canonical frontend domains', () => {
       'deaddrop',
       'deadman',
       'moderation',
+      'moderation/mjolnir',
       'streaming',
       'discovery',
       'profile',

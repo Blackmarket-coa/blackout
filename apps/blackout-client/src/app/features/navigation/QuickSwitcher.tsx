@@ -2,6 +2,7 @@ import React, { type KeyboardEvent, useCallback, useEffect, useMemo, useState } 
 import { useAtom, useSetAtom } from 'jotai';
 import type { Room, RoomMember } from 'matrix-js-sdk';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { useMentionNavigation } from './useMentionNavigation';
 import { selectedRoomIdAtom, selectedSpaceIdAtom } from '../../state/navigation';
 import { settingsPageAtom, type SettingsSectionId } from '../settings/settingsAtoms';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
@@ -87,6 +88,87 @@ const truncatePreview = (text: string, limit: number = MESSAGE_PREVIEW_LIMIT): s
     const collapsed = text.replace(/\s+/g, ' ').trim();
     if (collapsed.length <= limit) return collapsed;
     return `${collapsed.slice(0, limit - 1)}…`;
+};
+
+/** Last-N messages taken from each room's live timeline. */
+const MESSAGES_PER_ROOM = 5;
+/** Global cap so the index stays bounded on accounts with many rooms. */
+const MESSAGES_TOTAL_CAP = 100;
+
+/**
+ * Minimal structural view of a timeline event — what `collectRecentMessages`
+ * actually reads. Declared structurally (rather than as `MatrixEvent`) so unit
+ * tests can feed plain-object stubs, matching the room-stub convention used by
+ * the rest of this file's `safeCall` guards.
+ */
+type TimelineEventLike = {
+    getType?: () => string;
+    getId?: () => string | undefined;
+    getSender?: () => string | undefined;
+    getTs?: () => number;
+    getContent?: () => Record<string, unknown>;
+};
+
+/**
+ * Tap each room's live timeline for its most recent renderable text messages
+ * and shape them for `buildQuickSwitcherIndex`. This is the local-first
+ * "recent messages" source (Workstream F closing pass): newest-last timeline
+ * arrays are walked backwards, only `m.room.message` events with a string
+ * `body` qualify, and the merged result is newest-first and capped so the
+ * switcher index stays small. Server-side search (`useMessageSearch`) remains
+ * the deep-history path; this covers what the client already has in memory.
+ */
+export const collectRecentMessages = (
+    rooms: readonly Room[],
+    limits: { perRoom?: number; total?: number } = {}
+): QuickSwitcherMessageEntry[] => {
+    const perRoom = limits.perRoom ?? MESSAGES_PER_ROOM;
+    const total = limits.total ?? MESSAGES_TOTAL_CAP;
+    const collected: QuickSwitcherMessageEntry[] = [];
+
+    for (const room of rooms) {
+        const events = safeCall<readonly TimelineEventLike[]>(
+            () =>
+                (
+                    room as unknown as {
+                        getLiveTimeline: () => { getEvents: () => readonly TimelineEventLike[] };
+                    }
+                )
+                    .getLiveTimeline()
+                    .getEvents(),
+            []
+        );
+
+        let taken = 0;
+        for (let i = events.length - 1; i >= 0 && taken < perRoom; i -= 1) {
+            const event = events[i];
+            if (safeCall(() => event.getType?.(), undefined) !== 'm.room.message') continue;
+            const body = safeCall(() => event.getContent?.().body, undefined);
+            if (typeof body !== 'string' || !body.trim()) continue;
+            const eventId = safeCall(() => event.getId?.(), undefined);
+            if (!eventId) continue;
+
+            const senderId = safeCall(() => event.getSender?.(), undefined);
+            const senderName = senderId
+                ? safeCall(
+                      () => (room.getMember(senderId) as { name?: string } | null)?.name,
+                      undefined
+                  ) ?? senderId
+                : undefined;
+
+            collected.push({
+                id: eventId,
+                roomId: room.roomId,
+                roomName: room.name,
+                preview: body,
+                sender: senderName,
+                timestamp: safeCall(() => event.getTs?.(), undefined) ?? 0,
+            });
+            taken += 1;
+        }
+    }
+
+    return collected.sort((a, b) => b.timestamp - a.timestamp).slice(0, total);
 };
 
 interface QuickSwitcherProps {
@@ -353,6 +435,9 @@ export const QuickSwitcher = ({
     const [, setSelectedRoomId] = useAtom(selectedRoomIdAtom);
     const [, setSelectedSpaceId] = useAtom(selectedSpaceIdAtom);
     const setSettingsPage = useSetAtom(settingsPageAtom);
+    // Message results reuse the mention-inbox jump path: canopy-first room
+    // selection plus the jump-target atom the timeline scrolls to.
+    const { openRoomWithContext } = useMentionNavigation();
 
     const [search, setSearch] = useState('');
     const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -365,7 +450,12 @@ export const QuickSwitcher = ({
     }, [search]);
 
     useEffect(() => {
-        const rebuild = () => setIndex(buildQuickSwitcherIndex(client.getRooms(), pageEntries));
+        const rebuild = () => {
+            const rooms = client.getRooms();
+            setIndex(
+                buildQuickSwitcherIndex(rooms, pageEntries, undefined, collectRecentMessages(rooms))
+            );
+        };
         rebuild();
 
         const emitter = client as unknown as {
@@ -379,6 +469,7 @@ export const QuickSwitcher = ({
         emitter.on('sync', onSync);
         emitter.on('Room', onRoomUpdate);
         emitter.on('Room.name', onRoomUpdate);
+        emitter.on('Room.timeline', onRoomUpdate);
         emitter.on('RoomState.events', onRoomUpdate);
         emitter.on('RoomMember.name', onRoomUpdate);
 
@@ -386,6 +477,7 @@ export const QuickSwitcher = ({
             emitter.off('sync', onSync);
             emitter.off('Room', onRoomUpdate);
             emitter.off('Room.name', onRoomUpdate);
+            emitter.off('Room.timeline', onRoomUpdate);
             emitter.off('RoomState.events', onRoomUpdate);
             emitter.off('RoomMember.name', onRoomUpdate);
         };
@@ -452,6 +544,14 @@ export const QuickSwitcher = ({
                 return;
             }
 
+            if (result.category === 'Messages') {
+                if (result.jumpRoomId) {
+                    openRoomWithContext(result.jumpRoomId, result.jumpEventId);
+                }
+                onClose();
+                return;
+            }
+
             if (result.category === 'Users') {
                 const room = await client.createRoom({
                     is_direct: true,
@@ -485,6 +585,7 @@ export const QuickSwitcher = ({
             onActionPicked,
             onClose,
             onCommandPicked,
+            openRoomWithContext,
             setSelectedRoomId,
             setSelectedSpaceId,
             setSettingsPage,
@@ -561,7 +662,7 @@ export const QuickSwitcher = ({
                     value={search}
                     onChange={(event) => setSearch(event.target.value)}
                     onKeyDown={handleKeyDown}
-                    placeholder="Search rooms, spaces, DMs, members, settings, actions"
+                    placeholder="Search rooms, spaces, DMs, messages, members, settings, actions"
                     style={{
                         width: '100%',
                         border: 'none',

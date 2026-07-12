@@ -1,6 +1,12 @@
 name: blackout-desktop-tauri
 
 on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'blackout-desktop/**'
+      - 'apps/blackout-client/src/platform/**'
+      - '.github/workflows/blackout-desktop-tauri.yml'
   push:
     branches: [main]
     tags:
@@ -12,7 +18,38 @@ permissions:
   contents: write
 
 jobs:
+  # Fast, toolchain-free gate: proves a desktop notification / deep link routes
+  # to the right in-app location. Runs on PRs (the heavy bundle build below does
+  # not) so routing regressions are caught without a full Tauri build.
+  notification-harness:
+    name: Notification routing harness
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 9.15.4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run notification-routing harness (Tauri)
+        run: pnpm --filter blackout-desktop test:unit
+
   build:
+    # Release build only — never on PRs (needs signing secrets + Rust toolchain).
+    if: github.event_name != 'pull_request'
     strategy:
       fail-fast: false
       matrix:

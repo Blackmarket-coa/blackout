@@ -4,14 +4,32 @@ import {
     createFreeblackmarketStubProvider,
     shouldUseFreeblackmarketStub,
 } from './freeblackmarketStub';
-import { createBlamazonProvider } from './blamazon';
-import { createMayhemMarketplazeProvider } from './mayhemMarketplaze';
-import { createAntinAmazonProvider } from './antinAmazon';
+import { assertBlamazonDisabledForProduction, createBlamazonProvider } from './blamazon';
+import {
+    assertMayhemMarketplazeDisabledForProduction,
+    createMayhemMarketplazeProvider,
+} from './mayhemMarketplaze';
+import { assertAntinAmazonDisabledForProduction, createAntinAmazonProvider } from './antinAmazon';
 import { logEvent } from '../../services/marketplaceObservability';
 
 let cachedRegistry: Map<MarketplaceProviderId, MarketplaceProvider> | null = null;
 
+/**
+ * Hard-fail if any placeholder marketplace is enabled in production. Called before
+ * the registry is built (and again at server boot) — deliberately OUTSIDE the
+ * per-provider try/catch below, which swallows factory throws so one bad provider
+ * can't take down the rest. A misconfigured deploy must crash, not silently no-op.
+ */
+export function assertPlaceholderMarketplacesDisabledForProduction(
+    env: NodeJS.ProcessEnv = process.env
+): void {
+    assertBlamazonDisabledForProduction(env);
+    assertMayhemMarketplazeDisabledForProduction(env);
+    assertAntinAmazonDisabledForProduction(env);
+}
+
 function buildRegistry(): Map<MarketplaceProviderId, MarketplaceProvider> {
+    assertPlaceholderMarketplacesDisabledForProduction();
     // Each provider is constructed independently. A factory that throws (e.g.
     // freeblackmarket refusing to start in production without its secrets) must
     // not take down the rest of the marketplace — skip the failed provider, log
@@ -63,4 +81,7 @@ export {
     createBlamazonProvider,
     createMayhemMarketplazeProvider,
     createAntinAmazonProvider,
+    assertBlamazonDisabledForProduction,
+    assertMayhemMarketplazeDisabledForProduction,
+    assertAntinAmazonDisabledForProduction,
 };

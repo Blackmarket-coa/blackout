@@ -302,7 +302,12 @@ class QuestsService {
             if (filter.sourceKind && quest.sourceKind !== filter.sourceKind) return false;
             if (activeAtMs !== undefined) {
                 if (quest.startsAt && Date.parse(quest.startsAt) > activeAtMs) return false;
-                if (quest.endsAt && Date.parse(quest.endsAt) < activeAtMs) return false;
+                // Half-open window [startsAt, endsAt): a quest ended at t is
+                // inactive at t — matching end()'s own idempotency check
+                // (endsAt <= now means "already ended"). With `<` here, an
+                // end + list landing in the same millisecond still showed
+                // the quest as active (flaked in CI).
+                if (quest.endsAt && Date.parse(quest.endsAt) <= activeAtMs) return false;
             }
             return true;
         });

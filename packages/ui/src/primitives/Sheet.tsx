@@ -1,6 +1,7 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
 import { cx } from './cx';
+import { useFocusTrap } from './useFocusTrap';
 import * as styles from './Sheet.css';
 
 let sheetSeq = 0;
@@ -16,7 +17,8 @@ export interface SheetProps {
 
 /**
  * Portal bottom-sheet — the web generalization of the boutique `OverflowSheet`.
- * Closes on Escape and backdrop click, and moves focus to the panel on open.
+ * Closes on Escape and backdrop click, moves focus to the panel on open, and
+ * traps Tab inside it while open.
  */
 export const Sheet = ({
     open,
@@ -29,6 +31,8 @@ export const Sheet = ({
     const panelRef = React.useRef<HTMLDivElement>(null);
     const titleIdRef = React.useRef<string>();
     if (!titleIdRef.current) titleIdRef.current = `sheet-title-${(sheetSeq += 1)}`;
+
+    useFocusTrap(open, panelRef);
 
     React.useEffect(() => {
         if (!open) return;
@@ -70,6 +74,6 @@ export const Sheet = ({
                 {children}
             </div>
         </div>,
-        document.body,
+        document.body
     );
 };
