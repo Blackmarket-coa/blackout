@@ -74,16 +74,17 @@ For the source-of-truth triage with tier/owner detail see
 These are tracked in
 [`docs/architecture/deferred-bodies-schedule-2026-05-01.md`](docs/architecture/deferred-bodies-schedule-2026-05-01.md).
 Workstreams A (Ports 1–5), C, and F (minus stage channels, carved out to a
-Phase 5) are closed; E is largely closed (verification gates + external
-Draupnir enforcement remain); B's primitive set has shipped (only incremental
-adoption remains); D remains post-beta scope.
+Phase 5) are closed; E is closed client-side (only the external Draupnir
+sidecar enforcement remains); B's primitive set has shipped (only incremental
+adoption remains); D's GIF picker has shipped — its voice/video/media-controls
+polish remains post-beta scope.
 
 | Workstream | Scope | Status |
 | --- | --- | --- |
 | **B** | `@blackout/ui` v1 primitives (Button/Input/Select/etc.) using `vanilla-extract`. | Primitive set shipped (B1 + B1.1). Incremental production adoption ongoing — 15 files consume the now-real `@blackout/ui/primitives` specifier (MessageComposer, MutualAidPage, coliseum tabs, ProposalCreator, RoleEditor). |
 | **C** | Reactions / threading hardening: `ThreadPanel` slot mount in `panelSlots.tsx`, sidebar `ThreadUnreadBadge` mount, integration coverage. | **Closed (2026-06-13).** `ThreadPanel` wired into the `panelSlots.tsx` `threads` slot, `ThreadUnreadBadgeMount` in `CanopySidebar.tsx`, and the round-trip test landed (`apps/blackout-client/tests/unit/features/threading-parity/workstreamC.roundtrip.test.tsx`). |
 | **D** | Discord parity P2: GIF picker (Giphy), voice/video polish, screen-sharing polish, media player controls. | GIF picker shipped (2026-07-11): Giphy is the decided provider (`/v1/integrations/giphy` proxy; client falls back to Tenor when only a Tenor key is configured). Voice/video/screen-share polish and media player controls remain scoped. |
-| **E** | Discord parity P3: custom emoji packs, welcome flow, AutoMod, raid protection, verification gates, slowmode, audit log. | **Largely closed (2026-07-11).** MSC2545 packs (incl. reactions-picker unification), welcome/onboarding, slowmode, AutoMod config editor, Draupnir console, mod-action audit log, and the Mjolnir REST backend all ship. Remaining: verification/join gates (pure code, unstarted) and the external Draupnir sidecar that enforces `co.bmc.automod` / raid lockdown. |
+| **E** | Discord parity P3: custom emoji packs, welcome flow, AutoMod, raid protection, verification gates, slowmode, audit log. | **Closed client-side (2026-07-11).** MSC2545 packs (incl. reactions-picker unification), welcome/onboarding, slowmode, verification/join gates (`co.bmc.verification_gate`: membership-period rule enforced in the composer, account-age rule carried for the server-side enforcer), AutoMod config editor, Draupnir console, mod-action audit log, and the Mjolnir REST backend all ship. Remaining: the external Draupnir sidecar that enforces `co.bmc.automod` / raid lockdown / account-age server-side. |
 | **F** | Discord parity P4: theme engine (light/AMOLED), quick switcher, accessibility audit, profile-card polish, advanced notification controls. | **Closed (2026-07-11)** except stage channels, which are carved out to a Phase 5 alongside Workstream D's RTC baseline (see the schedule doc's F status update). |
 
 ---

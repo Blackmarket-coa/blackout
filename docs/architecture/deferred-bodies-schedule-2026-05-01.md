@@ -363,8 +363,14 @@ An on-disk audit found this workstream substantially built despite the
   `co.bmc.automod` and actuates raid lockdown — remains genuinely external
   (Draupnir sidecar), the only true cross-team dependency left here.
 - **Slowmode: already built + client-enforced** (`co.bmc.slowmode`).
-- **Verification/join gates: still genuinely unstarted** — the one remaining
-  pure-code E item (only `newAccountRestrictions` config exists today).
+- **Verification/join gates: shipped (2026-07-11)** — `co.bmc.verification_gate`
+  room state event (schema in
+  `apps/blackout-client/src/app/features/room/verificationGate.ts`, mirroring
+  the slowmode pattern): a minimum-membership-period rule enforced client-side
+  in the composer, plus a minimum-account-age rule carried in the same config
+  for the server-side enforcer (clients cannot observe account creation time —
+  same appservice bucket as `co.bmc.automod`'s newAccountRestrictions). Settings
+  editor (`RoomVerificationGate`) sits next to Slow Mode in room settings.
 
 ### Scope
 

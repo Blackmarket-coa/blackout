@@ -56,6 +56,12 @@ import {
     evaluateSlowmode,
     parseSlowmodeConfig,
 } from './slowmode';
+import {
+    VERIFICATION_GATE_STATE_EVENT_TYPE,
+    evaluateVerificationGate,
+    formatGateWait,
+    parseVerificationGateConfig,
+} from './verificationGate';
 
 const MAX_SUGGESTIONS = 8;
 const MAX_MESSAGE_LENGTH = 8000;
@@ -899,6 +905,31 @@ export const MessageComposer = ({
         const plainBody = toPlainText(value);
         if (!plainBody && attachments.length === 0 && !voiceAttachment) return;
         if (plainBody.length > MAX_MESSAGE_LENGTH) return;
+
+        // Verification gate: block brand-new members per the room's
+        // co.bmc.verification_gate config (Discord-parity verification
+        // level). Edits aren't new posts, so they're never gated.
+        if (room && target?.mode !== 'edit') {
+            const member = room.getMember(matrixClient.getUserId() ?? '');
+            const gateContent = room.currentState
+                .getStateEvents(VERIFICATION_GATE_STATE_EVENT_TYPE as never, '')
+                ?.getContent<Record<string, unknown>>();
+            const gateVerdict = evaluateVerificationGate({
+                config: parseVerificationGateConfig(gateContent),
+                joinedAtTs: member?.events?.member?.getTs() ?? null,
+                // Account creation time isn't visible client-side; the
+                // account-age rule is enforced by the server-side enforcer.
+                accountCreatedTs: null,
+                now: Date.now(),
+                userPowerLevel: member?.powerLevel ?? 0,
+            });
+            if (!gateVerdict.allowed) {
+                setSlowmodeNotice(
+                    `This den requires a short membership period before posting — try again in ${formatGateWait(gateVerdict.retryAfterMs)}.`
+                );
+                return;
+            }
+        }
 
         // Slow mode: throttle non-exempt senders per the room's co.bmc.slowmode
         // config. Edits aren't new posts, so they're never throttled.
