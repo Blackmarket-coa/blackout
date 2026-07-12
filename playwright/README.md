@@ -11,8 +11,14 @@ release-blocker case IDs in
 |---|---|
 | `services.ts` | Worker fixture options (homeserver-type, etc.). |
 | `e2e/launch-smoke/` | Specs covering the LS-* automated set. |
+| `e2e/coliseum/` | Coliseum Coalition smoke (SEEDED_ISSUES #8). Skips until `LS_COLISEUM_ROOM_ALIAS` is set (i.e. until the Coalition is seeded, launch prep B6). |
 
 ## Running
+
+These specs use the dedicated `playwright.launch-smoke.config.ts` (the
+repo-root `playwright.config.ts` only discovers
+`apps/blackout-client/tests/e2e`, so invoking these specs without the
+config silently matches 0 tests).
 
 ```bash
 # Local — assumes the dev server is already running on $BASE_URL.
@@ -20,14 +26,24 @@ BASE_URL=http://localhost:8080 \
 BLACKOUT_E2E_BASE_URL=http://localhost:8080 \
 LS_AUTH_USERNAME=smoke_member_a \
 LS_AUTH_PASSWORD=<password> \
-pnpm playwright test playwright/e2e/launch-smoke
+pnpm test:e2e:launch-smoke playwright/e2e/launch-smoke
 ```
 
 ```bash
-# CI — playwright.config.ts spawns a static server via `npx serve` against
-# ./webapp. The smoke seed users + homeserver must be reachable before the
-# job runs; see docs/launch-smoke-suite.md "Environment & Data Preconditions".
-CI=true pnpm playwright test playwright/e2e/launch-smoke
+# CI / staging — the smoke seed users + homeserver must be reachable before
+# the job runs; see docs/launch-smoke-suite.md "Environment & Data
+# Preconditions".
+CI=true BLACKOUT_E2E_BASE_URL=https://<staging-domain> \
+pnpm test:e2e:launch-smoke playwright/e2e/launch-smoke
+```
+
+```bash
+# Coliseum Coalition smoke — run alongside launch-smoke once the Coalition
+# is seeded. LS_COLISEUM_MUTUAL_AID_TEXT / LS_COLISEUM_PROPOSAL_TEXT are
+# optional exact-match assertions on the seeded content.
+LS_COLISEUM_ROOM_ALIAS='#coliseum:matrix.theblackout.app' \
+CI=true BLACKOUT_E2E_BASE_URL=https://<staging-domain> \
+pnpm test:e2e:launch-smoke playwright/e2e/coliseum
 ```
 
 ## Coverage status (2026-05-10)
