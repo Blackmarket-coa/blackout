@@ -473,6 +473,14 @@ Five of the six F items landed on `claude/stubs-placeholders-4xqu8t`:
   badges on audience avatars. What remains of Phase 5 is the infra half:
   the real LiveKit runtime binding, which also unlocks *enforced*
   listen-only audience (today the speaker/audience split is presentational).
+  **The deployment manifests for that half landed 2026-07-12** —
+  `infra/single-server-baseline/` now ships the LiveKit SFU + `lk-jwt`
+  token-bridge services, the nginx `/livekit/{jwt,sfu}` exposure, and the
+  MSC4143 `rtc_foci` advertisement in `/.well-known/matrix/client`
+  (townhall-staging gained the missing token bridge too; all guarded by
+  `tools/ci/check-call-config.mjs`). What's left is purely operational:
+  set the `LIVEKIT_*` secrets, render the template, open the RTC ports,
+  and deploy (RUNBOOK steps 2 and 6).
 
 ### Scope
 

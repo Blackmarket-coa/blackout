@@ -502,6 +502,57 @@ services:
             - no-new-privileges:true
         <<: *common-logging
 
+    # MatrixRTC voice/video: LiveKit SFU + Element's JWT token bridge.
+    # nginx exposes them at /livekit/sfu and /livekit/jwt on the matrix
+    # vhost, and /.well-known/matrix/client advertises the focus via
+    # org.matrix.msc4143.rtc_foci (see the client's features/call/README.md).
+    # Render livekit/livekit.yaml from livekit.yaml.template first
+    # (RUNBOOK step 6).
+    livekit:
+        image: livekit/livekit-server:v1.8.4
+        container_name: blackout-livekit
+        restart: unless-stopped
+        command: ['--config', '/etc/livekit.yaml']
+        ports:
+            - '7881:7881/tcp'
+            - '50100-50200:50100-50200/udp'
+        volumes:
+            - ./livekit/livekit.yaml:/etc/livekit.yaml:ro
+        healthcheck:
+            test: ['CMD-SHELL', 'wget -q --spider http://127.0.0.1:7880 || exit 1']
+            interval: 30s
+            timeout: 5s
+            retries: 5
+            start_period: 15s
+        networks:
+            - edge
+            - app
+        security_opt:
+            - no-new-privileges:true
+        <<: *common-logging
+
+    lk-jwt:
+        image: ghcr.io/element-hq/lk-jwt-service:0.2.3
+        container_name: blackout-lk-jwt
+        restart: unless-stopped
+        environment:
+            # The websocket URL handed to clients in minted tokens — the
+            # public nginx path, not the container address.
+            LIVEKIT_URL: ${LIVEKIT_PUBLIC_WS_URL}
+            LIVEKIT_KEY: ${LIVEKIT_API_KEY}
+            LIVEKIT_SECRET: ${LIVEKIT_API_SECRET}
+            LK_JWT_PORT: '8080'
+        # No healthcheck: the image is distroless (no shell/wget); nginx
+        # surfaces failures via 502s on /livekit/jwt.
+        depends_on:
+            - livekit
+        networks:
+            - edge
+            - app
+        security_opt:
+            - no-new-privileges:true
+        <<: *common-logging
+
     coturn:
         image: coturn/coturn:4.6.3-r0
         container_name: blackout-coturn

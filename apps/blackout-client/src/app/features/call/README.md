@@ -32,9 +32,17 @@ For self-hosted MatrixRTC + LiveKit with Element Call:
 3. **Matrix well-known configuration**
     - `/.well-known/matrix/client` must expose `rtc_foci` / `org.matrix.msc4143.rtc_foci` with a LiveKit focus.
 4. **Network/port forwarding**
-    - `7880/TCP`
+    - `7880/TCP` (or keep it behind the reverse proxy at `/livekit/sfu`)
     - `7881/TCP`
     - `50100-50200/UDP`
+
+**All four ship in the production baseline** as of 2026-07-12:
+`infra/single-server-baseline/` carries the `livekit` + `lk-jwt` compose
+services, `livekit/livekit.yaml.template`, the nginx `/livekit/{jwt,sfu}`
+locations, and the MSC4143 focus in the well-known response — validated by
+`pnpm guard:call-config`. Deployment (rendering the template, setting the
+`LIVEKIT_*` env keys, opening the RTC ports) is an operator step; see the
+baseline RUNBOOK.
 
 ## Operational readiness checks
 

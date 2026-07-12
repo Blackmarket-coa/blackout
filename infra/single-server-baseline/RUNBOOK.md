@@ -42,6 +42,8 @@ No database or Redis ports are published to the host.
    - `80/tcp`, `443/tcp`
    - `3478/tcp`, `3478/udp`, `5349/tcp`
    - relay range `49160-49200/udp`
+   - LiveKit RTC: `7881/tcp`, media range `50100-50200/udp` (the SFU
+     websocket itself stays behind nginx at `/livekit/sfu`)
 3. Install Docker Engine and Compose plugin.
 4. Copy this folder to `/opt/blackout`.
 5. Create env file:
@@ -60,8 +62,17 @@ source .env
 set +a
 envsubst < synapse/homeserver.yaml.template > synapse/homeserver.yaml
 envsubst < coturn/turnserver.conf.template > coturn/turnserver.conf
-chmod 600 synapse/homeserver.yaml coturn/turnserver.conf
+envsubst < livekit/livekit.yaml.template > livekit/livekit.yaml
+chmod 600 synapse/homeserver.yaml coturn/turnserver.conf livekit/livekit.yaml
 ```
+
+MatrixRTC calls need the `LIVEKIT_*` variables set in `.env` (see
+`.env.example`) before rendering — the same key pair feeds both the SFU
+config and the `lk-jwt` token bridge. After `docker compose up`, verify with
+`pnpm guard:call-config` (repo) and check that
+`https://theblackout.app/.well-known/matrix/client` returns the
+`org.matrix.msc4143.rtc_foci` entry; the client's call UI reports
+`healthy` once the focus resolves.
 
 ## 3) Initial TLS bootstrap
 

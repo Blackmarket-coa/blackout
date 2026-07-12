@@ -1,0 +1,28 @@
+# LiveKit SFU configuration for the single-server baseline (MatrixRTC
+# voice/video calls — Element Call SDK/widget in the Blackout client).
+#
+# Render with the other templated configs (RUNBOOK step 6):
+#   envsubst < livekit/livekit.yaml.template > livekit/livekit.yaml
+#   chmod 600 livekit/livekit.yaml
+#
+# Ports follow apps/blackout-client/src/app/features/call/README.md:
+#   7880/tcp  — websocket + HTTP API (proxied at /livekit/sfu)
+#   7881/tcp  — RTC over TCP fallback
+#   50100-50200/udp — RTC media
+port: 7880
+rtc:
+  tcp_port: 7881
+  port_range_start: 50100
+  port_range_end: 50200
+  # The SFU sits behind nginx on a single host; advertise the machine's
+  # public address for ICE.
+  use_external_ip: true
+keys:
+  # Shared with the lk-jwt-service token bridge (same values in .env).
+  ${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}
+turn:
+  # coturn ships as its own service in this stack.
+  enabled: false
+logging:
+  level: info
+  json: true
