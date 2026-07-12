@@ -393,6 +393,12 @@ An on-disk audit found this workstream substantially built despite the
   audit view ship). Enforcement — a bot/appservice that *reads*
   `co.bmc.automod` and actuates raid lockdown — remains genuinely external
   (Draupnir sidecar), the only true cross-team dependency left here.
+  **Update (2026-07-12):** the sidecar's deployment manifests now ship in
+  `infra/single-server-baseline/` (Draupnir 3.1.0 compose service +
+  `draupnir/production.yaml.template` + RUNBOOK §11.1 bot/management-room
+  bootstrap, wired to the client console's `co.bmc.draupnir` config event).
+  What's left is the operator step: bot account, token, management room,
+  deploy.
 - **Slowmode: already built + client-enforced** (`co.bmc.slowmode`).
 - **Verification/join gates: shipped (2026-07-11)** — `co.bmc.verification_gate`
   room state event (schema in
@@ -473,6 +479,14 @@ Five of the six F items landed on `claude/stubs-placeholders-4xqu8t`:
   badges on audience avatars. What remains of Phase 5 is the infra half:
   the real LiveKit runtime binding, which also unlocks *enforced*
   listen-only audience (today the speaker/audience split is presentational).
+  **The deployment manifests for that half landed 2026-07-12** —
+  `infra/single-server-baseline/` now ships the LiveKit SFU + `lk-jwt`
+  token-bridge services, the nginx `/livekit/{jwt,sfu}` exposure, and the
+  MSC4143 `rtc_foci` advertisement in `/.well-known/matrix/client`
+  (townhall-staging gained the missing token bridge too; all guarded by
+  `tools/ci/check-call-config.mjs`). What's left is purely operational:
+  set the `LIVEKIT_*` secrets, render the template, open the RTC ports,
+  and deploy (RUNBOOK steps 2 and 6).
 
 ### Scope
 
