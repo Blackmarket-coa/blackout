@@ -232,19 +232,19 @@ jobs:
       - run: pnpm guard:ops-artifacts
 
   audit-clean:
+    # `pnpm audit` broke when npm retired its full-audit registry endpoint
+    # (410 responses), so this gate scans the lockfile with osv-scanner
+    # instead — same pinned action and allowlist (osv-scanner.toml) as the
+    # scheduled security workflow.
     name: Dependency audit (no advisories at moderate+)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
-      - uses: pnpm/action-setup@v5
+      - name: OSV scanner
+        uses: google/osv-scanner-action/osv-scanner-action@v2.3.3
         with:
-          version: 9.15.4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm guard:audit-clean
+          scan-args: |-
+            --lockfile=pnpm-lock.yaml
 
   helm-chart-lint:
     name: Helm chart lint + template

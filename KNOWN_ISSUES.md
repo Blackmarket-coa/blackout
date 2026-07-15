@@ -16,9 +16,11 @@ are not. Use the right template:
 ## Top 5 right now
 
 (Updated daily from H48 onward, in the daily build report at
-`docs/launch/builds/H{N}.md`. Empty at launch.)
+`docs/launch/builds/H{N}.md`. The test flight is underway; this list is
+still empty because no defects have been curated onto it yet, or because
+the flight hasn't yet reached H48.)
 
-1. _(none yet — test flight not started)_
+1. _(none curated yet)_
 2.
 3.
 4.

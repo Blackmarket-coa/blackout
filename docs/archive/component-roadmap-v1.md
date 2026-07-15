@@ -1,3 +1,6 @@
+> **Archived: design-spec snapshot (2026-06).** May not reflect the current state of `packages/ui`.
+> Check that package's source and `packages/ui/README.md` for the implemented component API.
+
 # V1 Component Roadmap
 
 This roadmap defines the first stable contract for core UI primitives using the token system in `design-tokens.example.json`.
