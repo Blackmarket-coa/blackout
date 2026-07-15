@@ -2,11 +2,16 @@ import { useState, type CSSProperties } from 'react';
 import type { Room } from 'matrix-js-sdk';
 import { useOptionalCall } from '../call/CallProvider';
 import { ScreenSharePreview } from '../call/ScreenSharePreview';
-import { useWatchParty } from './useWatchParty';
+import { readPowerLevel, usePowerLevels } from '../../hooks/usePowerLevels';
+import { useWatchParty, type WatchPartyHandle } from './useWatchParty';
+import { useWatchPartyLive } from './useWatchPartyLive';
 import { WatchPartyPlayer } from './WatchPartyPlayer';
+import { WatchPartyReactionBar, WatchPartyReactionOverlay } from './WatchPartyReactions';
 import {
+    WATCH_PARTY_STATE_EVENT_TYPE,
     type WatchPartyMode,
     type WatchPartySourceKind,
+    type WatchPartyState,
     isValidSourceUri,
 } from './watchPartyState';
 
@@ -201,6 +206,53 @@ export const WatchPartyWidget = ({ room }: { room: Room }) => {
     }
 
     return (
+        <ActiveParty
+            room={room}
+            state={state}
+            myUserId={myUserId}
+            isHost={isHost}
+            canControl={canControl}
+            advance={advance}
+            claimHost={claimHost}
+            endParty={endParty}
+        />
+    );
+};
+
+const ActiveParty = ({
+    room,
+    state,
+    myUserId,
+    isHost,
+    canControl,
+    advance,
+    claimHost,
+    endParty,
+}: {
+    room: Room;
+    state: WatchPartyState;
+    myUserId: string;
+    isHost: boolean;
+    canControl: boolean;
+    advance: WatchPartyHandle['advance'];
+    claimHost: WatchPartyHandle['claimHost'];
+    endParty: WatchPartyHandle['endParty'];
+}) => {
+    const { bursts, controlRequests, sendReaction, requestControl } = useWatchPartyLive(
+        room,
+        state.hostId
+    );
+    const [requested, setRequested] = useState(false);
+
+    // Handing over the host only works when the target can write the party
+    // state event server-side; annotate under-powered requesters instead of
+    // minting a host whose transport writes the server would reject.
+    const powerLevels = usePowerLevels(room);
+    const requiredStatePower = readPowerLevel.state(powerLevels, WATCH_PARTY_STATE_EVENT_TYPE);
+    const canWriteState = (userId: string) =>
+        readPowerLevel.user(powerLevels, userId) >= requiredStatePower;
+
+    return (
         <section aria-label="Watch party" style={{ display: 'grid', gap: 10, padding: 12 }}>
             <header style={{ display: 'grid', gap: 2 }}>
                 <strong>
@@ -214,24 +266,73 @@ export const WatchPartyWidget = ({ room }: { room: Room }) => {
                 </small>
             </header>
 
-            {state.mode === 'screenshare' ? (
-                <ScreenshareParty hostId={state.hostId} isHost={isHost} />
-            ) : (
-                <WatchPartyPlayer room={room} state={state} isHost={isHost} onAdvance={advance} />
-            )}
+            <div style={{ position: 'relative' }}>
+                {state.mode === 'screenshare' ? (
+                    <ScreenshareParty hostId={state.hostId} isHost={isHost} />
+                ) : (
+                    <WatchPartyPlayer
+                        room={room}
+                        state={state}
+                        isHost={isHost}
+                        onAdvance={advance}
+                    />
+                )}
+                <WatchPartyReactionOverlay bursts={bursts} />
+            </div>
 
-            {canControl ? (
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    {!isHost && state.hostId !== myUserId ? (
-                        <button type="button" style={buttonStyle} onClick={() => void claimHost()}>
-                            Take over as host
-                        </button>
-                    ) : null}
+            <WatchPartyReactionBar onReact={sendReaction} />
+
+            {isHost && controlRequests.length > 0 ? (
+                <div style={{ display: 'grid', gap: 4 }}>
+                    <strong style={{ fontSize: 12 }}>Control requests</strong>
+                    {controlRequests.map((userId) => (
+                        <div key={userId} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                            <span style={{ fontSize: 13 }}>{userId}</span>
+                            {canWriteState(userId) ? (
+                                <button
+                                    type="button"
+                                    style={buttonStyle}
+                                    onClick={() => void advance({ hostId: userId })}
+                                >
+                                    Make host
+                                </button>
+                            ) : (
+                                <small style={mutedText}>
+                                    needs moderator power to drive playback
+                                </small>
+                            )}
+                        </div>
+                    ))}
+                </div>
+            ) : null}
+
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {!canControl && !requested ? (
+                    <button
+                        type="button"
+                        style={buttonStyle}
+                        onClick={() => {
+                            setRequested(true);
+                            void requestControl().catch(() => setRequested(false));
+                        }}
+                    >
+                        Request control
+                    </button>
+                ) : null}
+                {!canControl && requested ? (
+                    <small style={mutedText}>Control requested — waiting for the host.</small>
+                ) : null}
+                {canControl && !isHost && state.hostId !== myUserId ? (
+                    <button type="button" style={buttonStyle} onClick={() => void claimHost()}>
+                        Take over as host
+                    </button>
+                ) : null}
+                {canControl ? (
                     <button type="button" style={buttonStyle} onClick={() => void endParty()}>
                         End party
                     </button>
-                </div>
-            ) : null}
+                ) : null}
+            </div>
         </section>
     );
 };

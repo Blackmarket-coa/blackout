@@ -33,23 +33,32 @@ const buildRoom = ({
     myPower,
     partyState,
     sendStateEvent,
+    sendEvent,
+    powerLevelUsers,
+    timelineEvents,
 }: {
     myPower: number;
     partyState?: WatchPartyState;
     sendStateEvent?: ReturnType<typeof vi.fn>;
+    sendEvent?: ReturnType<typeof vi.fn>;
+    powerLevelUsers?: Record<string, number>;
+    timelineEvents?: unknown[];
 }): Room => {
     const client = createFakeMatrixClient({
         extras: {
             sendStateEvent: (sendStateEvent ??
                 vi.fn().mockResolvedValue({ event_id: '$x' })) as never,
+            ...(sendEvent ? { sendEvent: sendEvent as never } : {}),
             mxcUrlToHttp: ((mxc: string) =>
                 `https://matrix.example.org/media/${mxc.slice('mxc://'.length)}`) as never,
         },
     });
     const room = createFakeRoom({
+        powerLevelUsers: powerLevelUsers ?? { [ME]: myPower },
         stateEvents: partyState
             ? { [WATCH_PARTY_STATE_EVENT_TYPE]: serializeWatchPartyState(partyState) }
             : {},
+        timelineEvents: timelineEvents as never,
     });
     Object.assign(room, {
         client,
@@ -57,6 +66,12 @@ const buildRoom = ({
     });
     return room;
 };
+
+const timelineRequestEvent = (sender: string, ts: number) => ({
+    getType: () => 'co.bmc.watch_party.control_request',
+    getSender: () => sender,
+    getTs: () => ts,
+});
 
 let container: HTMLDivElement | null = null;
 let root: ReactDOM.Root | null = null;
@@ -171,6 +186,76 @@ describe('WatchPartyWidget', () => {
 
         expect(container?.querySelector('[data-testid="watch-party-player"]')).toBeNull();
         expect(container?.textContent).toContain(`${HOST} is presenting`);
+    });
+
+    it('lets any viewer send a palette reaction as a timeline event', () => {
+        const sendEvent = vi.fn().mockResolvedValue({ event_id: '$r' });
+        render(buildRoom({ myPower: 0, partyState: party(), sendEvent }));
+
+        act(() => {
+            click(buttonByText('🎉') as HTMLButtonElement);
+        });
+
+        expect(sendEvent).toHaveBeenCalledWith('!room:example.org', 'co.bmc.watch_party.reaction', {
+            key: '🎉',
+        });
+    });
+
+    it('lets a plain viewer request control via a timeline event', () => {
+        const sendEvent = vi.fn().mockResolvedValue({ event_id: '$q' });
+        render(buildRoom({ myPower: 0, partyState: party(), sendEvent }));
+
+        act(() => {
+            click(buttonByText('Request control') as HTMLButtonElement);
+        });
+
+        expect(sendEvent).toHaveBeenCalledTimes(1);
+        const [roomId, eventType] = sendEvent.mock.calls[0];
+        expect(roomId).toBe('!room:example.org');
+        expect(eventType).toBe('co.bmc.watch_party.control_request');
+        expect(container?.textContent).toContain('Control requested');
+        expect(buttonByText('Request control')).toBeUndefined();
+    });
+
+    it('shows the host a request queue and hands over to an empowered requester', () => {
+        const sendStateEvent = vi.fn().mockResolvedValue({ event_id: '$x' });
+        render(
+            buildRoom({
+                myPower: 100,
+                partyState: party({ hostId: ME }),
+                sendStateEvent,
+                powerLevelUsers: { [ME]: 100, '@viewer:example.org': 50 },
+                timelineEvents: [timelineRequestEvent('@viewer:example.org', Date.now())],
+            })
+        );
+
+        expect(container?.textContent).toContain('Control requests');
+        expect(container?.textContent).toContain('@viewer:example.org');
+
+        act(() => {
+            click(buttonByText('Make host') as HTMLButtonElement);
+        });
+
+        const [, eventType, content] = sendStateEvent.mock.calls[0];
+        expect(eventType).toBe(WATCH_PARTY_STATE_EVENT_TYPE);
+        const parsed = parseWatchPartyState(content as Record<string, unknown>);
+        expect(parsed?.hostId).toBe('@viewer:example.org');
+        expect(parsed?.revision).toBe(2);
+    });
+
+    it('withholds host handover from under-powered requesters', () => {
+        render(
+            buildRoom({
+                myPower: 100,
+                partyState: party({ hostId: ME }),
+                powerLevelUsers: { [ME]: 100 },
+                timelineEvents: [timelineRequestEvent('@viewer:example.org', Date.now())],
+            })
+        );
+
+        expect(container?.textContent).toContain('@viewer:example.org');
+        expect(buttonByText('Make host')).toBeUndefined();
+        expect(container?.textContent).toContain('needs moderator power');
     });
 
     it('ends the party by clearing the state event', () => {
