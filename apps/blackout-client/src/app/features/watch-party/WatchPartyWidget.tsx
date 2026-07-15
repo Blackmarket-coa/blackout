@@ -1,8 +1,14 @@
-import { useState, type CSSProperties } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import type { Room } from 'matrix-js-sdk';
 import { useOptionalCall } from '../call/CallProvider';
 import { ScreenSharePreview } from '../call/ScreenSharePreview';
 import { readPowerLevel, usePowerLevels } from '../../hooks/usePowerLevels';
+import {
+    buildOwncastPlaylistUrl,
+    fetchOwncastOrigin,
+    listStreams,
+    type StreamSummary,
+} from '../streams/streamsClient';
 import { useWatchParty, type WatchPartyHandle } from './useWatchParty';
 import { useWatchPartyLive } from './useWatchPartyLive';
 import { WatchPartyPlayer } from './WatchPartyPlayer';
@@ -57,6 +63,65 @@ const sourceKindForUri = (uri: string): WatchPartySourceKind => {
     return 'url';
 };
 
+/**
+ * Live Blackout streams for the live-event source picker. One shot on mount;
+ * failures degrade to the manual URL input, which always stays available.
+ */
+const LiveStreamPicker = ({ onPick }: { onPick: (uri: string, title: string) => void }) => {
+    const [streams, setStreams] = useState<StreamSummary[]>([]);
+    const [playlistUrl, setPlaylistUrl] = useState('');
+    const [failed, setFailed] = useState(false);
+
+    useEffect(() => {
+        let cancelled = false;
+        void Promise.all([
+            listStreams({ state: 'live', sort: 'live', limit: 10 }),
+            fetchOwncastOrigin(),
+        ])
+            .then(([list, origin]) => {
+                if (cancelled) return;
+                setStreams(list.items.filter((s) => s.state === 'live'));
+                setPlaylistUrl(buildOwncastPlaylistUrl(origin.origin));
+            })
+            .catch(() => {
+                if (!cancelled) setFailed(true);
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, []);
+
+    if (failed || (streams.length === 0 && !playlistUrl)) {
+        return (
+            <small style={mutedText}>
+                {failed
+                    ? 'Could not load live streams — paste a stream URL below instead.'
+                    : 'Looking for live streams…'}
+            </small>
+        );
+    }
+    if (streams.length === 0) {
+        return <small style={mutedText}>No Blackout streams are live right now.</small>;
+    }
+
+    return (
+        <div style={{ display: 'grid', gap: 4 }} aria-label="Live streams">
+            <small style={mutedText}>Live now:</small>
+            {streams.map((stream) => (
+                <button
+                    key={stream.id}
+                    type="button"
+                    style={{ ...buttonStyle, justifySelf: 'start' }}
+                    disabled={!playlistUrl}
+                    onClick={() => onPick(playlistUrl, stream.title)}
+                >
+                    🔴 {stream.title}
+                </button>
+            ))}
+        </div>
+    );
+};
+
 const StartPartyForm = ({
     onStart,
 }: {
@@ -100,6 +165,14 @@ const StartPartyForm = ({
                     </label>
                 ))}
             </div>
+            {mode === 'live_event' ? (
+                <LiveStreamPicker
+                    onPick={(pickedUri, pickedTitle) => {
+                        setUri(pickedUri);
+                        setTitle(pickedTitle);
+                    }}
+                />
+            ) : null}
             {needsSource ? (
                 <>
                     <input

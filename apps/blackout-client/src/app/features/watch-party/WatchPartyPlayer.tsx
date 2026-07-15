@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { Room } from 'matrix-js-sdk';
+import type HlsType from 'hls.js';
 import { type WatchPartyState, reconcilePlayback } from './watchPartyState';
 
 /** How often followers re-check the shared playhead. */
@@ -61,8 +62,8 @@ const resolveSourceUrl = (room: Room, state: WatchPartyState): string | null => 
  * The host's transport actions (play/pause/seek/rate) publish new party
  * revisions; followers run a reconciliation loop that seeks on large drift
  * and rate-nudges small drift so playback converges without stutter.
- * HLS sources play where the browser supports HLS natively (Safari/iOS);
- * hls.js wiring stays deferred, matching the livestream viewer.
+ * HLS sources play natively where supported (Safari/iOS) and through a
+ * lazily-loaded hls.js elsewhere.
  */
 export const WatchPartyPlayer = ({
     room,
@@ -83,14 +84,45 @@ export const WatchPartyPlayer = ({
     // Autoplay policy: a follower join can be blocked until a user gesture.
     const [needsGesture, setNeedsGesture] = useState(false);
     const [hlsUnsupported, setHlsUnsupported] = useState(false);
+    const hlsRef = useRef<HlsType | null>(null);
 
     const src = resolveSourceUrl(room, state);
+    const isHlsSource = state.source?.kind === 'hls' || /\.m3u8(\?|$)/.test(src ?? '');
 
+    // HLS: play natively where the browser supports it (Safari/iOS);
+    // everywhere else attach hls.js via MSE. The library loads lazily so
+    // non-HLS parties never pay for the chunk.
     useEffect(() => {
         const video = videoRef.current;
-        if (!video || !src) return;
-        setHlsUnsupported(state.source?.kind === 'hls' && !canPlayNativeHls(video));
-    }, [src, state.source?.kind]);
+        if (!video || !src || !isHlsSource) return undefined;
+
+        if (canPlayNativeHls(video)) {
+            video.src = src;
+            return () => {
+                video.removeAttribute('src');
+            };
+        }
+
+        let cancelled = false;
+        void import('hls.js').then(({ default: Hls }) => {
+            if (cancelled) return;
+            if (!Hls.isSupported()) {
+                setHlsUnsupported(true);
+                return;
+            }
+            const hls = new Hls();
+            hlsRef.current = hls;
+            hls.loadSource(src);
+            hls.attachMedia(video);
+        });
+
+        return () => {
+            cancelled = true;
+            hlsRef.current?.destroy();
+            hlsRef.current = null;
+            setHlsUnsupported(false);
+        };
+    }, [src, isHlsSource]);
 
     // --- Host side: publish transport changes + heartbeat -----------------
     const publishFromElement = useCallback(
@@ -179,8 +211,9 @@ export const WatchPartyPlayer = ({
         return (
             <div style={{ ...playerShellStyle, background: 'var(--bg-input)', padding: 12 }}>
                 <small style={{ color: 'var(--text-secondary)' }}>
-                    This party uses an HLS stream, which this browser cannot play natively. Join
-                    from Safari/iOS, or ask the host to use a direct video URL or an upload instead.
+                    This party uses an HLS stream and this browser supports neither native HLS nor
+                    Media Source Extensions. Try a current browser, or ask the host to use a direct
+                    video URL or an upload instead.
                 </small>
             </div>
         );
@@ -190,7 +223,9 @@ export const WatchPartyPlayer = ({
         <div data-testid="watch-party-player" style={playerShellStyle}>
             <video
                 ref={videoRef}
-                src={src}
+                // HLS sources attach through the effect above (hls.js MSE or
+                // native); giving the element a src too would fight it.
+                src={isHlsSource ? undefined : src}
                 controls={isHost}
                 playsInline
                 aria-label={state.source?.title ?? 'Watch party video'}

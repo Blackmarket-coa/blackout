@@ -13,6 +13,16 @@ import {
 } from '../../../../src/app/features/watch-party/watchPartyState';
 import { createFakeMatrixClient, createFakeRoom } from '../../../helpers/fakeMatrixClient';
 
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
+vi.mock('../../../../src/app/features/streams/streamsClient', () => ({
+    listStreams: vi.fn().mockResolvedValue({
+        items: [{ id: 's1', state: 'live', title: 'Championship Final' }],
+    }),
+    fetchOwncastOrigin: vi.fn().mockResolvedValue({ origin: 'https://owncast.example.org' }),
+    buildOwncastPlaylistUrl: (origin: string) => `${origin}/hls/stream.m3u8`,
+}));
+
 const HOST = '@host:example.org';
 // createFakeMatrixClient hardcodes the local user as @user:example.org.
 const ME = '@user:example.org';
@@ -156,6 +166,32 @@ describe('WatchPartyWidget', () => {
 
         expect(sendStateEvent).not.toHaveBeenCalled();
         expect(container?.textContent).toContain('Source must be an https://');
+    });
+
+    it('fills the source from the live-stream picker in live-event mode', async () => {
+        render(buildRoom({ myPower: 100 }));
+
+        const liveRadio = Array.from(
+            container?.querySelectorAll('input[type="radio"]') ?? []
+        )[1] as HTMLInputElement;
+        act(() => {
+            click(liveRadio);
+        });
+        // Let the mocked listStreams/fetchOwncastOrigin promises resolve.
+        await act(async () => {
+            await Promise.resolve();
+        });
+
+        const pick = buttonByText('🔴 Championship Final');
+        expect(pick).toBeDefined();
+        act(() => {
+            click(pick as HTMLButtonElement);
+        });
+
+        const uriInput = container?.querySelector(
+            'input[aria-label="Video source URL"]'
+        ) as HTMLInputElement;
+        expect(uriInput.value).toBe('https://owncast.example.org/hls/stream.m3u8');
     });
 
     it('renders the shared player and host controls for an active party', () => {
