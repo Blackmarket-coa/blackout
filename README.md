@@ -6,9 +6,13 @@
 Federated, end-to-end-encrypted communication platform built on the Matrix
 protocol — with first-class governance, mutual aid, steganography, deaddrop
 encrypted messaging, LiveKit-based voice and video, and post-quantum hybrid
-encryption (X25519 + ML-KEM-768). This repository is a pnpm/turborepo
-monorepo containing web, Tauri desktop, Capacitor mobile, a Synapse-derived
-homeserver, and a Node/Hono API server.
+encryption (X25519 + ML-KEM-768). It also ships OPSEC tooling (panic button,
+burner identities, dead-man's switch), a creator economy (live streaming,
+tips, subscriptions, marketplace), first-party Twitch/YouTube/Kick/Discord
+bridges, and a sandboxed plugin ecosystem — see the
+[feature overview](docs/features/OVERVIEW.md) for the full map. This
+repository is a pnpm/turborepo monorepo containing web, Tauri desktop,
+Capacitor mobile, a Synapse-derived homeserver, and a Node/Hono API server.
 
 ## For testers (no setup required)
 
@@ -33,6 +37,13 @@ homeserver, and a Node/Hono API server.
 - Pick a role (Scout / Operator / Builder / Signal / Federation Team) in [`CONTRIBUTOR_ROLES.md`](CONTRIBUTOR_ROLES.md).
 
 ## What this repo contains
+
+For the full map of implemented features — core comms, safety/OPSEC tooling
+(panic button, burner identities, dead-man's switch, canary tripwires),
+governance and coalitions, the creator economy (streaming, tips,
+subscriptions, marketplace), Twitch/YouTube/Kick/Discord bridges, and the
+plugin ecosystem — see
+[`docs/features/OVERVIEW.md`](docs/features/OVERVIEW.md).
 
 - Web client (`apps/blackout-client`) — Matrix-protocol web app with Blackout's feature plugins.
 - Desktop wrapper: `blackout-desktop` (Tauri)
