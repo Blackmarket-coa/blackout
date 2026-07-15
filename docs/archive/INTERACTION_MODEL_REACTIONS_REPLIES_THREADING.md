@@ -1,3 +1,6 @@
+> **Archived: design-spec snapshot (2026-06).** May not reflect the current implementation of
+> reactions/replies/threading in `apps/blackout-client/src/app/features/room/`.
+
 # Interaction Model: Reactions, Replies, and Threading
 
 ## 1) Event Schema

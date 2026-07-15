@@ -1,3 +1,8 @@
+> **Archived: historical founding spec (2026-06).** This was the original one-shot build brief and
+> does not reflect the current implementation. For current status see
+> [`docs/archive/README.md`](README.md), [`OSS_GAP_FILL_BUILD_PLAN.md`](../../OSS_GAP_FILL_BUILD_PLAN.md),
+> and [`docs/SUMMARY.md`](../SUMMARY.md).
+
 # Blackout Build Plan: Complete Implementation Spec
 ## One-Shot AI Build Instructions
 

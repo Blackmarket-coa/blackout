@@ -3,6 +3,11 @@
     "version": "0.0.0",
     "private": true,
     "description": "Blackout monorepo – secure communication platform",
+    "homepage": "https://theblackout.app",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/Blackmarket-coa/blackout.git"
+    },
     "license": "SEE LICENSE IN README.md",
     "type": "module",
     "packageManager": "pnpm@9.15.4",

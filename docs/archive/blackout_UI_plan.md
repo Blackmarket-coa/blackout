@@ -1,8 +1,8 @@
 
 
-
-
-
+> **Archived: exported design doc snapshot (March 2026).** Predates most of the current codebase;
+> treat as historical reference, not a current feature map. See `docs/features/` for living feature
+> docs.
 
 BLACKOUT
 UI Plan & Feature Map

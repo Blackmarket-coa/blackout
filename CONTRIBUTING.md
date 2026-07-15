@@ -87,16 +87,16 @@ information. By default the PR title is used; you can override this with a
 
 To add a longer description:
 
-_Fix llama herding bug_
+_Fix reaction picker crash_
 
 ```
-Notes: Fix a bug (https://github.com/Blackmarket-coa/blackout/issues/123) where the 'Herd' button would not herd more than 8 llamas if the moon was in the waxing gibbous phase.
+Notes: Fix a bug (https://github.com/Blackmarket-coa/blackout/issues/123) where the reaction picker would crash if a message had more than 8 distinct reactions.
 ```
 
 For PRs that don't need a user-facing changelog entry (the default for
 `T-Task`):
 
-_Remove outdated comment from `Ungulates.ts`_
+_Remove outdated comment from `RoomList.tsx`_
 
 ```
 Notes: none
@@ -104,11 +104,11 @@ Notes: none
 
 For changes spanning multiple downstream surfaces, scope the notes:
 
-_Fix another herding bug_
+_Fix voice channel reconnect bug_
 
 ```
-Notes: Fix a bug where the `herd()` function would only work on Tuesdays
-blackout notes: Fix a bug where the 'Herd' button only worked on Tuesdays
+Notes: Fix a bug where the voice channel would not automatically reconnect after a dropped connection
+blackout notes: Fix a bug where rejoining a voice channel after a dropped connection required a manual refresh
 ```
 
 Scopes you can specify:
@@ -209,7 +209,7 @@ review much harder.
 ## Shared components
 
 When adding UI components, consider whether they belong in
-`packages/shared-components` rather than directly under `src/`. Add them to
+`packages/ui` rather than directly under `src/`. Add them to
 shared components if they:
 
 - Are reusable across different parts of the application,
@@ -217,8 +217,7 @@ shared components if they:
 - Follow established patterns and aren't tightly coupled to specific
   application logic.
 
-See [`packages/shared-components/README.md`](./packages/shared-components/README.md)
-for more.
+See [`packages/ui/README.md`](./packages/ui/README.md) for more.
 
 ## Attribution
 

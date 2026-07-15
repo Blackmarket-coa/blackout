@@ -4,8 +4,8 @@ This repository is in an active migration from inherited Element/Cinny structure
 
 ## Where to work
 
-- `apps/blackout-client` is the main browser client.
-- `apps/blackout-web` is the customization transfer surface, not the long-term product shell.
+- `apps/blackout-client` is the canonical browser client and the long-term product shell.
+- `legacy/blackout-web` is the retained customization/steganography surface from the pre-migration app, not the long-term product shell.
 - Shared Blackout logic should move toward reusable core/state layers instead of new legacy wrappers.
 
 ## Preferred direction
@@ -33,7 +33,7 @@ Helpful checks:
 
 ```sh
 pnpm --dir apps/blackout-client typecheck
-pnpm --dir apps/blackout-web exec tsc --noEmit
+pnpm --dir legacy/blackout-web exec tsc --noEmit
 ```
 
 ## Editing guidance

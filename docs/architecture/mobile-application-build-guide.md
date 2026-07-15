@@ -1,3 +1,8 @@
+> **Superseded.** This describes an earlier Expo/React Native mobile approach (March 2026) that is
+> no longer current — the mobile shell is now Capacitor-based (`blackout-mobile/`). See the
+> canonical guide at [`/mobile-application-build-guide.md`](../../mobile-application-build-guide.md).
+> Kept here for historical reference only.
+
 # BLACKOUT Mobile Application Build Guide
 
 **Turborepo Monorepo · React Native (Expo) · matrix-js-sdk**  

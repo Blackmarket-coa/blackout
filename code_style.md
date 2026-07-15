@@ -1,10 +1,15 @@
-# Element Web/Desktop code style guide
+# Blackout code style guide
 
-This code style applies to projects which the element-web team directly maintains or is reasonably
-adjacent to. As of writing, these are:
+This code style applies to projects the Blackout team directly maintains or is reasonably adjacent
+to. As of writing, these are:
 
-- element-desktop
-- element-web
+- `apps/blackout-client`
+- `blackout-desktop`
+- `blackout-mobile`
+- `packages/api` (`apps/blackout-server`)
+
+Blackout was forked from Element Web/Desktop, and this guide is adapted from Element's own code
+style guide — most of the underlying guidance still applies to Blackout's codebase as-is.
 
 ## Guiding principles
 
@@ -267,14 +272,14 @@ Inheriting all the rules of TypeScript, the following additionally apply:
 16. Prefer hooks (functional components) over class components. Be consistent with the existing area if unsure
     which should be used.
     1. Unless the component is considered a "structure", in which case use classes.
-17. Write more views than structures. Structures are chunks of functionality like MatrixChat while views are
-    isolated components.
+17. Write more views than structures. Structures are chunks of functionality like the app shell root
+    component while views are isolated components.
 18. Components should serve a single, or near-single, purpose.
 19. Prefer to derive information from component properties rather than establish state.
 20. Do not use `React.Component::forceUpdate`.
 21. Prefer to use [compound typography components](https://compound.element.io/?path=/docs/compound-web_typography--docs) instead of raw HTML elements for text. This ensures consistent font usage and letter spacing across the app.
 22. If you can't use 21, don't forget to apply the correct CSS classes for font and letter spacing.
-23. Prefer to use `Flex` or `Box` components from shared-components for layout instead of raw HTML elements with CSS flexbox styles.
+23. Prefer to use `Flex` or `Box` components from `packages/ui` for layout instead of raw HTML elements with CSS flexbox styles.
 
 ## Stylesheets
 
@@ -286,13 +291,14 @@ Inheriting all the rules of TypeScript, the following additionally apply:
 > [!NOTE]
 > We use PostCSS + some plugins to process our styles. It looks like SCSS, but actually it is not.
 
-**PostCSS should be use when working in the main Element Web codebase (not shared-components).**
+**PostCSS is a legacy convention inherited from Element, applicable to older `.pcss` files in the
+codebase (not `packages/ui`). New components should use CSS modules — see below — instead.**
 
 #### Naming and file structure
 
 1. The view's CSS file MUST have the same name as the component (e.g. `res/css/components/views/rooms/_RoomTile.pcss` for `RoomTile.tsx` component).
 2. Per-view CSS is optional - it could choose to inherit all its styling from the context of the rest of the app, although this is unusual.
-3. Class names must be prefixed with `mx_`.
+3. Class names must be prefixed with `mx_` (a legacy prefix inherited from Element; do not use it for new CSS modules — see below).
 4. Class names must strictly denote the component which defines them.
    For example: `mx_MyFoo` for `MyFoo` component.
 5. Class names for DOM elements within a view which aren't components are named by appending a lower camel case identifier to the view's class name.

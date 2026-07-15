@@ -12,7 +12,7 @@
   than first-impression design.
 - Related: [`accessibility-audit-2026-05-17.md`](./accessibility-audit-2026-05-17.md),
   [`../usability-improvements.md`](../usability-improvements.md) (live P0/P1
-  defect tracker), [`../../component-roadmap-v1.md`](../../component-roadmap-v1.md)
+  defect tracker), [`../archive/component-roadmap-v1.md`](../archive/component-roadmap-v1.md)
   (component-level a11y requirements).
 
 ## Purpose & scope
@@ -253,5 +253,5 @@ output to be triageable on arrival.
   sub-audits A, C and B.
 - [`../features/stoat_inspired_community_ux_plan.md`](../features/stoat_inspired_community_ux_plan.md)
   — navigation shell design and keyboard continuity.
-- [`../../component-roadmap-v1.md`](../../component-roadmap-v1.md) —
+- [`../archive/component-roadmap-v1.md`](../archive/component-roadmap-v1.md) —
   Button/Form-level a11y requirements (focus rings, ARIA, keyboard).

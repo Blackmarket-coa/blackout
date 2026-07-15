@@ -18,6 +18,14 @@ operations guide; it points at it.
 | SLO dashboards, on-call escalation, secrets break-glass | [`docs/operations/`](docs/operations/)                                                            |
 | Incident playbooks                                      | [`docs/runbooks/`](docs/runbooks/)                                                                |
 
+## Current focus
+
+The most recently landed workstreams (analytics, VOD recording, clips,
+proximity, feed quick-wins) are tracked with their file-level status in
+[`OSS_GAP_FILL_BUILD_PLAN.md`](OSS_GAP_FILL_BUILD_PLAN.md#status-update--2026-07-11).
+Historical build plans and superseded design docs live in
+[`docs/archive/`](docs/archive/README.md).
+
 ## FBM-side companions
 
 The cooperative-economic substrate lives in the FBM repository at

@@ -115,7 +115,8 @@ workflow in
 The historical Element-fork archive branch (`archive/element-web-fork`)
 and tag (`v0-element-fork`) exist locally but have not been pushed to
 `origin`. This is preservation-only and doesn't block any forward work
-(see `PHASE0_STATUS.md` note for the supersession rationale). Pushing
+(see [`docs/archive/PHASE0_STATUS.md`](docs/archive/PHASE0_STATUS.md) note
+for the supersession rationale). Pushing
 requires a clone with write access — it can't be done from the CI
 sandbox.
 

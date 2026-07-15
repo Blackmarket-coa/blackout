@@ -97,7 +97,7 @@ From [`KNOWN_LIMITATIONS.md`](../../KNOWN_LIMITATIONS.md) and
   parity), F (P4 polish) — all post-beta scope.
 - Phase 0 archive push (`archive/element-web-fork` branch +
   `v0-element-fork` tag) — preservation-only; not a launch blocker
-  per the supersession note in [`PHASE0_STATUS.md`](../../PHASE0_STATUS.md).
+  per the supersession note in [`PHASE0_STATUS.md`](../archive/PHASE0_STATUS.md).
 
 ## Residual risk (carry forward from `production_readiness_2026_05.md` §7)
 

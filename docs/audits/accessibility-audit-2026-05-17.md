@@ -39,7 +39,7 @@ this audit is responsible for retiring.
 Anchors: `apps/blackout-client/src/app/styles/Modal.css.ts`,
 `apps/blackout-client/src/app/components/nav/NavItem.tsx`,
 `packages/design/src/` (tokens),
-[`../../component-roadmap-v1.md`](../../component-roadmap-v1.md) (focus
+[`../archive/component-roadmap-v1.md`](../archive/component-roadmap-v1.md) (focus
 ring spec on Button/Form).
 
 ## 2. Screen readers & semantics
@@ -154,4 +154,4 @@ Plugins inherit the host's a11y obligations:
 
 - [`ux-reliability-audit-2026-05-17.md`](./ux-reliability-audit-2026-05-17.md)
 - [`../usability-improvements.md`](../usability-improvements.md)
-- [`../../component-roadmap-v1.md`](../../component-roadmap-v1.md)
+- [`../archive/component-roadmap-v1.md`](../archive/component-roadmap-v1.md)

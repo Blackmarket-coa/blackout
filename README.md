@@ -13,19 +13,16 @@ homeserver, and a Node/Hono API server.
 ## For testers (no setup required)
 
 - Hosted instance: **[`https://matrix.theblackout.app`](https://matrix.theblackout.app)**.
-- **Join the beta — no CLI needed:** registration is invite-gated. Open the
-  community invite link, click **Create account**, and the registration token
-  is filled in for you:
+- **Join the beta — no CLI needed:** registration is invite-gated. A standing
+  community invite link is not yet published here; request one via the
+  [invite-request issue template](https://github.com/Blackmarket-coa/blackout/issues/new/choose)
+  and you'll get a link that pre-fills the registration token so you never
+  have to touch the CLI.
 
-  > **Invite link:** `https://matrix.theblackout.app/invite/COMMUNITY_TOKEN`
-  >
-  > _Maintainers: replace `COMMUNITY_TOKEN` above with a multi-use community
-  > invitation minted via the invitations flow (`POST /v1/invitations`, or the
-  > in-app Invitations panel). The link pre-fills the Synapse registration
-  > token, so testers never touch the CLI._
-
-  If the link is exhausted or expired, request a fresh one via the
-  [invite-request issue template](https://github.com/Blackmarket-coa/blackout/issues/new/choose).
+  > _Maintainers: once a multi-use community invitation is minted via the
+  > invitations flow (`POST /v1/invitations`, or the in-app Invitations panel),
+  > publish it here as `https://matrix.theblackout.app/invite/<TOKEN>` and
+  > remove this note._
 - Browse public rooms before signing up at
   [`https://matrix.theblackout.app/explore`](https://matrix.theblackout.app/explore).
 - See [`TESTERS.md`](TESTERS.md) for the 5-minute orientation and what to try first.
@@ -244,9 +241,12 @@ git clone https://github.com/Blackmarket-coa/blackout.git
 cd blackout
 pnpm install
 cp config.sample.json config.json
+cp apps/blackout-server/.env.example apps/blackout-server/.env
+cp apps/blackout-client/.env.example apps/blackout-client/.env
 ```
 
-Then edit `config.json` as needed. See `docs/config.md` for configuration details.
+- `config.json` is the client's runtime Matrix/homeserver config (Element/Cinny-style). Edit as needed — see `docs/config.md`.
+- Each `.env` file holds workspace-local secrets and build settings for that app.
 
 ### Build
 
@@ -318,7 +318,7 @@ Default local URL:
 5. Verify:
    - `/` returns the frontend app.
 
-### Legacy frontend quality checks (`apps/blackout-web`)
+### Legacy frontend quality checks (`legacy/blackout-web`)
 
 ```bash
 pnpm --filter @blackout/blackout-web test:unit
@@ -542,17 +542,7 @@ Canonical shared runtime packages:
 - `packages/blackout-protocol`
 - `packages/blackout-sdk`
 
-### Reproducible local bootstrap
-
-```bash
-git clone <repo>
-cd blackout
-pnpm install
-cp apps/blackout-server/.env.example apps/blackout-server/.env
-cp apps/blackout-client/.env.example apps/blackout-client/.env
-pnpm build
-pnpm dev
-```
+For local bootstrap steps, see [Quick start](#quick-start) above.
 
 ### Deployment config locations
 

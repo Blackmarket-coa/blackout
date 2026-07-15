@@ -1,6 +1,7 @@
-Vector is written mainly by the Vector team, building upon the Matrix React
-SDK. Vector also welcomes external contributions. Third party contributors
-include:
+Blackout is written mainly by the Black Market Coalition, building upon the
+Matrix React SDK and the Element/Vector web client it was forked from.
+Blackout also welcomes external contributions. Third party contributors to
+the upstream Element/Vector codebase this project inherits include:
 
 * Nolan Darilek (https://github.com/ndarilek)
   Accessibility and semantic markup contributions
