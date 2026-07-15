@@ -41,6 +41,7 @@ import {
 } from '../../features/call/liveInteractionBundle';
 import { SoundboardWidget } from '../../features/soundboard/SoundboardWidget';
 import { StageChannelWidget } from '../../features/stage-channels/StageChannelWidget';
+import { WatchPartyWidget } from '../../features/watch-party/WatchPartyWidget';
 
 export type RightPanelSlotProps = {
     panel: Exclude<RightPanelType, null>;
@@ -76,11 +77,14 @@ export const WIDGET_PANEL_INVENTORY_IDS = [
     'soundboard',
     'numbers_station',
     'stage_channels',
+    'watch_party',
 ] as const;
 
-export type WidgetPanelInventoryId = (typeof WIDGET_PANEL_INVENTORY_IDS)[number];
+export type WidgetPanelInventoryId = typeof WIDGET_PANEL_INVENTORY_IDS[number];
 
-export const isWidgetPanelInventoryId = (panel: RightPanelSlotName): panel is WidgetPanelInventoryId =>
+export const isWidgetPanelInventoryId = (
+    panel: RightPanelSlotName
+): panel is WidgetPanelInventoryId =>
     WIDGET_PANEL_INVENTORY_IDS.some((inventoryId) => inventoryId === panel);
 
 const buildMemberProfile = (member: RoomMember): MemberProfile => ({
@@ -520,7 +524,14 @@ const MonetizationPanel: RightPanelSlotRenderer = ({ room }) => {
 
 const baselineSlotRegistry: RightPanelSlotRegistry = {
     members: MembersPanel,
-    threads: ({ events, room, onJumpToEvent, activeThreadRootId, onSelectThread, onClearThread }) => {
+    threads: ({
+        events,
+        room,
+        onJumpToEvent,
+        activeThreadRootId,
+        onSelectThread,
+        onClearThread,
+    }) => {
         if (!activeThreadRootId) {
             return (
                 <ThreadRootList
@@ -628,7 +639,9 @@ const WidgetInventoryPanel = ({ panel, room }: RightPanelSlotProps) => {
                         gap: 4,
                     }}
                 >
-                    <strong style={{ fontSize: 12 }}>Dependency health: {diagnostics.status}</strong>
+                    <strong style={{ fontSize: 12 }}>
+                        Dependency health: {diagnostics.status}
+                    </strong>
                     {diagnostics.failures.length === 0 ? (
                         <small style={{ color: 'var(--text-secondary)' }}>
                             All live interaction dependencies are available.
@@ -651,6 +664,7 @@ const WidgetInventoryPanel = ({ panel, room }: RightPanelSlotProps) => {
 const widgetRendererFor = (inventoryId: WidgetPanelInventoryId): RightPanelSlotRenderer => {
     if (inventoryId === 'soundboard') return ({ room }) => <SoundboardWidget room={room} />;
     if (inventoryId === 'stage_channels') return ({ room }) => <StageChannelWidget room={room} />;
+    if (inventoryId === 'watch_party') return ({ room }) => <WatchPartyWidget room={room} />;
     return WidgetInventoryPanel;
 };
 

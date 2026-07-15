@@ -111,6 +111,7 @@ const RIGHT_PANEL_LABELS: Record<Exclude<RightPanelType, null>, string> = {
     soundboard: 'Soundboard',
     numbers_station: 'Numbers station',
     stage_channels: 'Stage channels',
+    watch_party: 'Watch party',
 };
 
 const RIGHT_PANEL_TOOLTIPS: Record<Exclude<RightPanelType, null>, string> = {
@@ -133,6 +134,7 @@ const RIGHT_PANEL_TOOLTIPS: Record<Exclude<RightPanelType, null>, string> = {
     soundboard: 'Open the soundboard',
     numbers_station: 'Open the numbers station broadcast surface',
     stage_channels: 'Open stage channels',
+    watch_party: 'Watch videos, live events, or a shared screen together',
 };
 
 const roomKindIcon = (room: Room): string => {
@@ -655,57 +657,57 @@ export const ClientLayout = () => {
                         roomId={selectedRoomId}
                         canopyId={routeCanopyId ?? selectedSpaceId ?? undefined}
                     >
-                    <section
-                        style={{
-                            border: '1px solid var(--border-default)',
-                            borderRadius: 10,
-                            height: 'min(62vh, 760px)',
-                            minHeight: 360,
-                            overflow: 'hidden',
-                        }}
-                    >
-                        {coalitionEnabled &&
-                        coalitionDenState.enabled &&
-                        roomSurface === 'coalition' ? (
-                            <CoalitionView
-                                denId={selectedRoomId}
-                                canopyId={coalitionDenState.canopyId ?? selectedSpaceId ?? null}
-                                enabledTabs={
-                                    coalitionDenState.enabledTabs.length > 0
-                                        ? coalitionDenState.enabledTabs
-                                        : undefined
-                                }
-                                scopeLabel={`Den · ${
-                                    rooms.find((room) => room.roomId === selectedRoomId)?.name ??
-                                    selectedRoomId
-                                }`}
-                            />
-                        ) : forumEnabled && isForumRoom && roomSurface === 'forum' ? (
-                            <ForumView roomId={selectedRoomId} />
+                        <section
+                            style={{
+                                border: '1px solid var(--border-default)',
+                                borderRadius: 10,
+                                height: 'min(62vh, 760px)',
+                                minHeight: 360,
+                                overflow: 'hidden',
+                            }}
+                        >
+                            {coalitionEnabled &&
+                            coalitionDenState.enabled &&
+                            roomSurface === 'coalition' ? (
+                                <CoalitionView
+                                    denId={selectedRoomId}
+                                    canopyId={coalitionDenState.canopyId ?? selectedSpaceId ?? null}
+                                    enabledTabs={
+                                        coalitionDenState.enabledTabs.length > 0
+                                            ? coalitionDenState.enabledTabs
+                                            : undefined
+                                    }
+                                    scopeLabel={`Den · ${
+                                        rooms.find((room) => room.roomId === selectedRoomId)
+                                            ?.name ?? selectedRoomId
+                                    }`}
+                                />
+                            ) : forumEnabled && isForumRoom && roomSurface === 'forum' ? (
+                                <ForumView roomId={selectedRoomId} />
+                            ) : (
+                                <RoomTimeline
+                                    roomId={selectedRoomId}
+                                    unreadEventId={unreadMarkerEventId ?? undefined}
+                                    jumpToEventId={jumpTargetEventId ?? undefined}
+                                    onJumpResolved={(eventId, found) => {
+                                        if (eventId === jumpTargetEventId && found) {
+                                            setJumpTargetEventId(null);
+                                        }
+                                        if (eventId === unreadMarkerEventId && found) {
+                                            setUnreadMarkerEventId(null);
+                                        }
+                                    }}
+                                />
+                            )}
+                        </section>
+
+                        {deadDrop.data.enabled ? (
+                            <DeadDropComposer roomId={selectedRoomId} />
                         ) : (
-                            <RoomTimeline
-                                roomId={selectedRoomId}
-                                unreadEventId={unreadMarkerEventId ?? undefined}
-                                jumpToEventId={jumpTargetEventId ?? undefined}
-                                onJumpResolved={(eventId, found) => {
-                                    if (eventId === jumpTargetEventId && found) {
-                                        setJumpTargetEventId(null);
-                                    }
-                                    if (eventId === unreadMarkerEventId && found) {
-                                        setUnreadMarkerEventId(null);
-                                    }
-                                }}
-                            />
+                            <MessageComposer roomId={selectedRoomId} />
                         )}
-                    </section>
 
-                    {deadDrop.data.enabled ? (
-                        <DeadDropComposer roomId={selectedRoomId} />
-                    ) : (
-                        <MessageComposer roomId={selectedRoomId} />
-                    )}
-
-                    <DeadDropSettings roomId={selectedRoomId} />
+                        <DeadDropSettings roomId={selectedRoomId} />
                     </RoomInviteAcceptGate>
                 </div>
             );
@@ -1680,7 +1682,6 @@ export const ClientLayout = () => {
                 </div>
             </main>
 
-
             {lobbyOpen && selectedSpaceId ? (
                 <aside
                     role="dialog"
@@ -1866,9 +1867,7 @@ export const ClientLayout = () => {
             <CreateSpaceModalRenderer />
             <CreateRoomModalRenderer />
             {showGlobalInvitations ? (
-                <InvitationsManager
-                    requestClose={() => setShowGlobalInvitations(false)}
-                />
+                <InvitationsManager requestClose={() => setShowGlobalInvitations(false)} />
             ) : null}
             {attachProductOpen ? (
                 <Suspense fallback={null}>
@@ -1923,7 +1922,11 @@ const DenInviteButtons: React.FC<{ room: Room }> = ({ room }) => {
                 type="button"
                 onClick={() => setShowInvite(true)}
                 disabled={!canInvite}
-                title={canInvite ? 'Invite a user by Matrix ID' : 'You don’t have permission to invite here'}
+                title={
+                    canInvite
+                        ? 'Invite a user by Matrix ID'
+                        : 'You don’t have permission to invite here'
+                }
                 aria-label="Invite a user"
                 style={{
                     ...buttonStyle,

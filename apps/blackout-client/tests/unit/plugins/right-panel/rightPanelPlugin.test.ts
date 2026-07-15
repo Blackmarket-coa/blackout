@@ -42,12 +42,14 @@ describe('right panel plugin slots', () => {
         expect(typeof registry.soundboard).toBe('function');
         expect(typeof registry.numbers_station).toBe('function');
         expect(typeof registry.stage_channels).toBe('function');
+        expect(typeof registry.watch_party).toBe('function');
 
         expect(withoutLiveBundle.townhall_sfu).toBeUndefined();
         expect(withoutLiveBundle.element_call).toBeUndefined();
         expect(withoutLiveBundle.soundboard).toBeUndefined();
         expect(withoutLiveBundle.numbers_station).toBeUndefined();
         expect(withoutLiveBundle.stage_channels).toBeUndefined();
+        expect(withoutLiveBundle.watch_party).toBeUndefined();
         expect(typeof withoutLiveBundle.media_pipeline).toBe('function');
     });
 });

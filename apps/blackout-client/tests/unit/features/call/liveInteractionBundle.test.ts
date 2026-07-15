@@ -46,6 +46,7 @@ describe('live interaction bundle diagnostics', () => {
         expect(isLiveInteractionWidgetPanelId('soundboard')).toBe(true);
         expect(isLiveInteractionWidgetPanelId('numbers_station')).toBe(true);
         expect(isLiveInteractionWidgetPanelId('element_call')).toBe(true);
+        expect(isLiveInteractionWidgetPanelId('watch_party')).toBe(true);
         expect(isLiveInteractionWidgetPanelId('media_pipeline')).toBe(false);
     });
 });
