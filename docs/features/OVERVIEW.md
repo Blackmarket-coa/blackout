@@ -34,6 +34,11 @@ Client code: `apps/blackout-client/src/app/features/`; server code:
 - **Voice & video** — 1:1 and group calls, screen share, and stage channels
   over a LiveKit SFU (`call`, `media-call`, `stage-channels`, `soundboard`;
   infra: `infra/single-server-baseline/` livekit + lk-jwt + coturn).
+- **Watch parties** — synchronized co-watching in a den via the
+  `co.bmc.watch_party` state event: a host-driven shared player (drift
+  reconciliation with hard-seek/rate-nudge), live-event co-watch, and
+  screenshare mode over the call layer, plus floating reactions and a
+  host-control request queue carried by timeline events (`watch-party`).
 - **Communities** — canopies (spaces) with dens, roles and granular
   permissions, pins, member panels, discovery/lobby/welcome flows, forums,
   topics, documents, and an education module (`canopy`, `communities`,

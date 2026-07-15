@@ -19,6 +19,7 @@ export type RightPanelType =
     | 'soundboard'
     | 'numbers_station'
     | 'stage_channels'
+    | 'watch_party'
     | 'notifications'
     | null;
 

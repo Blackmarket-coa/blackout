@@ -39,7 +39,8 @@ export type QuickActionId =
     | 'open-widget-matrix-widget-compat'
     | 'open-widget-soundboard'
     | 'open-widget-numbers-station'
-    | 'open-widget-stage-channels';
+    | 'open-widget-stage-channels'
+    | 'open-widget-watch-party';
 
 export type FeatureAnchor =
     | { kind: 'route'; target: string }
@@ -95,6 +96,7 @@ export const FEATURE_ROUTE_ANCHORS = [
     'route-widget-soundboard',
     'route-widget-numbers-station',
     'route-widget-stage-channels',
+    'route-widget-watch-party',
 ] as const;
 
 export const FEATURE_SETTINGS_ANCHORS = [
@@ -216,6 +218,7 @@ export const FEATURE_UI_ENTRIES: FeatureEntry[] = [
         'Open the numbers station widget.'
     ),
     widgetEntry('open-widget-stage-channels', 'Stage Channels', 'Open the stage channels widget.'),
+    widgetEntry('open-widget-watch-party', 'Watch Party', 'Open the watch party widget.'),
     {
         id: 'compose-join',
         label: '/join',
@@ -371,6 +374,7 @@ const WIDGET_PANEL_ID_BY_ACTION = {
     'open-widget-soundboard': 'soundboard',
     'open-widget-numbers-station': 'numbers_station',
     'open-widget-stage-channels': 'stage_channels',
+    'open-widget-watch-party': 'watch_party',
 } as const satisfies Record<Extract<QuickActionId, `open-widget-${string}`>, string>;
 
 export type WidgetPanelId =

@@ -4,9 +4,10 @@ export const LIVE_INTERACTION_WIDGET_PANEL_IDS = [
     'soundboard',
     'numbers_station',
     'stage_channels',
+    'watch_party',
 ] as const;
 
-export type LiveInteractionWidgetPanelId = (typeof LIVE_INTERACTION_WIDGET_PANEL_IDS)[number];
+export type LiveInteractionWidgetPanelId = typeof LIVE_INTERACTION_WIDGET_PANEL_IDS[number];
 
 export type LiveInteractionDependencyId =
     | 'runtime.plugin.right_panel_slots'
@@ -84,7 +85,8 @@ export const evaluateLiveInteractionDependencies = (
         failures.push({
             id: 'browser.media_devices.enumerate',
             message: 'MediaDevices.enumerateDevices() is unavailable.',
-            adminHint: 'Use a browser build that supports device enumeration for live audio/video routing.',
+            adminHint:
+                'Use a browser build that supports device enumeration for live audio/video routing.',
         });
     }
 
