@@ -311,10 +311,8 @@ const ActiveParty = ({
     claimHost: WatchPartyHandle['claimHost'];
     endParty: WatchPartyHandle['endParty'];
 }) => {
-    const { bursts, controlRequests, sendReaction, requestControl } = useWatchPartyLive(
-        room,
-        state.hostId
-    );
+    const { bursts, controlRequests, activeViewers, sendReaction, requestControl } =
+        useWatchPartyLive(room, state.hostId);
     const [requested, setRequested] = useState(false);
 
     // Handing over the host only works when the target can write the party
@@ -337,6 +335,11 @@ const ActiveParty = ({
                     {isHost ? ' (you)' : ''}
                     {state.mode !== 'screenshare' ? ` · ${state.status}` : ''}
                 </small>
+                {activeViewers.length > 0 ? (
+                    <small style={mutedText} title={activeViewers.join(', ')}>
+                        👥 Watching now: {activeViewers.length}
+                    </small>
+                ) : null}
             </header>
 
             <div style={{ position: 'relative' }}>

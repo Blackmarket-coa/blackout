@@ -2,9 +2,12 @@ import { describe, expect, it } from 'vitest';
 import {
     CONTROL_REQUEST_TTL_MS,
     REACTION_BURST_MAX,
+    VIEWER_STALE_MS,
+    WATCH_PARTY_HEARTBEAT_EVENT_TYPE,
     WATCH_PARTY_REACTION_KEYS,
     WATCH_PARTY_REQUEST_EVENT_TYPE,
     appendBurst,
+    collectActiveViewers,
     collectControlRequests,
     parseReactionKey,
     type ReactionBurst,
@@ -67,5 +70,36 @@ describe('collectControlRequests', () => {
     it('returns [] when nothing qualifies', () => {
         expect(collectControlRequests([], '@host:x', NOW)).toEqual([]);
         expect(collectControlRequests([request('@host:x', 0)], '@host:x', NOW)).toEqual([]);
+    });
+});
+
+describe('collectActiveViewers', () => {
+    const NOW = 1_000_000_000;
+    const beat = (sender: string, ageMs: number) => ({
+        type: WATCH_PARTY_HEARTBEAT_EVENT_TYPE,
+        sender,
+        originServerTs: NOW - ageMs,
+    });
+
+    it('keeps fresh viewers, dedupes by sender, orders most-recent first', () => {
+        const viewers = collectActiveViewers(
+            [
+                beat('@old:x', VIEWER_STALE_MS - 1_000),
+                beat('@recent:x', 1_000),
+                beat('@recent:x', 5_000), // duplicate, older — latest (1s) wins
+                beat('@gone:x', VIEWER_STALE_MS + 1), // stale — dropped
+                { type: 'm.room.message', sender: '@chat:x', originServerTs: NOW }, // unrelated
+            ],
+            NOW
+        );
+        expect(viewers).toEqual(['@recent:x', '@old:x']);
+    });
+
+    it('counts a future-timestamped heartbeat as fresh (clock skew)', () => {
+        expect(collectActiveViewers([beat('@ahead:x', -5_000)], NOW)).toEqual(['@ahead:x']);
+    });
+
+    it('returns [] with no heartbeats', () => {
+        expect(collectActiveViewers([], NOW)).toEqual([]);
     });
 });

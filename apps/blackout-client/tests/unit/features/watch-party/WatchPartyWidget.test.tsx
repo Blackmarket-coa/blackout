@@ -83,6 +83,12 @@ const timelineRequestEvent = (sender: string, ts: number) => ({
     getTs: () => ts,
 });
 
+const timelineHeartbeatEvent = (sender: string, ts: number) => ({
+    getType: () => 'co.bmc.watch_party.heartbeat',
+    getSender: () => sender,
+    getTs: () => ts,
+});
+
 let container: HTMLDivElement | null = null;
 let root: ReactDOM.Root | null = null;
 
@@ -245,10 +251,13 @@ describe('WatchPartyWidget', () => {
             click(buttonByText('Request control') as HTMLButtonElement);
         });
 
-        expect(sendEvent).toHaveBeenCalledTimes(1);
-        const [roomId, eventType] = sendEvent.mock.calls[0];
-        expect(roomId).toBe('!room:example.org');
-        expect(eventType).toBe('co.bmc.watch_party.control_request');
+        // The mounted party also emits presence heartbeats; assert on the
+        // control-request send specifically rather than a total call count.
+        const requestCall = sendEvent.mock.calls.find(
+            ([, eventType]) => eventType === 'co.bmc.watch_party.control_request'
+        );
+        expect(requestCall).toBeDefined();
+        expect(requestCall?.[0]).toBe('!room:example.org');
         expect(container?.textContent).toContain('Control requested');
         expect(buttonByText('Request control')).toBeUndefined();
     });
@@ -292,6 +301,21 @@ describe('WatchPartyWidget', () => {
         expect(container?.textContent).toContain('@viewer:example.org');
         expect(buttonByText('Make host')).toBeUndefined();
         expect(container?.textContent).toContain('needs moderator power');
+    });
+
+    it('shows a "watching now" count from fresh presence heartbeats', () => {
+        render(
+            buildRoom({
+                myPower: 0,
+                partyState: party(),
+                timelineEvents: [
+                    timelineHeartbeatEvent('@a:example.org', Date.now()),
+                    timelineHeartbeatEvent('@b:example.org', Date.now()),
+                ],
+            })
+        );
+
+        expect(container?.textContent).toContain('Watching now: 2');
     });
 
     it('ends the party by clearing the state event', () => {
