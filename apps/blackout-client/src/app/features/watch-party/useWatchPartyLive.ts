@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { RoomEvent, type MatrixEvent, type Room } from 'matrix-js-sdk';
 import {
+    HEARTBEAT_INTERVAL_MS,
     REACTION_BURST_TTL_MS,
     REACTION_SEND_THROTTLE_MS,
+    WATCH_PARTY_HEARTBEAT_EVENT_TYPE,
     WATCH_PARTY_REACTION_EVENT_TYPE,
     WATCH_PARTY_REQUEST_EVENT_TYPE,
     type ReactionBurst,
     type WatchPartyReactionKey,
     appendBurst,
+    collectActiveViewers,
     collectControlRequests,
     parseReactionKey,
 } from './watchPartyLive';
@@ -17,6 +20,8 @@ export interface WatchPartyLiveHandle {
     bursts: ReactionBurst[];
     /** Members waiting for the host to hand over control, longest-waiting first. */
     controlRequests: string[];
+    /** Members currently watching (fresh presence heartbeat), most-recent first. */
+    activeViewers: string[];
     sendReaction: (key: WatchPartyReactionKey) => void;
     requestControl: () => Promise<void>;
 }
@@ -42,7 +47,16 @@ export const useWatchPartyLive = (room: Room, hostId: string): WatchPartyLiveHan
             Date.now()
         )
     );
+    const [activeViewers, setActiveViewers] = useState<string[]>(() =>
+        collectActiveViewers(room.getLiveTimeline().getEvents().map(toTimelineLike), Date.now())
+    );
     const lastSendRef = useRef(0);
+
+    const recomputeViewers = useCallback(() => {
+        setActiveViewers(
+            collectActiveViewers(room.getLiveTimeline().getEvents().map(toTimelineLike), Date.now())
+        );
+    }, [room]);
 
     // Recompute the queue when the host changes (their own stale request drops).
     useEffect(() => {
@@ -54,6 +68,27 @@ export const useWatchPartyLive = (room: Room, hostId: string): WatchPartyLiveHan
             )
         );
     }, [room, hostId]);
+
+    // Presence: announce we're watching now, then on an interval. Also sweep
+    // the roster each tick so viewers who went stale drop off even without a
+    // new inbound heartbeat to trigger a recompute.
+    useEffect(() => {
+        const beat = () => {
+            void mx
+                .sendEvent(
+                    room.roomId,
+                    WATCH_PARTY_HEARTBEAT_EVENT_TYPE as never,
+                    { ts: Date.now() } as never
+                )
+                .catch(() => undefined);
+        };
+        beat();
+        const timer = window.setInterval(() => {
+            beat();
+            recomputeViewers();
+        }, HEARTBEAT_INTERVAL_MS);
+        return () => window.clearInterval(timer);
+    }, [mx, room.roomId, recomputeViewers]);
 
     useEffect(() => {
         const expiry = new Set<ReturnType<typeof setTimeout>>();
@@ -91,6 +126,11 @@ export const useWatchPartyLive = (room: Room, hostId: string): WatchPartyLiveHan
                         Date.now()
                     )
                 );
+                return;
+            }
+
+            if (event.getType() === WATCH_PARTY_HEARTBEAT_EVENT_TYPE) {
+                recomputeViewers();
             }
         };
 
@@ -99,7 +139,7 @@ export const useWatchPartyLive = (room: Room, hostId: string): WatchPartyLiveHan
             mx.removeListener(RoomEvent.Timeline, onTimeline);
             expiry.forEach((timer) => clearTimeout(timer));
         };
-    }, [mx, room, hostId]);
+    }, [mx, room, hostId, recomputeViewers]);
 
     const sendReaction = useCallback(
         (key: WatchPartyReactionKey) => {
@@ -121,5 +161,5 @@ export const useWatchPartyLive = (room: Room, hostId: string): WatchPartyLiveHan
         );
     }, [mx, room.roomId]);
 
-    return { bursts, controlRequests, sendReaction, requestControl };
+    return { bursts, controlRequests, activeViewers, sendReaction, requestControl };
 };
