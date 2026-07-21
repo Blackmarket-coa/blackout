@@ -24,6 +24,7 @@ import {
 } from '../hooks/useCoalitionFeed';
 import { createCoalitionAidPost, type NearbyQuery } from '../coalitionClient';
 import { VideoReel, useVideoShare } from './VideoReel';
+import { VideoComposer } from '../composer/VideoComposer';
 import {
     buildLayerIconSvg,
     layerStyleFor,
@@ -316,6 +317,9 @@ export function MapTab({ scope }: MapTabProps) {
     );
 
     const [reelStartId, setReelStartId] = useState<string | null>(null);
+    /** Full reel including non-geo-tagged stories (map pins carry only tagged ones). */
+    const [allReelOpen, setAllReelOpen] = useState(false);
+    const [showVideoComposer, setShowVideoComposer] = useState(false);
     const { shareStatus, onShare } = useVideoShare();
 
     const layersArray = useMemo(() => [...activeLayers], [activeLayers]);
@@ -456,12 +460,15 @@ export function MapTab({ scope }: MapTabProps) {
     };
 
     // Reel ordered so the tapped story leads, then the rest of the nearby stories.
+    // The "Stories" control opens the full feed instead — including videos
+    // posted without a location, which never surface as pins.
     const reelItems = useMemo<CoalitionFeedItem[]>(() => {
+        if (allReelOpen) return videoState.data?.items ?? [];
         if (!reelStartId) return [];
         const start = videoItems.filter((item) => item.id === reelStartId);
         const rest = videoItems.filter((item) => item.id !== reelStartId);
         return [...start, ...rest];
-    }, [reelStartId, videoItems]);
+    }, [allReelOpen, videoState.data, reelStartId, videoItems]);
 
     return (
         <div style={{ height: mobile ? 'min(82vh, 820px)' : 'min(72vh, 820px)' }}>
@@ -621,6 +628,47 @@ export function MapTab({ scope }: MapTabProps) {
                     >
                         ➕ Post aid
                     </button>
+                    <button
+                        type="button"
+                        onClick={() => setShowVideoComposer((v) => !v)}
+                        aria-pressed={showVideoComposer}
+                        data-testid="coalition-map-post-video"
+                        title="Record or upload a video story"
+                        style={{
+                            border: '1px solid var(--border-default)',
+                            borderRadius: 999,
+                            padding: '4px 10px',
+                            fontSize: 12,
+                            background: showVideoComposer
+                                ? SOLARPUNK_CONTROL_ACTIVE.bg
+                                : 'var(--bg-surface)',
+                            color: showVideoComposer
+                                ? SOLARPUNK_CONTROL_ACTIVE.ink
+                                : 'var(--text-primary)',
+                            cursor: 'pointer',
+                        }}
+                    >
+                        🎥 Post video
+                    </button>
+                    {(videoState.data?.items.length ?? 0) > 0 ? (
+                        <button
+                            type="button"
+                            onClick={() => setAllReelOpen(true)}
+                            data-testid="coalition-map-stories"
+                            title="Watch all video stories, including ones without a map pin"
+                            style={{
+                                border: '1px solid var(--border-default)',
+                                borderRadius: 999,
+                                padding: '4px 10px',
+                                fontSize: 12,
+                                background: 'var(--bg-surface)',
+                                color: 'var(--text-primary)',
+                                cursor: 'pointer',
+                            }}
+                        >
+                            ▶ Stories
+                        </button>
+                    ) : null}
                 </div>
 
                 {showAidForm ? (
@@ -629,6 +677,18 @@ export function MapTab({ scope }: MapTabProps) {
                         defaultLocation={nearby ? { lat: nearby.lat, lng: nearby.lng } : undefined}
                         onPosted={() => aidState.refetch()}
                         onClose={() => setShowAidForm(false)}
+                    />
+                ) : null}
+
+                {showVideoComposer ? (
+                    <VideoComposer
+                        scope={scope}
+                        onPosted={() => {
+                            videoState.refetch();
+                            setShowVideoComposer(false);
+                            setAllReelOpen(true);
+                        }}
+                        onClose={() => setShowVideoComposer(false)}
                     />
                 ) : null}
 
@@ -886,7 +946,7 @@ export function MapTab({ scope }: MapTabProps) {
                     </div>
                 ) : null}
 
-                {reelStartId && reelItems.length > 0 ? (
+                {(reelStartId || allReelOpen) && reelItems.length > 0 ? (
                     <div
                         data-testid="coalition-map-reel"
                         style={{
@@ -898,7 +958,10 @@ export function MapTab({ scope }: MapTabProps) {
                     >
                         <button
                             type="button"
-                            onClick={() => setReelStartId(null)}
+                            onClick={() => {
+                                setReelStartId(null);
+                                setAllReelOpen(false);
+                            }}
                             aria-label="Close stories"
                             data-testid="coalition-map-reel-close"
                             style={{
