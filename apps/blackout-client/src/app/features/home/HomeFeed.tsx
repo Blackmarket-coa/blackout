@@ -42,6 +42,7 @@ import { AmbientBackdrop } from './AmbientBackdrop';
 import { EcosystemCanvas } from './EcosystemCanvas';
 import { ContextSidebar } from './context/ContextSidebar';
 import { useNearbySignals } from './useNearbySignals';
+import { LocationConsentDialog } from '../location/LocationConsentDialog';
 import { useTimeOfDay } from './useTimeOfDay';
 import { useReducedMotion } from './useReducedMotion';
 import { useAmbientSound } from './useAmbientSound';
@@ -266,11 +267,12 @@ export const HomeFeed = (): JSX.Element => {
                                 title={
                                     nearby.enabled
                                         ? 'Real located signals within 10 km. Click to turn off.'
-                                        : 'Opt in to count mutual-aid, events & market signals near you. Only a ~1 km-coarse position ever leaves this device.'
+                                        : 'Turn on location services to count mutual-aid, events & market signals near you. You choose after reading what is used and kept.'
                                 }
+                                aria-pressed={nearby.enabled}
                                 style={{ cursor: 'pointer', font: 'inherit', border: 'none' }}
                                 onClick={() =>
-                                    nearby.enabled ? nearby.disable() : nearby.enable()
+                                    nearby.enabled ? nearby.disable() : nearby.requestEnable()
                                 }
                             >
                                 🌱 {nearbyChipLabel}
@@ -572,6 +574,11 @@ export const HomeFeed = (): JSX.Element => {
                 </div>
             </div>
             {tourEnabled ? <HomeTourOverlay /> : null}
+            <LocationConsentDialog
+                open={nearby.disclosureOpen}
+                onConfirm={nearby.confirmEnable}
+                onCancel={nearby.cancelEnable}
+            />
         </section>
     );
 };

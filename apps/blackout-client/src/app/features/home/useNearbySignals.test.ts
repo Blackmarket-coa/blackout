@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
 import { act } from 'react-dom/test-utils';
 import ReactDOM from 'react-dom/client';
+import { getDefaultStore } from 'jotai';
 
 const fetchNearbySignalsMock = vi.fn();
 
@@ -11,6 +12,7 @@ vi.mock('../coalition/coalitionClient', () => ({
 }));
 
 import { coarsen, useNearbySignals, type NearbySignalsState } from './useNearbySignals';
+import { DEFAULT_LOCATION_CONSENT, locationConsentAtom } from '../location/locationConsent';
 
 const flush = async () => {
     for (let i = 0; i < 6; i++) await Promise.resolve();
@@ -40,6 +42,8 @@ describe('useNearbySignals', () => {
     beforeEach(() => {
         document.body.innerHTML = '';
         localStorage.clear();
+        // Reset the shared consent atom so state never leaks between tests.
+        getDefaultStore().set(locationConsentAtom, DEFAULT_LOCATION_CONSENT);
         fetchNearbySignalsMock.mockReset();
         geolocationMock.getCurrentPosition.mockReset();
         vi.stubGlobal('navigator', { geolocation: geolocationMock });
@@ -53,10 +57,22 @@ describe('useNearbySignals', () => {
     it('starts disabled and never touches geolocation', async () => {
         const hook = await renderHook();
         expect(hook.current.enabled).toBe(false);
+        expect(hook.current.disclosureOpen).toBe(false);
         expect(geolocationMock.getCurrentPosition).not.toHaveBeenCalled();
     });
 
-    it('enable() sends only coarse coordinates and keeps the count', async () => {
+    it('requestEnable opens the disclosure without touching geolocation', async () => {
+        const hook = await renderHook();
+        await act(async () => {
+            hook.current.requestEnable();
+            await flush();
+        });
+        expect(hook.current.disclosureOpen).toBe(true);
+        expect(hook.current.enabled).toBe(false);
+        expect(geolocationMock.getCurrentPosition).not.toHaveBeenCalled();
+    });
+
+    it('confirmEnable (step 2) grants consent, sends only coarse coordinates, keeps the count', async () => {
         geolocationMock.getCurrentPosition.mockImplementation((onSuccess: PositionCallback) => {
             onSuccess({
                 coords: { latitude: 48.858844, longitude: 2.294351 },
@@ -66,7 +82,11 @@ describe('useNearbySignals', () => {
 
         const hook = await renderHook();
         await act(async () => {
-            hook.current.enable();
+            hook.current.requestEnable();
+            await flush();
+        });
+        await act(async () => {
+            hook.current.confirmEnable();
             await flush();
         });
 
@@ -77,11 +97,33 @@ describe('useNearbySignals', () => {
         });
         expect(hook.current.count).toBe(12);
         expect(hook.current.enabled).toBe(true);
-        expect(localStorage.getItem('co.bmc.home.nearbySignals.v1')).toBe('on');
+        expect(hook.current.disclosureOpen).toBe(false);
+        const stored = JSON.parse(localStorage.getItem('blackout.location.consent.v1') ?? '{}');
+        expect(stored.status).toBe('granted');
+        expect(stored.disclosureVersion).toBe(1);
+    });
+
+    it('cancelEnable closes the disclosure and leaves location off', async () => {
+        const hook = await renderHook();
+        await act(async () => {
+            hook.current.requestEnable();
+            await flush();
+        });
+        await act(async () => {
+            hook.current.cancelEnable();
+            await flush();
+        });
+        expect(hook.current.disclosureOpen).toBe(false);
+        expect(hook.current.enabled).toBe(false);
+        expect(geolocationMock.getCurrentPosition).not.toHaveBeenCalled();
     });
 
     it('disable() clears state and persists the opt-out', async () => {
-        localStorage.setItem('co.bmc.home.nearbySignals.v1', 'on');
+        getDefaultStore().set(locationConsentAtom, {
+            status: 'granted',
+            grantedAt: 1,
+            disclosureVersion: 1,
+        });
         geolocationMock.getCurrentPosition.mockImplementation((onSuccess: PositionCallback) => {
             onSuccess({ coords: { latitude: 1, longitude: 2 } } as GeolocationPosition);
         });
@@ -95,7 +137,8 @@ describe('useNearbySignals', () => {
         });
         expect(hook.current.enabled).toBe(false);
         expect(hook.current.count).toBe(null);
-        expect(localStorage.getItem('co.bmc.home.nearbySignals.v1')).toBe('off');
+        const stored = JSON.parse(localStorage.getItem('blackout.location.consent.v1') ?? '{}');
+        expect(stored.status).toBe('off');
     });
 
     it('surfaces a denied geolocation prompt as an error', async () => {
@@ -106,7 +149,11 @@ describe('useNearbySignals', () => {
         );
         const hook = await renderHook();
         await act(async () => {
-            hook.current.enable();
+            hook.current.requestEnable();
+            await flush();
+        });
+        await act(async () => {
+            hook.current.confirmEnable();
             await flush();
         });
         expect(hook.current.error).toBe('Could not get your location.');
