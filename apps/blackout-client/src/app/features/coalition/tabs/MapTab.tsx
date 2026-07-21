@@ -34,6 +34,8 @@ import { MyceliumLayer, useMyceliumGraph } from './mycelium';
 import { buildCommunitiesPath } from '../../../pages/paths';
 import { useViewportWidth } from '../../../hooks/useViewportWidth';
 import { isMobileViewport } from '../../../pages/client/layoutMetrics';
+import { LocationConsentDialog } from '../../location/LocationConsentDialog';
+import { coarsenCoordinate, useLocationConsentFlow } from '../../location/locationConsent';
 
 const CoalitionMap = React.lazy(() => import('./CoalitionMap'));
 
@@ -298,6 +300,10 @@ export function MapTab({ scope }: MapTabProps) {
     const [selectedPin, setSelectedPin] = useState<PinDetails | null>(null);
     const [nearby, setNearby] = useState<NearbyQuery | undefined>(undefined);
     const [nearbyError, setNearbyError] = useState<string | null>(null);
+    // Set when the viewer taps "Near me" without location consent yet; the
+    // disclosure opens and we locate them only once they confirm.
+    const [locatePending, setLocatePending] = useState(false);
+    const locationConsent = useLocationConsentFlow();
     const [temporalMode, setTemporalMode] = useState<TemporalMode>('all');
     const [radiusKm, setRadiusKm] = useState<number>(5);
     const [showHeat, setShowHeat] = useState(false);
@@ -322,8 +328,7 @@ export function MapTab({ scope }: MapTabProps) {
     const videoItems = useMemo<CoalitionFeedItem[]>(
         () =>
             (videoState.data?.items ?? []).filter(
-                (item) =>
-                    Number.isFinite(item.latitude) && Number.isFinite(item.longitude)
+                (item) => Number.isFinite(item.latitude) && Number.isFinite(item.longitude)
             ),
         [videoState.data]
     );
@@ -337,9 +342,12 @@ export function MapTab({ scope }: MapTabProps) {
         navigator.geolocation.getCurrentPosition(
             (position) => {
                 setNearbyError(null);
+                // Coarsen to a ~1.1 km grid before the position leaves the
+                // device — this feeds the nearby server queries and honours the
+                // "~1 km-coarse position" promise in the consent disclosure.
                 setNearby({
-                    lat: position.coords.latitude,
-                    lng: position.coords.longitude,
+                    lat: coarsenCoordinate(position.coords.latitude),
+                    lng: coarsenCoordinate(position.coords.longitude),
                     radiusKm: km,
                 });
             },
@@ -353,8 +361,25 @@ export function MapTab({ scope }: MapTabProps) {
             setNearbyError(null);
             return;
         }
+        // Location is off by default: the first tap opens the two-step
+        // disclosure and locates the viewer only after they confirm.
+        if (!locationConsent.granted) {
+            setLocatePending(true);
+            locationConsent.requestEnable();
+            return;
+        }
         requestNearby(radiusKm);
     };
+
+    // Once consent is granted from the disclosure, honour the tap that opened it.
+    useEffect(() => {
+        if (locationConsent.granted && locatePending) {
+            setLocatePending(false);
+            requestNearby(radiusKm);
+        }
+        // requestNearby closes over the latest radiusKm; re-run when consent flips.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [locationConsent.granted, locatePending, radiusKm]);
 
     const selectRadius = (km: number) => {
         setRadiusKm(km);
@@ -900,6 +925,15 @@ export function MapTab({ scope }: MapTabProps) {
                         />
                     </div>
                 ) : null}
+
+                <LocationConsentDialog
+                    open={locationConsent.disclosureOpen}
+                    onConfirm={locationConsent.confirmEnable}
+                    onCancel={() => {
+                        setLocatePending(false);
+                        locationConsent.cancelEnable();
+                    }}
+                />
             </section>
         </div>
     );

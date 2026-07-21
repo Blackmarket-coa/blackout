@@ -4,6 +4,7 @@ import { privacySettingsAtom, type DmPermission } from './settingsAtoms';
 import { trackSettingsInteraction } from './settingsTelemetry';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 import { DataRetentionSection } from './DataRetentionSection';
+import { LocationServicesSection } from '../location/LocationServicesSection';
 
 const dmOptions: Array<{ value: DmPermission; label: string }> = [
     { value: 'everyone', label: 'Everyone' },
@@ -14,11 +15,10 @@ const dmOptions: Array<{ value: DmPermission; label: string }> = [
 
 export const PrivacySettings = () => {
     const [settings, setSettings] = useAtom(privacySettingsAtom);
-    const updateSettings = <K extends keyof typeof settings>(key: K, value: (typeof settings)[K]) => {
+    const updateSettings = <K extends keyof typeof settings>(key: K, value: typeof settings[K]) => {
         setSettings((prev) => ({ ...prev, [key]: value }));
         trackSettingsInteraction('privacy', key, String(value));
     };
-
 
     return (
         <div style={{ display: 'grid', gap: 18 }}>
@@ -50,7 +50,7 @@ export const PrivacySettings = () => {
                                     setSettings((prev) => ({
                                         ...prev,
                                         blockedUsers: prev.blockedUsers.filter(
-                                            (entry) => entry.id !== user.id,
+                                            (entry) => entry.id !== user.id
                                         ),
                                     }))
                                 }
@@ -69,9 +69,7 @@ export const PrivacySettings = () => {
                         <button
                             key={option.value}
                             type="button"
-                            onClick={() =>
-                                updateSettings('dmPermissions', option.value)
-                            }
+                            onClick={() => updateSettings('dmPermissions', option.value)}
                             style={{
                                 border:
                                     settings.dmPermissions === option.value
@@ -96,9 +94,7 @@ export const PrivacySettings = () => {
                 <input
                     type="checkbox"
                     checked={settings.showReadReceipts}
-                    onChange={(event) =>
-                        updateSettings('showReadReceipts', event.target.checked)
-                    }
+                    onChange={(event) => updateSettings('showReadReceipts', event.target.checked)}
                 />
                 Read receipt visibility
             </label>
@@ -134,6 +130,8 @@ export const PrivacySettings = () => {
                 />
                 Send typing notifications (off = others can&apos;t see when you&apos;re typing)
             </label>
+
+            <LocationServicesSection />
 
             <DataRetentionSection />
         </div>
