@@ -70,6 +70,7 @@
         "linkifyjs": "4.3.2",
         "maplibre-gl": "5.24.0",
         "matrix-js-sdk": "^40.0.0",
+        "mediabunny": "1.50.9",
         "millify": "6.1.0",
         "pdfjs-dist": "4.9.155",
         "react": "18.2.0",

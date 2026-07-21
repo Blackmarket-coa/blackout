@@ -106,13 +106,16 @@ real adversaries.
     (client-side ffmpeg cut + optional captions), and a creator hub with
     insights (`streaming`, `streams`, `creators`, `modules/streaming`,
     `vodRecorderWorker`, `clipCutterWorker`).
--   **Video creation** — record on the native camera (mobile) or in-app webcam
-    recorder (desktop), grade with color filters, trim/crop/compress on
-    device, and post to the Coalition map's reel. The full-quality original
-    stays in an on-device vault (only a bounded 720p/1280p rendition uploads),
-    so server copies can expire under media retention — the reel then offers
-    the creator one-tap repost from the device
-    (`coalition/composer/VideoComposer`, `coalition/composer/useWebcamRecorder`,
+-   **Video creation** — TikTok-style hold-to-record over the native camera
+    viewfinder on mobile (`@capgo/camera-preview`, multi-take stitching), an
+    in-app webcam recorder on desktop, color-filter grades, and on-device
+    trim/crop/compress — hardware-accelerated via WebCodecs (mediabunny) with
+    ffmpeg.wasm fallback — posting to the Coalition map's reel. The
+    full-quality original stays in an on-device vault (only a bounded
+    720p/1280p rendition uploads), so server copies can expire under media
+    retention — the reel then offers the creator one-tap repost from the
+    device (`coalition/composer/VideoComposer`, `NativeCameraRecorder`,
+    `useWebcamRecorder`, `streaming/composer/renditionPipeline`,
     `platform/localVideoVault`, `platform/nativeMediaBridge`).
 -   **Monetization** — tips, gifts, subscriptions, channel points, community
     boosts, ad-revenue accounting, revenue split contracts, entitlements, and a

@@ -5,7 +5,32 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('@ffmpeg/ffmpeg', () => ({ FFmpeg: class {} }));
 vi.mock('@ffmpeg/util', () => ({ fetchFile: vi.fn(), toBlobURL: vi.fn() }));
 
-import { buildClipArgs } from './clipTranscode';
+import { buildClipArgs, buildConcatArgs, buildConcatList } from './clipTranscode';
+
+describe('segment concat helpers', () => {
+    it('builds a concat-demuxer list body', () => {
+        expect(buildConcatList(['seg0.mp4', 'seg1.mp4'])).toBe(
+            "file 'seg0.mp4'\nfile 'seg1.mp4'\n"
+        );
+    });
+
+    it('stream-copies the concat (no re-encode)', () => {
+        const args = buildConcatArgs('segments.txt', 'joined.mp4');
+        expect(args).toEqual([
+            '-f',
+            'concat',
+            '-safe',
+            '0',
+            '-i',
+            'segments.txt',
+            '-c',
+            'copy',
+            '-movflags',
+            '+faststart',
+            'joined.mp4',
+        ]);
+    });
+});
 
 describe('buildClipArgs', () => {
     it('trims via stream-copy when no crop is requested', () => {

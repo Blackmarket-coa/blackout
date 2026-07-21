@@ -6,7 +6,7 @@ This guide explains how to build and run the mobile application in the current B
 
 Mobile builds are handled by:
 
-- `blackout-mobile/` → **Capacitor-based mobile shell** with iOS/Android tooling scripts.
+-   `blackout-mobile/` → **Capacitor-based mobile shell** with iOS/Android tooling scripts.
 
 Use **`blackout-mobile/`** for installable iOS/Android builds.
 
@@ -14,10 +14,10 @@ Use **`blackout-mobile/`** for installable iOS/Android builds.
 
 Install the following:
 
-- Node.js 22+
-- pnpm 9.x
-- Xcode (for iOS builds, macOS only)
-- Android Studio + Android SDK (for Android builds)
+-   Node.js 22+
+-   pnpm 9.x
+-   Xcode (for iOS builds, macOS only)
+-   Android Studio + Android SDK (for Android builds)
 
 From repository root:
 
@@ -61,6 +61,21 @@ pnpm add:ios
 pnpm add:android
 ```
 
+### Camera recording permissions (@capgo/camera-preview)
+
+The video composer's hold-to-record surface uses `@capgo/camera-preview`.
+The Android manifest in this repo already declares `CAMERA`,
+`RECORD_AUDIO`, and `MODIFY_AUDIO_SETTINGS`. The iOS project is generated
+(`pnpm add:ios`), so after generating it add the usage strings to
+`ios/App/App/Info.plist` or recording will crash at runtime:
+
+```xml
+<key>NSCameraUsageDescription</key>
+<string>Record video stories</string>
+<key>NSMicrophoneUsageDescription</key>
+<string>Record audio with video stories</string>
+```
+
 ## 5) Run and iterate
 
 Open each native project in its platform IDE:
@@ -76,14 +91,14 @@ Then run from Xcode/Android Studio using your preferred simulator or physical de
 
 1. Make UI/feature changes in web app packages.
 2. Rebuild mobile web bundle:
-   ```bash
-   pnpm build:web
-   ```
+    ```bash
+    pnpm build:web
+    ```
 3. Sync into native projects:
-   ```bash
-   pnpm sync:android   # on Android flow
-   pnpm sync:ios       # on iOS flow
-   ```
+    ```bash
+    pnpm sync:android   # on Android flow
+    pnpm sync:ios       # on iOS flow
+    ```
 4. Re-run from Xcode/Android Studio.
 
 ## 7) Troubleshooting
@@ -121,4 +136,4 @@ pnpm sync:android   # or pnpm sync:ios
 
 For release hardening and production distribution policy, follow:
 
-- `docs/operations/runbooks/mobile_release_hardening_checklist.md`
+-   `docs/operations/runbooks/mobile_release_hardening_checklist.md`

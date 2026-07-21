@@ -121,8 +121,8 @@ export const ClipComposer = ({ onCreated, onClose }: ClipComposerProps): JSX.Ele
         setPhase('processing');
         try {
             const options: ClipEditOptions = { startSeconds, endSeconds, vertical };
-            const { transcodeClip } = await import('./clipTranscode');
-            const blob = await transcodeClip(file, options, setProgress);
+            const { renderRendition } = await import('./renditionPipeline');
+            const { blob } = await renderRendition(file, options, setProgress);
 
             setPhase('uploading');
             const edited = new File([blob], `${title.trim().slice(0, 60) || 'clip'}.mp4`, {
