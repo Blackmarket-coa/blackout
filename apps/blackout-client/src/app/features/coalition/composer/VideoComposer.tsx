@@ -4,7 +4,11 @@ import { uploadMedia, mxcToUrl } from '../../media/utils/matrixMedia';
 import { useMatrixClientOrNull } from '../../../hooks/useMatrixClient';
 import type { ClipColorFilter, ClipEditOptions } from '../../streaming/composer/clipTranscode';
 import { postCoalitionFeedItem, type CoalitionScopeQuery } from '../coalitionClient';
-import { nativePickVideo } from '../../../../platform/nativeMediaBridge';
+import {
+    nativeCameraRecordingAvailable,
+    nativePickVideo,
+} from '../../../../platform/nativeMediaBridge';
+import { NativeCameraRecorder } from './NativeCameraRecorder';
 import { useWebcamRecorder, webcamRecordingSupported } from './useWebcamRecorder';
 import {
     listLocalVideos,
@@ -204,6 +208,9 @@ export const VideoComposer = ({
     const [filter, setFilter] = useState<ClipColorFilter>('none');
     const [keepOriginal, setKeepOriginal] = useState(true);
     const [webcamOpen, setWebcamOpen] = useState(false);
+    /** True when @capgo/camera-preview can drive the native hold-to-record UI. */
+    const [nativeCamAvailable, setNativeCamAvailable] = useState(false);
+    const [nativeCamOpen, setNativeCamOpen] = useState(false);
     const [phase, setPhase] = useState<Phase>('idle');
     const [progress, setProgress] = useState(0);
     const [error, setError] = useState<string | null>(null);
@@ -246,6 +253,10 @@ export const VideoComposer = ({
 
     const capture = async (source: 'camera' | 'gallery') => {
         setError(null);
+        if (source === 'camera' && nativeCamAvailable) {
+            setNativeCamOpen(true);
+            return;
+        }
         const picked = await nativePickVideo({ source });
         if (!picked) return;
         const named = new File([picked.blob], picked.filename, {
@@ -291,6 +302,23 @@ export const VideoComposer = ({
     adoptFileRef.current = (take: File) => adoptFile(take, null);
     const onWebcamTake = useCallback((take: File) => {
         setWebcamOpen(false);
+        adoptFileRef.current(take);
+    }, []);
+
+    // Probe the native camera pipeline once; web builds resolve to false.
+    useEffect(() => {
+        let cancelled = false;
+        void nativeCameraRecordingAvailable().then((available) => {
+            if (!cancelled) setNativeCamAvailable(available);
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, []);
+
+    const onNativeTake = useCallback((take: File, takeNotice?: string) => {
+        setNativeCamOpen(false);
+        if (takeNotice) setNotice(takeNotice);
         adoptFileRef.current(take);
     }, []);
 
@@ -359,8 +387,10 @@ export const VideoComposer = ({
                     compress,
                     filter,
                 };
-                const { transcodeClip } = await import('../../streaming/composer/clipTranscode');
-                const blob = await transcodeClip(file, options, setProgress);
+                const { renderRendition } = await import(
+                    '../../streaming/composer/renditionPipeline'
+                );
+                const { blob } = await renderRendition(file, options, setProgress);
                 upload = new File([blob], `${title.trim().slice(0, 60) || 'video'}.mp4`, {
                     type: 'video/mp4',
                 });
@@ -465,6 +495,13 @@ export const VideoComposer = ({
 
             {webcamOpen && !busy ? (
                 <WebcamPanel onRecorded={onWebcamTake} onClose={() => setWebcamOpen(false)} />
+            ) : null}
+
+            {nativeCamOpen && !busy ? (
+                <NativeCameraRecorder
+                    onRecorded={onNativeTake}
+                    onClose={() => setNativeCamOpen(false)}
+                />
             ) : null}
 
             {previewUrl ? (

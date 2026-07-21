@@ -28,3 +28,6 @@ project(':capacitor-splash-screen').projectDir = new File('../../node_modules/.p
 
 include ':capacitor-status-bar'
 project(':capacitor-status-bar').projectDir = new File('../../node_modules/.pnpm/@capacitor+status-bar@7.0.5_@capacitor+core@7.6.0/node_modules/@capacitor/status-bar/android')
+
+include ':capgo-camera-preview'
+project(':capgo-camera-preview').projectDir = new File('../../node_modules/.pnpm/@capgo+camera-preview@7.26.4_@capacitor+core@7.6.0/node_modules/@capgo/camera-preview/android')

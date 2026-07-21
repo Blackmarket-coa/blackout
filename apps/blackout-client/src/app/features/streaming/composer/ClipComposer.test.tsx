@@ -24,7 +24,13 @@ vi.mock('../../../hooks/useMatrixClient', () => ({
 import ClipComposer from './ClipComposer';
 
 const flush = async () => {
-    for (let i = 0; i < 8; i++) await Promise.resolve();
+    // Settle nested dynamic imports (renditionPipeline -> engines) before
+    // draining microtasks; plain Promise.resolve loops miss module fetches.
+    await vi.dynamicImportSettled();
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await vi.dynamicImportSettled();
+    for (let i = 0; i < 10; i++) await Promise.resolve();
 };
 
 const setValue = (input: HTMLInputElement, value: string) => {
@@ -40,11 +46,14 @@ describe('ClipComposer', () => {
         transcodeClipMock.mockReset();
         uploadMediaMock.mockReset();
         createClipMock.mockReset();
-        vi.stubGlobal('URL', {
-            ...URL,
+        // Keep URL constructable: vitest's dynamic-import resolution calls
+        // `new URL(...)`, so a plain-object stub breaks unmocked imports.
+        class StubURL extends URL {}
+        Object.assign(StubURL, {
             createObjectURL: vi.fn(() => 'blob:preview'),
             revokeObjectURL: vi.fn(),
         });
+        vi.stubGlobal('URL', StubURL);
     });
 
     const mount = async () => {
