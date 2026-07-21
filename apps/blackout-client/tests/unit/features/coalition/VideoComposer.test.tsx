@@ -154,10 +154,11 @@ describe('VideoComposer', () => {
         expect(transcodeClipMock).toHaveBeenCalledTimes(1);
         const [, options] = transcodeClipMock.mock.calls[0] as [
             File,
-            { compress?: boolean; vertical: boolean }
+            { compress?: boolean; vertical: boolean; filter?: string }
         ];
         expect(options.compress).toBe(true);
         expect(options.vertical).toBe(true);
+        expect(options.filter).toBe('none');
         expect(uploadMediaMock).toHaveBeenCalledTimes(1);
 
         // Feed post carries the resolved homeserver media URL and the scope.
@@ -169,7 +170,7 @@ describe('VideoComposer', () => {
                 mediaUrl: 'https://hs.test/_matrix/media/v3/download/hs.test/abc123',
             })
         );
-        expect(markLocalVideoPostedMock).toHaveBeenCalledWith('vault-1');
+        expect(markLocalVideoPostedMock).toHaveBeenCalledWith('vault-1', 'feed-1');
         expect(onPosted).toHaveBeenCalledWith(expect.objectContaining({ id: 'feed-1' }));
     });
 
@@ -207,6 +208,41 @@ describe('VideoComposer', () => {
             'Record or choose a video first.'
         );
         expect(postFeedItemMock).not.toHaveBeenCalled();
+    });
+
+    it('preloads a vault original when opened via initialVaultEntryId', async () => {
+        listLocalVideosMock.mockResolvedValue([
+            {
+                id: 'vault-7',
+                title: 'Expired story',
+                filename: 'story.mp4',
+                contentType: 'video/mp4',
+                sizeBytes: 1024,
+                savedAt: '2026-07-01T00:00:00.000Z',
+                lastPostedFeedItemId: 'feed-old',
+            },
+        ]);
+        loadLocalVideoBlobMock.mockResolvedValue(new Blob(['old'], { type: 'video/mp4' }));
+
+        const onPosted = vi.fn();
+        const container = document.createElement('div');
+        document.body.appendChild(container);
+        const root = ReactDOM.createRoot(container);
+        await act(async () => {
+            root.render(
+                <VideoComposer
+                    scope={{ canopyId: 'canopy-1' }}
+                    onPosted={onPosted}
+                    onClose={vi.fn()}
+                    initialVaultEntryId="vault-7"
+                />
+            );
+            await flush();
+        });
+
+        expect(loadLocalVideoBlobMock).toHaveBeenCalledWith('vault-7');
+        const title = query(container, 'video-composer-title') as HTMLInputElement;
+        expect(title.value).toBe('Expired story');
     });
 
     it('lists vault originals and loads one for reposting', async () => {

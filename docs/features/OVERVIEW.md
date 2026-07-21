@@ -106,12 +106,14 @@ real adversaries.
     (client-side ffmpeg cut + optional captions), and a creator hub with
     insights (`streaming`, `streams`, `creators`, `modules/streaming`,
     `vodRecorderWorker`, `clipCutterWorker`).
--   **Video creation** — record on the native camera, trim/crop/compress on
-    device, and post to the Coalition reel. The full-quality original stays in
-    an on-device vault (only a bounded 720p/1280p rendition uploads), so server
-    copies can expire under media retention and be reposted from the device
-    (`coalition/composer/VideoComposer`, `platform/localVideoVault`,
-    `platform/nativeMediaBridge`).
+-   **Video creation** — record on the native camera (mobile) or in-app webcam
+    recorder (desktop), grade with color filters, trim/crop/compress on
+    device, and post to the Coalition map's reel. The full-quality original
+    stays in an on-device vault (only a bounded 720p/1280p rendition uploads),
+    so server copies can expire under media retention — the reel then offers
+    the creator one-tap repost from the device
+    (`coalition/composer/VideoComposer`, `coalition/composer/useWebcamRecorder`,
+    `platform/localVideoVault`, `platform/nativeMediaBridge`).
 -   **Monetization** — tips, gifts, subscriptions, channel points, community
     boosts, ad-revenue accounting, revenue split contracts, entitlements, and a
     Patreon webhook bridge (`monetization`, `tips.ts`, `gifts.ts`,

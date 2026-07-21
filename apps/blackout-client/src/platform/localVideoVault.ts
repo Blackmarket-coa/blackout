@@ -23,6 +23,11 @@ export interface LocalVideoEntry {
     savedAt: string;
     /** ISO timestamp of the most recent post made from this original. */
     lastPostedAt?: string;
+    /**
+     * Feed item id of the most recent post made from this original. Lets the
+     * reel offer "repost from this device" when a server copy has expired.
+     */
+    lastPostedFeedItemId?: string;
 }
 
 const DB_NAME = 'blackout-video-vault';
@@ -153,12 +158,16 @@ export async function removeLocalVideo(id: string): Promise<void> {
     });
 }
 
-/** Stamp an entry as posted so the library can show repost state. */
-export async function markLocalVideoPosted(id: string): Promise<void> {
+/** Stamp an entry as posted so the library and reel can show repost state. */
+export async function markLocalVideoPosted(id: string, feedItemId?: string): Promise<void> {
     await withDb('readwrite', async (tx) => {
         const store = tx.objectStore(ENTRIES_STORE);
         const entry = await requestDone(store.get(id) as IDBRequest<LocalVideoEntry | undefined>);
         if (!entry) return;
-        store.put({ ...entry, lastPostedAt: new Date().toISOString() });
+        store.put({
+            ...entry,
+            lastPostedAt: new Date().toISOString(),
+            ...(feedItemId ? { lastPostedFeedItemId: feedItemId } : {}),
+        });
     });
 }

@@ -1,4 +1,4 @@
-import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     AID_POST_CATEGORIES,
     AID_POST_TYPES,
@@ -25,6 +25,7 @@ import {
 import { createCoalitionAidPost, type NearbyQuery } from '../coalitionClient';
 import { VideoReel, useVideoShare } from './VideoReel';
 import { VideoComposer } from '../composer/VideoComposer';
+import { listLocalVideos, localVideoVaultSupported } from '../../../../platform/localVideoVault';
 import {
     buildLayerIconSvg,
     layerStyleFor,
@@ -320,7 +321,45 @@ export function MapTab({ scope }: MapTabProps) {
     /** Full reel including non-geo-tagged stories (map pins carry only tagged ones). */
     const [allReelOpen, setAllReelOpen] = useState(false);
     const [showVideoComposer, setShowVideoComposer] = useState(false);
+    /** Vault original to preload into the composer (the reel's repost path). */
+    const [composerVaultId, setComposerVaultId] = useState<string | null>(null);
+    /** feedItemId → vault entry id for originals this device has posted. */
+    const [repostVaultMap, setRepostVaultMap] = useState<ReadonlyMap<string, string>>(new Map());
     const { shareStatus, onShare } = useVideoShare();
+
+    const refreshRepostables = useCallback(async () => {
+        if (!localVideoVaultSupported()) return;
+        try {
+            const entries = await listLocalVideos();
+            const map = new Map<string, string>();
+            for (const entry of entries) {
+                if (entry.lastPostedFeedItemId) map.set(entry.lastPostedFeedItemId, entry.id);
+            }
+            setRepostVaultMap(map);
+        } catch {
+            // The vault is an enhancement; a broken IndexedDB never breaks the map.
+        }
+    }, []);
+
+    useEffect(() => {
+        void refreshRepostables();
+    }, [refreshRepostables]);
+
+    const repostableIds = useMemo(() => new Set(repostVaultMap.keys()), [repostVaultMap]);
+
+    // A story whose server copy expired: reopen the composer preloaded with
+    // the on-device original so the creator can post it again.
+    const onRepostFromDevice = useCallback(
+        (feedItemId: string) => {
+            const vaultId = repostVaultMap.get(feedItemId);
+            if (!vaultId) return;
+            setReelStartId(null);
+            setAllReelOpen(false);
+            setComposerVaultId(vaultId);
+            setShowVideoComposer(true);
+        },
+        [repostVaultMap]
+    );
 
     const layersArray = useMemo(() => [...activeLayers], [activeLayers]);
     const spatialState = useSpatialFeed(scope, layersArray);
@@ -683,12 +722,18 @@ export function MapTab({ scope }: MapTabProps) {
                 {showVideoComposer ? (
                     <VideoComposer
                         scope={scope}
+                        initialVaultEntryId={composerVaultId ?? undefined}
                         onPosted={() => {
                             videoState.refetch();
+                            void refreshRepostables();
                             setShowVideoComposer(false);
+                            setComposerVaultId(null);
                             setAllReelOpen(true);
                         }}
-                        onClose={() => setShowVideoComposer(false)}
+                        onClose={() => {
+                            setShowVideoComposer(false);
+                            setComposerVaultId(null);
+                        }}
                     />
                 ) : null}
 
@@ -985,6 +1030,8 @@ export function MapTab({ scope }: MapTabProps) {
                             onShare={onShare}
                             shareStatus={shareStatus}
                             height="100%"
+                            repostableIds={repostableIds}
+                            onRepost={onRepostFromDevice}
                         />
                     </div>
                 ) : null}

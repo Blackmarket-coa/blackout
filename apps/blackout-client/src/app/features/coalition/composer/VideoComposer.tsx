@@ -2,9 +2,10 @@ import React, { useCallback, useEffect, useRef, useState, type CSSProperties } f
 import type { CoalitionFeedItem } from '@blackout/core';
 import { uploadMedia, mxcToUrl } from '../../media/utils/matrixMedia';
 import { useMatrixClientOrNull } from '../../../hooks/useMatrixClient';
-import type { ClipEditOptions } from '../../streaming/composer/clipTranscode';
+import type { ClipColorFilter, ClipEditOptions } from '../../streaming/composer/clipTranscode';
 import { postCoalitionFeedItem, type CoalitionScopeQuery } from '../coalitionClient';
 import { nativePickVideo } from '../../../../platform/nativeMediaBridge';
+import { useWebcamRecorder, webcamRecordingSupported } from './useWebcamRecorder';
 import {
     listLocalVideos,
     loadLocalVideoBlob,
@@ -73,6 +74,92 @@ const ghostButtonStyle: CSSProperties = {
 
 type Phase = 'idle' | 'saving' | 'processing' | 'uploading' | 'posting';
 
+/**
+ * CSS approximations of the export color grades for the live preview. The
+ * real grade runs in ffmpeg at export; these only have to look close.
+ */
+const FILTER_PREVIEW_CSS: Record<ClipColorFilter, string> = {
+    none: 'none',
+    mono: 'grayscale(1)',
+    warm: 'sepia(0.22) saturate(1.15)',
+    cool: 'hue-rotate(-8deg) saturate(1.05) brightness(1.02)',
+    vivid: 'saturate(1.35) contrast(1.06)',
+};
+
+const FILTER_LABELS: Record<ClipColorFilter, string> = {
+    none: 'No filter',
+    mono: 'Mono',
+    warm: 'Warm',
+    cool: 'Cool',
+    vivid: 'Vivid',
+};
+
+/**
+ * In-app camera panel (getUserMedia + MediaRecorder) for runtimes where the
+ * file-input `capture` hint can't launch a native camera — desktop browsers
+ * foremost. Opens the camera on mount, releases it on unmount.
+ */
+function WebcamPanel({
+    onRecorded,
+    onClose,
+}: {
+    onRecorded: (file: File) => void;
+    onClose: () => void;
+}): JSX.Element {
+    const recorder = useWebcamRecorder();
+    const previewRef = useRef<HTMLVideoElement | null>(null);
+    const { open, close, file } = recorder;
+
+    useEffect(() => {
+        void open();
+        return close;
+    }, [open, close]);
+
+    useEffect(() => {
+        if (previewRef.current) previewRef.current.srcObject = recorder.stream;
+    }, [recorder.stream]);
+
+    useEffect(() => {
+        if (file) onRecorded(file);
+    }, [file, onRecorded]);
+
+    return (
+        <div style={{ display: 'grid', gap: 8 }} data-testid="video-composer-webcam">
+            <video
+                ref={previewRef}
+                autoPlay
+                muted
+                playsInline
+                style={{ maxHeight: 220, borderRadius: 10, background: '#000' }}
+                data-testid="video-composer-webcam-preview"
+            />
+            <div style={rowStyle}>
+                <button
+                    type="button"
+                    style={buttonStyle}
+                    onClick={() => (recorder.recording ? recorder.stop() : void recorder.start())}
+                    data-testid="video-composer-webcam-toggle"
+                >
+                    {recorder.recording ? '■ Stop' : '● Record'}
+                </button>
+                <button
+                    type="button"
+                    style={ghostButtonStyle}
+                    onClick={onClose}
+                    data-testid="video-composer-webcam-close"
+                >
+                    Cancel
+                </button>
+                {recorder.error ? (
+                    <span style={{ color: 'var(--text-danger, #f87171)' }}>
+                        {recorder.error.message}
+                    </span>
+                ) : null}
+            </div>
+        </div>
+    );
+}
+
 const phaseLabel = (phase: Phase, progress: number): string => {
     switch (phase) {
         case 'saving':
@@ -92,9 +179,16 @@ export interface VideoComposerProps {
     scope: CoalitionScopeQuery;
     onPosted: (item: CoalitionFeedItem) => void;
     onClose: () => void;
+    /** Open with this vault original preloaded (the reel's repost path). */
+    initialVaultEntryId?: string;
 }
 
-export const VideoComposer = ({ scope, onPosted, onClose }: VideoComposerProps): JSX.Element => {
+export const VideoComposer = ({
+    scope,
+    onPosted,
+    onClose,
+    initialVaultEntryId,
+}: VideoComposerProps): JSX.Element => {
     const mx = useMatrixClientOrNull();
     const [file, setFile] = useState<File | null>(null);
     /** Vault id backing `file` — set when loaded from the library or after save. */
@@ -107,7 +201,9 @@ export const VideoComposer = ({ scope, onPosted, onClose }: VideoComposerProps):
     const [end, setEnd] = useState('');
     const [vertical, setVertical] = useState(true);
     const [compress, setCompress] = useState(true);
+    const [filter, setFilter] = useState<ClipColorFilter>('none');
     const [keepOriginal, setKeepOriginal] = useState(true);
+    const [webcamOpen, setWebcamOpen] = useState(false);
     const [phase, setPhase] = useState<Phase>('idle');
     const [progress, setProgress] = useState(0);
     const [error, setError] = useState<string | null>(null);
@@ -176,6 +272,28 @@ export const VideoComposer = ({ scope, onPosted, onClose }: VideoComposerProps):
         void refreshLibrary();
     };
 
+    // Repost path: opened from the reel with a vault original to preload.
+    const preloadedRef = useRef(false);
+    useEffect(() => {
+        if (!initialVaultEntryId || preloadedRef.current || !vaultAvailable) return;
+        preloadedRef.current = true;
+        void (async () => {
+            const entry = (await listLocalVideos()).find((e) => e.id === initialVaultEntryId);
+            if (entry) await loadFromVault(entry);
+            else setError('That original is no longer on this device.');
+        })();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [initialVaultEntryId, vaultAvailable]);
+
+    // adoptFile closes over previewUrl/title state; route the webcam callback
+    // through a ref so WebcamPanel's effect deps stay stable.
+    const adoptFileRef = useRef((take: File) => adoptFile(take, null));
+    adoptFileRef.current = (take: File) => adoptFile(take, null);
+    const onWebcamTake = useCallback((take: File) => {
+        setWebcamOpen(false);
+        adoptFileRef.current(take);
+    }, []);
+
     const onMetadata = () => {
         const duration = videoRef.current?.duration;
         if (duration && Number.isFinite(duration)) {
@@ -239,6 +357,7 @@ export const VideoComposer = ({ scope, onPosted, onClose }: VideoComposerProps):
                     endSeconds,
                     vertical,
                     compress,
+                    filter,
                 };
                 const { transcodeClip } = await import('../../streaming/composer/clipTranscode');
                 const blob = await transcodeClip(file, options, setProgress);
@@ -279,7 +398,7 @@ export const VideoComposer = ({ scope, onPosted, onClose }: VideoComposerProps):
                 denId: scope.denId,
             });
             if (vaultId) {
-                await markLocalVideoPosted(vaultId).catch(() => undefined);
+                await markLocalVideoPosted(vaultId, feedItem.id).catch(() => undefined);
                 void refreshLibrary();
             }
             onPosted(feedItem);
@@ -325,12 +444,28 @@ export const VideoComposer = ({ scope, onPosted, onClose }: VideoComposerProps):
                 >
                     Choose from device
                 </button>
+                {webcamRecordingSupported() ? (
+                    <button
+                        type="button"
+                        style={ghostButtonStyle}
+                        onClick={() => setWebcamOpen((v) => !v)}
+                        aria-pressed={webcamOpen}
+                        disabled={busy}
+                        data-testid="video-composer-webcam-open"
+                    >
+                        ⏺ Record in app
+                    </button>
+                ) : null}
                 {file ? (
                     <span style={{ color: 'var(--text-muted, #9ca3af)' }}>
                         {file.name} ({Math.max(1, Math.round(file.size / (1024 * 1024)))} MB)
                     </span>
                 ) : null}
             </div>
+
+            {webcamOpen && !busy ? (
+                <WebcamPanel onRecorded={onWebcamTake} onClose={() => setWebcamOpen(false)} />
+            ) : null}
 
             {previewUrl ? (
                 <video
@@ -339,7 +474,12 @@ export const VideoComposer = ({ scope, onPosted, onClose }: VideoComposerProps):
                     controls
                     playsInline
                     onLoadedMetadata={onMetadata}
-                    style={{ maxHeight: 260, borderRadius: 10, background: '#000' }}
+                    style={{
+                        maxHeight: 260,
+                        borderRadius: 10,
+                        background: '#000',
+                        filter: FILTER_PREVIEW_CSS[filter],
+                    }}
                     data-testid="video-composer-preview"
                 />
             ) : null}
@@ -412,6 +552,22 @@ export const VideoComposer = ({ scope, onPosted, onClose }: VideoComposerProps):
                         data-testid="video-composer-compress"
                     />
                     Compress for upload
+                </label>
+                <label style={{ display: 'grid', gap: 2 }}>
+                    Filter
+                    <select
+                        style={inputStyle}
+                        value={filter}
+                        disabled={busy}
+                        onChange={(e) => setFilter(e.currentTarget.value as ClipColorFilter)}
+                        data-testid="video-composer-filter"
+                    >
+                        {(Object.keys(FILTER_LABELS) as ClipColorFilter[]).map((key) => (
+                            <option key={key} value={key}>
+                                {FILTER_LABELS[key]}
+                            </option>
+                        ))}
+                    </select>
                 </label>
                 {vaultAvailable ? (
                     <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
