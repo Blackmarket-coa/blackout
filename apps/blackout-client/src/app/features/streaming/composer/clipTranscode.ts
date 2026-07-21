@@ -27,6 +27,12 @@ export interface ClipEditOptions {
     endSeconds: number;
     /** Crop the picture to centered 9:16 (re-encodes video). */
     vertical: boolean;
+    /**
+     * Re-encode to a bounded H.264/AAC rendition (long edge ≤1280) sized for
+     * feed playback. This is the device-master posture: a phone-quality
+     * original stays on the device while a ~10x smaller copy uploads.
+     */
+    compress?: boolean;
 }
 
 export type TranscodeProgress = (ratio: number) => void;
@@ -51,10 +57,19 @@ const loadFFmpeg = async (): Promise<FFmpeg> => {
     return ffmpeg;
 };
 
+// Centered 9:16 window; min() keeps already-narrow sources intact.
+const VERTICAL_CROP = 'crop=min(iw\\,ih*9/16):ih';
+// Bounded downscales for the compressed rendition. `-2` keeps aspect with an
+// even width; `2*trunc(.../2)` forces an even height (libx264 rejects odd
+// dimensions) while never upscaling small sources.
+const SCALE_VERTICAL = 'scale=-2:2*trunc(min(1280\\,ih)/2)';
+const SCALE_LANDSCAPE = 'scale=-2:2*trunc(min(720\\,ih)/2)';
+
 /**
  * ffmpeg argv for the requested edit. Exported for tests: a straight trim is
  * a stream-copy (instant, keyframe-aligned); a vertical crop re-encodes video
- * (`crop=` has no copy path) but still copies audio.
+ * (`crop=` has no copy path) but still copies audio; `compress` re-encodes
+ * both streams into a bounded H.264/AAC rendition for upload.
  */
 export const buildClipArgs = (
     input: string,
@@ -63,18 +78,31 @@ export const buildClipArgs = (
 ): string[] => {
     const duration = String(Math.max(0.1, options.endSeconds - options.startSeconds));
     const base = ['-ss', String(options.startSeconds), '-i', input, '-t', duration];
-    if (options.vertical) {
+    if (options.compress) {
+        const filters = options.vertical ? `${VERTICAL_CROP},${SCALE_VERTICAL}` : SCALE_LANDSCAPE;
         return [
             ...base,
             '-vf',
-            // Centered 9:16 window; min() keeps already-narrow sources intact.
-            'crop=min(iw\\,ih*9/16):ih',
+            filters,
+            '-c:v',
+            'libx264',
+            '-preset',
+            'veryfast',
+            '-crf',
+            '28',
+            '-pix_fmt',
+            'yuv420p',
             '-c:a',
-            'copy',
+            'aac',
+            '-b:a',
+            '96k',
             '-movflags',
             '+faststart',
             output,
         ];
+    }
+    if (options.vertical) {
+        return [...base, '-vf', VERTICAL_CROP, '-c:a', 'copy', '-movflags', '+faststart', output];
     }
     return [...base, '-c', 'copy', '-movflags', '+faststart', output];
 };

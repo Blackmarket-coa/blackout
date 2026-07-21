@@ -42,6 +42,31 @@ describe('buildClipArgs', () => {
         expect(args).not.toContain('copy,-c');
     });
 
+    it('re-encodes a bounded H.264/AAC rendition when compress is on', () => {
+        const args = buildClipArgs('in.mp4', 'out.mp4', {
+            startSeconds: 0,
+            endSeconds: 30,
+            vertical: false,
+            compress: true,
+        });
+        expect(args[args.indexOf('-vf') + 1]).toBe('scale=-2:2*trunc(min(720\\,ih)/2)');
+        expect(args[args.indexOf('-c:v') + 1]).toBe('libx264');
+        expect(args[args.indexOf('-c:a') + 1]).toBe('aac');
+        expect(args).not.toContain('copy');
+    });
+
+    it('chains the 9:16 crop before the downscale when compress + vertical', () => {
+        const args = buildClipArgs('in.mp4', 'out.mp4', {
+            startSeconds: 0,
+            endSeconds: 30,
+            vertical: true,
+            compress: true,
+        });
+        expect(args[args.indexOf('-vf') + 1]).toBe(
+            'crop=min(iw\\,ih*9/16):ih,scale=-2:2*trunc(min(1280\\,ih)/2)'
+        );
+    });
+
     it('never produces a zero or negative duration', () => {
         const args = buildClipArgs('in.mp4', 'out.mp4', {
             startSeconds: 10,
