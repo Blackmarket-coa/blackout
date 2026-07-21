@@ -5,7 +5,7 @@ interface MobileTabBarProps {
 }
 
 const TAB_META: Array<{ id: MobileTab; label: string; icon: string; badge?: string }> = [
-  { id: "home", label: "Home", icon: "⌂", badge: "3" },
+  { id: "home", label: "Town Square", icon: "⌂", badge: "3" },
   { id: "spaces", label: "Canopies", icon: "▦", badge: "12" },
   { id: "search", label: "Search", icon: "⌕" },
   { id: "governance", label: "Gov Hub", icon: "🏛️", badge: "2" },

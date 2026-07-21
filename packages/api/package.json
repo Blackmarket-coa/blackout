@@ -27,7 +27,7 @@
         "@blackout/protocol": "workspace:*",
         "@hono/node-server": "2.0.5",
         "@simplewebauthn/server": "13.3.0",
-        "hono": "4.12.25",
+        "hono": "4.12.27",
         "ioredis": "5.10.1",
         "livekit-server-sdk": "^2.15.2",
         "nodemailer": "^9.0.1",

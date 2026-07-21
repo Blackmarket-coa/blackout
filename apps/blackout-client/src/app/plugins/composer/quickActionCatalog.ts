@@ -67,13 +67,7 @@ export type CasualRadialLabel =
     | 'Message'
     | 'Search';
 
-export type GovernanceRadialLabel =
-    | 'Propose'
-    | 'Round'
-    | 'Consent'
-    | 'Role'
-    | 'Treasury'
-    | 'Party';
+export type GovernanceRadialLabel = 'Propose' | 'Round' | 'Consent' | 'Role' | 'Treasury' | 'Party';
 
 export type RadialLabel = CasualRadialLabel | GovernanceRadialLabel;
 
@@ -85,7 +79,7 @@ export type RadialAction = {
 
 export const DOMAIN_ACTIONS: Record<DomainId, string[]> = {
     governance: ['Active votes', 'Results', 'Proposals', 'Delegates'],
-    trade: ['Marketplace', 'Payments', 'My orders'],
+    trade: ['The Black Market', 'Payments', 'My orders'],
     logistics: ['Tracking', 'Fleet', 'Routing'],
     discover: ['Coliseum', BLACKOUT_TERMS.canopy.titlePlural, 'Featured'],
 };

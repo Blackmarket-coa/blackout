@@ -82,10 +82,10 @@ export const isShellModeRoot = (pathname: string): boolean => {
  * future analytics surface that wants a stable mode label.
  */
 export const SHELL_MODE_TITLES: Record<ShellMode, string> = {
-    discovery: 'Home',
+    discovery: 'Town Square',
     community: BLACKOUT_TERMS.canopy.title,
     livestream: 'Live',
-    marketplace: 'Market',
+    marketplace: 'The Black Market',
     creator: 'Creator',
     streaming: 'Creator Hub',
     coalition: 'Coalition',

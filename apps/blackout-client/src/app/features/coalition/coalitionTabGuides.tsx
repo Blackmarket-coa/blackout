@@ -33,7 +33,7 @@ export const COALITION_TAB_GUIDES: Record<CoalitionTabId, ReactNode> = {
             <strong>+ New ring</strong>, then invite people to join.
         </>
     ),
-    shop: <>The community marketplace. List items for sale or browse local vendors.</>,
+    shop: <>The black market. List items for sale or browse local vendors.</>,
     tasks: (
         <>
             A shared board (to&#8209;do → doing → done). Add a task and move it forward as work gets

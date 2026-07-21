@@ -816,7 +816,7 @@ export const ClientLayout = () => {
                             {selectedSpaceId
                                 ? rooms.find((room) => room.roomId === selectedSpaceId)?.name ??
                                   BLACKOUT_TERMS.canopy.title
-                                : 'Home'}
+                                : 'Town Square'}
                         </strong>
                         <button
                             type="button"
