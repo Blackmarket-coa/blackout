@@ -165,3 +165,53 @@ export const transcodeClip = async (
         await ffmpeg.deleteFile(output).catch(() => undefined);
     }
 };
+
+/**
+ * concat-demuxer list body for stitching recorded segments. Exported for
+ * tests; filenames are internal (seg0.mp4…) so no quoting hazards exist.
+ */
+export const buildConcatList = (names: string[]): string =>
+    names.map((name) => `file '${name}'`).join('\n') + '\n';
+
+/** argv for a stream-copy concat of same-codec segments. Exported for tests. */
+export const buildConcatArgs = (list: string, output: string): string[] => [
+    '-f',
+    'concat',
+    '-safe',
+    '0',
+    '-i',
+    list,
+    '-c',
+    'copy',
+    '-movflags',
+    '+faststart',
+    output,
+];
+
+/**
+ * Stitch hold-to-record segments into one mp4. Segments come from the same
+ * camera session (same codec/parameters), so this is a stream-copy — fast
+ * and lossless. A single segment passes through untouched.
+ */
+export const concatClips = async (segments: Blob[]): Promise<Blob> => {
+    if (segments.length === 0) throw new Error('No segments to combine.');
+    if (segments.length === 1) return segments[0];
+    const ffmpeg = await loadFFmpeg();
+    const names = segments.map((_, index) => `seg${index}.mp4`);
+    const list = 'segments.txt';
+    const output = 'joined.mp4';
+    try {
+        for (let index = 0; index < segments.length; index++) {
+            await ffmpeg.writeFile(names[index], await fetchFile(segments[index]));
+        }
+        await ffmpeg.writeFile(list, new TextEncoder().encode(buildConcatList(names)));
+        const code = await ffmpeg.exec(buildConcatArgs(list, output));
+        if (code !== 0) throw new Error(`ffmpeg exited with ${code}`);
+        const data = (await ffmpeg.readFile(output)) as Uint8Array;
+        return new Blob([new Uint8Array(data)], { type: 'video/mp4' });
+    } finally {
+        for (const name of [...names, list, output]) {
+            await ffmpeg.deleteFile(name).catch(() => undefined);
+        }
+    }
+};

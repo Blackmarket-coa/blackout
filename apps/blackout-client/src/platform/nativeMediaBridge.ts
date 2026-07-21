@@ -337,3 +337,126 @@ export async function nativePickVideo(
     });
     return picked ? { source: 'file-input', ...picked } : null;
 }
+
+// ────────────────────────────────────────────────────────────────────────────
+// Native camera preview recording (@capgo/camera-preview). The plugin draws a
+// native camera layer behind the webview (toBack) so HTML controls can float
+// over a live viewfinder — the hold-to-record surface on mobile. Everything
+// degrades to null/false on web or when the plugin is absent, so call sites
+// keep the file-input capture path as fallback.
+// ────────────────────────────────────────────────────────────────────────────
+
+const CAPGO_CAMERA_PREVIEW_MODULE = '@capgo/camera-preview';
+
+export type NativeCameraPosition = 'front' | 'rear';
+
+type CameraPreviewPlugin = {
+    start?: (options: Record<string, unknown>) => Promise<unknown>;
+    stop?: () => Promise<unknown>;
+    flip?: () => Promise<unknown>;
+    startRecordVideo?: (options: Record<string, unknown>) => Promise<unknown>;
+    stopRecordVideo?: () => Promise<{ videoFilePath?: string }>;
+};
+
+const loadCameraPreview = async (): Promise<CameraPreviewPlugin | null> => {
+    if (!isNativePlatform()) return null;
+    // Prefer the bridge-registered plugin (always present when the native
+    // module is installed) over the npm module, which web bundles omit.
+    const registered = (
+        window as unknown as {
+            Capacitor?: { Plugins?: { CameraPreview?: CameraPreviewPlugin } };
+        }
+    ).Capacitor?.Plugins?.CameraPreview;
+    if (registered?.start) return registered;
+    try {
+        const mod = (await import(/* @vite-ignore */ CAPGO_CAMERA_PREVIEW_MODULE)) as {
+            CameraPreview?: CameraPreviewPlugin;
+        };
+        return mod.CameraPreview ?? null;
+    } catch {
+        return null;
+    }
+};
+
+/** True when the full record pipeline (preview + record + stop) is present. */
+export async function nativeCameraRecordingAvailable(): Promise<boolean> {
+    const plugin = await loadCameraPreview();
+    return Boolean(plugin?.start && plugin.startRecordVideo && plugin.stopRecordVideo);
+}
+
+/** Open the native viewfinder behind the webview. */
+export async function nativeCameraPreviewStart(
+    position: NativeCameraPosition = 'rear'
+): Promise<boolean> {
+    const plugin = await loadCameraPreview();
+    if (!plugin?.start) return false;
+    try {
+        await plugin.start({
+            position,
+            toBack: true,
+            enableVideoMode: true,
+            disableAudio: false,
+            storeToFile: true,
+        });
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+/** Tear the viewfinder down. Safe to call when it never opened. */
+export async function nativeCameraPreviewStop(): Promise<void> {
+    const plugin = await loadCameraPreview();
+    await plugin?.stop?.().catch(() => undefined);
+}
+
+/** Swap front/rear cameras while the viewfinder is open. */
+export async function nativeCameraFlip(): Promise<void> {
+    const plugin = await loadCameraPreview();
+    await plugin?.flip?.().catch(() => undefined);
+}
+
+/** Begin recording a segment. `maxDurationSeconds` guards runaway holds. */
+export async function nativeCameraRecordStart(maxDurationSeconds = 60): Promise<boolean> {
+    const plugin = await loadCameraPreview();
+    if (!plugin?.startRecordVideo) return false;
+    try {
+        await plugin.startRecordVideo({ maxDuration: maxDurationSeconds });
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+/** Stop recording; resolves to the native file path of the finished segment. */
+export async function nativeCameraRecordStop(): Promise<string | null> {
+    const plugin = await loadCameraPreview();
+    if (!plugin?.stopRecordVideo) return null;
+    try {
+        const result = await plugin.stopRecordVideo();
+        return result?.videoFilePath ?? null;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Read a native recording into a Blob via the webview's file server
+ * (convertFileSrc + fetch) — no base64 round-trip, so long takes never have
+ * to fit in a JS string.
+ */
+export async function readNativeFileAsBlob(path: string): Promise<Blob | null> {
+    try {
+        const core = (await import(/* @vite-ignore */ CAPACITOR_CORE_MODULE)) as {
+            Capacitor?: { convertFileSrc?: (path: string) => string };
+        };
+        const convert = core.Capacitor?.convertFileSrc;
+        if (!convert) return null;
+        const src = convert(path.startsWith('file://') ? path : `file://${path}`);
+        const response = await fetch(src);
+        if (!response.ok) return null;
+        return await response.blob();
+    } catch {
+        return null;
+    }
+}
