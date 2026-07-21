@@ -34,7 +34,7 @@ export function renderServerSidebar({ servers, activeServerId, activeView, showA
 
       <ul class="server-nav-list" role="list">
         <li>
-          <button type="button" class="sidebar-nav-btn ${activeView === "home" ? "is-selected" : ""}" ${homeServer ? `data-action="open-server" data-server-id="${homeServer.id}"` : `data-action="open-home-panel"`} aria-label="Home">
+          <button type="button" class="sidebar-nav-btn ${activeView === "home" ? "is-selected" : ""}" ${homeServer ? `data-action="open-server" data-server-id="${homeServer.id}"` : `data-action="open-home-panel"`} aria-label="Town Square">
             <span class="sidebar-nav-glyph">${homeInitials}</span>
           </button>
         </li>

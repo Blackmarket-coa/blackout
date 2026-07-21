@@ -20,7 +20,7 @@ export const USER_TOGGLEABLE_FLAGS = [
     'transparencyReports',
 ] as const satisfies readonly (keyof FeatureFlags)[];
 
-export type UserToggleableFlag = (typeof USER_TOGGLEABLE_FLAGS)[number];
+export type UserToggleableFlag = typeof USER_TOGGLEABLE_FLAGS[number];
 
 const USER_TOGGLEABLE_SET: ReadonlySet<string> = new Set(USER_TOGGLEABLE_FLAGS);
 
@@ -32,9 +32,9 @@ export const isUserToggleableFlag = (name: string): name is UserToggleableFlag =
 export const USER_TOGGLEABLE_FLAG_LABELS: Record<UserToggleableFlag, string> = {
     stegoToolkit: 'Steganography toolkit',
     topics: 'Topics',
-    homeFeedSegments: 'Home feed segments',
-    homeStreak: 'Home streak chip',
-    homeBountyBoard: 'Home bounty board',
+    homeFeedSegments: 'Town Square feed segments',
+    homeStreak: 'Town Square streak chip',
+    homeBountyBoard: 'Town Square bounty board',
     seriesTag: 'Series badges',
     transparencyReports: 'Transparency reports',
 };

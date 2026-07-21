@@ -29,8 +29,8 @@ export interface HomeTourStep {
 export const HOME_TOUR_STEPS: HomeTourStep[] = [
     {
         id: 'header',
-        title: 'Home',
-        body: 'Your homepage shows the latest activity across every den you have joined. This is the default landing surface for the new shell.',
+        title: 'Town Square',
+        body: 'The Town Square shows the latest activity across every den you have joined. This is the default landing surface for the new shell.',
         targetTestId: 'home-feed-header',
         fallbackRegion: 'home-feed',
         allowCenterFallback: true,

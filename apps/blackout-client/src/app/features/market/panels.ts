@@ -13,7 +13,7 @@ export const marketDestinationPanels: ShellPanelEntry[] = [
     {
         id: 'shell.market',
         kind: 'mobile-tab',
-        label: 'Community Market',
+        label: 'The Black Market',
         to: MARKET_PATH,
         order: 45,
     },

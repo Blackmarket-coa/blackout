@@ -5,7 +5,7 @@ const homePanels: ShellPanelEntry[] = [
     {
         id: 'home.sidebar',
         kind: 'sidebar',
-        label: 'Home',
+        label: 'Town Square',
         to: '/',
         order: 10,
     },

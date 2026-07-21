@@ -27,7 +27,7 @@ export const shellDestinationPanels: ShellPanelEntry[] = [
     {
         id: 'shell.home',
         kind: 'mobile-tab',
-        label: 'Home',
+        label: 'Town Square',
         to: ROOT_PATH,
         order: 10,
     },

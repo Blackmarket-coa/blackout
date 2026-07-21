@@ -1,16 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import {
-    applySettingChange,
-    type SettingsBucket,
-    type SettingsValue,
-} from '@blackout/sdk';
+import { applySettingChange, type SettingsBucket, type SettingsValue } from '@blackout/sdk';
 import { useRegistryFetcher } from '../../core/features/RegistryFetcherProvider';
 
 export type SidebarFetcher = {
-    fetchBucket: (
-        scope: 'account',
-        category: 'sidebar'
-    ) => Promise<{ bucket: SettingsBucket }>;
+    fetchBucket: (scope: 'account', category: 'sidebar') => Promise<{ bucket: SettingsBucket }>;
     setSetting: (
         scope: 'account',
         category: 'sidebar',
@@ -37,7 +30,7 @@ const stub: SidebarFetcher = {
  * profiles keep their current visibility.
  */
 const META_SPACES: Array<{ id: string; label: string; defaultEnabled: boolean }> = [
-    { id: 'Home', label: 'Home', defaultEnabled: true },
+    { id: 'Home', label: 'Town Square', defaultEnabled: true },
     { id: 'Favourites', label: 'Favourites', defaultEnabled: false },
     { id: 'People', label: 'People', defaultEnabled: false },
     { id: 'Orphans', label: 'Orphans', defaultEnabled: false },
@@ -62,11 +55,11 @@ export function SidebarPage({ fetcher: explicitFetcher }: Props) {
         setLoadError(null);
         try {
             const response = await fetcher.fetchBucket('account', 'sidebar');
-            setBucket(
-                response.bucket ?? { scope: 'account', category: 'sidebar', values: {} }
-            );
+            setBucket(response.bucket ?? { scope: 'account', category: 'sidebar', values: {} });
         } catch (error) {
-            setLoadError(error instanceof Error ? error.message : 'Failed to load sidebar settings.');
+            setLoadError(
+                error instanceof Error ? error.message : 'Failed to load sidebar settings.'
+            );
         }
     }, [fetcher]);
 
@@ -90,9 +83,7 @@ export function SidebarPage({ fetcher: explicitFetcher }: Props) {
                     })
                 );
             } catch (error) {
-                setActionError(
-                    error instanceof Error ? error.message : `Failed to set ${key}.`
-                );
+                setActionError(error instanceof Error ? error.message : `Failed to set ${key}.`);
             } finally {
                 setPending(null);
             }
@@ -106,10 +97,7 @@ export function SidebarPage({ fetcher: explicitFetcher }: Props) {
     };
 
     return (
-        <main
-            data-testid="sidebar-page"
-            style={{ padding: 16, display: 'grid', gap: 16 }}
-        >
+        <main data-testid="sidebar-page" style={{ padding: 16, display: 'grid', gap: 16 }}>
             <header>
                 <h1 style={{ margin: 0 }}>Sidebar</h1>
                 <p style={{ margin: 0, color: 'var(--text-secondary)' }}>

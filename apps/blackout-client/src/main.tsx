@@ -456,11 +456,11 @@ const BootstrapStatus = () => {
             >
                 <a
                     href="/home"
-                    aria-label="Home"
+                    aria-label="Town Square"
                     data-testid="bootstrap-home"
                     style={{ color: 'inherit' }}
                 >
-                    Home
+                    Town Square
                 </a>
                 <a
                     href="/explore"

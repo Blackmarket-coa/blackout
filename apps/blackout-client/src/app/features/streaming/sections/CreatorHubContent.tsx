@@ -74,7 +74,7 @@ const badgeStyle: CSSProperties = {
 };
 
 const TARGET_LABEL: Record<DistributionTarget, string> = {
-    home: 'Home feed',
+    home: 'Town Square',
     coliseum: 'Coliseum',
     coalition: 'Coalition',
     den: 'Den',
@@ -135,14 +135,21 @@ function ContentCard({ item, onChanged }: { item: CreatorContent; onChanged: () 
                     </button>
                 ) : null}
                 {item.status !== 'archived' ? (
-                    <button type="button" style={ghostButtonStyle} disabled={busy} onClick={onArchive}>
+                    <button
+                        type="button"
+                        style={ghostButtonStyle}
+                        disabled={busy}
+                        onClick={onArchive}
+                    >
                         Archive
                     </button>
                 ) : null}
             </div>
             {item.status === 'published' ? (
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                    <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Distribute to</span>
+                    <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                        Distribute to
+                    </span>
                     <select
                         value={target}
                         onChange={(event) => setTarget(event.target.value as DistributionTarget)}
@@ -163,7 +170,12 @@ function ContentCard({ item, onChanged }: { item: CreatorContent; onChanged: () 
                             style={{ ...inputStyle, width: 180 }}
                         />
                     ) : null}
-                    <button type="button" style={ghostButtonStyle} disabled={busy} onClick={onDistribute}>
+                    <button
+                        type="button"
+                        style={ghostButtonStyle}
+                        disabled={busy}
+                        onClick={onDistribute}
+                    >
                         Add
                     </button>
                 </div>
@@ -189,7 +201,7 @@ export function CreatorHubContent() {
                 setError(null);
             })
             .catch((err: unknown) =>
-                setError(err instanceof Error ? err.message : 'Failed to load content'),
+                setError(err instanceof Error ? err.message : 'Failed to load content')
             );
     }, []);
 
@@ -224,7 +236,7 @@ export function CreatorHubContent() {
                 setBusy(false);
             }
         },
-        [kind, title, body, mediaUrl, scheduledFor, busy, refetch],
+        [kind, title, body, mediaUrl, scheduledFor, busy, refetch]
     );
 
     return (
@@ -232,8 +244,8 @@ export function CreatorHubContent() {
             <header style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                 <h3 style={{ margin: 0, fontSize: 16 }}>Content</h3>
                 <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-                    Draft a video, article, or guide — publish it now or schedule it, then fan it out
-                    to the Home feed, Coliseum, a Coalition, or a Den.
+                    Draft a video, article, or guide — publish it now or schedule it, then fan it
+                    out to the Town Square, Coliseum, a Coalition, or a Den.
                 </span>
             </header>
 

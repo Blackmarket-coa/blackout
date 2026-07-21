@@ -59,7 +59,7 @@ const bodyStyle: CSSProperties = {
 export const MarketShell = (): JSX.Element => (
     <section style={layoutStyle} data-shell-region="market">
         <header style={headerStyle}>
-            <h1 style={titleStyle}>Market</h1>
+            <h1 style={titleStyle}>The Black Market</h1>
             <p style={subtitleStyle}>
                 Browse listings published by {BLACKOUT_TERMS.canopy.plural} and creators.
             </p>
