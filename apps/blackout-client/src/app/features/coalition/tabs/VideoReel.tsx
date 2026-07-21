@@ -39,6 +39,13 @@ export interface VideoReelProps {
     shareStatus?: string | null;
     /** Height of the scroll-snap container; defaults to the standalone reel sizing. */
     height?: number | string;
+    /**
+     * Feed item ids whose originals live in this device's vault. When one of
+     * these fails to load (e.g. the server copy expired under media
+     * retention), the item offers "Repost from this device" via onRepost.
+     */
+    repostableIds?: ReadonlySet<string>;
+    onRepost?: (feedItemId: string) => void;
 }
 
 /**
@@ -51,6 +58,8 @@ export function VideoReel({
     onShare,
     shareStatus,
     height = 'min(72vh, 820px)',
+    repostableIds,
+    onRepost,
 }: VideoReelProps) {
     return (
         <div
@@ -83,7 +92,13 @@ export function VideoReel({
                 </div>
             ) : null}
             {items.map((item) => (
-                <VideoReelItem key={item.id} item={item} onShare={onShare} />
+                <VideoReelItem
+                    key={item.id}
+                    item={item}
+                    onShare={onShare}
+                    repostable={repostableIds?.has(item.id) ?? false}
+                    onRepost={onRepost}
+                />
             ))}
         </div>
     );
@@ -92,6 +107,9 @@ export function VideoReel({
 interface VideoReelItemProps {
     item: CoalitionFeedItem;
     onShare: ShareHandler;
+    /** True when this item's original is in the viewer's on-device vault. */
+    repostable?: boolean;
+    onRepost?: (feedItemId: string) => void;
 }
 
 /**
@@ -99,11 +117,12 @@ interface VideoReelItemProps {
  * hook — extracted into its own component so the hook is called once per item
  * rather than inside a `.map()` (rules-of-hooks).
  */
-export function VideoReelItem({ item, onShare }: VideoReelItemProps) {
+export function VideoReelItem({ item, onShare, repostable, onRepost }: VideoReelItemProps) {
     const { likes, comments, toggleLike, addComment } = useCoalitionVideoEngagement(item.id);
     const [isCommenting, setIsCommenting] = useState(false);
     const [draft, setDraft] = useState('');
     const [submitting, setSubmitting] = useState(false);
+    const [mediaFailed, setMediaFailed] = useState(false);
 
     const likedByMe = likes.data?.likedByMe ?? false;
     const likeCount = likes.data?.count ?? 0;
@@ -139,12 +158,13 @@ export function VideoReelItem({ item, onShare }: VideoReelItemProps) {
                 color: '#fff',
             }}
         >
-            {item.mediaUrl ? (
+            {item.mediaUrl && !mediaFailed ? (
                 <video
                     src={item.mediaUrl}
                     playsInline
                     muted
                     loop
+                    onError={() => setMediaFailed(true)}
                     style={{
                         position: 'absolute',
                         inset: 0,
@@ -153,6 +173,37 @@ export function VideoReelItem({ item, onShare }: VideoReelItemProps) {
                         objectFit: 'cover',
                     }}
                 />
+            ) : mediaFailed ? (
+                <div
+                    data-testid={`coalition-video-unavailable-${item.id}`}
+                    style={{
+                        position: 'absolute',
+                        inset: 0,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 10,
+                        padding: 24,
+                        textAlign: 'center',
+                        background: 'linear-gradient(180deg, #1f2430 0%, #0a0a0a 100%)',
+                    }}
+                >
+                    <span style={{ fontSize: 14, opacity: 0.85 }}>
+                        This video is no longer available — server copies can expire under media
+                        retention.
+                    </span>
+                    {repostable && onRepost ? (
+                        <button
+                            type="button"
+                            onClick={() => onRepost(item.id)}
+                            data-testid={`coalition-video-repost-${item.id}`}
+                            style={reelButtonStyle(true)}
+                        >
+                            ⟳ Repost from this device
+                        </button>
+                    ) : null}
+                </div>
             ) : (
                 <div
                     style={{

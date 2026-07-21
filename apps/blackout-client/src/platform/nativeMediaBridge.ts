@@ -70,9 +70,11 @@ async function tryWebShare(payload: NativeSharePayload): Promise<boolean> {
 
 async function tryClipboard(payload: NativeSharePayload): Promise<boolean> {
     if (typeof navigator === 'undefined') return false;
-    const clipboard = (navigator as Navigator & {
-        clipboard?: { writeText?: (data: string) => Promise<void> };
-    }).clipboard;
+    const clipboard = (
+        navigator as Navigator & {
+            clipboard?: { writeText?: (data: string) => Promise<void> };
+        }
+    ).clipboard;
     if (!clipboard?.writeText) return false;
 
     const candidate = payload.url ?? payload.text ?? payload.title;
@@ -175,9 +177,7 @@ const dataUrlToBlob = async (dataUrl: string): Promise<Blob | null> => {
     }
 };
 
-const tryCapacitorCamera = async (
-    source: NativePhotoSource
-): Promise<NativePickedPhoto | null> => {
+const tryCapacitorCamera = async (source: NativePhotoSource): Promise<NativePickedPhoto | null> => {
     try {
         const core = (await import(/* @vite-ignore */ CAPACITOR_CORE_MODULE)) as {
             Capacitor?: CapacitorBridge;
@@ -193,12 +193,7 @@ const tryCapacitorCamera = async (
             quality: 90,
             allowEditing: false,
             resultType: 'dataUrl',
-            source:
-                source === 'camera'
-                    ? 'CAMERA'
-                    : source === 'gallery'
-                    ? 'PHOTOS'
-                    : 'PROMPT',
+            source: source === 'camera' ? 'CAMERA' : source === 'gallery' ? 'PHOTOS' : 'PROMPT',
         });
         if (!result?.dataUrl) return null;
 
@@ -217,13 +212,23 @@ const tryCapacitorCamera = async (
     }
 };
 
-const tryFileInput = (source: NativePhotoSource): Promise<NativePickedPhoto | null> => {
+type FileInputPickOptions = {
+    accept: string;
+    /** When true, sets `capture="environment"` so mobile webviews open the camera. */
+    capture: boolean;
+    fallbackContentType: string;
+    fallbackFilename: string;
+};
+
+const pickViaFileInput = (
+    options: FileInputPickOptions
+): Promise<{ contentType: string; blob: Blob; filename: string } | null> => {
     if (typeof document === 'undefined') return Promise.resolve(null);
     return new Promise((resolve) => {
         const input = document.createElement('input');
         input.type = 'file';
-        input.accept = 'image/*';
-        if (source === 'camera') {
+        input.accept = options.accept;
+        if (options.capture) {
             // The `capture` hint nudges mobile webviews toward the camera UI
             // without forcing it; ignored on desktop browsers.
             input.setAttribute('capture', 'environment');
@@ -241,10 +246,9 @@ const tryFileInput = (source: NativePhotoSource): Promise<NativePickedPhoto | nu
                 }
                 document.body.removeChild(input);
                 resolve({
-                    source: 'file-input',
-                    contentType: file.type || 'image/jpeg',
+                    contentType: file.type || options.fallbackContentType,
                     blob: file,
-                    filename: file.name || FALLBACK_PHOTO_FILENAME,
+                    filename: file.name || options.fallbackFilename,
                 });
             },
             { once: true }
@@ -260,6 +264,16 @@ const tryFileInput = (source: NativePhotoSource): Promise<NativePickedPhoto | nu
         document.body.appendChild(input);
         input.click();
     });
+};
+
+const tryFileInput = async (source: NativePhotoSource): Promise<NativePickedPhoto | null> => {
+    const picked = await pickViaFileInput({
+        accept: 'image/*',
+        capture: source === 'camera',
+        fallbackContentType: 'image/jpeg',
+        fallbackFilename: FALLBACK_PHOTO_FILENAME,
+    });
+    return picked ? { source: 'file-input', ...picked } : null;
 };
 
 /**
@@ -278,4 +292,48 @@ export async function nativePickPhoto(
     const native = await tryCapacitorCamera(source);
     if (native) return native;
     return tryFileInput(source);
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Video capture / pick (device-master video posture: recordings come off the
+// native camera and stay on the device until the user posts a rendition.)
+// ────────────────────────────────────────────────────────────────────────────
+
+export type NativePickedVideo = {
+    /**
+     * `@capacitor/camera` has no video mode, so today every pick flows through
+     * the file input; on mobile webviews the `capture` hint still opens the
+     * OS camera in video mode. Kept as a union so a native recorder plugin can
+     * slot in later without changing call sites.
+     */
+    source: 'file-input';
+    contentType: string;
+    blob: Blob;
+    filename: string;
+};
+
+export type NativeVideoSource = 'camera' | 'gallery' | 'auto';
+
+const FALLBACK_VIDEO_FILENAME = 'video.mp4';
+
+/**
+ * Prompts the user for a video via `<input type="file" accept="video/*">`.
+ * With `source: 'camera'` the `capture` attribute makes iOS/Android webviews
+ * (including the Capacitor shells) launch the native camera app in video
+ * mode — full native recording quality with zero plugin dependencies. Other
+ * sources open the OS gallery/file picker.
+ *
+ * Resolves to `null` when the user cancels or no DOM is available.
+ */
+export async function nativePickVideo(
+    options: { source?: NativeVideoSource } = {}
+): Promise<NativePickedVideo | null> {
+    const source = options.source ?? 'auto';
+    const picked = await pickViaFileInput({
+        accept: 'video/*',
+        capture: source === 'camera',
+        fallbackContentType: 'video/mp4',
+        fallbackFilename: FALLBACK_VIDEO_FILENAME,
+    });
+    return picked ? { source: 'file-input', ...picked } : null;
 }

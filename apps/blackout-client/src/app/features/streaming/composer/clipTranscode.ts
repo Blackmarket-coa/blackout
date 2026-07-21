@@ -21,13 +21,31 @@ const FFMPEG_CORE_BASE = (
     (import.meta.env.VITE_FFMPEG_CORE_BASE_URL as string | undefined) ?? '/ffmpeg-core'
 ).replace(/\/+$/, '');
 
+export type ClipColorFilter = 'none' | 'mono' | 'warm' | 'cool' | 'vivid';
+
 export interface ClipEditOptions {
     /** Trim window, in seconds of the source video. */
     startSeconds: number;
     endSeconds: number;
     /** Crop the picture to centered 9:16 (re-encodes video). */
     vertical: boolean;
+    /**
+     * Re-encode to a bounded H.264/AAC rendition (long edge ≤1280) sized for
+     * feed playback. This is the device-master posture: a phone-quality
+     * original stays on the device while a ~10x smaller copy uploads.
+     */
+    compress?: boolean;
+    /** Color grade applied to the picture (re-encodes video when not 'none'). */
+    filter?: ClipColorFilter;
 }
+
+/** ffmpeg filter chains for each color grade. */
+const COLOR_FILTER_CHAINS: Record<Exclude<ClipColorFilter, 'none'>, string> = {
+    mono: 'hue=s=0',
+    warm: 'eq=gamma_r=1.08:gamma_b=0.92:saturation=1.12',
+    cool: 'eq=gamma_b=1.08:gamma_r=0.94:saturation=1.05',
+    vivid: 'eq=saturation=1.35:contrast=1.06',
+};
 
 export type TranscodeProgress = (ratio: number) => void;
 
@@ -51,10 +69,21 @@ const loadFFmpeg = async (): Promise<FFmpeg> => {
     return ffmpeg;
 };
 
+// Centered 9:16 window; min() keeps already-narrow sources intact.
+const VERTICAL_CROP = 'crop=min(iw\\,ih*9/16):ih';
+// Bounded downscales for the compressed rendition. `-2` keeps aspect with an
+// even width; `2*trunc(.../2)` forces an even height (libx264 rejects odd
+// dimensions) while never upscaling small sources.
+const SCALE_VERTICAL = 'scale=-2:2*trunc(min(1280\\,ih)/2)';
+const SCALE_LANDSCAPE = 'scale=-2:2*trunc(min(720\\,ih)/2)';
+
 /**
  * ffmpeg argv for the requested edit. Exported for tests: a straight trim is
- * a stream-copy (instant, keyframe-aligned); a vertical crop re-encodes video
- * (`crop=` has no copy path) but still copies audio.
+ * a stream-copy (instant, keyframe-aligned); a vertical crop or color grade
+ * re-encodes video (neither has a copy path) but still copies audio;
+ * `compress` re-encodes both streams into a bounded H.264/AAC rendition.
+ * Chain order is crop → grade → downscale so the grade never pays for pixels
+ * that are about to be cropped, and the scale works on graded output.
  */
 export const buildClipArgs = (
     input: string,
@@ -63,12 +92,40 @@ export const buildClipArgs = (
 ): string[] => {
     const duration = String(Math.max(0.1, options.endSeconds - options.startSeconds));
     const base = ['-ss', String(options.startSeconds), '-i', input, '-t', duration];
-    if (options.vertical) {
+
+    const vfParts: string[] = [];
+    if (options.vertical) vfParts.push(VERTICAL_CROP);
+    if (options.filter && options.filter !== 'none') {
+        vfParts.push(COLOR_FILTER_CHAINS[options.filter]);
+    }
+    if (options.compress) {
+        vfParts.push(options.vertical ? SCALE_VERTICAL : SCALE_LANDSCAPE);
         return [
             ...base,
             '-vf',
-            // Centered 9:16 window; min() keeps already-narrow sources intact.
-            'crop=min(iw\\,ih*9/16):ih',
+            vfParts.join(','),
+            '-c:v',
+            'libx264',
+            '-preset',
+            'veryfast',
+            '-crf',
+            '28',
+            '-pix_fmt',
+            'yuv420p',
+            '-c:a',
+            'aac',
+            '-b:a',
+            '96k',
+            '-movflags',
+            '+faststart',
+            output,
+        ];
+    }
+    if (vfParts.length > 0) {
+        return [
+            ...base,
+            '-vf',
+            vfParts.join(','),
             '-c:a',
             'copy',
             '-movflags',

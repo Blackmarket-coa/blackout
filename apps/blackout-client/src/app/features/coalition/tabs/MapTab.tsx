@@ -1,4 +1,4 @@
-import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     AID_POST_CATEGORIES,
     AID_POST_TYPES,
@@ -24,6 +24,8 @@ import {
 } from '../hooks/useCoalitionFeed';
 import { createCoalitionAidPost, type NearbyQuery } from '../coalitionClient';
 import { VideoReel, useVideoShare } from './VideoReel';
+import { VideoComposer } from '../composer/VideoComposer';
+import { listLocalVideos, localVideoVaultSupported } from '../../../../platform/localVideoVault';
 import {
     buildLayerIconSvg,
     layerStyleFor,
@@ -316,7 +318,48 @@ export function MapTab({ scope }: MapTabProps) {
     );
 
     const [reelStartId, setReelStartId] = useState<string | null>(null);
+    /** Full reel including non-geo-tagged stories (map pins carry only tagged ones). */
+    const [allReelOpen, setAllReelOpen] = useState(false);
+    const [showVideoComposer, setShowVideoComposer] = useState(false);
+    /** Vault original to preload into the composer (the reel's repost path). */
+    const [composerVaultId, setComposerVaultId] = useState<string | null>(null);
+    /** feedItemId → vault entry id for originals this device has posted. */
+    const [repostVaultMap, setRepostVaultMap] = useState<ReadonlyMap<string, string>>(new Map());
     const { shareStatus, onShare } = useVideoShare();
+
+    const refreshRepostables = useCallback(async () => {
+        if (!localVideoVaultSupported()) return;
+        try {
+            const entries = await listLocalVideos();
+            const map = new Map<string, string>();
+            for (const entry of entries) {
+                if (entry.lastPostedFeedItemId) map.set(entry.lastPostedFeedItemId, entry.id);
+            }
+            setRepostVaultMap(map);
+        } catch {
+            // The vault is an enhancement; a broken IndexedDB never breaks the map.
+        }
+    }, []);
+
+    useEffect(() => {
+        void refreshRepostables();
+    }, [refreshRepostables]);
+
+    const repostableIds = useMemo(() => new Set(repostVaultMap.keys()), [repostVaultMap]);
+
+    // A story whose server copy expired: reopen the composer preloaded with
+    // the on-device original so the creator can post it again.
+    const onRepostFromDevice = useCallback(
+        (feedItemId: string) => {
+            const vaultId = repostVaultMap.get(feedItemId);
+            if (!vaultId) return;
+            setReelStartId(null);
+            setAllReelOpen(false);
+            setComposerVaultId(vaultId);
+            setShowVideoComposer(true);
+        },
+        [repostVaultMap]
+    );
 
     const layersArray = useMemo(() => [...activeLayers], [activeLayers]);
     const spatialState = useSpatialFeed(scope, layersArray);
@@ -456,12 +499,15 @@ export function MapTab({ scope }: MapTabProps) {
     };
 
     // Reel ordered so the tapped story leads, then the rest of the nearby stories.
+    // The "Stories" control opens the full feed instead — including videos
+    // posted without a location, which never surface as pins.
     const reelItems = useMemo<CoalitionFeedItem[]>(() => {
+        if (allReelOpen) return videoState.data?.items ?? [];
         if (!reelStartId) return [];
         const start = videoItems.filter((item) => item.id === reelStartId);
         const rest = videoItems.filter((item) => item.id !== reelStartId);
         return [...start, ...rest];
-    }, [reelStartId, videoItems]);
+    }, [allReelOpen, videoState.data, reelStartId, videoItems]);
 
     return (
         <div style={{ height: mobile ? 'min(82vh, 820px)' : 'min(72vh, 820px)' }}>
@@ -621,6 +667,47 @@ export function MapTab({ scope }: MapTabProps) {
                     >
                         ➕ Post aid
                     </button>
+                    <button
+                        type="button"
+                        onClick={() => setShowVideoComposer((v) => !v)}
+                        aria-pressed={showVideoComposer}
+                        data-testid="coalition-map-post-video"
+                        title="Record or upload a video story"
+                        style={{
+                            border: '1px solid var(--border-default)',
+                            borderRadius: 999,
+                            padding: '4px 10px',
+                            fontSize: 12,
+                            background: showVideoComposer
+                                ? SOLARPUNK_CONTROL_ACTIVE.bg
+                                : 'var(--bg-surface)',
+                            color: showVideoComposer
+                                ? SOLARPUNK_CONTROL_ACTIVE.ink
+                                : 'var(--text-primary)',
+                            cursor: 'pointer',
+                        }}
+                    >
+                        🎥 Post video
+                    </button>
+                    {(videoState.data?.items.length ?? 0) > 0 ? (
+                        <button
+                            type="button"
+                            onClick={() => setAllReelOpen(true)}
+                            data-testid="coalition-map-stories"
+                            title="Watch all video stories, including ones without a map pin"
+                            style={{
+                                border: '1px solid var(--border-default)',
+                                borderRadius: 999,
+                                padding: '4px 10px',
+                                fontSize: 12,
+                                background: 'var(--bg-surface)',
+                                color: 'var(--text-primary)',
+                                cursor: 'pointer',
+                            }}
+                        >
+                            ▶ Stories
+                        </button>
+                    ) : null}
                 </div>
 
                 {showAidForm ? (
@@ -629,6 +716,24 @@ export function MapTab({ scope }: MapTabProps) {
                         defaultLocation={nearby ? { lat: nearby.lat, lng: nearby.lng } : undefined}
                         onPosted={() => aidState.refetch()}
                         onClose={() => setShowAidForm(false)}
+                    />
+                ) : null}
+
+                {showVideoComposer ? (
+                    <VideoComposer
+                        scope={scope}
+                        initialVaultEntryId={composerVaultId ?? undefined}
+                        onPosted={() => {
+                            videoState.refetch();
+                            void refreshRepostables();
+                            setShowVideoComposer(false);
+                            setComposerVaultId(null);
+                            setAllReelOpen(true);
+                        }}
+                        onClose={() => {
+                            setShowVideoComposer(false);
+                            setComposerVaultId(null);
+                        }}
                     />
                 ) : null}
 
@@ -886,7 +991,7 @@ export function MapTab({ scope }: MapTabProps) {
                     </div>
                 ) : null}
 
-                {reelStartId && reelItems.length > 0 ? (
+                {(reelStartId || allReelOpen) && reelItems.length > 0 ? (
                     <div
                         data-testid="coalition-map-reel"
                         style={{
@@ -898,7 +1003,10 @@ export function MapTab({ scope }: MapTabProps) {
                     >
                         <button
                             type="button"
-                            onClick={() => setReelStartId(null)}
+                            onClick={() => {
+                                setReelStartId(null);
+                                setAllReelOpen(false);
+                            }}
                             aria-label="Close stories"
                             data-testid="coalition-map-reel-close"
                             style={{
@@ -922,6 +1030,8 @@ export function MapTab({ scope }: MapTabProps) {
                             onShare={onShare}
                             shareStatus={shareStatus}
                             height="100%"
+                            repostableIds={repostableIds}
+                            onRepost={onRepostFromDevice}
                         />
                     </div>
                 ) : null}
