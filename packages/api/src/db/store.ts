@@ -3800,8 +3800,12 @@ class InMemoryDb {
     }
 
     listCoalitionFeedComments(feedItemId: string): CoalitionFeedCommentRecord[] {
+        // createdAt has millisecond resolution, so comments written in the same
+        // tick tie. Reversing insertion order before the stable sort makes ties
+        // come out newest-inserted first, keeping the list strictly newest-first.
         return [...this.coalitionFeedComments.values()]
             .filter((r) => r.feedItemId === feedItemId)
+            .reverse()
             .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     }
 
