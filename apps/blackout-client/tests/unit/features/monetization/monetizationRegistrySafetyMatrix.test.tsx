@@ -36,6 +36,8 @@ vi.mock('../../../../src/app/features/monetization/routes', () => {
             { path: '/monetization/payouts/revenue-analytics/', component: Stub },
         ],
         monetizationThemePacksRoutes: [{ path: '/monetization/theme-packs/', component: Stub }],
+        monetizationAidPoolsRoutes: [{ path: '/monetization/aid-pools/', component: Stub }],
+        monetizationEarningsRoutes: [{ path: '/monetization/earnings/', component: Stub }],
     };
 });
 
@@ -123,6 +125,8 @@ describe('monetization + registry safety unit matrix', () => {
             '/monetization/app-marketplace/',
             '/monetization/payouts/revenue-analytics/',
             '/monetization/theme-packs/',
+            '/monetization/aid-pools/',
+            '/monetization/earnings/',
         ]);
         expect(uniqueNav).toEqual(['/monetization/']);
     });
@@ -142,7 +146,9 @@ describe('monetization + registry safety unit matrix', () => {
         flushSync(() => {
             root.render(
                 <Provider store={createStore()}>
-                    {monetizationOverview ? React.createElement(monetizationOverview.component) : null}
+                    {monetizationOverview
+                        ? React.createElement(monetizationOverview.component)
+                        : null}
                 </Provider>
             );
         });

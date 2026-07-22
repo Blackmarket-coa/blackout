@@ -109,6 +109,46 @@ describe('ColiseumView', () => {
         expect(container.querySelector('[data-testid="stub-reel"]')).toBeTruthy();
     });
 
+    it('renders the debate drill-in even when a den omits debate from enabledTabs', () => {
+        const store = createStore();
+        store.set(coliseumTabAtom, 'debate');
+        store.set(selectedColiseumTopicIdAtom, 'topic-1');
+        const container = document.createElement('div');
+        document.body.appendChild(container);
+        const root = ReactDOM.createRoot(container);
+        act(() => {
+            root.render(
+                <Provider store={store}>
+                    <ColiseumView enabledTabs={['reel', 'topics', 'live']} />
+                </Provider>
+            );
+        });
+        mountedRoots.push(root);
+        expect(container.querySelector('[data-testid="stub-debate"]')).toBeTruthy();
+        expect(container.querySelector('[data-testid="coliseum-debate-back-bar"]')).toBeTruthy();
+        expect(store.get(coliseumTabAtom)).toBe('debate');
+    });
+
+    it('still redirects a topicless debate tab when a den omits debate from enabledTabs', () => {
+        const store = createStore();
+        store.set(coliseumTabAtom, 'debate');
+        store.set(selectedColiseumTopicIdAtom, null);
+        const container = document.createElement('div');
+        document.body.appendChild(container);
+        const root = ReactDOM.createRoot(container);
+        act(() => {
+            root.render(
+                <Provider store={store}>
+                    <ColiseumView enabledTabs={['reel', 'topics', 'live']} />
+                </Provider>
+            );
+        });
+        mountedRoots.push(root);
+        expect(container.querySelector('[data-testid="stub-topics"]')).toBeTruthy();
+        expect(container.querySelector('[data-testid="stub-debate"]')).toBeNull();
+        expect(store.get(coliseumTabAtom)).toBe('topics');
+    });
+
     it('falls back to the first enabled tab when the stored tab is gated off', () => {
         const store = createStore();
         store.set(coliseumTabAtom, 'reel');

@@ -9,8 +9,10 @@ import {
     monetizationSubscriptionsGate,
 } from './gates';
 import {
+    monetizationAidPoolsRoutes,
     monetizationAppMarketplaceRoutes,
     monetizationBoostsRoutes,
+    monetizationEarningsRoutes,
     monetizationMarketplaceRoutes,
     monetizationOverviewRoutes,
     monetizationPayoutsRevenueAnalyticsRoutes,
@@ -39,6 +41,8 @@ export const monetizationFeature: BlackoutFeature = {
                 ...monetizationAppMarketplaceRoutes,
                 ...monetizationPayoutsRevenueAnalyticsRoutes,
                 ...monetizationThemePacksRoutes,
+                ...monetizationAidPoolsRoutes,
+                ...monetizationEarningsRoutes,
             ],
             navItems: monetizationNavItems,
             settings: [],

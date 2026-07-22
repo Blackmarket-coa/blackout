@@ -41,6 +41,7 @@ import { privacyToolsFeature } from '../../features/privacy-tools';
 import { burnerIdentityFeature } from '../../features/burner-identity';
 import { panicFeature } from '../../features/panic';
 import { meshFeature } from '../../features/mesh';
+import { messagingFeature } from '../../features/messaging';
 import type { FeatureModule } from './types';
 
 export const coreFeatureModules: FeatureModule[] = [
@@ -207,5 +208,9 @@ export const coreFeatureModules: FeatureModule[] = [
         // mesh module; the `mesh-transport` customization is enterprise-gated.
         feature: meshFeature,
         flag: 'meshTransport',
+    },
+    {
+        feature: messagingFeature,
+        flag: 'messaging',
     },
 ];

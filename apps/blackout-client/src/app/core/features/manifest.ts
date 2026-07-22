@@ -47,6 +47,7 @@ export const featureModuleManifest = [
     'burner-identity',
     'panic',
     'mesh',
+    'messaging',
 ] as const;
 
 export type FeatureModuleId = typeof featureModuleManifest[number];

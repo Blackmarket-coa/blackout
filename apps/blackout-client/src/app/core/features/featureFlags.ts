@@ -94,6 +94,13 @@ export type FeatureFlags = {
      */
     topics: boolean;
     /**
+     * Inbox messaging surface at `/messages/*` (locked-in DMs, mention
+     * notifications, invites). The mode router has classified these paths
+     * as the `inbox` shell mode since the Cinny migration; this flag gates
+     * the routes that actually render there.
+     */
+    messaging: boolean;
+    /**
      * Familiar feed IA flag. When on, HomeFeed renders a For You / Following
      * segmented toggle and a Hot / New / Top sort control (TikTok/X + Reddit
      * conventions) instead of the stacked Following-then-Discover sections.
@@ -379,6 +386,7 @@ export const defaultFeatureFlags: FeatureFlags = {
     // for the tour before being routed into their den.
     discoveryHomeFeed: true,
     topics: false,
+    messaging: true,
     homeFeedSegments: false,
     homeStreak: false,
     // Creator Hub production readiness: the bounty board sections are built and

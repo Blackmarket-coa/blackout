@@ -91,7 +91,17 @@ export const GROWTH_REFERRALS_PATH = '/growth/referrals';
 export const GROWTH_AMBASSADORS_PATH = '/growth/ambassadors';
 export const GROWTH_QUESTS_PATH = '/growth/quests';
 export const MARKET_PATH = '/market';
-export const MARKET_LISTING_PATH = '/market/listings/:listingId';
+/**
+ * Marketplace listing detail. A listing's identity is the
+ * (provider, provider-listing) pair — the single-listing API endpoint is
+ * `GET /v1/marketplace/listings/:providerId/:listingId` — so the route
+ * carries both params, mirroring `EVENT_DETAIL_PATH`.
+ */
+export const MARKET_LISTING_PATH = '/market/listings/:providerId/:listingId';
+
+/** Builds the market listing detail URL from the (provider, listing) pair. */
+export const buildMarketListingPath = (providerId: string, listingId: string): string =>
+    `/market/listings/${encodeURIComponent(providerId)}/${encodeURIComponent(listingId)}`;
 export const LIVE_PATH = '/live';
 export const LIVE_STREAM_PATH = '/live/:streamId';
 export const STREAMING_PATH = '/streaming';
