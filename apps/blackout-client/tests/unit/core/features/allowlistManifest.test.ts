@@ -51,6 +51,7 @@ describe('feature allowlist manifest', () => {
             'burner-identity',
             'panic',
             'mesh',
+            'messaging',
         ]);
     });
 

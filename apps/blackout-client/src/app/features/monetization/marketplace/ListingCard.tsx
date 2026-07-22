@@ -1,4 +1,5 @@
 import { createElement, type ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 import { categoryLabel, type NormalizedListing } from '@blackout/core';
 import type { MarketplaceProviderSummary } from './marketplaceClient';
 import { resolveMarketplaceProvider } from './providerMetadata';
@@ -40,6 +41,8 @@ interface ListingCardProps {
     onMessageVendor?: (listing: NormalizedListing) => void;
     purchasing?: boolean;
     alreadyOwned?: boolean;
+    /** When set, the listing title links through to this detail route. */
+    detailPath?: string;
 }
 
 export function ListingCard({
@@ -49,6 +52,7 @@ export function ListingCard({
     onMessageVendor,
     purchasing,
     alreadyOwned,
+    detailPath,
 }: ListingCardProps): ReactNode {
     const provider = resolveMarketplaceProvider(listing.providerId, providers);
 
@@ -82,7 +86,21 @@ export function ListingCard({
                 categoryLabel(listing.category)
             )
         ),
-        createElement('h3', { style: { margin: 0, fontSize: 16 } }, listing.title),
+        createElement(
+            'h3',
+            { style: { margin: 0, fontSize: 16 } },
+            detailPath
+                ? createElement(
+                      Link,
+                      {
+                          to: detailPath,
+                          style: { color: 'inherit' },
+                          'data-testid': 'listing-card-detail-link',
+                      } as never,
+                      listing.title
+                  )
+                : listing.title
+        ),
         createElement(
             'p',
             { style: { margin: 0, fontSize: 13, color: 'var(--text-secondary)' } },

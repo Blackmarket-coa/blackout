@@ -8,11 +8,17 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { capabilityContextAtom } from '../../../../src/app/core/features/capabilityContext';
 import { runtimeFeatureFlags } from '../../../../src/app/core/features/featureFlags';
-import { RegistryRouteList, buildRegistryRouteObjects } from '../../../../src/app/core/features/RegistryRouteList';
+import {
+    RegistryRouteList,
+    buildRegistryRouteObjects,
+} from '../../../../src/app/core/features/RegistryRouteList';
 import { RegistrySettingsList } from '../../../../src/app/core/features/RegistrySettingsList';
 import { RegistrySidebarList } from '../../../../src/app/core/features/RegistrySidebarList';
 
-const seedStore = (capabilities: string[], flagOverrides: Partial<typeof runtimeFeatureFlags> = {}) => {
+const seedStore = (
+    capabilities: string[],
+    flagOverrides: Partial<typeof runtimeFeatureFlags> = {}
+) => {
     const store = createStore();
     store.set(capabilityContextAtom, {
         capabilities,
@@ -47,6 +53,7 @@ describe('RegistrySidebarList', () => {
             coalition: false,
             coliseum: false,
             streaming: false,
+            messaging: false,
         });
         const { container } = await mount(
             <MemoryRouter>
@@ -59,10 +66,9 @@ describe('RegistrySidebarList', () => {
 
     it('emits sidebar entries for granted feature surfaces', async () => {
         // Stego toolkit + ephemeral lifecycle each contribute a sidebar entry.
-        const store = seedStore(
-            ['stego.toolkit.use', 'stego.lifecycle.manage'],
-            { stegoToolkit: true }
-        );
+        const store = seedStore(['stego.toolkit.use', 'stego.lifecycle.manage'], {
+            stegoToolkit: true,
+        });
 
         const { container } = await mount(
             <MemoryRouter>
@@ -108,10 +114,10 @@ describe('RegistrySettingsList', () => {
     });
 
     it('emits sections for every granted customization', async () => {
-        const store = seedStore(
-            ['settings.preferences.read', 'stego.settings.read'],
-            { settingsParity: true, stegoToolkit: true }
-        );
+        const store = seedStore(['settings.preferences.read', 'stego.settings.read'], {
+            settingsParity: true,
+            stegoToolkit: true,
+        });
 
         const { container } = await mount(<RegistrySettingsList />, store);
 
@@ -125,10 +131,9 @@ describe('RegistrySettingsList', () => {
     });
 
     it('honors the filter prop', async () => {
-        const store = seedStore(
-            ['settings.preferences.read', 'settings.sidebar.read'],
-            { settingsParity: true }
-        );
+        const store = seedStore(['settings.preferences.read', 'settings.sidebar.read'], {
+            settingsParity: true,
+        });
 
         const { container } = await mount(
             <RegistrySettingsList filter={(section) => section === 'Sidebar'} />,
@@ -191,6 +196,7 @@ describe('RegistryRouteList + buildRegistryRouteObjects', () => {
                 creatorsStorefront: false,
                 creatorsDashboard: false,
                 onboardingCreatorPath: false,
+                messaging: false,
             },
         });
         expect(objects).toEqual([]);

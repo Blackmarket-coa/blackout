@@ -19,7 +19,7 @@ import {
 import { readBlackoutApiToken } from './useMarketplaceAuth';
 import { ensureBlackoutApiToken } from '../../../../client/blackoutApiSession';
 import { getDirectCreatePath, withSearchParam } from '../../../pages/pathUtils';
-import type { DirectCreateSearchParams } from '../../../pages/paths';
+import { buildMarketListingPath, type DirectCreateSearchParams } from '../../../pages/paths';
 import { ListingCard } from './ListingCard';
 import { LibraryView } from './LibraryView';
 import { resolveMarketplaceProvider } from './providerMetadata';
@@ -387,6 +387,10 @@ export function MarketplaceSlice() {
                           onMessageVendor: handleMessageVendor,
                           purchasing: purchasingId === listingKey(listing),
                           alreadyOwned: ownedKeys.has(listingKey(listing)),
+                          detailPath: buildMarketListingPath(
+                              listing.providerId,
+                              listing.providerListingId
+                          ),
                       })
                   )
               );
