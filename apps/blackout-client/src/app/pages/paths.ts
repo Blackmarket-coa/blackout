@@ -91,7 +91,6 @@ export const GROWTH_REFERRALS_PATH = '/growth/referrals';
 export const GROWTH_AMBASSADORS_PATH = '/growth/ambassadors';
 export const GROWTH_QUESTS_PATH = '/growth/quests';
 export const MARKET_PATH = '/market';
-export const MARKET_LISTING_PATH = '/market/listings/:listingId';
 export const LIVE_PATH = '/live';
 export const LIVE_STREAM_PATH = '/live/:streamId';
 export const STREAMING_PATH = '/streaming';

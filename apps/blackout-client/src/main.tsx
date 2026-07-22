@@ -47,11 +47,12 @@ import { OAuthCallback } from './app/features/settings/linked-accounts/OAuthCall
 import { InviteLandingPage, PendingInviteRedeemer } from './app/components/invite-landing';
 import { OnboardingPage } from './app/features/welcome/OnboardingPage';
 import { PublicDirectory } from './app/features/discovery/PublicDirectory';
+import { ExplorePage } from './app/features/discovery/ExplorePage';
 import {
     CreatorStorefront as PublicProfileRoute,
     PublicProfileStandalone,
 } from './app/features/creators/CreatorStorefront';
-import { ONBOARDING_PATH, SWIPE_FEED_PATH } from './app/pages/paths';
+import { EXPLORE_PATH, ONBOARDING_PATH, SWIPE_FEED_PATH } from './app/pages/paths';
 import { NotFoundPage, RouteErrorFallback } from './app/pages/RouteErrorPage';
 import { trimTrailingSlash } from './app/utils/common';
 
@@ -258,6 +259,10 @@ const buildAppRouter = (capabilityContext: {
         // here (with the invited room as `?room=`) before dropping them into
         // the room; otherwise the wizard only ever shows as a ClientLayout modal.
         { path: ONBOARDING_PATH, element: <OnboardingPage /> },
+        // Logged-in discovery destination. The logged-out case is intercepted
+        // in BootstrapStatus (session-less PublicDirectory) before this router
+        // ever mounts; this route keeps the same URL working once signed in.
+        { path: EXPLORE_PATH, element: <ExplorePage /> },
         // Full-screen swipe-first feed. Reuses the unified-feed data and the
         // AppShell chrome, so it rides the same flags as HomeFeed.
         ...(homeFeedEnabled
