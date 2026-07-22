@@ -455,7 +455,7 @@ const BootstrapStatus = () => {
                 }}
             >
                 <a
-                    href="/home"
+                    href="/"
                     aria-label="Town Square"
                     data-testid="bootstrap-home"
                     style={{ color: 'inherit' }}

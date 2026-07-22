@@ -64,12 +64,16 @@ export function ColiseumView({
     );
 
     const activeTab = useMemo<ColiseumTabId>(() => {
-        if (!isValidColiseumTab(storedTab) || !tabs.includes(storedTab)) return fallbackTab;
-        // The debate drill-in is meaningless without a topic (e.g. a stale
-        // persisted tab) — show the topics feed instead.
-        if (storedTab === 'debate' && !selectedTopicId) {
+        if (!isValidColiseumTab(storedTab)) return fallbackTab;
+        // The debate drill-in is never a strip destination (see
+        // splitColiseumTabs), so a den's enabledTabs gate doesn't apply to it:
+        // it's valid whenever a topic is selected, and meaningless without one
+        // (e.g. a stale persisted tab) — show the topics feed instead.
+        if (storedTab === 'debate') {
+            if (selectedTopicId) return 'debate';
             return tabs.includes('topics') ? 'topics' : fallbackTab;
         }
+        if (!tabs.includes(storedTab)) return fallbackTab;
         return storedTab;
     }, [storedTab, tabs, fallbackTab, selectedTopicId]);
 
