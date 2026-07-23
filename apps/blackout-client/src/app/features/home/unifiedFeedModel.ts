@@ -282,8 +282,12 @@ export const mapGovernance = (
         };
     });
 
-export const mapDens = (rooms: readonly RoomLike[], now: number): DenFeedItem[] =>
-    buildHomeFeed(rooms, now).map((item) => ({
+export const mapDens = (
+    rooms: readonly RoomLike[],
+    now: number,
+    dmRoomIds?: ReadonlySet<string>
+): DenFeedItem[] =>
+    buildHomeFeed(rooms, now, { dmRoomIds }).map((item) => ({
         id: `den:${item.denId}`,
         source: 'den',
         unreadCount: item.unreadCount,
@@ -540,3 +544,26 @@ export const partitionFollowing = (
             return true;
         return item.canopyId !== null && joinedCanopyIds.has(item.canopyId);
     });
+
+/**
+ * Identity for "has the viewer opened this item". Statuses reuse one id per
+ * author (`status:<userId>`) and stamp `timestamp: now` on every projection,
+ * so their key includes the rendered content — a fresh status from the same
+ * author resurfaces, an unchanged one stays seen. Every other source already
+ * mints a unique id per underlying item.
+ */
+export const feedSeenKey = (item: UnifiedFeedItem): string =>
+    item.source === 'status' ? `${item.id}@${item.subtitle}` : item.id;
+
+/**
+ * Following shows only actionable items: dens while they still have unread
+ * activity, and everything else until the viewer has opened it (`seenKeys`
+ * holds `feedSeenKey`s of opened items).
+ */
+export const filterToUnseen = (
+    items: readonly UnifiedFeedItem[],
+    seenKeys: ReadonlySet<string>
+): UnifiedFeedItem[] =>
+    items.filter((item) =>
+        item.source === 'den' ? item.unreadCount > 0 : !seenKeys.has(feedSeenKey(item))
+    );

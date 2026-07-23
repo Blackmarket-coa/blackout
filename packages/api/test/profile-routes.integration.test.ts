@@ -74,6 +74,29 @@ test('profile PUT upserts and GET returns the saved record', async () => {
     assert.equal(fetched.profile.bio, 'hello world');
 });
 
+test('profile PUT treats blank strings as "keep stored value" instead of 400', async () => {
+    __resetProfileStoreForTests();
+    const userId = 'profile-user-blank';
+    const seed = await app.request(`/v1/profile/${userId}`, {
+        method: 'PUT',
+        headers: authHeaders(userId),
+        body: JSON.stringify({ displayName: 'Kept Name', profile: { bio: 'kept bio' } }),
+    });
+    assert.equal(seed.status, 200);
+
+    // Clients seed unset fields as '' — the save must still go through and the
+    // blank fields must not clobber (or reject) the stored values.
+    const blank = await app.request(`/v1/profile/${userId}`, {
+        method: 'PUT',
+        headers: authHeaders(userId),
+        body: JSON.stringify({ displayName: '', avatarUrl: '', profile: { bio: 'new bio' } }),
+    });
+    assert.equal(blank.status, 200);
+    const saved = (await blank.json()) as { displayName: string; profile: { bio?: string } };
+    assert.equal(saved.displayName, 'Kept Name');
+    assert.equal(saved.profile.bio, 'new bio');
+});
+
 test('profile PUT rejects edits to other users', async () => {
     __resetProfileStoreForTests();
     const response = await app.request('/v1/profile/profile-user-c', {

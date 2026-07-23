@@ -13,6 +13,9 @@ import {
 import { saveProfile as saveProfileDefault, type SaveProfileInput } from './profileClient';
 import { syncStatusToPresence } from './customStatus';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
+import { uploadMedia } from '../../utils/media';
+import { mxcUrlToHttp } from '../../utils/matrix';
 import { useHardenAvatarImage } from '../privacy-tools/useHardenAvatarImage';
 import { MEMBER_PRIMARY_ROLES } from './profileTypes';
 import type {
@@ -29,6 +32,16 @@ import type {
 } from './profileTypes';
 
 const fileToObjectUrl = (file: File): string => URL.createObjectURL(file);
+
+/** Trimmed value, or undefined when blank — the API treats absent as "keep stored value". */
+const trimmedOrUndefined = (value: string | undefined): string | undefined => {
+    const trimmed = value?.trim();
+    return trimmed ? trimmed : undefined;
+};
+
+/** blob: object URLs are per-tab previews, never durable — never persist them. */
+const durableUrlOrUndefined = (value: string | undefined): string | undefined =>
+    value && !value.startsWith('blob:') ? value : undefined;
 
 const defaultConnection = (): ProfileConnection => ({ type: 'website', label: '', url: '' });
 
@@ -90,6 +103,7 @@ export const ProfileEditor = ({ saveProfile = saveProfileDefault }: ProfileEdito
     const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
     const [saveError, setSaveError] = useState<string | null>(null);
     const hardenImage = useHardenAvatarImage();
+    const useAuthentication = useMediaAuthentication();
 
     const bioLength = useMemo(() => profile.profile.bio?.length ?? 0, [profile.profile.bio]);
 
@@ -115,14 +129,19 @@ export const ProfileEditor = ({ saveProfile = saveProfileDefault }: ProfileEdito
         // profile rather than the seeded placeholder.
         const targetUserId = authenticatedUserId ?? profile.userId;
         try {
+            // Blank strings would fail the API's min-length/url validation and 400
+            // the whole save; absent fields keep their stored values instead.
             await saveProfile(targetUserId, {
-                displayName: profile.displayName,
-                avatarUrl: profile.avatarUrl,
-                primaryRole: profile.primaryRole,
+                displayName: trimmedOrUndefined(profile.displayName),
+                avatarUrl: durableUrlOrUndefined(trimmedOrUndefined(profile.avatarUrl)),
+                primaryRole: trimmedOrUndefined(profile.primaryRole),
                 roleBadges: profile.roleBadges,
                 mutualSpaces: profile.mutualSpaces,
                 isFriend: profile.isFriend,
-                profile: profile.profile,
+                profile: {
+                    ...profile.profile,
+                    banner: durableUrlOrUndefined(profile.profile.banner),
+                },
             });
             setSaveState('saved');
         } catch (error) {
@@ -142,12 +161,25 @@ export const ProfileEditor = ({ saveProfile = saveProfileDefault }: ProfileEdito
         // Avatars carry faces — harden them (EXIF strip + optional perturbation)
         // before they become the preview/upload source.
         const prepared = field === 'avatarUrl' ? await hardenImage(file) : file;
-        const objectUrl = fileToObjectUrl(prepared);
-        setProfile((prev) =>
-            field === 'banner'
-                ? { ...prev, profile: { ...prev.profile, banner: objectUrl } }
-                : { ...prev, avatarUrl: objectUrl }
-        );
+        const apply = (url: string) =>
+            setProfile((prev) =>
+                field === 'banner'
+                    ? { ...prev, profile: { ...prev.profile, banner: url } }
+                    : { ...prev, avatarUrl: url }
+            );
+        // Instant local preview while the durable upload runs.
+        apply(fileToObjectUrl(prepared));
+        try {
+            const mxc = await uploadMedia(mx, prepared);
+            const http =
+                field === 'avatarUrl'
+                    ? mxcUrlToHttp(mx, mxc, useAuthentication, 160, 160, 'crop')
+                    : mxcUrlToHttp(mx, mxc, useAuthentication);
+            apply(http ?? mxc);
+        } catch {
+            // Upload failed: the blob preview stays visible, and onSave's
+            // durableUrlOrUndefined guard ensures it is never persisted.
+        }
     };
 
     const updateConnection = (idx: number, patch: Partial<ProfileConnection>) => {

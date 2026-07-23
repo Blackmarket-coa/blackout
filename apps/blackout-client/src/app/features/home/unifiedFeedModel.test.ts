@@ -3,6 +3,8 @@ import type { CoalitionFeedItem, ColiseumTopic, NormalizedListing } from '@black
 import type { StreamSummary } from '../streams/streamsClient';
 import type { RoomLike } from './feedModel';
 import {
+    feedSeenKey,
+    filterToUnseen,
     mapCoalition,
     mapColiseum,
     mapDens,
@@ -394,6 +396,17 @@ describe('series badges', () => {
     });
 });
 
+describe('mapDens', () => {
+    it('excludes DM rooms so friendships never surface as DEN cards', () => {
+        const dens = mapDens(
+            [room({ roomId: '!dm:s' }), room({ roomId: '!den:s' })],
+            NOW,
+            new Set(['!dm:s'])
+        );
+        expect(dens.map((i) => i.id)).toEqual(['den:!den:s']);
+    });
+});
+
 describe('partitionFollowing', () => {
     it('keeps den + status items and canopy-matched items only', () => {
         const dens = mapDens(
@@ -415,5 +428,67 @@ describe('partitionFollowing', () => {
         expect(ids).toContain('coalition:in');
         expect(ids).not.toContain('coalition:out');
         expect(ids).not.toContain('coliseum:global');
+    });
+});
+
+describe('filterToUnseen', () => {
+    it('keeps dens only while they have unread activity', () => {
+        const dens = mapDens(
+            [
+                room({ roomId: '!read:s' }),
+                room({ roomId: '!unread:s', getUnreadNotificationCount: () => 3 }),
+            ],
+            NOW
+        );
+        const kept = filterToUnseen(dens, new Set());
+        expect(kept.map((i) => i.id)).toEqual(['den:!unread:s']);
+    });
+
+    it('drops items the viewer has opened, keeps the rest', () => {
+        const wallPosts = mapWallPosts(
+            [
+                {
+                    id: 'p1',
+                    ownerUserId: '@a:s',
+                    ownerDisplayName: 'A',
+                    body: 'seen post',
+                    authorId: '@a:s',
+                    createdAt: new Date(NOW - HOUR).toISOString(),
+                },
+                {
+                    id: 'p2',
+                    ownerUserId: '@b:s',
+                    ownerDisplayName: 'B',
+                    body: 'new post',
+                    authorId: '@b:s',
+                    createdAt: new Date(NOW - HOUR).toISOString(),
+                },
+            ],
+            NOW
+        );
+        const kept = filterToUnseen(wallPosts, new Set([feedSeenKey(wallPosts[0])]));
+        expect(kept.map((i) => i.id)).toEqual(['wall:p2']);
+    });
+
+    it('resurfaces a status when its content changes, keeps it hidden when unchanged', () => {
+        const [original] = mapStatuses(
+            [{ userId: '@me:s', displayName: 'Me', text: 'old status' }],
+            NOW
+        );
+        const seen = new Set([feedSeenKey(original)]);
+
+        // Same author, same text, projected later: still seen (timestamp is
+        // stamped `now` on every projection and must not affect identity).
+        const [unchanged] = mapStatuses(
+            [{ userId: '@me:s', displayName: 'Me', text: 'old status' }],
+            NOW + HOUR
+        );
+        expect(filterToUnseen([unchanged], seen)).toEqual([]);
+
+        const [updated] = mapStatuses(
+            [{ userId: '@me:s', displayName: 'Me', text: 'new status' }],
+            NOW + HOUR
+        );
+        expect(filterToUnseen([updated], seen)).toEqual([updated]);
     });
 });

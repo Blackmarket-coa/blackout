@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
     removeFriend: vi.fn().mockResolvedValue(undefined),
     startDirectMessageWith: vi.fn().mockResolvedValue(undefined),
     navigateRoom: vi.fn(),
+    followUser: vi.fn().mockResolvedValue({ ok: true, following: true, created: true }),
 }));
 
 vi.mock('../../../../src/app/hooks/useMatrixClient', () => ({
@@ -29,6 +30,10 @@ vi.mock('../../../../src/app/features/friends/useFriends', () => ({
 
 vi.mock('../../../../src/app/features/friends/useFriendInbox', () => ({
     useFriendInbox: () => ({ incoming: mocks.incoming }),
+}));
+
+vi.mock('../../../../src/app/features/profile/profileClient', () => ({
+    followUser: (...args: unknown[]) => mocks.followUser(...args),
 }));
 
 vi.mock('../../../../src/app/features/friends/friendActions', () => ({
@@ -67,6 +72,8 @@ beforeEach(() => {
     mocks.removeFriend.mockClear();
     mocks.startDirectMessageWith.mockClear();
     mocks.navigateRoom.mockClear();
+    mocks.followUser.mockClear();
+    mocks.followUser.mockResolvedValue({ ok: true, following: true, created: true });
     document.body.innerHTML = '';
 });
 
@@ -108,6 +115,27 @@ describe('FriendsDialog', () => {
             userId: '@req:server',
             roomId: '!dm:server',
         });
+    });
+
+    it('follows back on accept so friendship activity is tracked', async () => {
+        mocks.incoming = [{ userId: '@req:server', roomId: '!dm:server' }];
+        const { container } = await mount();
+
+        await click(container.querySelector('[data-testid="friend-accept"]'));
+        expect(mocks.acceptFriendRequest).toHaveBeenCalled();
+        expect(mocks.followUser).toHaveBeenCalledWith('@req:server');
+    });
+
+    it('still completes the accept when the follow call fails', async () => {
+        mocks.incoming = [{ userId: '@req:server', roomId: '!dm:server' }];
+        mocks.followUser.mockRejectedValue(new Error('no blackout token'));
+        const { container } = await mount();
+
+        await click(container.querySelector('[data-testid="friend-accept"]'));
+        expect(mocks.acceptFriendRequest).toHaveBeenCalled();
+        // The row is only re-enabled if `run` resolved despite the rejection.
+        const accept = container.querySelector<HTMLButtonElement>('[data-testid="friend-accept"]');
+        expect(accept?.disabled).toBe(false);
     });
 
     it('removes a friend', async () => {

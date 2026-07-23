@@ -9,6 +9,7 @@ import {
     removeFriend,
     startDirectMessageWith,
 } from './friendActions';
+import { followUser } from '../profile/profileClient';
 
 const OVERLAY_STYLE: CSSProperties = {
     position: 'fixed',
@@ -159,7 +160,15 @@ export const FriendsDialog = ({ onClose }: { onClose: () => void }) => {
                                         style={btn('primary')}
                                         disabled={busy}
                                         data-testid="friend-accept"
-                                        onClick={() => void run(() => acceptFriendRequest(mx, req))}
+                                        onClick={() =>
+                                            void run(async () => {
+                                                await acceptFriendRequest(mx, req);
+                                                // Follow back so friendship activity is
+                                                // mutual; best-effort — never fail the
+                                                // accept over a missing Blackout token.
+                                                await followUser(req.userId).catch(() => {});
+                                            })
+                                        }
                                     >
                                         Accept
                                     </button>
