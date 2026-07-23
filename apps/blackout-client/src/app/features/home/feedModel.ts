@@ -45,8 +45,12 @@ const HOME_FEED_DEFAULT_LIMIT = 50;
 const safeNumber = (raw: unknown): number =>
     typeof raw === 'number' && Number.isFinite(raw) ? raw : 0;
 
-const isJoinedDen = (room: RoomLike): boolean => {
+const isJoinedDen = (room: RoomLike, dmRoomIds?: ReadonlySet<string>): boolean => {
     if (room.getType?.() === 'm.space') return false;
+    // DMs are conversations, not dens — they must never surface as DEN cards.
+    // `dmRoomIds` comes from m.direct account data, this app's authoritative DM
+    // registry (both friend-request paths register their rooms there).
+    if (dmRoomIds?.has(room.roomId)) return false;
     if (typeof room.getMyMembership === 'function' && room.getMyMembership() !== 'join')
         return false;
     return true;
@@ -102,10 +106,10 @@ const buildSubtitle = (room: RoomLike, lastActiveAt: number | null, now: number)
 export const buildHomeFeed = (
     rooms: readonly RoomLike[],
     now: number = Date.now(),
-    options: { limit?: number } = {}
+    options: { limit?: number; dmRoomIds?: ReadonlySet<string> } = {}
 ): HomeFeedItem[] => {
     const limit = options.limit ?? HOME_FEED_DEFAULT_LIMIT;
-    const dens = rooms.filter(isJoinedDen);
+    const dens = rooms.filter((room) => isJoinedDen(room, options.dmRoomIds));
 
     const items: HomeFeedItem[] = dens.map((room) => {
         const lastActiveRaw = room.getLastActiveTimestamp?.();

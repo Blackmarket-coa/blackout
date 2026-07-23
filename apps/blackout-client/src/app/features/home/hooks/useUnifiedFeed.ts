@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useAtomValue } from 'jotai';
 import type { Room } from 'matrix-js-sdk';
 import { joinedRoomsAtom } from '../../../state/rooms';
+import { mDirectAtom } from '../../../state/mDirectList';
 import { runtimeFeatureFlags } from '../../../core/features/featureFlags';
 import { listStreams } from '../../streams/streamsClient';
 import { fetchCoalitionFeed } from '../../coalition/coalitionClient';
@@ -113,6 +114,7 @@ const collectGovernanceProposals = (rooms: readonly Room[]): GovernanceProposalE
 
 export function useUnifiedFeed(sort?: FeedSort): UnifiedFeedResult {
     const rooms = useAtomValue(joinedRoomsAtom) as unknown as Room[];
+    const mDirects = useAtomValue(mDirectAtom);
     const flags = runtimeFeatureFlags;
     // Stream cards/rail link into the `/live/:streamId` viewer, which is owned
     // by `streamsViewer`. Gate the source on it so we never emit dead links
@@ -196,7 +198,7 @@ export function useUnifiedFeed(sort?: FeedSort): UnifiedFeedResult {
 
     return useMemo(() => {
         const now = Date.now();
-        const denItems = mapDens(rooms as unknown as RoomLike[], now);
+        const denItems = mapDens(rooms as unknown as RoomLike[], now, mDirects);
         const statusItems = mapStatuses(activity.statuses, now);
         const wallItems = mapWallPosts(activity.walls, now);
         const governanceItems = flags.governance
@@ -233,5 +235,5 @@ export function useUnifiedFeed(sort?: FeedSort): UnifiedFeedResult {
             loading: remote.loading,
             errorsBySource: remote.errorsBySource,
         };
-    }, [rooms, activity, remote, boostTags, sort]);
+    }, [rooms, mDirects, activity, remote, boostTags, sort]);
 }

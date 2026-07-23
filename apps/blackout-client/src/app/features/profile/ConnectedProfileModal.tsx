@@ -1,6 +1,7 @@
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { useFriends } from '../friends/useFriends';
 import { sendFriendRequest } from '../friends/friendActions';
+import { followUser } from './profileClient';
 import { ProfileModal } from './ProfileModal';
 import { useProfileActions } from './useProfileActions';
 import type { MemberProfile } from './profileTypes';
@@ -30,7 +31,15 @@ export const ConnectedProfileModal = ({
             onClose={onClose}
             onStartDm={startDm}
             onBlock={block}
-            onAddFriend={(userId) => void sendFriendRequest(mx, userId)}
+            onAddFriend={(userId) => {
+                void sendFriendRequest(mx, userId);
+                // The Matrix friend request is the source of truth for
+                // friendship; the follow edge feeds status/wall activity into
+                // the FOLLOWING feed and is best-effort — a follow failure
+                // (e.g. a Matrix-only session with no Blackout token) must
+                // never block or roll back the request.
+                void followUser(userId).catch(() => {});
+            }}
             requestPending={isOutgoing(profile.userId)}
         />
     );

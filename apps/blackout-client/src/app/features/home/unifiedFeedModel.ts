@@ -282,8 +282,12 @@ export const mapGovernance = (
         };
     });
 
-export const mapDens = (rooms: readonly RoomLike[], now: number): DenFeedItem[] =>
-    buildHomeFeed(rooms, now).map((item) => ({
+export const mapDens = (
+    rooms: readonly RoomLike[],
+    now: number,
+    dmRoomIds?: ReadonlySet<string>
+): DenFeedItem[] =>
+    buildHomeFeed(rooms, now, { dmRoomIds }).map((item) => ({
         id: `den:${item.denId}`,
         source: 'den',
         unreadCount: item.unreadCount,

@@ -58,6 +58,24 @@ describe('buildHomeFeed', () => {
         expect(items.map((i) => i.denId)).toEqual(['!den:s']);
     });
 
+    it('drops DM rooms when their ids are passed via dmRoomIds', () => {
+        const rooms = [
+            fakeRoom({ roomId: '!dm:s', name: 'friend', getLastActiveTimestamp: () => now }),
+            fakeRoom({
+                roomId: '!den:s',
+                name: 'Mutual aid den',
+                getLastActiveTimestamp: () => now,
+            }),
+        ];
+
+        const withExclusion = buildHomeFeed(rooms, now, { dmRoomIds: new Set(['!dm:s']) });
+        expect(withExclusion.map((i) => i.denId)).toEqual(['!den:s']);
+
+        // Without the option every joined non-space room still qualifies.
+        const withoutExclusion = buildHomeFeed(rooms, now);
+        expect(withoutExclusion.map((i) => i.denId).sort()).toEqual(['!den:s', '!dm:s']);
+    });
+
     it('orders by lastActiveAt desc and tie-breaks on name', () => {
         const items = buildHomeFeed(
             [

@@ -394,6 +394,17 @@ describe('series badges', () => {
     });
 });
 
+describe('mapDens', () => {
+    it('excludes DM rooms so friendships never surface as DEN cards', () => {
+        const dens = mapDens(
+            [room({ roomId: '!dm:s' }), room({ roomId: '!den:s' })],
+            NOW,
+            new Set(['!dm:s'])
+        );
+        expect(dens.map((i) => i.id)).toEqual(['den:!den:s']);
+    });
+});
+
 describe('partitionFollowing', () => {
     it('keeps den + status items and canopy-matched items only', () => {
         const dens = mapDens(
