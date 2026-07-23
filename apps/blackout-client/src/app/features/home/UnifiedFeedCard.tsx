@@ -1,7 +1,9 @@
 import classNames from 'classnames';
 import { useEffect, useRef } from 'react';
+import { useSetAtom } from 'jotai';
 import { Link } from 'react-router-dom';
 import { recordViewEvent } from '../../sdk/viewEvents';
+import { markFeedItemOpenedAtom } from './feedSeen';
 import * as css from './UnifiedFeedCard.css';
 import type { UnifiedFeedItem, UnifiedFeedSource } from './unifiedFeedModel';
 
@@ -50,6 +52,7 @@ export const UnifiedFeedCard = ({
             : SOURCE_GLYPH[item.source];
     const emberRing = item.source === 'den' && !reducedMotion;
     const cardRef = useRef<HTMLAnchorElement>(null);
+    const markOpened = useSetAtom(markFeedItemOpenedAtom);
 
     // One impression per item per session, fired when at least half the card
     // has actually been on screen (not merely rendered below the fold).
@@ -83,13 +86,14 @@ export const UnifiedFeedCard = ({
             data-testid="home-feed-card"
             data-source={item.source}
             data-den-id={item.denId ?? undefined}
-            onClick={() =>
+            onClick={() => {
+                markOpened(item);
                 recordViewEvent(
                     'feed_item_opened',
                     { itemId: item.id, source: item.source },
                     { coalitionId: item.canopyId ?? undefined }
-                )
-            }
+                );
+            }}
         >
             {item.mediaUrl ? (
                 <img

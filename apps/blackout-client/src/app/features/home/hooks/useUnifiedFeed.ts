@@ -11,7 +11,9 @@ import { fetchListings } from '../../monetization/marketplace/marketplaceClient'
 import { readBlackoutApiToken } from '../../monetization/marketplace/useMarketplaceAuth';
 import { GOVERNANCE_PROPOSAL_EVENT_TYPE } from '@blackout/protocol';
 import { normalizeProposalEventContent } from '../../governance/eventSchemas';
+import { seenFeedKeySetAtom } from '../feedSeen';
 import {
+    filterToUnseen,
     mapCoalition,
     mapColiseum,
     mapDens,
@@ -115,6 +117,7 @@ const collectGovernanceProposals = (rooms: readonly Room[]): GovernanceProposalE
 export function useUnifiedFeed(sort?: FeedSort): UnifiedFeedResult {
     const rooms = useAtomValue(joinedRoomsAtom) as unknown as Room[];
     const mDirects = useAtomValue(mDirectAtom);
+    const seenKeys = useAtomValue(seenFeedKeySetAtom);
     const flags = runtimeFeatureFlags;
     // Stream cards/rail link into the `/live/:streamId` viewer, which is owned
     // by `streamsViewer`. Gate the source on it so we never emit dead links
@@ -220,12 +223,17 @@ export function useUnifiedFeed(sort?: FeedSort): UnifiedFeedResult {
 
         const maxPerSource = UNIFIED_FEED_DEFAULT_MAX_PER_SOURCE;
         const discover = mergeAndRank(combined, { boostTags, sort, now, maxPerSource });
-        const following = mergeAndRank(partitionFollowing(combined, joinedCanopyIds), {
-            boostTags,
-            sort,
-            now,
-            maxPerSource,
-        });
+        // Following is an activity surface: unread dens plus items the viewer
+        // hasn't opened yet. Discover keeps everything so browsing still works.
+        const following = mergeAndRank(
+            filterToUnseen(partitionFollowing(combined, joinedCanopyIds), seenKeys),
+            {
+                boostTags,
+                sort,
+                now,
+                maxPerSource,
+            }
+        );
         const liveRail = selectLiveRail(discover);
 
         return {
@@ -235,5 +243,5 @@ export function useUnifiedFeed(sort?: FeedSort): UnifiedFeedResult {
             loading: remote.loading,
             errorsBySource: remote.errorsBySource,
         };
-    }, [rooms, mDirects, activity, remote, boostTags, sort]);
+    }, [rooms, mDirects, seenKeys, activity, remote, boostTags, sort]);
 }

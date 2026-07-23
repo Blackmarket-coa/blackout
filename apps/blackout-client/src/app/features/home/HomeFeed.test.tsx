@@ -201,7 +201,10 @@ describe('HomeFeed', () => {
             ],
         } as never);
 
-        const { container } = await mountWithRooms([fakeRoom({ roomId: '!d:s', name: 'A Den' })]);
+        // Following only surfaces dens with unread activity.
+        const { container } = await mountWithRooms([
+            fakeRoom({ roomId: '!d:s', name: 'A Den', getUnreadNotificationCount: () => 2 }),
+        ]);
 
         // The den lives in Following; the coalition bulletin lives in Discover.
         const discover = container.querySelector('[data-testid="home-discover-section"]');
@@ -235,7 +238,10 @@ describe('HomeFeed', () => {
             ],
         } as never);
 
-        const { container } = await mountWithRooms([fakeRoom({ roomId: '!d:s', name: 'A Den' })]);
+        // Following only surfaces dens with unread activity.
+        const { container } = await mountWithRooms([
+            fakeRoom({ roomId: '!d:s', name: 'A Den', getUnreadNotificationCount: () => 2 }),
+        ]);
 
         // Segmented controls render; the stacked sections do not.
         expect(container.querySelector('[data-testid="home-feed-controls"]')).not.toBeNull();
