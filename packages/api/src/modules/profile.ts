@@ -46,10 +46,15 @@ function subjectOwnsProfile(c: Context, userId: string): boolean {
     return MXID_LOCALPART_RE.exec(userId)?.[1] === username;
 }
 
+// Blank strings mean "keep the stored value": clients seed empty fields as ''
+// and a hard .min(1)/.url() failure would 400 the whole save.
+const blankToUndefined = (value: unknown) =>
+    typeof value === 'string' && value.trim() === '' ? undefined : value;
+
 const upsertSchema = z.object({
-    displayName: z.string().min(1).max(120).optional(),
-    avatarUrl: z.string().url().optional(),
-    primaryRole: z.string().max(120).optional(),
+    displayName: z.preprocess(blankToUndefined, z.string().min(1).max(120).optional()),
+    avatarUrl: z.preprocess(blankToUndefined, z.string().url().optional()),
+    primaryRole: z.preprocess(blankToUndefined, z.string().max(120).optional()),
     roleBadges: z.array(z.string().max(60)).max(20).optional(),
     mutualSpaces: z.array(z.string().max(120)).max(50).optional(),
     isFriend: z.boolean().optional(),
