@@ -79,6 +79,10 @@ export default defineConfig({
             '**/node_modules/**',
             '**/dist/**',
             '**/.{idea,git,cache,output,temp}/**',
+            // Playwright specs — run via `pnpm test:e2e`, not vitest. Without
+            // this, a bare `vitest run` collects them and fails on the
+            // @playwright/test runtime.
+            'tests/e2e/**',
         ],
     },
 });

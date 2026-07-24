@@ -68,6 +68,7 @@ describe('feature entrypoint registry adapter', () => {
             'open-widget-soundboard',
             'open-widget-numbers-station',
             'open-widget-stage-channels',
+            'open-widget-watch-party',
         ]);
     });
 
