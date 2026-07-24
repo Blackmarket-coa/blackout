@@ -8,6 +8,7 @@ import {
 } from '../../components/invite-landing/postAcceptanceRoute';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 import { GlossaryTerm } from '../../lib/GlossaryTerm';
+import { FeatureGuide } from '../../components/feature-guide/FeatureGuide';
 import {
     CANOPIES_PATH,
     COMMUNITIES_PATH,
@@ -58,11 +59,17 @@ function filterFeedByQuery(items: readonly UnifiedFeedItem[], query: string): Un
     });
 }
 
-const FEED_SORTS: { id: FeedSort; label: string }[] = [
-    { id: 'hot', label: 'Hot' },
-    { id: 'new', label: 'New' },
-    { id: 'top', label: 'Top' },
+const FEED_SORTS: { id: FeedSort; label: string; hint: string }[] = [
+    { id: 'hot', label: 'Hot', hint: 'Rising now — a blend of score and recency' },
+    { id: 'new', label: 'New', hint: 'Newest first' },
+    { id: 'top', label: 'Top', hint: 'Highest-scored first' },
 ];
+
+/** Tooltip copy for the For You / Following feed segments. */
+const SEGMENT_HINTS = {
+    forYou: 'Everything across Blackout, ranked for you',
+    following: 'New activity from the dens and people you follow',
+} as const;
 
 interface QuickAction {
     flag: keyof FeatureFlags;
@@ -333,6 +340,13 @@ export const HomeFeed = (): JSX.Element => {
                 </div>
                 <div className={css.grid}>
                     <main className={css.centerColumn}>
+                        <FeatureGuide
+                            style={{ borderRadius: 10, border: '1px solid var(--border-default)' }}
+                        >
+                            The Town Square gathers activity from every corner of Blackout — your{' '}
+                            <GlossaryTerm term="den">dens</GlossaryTerm>, live streams, Coliseum
+                            debates, market listings, and people you follow — into one feed.
+                        </FeatureGuide>
                         <input
                             type="search"
                             value={query}
@@ -348,6 +362,7 @@ export const HomeFeed = (): JSX.Element => {
                                         type="button"
                                         role="tab"
                                         data-testid="home-feed-segment-foryou"
+                                        title={SEGMENT_HINTS.forYou}
                                         aria-pressed={segment === 'forYou'}
                                         aria-selected={segment === 'forYou'}
                                         className={classNames(
@@ -365,6 +380,7 @@ export const HomeFeed = (): JSX.Element => {
                                         type="button"
                                         role="tab"
                                         data-testid="home-feed-segment-following"
+                                        title={SEGMENT_HINTS.following}
                                         aria-pressed={segment === 'following'}
                                         aria-selected={segment === 'following'}
                                         className={classNames(
@@ -385,6 +401,7 @@ export const HomeFeed = (): JSX.Element => {
                                             key={option.id}
                                             type="button"
                                             data-testid={`home-feed-sort-${option.id}`}
+                                            title={option.hint}
                                             aria-pressed={sort === option.id}
                                             className={classNames(
                                                 css.pill,
@@ -512,7 +529,12 @@ export const HomeFeed = (): JSX.Element => {
                                     data-shell-region="home-following"
                                     data-testid="home-following-section"
                                 >
-                                    <header className={css.sectionLabel}>Following</header>
+                                    <header
+                                        className={css.sectionLabel}
+                                        title={SEGMENT_HINTS.following}
+                                    >
+                                        Following
+                                    </header>
                                     {followingItems.length === 0 ? (
                                         <div
                                             className={css.emptyState}
@@ -555,7 +577,12 @@ export const HomeFeed = (): JSX.Element => {
                                             data-shell-region="home-discover"
                                             data-testid="home-discover-section"
                                         >
-                                            <header className={css.sectionLabel}>Discover</header>
+                                            <header
+                                                className={css.sectionLabel}
+                                                title="Suggestions from across Blackout, beyond what you already follow"
+                                            >
+                                                Discover
+                                            </header>
                                             <div
                                                 className={css.feedList}
                                                 data-testid="home-discover-list"

@@ -1,6 +1,7 @@
 import React, { type CSSProperties, useCallback, useState } from 'react';
 import { useAtom } from 'jotai';
 import {
+    INTEGRATIONS_VIEW_HINTS,
     INTEGRATIONS_VIEW_LABELS,
     INTEGRATIONS_VIEW_ORDER,
     streamingIntegrationsViewAtom,
@@ -56,6 +57,7 @@ export function IntegrationsTab({ initialView }: IntegrationsTabProps) {
             <HubSubTabs
                 views={INTEGRATIONS_VIEW_ORDER}
                 labels={INTEGRATIONS_VIEW_LABELS}
+                hints={INTEGRATIONS_VIEW_HINTS}
                 active={activeView}
                 onSelect={handleSelect}
                 ariaLabel="Integrations views"

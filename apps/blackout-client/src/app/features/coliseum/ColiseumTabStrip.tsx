@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import type { ColiseumTabId } from '@blackout/core';
-import { COLISEUM_TAB_LABELS, COLISEUM_TAB_ORDER } from '../../state/coliseum';
+import { COLISEUM_TAB_HINTS, COLISEUM_TAB_LABELS, COLISEUM_TAB_ORDER } from '../../state/coliseum';
 import { splitColiseumTabs } from './tabConsolidation';
 import { ColiseumMoreSheet } from './components/ColiseumMoreSheet';
 import { cx } from './components/cx';
@@ -50,6 +50,7 @@ export function ColiseumTabStrip({
                     type="button"
                     role="tab"
                     aria-selected={tab === activeTab}
+                    title={COLISEUM_TAB_HINTS[tab]}
                     className={cx(css.tab, tab === activeTab && css.tabActive)}
                     onClick={() => onSelectTab(tab)}
                     data-coliseum-tab={tab}
@@ -61,6 +62,7 @@ export function ColiseumTabStrip({
                 <button
                     type="button"
                     className={cx(css.tab, secondaryActive && css.tabActive)}
+                    title="More Coliseum surfaces — arena matches, shouts, leaderboards, and sources"
                     aria-haspopup="dialog"
                     aria-expanded={moreOpen}
                     data-testid="coliseum-more-tab"

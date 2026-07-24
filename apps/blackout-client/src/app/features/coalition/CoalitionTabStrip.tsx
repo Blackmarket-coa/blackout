@@ -1,6 +1,10 @@
 import React, { type CSSProperties } from 'react';
 import type { CoalitionTabId } from '@blackout/core';
-import { COALITION_TAB_LABELS, COALITION_TAB_ORDER } from '../../state/coalition';
+import {
+    COALITION_TAB_HINTS,
+    COALITION_TAB_LABELS,
+    COALITION_TAB_ORDER,
+} from '../../state/coalition';
 
 export interface CoalitionTabStripProps {
     activeTab: CoalitionTabId;
@@ -77,6 +81,7 @@ export function CoalitionTabStrip({
                     type="button"
                     role="tab"
                     aria-selected={tab === activeTab}
+                    title={COALITION_TAB_HINTS[tab]}
                     style={tab === activeTab ? tabActiveStyle : tabBaseStyle}
                     onClick={() => onSelectTab(tab)}
                     data-coalition-tab={tab}

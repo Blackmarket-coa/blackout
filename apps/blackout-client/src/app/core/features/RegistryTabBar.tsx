@@ -137,6 +137,7 @@ export const RegistryTabBar = ({
                     <Link
                         key={entry.id}
                         to={entry.to}
+                        title={entry.description ?? entry.label}
                         aria-current={active ? 'page' : undefined}
                         data-active={active ? 'true' : 'false'}
                         data-panel-id={entry.id}

@@ -49,4 +49,22 @@ export const COLISEUM_TAB_LABELS: Record<ColiseumTabId, string> = {
     sources: 'Sources',
 };
 
+/**
+ * Short plain-text hints per tab, rendered as button tooltips in the tab
+ * strip. Fuller explainers live in `coliseumTabGuides.tsx`; keep the two in
+ * sync when a tab's purpose changes.
+ */
+export const COLISEUM_TAB_HINTS: Record<ColiseumTabId, string> = {
+    reel: 'A vertical feed of the strongest arguments',
+    arena: 'Callouts and 1v1 matches — every fight ends in a verdict and a Brief',
+    match: 'The match you are watching',
+    shouts: 'Raw video takes — a back-and-forth can graduate into a match',
+    topics: 'Debates anchored to news stories',
+    debate: 'Vote on arguments and fire back with rebuttals',
+    live: 'Real-time town halls',
+    challenges: 'Community challenges — enter your attempt and vote on others',
+    leaderboards: 'Who is leading across the ecosystem',
+    sources: 'Curated news to cite in your arguments',
+};
+
 export const COLISEUM_TAB_ORDER: ColiseumTabId[] = [...COLISEUM_TABS];
