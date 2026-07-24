@@ -110,6 +110,36 @@ function winningChoice(counts: Record<CrucibleChoice, number>): CrucibleChoice {
 }
 
 /**
+ * Minimum red+blue votes on the evidence question before a credibility strike
+ * can be derived — a strike is a serious mark, so a tiny crowd can't issue one.
+ */
+export const CREDIBILITY_STRIKE_MIN_SIDE_VOTES = 4;
+
+/**
+ * A side is struck only when it captured at most this share of the evidence
+ * question's red+blue votes — i.e. the crowd ruled overwhelmingly against it.
+ */
+export const CREDIBILITY_STRIKE_MAX_LOSER_SHARE = 0.2;
+
+/**
+ * Derive whether the Crucible's evidence question amounts to a credibility
+ * strike against one side. Losing the evidence question is normal; a strike is
+ * reserved for a lopsided ruling: enough side votes were cast and the losing
+ * side captured almost none of them. Returns the struck side, or null.
+ */
+export function deriveCredibilityStrike(
+    breakdown: ReadonlyArray<CrucibleQuestionBreakdown>
+): ColiseumSide | null {
+    const evidence = breakdown.find((question) => question.questionId === 'evidence');
+    if (!evidence) return null;
+    const sideVotes = evidence.red + evidence.blue;
+    if (sideVotes < CREDIBILITY_STRIKE_MIN_SIDE_VOTES) return null;
+    const loser: ColiseumSide = evidence.red >= evidence.blue ? 'blue' : 'red';
+    const loserVotes = loser === 'red' ? evidence.red : evidence.blue;
+    return loserVotes / sideVotes <= CREDIBILITY_STRIKE_MAX_LOSER_SHARE ? loser : null;
+}
+
+/**
  * Compose the crowd's synthesis votes into a verdict. Each question is tallied
  * independently; a side's score is how many questions it won outright. The
  * overall winner is the side with the higher score, or null on a tie.

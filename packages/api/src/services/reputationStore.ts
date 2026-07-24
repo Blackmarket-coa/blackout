@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import {
     aggregateReputation,
+    tallyArenaRecord,
+    type ArenaRecord,
     type ReputationEventType,
     type ReputationProfile,
     type ReputationSubject,
@@ -36,7 +38,14 @@ export function recordReputationEvent(input: RecordReputationEventInput): boolea
 }
 
 export function getUserReputation(userId: string): ReputationProfile {
-    return aggregateReputation(db.listReputationEvents().filter((event) => event.userId === userId));
+    return aggregateReputation(
+        db.listReputationEvents().filter((event) => event.userId === userId)
+    );
+}
+
+/** The user's literal Coliseum record — event counts, not points. */
+export function getUserArenaRecord(userId: string): ArenaRecord {
+    return tallyArenaRecord(db.listReputationEvents().filter((event) => event.userId === userId));
 }
 
 /** Test hook: clear all recorded reputation. */

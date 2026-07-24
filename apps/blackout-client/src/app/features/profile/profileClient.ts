@@ -1,4 +1,4 @@
-import type { ReputationProfile } from '@blackout/core';
+import type { ArenaRecord, ReputationProfile } from '@blackout/core';
 import { createAuthorizedApiClient } from '../../sdk/client';
 import { readBlackoutApiToken } from '../monetization/marketplace/useMarketplaceAuth';
 import type { BmcProfileEvent, MemberProfile } from './profileTypes';
@@ -115,10 +115,17 @@ export function postWall(
     );
 }
 
+/** Literal Coliseum record — event counts plus Briefs fought in. */
+export interface ArenaTrackRecord extends ArenaRecord {
+    briefsAuthored: number;
+}
+
 export interface FetchReputationResponse {
     userId: string;
     generatedAt: string;
     reputation: ReputationProfile;
+    /** Absent on servers that predate the arena-record rollout. */
+    record?: ArenaTrackRecord;
 }
 
 export function fetchReputation(

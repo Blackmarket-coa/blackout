@@ -915,10 +915,23 @@ coliseum.post('/matches/:id/verdict', matchRateLimit, (c) => {
 
 // --- Briefs (permanent public record) ---
 
+const briefsQuerySchema = z.object({
+    fighter: z.string().optional(),
+    domain: domainEnum.optional(),
+    q: z.string().max(200).optional(),
+});
+
 coliseum.get('/briefs', (c) => {
-    const fighterId = c.req.query('fighter');
+    const parsed = briefsQuerySchema.safeParse(c.req.query());
+    if (!parsed.success) {
+        return c.json({ code: 'invalid_request', message: 'Invalid briefs query' }, 400);
+    }
     return c.json({
-        briefs: listBriefs({ fighterId: fighterId ? decodeURIComponent(fighterId) : undefined }),
+        briefs: listBriefs({
+            fighterId: parsed.data.fighter ? decodeURIComponent(parsed.data.fighter) : undefined,
+            domain: parsed.data.domain as never,
+            query: parsed.data.q,
+        }),
     });
 });
 

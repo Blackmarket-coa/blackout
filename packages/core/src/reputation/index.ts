@@ -60,6 +60,40 @@ export interface ReputationProfile {
 }
 
 /**
+ * A fighter's literal arena record — raw event counts, not points. This is the
+ * "debates won" status layer surfaced on profiles alongside the scored
+ * standings.
+ */
+export interface ArenaRecord {
+    matchesWon: number;
+    matchesDrawn: number;
+    roundsWon: number;
+    steelmansPassed: number;
+    credibilityStrikes: number;
+}
+
+/** Count the Coliseum fighter events in a user's reputation history. */
+export function tallyArenaRecord(
+    events: ReadonlyArray<{ type: ReputationEventType }>
+): ArenaRecord {
+    const record: ArenaRecord = {
+        matchesWon: 0,
+        matchesDrawn: 0,
+        roundsWon: 0,
+        steelmansPassed: 0,
+        credibilityStrikes: 0,
+    };
+    for (const event of events) {
+        if (event.type === 'match_won') record.matchesWon += 1;
+        else if (event.type === 'match_drawn') record.matchesDrawn += 1;
+        else if (event.type === 'round_won') record.roundsWon += 1;
+        else if (event.type === 'steelman_passed') record.steelmansPassed += 1;
+        else if (event.type === 'credibility_strike') record.credibilityStrikes += 1;
+    }
+    return record;
+}
+
+/**
  * Fold a list of reputation events into an overall standing plus a per-subject
  * breakdown. Tiers are derived with the shared `tierFromScore` thresholds so
  * subject and overall standings use the same ladder.

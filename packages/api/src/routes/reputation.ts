@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
-import { getUserReputation } from '../services/reputationStore';
+import { getUserArenaRecord, getUserReputation } from '../services/reputationStore';
+import { listBriefs } from '../services/coliseumMatchStore';
 
 const reputation = new Hono();
 
@@ -13,6 +14,12 @@ reputation.get('/:userId', (c) => {
         userId,
         generatedAt: new Date().toISOString(),
         reputation: profile,
+        // The literal arena track record: event counts plus the permanent
+        // Briefs this user fought in — the profile's visible status layer.
+        record: {
+            ...getUserArenaRecord(userId),
+            briefsAuthored: listBriefs({ fighterId: userId }).length,
+        },
     });
 });
 

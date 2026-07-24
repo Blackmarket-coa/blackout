@@ -1,5 +1,6 @@
 import {
     deriveColiseumMatchStatus,
+    deriveCredibilityStrike,
     deriveCrucibleVerdict,
     deriveChallengeStatus,
     isWithinRoundDurationCap,
@@ -18,6 +19,7 @@ import {
     type ColiseumChallengeStatus,
     type ColiseumTopicCategoryKey,
     type CrucibleChoice,
+    type CrucibleVerdict,
     type RoundTally,
 } from '@blackout/core';
 import type { ColiseumArgumentMedia, ColiseumCitation } from '@blackout/core';
@@ -333,8 +335,9 @@ function fighterForSide(match: ColiseumMatch, side: ColiseumSide): string | unde
     return side === 'red' ? match.challengerId : match.opponentId;
 }
 
-function awardFighterReputation(match: ColiseumMatch, winner: ColiseumSide | null): void {
+function awardFighterReputation(match: ColiseumMatch, verdict: CrucibleVerdict): void {
     const subject = match.domain;
+    const winner = verdict.winner;
     if (winner === null) {
         for (const userId of [match.challengerId, match.opponentId]) {
             if (!userId) continue;
@@ -345,18 +348,21 @@ function awardFighterReputation(match: ColiseumMatch, winner: ColiseumSide | nul
                 dedupeKey: `match_drawn:${match.id}:${userId}`,
             });
         }
-        return;
+    } else {
+        const winnerId = fighterForSide(match, winner);
+        if (winnerId) {
+            recordReputationEvent({
+                userId: winnerId,
+                type: 'match_won',
+                subject,
+                dedupeKey: `match_won:${match.id}`,
+            });
+        }
     }
-    const winnerId = fighterForSide(match, winner);
-    if (winnerId) {
-        recordReputationEvent({
-            userId: winnerId,
-            type: 'match_won',
-            subject,
-            dedupeKey: `match_won:${match.id}`,
-        });
-    }
-    // Per-round endorsements to the side that won each round's crowd tally.
+    // Per-round awards from each round's crowd tally: the leading side earns
+    // `round_won`, and a steel-man round whose author's side led its tally
+    // additionally earns `steelman_passed` — the crowd judged the summary of
+    // the opponent's position stronger than the opponent's own showing.
     for (const round of listRounds(match.id)) {
         const tally = roundTally(match.id, round.index);
         if (tally.leader === 'draw') continue;
@@ -368,6 +374,28 @@ function awardFighterReputation(match: ColiseumMatch, winner: ColiseumSide | nul
             subject,
             dedupeKey: `round_won:${match.id}:${round.index}`,
         });
+        if (round.kind === 'steelman' && tally.leader === round.side) {
+            recordReputationEvent({
+                userId: roundWinnerId,
+                type: 'steelman_passed',
+                subject,
+                dedupeKey: `steelman_passed:${match.id}:${round.index}`,
+            });
+        }
+    }
+    // A lopsided evidence ruling in the Crucible is a credibility strike
+    // against the side the crowd ruled overwhelmingly against.
+    const struckSide = deriveCredibilityStrike(verdict.breakdown);
+    if (struckSide) {
+        const struckId = fighterForSide(match, struckSide);
+        if (struckId) {
+            recordReputationEvent({
+                userId: struckId,
+                type: 'credibility_strike',
+                subject,
+                dedupeKey: `credibility_strike:${match.id}`,
+            });
+        }
     }
 }
 
@@ -396,7 +424,7 @@ export function mintVerdict(matchId: string, nowMs: number = Date.now()): Colise
 
     const verdictAt = new Date(nowMs).toISOString();
     db.upsertColiseumMatch({ ...match, verdictAt, status: 'verdict' });
-    awardFighterReputation(match, verdict.winner);
+    awardFighterReputation(match, verdict);
 
     return brief;
 }
@@ -409,16 +437,51 @@ export function getBriefForMatch(matchId: string): ColiseumBrief | null {
     return db.listColiseumBriefs().find((b) => b.matchId === matchId) ?? null;
 }
 
-export function listBriefs(filter: { fighterId?: string } = {}): ColiseumBrief[] {
-    const briefs = db.listColiseumBriefs();
-    const filtered = filter.fighterId
-        ? briefs.filter((b) => {
-              const match = db.getColiseumMatch(b.matchId);
-              return (
-                  match &&
-                  (match.challengerId === filter.fighterId || match.opponentId === filter.fighterId)
-              );
-          })
-        : briefs;
-    return [...filtered].sort((a, b) => b.mintedAt.localeCompare(a.mintedAt));
+export interface BriefFilter {
+    fighterId?: string;
+    /** Restrict to briefs whose match was tagged with this domain. */
+    domain?: ColiseumTopicCategoryKey;
+    /** Free-text match over the proposition and claim texts. */
+    query?: string;
+}
+
+/** A brief plus the domain its match was tagged with — the searchable record. */
+export interface BriefEntry {
+    brief: ColiseumBrief;
+    domain?: ColiseumTopicCategoryKey;
+}
+
+function briefMatchesQuery(brief: ColiseumBrief, query: string): boolean {
+    const q = query.toLowerCase();
+    if (brief.proposition.toLowerCase().includes(q)) return true;
+    return brief.claims.some((claim) => claim.text.toLowerCase().includes(q));
+}
+
+/**
+ * List minted briefs with their match's domain, newest first. This is the read
+ * path for the knowledge repository: briefs are queryable by fighter, by
+ * domain, and by free text — not just retrievable by id.
+ */
+export function listBriefEntries(filter: BriefFilter = {}): BriefEntry[] {
+    const query = filter.query?.trim().toLowerCase();
+    const entries: BriefEntry[] = [];
+    for (const brief of db.listColiseumBriefs()) {
+        const match = db.getColiseumMatch(brief.matchId);
+        if (filter.fighterId) {
+            if (
+                !match ||
+                (match.challengerId !== filter.fighterId && match.opponentId !== filter.fighterId)
+            ) {
+                continue;
+            }
+        }
+        if (filter.domain && match?.domain !== filter.domain) continue;
+        if (query && !briefMatchesQuery(brief, query)) continue;
+        entries.push({ brief, domain: match?.domain });
+    }
+    return entries.sort((a, b) => b.brief.mintedAt.localeCompare(a.brief.mintedAt));
+}
+
+export function listBriefs(filter: BriefFilter = {}): ColiseumBrief[] {
+    return listBriefEntries(filter).map((entry) => entry.brief);
 }
