@@ -3,12 +3,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
 import { act } from 'react-dom/test-utils';
 import ReactDOM from 'react-dom/client';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router';
 import type { CreatorOnboardingProgress } from './creatorOnboardingState';
 
 const navigateMock = vi.fn();
-vi.mock('react-router-dom', async () => {
-    const actual = (await vi.importActual('react-router-dom')) as Record<string, unknown>;
+vi.mock('react-router', async () => {
+    const actual = (await vi.importActual('react-router')) as Record<string, unknown>;
     return { ...actual, useNavigate: () => navigateMock };
 });
 
@@ -131,7 +131,9 @@ describe('CreatorOnboarding wizard', () => {
             await flush();
         });
         expect(container.querySelector('[data-testid="creator-step-hub-setup"]')).toBeTruthy();
-        expect(savePatchMock).toHaveBeenCalledWith(expect.objectContaining({ creatorStepIndex: 1 }));
+        expect(savePatchMock).toHaveBeenCalledWith(
+            expect.objectContaining({ creatorStepIndex: 1 })
+        );
     });
 
     it('resumes at the persisted step index', async () => {

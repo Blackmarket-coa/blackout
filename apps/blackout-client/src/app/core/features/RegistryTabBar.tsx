@@ -1,5 +1,5 @@
 import { createElement, useEffect, useState, type ComponentType, type CSSProperties } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { buildFeatureRegistry } from './buildRegistry';
 import { defaultFeatureFlags, type FeatureFlags } from './featureFlags';
 import { useCapabilityContext } from './capabilityContext';

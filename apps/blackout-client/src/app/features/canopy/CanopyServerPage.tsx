@@ -1,6 +1,6 @@
 import { type CSSProperties, type ReactNode, useEffect, useState } from 'react';
 import { useAtomValue } from 'jotai';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { selectedRoomIdAtom, selectedSpaceIdAtom } from '../../state/navigation';
 import { joinedRoomsAtom } from '../../state/rooms';
 import { useMatrixClient } from '../../hooks/useMatrixClient';

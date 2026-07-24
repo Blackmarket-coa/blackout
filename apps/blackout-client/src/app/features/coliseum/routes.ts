@@ -1,6 +1,6 @@
 import { createElement, useEffect } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router';
 import { isValidColiseumTab } from '@blackout/core';
 import { selectedRoomIdAtom, selectedSpaceIdAtom } from '../../state/navigation';
 import { coliseumTabAtom, selectedColiseumTopicIdAtom } from '../../state/coliseum';

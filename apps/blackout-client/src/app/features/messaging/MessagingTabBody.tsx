@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useAtomValue } from 'jotai';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router';
 import type { Room } from 'matrix-js-sdk';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { useRoomNavigate } from '../../hooks/useRoomNavigate';

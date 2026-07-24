@@ -1,4 +1,4 @@
-import { generatePath, Path } from 'react-router-dom';
+import { generatePath, Path } from 'react-router';
 import {
     DIRECT_CREATE_PATH,
     DIRECT_PATH,

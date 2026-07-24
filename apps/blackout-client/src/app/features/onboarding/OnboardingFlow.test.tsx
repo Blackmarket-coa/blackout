@@ -3,11 +3,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
 import { act } from 'react-dom/test-utils';
 import ReactDOM from 'react-dom/client';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router';
 
 const navigateMock = vi.fn();
-vi.mock('react-router-dom', async () => {
-    const actual = (await vi.importActual('react-router-dom')) as Record<string, unknown>;
+vi.mock('react-router', async () => {
+    const actual = (await vi.importActual('react-router')) as Record<string, unknown>;
     return {
         ...actual,
         useNavigate: () => navigateMock,
@@ -175,15 +175,15 @@ describe('OnboardingFlow choose-role step', () => {
         } as typeof readSnapshot;
         const { container } = await mount();
         expect(
-            container.querySelector('[data-testid="onboarding-creator-handoff"]'),
+            container.querySelector('[data-testid="onboarding-creator-handoff"]')
         ).not.toBeNull();
         // Role-select must NOT render when we're in the hand-off state.
         expect(container.querySelector('[data-testid="onboarding-role-options"]')).toBeNull();
         expect(
-            container.querySelector('[data-testid="onboarding-creator-continue"]'),
+            container.querySelector('[data-testid="onboarding-creator-continue"]')
         ).not.toBeNull();
         expect(
-            container.querySelector('[data-testid="onboarding-switch-to-member"]'),
+            container.querySelector('[data-testid="onboarding-switch-to-member"]')
         ).not.toBeNull();
     });
 
@@ -200,7 +200,7 @@ describe('OnboardingFlow choose-role step', () => {
         } as typeof readSnapshot;
         const { container } = await mount();
         const switchButton = container.querySelector(
-            '[data-testid="onboarding-switch-to-member"]',
+            '[data-testid="onboarding-switch-to-member"]'
         ) as HTMLButtonElement | null;
         expect(switchButton).not.toBeNull();
         await act(async () => {
@@ -214,9 +214,7 @@ describe('OnboardingFlow choose-role step', () => {
         });
         expect(savePatchMock).toHaveBeenCalledWith({ role: undefined, stepIndex: 0 });
         // The hand-off panel disappears; role-select reappears.
-        expect(
-            container.querySelector('[data-testid="onboarding-creator-handoff"]'),
-        ).toBeNull();
+        expect(container.querySelector('[data-testid="onboarding-creator-handoff"]')).toBeNull();
         expect(container.querySelector('[data-testid="onboarding-role-options"]')).not.toBeNull();
     });
 
@@ -240,7 +238,7 @@ describe('OnboardingFlow choose-role step', () => {
         try {
             const { container } = await mount();
             const restartButton = container.querySelector(
-                '[data-testid="onboarding-restart"]',
+                '[data-testid="onboarding-restart"]'
             ) as HTMLButtonElement | null;
             expect(restartButton).not.toBeNull();
             // Set the next snapshot the load-effect will read after reset().
@@ -263,7 +261,7 @@ describe('OnboardingFlow choose-role step', () => {
             expect(reloadSpy).not.toHaveBeenCalled();
             // After restart, the role-select step renders again.
             expect(
-                container.querySelector('[data-testid="onboarding-role-options"]'),
+                container.querySelector('[data-testid="onboarding-role-options"]')
             ).not.toBeNull();
         } finally {
             Object.defineProperty(window, 'location', {
@@ -276,7 +274,7 @@ describe('OnboardingFlow choose-role step', () => {
     it('renders a progress bar reflecting the current step', async () => {
         const { container } = await mount();
         const bar = container.querySelector(
-            '[data-testid="onboarding-progress-bar"]',
+            '[data-testid="onboarding-progress-bar"]'
         ) as HTMLDivElement | null;
         expect(bar).not.toBeNull();
         // Inner fill width = (1/5) * 100 = 20%.
@@ -300,7 +298,7 @@ describe('OnboardingFlow choose-role step', () => {
         // developer-tools section must not render.
         expect(container.querySelector('[data-testid="onboarding-developer-step"]')).toBeNull();
         const bar = container.querySelector(
-            '[data-testid="onboarding-progress-bar"]',
+            '[data-testid="onboarding-progress-bar"]'
         ) as HTMLDivElement | null;
         const fill = bar!.querySelector('div') as HTMLDivElement | null;
         // (5/5) * 100 = 100%.
@@ -320,20 +318,20 @@ describe('OnboardingFlow choose-role step', () => {
         try {
             const { container } = await mount();
             expect(
-                container.querySelector('[data-testid="onboarding-developer-step"]'),
+                container.querySelector('[data-testid="onboarding-developer-step"]')
             ).not.toBeNull();
             const files = container.querySelector(
-                '[data-testid="onboarding-developer-file-paths"]',
+                '[data-testid="onboarding-developer-file-paths"]'
             );
             expect(files).not.toBeNull();
             expect(files!.querySelectorAll('li').length).toBeGreaterThan(0);
             const docLinks = container.querySelector(
-                '[data-testid="onboarding-developer-doc-links"]',
+                '[data-testid="onboarding-developer-doc-links"]'
             );
             expect(docLinks).not.toBeNull();
             expect(docLinks!.querySelectorAll('a').length).toBeGreaterThan(0);
             expect(
-                container.querySelector('[data-testid="onboarding-developer-bundle"]'),
+                container.querySelector('[data-testid="onboarding-developer-bundle"]')
             ).not.toBeNull();
         } finally {
             runtimeFeatureFlags.onboardingDeveloperStep = false;

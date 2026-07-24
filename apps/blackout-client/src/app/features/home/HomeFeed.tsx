@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import classNames from 'classnames';
 import { useAtomValue } from 'jotai';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 import {
     INVITE_DEN_PARAM,
     INVITE_CANOPY_PARAM,

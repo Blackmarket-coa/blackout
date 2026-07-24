@@ -1,4 +1,4 @@
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router';
 import { getSpaceLobbyPath } from '../../pages/pathUtils';
 import { runtimeFeatureFlags } from '../../core/features/featureFlags';
 import { OnboardingFlow } from './OnboardingFlow';

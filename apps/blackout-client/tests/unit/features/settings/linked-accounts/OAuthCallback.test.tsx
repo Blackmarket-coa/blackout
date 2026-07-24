@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
 import { act } from 'react-dom/test-utils';
 import ReactDOM from 'react-dom/client';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router';
 import {
     OAuthCallback,
     POSTMESSAGE_TYPE,
@@ -21,7 +21,7 @@ const renderAt = async (url: string) => {
                 <Routes>
                     <Route path="/oauth/:provider/callback" element={<OAuthCallback />} />
                 </Routes>
-            </MemoryRouter>,
+            </MemoryRouter>
         );
     });
     return { container, root };
@@ -61,12 +61,12 @@ describe('OAuthCallback page', () => {
 
     it('renders the OAuth error envelope when the URL carries `?error=...`', async () => {
         const { container } = await renderAt(
-            '/oauth/twitch/callback?error=access_denied&error_description=user+rejected',
+            '/oauth/twitch/callback?error=access_denied&error_description=user+rejected'
         );
         await flushAsync();
         expect(container.textContent).toMatch(/access_denied/);
         // Did NOT call the completeCallback API: fetch should be untouched.
-        expect((global.fetch as unknown as ReturnType<typeof vi.fn>)).not.toHaveBeenCalled();
+        expect(global.fetch as unknown as ReturnType<typeof vi.fn>).not.toHaveBeenCalled();
     });
 
     it('renders the missing-params error when both code and state are absent', async () => {
@@ -86,8 +86,8 @@ describe('OAuthCallback page', () => {
                     providerUsername: 'StreamerBob',
                     scopes: [],
                 }),
-                { status: 200, headers: { 'content-type': 'application/json' } },
-            ) as unknown as Response,
+                { status: 200, headers: { 'content-type': 'application/json' } }
+            ) as unknown as Response
         );
 
         const openerPostMessage = vi.fn();
@@ -112,7 +112,7 @@ describe('OAuthCallback page', () => {
             expect(openerPostMessage).toHaveBeenCalled();
             const [payload, targetOrigin] = openerPostMessage.mock.calls[0] as [
                 Record<string, unknown>,
-                string,
+                string
             ];
             expect(payload).toMatchObject({
                 type: POSTMESSAGE_TYPE,
@@ -140,7 +140,7 @@ describe('OAuthCallback page', () => {
             new Response('{"code":"state_invalid","message":"OAuth state is unknown"}', {
                 status: 400,
                 headers: { 'content-type': 'application/json' },
-            }) as unknown as Response,
+            }) as unknown as Response
         );
 
         const openerPostMessage = vi.fn();
@@ -177,8 +177,8 @@ describe('OAuthCallback page', () => {
                     providerUsername: 'x',
                     scopes: [],
                 }),
-                { status: 200, headers: { 'content-type': 'application/json' } },
-            ) as unknown as Response,
+                { status: 200, headers: { 'content-type': 'application/json' } }
+            ) as unknown as Response
         );
 
         Object.defineProperty(window, 'opener', { configurable: true, value: null });

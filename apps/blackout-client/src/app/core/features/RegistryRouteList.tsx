@@ -1,5 +1,5 @@
 import { createElement } from 'react';
-import { Route, useRoutes, type RouteObject } from 'react-router-dom';
+import { Route, useRoutes, type RouteObject } from 'react-router';
 import { buildFeatureRegistry } from './buildRegistry';
 import { composeFeatureRoutes } from './composition';
 import { defaultFeatureFlags, type FeatureFlags } from './featureFlags';
@@ -76,9 +76,7 @@ export function RegistryRouteList() {
  * context is captured at call time — callers that need reactive routing
  * should rebuild the router when the context atom changes.
  */
-export const buildRegistryRouteObjects = (
-    context: CapabilityGateContext
-): RouteObject[] => {
+export const buildRegistryRouteObjects = (context: CapabilityGateContext): RouteObject[] => {
     const routes = composeFeatureRoutes(registryForContext(context), context);
     return routes.map((route) => ({
         path: route.path,

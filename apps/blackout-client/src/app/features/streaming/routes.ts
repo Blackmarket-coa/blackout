@@ -1,5 +1,5 @@
 import { createElement } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate } from 'react-router';
 import type { FeatureRoute } from '../../core/features/types';
 import { CREATOR_HUB_PATH, STREAMING_PATH } from '../../pages/paths';
 import StreamingView from './StreamingView';

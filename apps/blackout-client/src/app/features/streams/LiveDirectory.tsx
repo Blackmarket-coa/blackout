@@ -1,5 +1,5 @@
 import { useEffect, useState, type CSSProperties } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 import { LIVE_PATH } from '../../pages/paths';
 import {
@@ -119,7 +119,9 @@ const chipRowStyle: CSSProperties = {
 const chip = (active: boolean): CSSProperties => ({
     padding: '4px 10px',
     borderRadius: 999,
-    border: `1px solid ${active ? 'var(--accent-primary, #1ABC9C)' : 'var(--border-default, #374151)'}`,
+    border: `1px solid ${
+        active ? 'var(--accent-primary, #1ABC9C)' : 'var(--border-default, #374151)'
+    }`,
     background: active ? 'var(--accent-primary, #1ABC9C)' : 'transparent',
     color: active ? '#04121d' : 'var(--text-muted, #9ca3af)',
     fontSize: 12,

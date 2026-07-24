@@ -3,11 +3,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
 import { act } from 'react-dom/test-utils';
 import ReactDOM from 'react-dom/client';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router';
 
 const navigateMock = vi.fn();
-vi.mock('react-router-dom', async () => {
-    const actual = (await vi.importActual('react-router-dom')) as Record<string, unknown>;
+vi.mock('react-router', async () => {
+    const actual = (await vi.importActual('react-router')) as Record<string, unknown>;
     return {
         ...actual,
         useNavigate: () => navigateMock,

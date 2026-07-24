@@ -1,5 +1,5 @@
 import { type CSSProperties, type ReactNode } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 
 const baseStyle: CSSProperties = {
     display: 'inline-flex',

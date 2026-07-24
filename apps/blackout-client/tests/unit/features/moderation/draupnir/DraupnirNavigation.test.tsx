@@ -4,19 +4,12 @@ import React from 'react';
 import { act } from 'react-dom/test-utils';
 import ReactDOM from 'react-dom/client';
 import { Provider, createStore } from 'jotai';
-import { createMemoryRouter, RouterProvider } from 'react-router-dom';
+import { createMemoryRouter, RouterProvider } from 'react-router';
 import ClientLayout from '../../../../../src/app/pages/client/ClientLayout';
 import DraupnirRoutePage from '../../../../../src/app/features/moderation/draupnir/DraupnirRoutePage';
-import {
-    authStateAtom,
-    matrixClientAtom,
-    userIdAtom,
-} from '../../../../../src/app/state/auth';
+import { authStateAtom, matrixClientAtom, userIdAtom } from '../../../../../src/app/state/auth';
 import { allRoomsBaseAtom } from '../../../../../src/app/state/rooms';
-import {
-    createFakeMatrixClient,
-    createFakeRoom,
-} from '../../../../helpers/fakeMatrixClient';
+import { createFakeMatrixClient, createFakeRoom } from '../../../../helpers/fakeMatrixClient';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -151,7 +144,7 @@ describe('Draupnir moderation navigation', () => {
                     ),
                 },
             ],
-            { initialEntries: ['/'] },
+            { initialEntries: ['/'] }
         );
 
         const container = document.createElement('div');
@@ -165,13 +158,13 @@ describe('Draupnir moderation navigation', () => {
         });
 
         const moderationLink = Array.from(container.querySelectorAll('a')).find(
-            (link) => link.textContent === 'Moderation',
+            (link) => link.textContent === 'Moderation'
         ) as HTMLAnchorElement;
         expect(moderationLink).toBeTruthy();
 
         await act(async () => {
             moderationLink.dispatchEvent(
-                new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }),
+                new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })
             );
             await Promise.resolve();
         });

@@ -2,7 +2,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
-import { createMemoryRouter, Outlet, RouterProvider } from 'react-router-dom';
+import { createMemoryRouter, Outlet, RouterProvider } from 'react-router';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { MobileTopBar } from '../../../../src/app/pages/shell/MobileTopBar';
@@ -18,7 +18,7 @@ const renderAt = (path: string, ui: React.ReactNode): HTMLElement => {
                 children: [{ path: '*', element: <>{ui}</> }],
             },
         ],
-        { initialEntries: [path] },
+        { initialEntries: [path] }
     );
     const root = ReactDOM.createRoot(container);
     act(() => {
@@ -47,7 +47,7 @@ describe('MobileTopBar — auto back affordance (audit B)', () => {
     it('honors an explicit leading override (does not auto-inject)', () => {
         const container = renderAt(
             '/settings/about',
-            <MobileTopBar leading={<span data-testid="custom-leading" />} />,
+            <MobileTopBar leading={<span data-testid="custom-leading" />} />
         );
         expect(container.querySelector('[data-testid="custom-leading"]')).toBeTruthy();
         expect(container.querySelector('[data-testid="mobile-top-bar-back"]')).toBeNull();

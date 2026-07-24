@@ -1,6 +1,6 @@
 import { type CSSProperties, useMemo } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router';
 import { joinedRoomsAtom } from '../../state/rooms';
 import { selectedRoomIdAtom, selectedSpaceIdAtom } from '../../state/navigation';
 import { createSpaceModalAtom } from '../../state/createSpaceModal';

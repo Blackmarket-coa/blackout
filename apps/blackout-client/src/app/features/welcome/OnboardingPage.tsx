@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { useAtomValue } from 'jotai';
 import { OnboardingWizard } from './OnboardingWizard';
 import { DEFAULT_ONBOARDING_STEPS } from './useWelcome';

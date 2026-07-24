@@ -1,5 +1,5 @@
 import { ReactNode, useCallback } from 'react';
-import { matchPath, useLocation, useNavigate } from 'react-router-dom';
+import { matchPath, useLocation, useNavigate } from 'react-router';
 import {
     buildCommunitiesPath,
     COMMUNITIES_CANOPY_PATH,

@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import type { MatrixEvent, Room, RoomMember } from 'matrix-js-sdk';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { GovernanceDashboard } from '../../features/governance';
 import { NotificationsDrawer } from '../../features/notifications/components/NotificationsDrawer';
 import { RoleBadge } from '../../features/roles/RoleBadge';

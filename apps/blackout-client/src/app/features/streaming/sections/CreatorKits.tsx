@@ -1,13 +1,9 @@
 import React, { type CSSProperties, useMemo, useState } from 'react';
 import { useAtomValue } from 'jotai';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { CREATOR_KITS, type CreatorKit } from '../kits/kitCatalog';
 import { ownedTemplateKitsAtom } from '../kits/ownedTemplatesAtom';
-import {
-    applyCreatorKit,
-    kitAppliedStorageKey,
-    type ApplyStepResult,
-} from '../kits/applyKit';
+import { applyCreatorKit, kitAppliedStorageKey, type ApplyStepResult } from '../kits/applyKit';
 import { useMatrixClientOrNull } from '../../../hooks/useMatrixClient';
 import { HubSection, hubCardStyle, hubGridStyle } from '../components/HubSection';
 
@@ -108,9 +104,9 @@ const describeApply = (kit: CreatorKit): string[] => {
     if (!spec) return [];
     const lines: string[] = [];
     if (spec.profile?.status) lines.push(`Set profile status to “${spec.profile.status.text}”`);
-    for (const den of spec.dens ?? []) lines.push(`Create ${den.kind ?? 'private'} den “${den.name}”`);
-    for (const tier of spec.tiers ?? [])
-        lines.push(`Create subscription tier “${tier.name}”`);
+    for (const den of spec.dens ?? [])
+        lines.push(`Create ${den.kind ?? 'private'} den “${den.name}”`);
+    for (const tier of spec.tiers ?? []) lines.push(`Create subscription tier “${tier.name}”`);
     for (const pool of spec.aidPools ?? []) lines.push(`Create aid pool “${pool.title}”`);
     return lines;
 };
@@ -194,7 +190,14 @@ const KitApplyPanel = ({ kit }: { kit: CreatorKit }): JSX.Element | null => {
                     <p style={{ margin: '0 0 8px', fontSize: 13, fontWeight: 600 }}>
                         Applying “{kit.name}” will:
                     </p>
-                    <ul style={{ margin: '0 0 10px', paddingLeft: 18, fontSize: 13, lineHeight: 1.6 }}>
+                    <ul
+                        style={{
+                            margin: '0 0 10px',
+                            paddingLeft: 18,
+                            fontSize: 13,
+                            lineHeight: 1.6,
+                        }}
+                    >
                         {actions.map((line) => (
                             <li key={line}>{line}</li>
                         ))}
@@ -229,11 +232,20 @@ const KitApplyPanel = ({ kit }: { kit: CreatorKit }): JSX.Element | null => {
             {phase === 'done' ? (
                 <div data-testid="creator-kit-apply-results">
                     <p style={{ margin: '0 0 8px', fontSize: 13, fontWeight: 600 }}>Results</p>
-                    <ul style={{ margin: '0 0 10px', paddingLeft: 18, fontSize: 13, lineHeight: 1.6 }}>
+                    <ul
+                        style={{
+                            margin: '0 0 10px',
+                            paddingLeft: 18,
+                            fontSize: 13,
+                            lineHeight: 1.6,
+                        }}
+                    >
                         {results.map((step) => (
                             <li key={`${step.area}:${step.label}`} data-step-status={step.status}>
                                 {statusGlyph[step.status]} {step.label}
-                                {step.status === 'skipped' ? ' (not available on your account)' : ''}
+                                {step.status === 'skipped'
+                                    ? ' (not available on your account)'
+                                    : ''}
                                 {step.status === 'error' && step.detail ? ` — ${step.detail}` : ''}
                             </li>
                         ))}
@@ -297,10 +309,7 @@ const KitDetail = ({ kit }: { kit: CreatorKit }): JSX.Element => (
  */
 export const CreatorKits = (): JSX.Element => {
     const ownedTemplateKits = useAtomValue(ownedTemplateKitsAtom);
-    const kits = useMemo(
-        () => [...CREATOR_KITS, ...ownedTemplateKits],
-        [ownedTemplateKits]
-    );
+    const kits = useMemo(() => [...CREATOR_KITS, ...ownedTemplateKits], [ownedTemplateKits]);
     const [selectedKitId, setSelectedKitId] = useState<string | null>(CREATOR_KITS[0]?.id ?? null);
     const selectedKit = kits.find((kit) => kit.id === selectedKitId) ?? null;
 

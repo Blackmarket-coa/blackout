@@ -3,7 +3,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import { Provider as JotaiProvider, createStore } from 'jotai';
-import { createMemoryRouter, Outlet, RouterProvider } from 'react-router-dom';
+import { createMemoryRouter, Outlet, RouterProvider } from 'react-router';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { PrimaryNavBar } from '../../../../src/app/pages/shell/PrimaryNavBar';
@@ -26,14 +26,14 @@ const renderAt = (path: string): HTMLElement => {
                 children: [{ path: '*', element: <PrimaryNavBar /> }],
             },
         ],
-        { initialEntries: [path] },
+        { initialEntries: [path] }
     );
     const root = ReactDOM.createRoot(container);
     act(() => {
         root.render(
             <JotaiProvider store={store}>
                 <RouterProvider router={router} />
-            </JotaiProvider>,
+            </JotaiProvider>
         );
     });
     return container;

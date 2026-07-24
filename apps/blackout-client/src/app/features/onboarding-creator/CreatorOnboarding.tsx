@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router';
 import { runtimeFeatureFlags } from '../../core/features/featureFlags';
 import { useOnboardingProgress } from '../onboarding/onboardingState';
 import {
@@ -138,7 +138,8 @@ export const CreatorOnboarding = (): JSX.Element => {
             setLoading(false);
             trackCreatorOnboardingStarted(snapshot.startedAt);
             const stepId = visibleSteps[initialStep];
-            if (stepId) trackCreatorStepViewed(stepId, initialStep, Date.now() - snapshot.startedAt);
+            if (stepId)
+                trackCreatorStepViewed(stepId, initialStep, Date.now() - snapshot.startedAt);
         });
         return () => {
             mounted = false;

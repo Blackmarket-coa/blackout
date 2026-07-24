@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import * as css from './LiveNowRail.css';
 import type { StreamFeedItem } from './unifiedFeedModel';
 

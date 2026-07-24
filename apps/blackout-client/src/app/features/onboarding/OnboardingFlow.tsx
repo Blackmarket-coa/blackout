@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { useWelcomeContent } from '../welcome/useWelcome';
 import { runtimeFeatureFlags } from '../../core/features/featureFlags';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
@@ -307,7 +307,9 @@ export const OnboardingFlow = ({ spaceId, onClose, onCompleted }: OnboardingFlow
                         type="button"
                         data-testid="onboarding-creator-continue"
                         onClick={() =>
-                            navigate(`${ONBOARDING_CREATOR_PATH}?from=${encodeURIComponent(spaceId)}`)
+                            navigate(
+                                `${ONBOARDING_CREATOR_PATH}?from=${encodeURIComponent(spaceId)}`
+                            )
                         }
                     >
                         Continue creator setup

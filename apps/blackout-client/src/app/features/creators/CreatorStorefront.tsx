@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams } from 'react-router';
 import {
     creatorLevelFromReputation,
     creatorSkillsFromReputation,
@@ -77,7 +77,12 @@ const layoutStyle: CSSProperties = {
     color: '#f4f4f8',
     fontFamily: FONT_STACK,
 };
-const contentWrap: CSSProperties = { width: '100%', maxWidth: 760, margin: '0 auto', paddingBottom: 48 };
+const contentWrap: CSSProperties = {
+    width: '100%',
+    maxWidth: 760,
+    margin: '0 auto',
+    paddingBottom: 48,
+};
 const bannerStyle = (img: string | null): CSSProperties => ({
     height: 200,
     width: '100%',
@@ -99,7 +104,12 @@ const avatarRing: CSSProperties = {
     fontWeight: 700,
     color: TEAL,
 };
-const sectionStyle: CSSProperties = { padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12 };
+const sectionStyle: CSSProperties = {
+    padding: '16px 20px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 12,
+};
 const sectionTitle: CSSProperties = {
     fontSize: 12,
     letterSpacing: 0.6,
@@ -165,7 +175,8 @@ const tabButton = (active: boolean): CSSProperties => ({
     cursor: 'pointer',
 });
 
-const formatPrice = (priceCents: number, currency: string): string => formatCents(priceCents, currency);
+const formatPrice = (priceCents: number, currency: string): string =>
+    formatCents(priceCents, currency);
 
 const SOCIAL_LABELS: Record<string, string> = {
     github: 'GitHub',
@@ -213,7 +224,8 @@ export const CreatorStorefrontView = ({
     const [profile, setProfile] = useState<PublicProfileResponse | null>(null);
     const [tiers, setTiers] = useState<PublicCreatorTier[]>([]);
     const [streams, setStreams] = useState<StreamSummary[]>([]);
-    const [reputation, setReputation] = useState<Parameters<typeof creatorLevelFromReputation>[0]>(null);
+    const [reputation, setReputation] =
+        useState<Parameters<typeof creatorLevelFromReputation>[0]>(null);
     const [coliseum, setColiseum] = useState<CreatorColiseumSummary | null>(null);
     const [content, setContent] = useState<CreatorContent[]>([]);
     const [fbm, setFbm] = useState<FbmVendorResponse | null>(null);
@@ -269,7 +281,8 @@ export const CreatorStorefrontView = ({
 
     // Resolve the FBM vendor handle from connections, then load the catalog.
     const fbmHandle = useMemo(
-        () => memberProfile?.connections?.find((conn) => conn.type === 'fbm')?.username?.trim() || '',
+        () =>
+            memberProfile?.connections?.find((conn) => conn.type === 'fbm')?.username?.trim() || '',
         [memberProfile]
     );
     useEffect(() => {
@@ -343,7 +356,12 @@ export const CreatorStorefrontView = ({
     const achievements = [
         ...(memberProfile?.badgeIds ?? []).map((id) => ({ key: `badge-${id}`, label: id })),
         ...(coliseum && coliseum.wins > 0
-            ? [{ key: 'wins', label: `${coliseum.wins} challenge win${coliseum.wins === 1 ? '' : 's'}` }]
+            ? [
+                  {
+                      key: 'wins',
+                      label: `${coliseum.wins} challenge win${coliseum.wins === 1 ? '' : 's'}`,
+                  },
+              ]
             : []),
         ...(coliseum?.leaderboard
             ? [{ key: 'rank', label: `#${coliseum.leaderboard.rank} creator` }]
@@ -378,9 +396,20 @@ export const CreatorStorefrontView = ({
                     <div style={bannerStyle(null)} />
                     <div style={{ ...avatarRing, background: BORDER }} />
                     <div style={sectionStyle}>
-                        <div style={{ height: 22, width: 180, background: BORDER, borderRadius: 6 }} />
-                        <div style={{ height: 14, width: 120, background: BORDER, borderRadius: 6 }} />
-                        <div style={{ height: 64, width: '100%', background: CARD_BG, borderRadius: 12 }} />
+                        <div
+                            style={{ height: 22, width: 180, background: BORDER, borderRadius: 6 }}
+                        />
+                        <div
+                            style={{ height: 14, width: 120, background: BORDER, borderRadius: 6 }}
+                        />
+                        <div
+                            style={{
+                                height: 64,
+                                width: '100%',
+                                background: CARD_BG,
+                                borderRadius: 12,
+                            }}
+                        />
                     </div>
                 </div>
             </section>
@@ -388,7 +417,11 @@ export const CreatorStorefrontView = ({
     }
 
     return (
-        <section style={layoutStyle} data-shell-region="creator-storefront" data-creator-id={userId}>
+        <section
+            style={layoutStyle}
+            data-shell-region="creator-storefront"
+            data-creator-id={userId}
+        >
             <div style={contentWrap}>
                 <div style={bannerStyle(bannerUrl)} />
                 <div style={avatarRing}>
@@ -403,9 +436,18 @@ export const CreatorStorefrontView = ({
                     )}
                 </div>
 
-                <header style={{ padding: '8px 20px 0', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <header
+                    style={{
+                        padding: '8px 20px 0',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 4,
+                    }}
+                >
                     <h1 style={{ margin: 0, fontSize: 24, fontWeight: 700 }}>{displayName}</h1>
-                    <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <div
+                        style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}
+                    >
                         {pronouns ? <span style={mutedStyle}>{pronouns}</span> : null}
                         <span style={{ ...mutedStyle, fontFamily: 'monospace' }}>
                             @{displayHandle}:{SERVER_NAME}
@@ -417,17 +459,36 @@ export const CreatorStorefrontView = ({
                     <div style={sectionStyle} data-testid="profile-section-level">
                         <p style={sectionTitle}>Standing</p>
                         <div style={cardStyle}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                            <div
+                                style={{
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'baseline',
+                                }}
+                            >
                                 <span style={{ fontSize: 16, fontWeight: 700, color: TEAL }}>
                                     Level {level.level} · {level.title}
                                 </span>
                                 <span style={mutedStyle}>{level.xp} XP</span>
                             </div>
-                            <div style={{ height: 8, background: BORDER, borderRadius: 999, overflow: 'hidden', marginTop: 8 }}>
+                            <div
+                                style={{
+                                    height: 8,
+                                    background: BORDER,
+                                    borderRadius: 999,
+                                    overflow: 'hidden',
+                                    marginTop: 8,
+                                }}
+                            >
                                 <div
                                     style={{
                                         height: '100%',
-                                        width: `${Math.min(100, Math.round((level.xpIntoLevel / level.xpForNextLevel) * 100))}%`,
+                                        width: `${Math.min(
+                                            100,
+                                            Math.round(
+                                                (level.xpIntoLevel / level.xpForNextLevel) * 100
+                                            )
+                                        )}%`,
                                         background: `linear-gradient(90deg, ${FOREST}, ${TEAL})`,
                                     }}
                                 />
@@ -457,7 +518,10 @@ export const CreatorStorefrontView = ({
                         <p style={sectionTitle}>Achievements</p>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                             {achievements.map((a) => (
-                                <span key={a.key} style={{ ...chipStyle, borderColor: TEAL, color: TEAL }}>
+                                <span
+                                    key={a.key}
+                                    style={{ ...chipStyle, borderColor: TEAL, color: TEAL }}
+                                >
                                     {a.label}
                                 </span>
                             ))}
@@ -467,20 +531,20 @@ export const CreatorStorefrontView = ({
 
                 <div style={sectionStyle}>
                     {socialLinks.length > 0 && (
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                                {socialLinks.map((conn, i) => (
-                                    <a
-                                        key={`${conn.type}-${i}`}
-                                        href={conn.url}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        style={chipStyle}
-                                    >
-                                        {conn.label || SOCIAL_LABELS[conn.type] || conn.type}
-                                    </a>
-                                ))}
-                            </div>
-                        )}
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                            {socialLinks.map((conn, i) => (
+                                <a
+                                    key={`${conn.type}-${i}`}
+                                    href={conn.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    style={chipStyle}
+                                >
+                                    {conn.label || SOCIAL_LABELS[conn.type] || conn.type}
+                                </a>
+                            ))}
+                        </div>
+                    )}
                     <a href={`${CHAT_URL}/#/user/${encodeURIComponent(userId)}`} style={tealButton}>
                         Message on Blackout
                     </a>
@@ -488,7 +552,16 @@ export const CreatorStorefrontView = ({
 
                 {bio ? (
                     <div style={sectionStyle}>
-                        <p style={{ margin: 0, fontSize: 14, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{bio}</p>
+                        <p
+                            style={{
+                                margin: 0,
+                                fontSize: 14,
+                                lineHeight: 1.5,
+                                whiteSpace: 'pre-wrap',
+                            }}
+                        >
+                            {bio}
+                        </p>
                     </div>
                 ) : null}
 
@@ -522,7 +595,9 @@ export const CreatorStorefrontView = ({
                                     data-testid="storefront-tier-card"
                                     data-tier-id={tier.id}
                                 >
-                                    <span style={{ fontSize: 14, fontWeight: 600 }}>{tier.name}</span>
+                                    <span style={{ fontSize: 14, fontWeight: 600 }}>
+                                        {tier.name}
+                                    </span>
                                     <span style={mutedStyle}>
                                         {formatPrice(tier.priceCents, tier.currency)} / month
                                     </span>
@@ -543,10 +618,16 @@ export const CreatorStorefrontView = ({
                                 <a
                                     key={stream.id}
                                     href={`${LIVE_PATH}/${encodeURIComponent(stream.id)}`}
-                                    style={{ ...cardStyle, color: 'inherit', textDecoration: 'none' }}
+                                    style={{
+                                        ...cardStyle,
+                                        color: 'inherit',
+                                        textDecoration: 'none',
+                                    }}
                                     data-testid="storefront-live-card"
                                 >
-                                    <strong style={{ fontSize: 14, fontWeight: 600 }}>{stream.title}</strong>
+                                    <strong style={{ fontSize: 14, fontWeight: 600 }}>
+                                        {stream.title}
+                                    </strong>
                                     <span style={{ ...mutedStyle, color: TEAL }}>● LIVE</span>
                                 </a>
                             ))
@@ -557,17 +638,24 @@ export const CreatorStorefrontView = ({
                     <div style={sectionStyle} data-testid="storefront-section-replays">
                         {replays.length === 0 ? (
                             <p style={mutedStyle}>
-                                No replays yet. Past {BLACKOUT_TERMS.den.singular} streams will appear here.
+                                No replays yet. Past {BLACKOUT_TERMS.den.singular} streams will
+                                appear here.
                             </p>
                         ) : (
                             replays.map((stream) => (
                                 <a
                                     key={stream.id}
                                     href={`${LIVE_PATH}/${encodeURIComponent(stream.id)}`}
-                                    style={{ ...cardStyle, color: 'inherit', textDecoration: 'none' }}
+                                    style={{
+                                        ...cardStyle,
+                                        color: 'inherit',
+                                        textDecoration: 'none',
+                                    }}
                                     data-testid="storefront-replay-card"
                                 >
-                                    <strong style={{ fontSize: 14, fontWeight: 600 }}>{stream.title}</strong>
+                                    <strong style={{ fontSize: 14, fontWeight: 600 }}>
+                                        {stream.title}
+                                    </strong>
                                     <span style={mutedStyle}>Replay · {stream.updatedAt}</span>
                                 </a>
                             ))
@@ -585,7 +673,9 @@ export const CreatorStorefrontView = ({
                                 <span style={mutedStyle}>
                                     {ch.category} · {ch.status}
                                 </span>
-                                {ch.description ? <span style={{ fontSize: 13 }}>{ch.description}</span> : null}
+                                {ch.description ? (
+                                    <span style={{ fontSize: 13 }}>{ch.description}</span>
+                                ) : null}
                             </article>
                         ))}
                     </div>
@@ -598,8 +688,12 @@ export const CreatorStorefrontView = ({
                         <div style={gridStyle}>
                             {content.map((item) => (
                                 <article key={item.id} style={cardStyle}>
-                                    <span style={{ ...mutedStyle, color: TEAL, fontSize: 11 }}>{item.kind}</span>
-                                    <span style={{ fontSize: 14, fontWeight: 600 }}>{item.title}</span>
+                                    <span style={{ ...mutedStyle, color: TEAL, fontSize: 11 }}>
+                                        {item.kind}
+                                    </span>
+                                    <span style={{ fontSize: 14, fontWeight: 600 }}>
+                                        {item.title}
+                                    </span>
                                 </article>
                             ))}
                         </div>
@@ -616,7 +710,14 @@ export const CreatorStorefrontView = ({
                                 href={`${FBM_STORE}/products/${event.handle ?? event.id}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                style={{ ...cardStyle, flexDirection: 'row', gap: 12, alignItems: 'center', textDecoration: 'none', color: 'inherit' }}
+                                style={{
+                                    ...cardStyle,
+                                    flexDirection: 'row',
+                                    gap: 12,
+                                    alignItems: 'center',
+                                    textDecoration: 'none',
+                                    color: 'inherit',
+                                }}
                             >
                                 {event.metadata?.event_date && (
                                     <div
@@ -629,23 +730,44 @@ export const CreatorStorefrontView = ({
                                             color: TEAL,
                                         }}
                                     >
-                                        <div style={{ fontSize: 11 }}>{event.metadata.event_date}</div>
+                                        <div style={{ fontSize: 11 }}>
+                                            {event.metadata.event_date}
+                                        </div>
                                         {event.metadata.event_time && (
-                                            <div style={{ fontSize: 10, color: '#8a8a9a' }}>{event.metadata.event_time}</div>
+                                            <div style={{ fontSize: 10, color: '#8a8a9a' }}>
+                                                {event.metadata.event_time}
+                                            </div>
                                         )}
                                     </div>
                                 )}
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1 }}>
-                                    <span style={{ fontSize: 14, fontWeight: 600 }}>{event.title}</span>
-                                    {(event.metadata?.venue_name || event.metadata?.venue_location) && (
+                                <div
+                                    style={{
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        gap: 2,
+                                        flex: 1,
+                                    }}
+                                >
+                                    <span style={{ fontSize: 14, fontWeight: 600 }}>
+                                        {event.title}
+                                    </span>
+                                    {(event.metadata?.venue_name ||
+                                        event.metadata?.venue_location) && (
                                         <span style={mutedStyle}>
-                                            {[event.metadata?.venue_name, event.metadata?.venue_location]
+                                            {[
+                                                event.metadata?.venue_name,
+                                                event.metadata?.venue_location,
+                                            ]
                                                 .filter(Boolean)
                                                 .join(' · ')}
                                         </span>
                                     )}
                                 </div>
-                                {productPrice(event) && <span style={{ color: TEAL, fontWeight: 600 }}>{productPrice(event)}</span>}
+                                {productPrice(event) && (
+                                    <span style={{ color: TEAL, fontWeight: 600 }}>
+                                        {productPrice(event)}
+                                    </span>
+                                )}
                             </a>
                         ))}
                     </div>
@@ -661,25 +783,45 @@ export const CreatorStorefrontView = ({
                                     href={`${FBM_STORE}/products/${product.handle ?? product.id}`}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    style={{ ...cardStyle, gap: 6, textDecoration: 'none', color: 'inherit' }}
+                                    style={{
+                                        ...cardStyle,
+                                        gap: 6,
+                                        textDecoration: 'none',
+                                        color: 'inherit',
+                                    }}
                                 >
                                     {product.thumbnail && (
                                         <img
                                             src={product.thumbnail}
                                             alt={product.title}
-                                            style={{ width: '100%', height: 110, objectFit: 'cover', borderRadius: 8 }}
+                                            style={{
+                                                width: '100%',
+                                                height: 110,
+                                                objectFit: 'cover',
+                                                borderRadius: 8,
+                                            }}
                                         />
                                     )}
                                     {product.type?.value && (
-                                        <span style={{ ...mutedStyle, color: TEAL, fontSize: 11 }}>{product.type.value}</span>
+                                        <span style={{ ...mutedStyle, color: TEAL, fontSize: 11 }}>
+                                            {product.type.value}
+                                        </span>
                                     )}
-                                    <span style={{ fontSize: 13, fontWeight: 600 }}>{product.title}</span>
-                                    {productPrice(product) && <span style={mutedStyle}>{productPrice(product)}</span>}
+                                    <span style={{ fontSize: 13, fontWeight: 600 }}>
+                                        {product.title}
+                                    </span>
+                                    {productPrice(product) && (
+                                        <span style={mutedStyle}>{productPrice(product)}</span>
+                                    )}
                                 </a>
                             ))}
                         </div>
                         <a
-                            href={fbm?.vendor?.handle ? `${FBM_STORE}/${fbm.vendor.handle}` : FBM_STORE}
+                            href={
+                                fbm?.vendor?.handle
+                                    ? `${FBM_STORE}/${fbm.vendor.handle}`
+                                    : FBM_STORE
+                            }
                             target="_blank"
                             rel="noopener noreferrer"
                             style={{ ...mutedStyle, color: TEAL, fontSize: 12 }}
@@ -697,7 +839,9 @@ export const CreatorStorefrontView = ({
                             {sponsorVendors.map((vendor) => (
                                 <a
                                     key={vendor.handle ?? vendor.id}
-                                    href={vendor.handle ? `${FBM_STORE}/${vendor.handle}` : FBM_STORE}
+                                    href={
+                                        vendor.handle ? `${FBM_STORE}/${vendor.handle}` : FBM_STORE
+                                    }
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     style={{ ...chipStyle, padding: '8px 12px' }}
@@ -706,7 +850,12 @@ export const CreatorStorefrontView = ({
                                         <img
                                             src={vendor.photo}
                                             alt={vendor.name}
-                                            style={{ width: 20, height: 20, borderRadius: '50%', objectFit: 'cover' }}
+                                            style={{
+                                                width: 20,
+                                                height: 20,
+                                                borderRadius: '50%',
+                                                objectFit: 'cover',
+                                            }}
                                         />
                                     )}
                                     {vendor.name ?? vendor.handle}
@@ -716,12 +865,19 @@ export const CreatorStorefrontView = ({
                     </div>
                 )}
 
-                <footer style={{ ...sectionStyle, borderTop: `1px solid ${BORDER}`, marginTop: 12 }}>
+                <footer
+                    style={{ ...sectionStyle, borderTop: `1px solid ${BORDER}`, marginTop: 12 }}
+                >
                     <div style={{ display: 'flex', gap: 16 }}>
                         <a href="https://theblackout.app" style={{ ...mutedStyle, color: TEAL }}>
                             Blackout
                         </a>
-                        <a href={FBM_STORE} target="_blank" rel="noopener noreferrer" style={{ ...mutedStyle, color: TEAL }}>
+                        <a
+                            href={FBM_STORE}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{ ...mutedStyle, color: TEAL }}
+                        >
                             FreeBlackMarket
                         </a>
                     </div>

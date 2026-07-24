@@ -1,6 +1,6 @@
 import React, { useCallback } from 'react';
 import { Box, Line } from 'folds';
-import { useParams } from 'react-router-dom';
+import { useParams } from 'react-router';
 import { isKeyHotkey } from 'is-hotkey';
 import { RoomView } from './RoomView';
 import { MembersDrawer } from './MembersDrawer';
@@ -17,45 +17,43 @@ import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { useRoomMembers } from '../../hooks/useRoomMembers';
 
 export function Room() {
-  const { eventId } = useParams();
-  const room = useRoom();
-  const mx = useMatrixClient();
+    const { eventId } = useParams();
+    const room = useRoom();
+    const mx = useMatrixClient();
 
-  const [isDrawer] = useSetting(settingsAtom, 'isPeopleDrawer');
-  const [hideActivity] = useSetting(settingsAtom, 'hideActivity');
-  const screenSize = useScreenSizeContext();
-  const powerLevels = usePowerLevels(room);
-  const members = useRoomMembers(mx, room.roomId);
+    const [isDrawer] = useSetting(settingsAtom, 'isPeopleDrawer');
+    const [hideActivity] = useSetting(settingsAtom, 'hideActivity');
+    const screenSize = useScreenSizeContext();
+    const powerLevels = usePowerLevels(room);
+    const members = useRoomMembers(mx, room.roomId);
 
-  useKeyDown(
-    window,
-    useCallback(
-      (evt) => {
-        if (isKeyHotkey('escape', evt)) {
-          markAsRead(mx, room.roomId, hideActivity);
-        }
-      },
-      [mx, room.roomId, hideActivity]
-    )
-  );
+    useKeyDown(
+        window,
+        useCallback(
+            (evt) => {
+                if (isKeyHotkey('escape', evt)) {
+                    markAsRead(mx, room.roomId, hideActivity);
+                }
+            },
+            [mx, room.roomId, hideActivity]
+        )
+    );
 
-  return (
-    <PowerLevelsContextProvider value={powerLevels}>
-      <Box grow="Yes">
-        <RoomView room={room} eventId={eventId} />
-        {screenSize === ScreenSize.Desktop && isDrawer && (
-          <>
-            <Line variant="Background" direction="Vertical" size="300" />
-            <MembersDrawer key={room.roomId} room={room} members={members} />
-          </>
-        )}
-        {screenSize === ScreenSize.Desktop && (
-          <RoomRightPanelHost room={room} />
-        )}
-        {screenSize !== ScreenSize.Desktop && (
-          <NotificationsBottomSheet roomId={room.roomId} />
-        )}
-      </Box>
-    </PowerLevelsContextProvider>
-  );
+    return (
+        <PowerLevelsContextProvider value={powerLevels}>
+            <Box grow="Yes">
+                <RoomView room={room} eventId={eventId} />
+                {screenSize === ScreenSize.Desktop && isDrawer && (
+                    <>
+                        <Line variant="Background" direction="Vertical" size="300" />
+                        <MembersDrawer key={room.roomId} room={room} members={members} />
+                    </>
+                )}
+                {screenSize === ScreenSize.Desktop && <RoomRightPanelHost room={room} />}
+                {screenSize !== ScreenSize.Desktop && (
+                    <NotificationsBottomSheet roomId={room.roomId} />
+                )}
+            </Box>
+        </PowerLevelsContextProvider>
+    );
 }

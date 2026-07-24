@@ -1,6 +1,6 @@
 import React, { createElement, useEffect, useMemo, useRef, useState } from 'react';
 import { useAtomValue } from 'jotai';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { buildFeatureRegistry } from './buildRegistry';
 import { composeShellPanels, selectPanelsByKind } from './composition';
 import { defaultFeatureFlags, type FeatureFlags } from './featureFlags';
@@ -43,9 +43,7 @@ const railLinkStyle = (active: boolean): React.CSSProperties => ({
     width: RAIL_BUTTON_SIZE,
     height: RAIL_BUTTON_SIZE,
     borderRadius: 12,
-    border: active
-        ? '1px solid var(--accent-primary)'
-        : '1px solid var(--border-default)',
+    border: active ? '1px solid var(--accent-primary)' : '1px solid var(--border-default)',
     background: 'var(--bg-input)',
     color: 'var(--text-primary)',
     display: 'inline-flex',
@@ -104,39 +102,37 @@ export function RegistrySidebarList({
 
     if (panels.length === 0) return null;
 
-    const activeIndex = activePath
-        ? panels.findIndex((panel) => panel.to === activePath)
-        : -1;
+    const activeIndex = activePath ? panels.findIndex((panel) => panel.to === activePath) : -1;
 
     const focusItem = (index: number) => {
         const target = itemsRef.current[index];
         if (target) target.focus();
     };
 
-    const onRailKeyDown = (
-        index: number,
-    ): React.KeyboardEventHandler<HTMLAnchorElement> => (event) => {
-        if (panels.length < 2) return;
-        if (event.key === 'ArrowDown' || event.key === 'ArrowRight') {
-            event.preventDefault();
-            focusItem((index + 1) % panels.length);
-            return;
-        }
-        if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') {
-            event.preventDefault();
-            focusItem((index - 1 + panels.length) % panels.length);
-            return;
-        }
-        if (event.key === 'Home') {
-            event.preventDefault();
-            focusItem(0);
-            return;
-        }
-        if (event.key === 'End') {
-            event.preventDefault();
-            focusItem(panels.length - 1);
-        }
-    };
+    const onRailKeyDown =
+        (index: number): React.KeyboardEventHandler<HTMLAnchorElement> =>
+        (event) => {
+            if (panels.length < 2) return;
+            if (event.key === 'ArrowDown' || event.key === 'ArrowRight') {
+                event.preventDefault();
+                focusItem((index + 1) % panels.length);
+                return;
+            }
+            if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') {
+                event.preventDefault();
+                focusItem((index - 1 + panels.length) % panels.length);
+                return;
+            }
+            if (event.key === 'Home') {
+                event.preventDefault();
+                focusItem(0);
+                return;
+            }
+            if (event.key === 'End') {
+                event.preventDefault();
+                focusItem(panels.length - 1);
+            }
+        };
 
     if (mode === 'rail') {
         return (

@@ -1,6 +1,6 @@
 import { createElement, useEffect, useState, type ReactElement } from 'react';
 import { useAtomValue } from 'jotai';
-import { useParams } from 'react-router-dom';
+import { useParams } from 'react-router';
 import type { FeatureRoute } from '../../core/features/types';
 import ProfilePage from './ProfilePage';
 import ProfileEditor from './ProfileEditor';
@@ -124,10 +124,9 @@ const CharacterSheetRoutePage = () => {
     // component's props when the component is a plain function returning
     // JSX rather than React.FC<Props>; pass props through `as` to keep
     // the call site honest.
-    return createElement(
-        CharacterSheet as (props: { userId?: string }) => ReactElement | null,
-        { userId: decodedUserId },
-    );
+    return createElement(CharacterSheet as (props: { userId?: string }) => ReactElement | null, {
+        userId: decodedUserId,
+    });
 };
 
 export const profileRoutes: FeatureRoute[] = [

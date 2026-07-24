@@ -15,8 +15,8 @@ import { matrixClientAtom, userIdAtom } from '../../../../src/app/state/auth';
 import { allRoomsBaseAtom } from '../../../../src/app/state/rooms';
 import { composerCommandPayloadAtom } from '../../../../src/app/state/composer';
 
-vi.mock('react-router-dom', async () => {
-    const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
+vi.mock('react-router', async () => {
+    const actual = await vi.importActual<typeof import('react-router')>('react-router');
     return {
         ...actual,
         useInRouterContext: () => false,
@@ -355,9 +355,7 @@ describe('ClientLayout UI wiring', () => {
             selectedSpaceId: null,
             rightPanel: null,
         });
-        const inviteButton = container.querySelector(
-            '[data-testid="den-list-invite"]'
-        );
+        const inviteButton = container.querySelector('[data-testid="den-list-invite"]');
         expect(inviteButton).toBeTruthy();
         expect(inviteButton?.getAttribute('aria-label')).toBe('Create an invite link');
     });
@@ -365,7 +363,15 @@ describe('ClientLayout UI wiring', () => {
     it('threads panel lists distinct roots and drills into a thread on click', () => {
         const events = [
             makeEvent('$root', 'thread root'),
-            makeEvent('$reply', 'thread reply', 'm.thread', undefined, undefined, undefined, '$root'),
+            makeEvent(
+                '$reply',
+                'thread reply',
+                'm.thread',
+                undefined,
+                undefined,
+                undefined,
+                '$root'
+            ),
             makeEvent('$evt-pin', 'pinned message'),
         ];
         mockEvents = events;
@@ -417,8 +423,7 @@ describe('ClientLayout UI wiring', () => {
 
         const governanceButton = Array.from(container.querySelectorAll('button')).find(
             (button) =>
-                button.getAttribute('aria-label') ===
-                'Open the governance dashboard for this den'
+                button.getAttribute('aria-label') === 'Open the governance dashboard for this den'
         ) as HTMLButtonElement;
         expect(governanceButton).toBeTruthy();
 
