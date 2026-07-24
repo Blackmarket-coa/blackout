@@ -129,7 +129,11 @@ describe('AppShell', () => {
     });
 
     it('renders the bottom-tab bar with the canonical destinations on a mobile viewport', async () => {
-        const { router, container, root, store } = renderShell('/');
+        // The Profile destination mirrors its route's capability gate, so the
+        // full canonical set only renders with `profile.read` present.
+        const { router, container, root, store } = renderShell('/', {
+            capabilities: ['profile.read'],
+        });
         await act(async () => {
             root.render(
                 <JotaiProvider store={store}>
@@ -197,7 +201,11 @@ describe('AppShell', () => {
 
     for (const { name, path, panelId } of ACTIVE_TAB_CASES) {
         it(`marks ${name} active on ${path} and no other canonical tab`, async () => {
-            const { router, container, root, store } = renderShell(path);
+            // `profile.read` keeps the capability-gated Profile tab in the bar
+            // so every case runs against the full canonical destination set.
+            const { router, container, root, store } = renderShell(path, {
+                capabilities: ['profile.read'],
+            });
             await act(async () => {
                 root.render(
                     <JotaiProvider store={store}>
