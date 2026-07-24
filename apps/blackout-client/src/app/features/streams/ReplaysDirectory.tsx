@@ -1,5 +1,5 @@
 import { useEffect, useState, type CSSProperties } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { LIVE_PATH } from '../../pages/paths';
 import { listStreams, type StreamSummary } from './streamsClient';
 
@@ -77,7 +77,9 @@ const ReplayCard = ({ stream }: { stream: StreamSummary }): JSX.Element => (
     >
         <span style={replayBadge}>▶ replay</span>
         <strong style={{ fontSize: 14 }}>{stream.title}</strong>
-        <span style={{ fontSize: 12, color: 'var(--text-muted, #9ca3af)' }}>{stream.creatorId}</span>
+        <span style={{ fontSize: 12, color: 'var(--text-muted, #9ca3af)' }}>
+            {stream.creatorId}
+        </span>
         {stream.tags.length > 0 ? (
             <span style={{ fontSize: 11, color: 'var(--text-muted, #9ca3af)' }}>
                 {stream.tags.map((tag) => `#${tag}`).join(' · ')}

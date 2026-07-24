@@ -1,6 +1,7 @@
 import React, { lazy, Suspense, type CSSProperties, useCallback, useMemo, useState } from 'react';
 import { useAtom } from 'jotai';
 import {
+    EARNINGS_VIEW_HINTS,
     EARNINGS_VIEW_LABELS,
     EARNINGS_VIEW_ORDER,
     streamingEarningsViewAtom,
@@ -77,6 +78,7 @@ export function EarningsTab({ initialView }: EarningsTabProps) {
             <HubSubTabs
                 views={visibleViews}
                 labels={EARNINGS_VIEW_LABELS}
+                hints={EARNINGS_VIEW_HINTS}
                 active={activeView}
                 onSelect={handleSelect}
                 ariaLabel="Earnings views"

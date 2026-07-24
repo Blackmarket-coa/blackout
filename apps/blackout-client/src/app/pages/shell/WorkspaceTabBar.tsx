@@ -1,5 +1,5 @@
 import { type CSSProperties } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation } from 'react-router';
 import { RegistryTabBar } from '../../core/features/RegistryTabBar';
 import type { ShellPanelEntry } from '../../core/features/types';
 

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { useAtomValue } from 'jotai';
 import { joinedRoomsAtom } from '../../state/rooms';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
@@ -224,22 +224,22 @@ export const EventDirectory = (): JSX.Element => {
                     {viewMode === 'calendar' ? <EventCalendar items={items} /> : null}
                     {viewMode === 'list' ? (
                         <div data-testid="event-directory-list">
-                    {upcoming.length > 0 ? (
-                        <section style={sectionStyle} data-bucket="upcoming">
-                            <header style={sectionLabelStyle}>Upcoming</header>
-                            {upcoming.map((item) => (
-                                <EventCard key={item.id} item={item} />
-                            ))}
-                        </section>
-                    ) : null}
-                    {past.length > 0 ? (
-                        <section style={sectionStyle} data-bucket="past">
-                            <header style={sectionLabelStyle}>Past</header>
-                            {past.map((item) => (
-                                <EventCard key={item.id} item={item} />
-                            ))}
-                        </section>
-                    ) : null}
+                            {upcoming.length > 0 ? (
+                                <section style={sectionStyle} data-bucket="upcoming">
+                                    <header style={sectionLabelStyle}>Upcoming</header>
+                                    {upcoming.map((item) => (
+                                        <EventCard key={item.id} item={item} />
+                                    ))}
+                                </section>
+                            ) : null}
+                            {past.length > 0 ? (
+                                <section style={sectionStyle} data-bucket="past">
+                                    <header style={sectionLabelStyle}>Past</header>
+                                    {past.map((item) => (
+                                        <EventCard key={item.id} item={item} />
+                                    ))}
+                                </section>
+                            ) : null}
                         </div>
                     ) : null}
                 </>

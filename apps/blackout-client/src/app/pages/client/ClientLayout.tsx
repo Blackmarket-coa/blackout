@@ -1,7 +1,7 @@
 import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import type { Room } from 'matrix-js-sdk';
-import { Link, useInRouterContext, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { Link, useInRouterContext, useLocation, useNavigate, useParams } from 'react-router';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { joinedRoomsAtom } from '../../state/rooms';
 import { roomToParentsAtom } from '../../state/room/roomToParents';

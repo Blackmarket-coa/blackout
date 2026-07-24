@@ -5,7 +5,7 @@ import { act } from 'react-dom/test-utils';
 import ReactDOM from 'react-dom/client';
 
 const navigate = vi.fn();
-vi.mock('react-router-dom', () => ({ useNavigate: () => navigate }));
+vi.mock('react-router', () => ({ useNavigate: () => navigate }));
 
 let capturedHandler: ((event: unknown) => void) | null = null;
 const unsubscribe = vi.fn();

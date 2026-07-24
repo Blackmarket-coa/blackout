@@ -1,37 +1,37 @@
-import { useMatch, useParams } from 'react-router-dom';
+import { useMatch, useParams } from 'react-router';
 import { getCanonicalAliasRoomId, isRoomAlias } from '../../utils/matrix';
 import { useMatrixClient } from '../useMatrixClient';
 import { getSpaceLobbyPath, getSpaceSearchPath } from '../../pages/pathUtils';
 
 export const useSelectedSpace = (): string | undefined => {
-  const mx = useMatrixClient();
+    const mx = useMatrixClient();
 
-  const { spaceIdOrAlias } = useParams();
+    const { spaceIdOrAlias } = useParams();
 
-  const spaceId =
-    spaceIdOrAlias && isRoomAlias(spaceIdOrAlias)
-      ? getCanonicalAliasRoomId(mx, spaceIdOrAlias)
-      : spaceIdOrAlias;
+    const spaceId =
+        spaceIdOrAlias && isRoomAlias(spaceIdOrAlias)
+            ? getCanonicalAliasRoomId(mx, spaceIdOrAlias)
+            : spaceIdOrAlias;
 
-  return spaceId;
+    return spaceId;
 };
 
 export const useSpaceLobbySelected = (spaceIdOrAlias: string): boolean => {
-  const match = useMatch({
-    path: decodeURIComponent(getSpaceLobbyPath(spaceIdOrAlias)),
-    caseSensitive: true,
-    end: false,
-  });
+    const match = useMatch({
+        path: decodeURIComponent(getSpaceLobbyPath(spaceIdOrAlias)),
+        caseSensitive: true,
+        end: false,
+    });
 
-  return !!match;
+    return !!match;
 };
 
 export const useSpaceSearchSelected = (spaceIdOrAlias: string): boolean => {
-  const match = useMatch({
-    path: decodeURIComponent(getSpaceSearchPath(spaceIdOrAlias)),
-    caseSensitive: true,
-    end: false,
-  });
+    const match = useMatch({
+        path: decodeURIComponent(getSpaceSearchPath(spaceIdOrAlias)),
+        caseSensitive: true,
+        end: false,
+    });
 
-  return !!match;
+    return !!match;
 };

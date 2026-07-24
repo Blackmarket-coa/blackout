@@ -1,5 +1,5 @@
 import { type CSSProperties } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router';
 import { isShellModeRoot, resolveShellMode, SHELL_MODE_TITLES } from './modeRouter';
 
 const TOP_BAR_STYLE: CSSProperties = {

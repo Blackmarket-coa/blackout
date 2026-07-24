@@ -4,7 +4,7 @@ import React from 'react';
 import { act } from 'react-dom/test-utils';
 import ReactDOM from 'react-dom/client';
 import { Provider, createStore } from 'jotai';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter } from 'react-router';
 
 // Shared mocks for the join/navigation deps so we can assert the action fires.
 const { joinRoom, navigateRoom, navigateSpace } = vi.hoisted(() => ({

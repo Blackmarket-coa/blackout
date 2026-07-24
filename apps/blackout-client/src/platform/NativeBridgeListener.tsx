@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { listenForNativeBridgeEvents } from './native-bridge-contract';
 import { resolveNotificationRoute } from './notification-routing';
 

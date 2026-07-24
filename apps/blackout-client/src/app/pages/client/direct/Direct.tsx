@@ -1,6 +1,6 @@
 import React from 'react';
 import { Avatar, Box, Text } from 'folds';
-import { useMatch } from 'react-router-dom';
+import { useMatch } from 'react-router';
 import { NavCategory, NavItem, NavItemContent, NavLink } from '../../../components/nav';
 import { UnreadBadge } from '../../../components/unread-badge';
 import { RoomAvatar } from '../../../components/room-avatar';

@@ -4,7 +4,7 @@ import React from 'react';
 import { act } from 'react-dom/test-utils';
 import ReactDOM from 'react-dom/client';
 import { Provider as JotaiProvider, createStore } from 'jotai';
-import { createMemoryRouter, RouterProvider } from 'react-router-dom';
+import { createMemoryRouter, RouterProvider } from 'react-router';
 import { AppShell } from './AppShell';
 import { capabilityContextAtom } from '../../core/features/capabilityContext';
 import { defaultFeatureFlags, runtimeFeatureFlags } from '../../core/features/featureFlags';

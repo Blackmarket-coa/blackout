@@ -4,7 +4,7 @@ import React from 'react';
 import { act } from 'react-dom/test-utils';
 import ReactDOM from 'react-dom/client';
 import { Provider as JotaiProvider, atom, createStore } from 'jotai';
-import { createMemoryRouter, RouterProvider } from 'react-router-dom';
+import { createMemoryRouter, RouterProvider } from 'react-router';
 import type { RoomLike } from './feedModel';
 
 // HomeFeed depends on `joinedRoomsAtom` from `state/rooms`, which is a

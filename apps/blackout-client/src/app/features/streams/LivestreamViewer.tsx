@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState, type CSSProperties } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router';
 import { useMatrixClientOrNull } from '../../hooks/useMatrixClient';
 import { recordViewEvent } from '../../sdk/viewEvents';
 import { LIVE_PATH, CREATOR_STOREFRONT_PATH, buildCommunitiesPath } from '../../pages/paths';

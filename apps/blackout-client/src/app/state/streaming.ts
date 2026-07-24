@@ -40,6 +40,39 @@ export const STREAMING_TAB_LABELS: Record<StreamingTabId, string> = {
     integrations: 'Integrations',
 };
 
+/**
+ * Short plain-text hints per tab and sub-view, rendered as button tooltips in
+ * the tab strip / HubSubTabs. Fuller explainers live in
+ * `features/streaming/streamingTabGuides.tsx`; keep the two in sync when a
+ * tab's purpose changes.
+ */
+export const STREAMING_TAB_HINTS: Record<StreamingTabId, string> = {
+    overview: 'Your creator dashboard — publish content and jump into every surface',
+    content: 'Live streams, replays, and clips',
+    kits: 'Ready-made kits that set up your creator surfaces',
+    earnings: 'Rewards, listings, and revenue splits',
+    integrations: 'Broadcast tools, platform connections, bridges, and health',
+};
+
+export const CONTENT_VIEW_HINTS: Record<ContentViewId, string> = {
+    live: 'Streams broadcasting right now',
+    replays: 'Past streams saved to watch later',
+    clips: 'Short highlights cut from streams',
+};
+
+export const EARNINGS_VIEW_HINTS: Record<EarningsViewId, string> = {
+    rewards: 'Tips, subscriptions, and reward payouts',
+    listings: 'Your marketplace listings',
+    splits: 'Revenue-split contracts with collaborators',
+};
+
+export const INTEGRATIONS_VIEW_HINTS: Record<IntegrationsViewId, string> = {
+    broadcast: 'Stream keys and broadcast settings',
+    connections: 'Linked Twitch, YouTube, Kick, and Discord accounts',
+    bridges: 'Chat bridges and outgoing webhooks',
+    health: 'Status of your connected integrations',
+};
+
 export const CONTENT_VIEW_ORDER: ContentViewId[] = ['live', 'replays', 'clips'];
 
 export const CONTENT_VIEW_LABELS: Record<ContentViewId, string> = {

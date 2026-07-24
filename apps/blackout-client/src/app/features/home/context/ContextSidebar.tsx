@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import * as css from './ContextSidebar.css';
 import { ContextModule } from './ContextModule';
 import { bmcPalette } from '../../../styles/theme-engine';

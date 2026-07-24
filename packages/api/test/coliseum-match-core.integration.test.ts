@@ -8,6 +8,7 @@ import {
     cooldownRemainingMs,
     deriveChallengeStatus,
     deriveColiseumMatchStatus,
+    deriveCredibilityStrike,
     deriveCrucibleVerdict,
     detectBilateralExchange,
     isForfeit,
@@ -15,6 +16,7 @@ import {
     isWithinRoundDurationCap,
     mintBrief,
     rankResponseDrops,
+    tallyArenaRecord,
     tallyRoundVotes,
     type ColiseumResponseDrop,
     type ColiseumRoundVote,
@@ -126,6 +128,43 @@ test('computeShiftScore measures crowd movement; mintBrief is immutable assembly
     });
     assert.equal(brief.proposition, 'P');
     assert.ok(brief.shiftScore > 0);
+});
+
+test('deriveCredibilityStrike fires only on lopsided evidence rulings', () => {
+    const base = {
+        questionId: 'evidence',
+        prompt: 'Who used evidence more effectively?',
+        neither: 0,
+        both: 0,
+        winner: 'red' as const,
+    };
+    // Too few side votes → no strike, however lopsided.
+    assert.equal(deriveCredibilityStrike([{ ...base, red: 2, blue: 0 }]), null);
+    // Lopsided rulings strike the losing side.
+    assert.equal(deriveCredibilityStrike([{ ...base, red: 5, blue: 0 }]), 'blue');
+    assert.equal(deriveCredibilityStrike([{ ...base, red: 1, blue: 9, winner: 'blue' }]), 'red');
+    // A competitive loss is not a strike.
+    assert.equal(deriveCredibilityStrike([{ ...base, red: 6, blue: 4 }]), null);
+    // No evidence question tallied → no strike.
+    assert.equal(deriveCredibilityStrike([]), null);
+});
+
+test('tallyArenaRecord counts fighter events and ignores the rest', () => {
+    const record = tallyArenaRecord([
+        { type: 'match_won' },
+        { type: 'round_won' },
+        { type: 'round_won' },
+        { type: 'steelman_passed' },
+        { type: 'credibility_strike' },
+        { type: 'vote_cast' },
+    ]);
+    assert.deepEqual(record, {
+        matchesWon: 1,
+        matchesDrawn: 0,
+        roundsWon: 2,
+        steelmansPassed: 1,
+        credibilityStrikes: 1,
+    });
 });
 
 test('cooldown blocks within 48h and clears after', () => {

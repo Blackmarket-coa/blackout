@@ -1,5 +1,5 @@
 import { ReactEventHandler, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { useRoomNavigate } from './useRoomNavigate';
 import { useMatrixClient } from './useMatrixClient';
 import { isRoomId, isUserId } from '../utils/matrix';
@@ -8,45 +8,45 @@ import { useOpenUserRoomProfile } from '../state/hooks/userRoomProfile';
 import { useSpaceOptionally } from './useSpace';
 
 export const useMentionClickHandler = (roomId: string): ReactEventHandler<HTMLElement> => {
-  const mx = useMatrixClient();
-  const { navigateRoom, navigateSpace } = useRoomNavigate();
-  const navigate = useNavigate();
-  const openProfile = useOpenUserRoomProfile();
-  const space = useSpaceOptionally();
+    const mx = useMatrixClient();
+    const { navigateRoom, navigateSpace } = useRoomNavigate();
+    const navigate = useNavigate();
+    const openProfile = useOpenUserRoomProfile();
+    const space = useSpaceOptionally();
 
-  const handleClick: ReactEventHandler<HTMLElement> = useCallback(
-    (evt) => {
-      evt.stopPropagation();
-      evt.preventDefault();
-      const target = evt.currentTarget;
-      const mentionId = target.getAttribute('data-mention-id');
-      if (typeof mentionId !== 'string') return;
+    const handleClick: ReactEventHandler<HTMLElement> = useCallback(
+        (evt) => {
+            evt.stopPropagation();
+            evt.preventDefault();
+            const target = evt.currentTarget;
+            const mentionId = target.getAttribute('data-mention-id');
+            if (typeof mentionId !== 'string') return;
 
-      if (isUserId(mentionId)) {
-        openProfile(roomId, space?.roomId, mentionId, target.getBoundingClientRect());
-        return;
-      }
+            if (isUserId(mentionId)) {
+                openProfile(roomId, space?.roomId, mentionId, target.getBoundingClientRect());
+                return;
+            }
 
-      const eventId = target.getAttribute('data-mention-event-id') || undefined;
-      if (isRoomId(mentionId) && mx.getRoom(mentionId)) {
-        if (mx.getRoom(mentionId)?.isSpaceRoom()) navigateSpace(mentionId);
-        else navigateRoom(mentionId, eventId);
-        return;
-      }
+            const eventId = target.getAttribute('data-mention-event-id') || undefined;
+            if (isRoomId(mentionId) && mx.getRoom(mentionId)) {
+                if (mx.getRoom(mentionId)?.isSpaceRoom()) navigateSpace(mentionId);
+                else navigateRoom(mentionId, eventId);
+                return;
+            }
 
-      // A room we're not joined to (no parent canopy known) → open under the
-      // `-` no-canopy sentinel. Carry event/viaServers as query params.
-      const viaServers = target.getAttribute('data-mention-via') || undefined;
-      const params = new URLSearchParams();
-      if (eventId) params.set('event', eventId);
-      if (viaServers) params.set('viaServers', viaServers);
-      const qs = params.toString();
-      const base = buildCommunitiesPath(null, mentionId);
+            // A room we're not joined to (no parent canopy known) → open under the
+            // `-` no-canopy sentinel. Carry event/viaServers as query params.
+            const viaServers = target.getAttribute('data-mention-via') || undefined;
+            const params = new URLSearchParams();
+            if (eventId) params.set('event', eventId);
+            if (viaServers) params.set('viaServers', viaServers);
+            const qs = params.toString();
+            const base = buildCommunitiesPath(null, mentionId);
 
-      navigate(qs ? `${base}?${qs}` : base);
-    },
-    [mx, navigate, navigateRoom, navigateSpace, roomId, space, openProfile]
-  );
+            navigate(qs ? `${base}?${qs}` : base);
+        },
+        [mx, navigate, navigateRoom, navigateSpace, roomId, space, openProfile]
+    );
 
-  return handleClick;
+    return handleClick;
 };

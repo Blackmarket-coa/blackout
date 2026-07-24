@@ -1,5 +1,5 @@
 import { createElement, useEffect, useState, type ComponentType, type CSSProperties } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { buildFeatureRegistry } from './buildRegistry';
 import { defaultFeatureFlags, type FeatureFlags } from './featureFlags';
 import { useCapabilityContext } from './capabilityContext';
@@ -137,6 +137,7 @@ export const RegistryTabBar = ({
                     <Link
                         key={entry.id}
                         to={entry.to}
+                        title={entry.description ?? entry.label}
                         aria-current={active ? 'page' : undefined}
                         data-active={active ? 'true' : 'false'}
                         data-panel-id={entry.id}

@@ -1,7 +1,7 @@
 import classNames from 'classnames';
 import { useEffect, useRef } from 'react';
 import { useSetAtom } from 'jotai';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { recordViewEvent } from '../../sdk/viewEvents';
 import { markFeedItemOpenedAtom } from './feedSeen';
 import * as css from './UnifiedFeedCard.css';

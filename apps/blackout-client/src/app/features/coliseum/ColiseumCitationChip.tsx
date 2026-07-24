@@ -1,5 +1,5 @@
 import React, { type CSSProperties } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import type { ColiseumCitation } from '@blackout/core';
 import { buildCommunitiesPath } from '../../pages/paths';
 
@@ -65,7 +65,10 @@ export function ColiseumCitationChip({ citation }: ColiseumCitationChipProps) {
             );
         case 'townhall':
             return (
-                <Link to={`/ops/townhall?meetingId=${encodeURIComponent(citation.meetingId)}`} style={chipStyle}>
+                <Link
+                    to={`/ops/townhall?meetingId=${encodeURIComponent(citation.meetingId)}`}
+                    style={chipStyle}
+                >
                     <span aria-hidden>{glyph}</span>
                     <span>
                         {label}: {citation.meetingId}
@@ -76,7 +79,7 @@ export function ColiseumCitationChip({ citation }: ColiseumCitationChipProps) {
             return (
                 <Link
                     to={`/monetization/subscriptions/plans?subscriptionId=${encodeURIComponent(
-                        citation.subscriptionId,
+                        citation.subscriptionId
                     )}`}
                     style={chipStyle}
                 >

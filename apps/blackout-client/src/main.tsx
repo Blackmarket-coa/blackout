@@ -14,7 +14,7 @@ import 'folds/dist/style.css';
 import { configClass, varsClass } from 'folds';
 import { useAtomValue } from 'jotai';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { createBrowserRouter, Navigate, Outlet, RouterProvider } from 'react-router-dom';
+import { createBrowserRouter, Navigate, Outlet, RouterProvider } from 'react-router';
 import { Provider as JotaiProvider } from 'jotai';
 import { ThemeProvider } from './app/components/ThemeProvider';
 import { MatrixBootstrapper } from './app/components/bmc/MatrixBootstrapper';

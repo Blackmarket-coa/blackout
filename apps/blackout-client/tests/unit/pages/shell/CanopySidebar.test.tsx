@@ -3,7 +3,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import { Provider as JotaiProvider, createStore } from 'jotai';
-import { createMemoryRouter, Outlet, RouterProvider } from 'react-router-dom';
+import { createMemoryRouter, Outlet, RouterProvider } from 'react-router';
 import type { Room } from 'matrix-js-sdk';
 import { beforeEach, describe, expect, it } from 'vitest';
 
@@ -20,7 +20,7 @@ const makeSpace = (roomId: string, name: string): Room =>
         getMyMembership: () => 'join',
         getUnreadNotificationCount: () => 0,
         isSpaceRoom: () => true,
-    }) as unknown as Room;
+    } as unknown as Room);
 
 const render = (rooms: Room[]): HTMLElement => {
     const store = createStore();
@@ -39,14 +39,14 @@ const render = (rooms: Room[]): HTMLElement => {
                 children: [{ path: '*', element: <CanopySidebar /> }],
             },
         ],
-        { initialEntries: ['/'] },
+        { initialEntries: ['/'] }
     );
     const root = ReactDOM.createRoot(container);
     act(() => {
         root.render(
             <JotaiProvider store={store}>
                 <RouterProvider router={router} />
-            </JotaiProvider>,
+            </JotaiProvider>
         );
     });
     return container;
@@ -60,7 +60,7 @@ describe('CanopySidebar', () => {
     it('lists joined canopies and the discover/create affordances', () => {
         const container = render([makeSpace('!canopy:example.org', 'Black Market Coalition')]);
         const item = container.querySelector(
-            '[data-testid="canopy-sidebar-item-!canopy:example.org"]',
+            '[data-testid="canopy-sidebar-item-!canopy:example.org"]'
         );
         expect(item?.textContent).toContain('Black Market Coalition');
         expect(container.querySelector('[data-testid="canopy-sidebar-discover"]')).toBeTruthy();
@@ -72,13 +72,13 @@ describe('CanopySidebar', () => {
         // Canopies / Creator Hub / Coalition / Coliseum / Home live in the
         // top nav, so their sidebar registry entries must not be duplicated.
         expect(
-            container.querySelector('[data-testid="registry-panel-communities.sidebar"]'),
+            container.querySelector('[data-testid="registry-panel-communities.sidebar"]')
         ).toBeNull();
         expect(
-            container.querySelector('[data-testid="registry-panel-streaming.sidebar"]'),
+            container.querySelector('[data-testid="registry-panel-streaming.sidebar"]')
         ).toBeNull();
         expect(
-            container.querySelector('[data-testid="registry-panel-coalition.sidebar"]'),
+            container.querySelector('[data-testid="registry-panel-coalition.sidebar"]')
         ).toBeNull();
     });
 });

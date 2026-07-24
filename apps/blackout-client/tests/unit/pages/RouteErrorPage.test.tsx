@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
 import { act } from 'react-dom/test-utils';
 import ReactDOM from 'react-dom/client';
-import { RouterProvider, createMemoryRouter, type RouteObject } from 'react-router-dom';
+import { RouterProvider, createMemoryRouter, type RouteObject } from 'react-router';
 import { NotFoundPage, RouteErrorFallback } from '../../../src/app/pages/RouteErrorPage';
 
 let container: HTMLDivElement;

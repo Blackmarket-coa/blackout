@@ -1,5 +1,5 @@
 import { createElement, type ReactNode } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { categoryLabel, type NormalizedListing } from '@blackout/core';
 import type { MarketplaceProviderSummary } from './marketplaceClient';
 import { resolveMarketplaceProvider } from './providerMetadata';

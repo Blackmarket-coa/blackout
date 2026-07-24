@@ -1,5 +1,5 @@
 import { useMemo, useState, type CSSProperties } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { buildEventDetailPath } from '../../pages/paths';
 import { buildMonthGrid, type EventViewItem } from './eventModel';
 
@@ -110,13 +110,23 @@ export const EventCalendar = ({
     return (
         <div data-testid="event-calendar">
             <div style={headerStyle}>
-                <button type="button" style={navButtonStyle} onClick={() => step(-1)} aria-label="Previous month">
+                <button
+                    type="button"
+                    style={navButtonStyle}
+                    onClick={() => step(-1)}
+                    aria-label="Previous month"
+                >
                     ‹
                 </button>
                 <strong data-testid="event-calendar-label" style={{ fontSize: 15 }}>
                     {MONTHS[cursor.month]} {cursor.year}
                 </strong>
-                <button type="button" style={navButtonStyle} onClick={() => step(1)} aria-label="Next month">
+                <button
+                    type="button"
+                    style={navButtonStyle}
+                    onClick={() => step(1)}
+                    aria-label="Next month"
+                >
                     ›
                 </button>
             </div>
@@ -134,9 +144,7 @@ export const EventCalendar = ({
                         style={{
                             ...dayCellBase,
                             opacity: cell.inMonth ? 1 : 0.4,
-                            background: cell.inMonth
-                                ? 'var(--bg-input, #0f172a)'
-                                : 'transparent',
+                            background: cell.inMonth ? 'var(--bg-input, #0f172a)' : 'transparent',
                         }}
                     >
                         <span style={{ fontSize: 11, color: 'var(--text-muted, #9ca3af)' }}>

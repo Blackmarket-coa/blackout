@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect } from 'react';
-import { useParams, useSearchParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router';
 import { useSetAtom } from 'jotai';
 import {
     activeThreadRootIdAtom,

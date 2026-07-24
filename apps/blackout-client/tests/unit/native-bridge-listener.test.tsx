@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import React from 'react';
 import { act } from 'react-dom/test-utils';
 import ReactDOM from 'react-dom/client';
-import { createMemoryRouter, Outlet, RouterProvider } from 'react-router-dom';
+import { createMemoryRouter, Outlet, RouterProvider } from 'react-router';
 
 import { NativeBridgeListener } from '../../src/platform/NativeBridgeListener';
 import { dispatchNativeBridgeEvent } from '../../src/platform/native-bridge-contract';

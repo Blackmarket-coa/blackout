@@ -1,5 +1,5 @@
 import { useEffect, useState, type CSSProperties } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 import { buildCommunitiesPath, COMMUNITIES_PATH } from '../../pages/paths';
 import {

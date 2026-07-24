@@ -1,5 +1,5 @@
 import { type CSSProperties } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation } from 'react-router';
 import { useSetAtom } from 'jotai';
 import { RegistryTabBar } from '../../core/features/RegistryTabBar';
 import type { ShellPanelEntry } from '../../core/features/types';

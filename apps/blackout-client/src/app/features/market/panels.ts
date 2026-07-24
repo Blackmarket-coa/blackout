@@ -1,4 +1,5 @@
 import type { ShellPanelEntry } from '../../core/features/types';
+import { glyphIcon } from '../shell-destinations/panels';
 import { MARKET_PATH } from '../../pages/paths';
 
 /**
@@ -14,6 +15,8 @@ export const marketDestinationPanels: ShellPanelEntry[] = [
         id: 'shell.market',
         kind: 'mobile-tab',
         label: 'The Black Market',
+        description: 'Browse and sell — marketplace listings from canopies and creators.',
+        icon: glyphIcon('🛒'),
         to: MARKET_PATH,
         order: 45,
     },

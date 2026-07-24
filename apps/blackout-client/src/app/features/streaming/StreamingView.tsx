@@ -16,6 +16,8 @@ import {
     type StreamingTabId,
 } from '../../state/streaming';
 import { runtimeFeatureFlags } from '../../core/features/featureFlags';
+import { FeatureGuide } from '../../components/feature-guide/FeatureGuide';
+import { STREAMING_TAB_GUIDES } from './streamingTabGuides';
 import StreamingTabStrip from './StreamingTabStrip';
 import ContentTab from './tabs/ContentTab';
 import EarningsTab from './tabs/EarningsTab';
@@ -80,10 +82,16 @@ export function StreamingView({ initialTab }: StreamingViewProps) {
 
     return (
         <section
-            style={{ display: 'grid', gridTemplateRows: 'auto 1fr', height: '100%', minHeight: 0 }}
+            style={{
+                display: 'grid',
+                gridTemplateRows: 'auto auto 1fr',
+                height: '100%',
+                minHeight: 0,
+            }}
             data-testid="streaming-view"
         >
             <StreamingTabStrip activeTab={activeTab} onSelectTab={handleSelect} />
+            <FeatureGuide>{STREAMING_TAB_GUIDES[activeTab]}</FeatureGuide>
             <div style={contentStyle}>
                 {activeTab === 'overview' ? (
                     <div data-testid="streaming-tab-overview">

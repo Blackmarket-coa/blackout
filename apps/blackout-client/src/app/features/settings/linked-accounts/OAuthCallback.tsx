@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, useSearchParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router';
 import {
     completeCallback,
     isLinkedAccountProvider,
@@ -152,7 +152,8 @@ export function OAuthCallback() {
                         <h1 style={{ fontSize: 18, margin: 0 }}>Could not finish linking.</h1>
                         <p style={{ margin: 0, opacity: 0.85 }}>{status.message}</p>
                         <p style={{ margin: 0, opacity: 0.6, fontSize: 13 }}>
-                            Close this window and try again from Settings → Account → Linked accounts.
+                            Close this window and try again from Settings → Account → Linked
+                            accounts.
                         </p>
                     </>
                 )}
@@ -161,9 +162,7 @@ export function OAuthCallback() {
     );
 }
 
-const postOutcome = (
-    outcome: Omit<CallbackResultMessage, 'type'>,
-): void => {
+const postOutcome = (outcome: Omit<CallbackResultMessage, 'type'>): void => {
     if (typeof window === 'undefined' || !window.opener) return;
     const payload: CallbackResultMessage = { type: POSTMESSAGE_TYPE, ...outcome };
     try {

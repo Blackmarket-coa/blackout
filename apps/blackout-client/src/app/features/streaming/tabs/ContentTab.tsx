@@ -1,6 +1,7 @@
 import React, { lazy, Suspense, useCallback, useState } from 'react';
 import { useAtom } from 'jotai';
 import {
+    CONTENT_VIEW_HINTS,
     CONTENT_VIEW_LABELS,
     CONTENT_VIEW_ORDER,
     streamingContentViewAtom,
@@ -39,6 +40,7 @@ export function ContentTab({ initialView }: ContentTabProps) {
             <HubSubTabs
                 views={CONTENT_VIEW_ORDER}
                 labels={CONTENT_VIEW_LABELS}
+                hints={CONTENT_VIEW_HINTS}
                 active={activeView}
                 onSelect={handleSelect}
                 ariaLabel="Content views"

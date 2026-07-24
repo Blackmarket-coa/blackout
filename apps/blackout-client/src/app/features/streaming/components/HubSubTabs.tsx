@@ -4,6 +4,8 @@ export interface HubSubTabsProps<V extends string> {
     /** Selectable sub-views, in order. */
     views: readonly V[];
     labels: Record<V, string>;
+    /** Short per-view descriptions, rendered as button tooltips. */
+    hints?: Record<V, string>;
     active: V;
     onSelect: (view: V) => void;
     ariaLabel: string;
@@ -44,6 +46,7 @@ const pillActiveStyle: CSSProperties = {
 export function HubSubTabs<V extends string>({
     views,
     labels,
+    hints,
     active,
     onSelect,
     ariaLabel,
@@ -56,6 +59,7 @@ export function HubSubTabs<V extends string>({
                     type="button"
                     role="tab"
                     aria-selected={view === active}
+                    title={hints?.[view]}
                     style={view === active ? pillActiveStyle : pillBaseStyle}
                     onClick={() => onSelect(view)}
                     data-streaming-subtab={view}

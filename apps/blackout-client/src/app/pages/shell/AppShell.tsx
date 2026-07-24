@@ -1,5 +1,5 @@
 import { useEffect, type CSSProperties } from 'react';
-import { Outlet, useLocation } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router';
 import { useSetAtom } from 'jotai';
 import { shellModeAtom } from '../../state/navigation';
 import { createSpaceModalAtom } from '../../state/createSpaceModal';

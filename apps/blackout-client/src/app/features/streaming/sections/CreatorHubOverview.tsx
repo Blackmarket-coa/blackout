@@ -1,5 +1,5 @@
 import React, { type CSSProperties, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import {
     COALITION_PATH,
     CREATOR_DASHBOARD_PATH,

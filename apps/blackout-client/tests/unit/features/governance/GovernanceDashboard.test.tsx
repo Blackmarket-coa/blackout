@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
 import { act } from 'react-dom/test-utils';
 import ReactDOM from 'react-dom/client';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter } from 'react-router';
 import { Provider, createStore } from 'jotai';
 import { userIdAtom } from '../../../../src/app/state/auth';
 import { GovernanceDashboard } from '../../../../src/app/features/governance/GovernanceDashboard';
@@ -134,7 +134,7 @@ const renderDashboard = (initialUrl = '/governance') => {
                 <Provider store={store}>
                     <GovernanceDashboard roomId="!room:example.org" />
                 </Provider>
-            </MemoryRouter>,
+            </MemoryRouter>
         );
     });
 
@@ -203,12 +203,12 @@ describe('GovernanceDashboard sections', () => {
         expect(container.textContent).not.toContain('Retire feature B');
 
         const openButton = Array.from(container.querySelectorAll('button')).find(
-            (button) => button.textContent === 'View / Change Vote',
+            (button) => button.textContent === 'View / Change Vote'
         ) as HTMLButtonElement;
         act(() => openButton.click());
 
         expect(container.querySelector('[data-testid="proposal-detail"]')?.textContent).toContain(
-            'detail:proposal-a',
+            'detail:proposal-a'
         );
     });
 });

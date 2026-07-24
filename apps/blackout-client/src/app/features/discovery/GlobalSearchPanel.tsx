@@ -13,6 +13,7 @@ const TYPE_LABEL: Record<GlobalSearchType, string> = {
     project: 'Project',
     debate: 'Debate',
     knowledge: 'Knowledge',
+    brief: 'Brief',
 };
 
 const panelStyle: CSSProperties = {
@@ -39,7 +40,9 @@ const chipStyle = (active: boolean): CSSProperties => ({
     padding: '4px 10px',
     borderRadius: 999,
     cursor: 'pointer',
-    border: `1px solid ${active ? 'var(--accent-primary, #1ABC9C)' : 'var(--border-default, rgba(255,255,255,0.12))'}`,
+    border: `1px solid ${
+        active ? 'var(--accent-primary, #1ABC9C)' : 'var(--border-default, rgba(255,255,255,0.12))'
+    }`,
     background: active ? 'var(--accent-primary, #1ABC9C)' : 'transparent',
     color: active ? '#fff' : 'var(--text-secondary, #aaa)',
 });
@@ -166,7 +169,7 @@ export function GlobalSearchPanel({
                     onKeyDown={(event) => {
                         if (event.key === 'Enter') runSearch();
                     }}
-                    placeholder="Search coalitions, creators, bounties, projects, debates, guides…"
+                    placeholder="Search coalitions, creators, bounties, projects, debates, guides, briefs…"
                     data-testid="global-search-input"
                     style={inputStyle}
                 />

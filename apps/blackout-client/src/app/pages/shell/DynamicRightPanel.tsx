@@ -1,6 +1,6 @@
 import { type CSSProperties } from 'react';
 import { useAtomValue } from 'jotai';
-import { useLocation } from 'react-router-dom';
+import { useLocation } from 'react-router';
 import { rightPanelDescriptorAtom } from '../../state/navigation';
 import { buildFeatureRegistry } from '../../core/features/buildRegistry';
 import { defaultFeatureFlags, type FeatureFlags } from '../../core/features/featureFlags';

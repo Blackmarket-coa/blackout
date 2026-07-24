@@ -7,7 +7,7 @@ import {
     type NormalizedEntitlement,
     type NormalizedListing,
 } from '@blackout/core';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import {
     fetchEntitlements,
     fetchListings,

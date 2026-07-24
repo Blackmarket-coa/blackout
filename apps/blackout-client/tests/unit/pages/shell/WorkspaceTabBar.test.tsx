@@ -2,7 +2,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
-import { createMemoryRouter, Outlet, RouterProvider } from 'react-router-dom';
+import { createMemoryRouter, Outlet, RouterProvider } from 'react-router';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { WorkspaceTabBar } from '../../../../src/app/pages/shell/WorkspaceTabBar';
@@ -18,7 +18,7 @@ const renderAt = (path: string): HTMLElement => {
                 children: [{ path: '*', element: <WorkspaceTabBar /> }],
             },
         ],
-        { initialEntries: [path] },
+        { initialEntries: [path] }
     );
     const root = ReactDOM.createRoot(container);
     act(() => {

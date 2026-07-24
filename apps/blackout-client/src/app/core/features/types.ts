@@ -40,6 +40,12 @@ export type ShellPanelEntry = {
     kind: ShellPanelKind;
     label: string;
     /**
+     * One-line explanation of what the destination is for. Surfaced as the
+     * tab's tooltip/`title` so every bar entry can describe its use without
+     * taking visual space.
+     */
+    description?: string;
+    /**
      * Canonical client route that materializes this panel. Required because
      * panel selection is deep-linkable.
      */

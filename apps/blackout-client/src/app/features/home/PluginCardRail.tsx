@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react';
 import { useAtomValue } from 'jotai';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { installedHomepageCardsAtom } from '../monetization/install/installedHomepageCardsAtom';
 
 const sectionStyle: CSSProperties = {
@@ -99,9 +99,7 @@ export const PluginCardRail = (): JSX.Element | null => {
                             ) : null}
                             <span style={cardTitleStyle}>{card.title}</span>
                         </span>
-                        {card.summary ? (
-                            <span style={cardSummaryStyle}>{card.summary}</span>
-                        ) : null}
+                        {card.summary ? <span style={cardSummaryStyle}>{card.summary}</span> : null}
                     </Link>
                 ))}
             </div>

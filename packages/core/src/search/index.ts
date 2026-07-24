@@ -6,7 +6,9 @@
  * across those stores and returns a unified, ranked result.
  *
  * `debate` searches Coliseum debate topics (Debate Search); `knowledge` searches
- * published creator guides/articles (Knowledge Search).
+ * published creator guides/articles (Knowledge Search); `brief` searches the
+ * permanent, domain-tagged records of resolved Coliseum matches — the knowledge
+ * repository that resolved debates compound into.
  */
 
 export const GLOBAL_SEARCH_TYPES = [
@@ -16,8 +18,9 @@ export const GLOBAL_SEARCH_TYPES = [
     'project',
     'debate',
     'knowledge',
+    'brief',
 ] as const;
-export type GlobalSearchType = (typeof GLOBAL_SEARCH_TYPES)[number];
+export type GlobalSearchType = typeof GLOBAL_SEARCH_TYPES[number];
 
 export interface GlobalSearchResult {
     type: GlobalSearchType;

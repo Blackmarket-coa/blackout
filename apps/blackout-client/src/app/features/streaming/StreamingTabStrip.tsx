@@ -1,5 +1,6 @@
 import React, { type CSSProperties } from 'react';
 import {
+    STREAMING_TAB_HINTS,
     STREAMING_TAB_LABELS,
     STREAMING_TAB_ORDER,
     type StreamingTabId,
@@ -54,6 +55,7 @@ export function StreamingTabStrip({
                     type="button"
                     role="tab"
                     aria-selected={tab === activeTab}
+                    title={STREAMING_TAB_HINTS[tab]}
                     style={tab === activeTab ? tabActiveStyle : tabBaseStyle}
                     onClick={() => onSelectTab(tab)}
                     data-streaming-tab={tab}

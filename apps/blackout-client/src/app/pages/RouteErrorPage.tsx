@@ -1,4 +1,4 @@
-import { Link, isRouteErrorResponse, useRouteError } from 'react-router-dom';
+import { Link, isRouteErrorResponse, useRouteError } from 'react-router';
 
 /**
  * Branded replacements for react-router's default "Unexpected Application

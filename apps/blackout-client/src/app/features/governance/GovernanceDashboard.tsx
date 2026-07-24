@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useLocation, useSearchParams } from 'react-router-dom';
+import { useLocation, useSearchParams } from 'react-router';
 import { useAtomValue } from 'jotai';
 import { userIdAtom } from '../../state/auth';
 import { RegistryTabBar } from '../../core/features/RegistryTabBar';
@@ -7,11 +7,23 @@ import { ProposalCard } from './ProposalCard';
 import { ProposalCreator } from './ProposalCreator';
 import { ProposalDetail } from './ProposalDetail';
 import { ObjectivesPanel } from '../objectives';
-import { useGovernanceDiagnostics, useProposalResult, useProposals, useVotes, type ProposalModel } from './useProposals';
+import {
+    useGovernanceDiagnostics,
+    useProposalResult,
+    useProposals,
+    useVotes,
+    type ProposalModel,
+} from './useProposals';
 
 type GovernanceTab = 'active' | 'past' | 'create' | 'my-votes' | 'results';
 
-const VALID_TABS: ReadonlySet<GovernanceTab> = new Set(['active', 'past', 'create', 'my-votes', 'results']);
+const VALID_TABS: ReadonlySet<GovernanceTab> = new Set([
+    'active',
+    'past',
+    'create',
+    'my-votes',
+    'results',
+]);
 
 const isValidTab = (raw: string | null): raw is GovernanceTab =>
     raw !== null && VALID_TABS.has(raw as GovernanceTab);
@@ -129,18 +141,18 @@ export const GovernanceDashboard = ({ roomId }: { roomId: string }) => {
     const activeTab: GovernanceTab = location.pathname.endsWith('/governance/new')
         ? 'create'
         : isValidTab(tabFromQuery)
-            ? tabFromQuery
-            : 'active';
+        ? tabFromQuery
+        : 'active';
     const showDiagnostics = searchParams.get('diagnostics') === '1';
     const diagnostics = useGovernanceDiagnostics(roomId, selectedProposalId ?? undefined);
 
     const activeProposals = useMemo(
         () => proposals.data.filter((proposal) => proposal.status === 'active'),
-        [proposals.data],
+        [proposals.data]
     );
     const pastProposals = useMemo(
         () => proposals.data.filter((proposal) => proposal.status !== 'active'),
-        [proposals.data],
+        [proposals.data]
     );
 
     return (
@@ -178,7 +190,6 @@ export const GovernanceDashboard = ({ roomId }: { roomId: string }) => {
                 />
             </header>
 
-
             {showDiagnostics ? (
                 <section
                     data-testid="governance-diagnostics"
@@ -193,8 +204,8 @@ export const GovernanceDashboard = ({ roomId }: { roomId: string }) => {
                 >
                     <strong style={{ fontSize: 13 }}>Governance event diagnostics</strong>
                     <small style={{ color: 'var(--text-secondary)' }}>
-                        Invalid proposals: {diagnostics.invalidProposalEvents} • Migrated
-                        proposals: {diagnostics.migratedProposalEvents} • Invalid votes:{' '}
+                        Invalid proposals: {diagnostics.invalidProposalEvents} • Migrated proposals:{' '}
+                        {diagnostics.migratedProposalEvents} • Invalid votes:{' '}
                         {diagnostics.invalidVoteEvents} • Migrated votes:{' '}
                         {diagnostics.migratedVoteEvents} • Duplicate votes dropped:{' '}
                         {diagnostics.duplicateVoteEventsDropped}

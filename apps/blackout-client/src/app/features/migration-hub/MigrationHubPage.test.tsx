@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
 import { act } from 'react-dom/test-utils';
 import ReactDOM from 'react-dom/client';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter } from 'react-router';
 
 const listLinkedAccounts = vi.fn();
 const listImportableGuilds = vi.fn();
@@ -41,7 +41,7 @@ const mount = async () => {
         root.render(
             <MemoryRouter>
                 <MigrationHubPage />
-            </MemoryRouter>,
+            </MemoryRouter>
         );
         await flush();
     });
@@ -75,11 +75,25 @@ describe('MigrationHubPage', () => {
         listLinkedAccounts.mockResolvedValue({
             providers: ['discord'],
             accounts: [
-                { id: 'la1', provider: 'discord', providerUserId: 'd1', providerUsername: 'owner', scopes: ['guilds'] },
+                {
+                    id: 'la1',
+                    provider: 'discord',
+                    providerUserId: 'd1',
+                    providerUsername: 'owner',
+                    scopes: ['guilds'],
+                },
             ],
         });
         listImportableGuilds.mockResolvedValue({
-            guilds: [{ id: 'guild-1', name: 'My Server', owner: true, manageable: true, approximateMemberCount: 5000 }],
+            guilds: [
+                {
+                    id: 'guild-1',
+                    name: 'My Server',
+                    owner: true,
+                    manageable: true,
+                    approximateMemberCount: 5000,
+                },
+            ],
         });
         startImport.mockResolvedValue({ import: { id: 'imp-1' }, snapshot: {} });
         applyImport.mockResolvedValue({
@@ -93,7 +107,7 @@ describe('MigrationHubPage', () => {
         expect(guild).not.toBeNull();
 
         const importBtn = container.querySelector(
-            '[data-testid="import-guild-1"]',
+            '[data-testid="import-guild-1"]'
         ) as HTMLButtonElement;
         await act(async () => {
             importBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -109,7 +123,9 @@ describe('MigrationHubPage', () => {
     it('loads and renders the adoption dashboard', async () => {
         listLinkedAccounts.mockResolvedValue({
             providers: ['discord'],
-            accounts: [{ id: 'la1', provider: 'discord', providerUserId: 'd1', scopes: ['guilds'] }],
+            accounts: [
+                { id: 'la1', provider: 'discord', providerUserId: 'd1', scopes: ['guilds'] },
+            ],
         });
         listImportableGuilds.mockResolvedValue({
             guilds: [{ id: 'guild-1', name: 'My Server', owner: true, manageable: true }],
@@ -128,7 +144,7 @@ describe('MigrationHubPage', () => {
 
         const { container } = await mount();
         const dashBtn = container.querySelector(
-            '[data-testid="dashboard-guild-1"]',
+            '[data-testid="dashboard-guild-1"]'
         ) as HTMLButtonElement;
         await act(async () => {
             dashBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));

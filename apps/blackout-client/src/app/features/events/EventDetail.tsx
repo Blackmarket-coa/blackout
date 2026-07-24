@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router';
 import { useAtomValue } from 'jotai';
 import { joinedRoomsAtom } from '../../state/rooms';
 import { EVENTS_PATH, buildCommunitiesPath } from '../../pages/paths';

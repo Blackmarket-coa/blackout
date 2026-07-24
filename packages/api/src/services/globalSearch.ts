@@ -3,6 +3,7 @@ import { discoveryService } from './discovery';
 import { listBounties } from './bountyStore';
 import { listProjects } from './coalitionStore';
 import { listTopics } from './coliseumStore';
+import { listBriefEntries } from './coliseumMatchStore';
 import { listContent } from './creatorContentStore';
 
 /** Content kinds surfaced by Knowledge Search — long-form, not short videos. */
@@ -41,7 +42,7 @@ export function globalSearch(input: GlobalSearchInput = {}): GlobalSearchResult[
     const types = new Set<GlobalSearchType>(
         input.types && input.types.length > 0
             ? input.types
-            : ['coalition', 'creator', 'bounty', 'project', 'debate', 'knowledge'],
+            : ['coalition', 'creator', 'bounty', 'project', 'debate', 'knowledge', 'brief']
     );
     const limit = Math.max(1, Math.min(input.limit ?? 30, 100));
     const results: GlobalSearchResult[] = [];
@@ -107,6 +108,24 @@ export function globalSearch(input: GlobalSearchInput = {}): GlobalSearchResult[
         }
     }
 
+    // Brief Search — the permanent records of resolved Coliseum matches,
+    // matched on proposition + claims + domain. Matches that moved the crowd
+    // rank slightly higher via shiftScore (0..1), so the archive rewards
+    // resolution quality rather than recency alone.
+    if (types.has('brief')) {
+        for (const { brief, domain } of listBriefEntries()) {
+            const claimText = brief.claims.map((claim) => claim.text).join(' ');
+            if (!matches(query, brief.proposition, claimText, domain)) continue;
+            results.push({
+                type: 'brief',
+                id: brief.id,
+                title: brief.proposition,
+                subtitle: domain ?? 'Resolved match',
+                score: textScore(query, brief.proposition, claimText) + brief.shiftScore,
+            });
+        }
+    }
+
     // Knowledge Search — published creator guides/articles (community solutions,
     // tutorials), matched on title + body.
     if (types.has('knowledge')) {
@@ -123,7 +142,9 @@ export function globalSearch(input: GlobalSearchInput = {}): GlobalSearchResult[
         }
     }
 
-    return results.sort((a, b) => b.score - a.score || a.title.localeCompare(b.title)).slice(0, limit);
+    return results
+        .sort((a, b) => b.score - a.score || a.title.localeCompare(b.title))
+        .slice(0, limit);
 }
 
 /**
@@ -131,7 +152,9 @@ export function globalSearch(input: GlobalSearchInput = {}): GlobalSearchResult[
  * bounties and active projects. Drives the Discovery trending surface beyond the
  * creators/canopies the discovery service already ranks.
  */
-export function globalTrending(input: { region?: string; limit?: number } = {}): GlobalSearchResult[] {
+export function globalTrending(
+    input: { region?: string; limit?: number } = {}
+): GlobalSearchResult[] {
     const limit = Math.max(1, Math.min(input.limit ?? 30, 100));
     const results: GlobalSearchResult[] = [];
 
@@ -188,7 +211,9 @@ export function globalTrending(input: { region?: string; limit?: number } = {}):
         });
     });
 
-    return results.sort((a, b) => b.score - a.score || a.title.localeCompare(b.title)).slice(0, limit);
+    return results
+        .sort((a, b) => b.score - a.score || a.title.localeCompare(b.title))
+        .slice(0, limit);
 }
 
 export interface RecommendationInput {
@@ -224,7 +249,10 @@ export function recommend(input: RecommendationInput = {}): GlobalSearchResult[]
     const results: GlobalSearchResult[] = [];
 
     // Communities + creators the viewer doesn't already follow.
-    for (const entity of discoveryService.browse({ surface: 'recommended', region: input.region })) {
+    for (const entity of discoveryService.browse({
+        surface: 'recommended',
+        region: input.region,
+    })) {
         if (exclude.has(entity.id)) continue;
         const type: GlobalSearchType = entity.entityType === 'canopy' ? 'coalition' : 'creator';
         results.push({
@@ -264,5 +292,7 @@ export function recommend(input: RecommendationInput = {}): GlobalSearchResult[]
         });
     });
 
-    return results.sort((a, b) => b.score - a.score || a.title.localeCompare(b.title)).slice(0, limit);
+    return results
+        .sort((a, b) => b.score - a.score || a.title.localeCompare(b.title))
+        .slice(0, limit);
 }

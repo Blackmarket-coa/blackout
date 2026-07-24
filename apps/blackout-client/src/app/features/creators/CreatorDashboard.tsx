@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState, type CSSProperties } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 import { CREATOR_LISTINGS_PATH, ONBOARDING_CREATOR_PATH } from '../../pages/paths';
 import { ReferralBreakdown } from '../growth/ReferralBreakdown';
