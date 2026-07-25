@@ -343,6 +343,7 @@ app.onError((err, c) => {
 });
 
 const PORT = parseInt(process.env.PORT ?? '3000', 10);
+const SHUTDOWN_TIMEOUT_MS = parseInt(process.env.SHUTDOWN_TIMEOUT_MS ?? '10000', 10);
 const shouldListen =
     process.env.NODE_ENV !== 'test' && process.env.BLACKOUT_API_SKIP_LISTEN !== '1';
 
@@ -377,21 +378,6 @@ if (shouldListen && RUNTIME_DB_MODE === 'postgres') {
     }
     await initRuntimeStore(pool);
     log.info('postgres_store_hydrated');
-
-    const drainOnExit = (signal: string) => {
-        void (async () => {
-            try {
-                await drainRuntimeStore();
-                log.info('postgres_store_drained', { signal });
-            } catch (err) {
-                log.warn('postgres_store_drain_failed', { error: String(err) });
-            } finally {
-                process.exit(0);
-            }
-        })();
-    };
-    process.once('SIGTERM', () => drainOnExit('SIGTERM'));
-    process.once('SIGINT', () => drainOnExit('SIGINT'));
 }
 
 if (shouldListen) {
@@ -504,6 +490,38 @@ if (shouldListen) {
         attachSeOverlayShim(httpServer as any);
         log.info('se_overlay_shim_attached', { path: '/se-overlay/' });
     });
+
+    // Graceful shutdown for every runtime mode (not just postgres). Stop
+    // accepting new connections, let in-flight requests drain, flush the
+    // runtime store (a no-op unless BLACKOUT_DB_MODE=postgres), then exit. A
+    // hard timeout guarantees the process still exits if a connection hangs.
+    let shuttingDown = false;
+    const shutdown = (signal: string) => {
+        if (shuttingDown) return;
+        shuttingDown = true;
+        log.info('shutdown_signal_received', { signal });
+        const forceTimer = setTimeout(() => {
+            log.warn('shutdown_forced_after_timeout', { signal, timeoutMs: SHUTDOWN_TIMEOUT_MS });
+            process.exit(0);
+        }, SHUTDOWN_TIMEOUT_MS);
+        if (typeof forceTimer.unref === 'function') forceTimer.unref();
+
+        httpServer.close(() => {
+            void (async () => {
+                try {
+                    await drainRuntimeStore();
+                    log.info('runtime_store_drained', { signal });
+                } catch (err) {
+                    log.warn('runtime_store_drain_failed', { error: String(err) });
+                } finally {
+                    clearTimeout(forceTimer);
+                    process.exit(0);
+                }
+            })();
+        });
+    };
+    process.once('SIGTERM', () => shutdown('SIGTERM'));
+    process.once('SIGINT', () => shutdown('SIGINT'));
 }
 
 export default app;
