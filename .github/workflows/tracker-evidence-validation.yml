@@ -1,5 +1,9 @@
 name: tracker-evidence-validation
 
+# Least-privilege token: this workflow only reads repo contents.
+permissions:
+    contents: read
+
 # Runs only when tracker / reliability evidence docs or the validator itself
 # change. Previously this workflow triggered on every PR, but the validator
 # (a) lived behind a stale `scripts/` symlink that doesn't resolve in the

@@ -1,39 +1,43 @@
 name: production-ops-evidence
 
+# Least-privilege token: this workflow only reads repo contents.
+permissions:
+    contents: read
+
 on:
-  schedule:
-    - cron: '0 14 * * 1'   # weekly evidence packet (Monday)
-    - cron: '0 15 1 * *'   # monthly evidence packet (1st)
-    - cron: '0 16 1 */3 *' # quarterly evidence packet
-  workflow_dispatch:
+    schedule:
+        - cron: '0 14 * * 1' # weekly evidence packet (Monday)
+        - cron: '0 15 1 * *' # monthly evidence packet (1st)
+        - cron: '0 16 1 */3 *' # quarterly evidence packet
+    workflow_dispatch:
 
 jobs:
-  build-evidence:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+    build-evidence:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
 
-      - name: Create evidence packet
-        run: |
-          mkdir -p artifacts
-          DATE_UTC="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          cat > artifacts/production-ops-evidence.txt <<TXT
-          production_ops_evidence_timestamp=${DATE_UTC}
-          required_controls=database_backup,restore_verification,media_backup,config_env_backup,uptime_alerting,dashboards,release_gates
+            - name: Create evidence packet
+              run: |
+                  mkdir -p artifacts
+                  DATE_UTC="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+                  cat > artifacts/production-ops-evidence.txt <<TXT
+                  production_ops_evidence_timestamp=${DATE_UTC}
+                  required_controls=database_backup,restore_verification,media_backup,config_env_backup,uptime_alerting,dashboards,release_gates
 
-          checklist:
-          - confirm latest postgres backup age <= 24h
-          - confirm latest restore verification age <= 7d
-          - confirm media backup replication completed
-          - confirm encrypted config/env escrow updated
-          - confirm uptime SLO and pager alert tests ran
-          - export cpu/memory/disk/log dashboards
-          - run release gate checks before promotion
-          TXT
+                  checklist:
+                  - confirm latest postgres backup age <= 24h
+                  - confirm latest restore verification age <= 7d
+                  - confirm media backup replication completed
+                  - confirm encrypted config/env escrow updated
+                  - confirm uptime SLO and pager alert tests ran
+                  - export cpu/memory/disk/log dashboards
+                  - run release gate checks before promotion
+                  TXT
 
-      - name: Upload evidence artifact
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
-        with:
-          name: production-ops-evidence
-          path: artifacts/production-ops-evidence.txt
+            - name: Upload evidence artifact
+              uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+              with:
+                  name: production-ops-evidence
+                  path: artifacts/production-ops-evidence.txt

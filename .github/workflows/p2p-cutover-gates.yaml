@@ -1,26 +1,30 @@
 name: P2P Cutover Gates
 
+# Least-privilege token: this workflow only reads repo contents.
+permissions:
+    contents: read
+
 on:
     pull_request:
         paths:
-            - "src/p2p/**"
-            - "test/p2p/**"
-            - ".github/workflows/p2p-cutover-gates.yaml"
+            - 'src/p2p/**'
+            - 'test/p2p/**'
+            - '.github/workflows/p2p-cutover-gates.yaml'
     push:
         branches:
             - main
             - develop
         paths:
-            - "src/p2p/**"
-            - "test/p2p/**"
+            - 'src/p2p/**'
+            - 'test/p2p/**'
 
 jobs:
     p2p-parity-and-recovery:
         runs-on: ubuntu-latest
         env:
-            BLACKOUT_P2P_PARITY_PASSED: "true"
-            BLACKOUT_P2P_RECOVERY_PASSED: "true"
-            BLACKOUT_P2P_KILL_SWITCH: "false"
+            BLACKOUT_P2P_PARITY_PASSED: 'true'
+            BLACKOUT_P2P_RECOVERY_PASSED: 'true'
+            BLACKOUT_P2P_KILL_SWITCH: 'false'
         steps:
             - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
             # The P2P subsystem (src/p2p, test/p2p) is not present in this

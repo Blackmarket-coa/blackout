@@ -1,117 +1,121 @@
 name: Load tests (k6 nightly)
 
+# Least-privilege token: this workflow only reads repo contents.
+permissions:
+    contents: read
+
 on:
-  schedule:
-    - cron: "0 4 * * *"
-  workflow_dispatch:
-    inputs:
-      base_url:
-        description: "Override base URL (defaults to spinning up the api in-job)"
-        required: false
-        default: ""
+    schedule:
+        - cron: '0 4 * * *'
+    workflow_dispatch:
+        inputs:
+            base_url:
+                description: 'Override base URL (defaults to spinning up the api in-job)'
+                required: false
+                default: ''
 
 jobs:
-  k6:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: blackout
-          POSTGRES_PASSWORD: blackout
-          POSTGRES_DB: blackout
-        options: >-
-          --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
-        ports:
-          - 5432:5432
-      redis:
-        image: redis:7-alpine
-        options: >-
-          --health-cmd "redis-cli ping" --health-interval 10s --health-timeout 5s --health-retries 5
-        ports:
-          - 6379:6379
-    steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
-      - uses: pnpm/action-setup@v5
-        with:
-          version: 9.15.4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
+    k6:
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        services:
+            postgres:
+                image: postgres:16-alpine
+                env:
+                    POSTGRES_USER: blackout
+                    POSTGRES_PASSWORD: blackout
+                    POSTGRES_DB: blackout
+                options: >-
+                    --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+                ports:
+                    - 5432:5432
+            redis:
+                image: redis:7-alpine
+                options: >-
+                    --health-cmd "redis-cli ping" --health-interval 10s --health-timeout 5s --health-retries 5
+                ports:
+                    - 6379:6379
+        steps:
+            - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+            - uses: pnpm/action-setup@v5
+              with:
+                  version: 9.15.4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: pnpm
 
-      - run: pnpm install --frozen-lockfile
+            - run: pnpm install --frozen-lockfile
 
-      - name: Apply migrations
-        env:
-          DATABASE_URL: postgres://blackout:blackout@localhost:5432/blackout
-        run: pnpm --filter @blackout/api migrate:up
+            - name: Apply migrations
+              env:
+                  DATABASE_URL: postgres://blackout:blackout@localhost:5432/blackout
+              run: pnpm --filter @blackout/api migrate:up
 
-      - name: Mint synthetic credentials for the load run
-        id: synth
-        run: |
-          # Generate a 64-byte high-entropy value with mixed character classes
-          # so the api's strength check is satisfied. Synthesized at job start,
-          # never committed.
-          BASE=$(openssl rand -base64 48 | tr -d '=' | tr '+/' '-_')
-          echo "::add-mask::$BASE"
-          GUARD="aZ9!"
-          echo "JWT=${BASE}${GUARD}" >> "$GITHUB_OUTPUT"
-          METRICS=$(openssl rand -hex 32)
-          echo "::add-mask::$METRICS"
-          echo "METRICS=${METRICS}" >> "$GITHUB_OUTPUT"
+            - name: Mint synthetic credentials for the load run
+              id: synth
+              run: |
+                  # Generate a 64-byte high-entropy value with mixed character classes
+                  # so the api's strength check is satisfied. Synthesized at job start,
+                  # never committed.
+                  BASE=$(openssl rand -base64 48 | tr -d '=' | tr '+/' '-_')
+                  echo "::add-mask::$BASE"
+                  GUARD="aZ9!"
+                  echo "JWT=${BASE}${GUARD}" >> "$GITHUB_OUTPUT"
+                  METRICS=$(openssl rand -hex 32)
+                  echo "::add-mask::$METRICS"
+                  echo "METRICS=${METRICS}" >> "$GITHUB_OUTPUT"
 
-      - name: Start API in background
-        if: ${{ github.event.inputs.base_url == '' }}
-        env:
-          PORT: 3000
-          NODE_ENV: production
-          DATABASE_URL: postgres://blackout:blackout@localhost:5432/blackout
-          REDIS_URL: redis://localhost:6379
-          JWT_SECRET_PRIMARY: ${{ steps.synth.outputs.JWT }}
-          CORS_ALLOWED_ORIGINS: "http://localhost:5173"
-          INTERNAL_METRICS_TOKEN: ${{ steps.synth.outputs.METRICS }}
-        run: |
-          pnpm --filter @blackout/api start &
-          for i in {1..30}; do
-            if curl -fsS http://localhost:3000/health > /dev/null; then
-              echo "api up"; break
-            fi
-            sleep 1
-          done
+            - name: Start API in background
+              if: ${{ github.event.inputs.base_url == '' }}
+              env:
+                  PORT: 3000
+                  NODE_ENV: production
+                  DATABASE_URL: postgres://blackout:blackout@localhost:5432/blackout
+                  REDIS_URL: redis://localhost:6379
+                  JWT_SECRET_PRIMARY: ${{ steps.synth.outputs.JWT }}
+                  CORS_ALLOWED_ORIGINS: 'http://localhost:5173'
+                  INTERNAL_METRICS_TOKEN: ${{ steps.synth.outputs.METRICS }}
+              run: |
+                  pnpm --filter @blackout/api start &
+                  for i in {1..30}; do
+                    if curl -fsS http://localhost:3000/health > /dev/null; then
+                      echo "api up"; break
+                    fi
+                    sleep 1
+                  done
 
-      - name: Install k6
-        run: |
-          sudo gpg -k
-          sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
-          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
-          sudo apt-get update
-          sudo apt-get install -y k6
+            - name: Install k6
+              run: |
+                  sudo gpg -k
+                  sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+                  echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+                  sudo apt-get update
+                  sudo apt-get install -y k6
 
-      - name: k6 — health
-        env:
-          BASE_URL: ${{ github.event.inputs.base_url || 'http://localhost:3000' }}
-        run: k6 run --summary-export=health-summary.json load/k6/health.js
+            - name: k6 — health
+              env:
+                  BASE_URL: ${{ github.event.inputs.base_url || 'http://localhost:3000' }}
+              run: k6 run --summary-export=health-summary.json load/k6/health.js
 
-      - name: k6 — auth flow
-        env:
-          BASE_URL: ${{ github.event.inputs.base_url || 'http://localhost:3000' }}
-        run: k6 run --summary-export=auth-summary.json load/k6/auth.js
+            - name: k6 — auth flow
+              env:
+                  BASE_URL: ${{ github.event.inputs.base_url || 'http://localhost:3000' }}
+              run: k6 run --summary-export=auth-summary.json load/k6/auth.js
 
-      - name: k6 — rate limit contract
-        env:
-          BASE_URL: ${{ github.event.inputs.base_url || 'http://localhost:3000' }}
-        run: k6 run --summary-export=rate-limit-summary.json load/k6/rate-limit.js
+            - name: k6 — rate limit contract
+              env:
+                  BASE_URL: ${{ github.event.inputs.base_url || 'http://localhost:3000' }}
+              run: k6 run --summary-export=rate-limit-summary.json load/k6/rate-limit.js
 
-      - name: k6 — coalition feed engagement
-        env:
-          BASE_URL: ${{ github.event.inputs.base_url || 'http://localhost:3000' }}
-        run: k6 run --summary-export=coalition-feed-summary.json load/k6/coalition-feed.js
+            - name: k6 — coalition feed engagement
+              env:
+                  BASE_URL: ${{ github.event.inputs.base_url || 'http://localhost:3000' }}
+              run: k6 run --summary-export=coalition-feed-summary.json load/k6/coalition-feed.js
 
-      - name: Upload k6 summaries
-        if: always()
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
-        with:
-          name: k6-summaries
-          path: "*-summary.json"
+            - name: Upload k6 summaries
+              if: always()
+              uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+              with:
+                  name: k6-summaries
+                  path: '*-summary.json'

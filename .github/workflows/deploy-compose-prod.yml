@@ -1,189 +1,193 @@
 name: Deploy Compose Production
 
+# Least-privilege token: this workflow only reads repo contents.
+permissions:
+    contents: read
+
 on:
-  workflow_dispatch:
-    inputs:
-      image_tag:
-        description: Image tag to deploy
-        required: true
-        default: stable
-      mode:
-        description: "Rollout mode: canary, promote, or full"
-        required: true
-        default: canary
-        type: choice
-        options:
-          - canary
-          - promote
-          - full
-  push:
-    branches: [main]
-    paths:
-      - 'deploy/docker/production/**'
-      - '.github/workflows/deploy-compose-prod.yml'
+    workflow_dispatch:
+        inputs:
+            image_tag:
+                description: Image tag to deploy
+                required: true
+                default: stable
+            mode:
+                description: 'Rollout mode: canary, promote, or full'
+                required: true
+                default: canary
+                type: choice
+                options:
+                    - canary
+                    - promote
+                    - full
+    push:
+        branches: [main]
+        paths:
+            - 'deploy/docker/production/**'
+            - '.github/workflows/deploy-compose-prod.yml'
 
 jobs:
-  canary:
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'canary'
-    runs-on: ubuntu-latest
-    environment: production-canary
-    steps:
-      - name: Checkout
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+    canary:
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'canary'
+        runs-on: ubuntu-latest
+        environment: production-canary
+        steps:
+            - name: Checkout
+              uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
 
-      - name: Configure SSH
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.PROD_SSH_KEY }}
+            - name: Configure SSH
+              uses: webfactory/ssh-agent@v0.9.0
+              with:
+                  ssh-private-key: ${{ secrets.PROD_SSH_KEY }}
 
-      - name: Sync compose bundle
-        run: |
-          rsync -az --delete deploy/docker/production/ "${{ secrets.PROD_SSH_USER }}@${{ secrets.PROD_SSH_HOST }}:${{ secrets.PROD_STACK_DIR }}/"
+            - name: Sync compose bundle
+              run: |
+                  rsync -az --delete deploy/docker/production/ "${{ secrets.PROD_SSH_USER }}@${{ secrets.PROD_SSH_HOST }}:${{ secrets.PROD_STACK_DIR }}/"
 
-      - name: Deploy canary (one replica side-by-side)
-        run: |
-          ssh "${{ secrets.PROD_SSH_USER }}@${{ secrets.PROD_SSH_HOST }}" <<'EOSSH'
-          set -euo pipefail
-          cd "${{ secrets.PROD_STACK_DIR }}"
-          export APP_IMAGE_TAG="${{ github.event.inputs.image_tag || github.sha }}"
-          export APP_CANARY_TAG="$APP_IMAGE_TAG"
-          # Bring up the canary service alongside the stable fleet. The
-          # production Caddyfile must include a `weighted_round_robin`
-          # upstream block keyed on `app` and `app_canary`; weight is
-          # bumped from 0 to 10 here. See deploy/docker/production/Caddyfile.
-          docker compose -f docker-compose.yml -f docker-compose.canary.yml pull app_canary
-          docker compose -f docker-compose.yml -f docker-compose.canary.yml up -d --no-deps app_canary
-          docker compose exec -T reverse-proxy caddy reload --config /etc/caddy/Caddyfile
-          # Smoke the canary directly.
-          docker compose exec -T app_canary wget -q -O- http://127.0.0.1:3000/health
-          EOSSH
+            - name: Deploy canary (one replica side-by-side)
+              run: |
+                  ssh "${{ secrets.PROD_SSH_USER }}@${{ secrets.PROD_SSH_HOST }}" <<'EOSSH'
+                  set -euo pipefail
+                  cd "${{ secrets.PROD_STACK_DIR }}"
+                  export APP_IMAGE_TAG="${{ github.event.inputs.image_tag || github.sha }}"
+                  export APP_CANARY_TAG="$APP_IMAGE_TAG"
+                  # Bring up the canary service alongside the stable fleet. The
+                  # production Caddyfile must include a `weighted_round_robin`
+                  # upstream block keyed on `app` and `app_canary`; weight is
+                  # bumped from 0 to 10 here. See deploy/docker/production/Caddyfile.
+                  docker compose -f docker-compose.yml -f docker-compose.canary.yml pull app_canary
+                  docker compose -f docker-compose.yml -f docker-compose.canary.yml up -d --no-deps app_canary
+                  docker compose exec -T reverse-proxy caddy reload --config /etc/caddy/Caddyfile
+                  # Smoke the canary directly.
+                  docker compose exec -T app_canary wget -q -O- http://127.0.0.1:3000/health
+                  EOSSH
 
-      - name: Soak window — wait 5 min and check error rate
-        run: |
-          sleep 300
-          ssh "${{ secrets.PROD_SSH_USER }}@${{ secrets.PROD_SSH_HOST }}" <<'EOSSH'
-          set -euo pipefail
-          cd "${{ secrets.PROD_STACK_DIR }}"
-          # Pull /metrics from the canary and ensure 5xx rate is below 1%.
-          # The metrics endpoint is bearer-gated; the token lives in the
-          # canary's env file. This is the same query used by Argo Rollouts
-          # in the kubernetes path (see deploy/helm/blackout/templates/rollout.yaml).
-          docker compose exec -T app_canary sh -c '
-            METRICS=$(wget -q -O- --header "authorization: Bearer $INTERNAL_METRICS_TOKEN" http://127.0.0.1:3000/metrics)
-            FIVES=$(echo "$METRICS" | awk -F "[{} ]" "/^http_requests_total\\{.*status=\\\"5[0-9]+\\\"/ {sum += \$NF} END {print sum+0}")
-            ALL=$(echo "$METRICS" | awk -F "[ ]" "/^http_requests_total\\{/ {sum += \$NF} END {print sum+0}")
-            if [ "$ALL" -lt 100 ]; then
-              echo "Not enough traffic to judge canary ($ALL); proceeding cautiously."; exit 0
-            fi
-            RATE=$(awk -v f="$FIVES" -v a="$ALL" "BEGIN { print f/a }")
-            echo "5xx ratio: $RATE"
-            awk -v r="$RATE" "BEGIN { if (r > 0.01) exit 1 }"
-          '
-          EOSSH
+            - name: Soak window — wait 5 min and check error rate
+              run: |
+                  sleep 300
+                  ssh "${{ secrets.PROD_SSH_USER }}@${{ secrets.PROD_SSH_HOST }}" <<'EOSSH'
+                  set -euo pipefail
+                  cd "${{ secrets.PROD_STACK_DIR }}"
+                  # Pull /metrics from the canary and ensure 5xx rate is below 1%.
+                  # The metrics endpoint is bearer-gated; the token lives in the
+                  # canary's env file. This is the same query used by Argo Rollouts
+                  # in the kubernetes path (see deploy/helm/blackout/templates/rollout.yaml).
+                  docker compose exec -T app_canary sh -c '
+                    METRICS=$(wget -q -O- --header "authorization: Bearer $INTERNAL_METRICS_TOKEN" http://127.0.0.1:3000/metrics)
+                    FIVES=$(echo "$METRICS" | awk -F "[{} ]" "/^http_requests_total\\{.*status=\\\"5[0-9]+\\\"/ {sum += \$NF} END {print sum+0}")
+                    ALL=$(echo "$METRICS" | awk -F "[ ]" "/^http_requests_total\\{/ {sum += \$NF} END {print sum+0}")
+                    if [ "$ALL" -lt 100 ]; then
+                      echo "Not enough traffic to judge canary ($ALL); proceeding cautiously."; exit 0
+                    fi
+                    RATE=$(awk -v f="$FIVES" -v a="$ALL" "BEGIN { print f/a }")
+                    echo "5xx ratio: $RATE"
+                    awk -v r="$RATE" "BEGIN { if (r > 0.01) exit 1 }"
+                  '
+                  EOSSH
 
-      - name: Post-deploy verification (canary)
-        env:
-          POST_DEPLOY_BASE_URL: ${{ secrets.PROD_PUBLIC_URL }}
-          POST_DEPLOY_BEARER: ${{ secrets.POST_DEPLOY_BEARER }}
-          POST_DEPLOY_EXPECTED_VERSION: ${{ github.event.inputs.image_tag }}
-        run: |
-          if [ -z "$POST_DEPLOY_BASE_URL" ]; then
-            echo "PROD_PUBLIC_URL secret not set; skipping post-deploy verify."
-            exit 0
-          fi
-          node tools/ci/post-deploy-verify.mjs
+            - name: Post-deploy verification (canary)
+              env:
+                  POST_DEPLOY_BASE_URL: ${{ secrets.PROD_PUBLIC_URL }}
+                  POST_DEPLOY_BEARER: ${{ secrets.POST_DEPLOY_BEARER }}
+                  POST_DEPLOY_EXPECTED_VERSION: ${{ github.event.inputs.image_tag }}
+              run: |
+                  if [ -z "$POST_DEPLOY_BASE_URL" ]; then
+                    echo "PROD_PUBLIC_URL secret not set; skipping post-deploy verify."
+                    exit 0
+                  fi
+                  node tools/ci/post-deploy-verify.mjs
 
-  promote:
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'promote'
-    runs-on: ubuntu-latest
-    environment: production
-    steps:
-      - name: Checkout
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+    promote:
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'promote'
+        runs-on: ubuntu-latest
+        environment: production
+        steps:
+            - name: Checkout
+              uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
 
-      - name: Configure SSH
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.PROD_SSH_KEY }}
+            - name: Configure SSH
+              uses: webfactory/ssh-agent@v0.9.0
+              with:
+                  ssh-private-key: ${{ secrets.PROD_SSH_KEY }}
 
-      - name: Promote canary tag to stable fleet
-        run: |
-          ssh "${{ secrets.PROD_SSH_USER }}@${{ secrets.PROD_SSH_HOST }}" <<'EOSSH'
-          set -euo pipefail
-          cd "${{ secrets.PROD_STACK_DIR }}"
-          export APP_IMAGE_TAG="${{ github.event.inputs.image_tag || github.sha }}"
-          docker compose -f docker-compose.yml pull app worker
-          docker compose -f docker-compose.yml up -d --no-deps app worker --remove-orphans
-          docker compose -f docker-compose.yml exec -T app wget -q -O- http://127.0.0.1:3000/health
-          # Tear the canary back down once the main fleet is on the new tag.
-          docker compose -f docker-compose.yml -f docker-compose.canary.yml stop app_canary || true
-          docker compose -f docker-compose.yml -f docker-compose.canary.yml rm -f app_canary || true
-          docker compose exec -T reverse-proxy caddy reload --config /etc/caddy/Caddyfile
-          EOSSH
+            - name: Promote canary tag to stable fleet
+              run: |
+                  ssh "${{ secrets.PROD_SSH_USER }}@${{ secrets.PROD_SSH_HOST }}" <<'EOSSH'
+                  set -euo pipefail
+                  cd "${{ secrets.PROD_STACK_DIR }}"
+                  export APP_IMAGE_TAG="${{ github.event.inputs.image_tag || github.sha }}"
+                  docker compose -f docker-compose.yml pull app worker
+                  docker compose -f docker-compose.yml up -d --no-deps app worker --remove-orphans
+                  docker compose -f docker-compose.yml exec -T app wget -q -O- http://127.0.0.1:3000/health
+                  # Tear the canary back down once the main fleet is on the new tag.
+                  docker compose -f docker-compose.yml -f docker-compose.canary.yml stop app_canary || true
+                  docker compose -f docker-compose.yml -f docker-compose.canary.yml rm -f app_canary || true
+                  docker compose exec -T reverse-proxy caddy reload --config /etc/caddy/Caddyfile
+                  EOSSH
 
-      - name: Post-deploy verification (promote)
-        env:
-          POST_DEPLOY_BASE_URL: ${{ secrets.PROD_PUBLIC_URL }}
-          POST_DEPLOY_BEARER: ${{ secrets.POST_DEPLOY_BEARER }}
-          POST_DEPLOY_EXPECTED_VERSION: ${{ github.event.inputs.image_tag }}
-        run: |
-          if [ -z "$POST_DEPLOY_BASE_URL" ]; then
-            echo "PROD_PUBLIC_URL secret not set; skipping post-deploy verify."
-            exit 0
-          fi
-          node tools/ci/post-deploy-verify.mjs
+            - name: Post-deploy verification (promote)
+              env:
+                  POST_DEPLOY_BASE_URL: ${{ secrets.PROD_PUBLIC_URL }}
+                  POST_DEPLOY_BEARER: ${{ secrets.POST_DEPLOY_BEARER }}
+                  POST_DEPLOY_EXPECTED_VERSION: ${{ github.event.inputs.image_tag }}
+              run: |
+                  if [ -z "$POST_DEPLOY_BASE_URL" ]; then
+                    echo "PROD_PUBLIC_URL secret not set; skipping post-deploy verify."
+                    exit 0
+                  fi
+                  node tools/ci/post-deploy-verify.mjs
 
-      - name: Trigger backup verification
-        if: success()
-        run: |
-          gh workflow run dr-backup-verification.yml -f environment=production
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            - name: Trigger backup verification
+              if: success()
+              run: |
+                  gh workflow run dr-backup-verification.yml -f environment=production
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  full-rollout:
-    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'full')
-    runs-on: ubuntu-latest
-    environment: production
-    steps:
-      - name: Checkout
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+    full-rollout:
+        if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'full')
+        runs-on: ubuntu-latest
+        environment: production
+        steps:
+            - name: Checkout
+              uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
 
-      - name: Configure SSH
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.PROD_SSH_KEY }}
+            - name: Configure SSH
+              uses: webfactory/ssh-agent@v0.9.0
+              with:
+                  ssh-private-key: ${{ secrets.PROD_SSH_KEY }}
 
-      - name: Sync compose bundle
-        run: |
-          rsync -az --delete deploy/docker/production/ "${{ secrets.PROD_SSH_USER }}@${{ secrets.PROD_SSH_HOST }}:${{ secrets.PROD_STACK_DIR }}/"
+            - name: Sync compose bundle
+              run: |
+                  rsync -az --delete deploy/docker/production/ "${{ secrets.PROD_SSH_USER }}@${{ secrets.PROD_SSH_HOST }}:${{ secrets.PROD_STACK_DIR }}/"
 
-      - name: Deploy stack (no canary)
-        run: |
-          ssh "${{ secrets.PROD_SSH_USER }}@${{ secrets.PROD_SSH_HOST }}" <<'EOSSH'
-          set -euo pipefail
-          cd "${{ secrets.PROD_STACK_DIR }}"
-          export APP_IMAGE_TAG="${{ github.event.inputs.image_tag || github.sha }}"
-          docker compose -f docker-compose.yml pull app worker
-          docker compose -f docker-compose.yml up -d --remove-orphans
-          docker compose -f docker-compose.yml ps
-          docker compose -f docker-compose.yml exec -T app wget -q -O- http://127.0.0.1:3000/health
-          EOSSH
+            - name: Deploy stack (no canary)
+              run: |
+                  ssh "${{ secrets.PROD_SSH_USER }}@${{ secrets.PROD_SSH_HOST }}" <<'EOSSH'
+                  set -euo pipefail
+                  cd "${{ secrets.PROD_STACK_DIR }}"
+                  export APP_IMAGE_TAG="${{ github.event.inputs.image_tag || github.sha }}"
+                  docker compose -f docker-compose.yml pull app worker
+                  docker compose -f docker-compose.yml up -d --remove-orphans
+                  docker compose -f docker-compose.yml ps
+                  docker compose -f docker-compose.yml exec -T app wget -q -O- http://127.0.0.1:3000/health
+                  EOSSH
 
-      - name: Post-deploy verification (full rollout)
-        env:
-          POST_DEPLOY_BASE_URL: ${{ secrets.PROD_PUBLIC_URL }}
-          POST_DEPLOY_BEARER: ${{ secrets.POST_DEPLOY_BEARER }}
-          POST_DEPLOY_EXPECTED_VERSION: ${{ github.event.inputs.image_tag }}
-        run: |
-          if [ -z "$POST_DEPLOY_BASE_URL" ]; then
-            echo "PROD_PUBLIC_URL secret not set; skipping post-deploy verify."
-            exit 0
-          fi
-          node tools/ci/post-deploy-verify.mjs
+            - name: Post-deploy verification (full rollout)
+              env:
+                  POST_DEPLOY_BASE_URL: ${{ secrets.PROD_PUBLIC_URL }}
+                  POST_DEPLOY_BEARER: ${{ secrets.POST_DEPLOY_BEARER }}
+                  POST_DEPLOY_EXPECTED_VERSION: ${{ github.event.inputs.image_tag }}
+              run: |
+                  if [ -z "$POST_DEPLOY_BASE_URL" ]; then
+                    echo "PROD_PUBLIC_URL secret not set; skipping post-deploy verify."
+                    exit 0
+                  fi
+                  node tools/ci/post-deploy-verify.mjs
 
-      - name: Trigger backup verification
-        if: success()
-        run: |
-          gh workflow run dr-backup-verification.yml -f environment=production
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            - name: Trigger backup verification
+              if: success()
+              run: |
+                  gh workflow run dr-backup-verification.yml -f environment=production
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
