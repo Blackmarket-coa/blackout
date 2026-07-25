@@ -71,19 +71,47 @@ jobs:
               env:
                   PORT: 3000
                   NODE_ENV: production
+                  # Run against the postgres service (not the default `file`
+                  # store). Without this the API silently ran in file mode and
+                  # ignored the migrated database — and the production boot guard
+                  # now refuses to start without it.
+                  BLACKOUT_DB_MODE: postgres
                   DATABASE_URL: postgres://blackout:blackout@localhost:5432/blackout
                   REDIS_URL: redis://localhost:6379
                   JWT_SECRET_PRIMARY: ${{ steps.synth.outputs.JWT }}
                   CORS_ALLOWED_ORIGINS: 'http://localhost:5173'
                   INTERNAL_METRICS_TOKEN: ${{ steps.synth.outputs.METRICS }}
+                  # Required in production so pseudonymized log ids aren't guessable.
+                  LOG_HASH_SALT: ${{ steps.synth.outputs.METRICS }}
               run: |
-                  pnpm --filter @blackout/api start &
-                  for i in {1..30}; do
+                  # Capture boot output so a startup failure is diagnosable
+                  # instead of k6 silently hammering a dead port (and reporting a
+                  # misleading 100%-failure "load result").
+                  pnpm --filter @blackout/api start > api.log 2>&1 &
+                  API_PID=$!
+                  up=0
+                  for i in {1..60}; do
+                    if ! kill -0 "$API_PID" 2>/dev/null; then
+                      echo "::error::API process exited during startup"; break
+                    fi
                     if curl -fsS http://localhost:3000/health > /dev/null; then
-                      echo "api up"; break
+                      echo "api up"; up=1; break
                     fi
                     sleep 1
                   done
+                  if [ "$up" -ne 1 ]; then
+                    echo "::error::API did not become healthy on :3000 — boot log:"
+                    cat api.log || true
+                    exit 1
+                  fi
+
+            - name: Upload API boot log
+              if: ${{ always() && github.event.inputs.base_url == '' }}
+              uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+              with:
+                  name: api-boot-log
+                  path: api.log
+                  if-no-files-found: ignore
 
             - name: Install k6
               run: |
