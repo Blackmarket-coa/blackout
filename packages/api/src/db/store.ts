@@ -3217,6 +3217,10 @@ class InMemoryDb {
         return record;
     }
 
+    getCoalitionNeed(id: string): CoalitionNeedRecord | undefined {
+        return this.coalitionNeeds.get(id);
+    }
+
     updateCoalitionNeed(
         id: string,
         patch: Partial<Pick<CoalitionNeedRecord, 'status' | 'fulfilledByListingId'>>
@@ -3440,6 +3444,10 @@ class InMemoryDb {
         };
         this.coalitionResources.set(record.id, record);
         return record;
+    }
+
+    getCoalitionResource(id: string): CoalitionResourceRecord | undefined {
+        return this.coalitionResources.get(id);
     }
 
     updateCoalitionResourceAvailability(

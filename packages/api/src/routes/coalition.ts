@@ -83,6 +83,7 @@ import {
     saveVolunteerSignup,
     saveVolunteerSlot,
     createNeed,
+    getNeed,
     listNeeds,
     newNeedId,
     updateNeed,
@@ -93,6 +94,7 @@ import {
     updateProject,
     updateProjectStatus,
     createResource,
+    getResource,
     listResources,
     newResourceId,
     updateResourceAvailability,
@@ -516,6 +518,14 @@ coalition.patch('/needs/:id', async (c) => {
     if (user instanceof Response) return user;
     const parsed = await readJsonBody(c, updateNeedSchema);
     if (parsed instanceof Response) return parsed;
+    const existing = getNeed(c.req.param('id'));
+    if (!existing) {
+        return c.json({ code: 'not_found', message: 'Need not found' }, 404);
+    }
+    // Only the need's author may update it — mirrors the project-lead rule.
+    if (existing.authorId !== user.sub) {
+        return c.json({ code: 'forbidden', message: 'Only the need author can update it' }, 403);
+    }
     const need = updateNeed(c.req.param('id'), parsed);
     if (!need) {
         return c.json({ code: 'not_found', message: 'Need not found' }, 404);
@@ -762,6 +772,17 @@ coalition.patch('/resources/:id', async (c) => {
     if (user instanceof Response) return user;
     const parsed = await readJsonBody(c, updateResourceSchema);
     if (parsed instanceof Response) return parsed;
+    const existing = getResource(c.req.param('id'));
+    if (!existing) {
+        return c.json({ code: 'not_found', message: 'Resource not found' }, 404);
+    }
+    // Only the resource steward may change its availability.
+    if (existing.stewardId !== user.sub) {
+        return c.json(
+            { code: 'forbidden', message: 'Only the resource steward can update it' },
+            403
+        );
+    }
     const resource = updateResourceAvailability(c.req.param('id'), parsed.availability);
     if (!resource) {
         return c.json({ code: 'not_found', message: 'Resource not found' }, 404);
