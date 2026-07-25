@@ -128,6 +128,11 @@ jobs:
                   # not double-report the vendored Synapse test-key fixtures
                   # (e.g. synapse/util/manhole.py's upstream demo RSA key).
                   scanners: vuln
+                  # Skip the vendored Synapse fork: it is upstream Python code
+                  # this repo does not deploy (production runs the upstream
+                  # matrixdotorg/synapse image), and its dependency CVE churn is
+                  # tracked via upstream-advisories.yml, not gated here.
+                  skip-dirs: apps/blackout-server
                   # Blocking: fail on fixable CRITICAL/HIGH findings. Reviewed,
                   # non-applicable advisories are documented in .trivyignore.
                   exit-code: '1'
