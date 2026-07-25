@@ -8,27 +8,24 @@ import type { Duplex } from 'node:stream';
 import { WebSocketServer } from 'ws';
 
 import {
-  buildAuthFailedAndClose,
-  buildJoinBurst,
-  buildJoinDenied,
-  buildOutgoingPrivmsg,
-  buildWelcomeBurst,
-  handleInboundLine,
-  initConnectionState,
-  type ConnectionState,
-  type ServerEvent,
+    buildAuthFailedAndClose,
+    buildJoinBurst,
+    buildJoinDenied,
+    buildOutgoingPrivmsg,
+    buildWelcomeBurst,
+    handleInboundLine,
+    initConnectionState,
+    type ConnectionState,
+    type ServerEvent,
 } from './ircServerProtocol';
 import { noteUsed, verifyBearer } from '../../services/twitchIrcBotTokens';
 import { db } from '../../db/store';
-import {
-  subscribeChatMessages,
-  type HubChatMessage,
-} from '../../services/chatMessageHub';
+import { subscribeChatMessages, type HubChatMessage } from '../../services/chatMessageHub';
 import { matrixClient as defaultMatrixClient } from '../matrix-client';
 import type { MatrixSendEventClient } from '../../services/twitchChatBridge';
 import {
-  REQUIRED_CAPS as TWITCH_INGRESS_CAPS,
-  sendChatMessage as sendTwitchIrcChatMessage,
+    REQUIRED_CAPS as TWITCH_INGRESS_CAPS,
+    sendChatMessage as sendTwitchIrcChatMessage,
 } from '../twitch/chatIngress';
 import { log } from '../../telemetry/logger';
 
@@ -64,77 +61,91 @@ import { log } from '../../telemetry/logger';
 type WsClient = any;
 
 interface BotSession {
-  ws: WsClient;
-  state: ConnectionState;
-  /** Set after successful PASS+NICK verification. */
-  blackoutUserId?: string;
-  tokenId?: string;
-  /** Active per-channel hub disposers, keyed by channel slug (lowercased, with `#`). */
-  subscriptions: Map<string, () => void>;
-  /** ms-since-epoch of the WebSocket upgrade. */
-  connectedAt: number;
-  /** ms-since-epoch of the most recent inbound IRC line — useful for last-seen surfacing. */
-  lastActivityAt: number;
+    ws: WsClient;
+    state: ConnectionState;
+    /** Set after successful PASS+NICK verification. */
+    blackoutUserId?: string;
+    tokenId?: string;
+    /** Active per-channel hub disposers, keyed by channel slug (lowercased, with `#`). */
+    subscriptions: Map<string, () => void>;
+    /** ms-since-epoch of the WebSocket upgrade. */
+    connectedAt: number;
+    /** ms-since-epoch of the most recent inbound IRC line — useful for last-seen surfacing. */
+    lastActivityAt: number;
+    /** Timer that force-closes a connection that never authenticates. */
+    authTimer?: ReturnType<typeof setTimeout>;
 }
+
+// Hardening bounds for this raw-socket shim, which is attached to the HTTP
+// server outside the Hono middleware chain (no CORS / rate-limit / headers).
+// IRC lines are tiny; cap frames well below the `ws` 100 MiB default so an
+// unauthenticated peer cannot amplify memory pre-auth. Unauthenticated
+// connections are force-closed after the timeout so they cannot be held open.
+const MAX_FRAME_BYTES = 64 * 1024;
+const UNAUTHENTICATED_TIMEOUT_MS = 10_000;
 
 /** Public projection — never exposes the WebSocket internals or tokenId. */
 export interface BotSessionSnapshot {
-  /** The bot's NICK (lowercased on accept). */
-  nick: string;
-  /** Channels currently joined (with leading `#`). */
-  joinedChannels: string[];
-  /** Token id used to authenticate, so the creator can match this session to a labelled token. */
-  tokenId: string;
-  connectedAt: number;
-  lastActivityAt: number;
+    /** The bot's NICK (lowercased on accept). */
+    nick: string;
+    /** Channels currently joined (with leading `#`). */
+    joinedChannels: string[];
+    /** Token id used to authenticate, so the creator can match this session to a labelled token. */
+    tokenId: string;
+    connectedAt: number;
+    lastActivityAt: number;
 }
 
 export const listSessionsForUser = (blackoutUserId: string): BotSessionSnapshot[] => {
-  const out: BotSessionSnapshot[] = [];
-  for (const s of sessions) {
-    if (!s.state.authenticated) continue;
-    if (s.blackoutUserId !== blackoutUserId) continue;
-    if (!s.tokenId || !s.state.nick) continue;
-    out.push({
-      nick: s.state.nick,
-      joinedChannels: [...s.state.joinedChannels].sort(),
-      tokenId: s.tokenId,
-      connectedAt: s.connectedAt,
-      lastActivityAt: s.lastActivityAt,
-    });
-  }
-  return out;
+    const out: BotSessionSnapshot[] = [];
+    for (const s of sessions) {
+        if (!s.state.authenticated) continue;
+        if (s.blackoutUserId !== blackoutUserId) continue;
+        if (!s.tokenId || !s.state.nick) continue;
+        out.push({
+            nick: s.state.nick,
+            joinedChannels: [...s.state.joinedChannels].sort(),
+            tokenId: s.tokenId,
+            connectedAt: s.connectedAt,
+            lastActivityAt: s.lastActivityAt,
+        });
+    }
+    return out;
 };
 
 const sessions = new Set<BotSession>();
 
 const send = (session: BotSession, lines: string[]): void => {
-  if (lines.length === 0) return;
-  if (session.ws.readyState !== 1 /* OPEN */) return;
-  for (const line of lines) {
-    try {
-      session.ws.send(line);
-    } catch (err) {
-      log.warn('twitch_irc_shim_send_failed', { error: String(err) });
+    if (lines.length === 0) return;
+    if (session.ws.readyState !== 1 /* OPEN */) return;
+    for (const line of lines) {
+        try {
+            session.ws.send(line);
+        } catch (err) {
+            log.warn('twitch_irc_shim_send_failed', { error: String(err) });
+        }
     }
-  }
 };
 
 const closeSession = (session: BotSession, reason?: string): void => {
-  for (const dispose of session.subscriptions.values()) {
-    try {
-      dispose();
-    } catch {
-      // ignore
+    if (session.authTimer) {
+        clearTimeout(session.authTimer);
+        session.authTimer = undefined;
     }
-  }
-  session.subscriptions.clear();
-  sessions.delete(session);
-  try {
-    session.ws.close(1000, reason ?? 'bye');
-  } catch {
-    // already closed
-  }
+    for (const dispose of session.subscriptions.values()) {
+        try {
+            dispose();
+        } catch {
+            // ignore
+        }
+    }
+    session.subscriptions.clear();
+    sessions.delete(session);
+    try {
+        session.ws.close(1000, reason ?? 'bye');
+    } catch {
+        // already closed
+    }
 };
 
 /**
@@ -151,42 +162,40 @@ const closeSession = (session: BotSession, reason?: string): void => {
  * Matrix room (we don't try to relay back out to YouTube / Kick).
  */
 const findBridgeForJoin = (
-  blackoutUserId: string,
-  channel: string,
+    blackoutUserId: string,
+    channel: string
 ): { matrixRoomId: string; source: 'twitch' | 'youtube' | 'kick' } | null => {
-  if (!channel.startsWith('#')) return null;
-  const slug = channel.slice(1);
+    if (!channel.startsWith('#')) return null;
+    const slug = channel.slice(1);
 
-  if (slug.startsWith('yt:')) {
-    const channelId = slug.slice(3);
-    if (!channelId) return null;
-    const bridges = db.listYoutubeChatBridgesForUser(blackoutUserId);
-    const match = bridges.find(
-      (b) => b.isActive && b.youtubeChannelId.toLowerCase() === channelId,
-    );
-    return match ? { matrixRoomId: match.matrixRoomId, source: 'youtube' } : null;
-  }
+    if (slug.startsWith('yt:')) {
+        const channelId = slug.slice(3);
+        if (!channelId) return null;
+        const bridges = db.listYoutubeChatBridgesForUser(blackoutUserId);
+        const match = bridges.find(
+            (b) => b.isActive && b.youtubeChannelId.toLowerCase() === channelId
+        );
+        return match ? { matrixRoomId: match.matrixRoomId, source: 'youtube' } : null;
+    }
 
-  if (slug.startsWith('kick:')) {
-    const chatroomId = slug.slice(5);
-    if (!chatroomId) return null;
-    const bridges = db.listKickChatBridgesForUser(blackoutUserId);
-    const match = bridges.find((b) => b.isActive && b.kickChatroomId === chatroomId);
-    return match ? { matrixRoomId: match.matrixRoomId, source: 'kick' } : null;
-  }
+    if (slug.startsWith('kick:')) {
+        const chatroomId = slug.slice(5);
+        if (!chatroomId) return null;
+        const bridges = db.listKickChatBridgesForUser(blackoutUserId);
+        const match = bridges.find((b) => b.isActive && b.kickChatroomId === chatroomId);
+        return match ? { matrixRoomId: match.matrixRoomId, source: 'kick' } : null;
+    }
 
-  // Default: Twitch chat bridge keyed by login slug.
-  const bridges = db.listTwitchChatBridgesForUser(blackoutUserId);
-  const match = bridges.find(
-    (b) => b.isActive && b.twitchChannel.toLowerCase() === slug,
-  );
-  return match ? { matrixRoomId: match.matrixRoomId, source: 'twitch' } : null;
+    // Default: Twitch chat bridge keyed by login slug.
+    const bridges = db.listTwitchChatBridgesForUser(blackoutUserId);
+    const match = bridges.find((b) => b.isActive && b.twitchChannel.toLowerCase() === slug);
+    return match ? { matrixRoomId: match.matrixRoomId, source: 'twitch' } : null;
 };
 
 interface AttachOptions {
-  matrixClient?: MatrixSendEventClient;
-  /** Override the path the WS server listens on. Default: '/twitch-irc'. */
-  path?: string;
+    matrixClient?: MatrixSendEventClient;
+    /** Override the path the WS server listens on. Default: '/twitch-irc'. */
+    path?: string;
 }
 
 /**
@@ -196,208 +205,224 @@ interface AttachOptions {
  * removes the upgrade handler.
  */
 export const attachTwitchIrcShim = (
-  server: HttpServer,
-  options: AttachOptions = {},
+    server: HttpServer,
+    options: AttachOptions = {}
 ): (() => void) => {
-  const matrix = options.matrixClient ?? defaultMatrixClient;
-  const path = options.path ?? '/twitch-irc';
-  const wss = new WebSocketServer({ noServer: true });
+    const matrix = options.matrixClient ?? defaultMatrixClient;
+    const path = options.path ?? '/twitch-irc';
+    const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_FRAME_BYTES });
 
-  const onUpgrade = (req: IncomingMessage, socket: Duplex, head: Buffer) => {
-    if (!req.url) return;
-    const url = new URL(req.url, 'http://localhost');
-    if (url.pathname !== path) return;
-    wss.handleUpgrade(req, socket, head, (ws: WsClient) => {
-      registerConnection(ws, matrix);
-    });
-  };
-  server.on('upgrade', onUpgrade);
+    const onUpgrade = (req: IncomingMessage, socket: Duplex, head: Buffer) => {
+        if (!req.url) return;
+        const url = new URL(req.url, 'http://localhost');
+        if (url.pathname !== path) return;
+        wss.handleUpgrade(req, socket, head, (ws: WsClient) => {
+            registerConnection(ws, matrix);
+        });
+    };
+    server.on('upgrade', onUpgrade);
 
-  return () => {
-    server.off('upgrade', onUpgrade);
-    for (const session of [...sessions]) closeSession(session, 'shutdown');
-    wss.close();
-  };
+    return () => {
+        server.off('upgrade', onUpgrade);
+        for (const session of [...sessions]) closeSession(session, 'shutdown');
+        wss.close();
+    };
 };
 
 const registerConnection = (ws: WsClient, matrix: MatrixSendEventClient): BotSession => {
-  const now = Date.now();
-  const session: BotSession = {
-    ws,
-    state: initConnectionState(),
-    subscriptions: new Map(),
-    connectedAt: now,
-    lastActivityAt: now,
-  };
-  sessions.add(session);
+    const now = Date.now();
+    const session: BotSession = {
+        ws,
+        state: initConnectionState(),
+        subscriptions: new Map(),
+        connectedAt: now,
+        lastActivityAt: now,
+    };
+    sessions.add(session);
 
-  ws.on('message', (data: Buffer | string) => {
-    const buf = typeof data === 'string' ? data : data.toString('utf8');
-    session.lastActivityAt = Date.now();
-    // IRC is line-delimited; multiple lines may arrive in one frame.
-    for (const raw of buf.split(/\r?\n/)) {
-      if (!raw) continue;
-      const events = handleInboundLine(session.state, raw);
-      for (const evt of events) handleEvent(session, evt, matrix);
-    }
-  });
+    // Force-close connections that never authenticate, so an unauthenticated
+    // peer cannot hold a socket open indefinitely (parity with the OBS/SE shims).
+    session.authTimer = setTimeout(() => {
+        if (!session.state.authenticated) {
+            send(session, buildAuthFailedAndClose());
+            closeSession(session, 'auth_timeout');
+        }
+    }, UNAUTHENTICATED_TIMEOUT_MS);
+    if (typeof session.authTimer.unref === 'function') session.authTimer.unref();
 
-  ws.on('close', () => closeSession(session));
-  ws.on('error', () => closeSession(session));
+    ws.on('message', (data: Buffer | string) => {
+        const buf = typeof data === 'string' ? data : data.toString('utf8');
+        session.lastActivityAt = Date.now();
+        // IRC is line-delimited; multiple lines may arrive in one frame.
+        for (const raw of buf.split(/\r?\n/)) {
+            if (!raw) continue;
+            const events = handleInboundLine(session.state, raw);
+            for (const evt of events) handleEvent(session, evt, matrix);
+        }
+    });
 
-  return session;
+    ws.on('close', () => closeSession(session));
+    ws.on('error', () => closeSession(session));
+
+    return session;
 };
 
 const handleEvent = (
-  session: BotSession,
-  evt: ServerEvent,
-  matrix: MatrixSendEventClient,
+    session: BotSession,
+    evt: ServerEvent,
+    matrix: MatrixSendEventClient
 ): void => {
-  switch (evt.kind) {
-    case 'send':
-      send(session, evt.lines);
-      return;
-    case 'auth_attempt': {
-      const record = verifyBearer(evt.presentedBearer);
-      if (!record) {
-        send(session, buildAuthFailedAndClose());
-        closeSession(session, 'auth_failed');
-        return;
-      }
-      session.blackoutUserId = record.blackoutUserId;
-      session.tokenId = record.id;
-      session.state.authenticated = true;
-      session.state.registered = true;
-      noteUsed(record.id);
-      send(session, buildWelcomeBurst(session.state.nick ?? 'bot'));
-      return;
-    }
-    case 'join_request': {
-      if (!session.blackoutUserId) {
-        send(session, buildJoinDenied(session.state.nick ?? '*', evt.channel));
-        return;
-      }
-      const bridge = findBridgeForJoin(session.blackoutUserId, evt.channel);
-      if (!bridge) {
-        // The bot tried to JOIN a channel the creator hasn't bridged.
-        send(session, buildJoinDenied(session.state.nick ?? '*', evt.channel));
-        return;
-      }
-      session.state.joinedChannels.add(evt.channel);
-      // Subscribe to the in-process hub so chat from whatever platform
-      // the channel resolves to (Twitch / YouTube / Kick — see
-      // findBridgeForJoin) reaches the bot as a Twitch-shape PRIVMSG.
-      const dispose = subscribeChatMessages({
-        key: { blackoutUserId: session.blackoutUserId, channelKey: evt.channel },
-        listener: (msg: HubChatMessage) =>
-          send(session, [
-            buildOutgoingPrivmsg({
-              channel: evt.channel,
-              authorLogin: msg.authorLogin,
-              body: msg.body,
-              tags: msg.tags,
-            }),
-          ]),
-      });
-      session.subscriptions.set(evt.channel, dispose);
-      send(session, buildJoinBurst(session.state.nick ?? 'bot', evt.channel));
-      return;
-    }
-    case 'part_request': {
-      const dispose = session.subscriptions.get(evt.channel);
-      if (dispose) {
-        dispose();
-        session.subscriptions.delete(evt.channel);
-      }
-      return;
-    }
-    case 'privmsg': {
-      if (!session.blackoutUserId) return;
-      const bridge = findBridgeForJoin(session.blackoutUserId, evt.channel);
-      if (!bridge) return;
-      // Forward into the bridge's Matrix room. `m.blackout.origin` lets
-      // downstream consumers (and the bridge's own re-entry guard) see
-      // these were authored by an external IRC bot, not by chat bridge
-      // ingress.
-      const content = {
-        msgtype: 'm.text',
-        body: evt.body,
-        'm.blackout.origin': 'twitch_irc_compat_bot',
-        'm.blackout.origin_sender_username': session.state.nick,
-        ...(session.tokenId ? { 'm.blackout.origin_token_id': session.tokenId } : {}),
-      };
-      const txnId = `twitch-irc-bot-${session.tokenId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      void matrix
-        .sendEvent(bridge.matrixRoomId, content, { txnId })
-        .then((res) => {
-          if (!res.ok) {
-            log.warn('twitch_irc_shim_matrix_send_failed', {
-              tokenId: session.tokenId,
-              channel: evt.channel,
-              status: res.status,
-            });
-          }
-        })
-        .catch((err) =>
-          log.warn('twitch_irc_shim_matrix_send_threw', {
-            tokenId: session.tokenId,
-            error: String(err),
-          }),
-        );
-
-      // For Twitch-shape channels (#login), ALSO mirror the bot's
-      // message back out to real Twitch IRC via the creator's authed
-      // chat-ingress connection. This is safe only while ingress does not
-      // request the `echo-message` cap: otherwise our own PRIVMSG echoes
-      // back through twitchChatBridge → hub → bot and loops forever. Guard
-      // the invariant here so a future cap change fails loudly rather than
-      // silently looping.
-      // YouTube and Kick #yt:/#kick: channels stay Matrix-only because
-      // their outbound semantics are different (YT needs OAuth quota;
-      // Kick has no public outbound API).
-      if (
-        bridge.source === 'twitch' &&
-        evt.channel.startsWith('#') &&
-        !(TWITCH_INGRESS_CAPS as readonly string[]).includes('twitch.tv/echo-message')
-      ) {
-        const twitchChannel = evt.channel.slice(1);
-        try {
-          const out = sendTwitchIrcChatMessage(
-            session.blackoutUserId,
-            twitchChannel,
-            evt.body,
-          );
-          if (out.kind !== 'ok') {
-            log.info('twitch_irc_shim_outbound_skipped', {
-              tokenId: session.tokenId,
-              twitchChannel,
-              kind: out.kind,
-            });
-          }
-        } catch (err) {
-          log.warn('twitch_irc_shim_outbound_threw', {
-            tokenId: session.tokenId,
-            twitchChannel,
-            error: String(err),
-          });
+    switch (evt.kind) {
+        case 'send':
+            send(session, evt.lines);
+            return;
+        case 'auth_attempt': {
+            const record = verifyBearer(evt.presentedBearer);
+            if (!record) {
+                send(session, buildAuthFailedAndClose());
+                closeSession(session, 'auth_failed');
+                return;
+            }
+            session.blackoutUserId = record.blackoutUserId;
+            session.tokenId = record.id;
+            session.state.authenticated = true;
+            session.state.registered = true;
+            if (session.authTimer) {
+                clearTimeout(session.authTimer);
+                session.authTimer = undefined;
+            }
+            noteUsed(record.id);
+            send(session, buildWelcomeBurst(session.state.nick ?? 'bot'));
+            return;
         }
-      }
-      return;
+        case 'join_request': {
+            if (!session.blackoutUserId) {
+                send(session, buildJoinDenied(session.state.nick ?? '*', evt.channel));
+                return;
+            }
+            const bridge = findBridgeForJoin(session.blackoutUserId, evt.channel);
+            if (!bridge) {
+                // The bot tried to JOIN a channel the creator hasn't bridged.
+                send(session, buildJoinDenied(session.state.nick ?? '*', evt.channel));
+                return;
+            }
+            session.state.joinedChannels.add(evt.channel);
+            // Subscribe to the in-process hub so chat from whatever platform
+            // the channel resolves to (Twitch / YouTube / Kick — see
+            // findBridgeForJoin) reaches the bot as a Twitch-shape PRIVMSG.
+            const dispose = subscribeChatMessages({
+                key: { blackoutUserId: session.blackoutUserId, channelKey: evt.channel },
+                listener: (msg: HubChatMessage) =>
+                    send(session, [
+                        buildOutgoingPrivmsg({
+                            channel: evt.channel,
+                            authorLogin: msg.authorLogin,
+                            body: msg.body,
+                            tags: msg.tags,
+                        }),
+                    ]),
+            });
+            session.subscriptions.set(evt.channel, dispose);
+            send(session, buildJoinBurst(session.state.nick ?? 'bot', evt.channel));
+            return;
+        }
+        case 'part_request': {
+            const dispose = session.subscriptions.get(evt.channel);
+            if (dispose) {
+                dispose();
+                session.subscriptions.delete(evt.channel);
+            }
+            return;
+        }
+        case 'privmsg': {
+            if (!session.blackoutUserId) return;
+            const bridge = findBridgeForJoin(session.blackoutUserId, evt.channel);
+            if (!bridge) return;
+            // Forward into the bridge's Matrix room. `m.blackout.origin` lets
+            // downstream consumers (and the bridge's own re-entry guard) see
+            // these were authored by an external IRC bot, not by chat bridge
+            // ingress.
+            const content = {
+                msgtype: 'm.text',
+                body: evt.body,
+                'm.blackout.origin': 'twitch_irc_compat_bot',
+                'm.blackout.origin_sender_username': session.state.nick,
+                ...(session.tokenId ? { 'm.blackout.origin_token_id': session.tokenId } : {}),
+            };
+            const txnId = `twitch-irc-bot-${session.tokenId}-${Date.now()}-${Math.random()
+                .toString(36)
+                .slice(2, 8)}`;
+            void matrix
+                .sendEvent(bridge.matrixRoomId, content, { txnId })
+                .then((res) => {
+                    if (!res.ok) {
+                        log.warn('twitch_irc_shim_matrix_send_failed', {
+                            tokenId: session.tokenId,
+                            channel: evt.channel,
+                            status: res.status,
+                        });
+                    }
+                })
+                .catch((err) =>
+                    log.warn('twitch_irc_shim_matrix_send_threw', {
+                        tokenId: session.tokenId,
+                        error: String(err),
+                    })
+                );
+
+            // For Twitch-shape channels (#login), ALSO mirror the bot's
+            // message back out to real Twitch IRC via the creator's authed
+            // chat-ingress connection. This is safe only while ingress does not
+            // request the `echo-message` cap: otherwise our own PRIVMSG echoes
+            // back through twitchChatBridge → hub → bot and loops forever. Guard
+            // the invariant here so a future cap change fails loudly rather than
+            // silently looping.
+            // YouTube and Kick #yt:/#kick: channels stay Matrix-only because
+            // their outbound semantics are different (YT needs OAuth quota;
+            // Kick has no public outbound API).
+            if (
+                bridge.source === 'twitch' &&
+                evt.channel.startsWith('#') &&
+                !(TWITCH_INGRESS_CAPS as readonly string[]).includes('twitch.tv/echo-message')
+            ) {
+                const twitchChannel = evt.channel.slice(1);
+                try {
+                    const out = sendTwitchIrcChatMessage(
+                        session.blackoutUserId,
+                        twitchChannel,
+                        evt.body
+                    );
+                    if (out.kind !== 'ok') {
+                        log.info('twitch_irc_shim_outbound_skipped', {
+                            tokenId: session.tokenId,
+                            twitchChannel,
+                            kind: out.kind,
+                        });
+                    }
+                } catch (err) {
+                    log.warn('twitch_irc_shim_outbound_threw', {
+                        tokenId: session.tokenId,
+                        twitchChannel,
+                        error: String(err),
+                    });
+                }
+            }
+            return;
+        }
+        case 'ping':
+            // PING is auto-handled by the protocol layer (PONG line emitted via
+            // a `send` event); nothing extra to do here.
+            return;
+        case 'quit':
+            closeSession(session, evt.reason);
+            return;
+        case 'unknown':
+            log.info('twitch_irc_shim_unknown_command', {
+                command: evt.command,
+                params: evt.params,
+            });
+            return;
     }
-    case 'ping':
-      // PING is auto-handled by the protocol layer (PONG line emitted via
-      // a `send` event); nothing extra to do here.
-      return;
-    case 'quit':
-      closeSession(session, evt.reason);
-      return;
-    case 'unknown':
-      log.info('twitch_irc_shim_unknown_command', {
-        command: evt.command,
-        params: evt.params,
-      });
-      return;
-  }
 };
 
 export const __test__ = { sessions, registerConnection, handleEvent };
