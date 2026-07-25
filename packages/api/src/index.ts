@@ -92,7 +92,7 @@ import { log } from './telemetry/logger';
 import { startBackgroundLoops } from './backgroundLoops';
 import { httpMetricsMiddleware } from './telemetry/http-metrics';
 import { registry as metricsRegistry } from './telemetry/metrics';
-import { initErrorReporter } from './telemetry/errors';
+import { initErrorReporter, errorReporter } from './telemetry/errors';
 import { initTracing } from './telemetry/tracing';
 import { bootstrapMailer } from './services/mailer';
 import { runSecurityPreflight } from './config/security';
@@ -280,12 +280,23 @@ app.route('/bug-report/widget', widgetReportRoutes);
 app.route('/i', shareRoutes);
 
 app.get('/health', (c) =>
+    // Unauthenticated readiness probe: expose only coarse booleans. The detailed
+    // preflight state (JWT secret count, token transport, Matrix bot user id, and
+    // upstream error detail) is sensitive and must not leak to anonymous callers.
+    // Operational detail lives behind auth (/metrics, /v1/diagnostics).
     c.json({
         status: 'ok',
         legacyAliasEnabled,
         aliasRemovalDate: API_ALIAS_REMOVAL_DATE,
-        security: securityPreflight,
-        matrix: matrixHealth,
+        security: {
+            ok:
+                securityPreflight.jwtSecretsConfigured > 0 &&
+                securityPreflight.cookieSecureValidated,
+        },
+        matrix: {
+            configured: matrixHealth.configured,
+            adminOk: matrixHealth.adminOk,
+        },
     })
 );
 
@@ -313,9 +324,46 @@ app.get('/metrics', (c) => {
     return c.body(metricsRegistry.expose());
 });
 
+// Central 404 handler: every unmatched route returns the API's JSON error
+// contract rather than Hono's default plain-text body.
+app.notFound((c) => c.json({ code: 'not_found', message: 'Not found' }, 404));
+
+// Central error handler: unhandled exceptions from any route are reported to the
+// error reporter and returned as the API's JSON error contract. The internal
+// error message/stack is never sent to the client — only a generic 500 — so a
+// route throw cannot leak internals.
+app.onError((err, c) => {
+    log.error('unhandled_route_error', {
+        method: c.req.method,
+        path: c.req.path,
+        error: err instanceof Error ? err.message : String(err),
+    });
+    errorReporter().capture(err, { method: c.req.method, path: c.req.path });
+    return c.json({ code: 'internal_error', message: 'Internal server error' }, 500);
+});
+
 const PORT = parseInt(process.env.PORT ?? '3000', 10);
 const shouldListen =
     process.env.NODE_ENV !== 'test' && process.env.BLACKOUT_API_SKIP_LISTEN !== '1';
+
+// Fail-closed production configuration guards. These run before the server
+// listens so a misconfigured production deploy is caught by the process
+// supervisor rather than silently degrading or leaking.
+if (shouldListen && process.env.NODE_ENV === 'production') {
+    if (RUNTIME_DB_MODE !== 'postgres') {
+        throw new Error(
+            `BLACKOUT_DB_MODE=${RUNTIME_DB_MODE} is not permitted in production; ` +
+                'set BLACKOUT_DB_MODE=postgres (with DATABASE_URL) for a durable, ' +
+                'multi-replica-safe store.'
+        );
+    }
+    if (!process.env.LOG_HASH_SALT) {
+        throw new Error(
+            'LOG_HASH_SALT must be set in production so pseudonymized identifiers in ' +
+                'logs are not reversible via the known default salt.'
+        );
+    }
+}
 
 // Postgres runtime store: run migrations then hydrate the in-memory mirror
 // BEFORE serving or starting any store-reading background loops. Top-level
