@@ -90,6 +90,7 @@ import {
 } from './telemetry/api-alias-usage';
 import { log } from './telemetry/logger';
 import { startBackgroundLoops } from './backgroundLoops';
+import { tryBecomeBackgroundLeader, releaseBackgroundLeader } from './services/backgroundLeader';
 import { httpMetricsMiddleware } from './telemetry/http-metrics';
 import { registry as metricsRegistry } from './telemetry/metrics';
 import { initErrorReporter, errorReporter } from './telemetry/errors';
@@ -446,12 +447,22 @@ if (shouldListen) {
     });
 
     // Periodic background-job loops (Twitch/YouTube/Streamlabs pollers, the
-    // scheduled-message dispatcher, FBM sweepers + ACL reconcile). A single
-    // process runs them in-process. When a dedicated `worker` replica owns them
-    // (see src/worker.ts), set BLACKOUT_BACKGROUND_WORKERS_DISABLED=1 on the app
-    // + canary replicas so the jobs are not double-processed across the fleet.
+    // scheduled-message + content dispatchers, coalition surge, FBM sweepers +
+    // ACL reconcile, and the dead-man's-switch sweep). These must run on exactly
+    // one process. BLACKOUT_BACKGROUND_WORKERS_DISABLED=1 opts a replica out
+    // entirely; among the rest, a Postgres advisory-lock leader election ensures
+    // only one actually runs the loops even if the env var is misconfigured
+    // across replicas (in file/memory mode there is a single process anyway).
     if (process.env.BLACKOUT_BACKGROUND_WORKERS_DISABLED !== '1') {
-        startBackgroundLoops();
+        void (async () => {
+            const isLeader = await tryBecomeBackgroundLeader();
+            if (isLeader) {
+                startBackgroundLoops();
+                log.info('background_loops_started', {});
+            } else {
+                log.info('background_loops_skipped_not_leader', {});
+            }
+        })();
     }
 
     const httpServer = serve({ fetch: app.fetch, port: PORT }, (info) => {
@@ -509,6 +520,7 @@ if (shouldListen) {
         httpServer.close(() => {
             void (async () => {
                 try {
+                    await releaseBackgroundLeader();
                     await drainRuntimeStore();
                     log.info('runtime_store_drained', { signal });
                 } catch (err) {
