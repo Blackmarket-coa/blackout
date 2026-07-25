@@ -1,22 +1,32 @@
-# syntax=docker.io/docker/dockerfile:1.21-labs@sha256:2e681d22e86e738a057075f930b81b2ab8bc2a34cd16001484a7453cfa7a03fb
+# Static web client (@blackout/client) served by nginx.
+#
+# Build context is the repository root, e.g.:
+#   docker build -f deploy/docker/Dockerfile -t blackout-web .
+# The CI publish job (.github/workflows/docker.yml) uses the same context.
+#
+# NOTE: this repo is a pnpm/Turborepo monorepo. The canonical frontend is
+# apps/blackout-client (the former Element-web-derived apps/blackout-web shell
+# has been archived to legacy/blackout-web). Earlier revisions of this file were
+# an upstream Element-web Dockerfile (yarn + scripts/docker-package.sh) that no
+# longer matched this repo and could not build.
 
 # Builder
 FROM --platform=$BUILDPLATFORM node:24-bullseye@sha256:8036dbe5b1f465e3acb8b866031cd06e4f84c31b0e83dabbdc59397a40dbe288 AS builder
 
-# Support custom branch of the js-sdk. This also helps us build images of element-web develop.
-ARG USE_CUSTOM_SDKS=false
-ARG JS_SDK_REPO="https://github.com/matrix-org/matrix-js-sdk.git"
-ARG JS_SDK_BRANCH="master"
+RUN corepack enable && corepack prepare pnpm@9.15.4 --activate
 
 WORKDIR /src
 
-COPY --exclude=docker . /src
-RUN bash /src/scripts/docker-link-repos.sh
-RUN yarn --network-timeout=200000 install
-RUN bash /src/scripts/docker-package.sh
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
+COPY packages/ ./packages/
+COPY apps/ ./apps/
+COPY config.sample.json ./config.json
 
-# Copy the config now so that we don't create another layer in the app image
-RUN cp /src/config.sample.json /src/webapp/config.json
+RUN pnpm install --frozen-lockfile
+RUN pnpm client:build
+
+# Copy the sample config into the built client so the app image ships a default.
+RUN cp /src/config.sample.json /src/apps/blackout-client/dist/config.json
 
 # App
 FROM nginxinc/nginx-unprivileged:alpine-slim@sha256:9ac6a908ed07ba7d23cbf6048090453a081abf663c53a7c3f3bf96abc16c0799
@@ -27,12 +37,12 @@ USER root
 # Install jq and moreutils for sponge, both used by our entrypoints
 RUN apk add jq moreutils
 
-COPY --from=builder /src/webapp /app
+COPY --from=builder /src/apps/blackout-client/dist /app
 
 # Override default nginx config. Templates in `/etc/nginx/templates` are passed
 # through `envsubst` by the nginx docker image entry point.
-COPY /docker/nginx-templates/* /etc/nginx/templates/
-COPY /docker/docker-entrypoint.d/* /docker-entrypoint.d/
+COPY deploy/docker/nginx-templates/* /etc/nginx/templates/
+COPY deploy/docker/docker-entrypoint.d/* /docker-entrypoint.d/
 
 RUN rm -rf /usr/share/nginx/html \
   && ln -s /app /usr/share/nginx/html
