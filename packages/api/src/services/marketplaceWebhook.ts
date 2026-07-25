@@ -1,4 +1,8 @@
-import type { LifecycleEventType, MarketplaceProvider, NormalizedLifecycleEvent } from '@blackout/core';
+import type {
+    LifecycleEventType,
+    MarketplaceProvider,
+    NormalizedLifecycleEvent,
+} from '@blackout/core';
 import {
     applyLifecycleEvent,
     hasProcessedWebhookEvent,
@@ -7,16 +11,12 @@ import {
     type ApplyEventResult,
 } from './marketplaceEntitlements';
 import { incrementCounter, logEvent } from './marketplaceObservability';
+import { flushRuntimeStoreWrites } from '../db/store';
 import { creatorDrivenSalesTotal, creatorDrivenGmvCentsTotal } from '../telemetry/metrics';
 import { captureTip, createTip, refundTip, TipValidationError } from './tips';
 import { captureSubscription, refundSubscription } from './creatorSubscriptions';
 import { captureBoostPledge, refundBoostPledge } from './communityBoosts';
-import {
-    ambassadorService,
-    bountyRewardService,
-    questsService,
-    referralService,
-} from './growth';
+import { ambassadorService, bountyRewardService, questsService, referralService } from './growth';
 import { dispatchFbmMatrixEvent, parseFbmMatrixEvent } from './fbmMatrixBridge';
 import { maybeDeliverDigitalDeadDrop } from './fbmMatrixBridge/deadDropDelivery';
 import { tryHandleEntitlementsChanged } from './fbmAclSync/webhookTrigger';
@@ -131,6 +131,11 @@ export async function dispatchMarketplaceWebhook(
     }
 
     const applied = applyLifecycleEvent(event);
+    // Durability barrier: the entitlement grant / license issuance above is a
+    // financially-significant write that the synchronous store only put in the
+    // in-memory mirror. Flush it to Postgres before we ack the webhook, so a
+    // crash cannot lose a paid entitlement (no-op unless BLACKOUT_DB_MODE=postgres).
+    await flushRuntimeStoreWrites();
     // Best-effort digital-product dead-drop delivery (AOG §4.1). Fire-and-forget
     // so a Matrix outage can never block or fail the entitlement grant; no-ops
     // unless the bridge is enabled and the purchase is flagged digitalDelivery.
@@ -172,7 +177,8 @@ function dispatchMonetizationEvent(
             : null;
 
     if (tipId) {
-        const fbmOrderId = typeof meta['fbmOrderId'] === 'string' ? (meta['fbmOrderId'] as string) : null;
+        const fbmOrderId =
+            typeof meta['fbmOrderId'] === 'string' ? (meta['fbmOrderId'] as string) : null;
         if (event.type === 'purchase.succeeded') {
             captureTip(tipId, { fbmOrderId });
             incrementCounter('marketplace_tip_captured_total', { providerId: provider.id });
@@ -361,7 +367,8 @@ function dispatchGrowthAttributionEvent(
         if (!ambassador) {
             return ackUnresolvable(provider, event, 'unknown_ambassadorId');
         }
-        const periodKey = typeof meta['periodKey'] === 'string' ? (meta['periodKey'] as string) : null;
+        const periodKey =
+            typeof meta['periodKey'] === 'string' ? (meta['periodKey'] as string) : null;
         const tip = safeCreateAndCaptureSystemTip({
             recipientUserId: ambassador.userId,
             contextKind: 'ambassador_commission',
@@ -389,7 +396,8 @@ function dispatchGrowthAttributionEvent(
         if (!completion) {
             return ackUnresolvable(provider, event, 'unknown_questCompletionId');
         }
-        const questId = typeof meta['questId'] === 'string' ? (meta['questId'] as string) : completion.questId;
+        const questId =
+            typeof meta['questId'] === 'string' ? (meta['questId'] as string) : completion.questId;
         const tip = safeCreateAndCaptureSystemTip({
             recipientUserId: completion.userId,
             contextKind: 'quest_reward',
@@ -407,8 +415,7 @@ function dispatchGrowthAttributionEvent(
     }
 
     if (event.type === 'bounty.reward_settled') {
-        const bountyId =
-            typeof meta['bountyId'] === 'string' ? (meta['bountyId'] as string) : null;
+        const bountyId = typeof meta['bountyId'] === 'string' ? (meta['bountyId'] as string) : null;
         if (!bountyId) {
             return ackUnresolvable(provider, event, 'missing_bountyId');
         }
@@ -454,7 +461,7 @@ interface SystemTipInput {
 // tip can't be created we still ack the event and log so the operator
 // can repair the upstream ledger seed.
 function safeCreateAndCaptureSystemTip(
-    input: SystemTipInput,
+    input: SystemTipInput
 ): { id: string; netCents: number } | null {
     try {
         const tip = createTip({
@@ -491,7 +498,7 @@ const CREATOR_DRIVEN_KIND_BY_EVENT: Partial<Record<LifecycleEventType, string>> 
 function finalizeGrowthAttribution(
     provider: MarketplaceProvider,
     event: NormalizedLifecycleEvent,
-    tipId: string | null,
+    tipId: string | null
 ): WebhookDispatchResult {
     markWebhookProcessed(event.providerId, event.eventId);
     incrementCounter('marketplace_growth_attribution_total', {
@@ -503,7 +510,8 @@ function finalizeGrowthAttribution(
     const attributionKind = tipId ? CREATOR_DRIVEN_KIND_BY_EVENT[event.type] : undefined;
     if (attributionKind) {
         const meta = event.metadata ?? {};
-        const gmvCents = typeof meta['grossCents'] === 'number' ? (meta['grossCents'] as number) : 0;
+        const gmvCents =
+            typeof meta['grossCents'] === 'number' ? (meta['grossCents'] as number) : 0;
         creatorDrivenSalesTotal.inc({ attribution_kind: attributionKind });
         creatorDrivenGmvCentsTotal.inc({ attribution_kind: attributionKind }, gmvCents);
         incrementCounter('creator_driven_sales_total', { attributionKind });
@@ -526,7 +534,7 @@ function finalizeGrowthAttribution(
 function ackUnresolvable(
     provider: MarketplaceProvider,
     event: NormalizedLifecycleEvent,
-    reason: string,
+    reason: string
 ): WebhookDispatchResult {
     markWebhookProcessed(event.providerId, event.eventId);
     incrementCounter('marketplace_growth_attribution_unresolved_total', {

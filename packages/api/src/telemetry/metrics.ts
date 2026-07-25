@@ -294,6 +294,17 @@ export const marketplaceWebhooksTotal = new Counter(
     ['provider', 'outcome']
 );
 
+export const dbWriteBehindFailuresTotal = new Counter(
+    'db_write_behind_failures_total',
+    'Write-behind Postgres persistence ops that permanently failed after retry (a potential data-loss event). Alert on any increase.',
+    ['map', 'kind']
+);
+
+export const dbWriteBehindDepth = new Gauge(
+    'db_write_behind_depth',
+    'Approximate number of write-behind ops not yet flushed to Postgres (durability lag / backpressure).'
+);
+
 export const mailFailoverStateChangesTotal = new Counter(
     'mail_failover_state_changes_total',
     'Transitions of the mailer failover breaker between closed/half-open/open.',

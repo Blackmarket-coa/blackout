@@ -3226,6 +3226,10 @@ class InMemoryDb {
         return record;
     }
 
+    getCoalitionTask(id: string): CoalitionTaskRecord | undefined {
+        return this.coalitionTasks.get(id);
+    }
+
     updateCoalitionTaskStatus(
         id: string,
         status: CoalitionTaskRecord['status']
@@ -6557,6 +6561,18 @@ export async function initRuntimeStore(pool: PgPool): Promise<void> {
 /** Flush write-behind ops + close the change subscription on graceful shutdown. */
 export async function drainRuntimeStore(): Promise<void> {
     if (db instanceof PostgresBackedDb) await db.shutdown();
+}
+
+/**
+ * Await durability of all currently-queued write-behind ops WITHOUT tearing
+ * down the change subscription. Critical request paths (e.g. payment capture,
+ * entitlement grants) can call this after their mutation and before acking, so
+ * a crash cannot lose a financially- or security-significant write that the
+ * synchronous mutator API only wrote to the in-memory mirror. No-op unless
+ * BLACKOUT_DB_MODE=postgres.
+ */
+export async function flushRuntimeStoreWrites(): Promise<void> {
+    if (db instanceof PostgresBackedDb) await db.drain();
 }
 
 /** Runtime store mode, for boot wiring. */
