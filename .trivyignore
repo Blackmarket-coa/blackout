@@ -8,6 +8,9 @@
 GHSA-qwww-vcr4-c8h2
 
 # brace-expansion ReDoS. The tree resolves to 1.1.16/2.1.2/5.0.8, all at or
-# above the maintainer's per-line security patches (1.1.12/2.0.2/5.0.8); the
-# scanners over-report across major lines. Every instance is patched.
+# above the maintainer's per-line security patches (1.1.12/2.0.2/5.0.8); OSV's
+# affected-versions list for the 1.x line tops out at 1.1.11, so 1.1.16 is
+# patched. The scanners over-report across major lines. CVE-2026-14257 is the
+# CVE alias of GHSA-mh99-v99m-4gvg (Trivy matches by CVE); both are listed.
 GHSA-mh99-v99m-4gvg
+CVE-2026-14257
