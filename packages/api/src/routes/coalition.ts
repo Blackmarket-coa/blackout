@@ -99,7 +99,7 @@ import {
     newResourceId,
     updateResourceAvailability,
 } from '../services/coalitionStore';
-import { createTask, listTasks, newTaskId, updateTaskStatus } from '../services/taskStore';
+import { createTask, getTask, listTasks, newTaskId, updateTaskStatus } from '../services/taskStore';
 import {
     getProjectView,
     listProjectSupporters,
@@ -457,6 +457,7 @@ coalition.post('/tasks', async (c) => {
         title: parsed.title,
         description: parsed.description,
         assigneeId: parsed.assigneeId,
+        createdBy: user.sub,
         proposalEventId: parsed.proposalEventId,
     });
     return c.json({ task }, 201);
@@ -471,6 +472,20 @@ coalition.patch('/tasks/:id', async (c) => {
     if (user instanceof Response) return user;
     const parsed = await readJsonBody(c, updateTaskSchema);
     if (parsed instanceof Response) return parsed;
+    const existing = getTask(c.req.param('id'));
+    if (!existing) {
+        return c.json({ code: 'not_found', message: 'Task not found' }, 404);
+    }
+    // Object-level authorization: only the task's creator or assignee may move
+    // it across the board. Tasks created before `createdBy` existed have no
+    // creator recorded and are grandfathered (open to any authenticated user)
+    // so the fix does not break pre-existing beta data.
+    if (existing.createdBy && existing.createdBy !== user.sub && existing.assigneeId !== user.sub) {
+        return c.json(
+            { code: 'forbidden', message: 'Only the task creator or assignee can update it' },
+            403
+        );
+    }
     const task = updateTaskStatus(c.req.param('id'), parsed.status);
     if (!task) {
         return c.json({ code: 'not_found', message: 'Task not found' }, 404);
