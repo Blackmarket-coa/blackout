@@ -23,3 +23,14 @@
 id = "GHSA-qwww-vcr4-c8h2"
 ignoreUntil = 2026-10-31
 reason = "RSC-mode-only advisory; client uses react-router in library mode. Fix requires React 19 migration (tracked separately)."
+
+# brace-expansion ReDoS. The tree resolves to 1.1.16, 2.1.2, and 5.0.8 (pinned
+# via pnpm.overrides) — all at or above the maintainer's per-line security
+# patches (1.1.12 / 2.0.2 / 5.0.8), so every instance is patched. OSV (and npm
+# audit) over-report because their normalized affected-range spans majors. The
+# 1.x/2.x instances are react-native dev-toolchain transitives under the
+# blackout-gov app; they cannot move to 5.x without breaking glob@7/minimatch@3.
+[[IgnoredVulns]]
+id = "GHSA-mh99-v99m-4gvg"
+ignoreUntil = 2026-10-31
+reason = "Resolved to 1.1.16/2.1.2/5.0.8, all >= the per-line fixes (1.1.12/2.0.2/5.0.8). OSV over-reports across majors; packages are patched."

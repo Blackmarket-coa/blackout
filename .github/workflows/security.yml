@@ -123,5 +123,12 @@ jobs:
                   scan-ref: .
                   severity: CRITICAL,HIGH
                   ignore-unfixed: true
-                  # Blocking: fail on fixable CRITICAL/HIGH findings.
+                  # Vulnerabilities only — secret scanning is owned by the
+                  # dedicated gitleaks job (with .gitleaksignore), so Trivy does
+                  # not double-report the vendored Synapse test-key fixtures
+                  # (e.g. synapse/util/manhole.py's upstream demo RSA key).
+                  scanners: vuln
+                  # Blocking: fail on fixable CRITICAL/HIGH findings. Reviewed,
+                  # non-applicable advisories are documented in .trivyignore.
                   exit-code: '1'
+                  trivyignores: .trivyignore

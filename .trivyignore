@@ -1,0 +1,13 @@
+# Trivy ignore list — reviewed, non-applicable advisories only.
+# Mirrors the accepted-risk set in osv-scanner.toml and pnpm.auditConfig
+# (package.json). Keep the rationale in sync across all three.
+
+# react-router RSC-mode CSRF bypass. The client is a Vite SPA using
+# react-router in library mode only (no RSC), so it does not apply. The fix
+# (react-router 8) requires a React 18->19 migration, tracked separately.
+GHSA-qwww-vcr4-c8h2
+
+# brace-expansion ReDoS. The tree resolves to 1.1.16/2.1.2/5.0.8, all at or
+# above the maintainer's per-line security patches (1.1.12/2.0.2/5.0.8); the
+# scanners over-report across major lines. Every instance is patched.
+GHSA-mh99-v99m-4gvg
