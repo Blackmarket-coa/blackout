@@ -15,6 +15,13 @@ export interface RateLimitOptions {
      * a falsy value, so anonymous traffic is still bucketed by address.
      */
     identify?: (c: Context) => string | null | undefined;
+    /**
+     * When true, a store error rejects the request (429) instead of allowing it.
+     * Use for security-sensitive buckets (auth/brute-force) where a Redis outage
+     * must NOT silently disable protection. Defaults to false so a store blip
+     * degrades to availability on non-sensitive buckets.
+     */
+    failClosed?: boolean;
 }
 
 /**
@@ -133,7 +140,7 @@ const clientKey = (c: Context, bucket: string): string => {
 };
 
 export function createRateLimit(options: RateLimitOptions) {
-    const { bucket, windowMs, maxRequests, store: providedStore, identify } = options;
+    const { bucket, windowMs, maxRequests, store: providedStore, identify, failClosed } = options;
     let resolvedStore: RateLimitStore | null = providedStore ?? null;
 
     return async function rateLimitMiddleware(c: Context, next: Next) {
@@ -148,8 +155,19 @@ export function createRateLimit(options: RateLimitOptions) {
         try {
             count = await store.hit(key, windowMs);
         } catch (err) {
-            // Fail-open with a warning rather than 500. The legacy behavior was effectively fail-open
-            // because the in-memory store could not error.
+            if (failClosed) {
+                // Security-sensitive bucket: a store outage must not silently
+                // disable brute-force protection. Reject rather than allow.
+                log.error('rate-limit: store error, rejecting request (fail-closed)', {
+                    bucket,
+                    error: String(err),
+                });
+                const retryAfter = Math.ceil(windowMs / 1000);
+                c.header('Retry-After', String(retryAfter));
+                return c.json({ code: 'rate_limited', message: 'Rate limit unavailable' }, 429);
+            }
+            // Non-sensitive bucket: fail-open with a warning rather than 500, so a
+            // store blip degrades to availability.
             log.warn('rate-limit: store error, allowing request', { bucket, error: String(err) });
             return next();
         }
@@ -172,6 +190,8 @@ export const authRateLimit = createRateLimit({
     bucket: 'auth',
     windowMs: 60_000,
     maxRequests: Number.isFinite(authMax) && authMax > 0 ? authMax : 10,
+    // Brute-force protection must not vanish during a Redis outage.
+    failClosed: true,
 });
 
 // Mutating clip endpoints (create/update/delete). Reads stay on the global

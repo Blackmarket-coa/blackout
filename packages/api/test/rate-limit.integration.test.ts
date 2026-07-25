@@ -135,6 +135,24 @@ test('fails open with a warning when the store throws', async () => {
     assert.equal(nextCalled, true);
 });
 
+test('fails closed (429) when a failClosed bucket store throws', async () => {
+    const mw = createRateLimit({
+        bucket: 'auth-test',
+        windowMs: 60_000,
+        maxRequests: 1,
+        store: new ExplodingStore(),
+        failClosed: true,
+    });
+    let nextCalled = false;
+    const next = async () => {
+        nextCalled = true;
+    };
+    const ctx = buildContext('203.0.113.11');
+    await mw(ctx as never, next as never);
+    assert.equal(nextCalled, false, 'request must not proceed when protection is unavailable');
+    assert.equal((ctx as { _result: { status: number } })._result.status, 429);
+});
+
 test('setDefaultRateLimitStore replaces the lazily-resolved default', async () => {
     const shared = new Map<string, number[]>();
     setDefaultRateLimitStore(new FakeRedisStore(shared));
