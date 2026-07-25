@@ -289,27 +289,30 @@ _Prepared as an independent pre-launch readiness audit. Evidence for every Criti
 
 ## Appendix B — Remediation status
 
-Fixes landed on branch `claude/pre-launch-app-audit-mp0yvg` (PR #857) after the audit. Each was verified before commit (`@blackout/api` typecheck clean; API suite **1318/1318**; `pnpm build` green; `pnpm audit --prod` clean with documented ignores).
+Fixes landed on branch `claude/pre-launch-app-audit-mp0yvg` (PR #857) after the audit. Each was verified before commit (`@blackout/api` typecheck clean; API suite **1321/1321**; `pnpm build` green; `pnpm audit --prod` clean with documented ignores; migration round-trip via `verify-migrations-ephemeral`).
 
-| ID        | Finding                                    | Status                                                                            |
-| --------- | ------------------------------------------ | --------------------------------------------------------------------------------- |
-| C1        | Dead-man's switch never fires autonomously | ✅ Fixed — server-side sweep loop (`deadmanSweepScheduler`, on by default) + test |
-| H1        | WS shims outside middleware / DoS          | ✅ Fixed — frame caps + unauthenticated idle timeout on Twitch/OBS shims          |
-| H2        | Graceful shutdown only in postgres mode    | ✅ Fixed — unconditional shutdown; closes HTTP server + drains                    |
-| H4        | Background-loop double-processing at scale | ✅ Fixed — Postgres advisory-lock leader election (fails safe)                    |
-| H5        | Rate limiter fails open                    | ✅ Fixed — auth bucket fails closed on store error                                |
-| H6        | Default `file` DB mode in production       | ✅ Fixed — production refuses to boot unless `BLACKOUT_DB_MODE=postgres`          |
-| H7        | Security CI lane cannot fail a build       | ✅ Fixed — pnpm audit + Trivy blocking; documented, time-boxed ignores            |
-| H8        | High-sev dependency advisories             | ✅ Fixed — postcss/tar/brace-expansion patched (react-router: see below)          |
-| H9        | Access-token revocation incomplete         | ✅ Fixed — per-user revocation cutoff on revoke-all / password change / reuse     |
-| H10       | Rotted deploy entry points                 | ✅ Fixed — `index.js`, `Dockerfile.blackout`, CI web image repaired               |
-| H11       | No Privacy Policy / ToS                    | ⚠️ Drafted — templates under `docs/legal/`, **counsel review required**           |
-| M1/M2     | Coalition needs/resources BOLA             | ✅ Fixed — ownership checks + regression tests                                    |
-| M7/M9/M10 | onError, /health disclosure, log salt      | ✅ Fixed                                                                          |
-| M15       | 9 workflows over-scoped                    | ✅ Fixed — least-privilege `permissions:`                                         |
+| ID        | Finding                                      | Status                                                                                                                               |
+| --------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| C1        | Dead-man's switch never fires autonomously   | ✅ Fixed — server-side sweep loop (`deadmanSweepScheduler`, on by default) + test                                                    |
+| H1        | WS shims outside middleware / DoS            | ✅ Fixed — frame caps + unauthenticated idle timeout on Twitch/OBS shims                                                             |
+| H2        | Graceful shutdown only in postgres mode      | ✅ Fixed — unconditional shutdown; closes HTTP server + drains                                                                       |
+| H4        | Background-loop double-processing at scale   | ✅ Fixed — Postgres advisory-lock leader election (fails safe)                                                                       |
+| H5        | Rate limiter fails open                      | ✅ Fixed — auth bucket fails closed on store error                                                                                   |
+| H6        | Default `file` DB mode in production         | ✅ Fixed — production refuses to boot unless `BLACKOUT_DB_MODE=postgres`                                                             |
+| H7        | Security CI lane cannot fail a build         | ✅ Fixed — pnpm audit + Trivy blocking; documented, time-boxed ignores                                                               |
+| H8        | High-sev dependency advisories               | ✅ Fixed — postcss/tar/brace-expansion patched (react-router: see below)                                                             |
+| H9        | Access-token revocation incomplete           | ✅ Fixed — per-user revocation cutoff on revoke-all / password change / reuse                                                        |
+| H10       | Rotted deploy entry points                   | ✅ Fixed — `index.js`, `Dockerfile.blackout`, CI web image repaired                                                                  |
+| H11       | No Privacy Policy / ToS                      | ⚠️ Drafted — templates under `docs/legal/`, **counsel review required**                                                              |
+| H3        | Write-behind loses committed writes silently | ✅ Fixed — failure metric + depth gauge; `flushRuntimeStoreWrites()` durability barrier on the marketplace webhook money path + test |
+| M1/M2     | Coalition needs/resources BOLA               | ✅ Fixed — ownership checks + regression tests                                                                                       |
+| M3        | Coalition _task_ BOLA                        | ✅ Fixed — `createdBy` field (migration 073) + creator/assignee gate + test                                                          |
+| M7/M9/M10 | onError, /health disclosure, log salt        | ✅ Fixed                                                                                                                             |
+| M15       | 9 workflows over-scoped                      | ✅ Fixed — least-privilege `permissions:`                                                                                            |
+| L8        | Nightly k6 can't produce a valid signal      | ✅ Fixed — API boot fails fast + logs captured; runs against postgres                                                                |
+| (deps)    | Pillow / rustls-webpki high-sev advisories   | ✅ Fixed — perturbation sidecar pillow → 12.3.0; desktop rustls-webpki → 0.103.13                                                    |
 
 **Deferred (need product/architecture decisions):**
 
--   **react-router 7→8** (H8 remainder): the entire react-router 8 line requires **React ≥19.2.7**; the client is on React 18.2 and `folds` peers on React 17, so this is a React 18→19 migration, not a router bump. The advisory (GHSA-qwww-vcr4-c8h2) is RSC-mode-only and the client uses library mode, so it does not apply — silenced with a time-boxed, documented ignore (`osv-scanner.toml`, `pnpm.auditConfig`) that expires 2026-10-31 to force re-evaluation.
--   **M3** (coalition _task_ BOLA): needs a den-membership model (or a task-creator column + migration).
--   **H3** (write-behind durability), **M4/M5/M8/M11/M12/M16-M20**, and the runtime **E2E + load-test** validation (§5) remain from the checklist.
+-   **react-router 7→8 / React 18→19** (H8 remainder): the entire react-router 8 line requires **React ≥19.2.7**; the client is on React 18.2 and the `folds` design system (used in 322 files) still peers React 17, so this is a React 18→19 framework migration whose runtime behaviour can't be validated without running the full client — not a router bump. The advisory (GHSA-qwww-vcr4-c8h2) is RSC-mode-only and the client uses library mode, so it does not apply; it is silenced with a time-boxed, documented ignore (`osv-scanner.toml`, `.trivyignore`, `pnpm.auditConfig`) expiring 2026-10-31. A concrete, grounded migration plan is at **`docs/migrations/react-19-and-react-router-8.md`**.
+-   **M4/M5/M8/M11/M12/M14/M16-M20**, and the runtime **E2E + load-test** validation (§5) remain from the checklist. (L8 unblocks the load test by making the harness produce a real signal; the actual production-like E2E/load _run_ still needs a live stack.)
