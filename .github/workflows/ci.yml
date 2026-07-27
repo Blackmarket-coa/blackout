@@ -1,436 +1,444 @@
 name: Blackout CI
 
 on:
-  push:
-  pull_request:
-    branches: ["**"]
+    push:
+    pull_request:
+        branches: ['**']
 
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+    group: ci-${{ github.ref }}
+    cancel-in-progress: true
 
 permissions:
-  contents: read
+    contents: read
 
 jobs:
-  lint:
-    name: Lint (ESLint + Prettier)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
-      - uses: pnpm/action-setup@v5
-        with:
-          version: 9.15.4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @blackout/client exec eslint "src/**/*.{ts,tsx}" --max-warnings=0
+    lint:
+        name: Lint (ESLint + Prettier)
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+            - uses: pnpm/action-setup@v5
+              with:
+                  version: 9.15.4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: pnpm
+            - run: pnpm install --frozen-lockfile
+            - run: pnpm --filter @blackout/client exec eslint "src/**/*.{ts,tsx}" --max-warnings=0
 
-  typecheck:
-    name: Type check (tsc --noEmit)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
-      - uses: pnpm/action-setup@v5
-        with:
-          version: 9.15.4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - name: Build workspace dependencies (core, design) for project references
-        run: |
-          pnpm --filter @blackout/core run build
-          pnpm --filter @blackout/design run build
-      - run: pnpm --filter @blackout/client run typecheck
-      - run: pnpm --filter @blackout/api run typecheck
-      - run: pnpm --filter blackout-mobile run preflight
+    typecheck:
+        name: Type check (tsc --noEmit)
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+            - uses: pnpm/action-setup@v5
+              with:
+                  version: 9.15.4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: pnpm
+            - run: pnpm install --frozen-lockfile
+            - name: Build workspace dependencies (core, design) for project references
+              run: |
+                  pnpm --filter @blackout/core run build
+                  pnpm --filter @blackout/design run build
+            - run: pnpm --filter @blackout/client run typecheck
+            - run: pnpm --filter @blackout/api run typecheck
+            - run: pnpm --filter blackout-mobile run preflight
 
-  unit-tests:
-    name: Unit tests (Vitest)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
-      - uses: pnpm/action-setup@v5
-        with:
-          version: 9.15.4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - name: Build workspace dependencies for project references
-        run: |
-          pnpm --filter @blackout/core run build
-          pnpm --filter @blackout/design run build
-      - run: pnpm --filter @blackout/client run test:coverage
-      - run: pnpm --filter @blackout/client run test:integration
+    unit-tests:
+        name: Unit tests (Vitest)
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+            - uses: pnpm/action-setup@v5
+              with:
+                  version: 9.15.4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: pnpm
+            - run: pnpm install --frozen-lockfile
+            - name: Build workspace dependencies for project references
+              run: |
+                  pnpm --filter @blackout/core run build
+                  pnpm --filter @blackout/design run build
+            - run: pnpm --filter @blackout/client run test:coverage
+            - run: pnpm --filter @blackout/client run test:integration
 
-  feature-registry-validation:
-    name: Feature registry validation
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - run: node tools/ci/check-feature-registry.mjs
+    feature-registry-validation:
+        name: Feature registry validation
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+            - run: node tools/ci/check-feature-registry.mjs
 
+    matrix-sdk-baseline:
+        name: Matrix SDK baseline alignment
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+            - run: node tools/ci/check-matrix-sdk-version-alignment.mjs
 
-  matrix-sdk-baseline:
-    name: Matrix SDK baseline alignment
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - run: node tools/ci/check-matrix-sdk-version-alignment.mjs
+    deployment-readiness:
+        name: Deployment readiness assertions
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+            - run: node tools/ci/check-deployment-readiness.mjs
 
-  deployment-readiness:
-    name: Deployment readiness assertions
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - run: node tools/ci/check-deployment-readiness.mjs
+    production-compose-image-policy:
+        name: Production compose image policy
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+            - run: deploy/docker/production/scripts/check-no-latest-images.sh
 
-  production-compose-image-policy:
-    name: Production compose image policy
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
-      - run: deploy/docker/production/scripts/check-no-latest-images.sh
+    build-verification:
+        name: Build verification
+        runs-on: ubuntu-latest
+        strategy:
+            matrix:
+                project: ['@blackout/client', 'blackout-mobile']
+        steps:
+            - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+            - uses: pnpm/action-setup@v5
+              with:
+                  version: 9.15.4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: pnpm
+            - name: Fresh install (force relink)
+              run: pnpm install --frozen-lockfile --force
+            - run: pnpm --filter "${{ matrix.project }}" run build
 
-  build-verification:
-    name: Build verification
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        project: ["@blackout/client", "blackout-mobile"]
-    steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
-      - uses: pnpm/action-setup@v5
-        with:
-          version: 9.15.4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - name: Fresh install (force relink)
-        run: pnpm install --frozen-lockfile --force
-      - run: pnpm --filter "${{ matrix.project }}" run build
-
-  bundle-size:
-    name: Bundle size check
-    runs-on: ubuntu-latest
-    env:
-      # Re-baselined for the vite 6 -> 8 migration: vite 8's rolldown bundler
-      # emits ~1.9MB more than rollup did for the same sources (the wasm/worker
-      # payloads are unchanged; the delta is JS chunk output). Raised from
-      # 24576 to 28672 with ~2MB headroom to keep catching unexpected growth.
-      MAX_BUNDLE_KB: 28672
-    steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
-      - uses: pnpm/action-setup@v5
-        with:
-          version: 9.15.4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @blackout/client run build
-      - name: Check bundle size threshold
-        run: |
-          # Exclude .map files: source maps aren't shipped to users and
-          # would dominate the size signal otherwise.
-          BUNDLE_KB=$(du -sk --exclude='*.map' apps/blackout-client/dist | cut -f1)
-          echo "Bundle size (excluding source maps): ${BUNDLE_KB}KB"
-          if [ "$BUNDLE_KB" -gt "$MAX_BUNDLE_KB" ]; then
-            echo "Bundle exceeds ${MAX_BUNDLE_KB}KB threshold"
-            exit 1
-          fi
-
-  qa-monorepo:
-    name: Monorepo QA conformance
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
-      - uses: pnpm/action-setup@v5
-        with:
-          version: 9.15.4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - name: Run monorepo QA suite
-        id: qa_monorepo
-        continue-on-error: ${{ vars.MONOREPO_MIGRATION_THRESHOLD_MET != 'true' }}
-        run: pnpm qa:monorepo
-      - name: Upload monorepo QA artifacts
-        if: always()
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
-        with:
-          name: qa-monorepo-artifacts
-          path: artifacts/qa-monorepo
-          if-no-files-found: warn
-      - name: Enforce monorepo QA gate at threshold
-        if: vars.MONOREPO_MIGRATION_THRESHOLD_MET == 'true' && steps.qa_monorepo.outcome != 'success'
-        run: |
-          echo "MONOREPO_MIGRATION_THRESHOLD_MET=true so qa:monorepo is required."
-          exit 1
-
-  frontend-consolidation-safety-gates:
-    name: Frontend consolidation safety gates
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
-      - uses: pnpm/action-setup@v5
-        with:
-          version: 9.15.4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - name: Anti-drift check for consolidation artifacts
-        run: pnpm guard:frontend-consolidation
-      - name: Keep canonical migration surfaces green
-        run: pnpm --filter @blackout/blackout-gov test
-
-  edge-hardening-guards:
-    name: Edge hardening guards (CORS allowlist)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - name: CORS allowlist guard
-        run: node tools/ci/check-cors-allowlist.mjs
-
-  ops-artifacts-lint:
-    name: Ops artifacts lint (alerts + dashboards)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
-      - uses: pnpm/action-setup@v5
-        with:
-          version: 9.15.4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm guard:ops-artifacts
-
-  audit-clean:
-    # `pnpm audit` broke when npm retired its full-audit registry endpoint
-    # (410 responses), so this gate scans the lockfile with osv-scanner
-    # instead — same pinned action and allowlist (osv-scanner.toml) as the
-    # scheduled security workflow.
-    name: Dependency audit (no advisories at moderate+)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
-      - name: OSV scanner
-        uses: google/osv-scanner-action/osv-scanner-action@v2.3.3
-        with:
-          scan-args: |-
-            --lockfile=pnpm-lock.yaml
-
-  helm-chart-lint:
-    name: Helm chart lint + template
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
-      - name: Install helm
-        uses: azure/setup-helm@b9e51907a09c216f16ebe8536097933489208112 # v4
-        with:
-          version: v3.15.4
-      - name: Lint chart
-        run: helm lint deploy/helm/blackout
-      - name: Render default values
-        run: helm template blackout deploy/helm/blackout > /tmp/blackout-default.yaml
-      - name: Render with canary + external-secrets enabled
-        run: |
-          helm template blackout deploy/helm/blackout \
-            --set canary.enabled=true \
-            --set externalSecrets.enabled=true \
-            --set api.observability.sentry.enabled=true \
-            --set api.observability.otel.enabled=true \
-            > /tmp/blackout-full.yaml
-
-  e2e-smoke:
-    name: Client e2e smoke (Playwright / chromium)
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
-      - uses: pnpm/action-setup@v5
-        with:
-          version: 9.15.4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - name: Build workspace dependencies for the client bundle
-        run: |
-          pnpm --filter @blackout/core run build
-          pnpm --filter @blackout/design run build
-      - name: Build @blackout/client
-        run: pnpm --filter @blackout/client run build
-      - name: Install Playwright chromium + system deps
-        run: pnpm e2e:install
-      - name: Run Playwright e2e suite
+    bundle-size:
+        name: Bundle size check
+        runs-on: ubuntu-latest
         env:
-          CI: "1"
-        run: pnpm e2e
-      - name: Upload Playwright report on failure
-        if: failure()
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
-        with:
-          name: playwright-report
-          path: apps/blackout-client/playwright-report
-          if-no-files-found: ignore
+            # Re-baselined for the vite 6 -> 8 migration: vite 8's rolldown bundler
+            # emits ~1.9MB more than rollup did for the same sources (the wasm/worker
+            # payloads are unchanged; the delta is JS chunk output). Raised from
+            # 24576 to 28672 with ~2MB headroom to keep catching unexpected growth.
+            MAX_BUNDLE_KB: 28672
+        steps:
+            - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+            - uses: pnpm/action-setup@v5
+              with:
+                  version: 9.15.4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: pnpm
+            - run: pnpm install --frozen-lockfile
+            - run: pnpm --filter @blackout/client run build
+            - name: Check bundle size threshold
+              run: |
+                  # Exclude .map files: source maps aren't shipped to users and
+                  # would dominate the size signal otherwise.
+                  BUNDLE_KB=$(du -sk --exclude='*.map' apps/blackout-client/dist | cut -f1)
+                  echo "Bundle size (excluding source maps): ${BUNDLE_KB}KB"
+                  if [ "$BUNDLE_KB" -gt "$MAX_BUNDLE_KB" ]; then
+                    echo "Bundle exceeds ${MAX_BUNDLE_KB}KB threshold"
+                    exit 1
+                  fi
 
-  nav-audit:
-    name: Navigation audit (Playwright + crawler + mobile)
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
-    steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
-      - uses: pnpm/action-setup@v5
-        with:
-          version: 9.15.4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - name: Cache Playwright browsers
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
-      - name: Build workspace dependencies for the client bundle
-        run: |
-          pnpm --filter @blackout/core run build
-          pnpm --filter @blackout/design run build
-      - name: Build @blackout/client
-        run: pnpm --filter @blackout/client run build
-      - name: Install Playwright chromium + system deps
-        run: pnpm e2e:install
-      # TODO(audit): wire a Synapse + MAS service here (composite action)
-      # and export BLACKOUT_E2E_HOMESERVER_URL / LS_AUTH_USERNAME /
-      # LS_AUTH_PASSWORD so global-setup.ts can drive a real login.
-      # Until then the audit gracefully falls back to bootstrap-gate-only
-      # coverage and reports the same single warning + info.
-      - name: Run navigation-audit Playwright suite
-        id: nav_audit_playwright
-        continue-on-error: ${{ vars.NAVIGATION_AUDIT_REQUIRED != 'true' }}
-        env:
-          CI: "1"
-          BLACKOUT_AUDIT_STORAGE_STATE: audit/navigation/.playwright-state/storageState.json
-        run: pnpm test:e2e:navigation
-      - name: Run web navigation crawler
-        id: nav_audit_crawler
-        continue-on-error: ${{ vars.NAVIGATION_AUDIT_REQUIRED != 'true' }}
-        env:
-          BLACKOUT_AUDIT_STORAGE_STATE: audit/navigation/.playwright-state/storageState.json
-        run: |
-          pnpm --filter @blackout/client exec vite preview \
-            --port 4173 --host 127.0.0.1 --strictPort &
-          VITE_PID=$!
-          # Wait for the preview server to accept connections.
-          for i in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:4173 > /dev/null; then break; fi
-            sleep 1
-          done
-          pnpm tsx tools/audit-navigation/crawl-web.ts --base http://127.0.0.1:4173
-          STATUS=$?
-          kill $VITE_PID 2>/dev/null || true
-          exit $STATUS
-      - name: Run mobile static auditor
-        id: nav_audit_mobile
-        continue-on-error: ${{ vars.NAVIGATION_AUDIT_REQUIRED != 'true' }}
-        run: pnpm tsx tools/audit-navigation/audit-mobile.ts
-      - name: Upload audit reports
-        if: always()
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
-        with:
-          name: navigation-audit-reports
-          path: |
-            audit/navigation/web-report.json
-            audit/navigation/web-report.md
-            audit/navigation/mobile-report.json
-            audit/navigation/mobile-report.md
-            audit/navigation/playwright-html/
-            audit/navigation/playwright-results/
-          if-no-files-found: ignore
-      - name: Enforce navigation-audit outcome when required
-        if: vars.NAVIGATION_AUDIT_REQUIRED == 'true'
-        run: |
-          set -e
-          if [ "${{ steps.nav_audit_playwright.outcome }}" != "success" ] \
-             || [ "${{ steps.nav_audit_crawler.outcome }}" != "success" ] \
-             || [ "${{ steps.nav_audit_mobile.outcome }}" != "success" ]; then
-            echo "Navigation audit failed and NAVIGATION_AUDIT_REQUIRED is true."
-            exit 1
-          fi
+    qa-monorepo:
+        name: Monorepo QA conformance
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+            - uses: pnpm/action-setup@v5
+              with:
+                  version: 9.15.4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: pnpm
+            - run: pnpm install --frozen-lockfile
+            - name: Run monorepo QA suite
+              id: qa_monorepo
+              # Soft (reports but does not block) until the monorepo migration reaches
+              # its conformance threshold. Promote to BLOCKING by setting the repo
+              # variable MONOREPO_MIGRATION_THRESHOLD_MET=true
+              # (Settings → Secrets and variables → Actions → Variables). Audit L7.
+              continue-on-error: ${{ vars.MONOREPO_MIGRATION_THRESHOLD_MET != 'true' }}
+              run: pnpm qa:monorepo
+            - name: Upload monorepo QA artifacts
+              if: always()
+              uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+              with:
+                  name: qa-monorepo-artifacts
+                  path: artifacts/qa-monorepo
+                  if-no-files-found: warn
+            - name: Enforce monorepo QA gate at threshold
+              if: vars.MONOREPO_MIGRATION_THRESHOLD_MET == 'true' && steps.qa_monorepo.outcome != 'success'
+              run: |
+                  echo "MONOREPO_MIGRATION_THRESHOLD_MET=true so qa:monorepo is required."
+                  exit 1
 
-  api-smoke-and-integration:
-    name: API smoke + integration (Hono app.fetch)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
-      - uses: pnpm/action-setup@v5
-        with:
-          version: 9.15.4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - name: Migration + reversibility verification
-        run: |
-          node tools/ci/check-db-migrations.mjs
-          node tools/ci/verify-migrations-ephemeral.mjs
-      - name: API integration tests
-        env:
-          BLACKOUT_DB_MODE: memory
-          BLACKOUT_API_SKIP_LISTEN: "1"
-          NODE_ENV: test
-        run: pnpm --filter @blackout/api test:integration
+    frontend-consolidation-safety-gates:
+        name: Frontend consolidation safety gates
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+            - uses: pnpm/action-setup@v5
+              with:
+                  version: 9.15.4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: pnpm
+            - run: pnpm install --frozen-lockfile
+            - name: Anti-drift check for consolidation artifacts
+              run: pnpm guard:frontend-consolidation
+            - name: Keep canonical migration surfaces green
+              run: pnpm --filter @blackout/blackout-gov test
 
-  launch-smoke:
-    name: Launch-smoke gate (LS-* release-blocker cases)
-    runs-on: ubuntu-latest
-    needs: api-smoke-and-integration
-    steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
-      - uses: pnpm/action-setup@v5
-        with:
-          version: 9.15.4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - name: Run automated LS-* smoke set
-        env:
-          BLACKOUT_DB_MODE: memory
-          BLACKOUT_API_SKIP_LISTEN: "1"
-          NODE_ENV: test
-        # Per docs/launch-smoke-suite.md: every release-blocker case
-        # must pass for the launch gate to clear. Failure here is a
-        # release-no-go.
-        run: pnpm --filter @blackout/api test:launch-smoke
+    edge-hardening-guards:
+        name: Edge hardening guards (CORS allowlist)
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+            - name: CORS allowlist guard
+              run: node tools/ci/check-cors-allowlist.mjs
+
+    ops-artifacts-lint:
+        name: Ops artifacts lint (alerts + dashboards)
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+            - uses: pnpm/action-setup@v5
+              with:
+                  version: 9.15.4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: pnpm
+            - run: pnpm install --frozen-lockfile
+            - run: pnpm guard:ops-artifacts
+
+    audit-clean:
+        # `pnpm audit` broke when npm retired its full-audit registry endpoint
+        # (410 responses), so this gate scans the lockfile with osv-scanner
+        # instead — same pinned action and allowlist (osv-scanner.toml) as the
+        # scheduled security workflow.
+        name: Dependency audit (no advisories at moderate+)
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+            - name: OSV scanner
+              uses: google/osv-scanner-action/osv-scanner-action@v2.3.3
+              with:
+                  scan-args: |-
+                      --lockfile=pnpm-lock.yaml
+
+    helm-chart-lint:
+        name: Helm chart lint + template
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+            - name: Install helm
+              uses: azure/setup-helm@b9e51907a09c216f16ebe8536097933489208112 # v4
+              with:
+                  version: v3.15.4
+            - name: Lint chart
+              run: helm lint deploy/helm/blackout
+            - name: Render default values
+              run: helm template blackout deploy/helm/blackout > /tmp/blackout-default.yaml
+            - name: Render with canary + external-secrets enabled
+              run: |
+                  helm template blackout deploy/helm/blackout \
+                    --set canary.enabled=true \
+                    --set externalSecrets.enabled=true \
+                    --set api.observability.sentry.enabled=true \
+                    --set api.observability.otel.enabled=true \
+                    > /tmp/blackout-full.yaml
+
+    e2e-smoke:
+        name: Client e2e smoke (Playwright / chromium)
+        runs-on: ubuntu-latest
+        timeout-minutes: 20
+        steps:
+            - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+            - uses: pnpm/action-setup@v5
+              with:
+                  version: 9.15.4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: pnpm
+            - run: pnpm install --frozen-lockfile
+            - name: Build workspace dependencies for the client bundle
+              run: |
+                  pnpm --filter @blackout/core run build
+                  pnpm --filter @blackout/design run build
+            - name: Build @blackout/client
+              run: pnpm --filter @blackout/client run build
+            - name: Install Playwright chromium + system deps
+              run: pnpm e2e:install
+            - name: Run Playwright e2e suite
+              env:
+                  CI: '1'
+              run: pnpm e2e
+            - name: Upload Playwright report on failure
+              if: failure()
+              uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+              with:
+                  name: playwright-report
+                  path: apps/blackout-client/playwright-report
+                  if-no-files-found: ignore
+
+    nav-audit:
+        name: Navigation audit (Playwright + crawler + mobile)
+        runs-on: ubuntu-latest
+        timeout-minutes: 25
+        steps:
+            - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+            - uses: pnpm/action-setup@v5
+              with:
+                  version: 9.15.4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: pnpm
+            - run: pnpm install --frozen-lockfile
+            - name: Cache Playwright browsers
+              uses: actions/cache@v4
+              with:
+                  path: ~/.cache/ms-playwright
+                  key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+            - name: Build workspace dependencies for the client bundle
+              run: |
+                  pnpm --filter @blackout/core run build
+                  pnpm --filter @blackout/design run build
+            - name: Build @blackout/client
+              run: pnpm --filter @blackout/client run build
+            - name: Install Playwright chromium + system deps
+              run: pnpm e2e:install
+            # TODO(audit): wire a Synapse + MAS service here (composite action)
+            # and export BLACKOUT_E2E_HOMESERVER_URL / LS_AUTH_USERNAME /
+            # LS_AUTH_PASSWORD so global-setup.ts can drive a real login.
+            # Until then the audit gracefully falls back to bootstrap-gate-only
+            # coverage and reports the same single warning + info.
+            # The three nav-audit steps below are soft until a live homeserver is
+            # wired in (see TODO above) and the repo variable NAVIGATION_AUDIT_REQUIRED
+            # is set to 'true' (Settings → Secrets and variables → Actions → Variables),
+            # which promotes them to BLOCKING. Without a homeserver they fall back to
+            # bootstrap-gate-only coverage. Audit L7.
+            - name: Run navigation-audit Playwright suite
+              id: nav_audit_playwright
+              continue-on-error: ${{ vars.NAVIGATION_AUDIT_REQUIRED != 'true' }}
+              env:
+                  CI: '1'
+                  BLACKOUT_AUDIT_STORAGE_STATE: audit/navigation/.playwright-state/storageState.json
+              run: pnpm test:e2e:navigation
+            - name: Run web navigation crawler
+              id: nav_audit_crawler
+              continue-on-error: ${{ vars.NAVIGATION_AUDIT_REQUIRED != 'true' }}
+              env:
+                  BLACKOUT_AUDIT_STORAGE_STATE: audit/navigation/.playwright-state/storageState.json
+              run: |
+                  pnpm --filter @blackout/client exec vite preview \
+                    --port 4173 --host 127.0.0.1 --strictPort &
+                  VITE_PID=$!
+                  # Wait for the preview server to accept connections.
+                  for i in $(seq 1 30); do
+                    if curl -fsS http://127.0.0.1:4173 > /dev/null; then break; fi
+                    sleep 1
+                  done
+                  pnpm tsx tools/audit-navigation/crawl-web.ts --base http://127.0.0.1:4173
+                  STATUS=$?
+                  kill $VITE_PID 2>/dev/null || true
+                  exit $STATUS
+            - name: Run mobile static auditor
+              id: nav_audit_mobile
+              continue-on-error: ${{ vars.NAVIGATION_AUDIT_REQUIRED != 'true' }}
+              run: pnpm tsx tools/audit-navigation/audit-mobile.ts
+            - name: Upload audit reports
+              if: always()
+              uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+              with:
+                  name: navigation-audit-reports
+                  path: |
+                      audit/navigation/web-report.json
+                      audit/navigation/web-report.md
+                      audit/navigation/mobile-report.json
+                      audit/navigation/mobile-report.md
+                      audit/navigation/playwright-html/
+                      audit/navigation/playwright-results/
+                  if-no-files-found: ignore
+            - name: Enforce navigation-audit outcome when required
+              if: vars.NAVIGATION_AUDIT_REQUIRED == 'true'
+              run: |
+                  set -e
+                  if [ "${{ steps.nav_audit_playwright.outcome }}" != "success" ] \
+                     || [ "${{ steps.nav_audit_crawler.outcome }}" != "success" ] \
+                     || [ "${{ steps.nav_audit_mobile.outcome }}" != "success" ]; then
+                    echo "Navigation audit failed and NAVIGATION_AUDIT_REQUIRED is true."
+                    exit 1
+                  fi
+
+    api-smoke-and-integration:
+        name: API smoke + integration (Hono app.fetch)
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+            - uses: pnpm/action-setup@v5
+              with:
+                  version: 9.15.4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: pnpm
+            - run: pnpm install --frozen-lockfile
+            - name: Migration + reversibility verification
+              run: |
+                  node tools/ci/check-db-migrations.mjs
+                  node tools/ci/verify-migrations-ephemeral.mjs
+            - name: API integration tests
+              env:
+                  BLACKOUT_DB_MODE: memory
+                  BLACKOUT_API_SKIP_LISTEN: '1'
+                  NODE_ENV: test
+              run: pnpm --filter @blackout/api test:integration
+
+    launch-smoke:
+        name: Launch-smoke gate (LS-* release-blocker cases)
+        runs-on: ubuntu-latest
+        needs: api-smoke-and-integration
+        steps:
+            - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+            - uses: pnpm/action-setup@v5
+              with:
+                  version: 9.15.4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: pnpm
+            - run: pnpm install --frozen-lockfile
+            - name: Run automated LS-* smoke set
+              env:
+                  BLACKOUT_DB_MODE: memory
+                  BLACKOUT_API_SKIP_LISTEN: '1'
+                  NODE_ENV: test
+              # Per docs/launch-smoke-suite.md: every release-blocker case
+              # must pass for the launch gate to clear. Failure here is a
+              # release-no-go.
+              run: pnpm --filter @blackout/api test:launch-smoke

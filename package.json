@@ -58,6 +58,7 @@
         "guard:audit-clean": "pnpm audit --prod --audit-level moderate",
         "probe:calls:synthetic": "node tools/ci/synthetic-call-probe.mjs",
         "guard:auth-secrets": "node tools/ci/check-auth-secrets.mjs",
+        "guard:sops-recipients": "node tools/ci/check-sops-recipients.mjs",
         "guard:cors-allowlist": "node tools/ci/check-cors-allowlist.mjs",
         "guard:runtime-targets": "node tools/ci/check-canonical-runtime-targets.mjs",
         "test:guard:runtime-targets": "node --test tools/ci/check-canonical-runtime-targets.test.mjs",
