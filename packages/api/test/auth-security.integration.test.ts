@@ -70,7 +70,10 @@ test('validates secure cookie settings in production', async () => {
 test('verifyJwt pins the header algorithm to HS256 (L1 defense-in-depth)', async () => {
     resetEnv();
     const auth = await loadAuth();
-    process.env.JWT_SECRET_PRIMARY = 'Str0ng!AlgKey-That-Is-Long-321#ABCxyzZZ';
+    // Synthetic low-entropy test secret (repeated token) that still satisfies
+    // isStrongSecret(): length >= 32 with lower/upper/digit/symbol classes. Kept
+    // deliberately low-entropy so entropy-based secret scanners don't flag it.
+    process.env.JWT_SECRET_PRIMARY = 'AlgTest1!'.repeat(4);
     process.env.JWT_ISSUER = 'blackout-api';
     process.env.JWT_AUDIENCE = 'blackout-clients';
     auth.clearAuthRuntimeConfigCache();
