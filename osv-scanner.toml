@@ -9,7 +9,28 @@
 # not apply to our usage and there's a concrete plan to upgrade.
 # Otherwise the right fix is to bump the dependency now.
 #
-# The allowlist is currently empty: every previously-accepted advisory
-# (hono JSX/bodyLimit, fast-uri, @babel/plugin-transform-modules-systemjs,
-# vitest) has since been resolved by bumping the underlying dependency via
-# pnpm.overrides, so no risk acceptance is outstanding.
+# Every other previously-accepted advisory (hono JSX/bodyLimit, fast-uri,
+# @babel/plugin-transform-modules-systemjs, vitest, postcss, tar) has been
+# resolved by bumping the underlying dependency via pnpm.overrides.
+
+# react-router RSC-mode CSRF bypass. Does NOT apply to Blackout: the client is
+# a Vite SPA that imports react-router in library mode only (no RSC / framework
+# mode — verified: zero `@react-router/server` or RSC imports across src). The
+# fix is react-router 8, whose entire line requires React >=19.2.7, so adopting
+# it is a React 18->19 migration (folds still peers React 17), tracked as a
+# separate epic. ignoreUntil forces that decision to be revisited.
+[[IgnoredVulns]]
+id = "GHSA-qwww-vcr4-c8h2"
+ignoreUntil = 2026-10-31
+reason = "RSC-mode-only advisory; client uses react-router in library mode. Fix requires React 19 migration (tracked separately)."
+
+# brace-expansion ReDoS. The tree resolves to 1.1.16, 2.1.2, and 5.0.8 (pinned
+# via pnpm.overrides) — all at or above the maintainer's per-line security
+# patches (1.1.12 / 2.0.2 / 5.0.8), so every instance is patched. OSV (and npm
+# audit) over-report because their normalized affected-range spans majors. The
+# 1.x/2.x instances are react-native dev-toolchain transitives under the
+# blackout-gov app; they cannot move to 5.x without breaking glob@7/minimatch@3.
+[[IgnoredVulns]]
+id = "GHSA-mh99-v99m-4gvg"
+ignoreUntil = 2026-10-31
+reason = "Resolved to 1.1.16/2.1.2/5.0.8, all >= the per-line fixes (1.1.12/2.0.2/5.0.8). OSV over-reports across majors; packages are patched."

@@ -11,8 +11,6 @@ COPY packages/ ./packages/
 
 COPY apps/ ./apps/
 
-COPY blackout/ ./blackout/
-
 COPY config.sample.json ./config.json
 
 RUN pnpm install --frozen-lockfile

@@ -11,11 +11,16 @@ export interface CreateTaskInput {
     title: string;
     description?: string;
     assigneeId?: string;
+    createdBy?: string;
     proposalEventId?: string;
 }
 
 export function createTask(input: CreateTaskInput): CoalitionTask {
     return db.createCoalitionTask(input);
+}
+
+export function getTask(id: string): CoalitionTask | null {
+    return db.getCoalitionTask(id) ?? null;
 }
 
 export function updateTaskStatus(id: string, status: TaskStatus): CoalitionTask | null {

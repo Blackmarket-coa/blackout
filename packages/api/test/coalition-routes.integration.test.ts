@@ -182,10 +182,9 @@ test('coalition seller-locations filters by nearby radius', async () => {
 
     // A generous radius around the cluster returns everything visible.
     const near = (await (
-        await app.request(
-            '/v1/coalition/seller-locations?lat=40.7128&lng=-74.006&radiusKm=5',
-            { headers: authHeader() },
-        )
+        await app.request('/v1/coalition/seller-locations?lat=40.7128&lng=-74.006&radiusKm=5', {
+            headers: authHeader(),
+        })
     ).json()) as LocResponse;
     assert.equal(near.locations.length, all.locations.length);
 });
@@ -241,4 +240,25 @@ test('coalition task update 404s for unknown task', async () => {
         body: JSON.stringify({ status: 'done' }),
     });
     assert.equal(response.status, 404);
+});
+
+test('coalition task update is denied for a non-creator/non-assignee (M3)', async () => {
+    const created = await app.request('/v1/coalition/tasks', {
+        method: 'POST',
+        headers: { ...authHeader(), 'content-type': 'application/json' },
+        body: JSON.stringify({ denId: '!demo-aid:server', title: 'Owned task' }),
+    });
+    assert.equal(created.status, 201);
+    const { task } = (await created.json()) as { task: { id: string } };
+
+    const intruder = {
+        authorization: `Bearer ${signJwt('coalition-test-intruder', 'coalition', 600)}`,
+        'content-type': 'application/json',
+    };
+    const denied = await app.request(`/v1/coalition/tasks/${task.id}`, {
+        method: 'PATCH',
+        headers: intruder,
+        body: JSON.stringify({ status: 'done' }),
+    });
+    assert.equal(denied.status, 403);
 });

@@ -151,6 +151,11 @@ const DB_FILE_PATH = resolve(
     process.env.BLACKOUT_DB_FILE ?? '.blackout/data/store.json'
 );
 
+// How long a per-user access-token revocation cutoff must persist: at least the
+// longest access-token lifetime (default 24h) plus a buffer, so no token issued
+// before the cutoff can still be valid once the cutoff record is pruned.
+const USER_TOKEN_CUTOFF_TTL_MS = 25 * 60 * 60 * 1000;
+
 type PersistedState = {
     users: UserRecord[];
     canopyDirectoryEntries: CanopyDirectoryEntryRecord[];
@@ -924,6 +929,43 @@ class InMemoryDb {
             }
         }
         return removed;
+    }
+
+    // Synthetic revoked-session key holding a per-user "logout everywhere"
+    // cutoff. Reusing the revokedSessions table means this persists, prunes, and
+    // hydrates through the exact same mechanism as per-jti revocations — no new
+    // table or migration. Real jtis are random base64url and never collide.
+    private userTokenCutoffJti(userId: string): string {
+        return `user-token-cutoff:${userId}`;
+    }
+
+    /**
+     * Invalidate every access token already issued to `userId` (a cutoff at
+     * "now"). Access JWTs are stateless, so "revoke all sessions" and
+     * refresh-token reuse detection call this to stop previously-minted access
+     * tokens from remaining valid until their TTL. The synthetic record's
+     * revokedAt IS the cutoff; it self-expires after the max access-token
+     * lifetime so no token issued before it can still be presented.
+     */
+    revokeUserTokensBefore(userId: string, reason: string): void {
+        this.revokeSession({
+            jti: this.userTokenCutoffJti(userId),
+            userId,
+            reason,
+            expiresAt: new Date(Date.now() + USER_TOKEN_CUTOFF_TTL_MS).toISOString(),
+        });
+    }
+
+    /**
+     * Epoch-seconds cutoff before which this user's access tokens are invalid,
+     * or 0 if none is active. authMiddleware rejects any token whose `iat` is
+     * below this even when its signature and `exp` are still valid.
+     */
+    getUserTokenRevocationCutoff(userId: string): number {
+        const record = this.revokedSessions.get(this.userTokenCutoffJti(userId));
+        if (!record) return 0;
+        if (new Date(record.expiresAt).getTime() <= Date.now()) return 0;
+        return Math.floor(new Date(record.revokedAt).getTime() / 1000);
     }
 
     // --- linked accounts (third-party OAuth identity links) ---
@@ -3184,6 +3226,10 @@ class InMemoryDb {
         return record;
     }
 
+    getCoalitionTask(id: string): CoalitionTaskRecord | undefined {
+        return this.coalitionTasks.get(id);
+    }
+
     updateCoalitionTaskStatus(
         id: string,
         status: CoalitionTaskRecord['status']
@@ -3215,6 +3261,10 @@ class InMemoryDb {
         };
         this.coalitionNeeds.set(record.id, record);
         return record;
+    }
+
+    getCoalitionNeed(id: string): CoalitionNeedRecord | undefined {
+        return this.coalitionNeeds.get(id);
     }
 
     updateCoalitionNeed(
@@ -3440,6 +3490,10 @@ class InMemoryDb {
         };
         this.coalitionResources.set(record.id, record);
         return record;
+    }
+
+    getCoalitionResource(id: string): CoalitionResourceRecord | undefined {
+        return this.coalitionResources.get(id);
     }
 
     updateCoalitionResourceAvailability(
@@ -6507,6 +6561,18 @@ export async function initRuntimeStore(pool: PgPool): Promise<void> {
 /** Flush write-behind ops + close the change subscription on graceful shutdown. */
 export async function drainRuntimeStore(): Promise<void> {
     if (db instanceof PostgresBackedDb) await db.shutdown();
+}
+
+/**
+ * Await durability of all currently-queued write-behind ops WITHOUT tearing
+ * down the change subscription. Critical request paths (e.g. payment capture,
+ * entitlement grants) can call this after their mutation and before acking, so
+ * a crash cannot lose a financially- or security-significant write that the
+ * synchronous mutator API only wrote to the in-memory mirror. No-op unless
+ * BLACKOUT_DB_MODE=postgres.
+ */
+export async function flushRuntimeStoreWrites(): Promise<void> {
+    if (db instanceof PostgresBackedDb) await db.drain();
 }
 
 /** Runtime store mode, for boot wiring. */

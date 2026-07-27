@@ -311,6 +311,9 @@ export function listNeeds(filter: { canopyId?: string } = {}) {
 export function createNeed(input: Parameters<typeof db.createCoalitionNeed>[0]) {
     return db.createCoalitionNeed(input);
 }
+export function getNeed(id: string) {
+    return db.getCoalitionNeed(id) ?? null;
+}
 export function updateNeed(id: string, patch: Parameters<typeof db.updateCoalitionNeed>[1]) {
     return db.updateCoalitionNeed(id, patch) ?? null;
 }
@@ -358,6 +361,9 @@ export function listResources(filter: { canopyId?: string } = {}) {
 }
 export function createResource(input: Parameters<typeof db.createCoalitionResource>[0]) {
     return db.createCoalitionResource(input);
+}
+export function getResource(id: string) {
+    return db.getCoalitionResource(id) ?? null;
 }
 export function updateResourceAvailability(
     id: string,

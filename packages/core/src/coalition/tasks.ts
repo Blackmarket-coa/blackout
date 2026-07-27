@@ -5,7 +5,7 @@
  */
 
 export const TASK_STATUSES = ['todo', 'doing', 'done'] as const;
-export type TaskStatus = (typeof TASK_STATUSES)[number];
+export type TaskStatus = typeof TASK_STATUSES[number];
 
 export interface CoalitionTask {
     id: string;
@@ -14,6 +14,10 @@ export interface CoalitionTask {
     description?: string;
     status: TaskStatus;
     assigneeId?: string;
+    /** User id of the task's creator. Used for object-level authorization on
+     *  updates. Optional for backward-compatibility with tasks created before
+     *  this field existed (those are grandfathered). */
+    createdBy?: string;
     /** Optional link to a governance proposal state-event id. */
     proposalEventId?: string;
     createdAt: string;

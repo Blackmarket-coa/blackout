@@ -64,6 +64,42 @@ const envelope = (event: string, record: DeadmanSwitchRecord, senderId: string) 
     payload: recordToPayload(record),
 });
 
+/**
+ * Autonomous server-side sweep of EVERY armed switch against the wall clock,
+ * driving overdue ones into grace/triggered and emitting the domain event.
+ *
+ * This is the load-bearing half of a dead-man's switch: unlike the owner-scoped
+ * POST /process-overdue endpoint (which only fires switches the *authenticated
+ * owner* asks about), this runs from the background loop with no user present —
+ * so a switch fires exactly when its owner has gone dark, which is the entire
+ * point of the feature. `evaluateTransition` is idempotent for already
+ * triggered/cancelled switches, so repeated ticks never re-emit. Returns the
+ * number of switches whose status advanced this pass.
+ */
+export function sweepOverdueDeadmanSwitches(now: Date = new Date()): number {
+    let processed = 0;
+    for (const record of db.listAllDeadmanSwitches()) {
+        const transition = evaluateTransition(record, now);
+        if (transition.kind === 'none') continue;
+
+        const updated = db.setDeadmanSwitchStatus(record.id, transition.record.status);
+        if (!updated) continue;
+
+        emitDomainEvent({
+            module: 'deadman',
+            type: transition.kind === 'grace' ? 'deadman.switch.grace' : 'deadman.switch.triggered',
+            payload: {
+                switchId: updated.id,
+                ownerId: updated.ownerId,
+                roomId: updated.roomId,
+                recipients: updated.recipients,
+            },
+        });
+        processed += 1;
+    }
+    return processed;
+}
+
 function createDeadmanRouter() {
     const deadman = new Hono();
 

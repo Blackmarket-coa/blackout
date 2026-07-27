@@ -22,6 +22,13 @@ function authHeader(): Record<string, string> {
     };
 }
 
+function otherUserAuthHeader(): Record<string, string> {
+    return {
+        authorization: `Bearer ${signJwt('community-test-other', 'community', 600)}`,
+        'content-type': 'application/json',
+    };
+}
+
 const CANOPY = '!canopy-community-test:blackout';
 
 // --- Needs Board ---
@@ -33,7 +40,9 @@ test('coalition needs: create, list, update lifecycle', async () => {
         body: JSON.stringify({ canopyId: CANOPY, kind: 'compost', title: 'Need compost' }),
     });
     assert.equal(created.status, 201);
-    const { need } = (await created.json()) as { need: { id: string; status: string; authorId: string } };
+    const { need } = (await created.json()) as {
+        need: { id: string; status: string; authorId: string };
+    };
     assert.equal(need.status, 'open');
     assert.equal(need.authorId, 'community-test-user');
 
@@ -64,6 +73,23 @@ test('coalition needs: write requires auth', async () => {
         body: JSON.stringify({ canopyId: CANOPY, kind: 'creator', title: 'Need creator' }),
     });
     assert.equal(res.status, 401);
+});
+
+test('coalition needs: non-author cannot update (403)', async () => {
+    const created = await app.request('/v1/coalition/needs', {
+        method: 'POST',
+        headers: authHeader(),
+        body: JSON.stringify({ canopyId: CANOPY, kind: 'compost', title: 'Owned need' }),
+    });
+    assert.equal(created.status, 201);
+    const { need } = (await created.json()) as { need: { id: string } };
+
+    const patched = await app.request(`/v1/coalition/needs/${need.id}`, {
+        method: 'PATCH',
+        headers: otherUserAuthHeader(),
+        body: JSON.stringify({ status: 'fulfilled' }),
+    });
+    assert.equal(patched.status, 403);
 });
 
 test('coalition needs: patch unknown id is 404', async () => {
@@ -141,4 +167,21 @@ test('coalition resources: rejects invalid availability', async () => {
         body: JSON.stringify({ canopyId: CANOPY, name: 'X', kind: 'tool', availability: 'nope' }),
     });
     assert.equal(res.status, 400);
+});
+
+test('coalition resources: non-steward cannot update availability (403)', async () => {
+    const created = await app.request('/v1/coalition/resources', {
+        method: 'POST',
+        headers: authHeader(),
+        body: JSON.stringify({ canopyId: CANOPY, name: 'Owned tool', kind: 'tool' }),
+    });
+    assert.equal(created.status, 201);
+    const { resource } = (await created.json()) as { resource: { id: string } };
+
+    const patched = await app.request(`/v1/coalition/resources/${resource.id}`, {
+        method: 'PATCH',
+        headers: otherUserAuthHeader(),
+        body: JSON.stringify({ availability: 'in_use' }),
+    });
+    assert.equal(patched.status, 403);
 });

@@ -90,9 +90,10 @@ import {
 } from './telemetry/api-alias-usage';
 import { log } from './telemetry/logger';
 import { startBackgroundLoops } from './backgroundLoops';
+import { tryBecomeBackgroundLeader, releaseBackgroundLeader } from './services/backgroundLeader';
 import { httpMetricsMiddleware } from './telemetry/http-metrics';
 import { registry as metricsRegistry } from './telemetry/metrics';
-import { initErrorReporter } from './telemetry/errors';
+import { initErrorReporter, errorReporter } from './telemetry/errors';
 import { initTracing } from './telemetry/tracing';
 import { bootstrapMailer } from './services/mailer';
 import { runSecurityPreflight } from './config/security';
@@ -280,12 +281,23 @@ app.route('/bug-report/widget', widgetReportRoutes);
 app.route('/i', shareRoutes);
 
 app.get('/health', (c) =>
+    // Unauthenticated readiness probe: expose only coarse booleans. The detailed
+    // preflight state (JWT secret count, token transport, Matrix bot user id, and
+    // upstream error detail) is sensitive and must not leak to anonymous callers.
+    // Operational detail lives behind auth (/metrics, /v1/diagnostics).
     c.json({
         status: 'ok',
         legacyAliasEnabled,
         aliasRemovalDate: API_ALIAS_REMOVAL_DATE,
-        security: securityPreflight,
-        matrix: matrixHealth,
+        security: {
+            ok:
+                securityPreflight.jwtSecretsConfigured > 0 &&
+                securityPreflight.cookieSecureValidated,
+        },
+        matrix: {
+            configured: matrixHealth.configured,
+            adminOk: matrixHealth.adminOk,
+        },
     })
 );
 
@@ -313,9 +325,47 @@ app.get('/metrics', (c) => {
     return c.body(metricsRegistry.expose());
 });
 
+// Central 404 handler: every unmatched route returns the API's JSON error
+// contract rather than Hono's default plain-text body.
+app.notFound((c) => c.json({ code: 'not_found', message: 'Not found' }, 404));
+
+// Central error handler: unhandled exceptions from any route are reported to the
+// error reporter and returned as the API's JSON error contract. The internal
+// error message/stack is never sent to the client — only a generic 500 — so a
+// route throw cannot leak internals.
+app.onError((err, c) => {
+    log.error('unhandled_route_error', {
+        method: c.req.method,
+        path: c.req.path,
+        error: err instanceof Error ? err.message : String(err),
+    });
+    errorReporter().capture(err, { method: c.req.method, path: c.req.path });
+    return c.json({ code: 'internal_error', message: 'Internal server error' }, 500);
+});
+
 const PORT = parseInt(process.env.PORT ?? '3000', 10);
+const SHUTDOWN_TIMEOUT_MS = parseInt(process.env.SHUTDOWN_TIMEOUT_MS ?? '10000', 10);
 const shouldListen =
     process.env.NODE_ENV !== 'test' && process.env.BLACKOUT_API_SKIP_LISTEN !== '1';
+
+// Fail-closed production configuration guards. These run before the server
+// listens so a misconfigured production deploy is caught by the process
+// supervisor rather than silently degrading or leaking.
+if (shouldListen && process.env.NODE_ENV === 'production') {
+    if (RUNTIME_DB_MODE !== 'postgres') {
+        throw new Error(
+            `BLACKOUT_DB_MODE=${RUNTIME_DB_MODE} is not permitted in production; ` +
+                'set BLACKOUT_DB_MODE=postgres (with DATABASE_URL) for a durable, ' +
+                'multi-replica-safe store.'
+        );
+    }
+    if (!process.env.LOG_HASH_SALT) {
+        throw new Error(
+            'LOG_HASH_SALT must be set in production so pseudonymized identifiers in ' +
+                'logs are not reversible via the known default salt.'
+        );
+    }
+}
 
 // Postgres runtime store: run migrations then hydrate the in-memory mirror
 // BEFORE serving or starting any store-reading background loops. Top-level
@@ -329,21 +379,6 @@ if (shouldListen && RUNTIME_DB_MODE === 'postgres') {
     }
     await initRuntimeStore(pool);
     log.info('postgres_store_hydrated');
-
-    const drainOnExit = (signal: string) => {
-        void (async () => {
-            try {
-                await drainRuntimeStore();
-                log.info('postgres_store_drained', { signal });
-            } catch (err) {
-                log.warn('postgres_store_drain_failed', { error: String(err) });
-            } finally {
-                process.exit(0);
-            }
-        })();
-    };
-    process.once('SIGTERM', () => drainOnExit('SIGTERM'));
-    process.once('SIGINT', () => drainOnExit('SIGINT'));
 }
 
 if (shouldListen) {
@@ -412,12 +447,22 @@ if (shouldListen) {
     });
 
     // Periodic background-job loops (Twitch/YouTube/Streamlabs pollers, the
-    // scheduled-message dispatcher, FBM sweepers + ACL reconcile). A single
-    // process runs them in-process. When a dedicated `worker` replica owns them
-    // (see src/worker.ts), set BLACKOUT_BACKGROUND_WORKERS_DISABLED=1 on the app
-    // + canary replicas so the jobs are not double-processed across the fleet.
+    // scheduled-message + content dispatchers, coalition surge, FBM sweepers +
+    // ACL reconcile, and the dead-man's-switch sweep). These must run on exactly
+    // one process. BLACKOUT_BACKGROUND_WORKERS_DISABLED=1 opts a replica out
+    // entirely; among the rest, a Postgres advisory-lock leader election ensures
+    // only one actually runs the loops even if the env var is misconfigured
+    // across replicas (in file/memory mode there is a single process anyway).
     if (process.env.BLACKOUT_BACKGROUND_WORKERS_DISABLED !== '1') {
-        startBackgroundLoops();
+        void (async () => {
+            const isLeader = await tryBecomeBackgroundLeader();
+            if (isLeader) {
+                startBackgroundLoops();
+                log.info('background_loops_started', {});
+            } else {
+                log.info('background_loops_skipped_not_leader', {});
+            }
+        })();
     }
 
     const httpServer = serve({ fetch: app.fetch, port: PORT }, (info) => {
@@ -456,6 +501,39 @@ if (shouldListen) {
         attachSeOverlayShim(httpServer as any);
         log.info('se_overlay_shim_attached', { path: '/se-overlay/' });
     });
+
+    // Graceful shutdown for every runtime mode (not just postgres). Stop
+    // accepting new connections, let in-flight requests drain, flush the
+    // runtime store (a no-op unless BLACKOUT_DB_MODE=postgres), then exit. A
+    // hard timeout guarantees the process still exits if a connection hangs.
+    let shuttingDown = false;
+    const shutdown = (signal: string) => {
+        if (shuttingDown) return;
+        shuttingDown = true;
+        log.info('shutdown_signal_received', { signal });
+        const forceTimer = setTimeout(() => {
+            log.warn('shutdown_forced_after_timeout', { signal, timeoutMs: SHUTDOWN_TIMEOUT_MS });
+            process.exit(0);
+        }, SHUTDOWN_TIMEOUT_MS);
+        if (typeof forceTimer.unref === 'function') forceTimer.unref();
+
+        httpServer.close(() => {
+            void (async () => {
+                try {
+                    await releaseBackgroundLeader();
+                    await drainRuntimeStore();
+                    log.info('runtime_store_drained', { signal });
+                } catch (err) {
+                    log.warn('runtime_store_drain_failed', { error: String(err) });
+                } finally {
+                    clearTimeout(forceTimer);
+                    process.exit(0);
+                }
+            })();
+        });
+    };
+    process.once('SIGTERM', () => shutdown('SIGTERM'));
+    process.once('SIGINT', () => shutdown('SIGINT'));
 }
 
 export default app;
