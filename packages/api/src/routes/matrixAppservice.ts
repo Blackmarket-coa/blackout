@@ -1,9 +1,19 @@
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { Hono } from 'hono';
-import {
-  routeOutboundMatrixMessage,
-  shouldRouteOutbound,
-} from '../services/outboundMessageRouter';
+import { routeOutboundMatrixMessage, shouldRouteOutbound } from '../services/outboundMessageRouter';
 import { log } from '../telemetry/logger';
+
+/**
+ * Constant-time secret comparison. Both sides are SHA-256'd to a fixed
+ * 32-byte digest first so the comparison neither throws on unequal input
+ * lengths nor leaks the expected length through timing. Matches the
+ * timing-safe discipline used elsewhere for shared-secret checks.
+ */
+function timingSafeSecretEqual(presented: string, expected: string): boolean {
+    const a = createHash('sha256').update(presented, 'utf8').digest();
+    const b = createHash('sha256').update(expected, 'utf8').digest();
+    return timingSafeEqual(a, b);
+}
 
 /**
  * Phase 1 / Track A: Matrix appservice transactions endpoint.
@@ -32,7 +42,7 @@ import { log } from '../telemetry/logger';
  */
 
 interface TransactionsBody {
-  events?: Array<Record<string, unknown>>;
+    events?: Array<Record<string, unknown>>;
 }
 
 const MAX_REMEMBERED_TXNS = 1024;
@@ -43,18 +53,18 @@ const MAX_REMEMBERED_TXNS = 1024;
  */
 const seenTxnIds = new Map<string, true>();
 const rememberTxn = (txnId: string): boolean => {
-  if (seenTxnIds.has(txnId)) return true;
-  seenTxnIds.set(txnId, true);
-  if (seenTxnIds.size > MAX_REMEMBERED_TXNS) {
-    // Map iteration is insertion-ordered; drop the oldest.
-    const oldest = seenTxnIds.keys().next().value;
-    if (oldest !== undefined) seenTxnIds.delete(oldest);
-  }
-  return false;
+    if (seenTxnIds.has(txnId)) return true;
+    seenTxnIds.set(txnId, true);
+    if (seenTxnIds.size > MAX_REMEMBERED_TXNS) {
+        // Map iteration is insertion-ordered; drop the oldest.
+        const oldest = seenTxnIds.keys().next().value;
+        if (oldest !== undefined) seenTxnIds.delete(oldest);
+    }
+    return false;
 };
 
 const defaultHsTokenResolver = (): string | undefined =>
-  process.env.MATRIX_APPSERVICE_HS_TOKEN?.trim() || undefined;
+    process.env.MATRIX_APPSERVICE_HS_TOKEN?.trim() || undefined;
 
 /**
  * Appservice → homeserver token. Reserved for the day this route grows
@@ -65,102 +75,101 @@ const defaultHsTokenResolver = (): string | undefined =>
  * `deploy/matrix-appservice/registration.yaml`.
  */
 const defaultAsTokenResolver = (): string | undefined =>
-  process.env.MATRIX_APPSERVICE_AS_TOKEN?.trim() || undefined;
+    process.env.MATRIX_APPSERVICE_AS_TOKEN?.trim() || undefined;
 
 export interface AppserviceRouteOptions {
-  /** Returns the per-deployment homeserver token. Default: env. */
-  hsTokenResolver?: () => string | undefined;
-  /** Returns the per-deployment appservice token. Default: env. */
-  asTokenResolver?: () => string | undefined;
-  /** Route handler hook; default: outboundMessageRouter.routeOutboundMatrixMessage. */
-  onMessage?: (roomId: string, body: string) => Promise<unknown> | unknown;
-  /** Reset the seen-txn cache. Tests use this. */
-  resetCache?: boolean;
+    /** Returns the per-deployment homeserver token. Default: env. */
+    hsTokenResolver?: () => string | undefined;
+    /** Returns the per-deployment appservice token. Default: env. */
+    asTokenResolver?: () => string | undefined;
+    /** Route handler hook; default: outboundMessageRouter.routeOutboundMatrixMessage. */
+    onMessage?: (roomId: string, body: string) => Promise<unknown> | unknown;
+    /** Reset the seen-txn cache. Tests use this. */
+    resetCache?: boolean;
 }
 
-export const buildMatrixAppserviceRoute = (
-  options: AppserviceRouteOptions = {},
-): Hono => {
-  const router = new Hono();
-  const hsTokenResolver = options.hsTokenResolver ?? defaultHsTokenResolver;
-  const onMessage =
-    options.onMessage ??
-    ((roomId: string, body: string) => routeOutboundMatrixMessage(roomId, body));
-  if (options.resetCache) seenTxnIds.clear();
+export const buildMatrixAppserviceRoute = (options: AppserviceRouteOptions = {}): Hono => {
+    const router = new Hono();
+    const hsTokenResolver = options.hsTokenResolver ?? defaultHsTokenResolver;
+    const onMessage =
+        options.onMessage ??
+        ((roomId: string, body: string) => routeOutboundMatrixMessage(roomId, body));
+    if (options.resetCache) seenTxnIds.clear();
 
-  router.put('/transactions/:txnId', async (c) => {
-    const expected = hsTokenResolver();
-    if (!expected) {
-      // Operator misconfigured — Synapse should retry while we fix it.
-      log.warn('matrix_appservice_no_hs_token_configured');
-      return c.json(
-        { code: 'matrix_appservice_misconfigured', message: 'MATRIX_APPSERVICE_HS_TOKEN is not set.' },
-        503,
-      );
-    }
-    // Synapse uses `?access_token=...` in older versions and
-    // `Authorization: Bearer ...` in v1.4+. Accept both.
-    const presentedFromHeader = c.req
-      .header('authorization')
-      ?.replace(/^Bearer\s+/i, '');
-    const presentedFromQuery = c.req.query('access_token');
-    const presented = presentedFromHeader || presentedFromQuery;
-    if (presented !== expected) {
-      log.info('matrix_appservice_bad_token');
-      return c.json({ code: 'M_FORBIDDEN' }, 403);
-    }
+    router.put('/transactions/:txnId', async (c) => {
+        const expected = hsTokenResolver();
+        if (!expected) {
+            // Operator misconfigured — Synapse should retry while we fix it.
+            log.warn('matrix_appservice_no_hs_token_configured');
+            return c.json(
+                {
+                    code: 'matrix_appservice_misconfigured',
+                    message: 'MATRIX_APPSERVICE_HS_TOKEN is not set.',
+                },
+                503
+            );
+        }
+        // Synapse uses `?access_token=...` in older versions and
+        // `Authorization: Bearer ...` in v1.4+. Accept both.
+        const presentedFromHeader = c.req.header('authorization')?.replace(/^Bearer\s+/i, '');
+        const presentedFromQuery = c.req.query('access_token');
+        const presented = presentedFromHeader || presentedFromQuery;
+        if (!presented || !timingSafeSecretEqual(presented, expected)) {
+            log.info('matrix_appservice_bad_token');
+            return c.json({ code: 'M_FORBIDDEN' }, 403);
+        }
 
-    const txnId = c.req.param('txnId');
-    if (!txnId) {
-      return c.json({ code: 'M_INVALID_PARAM' }, 400);
-    }
+        const txnId = c.req.param('txnId');
+        if (!txnId) {
+            return c.json({ code: 'M_INVALID_PARAM' }, 400);
+        }
 
-    if (rememberTxn(txnId)) {
-      // Already processed — idempotent ack.
-      return c.json({});
-    }
+        if (rememberTxn(txnId)) {
+            // Already processed — idempotent ack.
+            return c.json({});
+        }
 
-    let body: TransactionsBody;
-    try {
-      body = (await c.req.json()) as TransactionsBody;
-    } catch {
-      return c.json({ code: 'M_NOT_JSON' }, 400);
-    }
-    const events = Array.isArray(body.events) ? body.events : [];
+        let body: TransactionsBody;
+        try {
+            body = (await c.req.json()) as TransactionsBody;
+        } catch {
+            return c.json({ code: 'M_NOT_JSON' }, 400);
+        }
+        const events = Array.isArray(body.events) ? body.events : [];
 
-    for (const event of events) {
-      try {
-        await processEvent(event, onMessage);
-      } catch (err) {
-        log.warn('matrix_appservice_event_handler_threw', {
-          eventType: typeof event?.type === 'string' ? event.type : '?',
-          error: String(err),
-        });
-      }
-    }
+        for (const event of events) {
+            try {
+                await processEvent(event, onMessage);
+            } catch (err) {
+                log.warn('matrix_appservice_event_handler_threw', {
+                    eventType: typeof event?.type === 'string' ? event.type : '?',
+                    error: String(err),
+                });
+            }
+        }
 
-    return c.json({});
-  });
+        return c.json({});
+    });
 
-  return router;
+    return router;
 };
 
 const processEvent = async (
-  event: Record<string, unknown>,
-  onMessage: (roomId: string, body: string) => Promise<unknown> | unknown,
+    event: Record<string, unknown>,
+    onMessage: (roomId: string, body: string) => Promise<unknown> | unknown
 ): Promise<void> => {
-  if (event?.type !== 'm.room.message') return;
-  const roomId = typeof event.room_id === 'string' ? event.room_id : null;
-  const content = (event.content ?? {}) as Record<string, unknown>;
-  if (!roomId) return;
-  if (!shouldRouteOutbound(content)) return;
-  const text = typeof content.body === 'string' ? content.body : '';
-  if (!text) return;
-  await onMessage(roomId, text);
+    if (event?.type !== 'm.room.message') return;
+    const roomId = typeof event.room_id === 'string' ? event.room_id : null;
+    const content = (event.content ?? {}) as Record<string, unknown>;
+    if (!roomId) return;
+    if (!shouldRouteOutbound(content)) return;
+    const text = typeof content.body === 'string' ? content.body : '';
+    if (!text) return;
+    await onMessage(roomId, text);
 };
 
 export const __test__ = {
-  resetSeenTxns: () => seenTxnIds.clear(),
+    resetSeenTxns: () => seenTxnIds.clear(),
 };
 
 export default buildMatrixAppserviceRoute();
