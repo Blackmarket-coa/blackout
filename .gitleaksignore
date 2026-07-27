@@ -26,3 +26,13 @@ f36678519cc7e063c4cbdacad9e2ff956dd9c6a8:packages/api/test/youtube-chat-bridge.i
 #    envelope from non-contiguous fragments so future edits to this
 #    fixture won't reintroduce the flag.
 eff3f80589879b156a2378743f3c42e2ce7314f1:packages/api/test/github-issues.integration.test.ts:private-key:18
+
+# 4) Plugin-installer test fixtures: an obviously-synthetic HMAC key
+#    (`00112233445566778899aabbccddeeff` repeated) used to sign a fake
+#    plugin bundle so the signature-verification path can be exercised.
+#    Not a credential — an incrementing-byte placeholder. Flagged because
+#    Prettier collapsed the wrapped literal onto one line in the M19
+#    commit; the value is identical to the long-standing codePlugin test
+#    fixture.
+7d97c67571d48d7e3f06138aff8501b19e9b4d7a:apps/blackout-client/tests/unit/features/monetization/pluginInstaller.codePlugin.test.ts:generic-api-key:18
+7d97c67571d48d7e3f06138aff8501b19e9b4d7a:apps/blackout-client/tests/unit/features/monetization/pluginInstaller.codePluginGate.test.ts:generic-api-key:18
