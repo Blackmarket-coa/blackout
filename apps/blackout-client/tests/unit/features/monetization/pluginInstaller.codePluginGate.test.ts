@@ -55,29 +55,28 @@ function bytesToBase64(bytes: Uint8Array): string {
     return btoa(binary);
 }
 
-const pluginId = 'com.example.code-plugin';
+const pluginId = 'com.example.gated-code-plugin';
 const entitlement: NormalizedEntitlement = {
-    id: 'ent.code-plugin',
+    id: 'ent.gated-code-plugin',
     status: 'granted',
     providerId: 'freeblackmarket',
-    providerListingId: 'lst-code-plugin',
+    providerListingId: 'lst-gated-code-plugin',
     userId: 'u1',
     purchasedAt: '2026-05-17T00:00:00Z',
 } as NormalizedEntitlement;
 
-async function buildBundle(overrides: Partial<PluginManifest> = {}): Promise<SignedPluginBundle> {
+async function buildBundle(): Promise<SignedPluginBundle> {
     const bundleBytes = new TextEncoder().encode('// noop plugin body\n');
     const bundleSha = await sha256Hex(bundleBytes);
     const manifest: PluginManifest = {
         id: pluginId,
-        name: 'Code Plugin',
+        name: 'Gated Code Plugin',
         version: '1.0.0',
         protocolVersion: 2,
         artifactKind: 'code_plugin',
-        listing: { providerId: 'freeblackmarket', providerListingId: 'lst-code-plugin' },
+        listing: { providerId: 'freeblackmarket', providerListingId: 'lst-gated-code-plugin' },
         capabilities: ['message.read', 'http.fetch'],
         sha256: bundleSha,
-        ...overrides,
     };
     const manifestSha = await canonicalManifestSha256(manifest);
     const signature = await signBundle(manifestSha, bundleSha);
@@ -103,39 +102,37 @@ afterEach(() => {
     setPluginPublishingKeys([]);
 });
 
-describe('installEntitlement(code_plugin)', () => {
-    it('mounts a sandbox in the registry and grants all declared capabilities by default', async () => {
+describe('installEntitlement(code_plugin) — sandbox activation gate (M19)', () => {
+    it('gate OFF (default): does NOT mount a sandbox and marks the record disabled', async () => {
         const bundle = await buildBundle();
         const result = await installEntitlement(entitlement, {
             fetchSignedBundle: async () => bundle,
-            codePluginsEnabled: true,
+            // codePluginsEnabled omitted → fail-closed default (false)
         });
 
-        expect(result.record.grantedCapabilities).toEqual(['message.read', 'http.fetch']);
-        expect(getSandbox(pluginId)).toBeDefined();
+        expect(getSandbox(pluginId)).toBeUndefined();
+        expect(result.record.status).toBe('disabled');
+        expect(result.record.lastError).toBeUndefined();
     });
 
-    it('intersects grantedCapabilities with approvedCapabilities', async () => {
+    it('gate ON: mounts the sandbox and the record is enabled', async () => {
         const bundle = await buildBundle();
         const result = await installEntitlement(entitlement, {
             fetchSignedBundle: async () => bundle,
-            approvedCapabilities: ['message.read'],
             codePluginsEnabled: true,
         });
 
-        expect(result.record.grantedCapabilities).toEqual(['message.read']);
         expect(getSandbox(pluginId)).toBeDefined();
+        expect(result.record.status).toBe('enabled');
     });
 
-    it('uninstallPlugin tears down the sandbox', async () => {
+    it('uninstalling a gated (never-mounted) record does not throw', async () => {
         const bundle = await buildBundle();
         const result = await installEntitlement(entitlement, {
             fetchSignedBundle: async () => bundle,
-            codePluginsEnabled: true,
         });
-        expect(getSandbox(pluginId)).toBeDefined();
-
-        uninstallPlugin(result.record);
+        expect(getSandbox(pluginId)).toBeUndefined();
+        expect(() => uninstallPlugin(result.record)).not.toThrow();
         expect(getSandbox(pluginId)).toBeUndefined();
     });
 });

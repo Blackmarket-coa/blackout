@@ -65,6 +65,17 @@ export type FeatureFlags = {
     canopyServer: boolean;
     plugins: boolean;
     /**
+     * Code-plugin runtime sandbox. When OFF (default) the host does NOT mount
+     * marketplace `code_plugin` sandboxes: the sandbox host RPC surface
+     * (install/sandbox/defaultHandlers.ts) is still entirely stubbed to
+     * `not-implemented`, so a mounted plugin would silently no-op every host
+     * call. Gating keeps such plugins installed-but-inactive and surfaced as
+     * "unavailable" rather than a green `enabled` plugin that does nothing. Flip
+     * on (per-env via `BLACKOUT_PLUGIN_CODE_SANDBOX=true`) only once the host RPC
+     * handlers are implemented. Reversible. (Audit M19.)
+     */
+    pluginCodeSandbox: boolean;
+    /**
      * AppShell mode-routing flag. When enabled (default-on as of PR-10),
      * every destination renders inside the AppShell wrapper (bottom-tab
      * bar + mode-aware top bar + dynamic right panel) and the canonical
@@ -380,6 +391,7 @@ export const defaultFeatureFlags: FeatureFlags = {
     communities: true,
     canopyServer: true,
     plugins: true,
+    pluginCodeSandbox: false,
     shellAppShell: true,
     // HomeFeed is the default `/` surface so the home tour (gated by
     // onboardingHomeTour below) has a place to run — invited users land here
@@ -704,6 +716,12 @@ export const resolveFeatureFlags = (
         }
         if (env.BLACKOUT_PLUGINS === 'false') {
             nextFlags.plugins = false;
+        }
+        if (env.BLACKOUT_PLUGIN_CODE_SANDBOX === 'true') {
+            nextFlags.pluginCodeSandbox = true;
+        }
+        if (env.BLACKOUT_PLUGIN_CODE_SANDBOX === 'false') {
+            nextFlags.pluginCodeSandbox = false;
         }
         if (env.BLACKOUT_SHELL_APP_SHELL === 'true') {
             nextFlags.shellAppShell = true;
@@ -1040,6 +1058,12 @@ export const resolveFeatureFlags = (
     }
     if (env.BLACKOUT_PLUGINS === 'false') {
         nextFlags.plugins = false;
+    }
+    if (env.BLACKOUT_PLUGIN_CODE_SANDBOX === 'true') {
+        nextFlags.pluginCodeSandbox = true;
+    }
+    if (env.BLACKOUT_PLUGIN_CODE_SANDBOX === 'false') {
+        nextFlags.pluginCodeSandbox = false;
     }
     if (env.BLACKOUT_SHELL_APP_SHELL === 'true') {
         nextFlags.shellAppShell = true;
