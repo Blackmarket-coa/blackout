@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { hashPassword } from '../services/auth';
 import type {
+    CanaryTokenRecord,
     CanopyDirectoryEntryRecord,
     CanopyVoiceRoomRecord,
     FederationLinkRecord,
@@ -159,6 +160,7 @@ const USER_TOKEN_CUTOFF_TTL_MS = 25 * 60 * 60 * 1000;
 type PersistedState = {
     users: UserRecord[];
     canopyDirectoryEntries: CanopyDirectoryEntryRecord[];
+    canaryTokens: CanaryTokenRecord[];
     messages: MessageRecord[];
     scheduledMessages: ScheduledMessageRecord[];
     votes: VoteRecord[];
@@ -284,6 +286,7 @@ class InMemoryDb {
     users = new Map<string, UserRecord>();
     /** Keyed by canopy (Matrix space) id. */
     canopyDirectoryEntries = new Map<string, CanopyDirectoryEntryRecord>();
+    canaryTokens = new Map<string, CanaryTokenRecord>();
     messages = new Map<string, MessageRecord>();
     /** Keyed by scheduled-message id. */
     scheduledMessages = new Map<string, ScheduledMessageRecord>();
@@ -1860,6 +1863,22 @@ class InMemoryDb {
 
     listCanopyDirectoryEntries(): CanopyDirectoryEntryRecord[] {
         return [...this.canopyDirectoryEntries.values()];
+    }
+
+    // --- active-defense canary tokens (durable G5 state, M16) ---
+    listCanaryTokens(ownerUserId: string): CanaryTokenRecord[] {
+        return [...this.canaryTokens.values()]
+            .filter((c) => c.ownerUserId === ownerUserId)
+            .sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1));
+    }
+
+    getCanaryTokenByToken(token: string): CanaryTokenRecord | undefined {
+        return [...this.canaryTokens.values()].find((c) => c.token === token);
+    }
+
+    upsertCanaryToken(record: CanaryTokenRecord): CanaryTokenRecord {
+        this.canaryTokens.set(record.id, record);
+        return record;
     }
 
     createMessage(input: Omit<MessageRecord, 'createdAt'>): MessageRecord {
@@ -4408,6 +4427,7 @@ export class FileBackedDb extends InMemoryDb {
         this.canopyDirectoryEntries = new Map(
             (parsed.canopyDirectoryEntries ?? []).map((row) => [row.canopyId, row])
         );
+        this.canaryTokens = new Map((parsed.canaryTokens ?? []).map((row) => [row.id, row]));
         this.messages = new Map(parsed.messages.map((row) => [row.id, row]));
         this.scheduledMessages = new Map(
             (parsed.scheduledMessages ?? []).map((row) => [row.id, row])
@@ -4779,6 +4799,7 @@ export class FileBackedDb extends InMemoryDb {
         return {
             users: [...this.users.values()],
             canopyDirectoryEntries: [...this.canopyDirectoryEntries.values()],
+            canaryTokens: [...this.canaryTokens.values()],
             messages: [...this.messages.values()],
             scheduledMessages: [...this.scheduledMessages.values()],
             votes: [...this.votes.values()],
@@ -5083,6 +5104,12 @@ export class FileBackedDb extends InMemoryDb {
         const record = super.upsertCanopyDirectoryEntry(input);
         this.persist();
         return record;
+    }
+
+    override upsertCanaryToken(record: CanaryTokenRecord): CanaryTokenRecord {
+        const saved = super.upsertCanaryToken(record);
+        this.persist();
+        return saved;
     }
 
     override createMessage(input: Omit<MessageRecord, 'createdAt'>): MessageRecord {

@@ -1,71 +1,62 @@
 /**
  * Active-defense service (OSS-manifest group G5) — defensive, local-only
  * primitives: canary tokens and synthetic decoy data. No outbound traffic, no
- * third-party-directed behavior; everything here is generated and stored
- * locally so an operator can seed their own honeypots and detect unauthorized
- * access. In-memory store (parity with the other first-party stub services).
+ * third-party-directed behavior; everything here is generated locally so an
+ * operator can seed their own honeypots and detect unauthorized access.
+ *
+ * Canary-token state is DURABLE (M16): it is persisted through the runtime
+ * store (write-through in file/postgres modes; hydrated on boot), replacing the
+ * former in-memory-only Maps that were wiped on every restart/redeploy. The
+ * business logic (id/token generation, the per-owner cap, timestamps) stays
+ * here; only the storage moved. Decoy generation is pure and stateless.
  */
 
 import { randomUUID, randomBytes } from 'node:crypto';
+import { db } from '../db/store';
+import type { CanaryTokenRecord } from '../db/types';
 
-export type CanaryToken = {
-  id: string;
-  ownerUserId: string;
-  label: string;
-  /** Opaque token an operator embeds in a honeypot artifact. */
-  token: string;
-  createdAt: string;
-  lastTrippedAt: string | null;
-  tripCount: number;
-  /** User-agent of the most recent trip (truncated), when a tripwire fired. */
-  lastTripUserAgent: string | null;
-};
+export type CanaryToken = CanaryTokenRecord;
 
 export type TripContext = {
-  userAgent?: string | null;
+    userAgent?: string | null;
 };
 
 export type DecoyKind = 'contact' | 'message' | 'credential';
 
 export type DecoyRecord = {
-  kind: DecoyKind;
-  /** Clearly-synthetic marker so decoys are never mistaken for real data. */
-  synthetic: true;
-  value: Record<string, string>;
+    kind: DecoyKind;
+    /** Clearly-synthetic marker so decoys are never mistaken for real data. */
+    synthetic: true;
+    value: Record<string, string>;
 };
 
 const MAX_CANARIES_PER_OWNER = 100;
 const MAX_DECOY_COUNT = 100;
 
-const canariesByOwner = new Map<string, CanaryToken[]>();
-const canariesByToken = new Map<string, CanaryToken>();
-
 export function listCanaries(ownerUserId: string): CanaryToken[] {
-  return canariesByOwner.get(ownerUserId) ?? [];
+    return db.listCanaryTokens(ownerUserId);
 }
 
 export type MintCanaryResult =
-  | { kind: 'ok'; record: CanaryToken }
-  | { kind: 'limit_reached'; cap: number };
+    | { kind: 'ok'; record: CanaryToken }
+    | { kind: 'limit_reached'; cap: number };
 
 export function mintCanary(ownerUserId: string, label: string): MintCanaryResult {
-  const existing = canariesByOwner.get(ownerUserId) ?? [];
-  if (existing.length >= MAX_CANARIES_PER_OWNER) {
-    return { kind: 'limit_reached', cap: MAX_CANARIES_PER_OWNER };
-  }
-  const record: CanaryToken = {
-    id: randomUUID(),
-    ownerUserId,
-    label: label.slice(0, 200),
-    token: `bo-canary-${randomBytes(16).toString('hex')}`,
-    createdAt: new Date().toISOString(),
-    lastTrippedAt: null,
-    tripCount: 0,
-    lastTripUserAgent: null,
-  };
-  canariesByOwner.set(ownerUserId, [...existing, record]);
-  canariesByToken.set(record.token, record);
-  return { kind: 'ok', record };
+    if (db.listCanaryTokens(ownerUserId).length >= MAX_CANARIES_PER_OWNER) {
+        return { kind: 'limit_reached', cap: MAX_CANARIES_PER_OWNER };
+    }
+    const record: CanaryTokenRecord = {
+        id: randomUUID(),
+        ownerUserId,
+        label: label.slice(0, 200),
+        token: `bo-canary-${randomBytes(16).toString('hex')}`,
+        createdAt: new Date().toISOString(),
+        lastTrippedAt: null,
+        tripCount: 0,
+        lastTripUserAgent: null,
+    };
+    db.upsertCanaryToken(record);
+    return { kind: 'ok', record };
 }
 
 /**
@@ -75,59 +66,57 @@ export function mintCanary(ownerUserId: string, label: string): MintCanaryResult
  * the signal we want to capture.
  */
 export function tripCanary(token: string, context: TripContext = {}): CanaryToken | null {
-  const record = canariesByToken.get(token);
-  if (!record) return null;
-  const userAgent = context.userAgent ? context.userAgent.slice(0, 400) : record.lastTripUserAgent;
-  const updated: CanaryToken = {
-    ...record,
-    lastTrippedAt: new Date().toISOString(),
-    tripCount: record.tripCount + 1,
-    lastTripUserAgent: userAgent ?? null,
-  };
-  canariesByToken.set(token, updated);
-  const owned = canariesByOwner.get(record.ownerUserId) ?? [];
-  canariesByOwner.set(
-    record.ownerUserId,
-    owned.map((c) => (c.id === updated.id ? updated : c)),
-  );
-  return updated;
+    const record = db.getCanaryTokenByToken(token);
+    if (!record) return null;
+    const userAgent = context.userAgent
+        ? context.userAgent.slice(0, 400)
+        : record.lastTripUserAgent;
+    const updated: CanaryTokenRecord = {
+        ...record,
+        lastTrippedAt: new Date().toISOString(),
+        tripCount: record.tripCount + 1,
+        lastTripUserAgent: userAgent ?? null,
+    };
+    return db.upsertCanaryToken(updated);
 }
 
 const DECOY_KINDS: readonly DecoyKind[] = ['contact', 'message', 'credential'];
 
 export function isDecoyKind(value: unknown): value is DecoyKind {
-  return typeof value === 'string' && (DECOY_KINDS as readonly string[]).includes(value);
+    return typeof value === 'string' && (DECOY_KINDS as readonly string[]).includes(value);
 }
 
 export function clampDecoyCount(requested: number): number {
-  if (!Number.isFinite(requested) || requested < 1) return 1;
-  return Math.min(Math.floor(requested), MAX_DECOY_COUNT);
+    if (!Number.isFinite(requested) || requested < 1) return 1;
+    return Math.min(Math.floor(requested), MAX_DECOY_COUNT);
 }
 
 /** Generate clearly-synthetic decoy records locally. No real PII is involved. */
 export function generateDecoyData(kind: DecoyKind, count: number): DecoyRecord[] {
-  const out: DecoyRecord[] = [];
-  for (let i = 0; i < count; i += 1) {
-    const tag = randomBytes(4).toString('hex');
-    let value: Record<string, string>;
-    switch (kind) {
-      case 'contact':
-        value = { name: `Decoy User ${tag}`, email: `decoy-${tag}@invalid.example` };
-        break;
-      case 'message':
-        value = { from: `decoy-${tag}`, body: `Synthetic decoy message ${tag}` };
-        break;
-      case 'credential':
-        value = { username: `decoy_${tag}`, secret: `honeytoken-${randomBytes(8).toString('hex')}` };
-        break;
+    const out: DecoyRecord[] = [];
+    for (let i = 0; i < count; i += 1) {
+        const tag = randomBytes(4).toString('hex');
+        let value: Record<string, string>;
+        switch (kind) {
+            case 'contact':
+                value = { name: `Decoy User ${tag}`, email: `decoy-${tag}@invalid.example` };
+                break;
+            case 'message':
+                value = { from: `decoy-${tag}`, body: `Synthetic decoy message ${tag}` };
+                break;
+            case 'credential':
+                value = {
+                    username: `decoy_${tag}`,
+                    secret: `honeytoken-${randomBytes(8).toString('hex')}`,
+                };
+                break;
+        }
+        out.push({ kind, synthetic: true, value });
     }
-    out.push({ kind, synthetic: true, value });
-  }
-  return out;
+    return out;
 }
 
-/** Test-only reset of the in-memory store. */
+/** Test-only reset of the canary store. */
 export function __resetActiveDefenseForTest(): void {
-  canariesByOwner.clear();
-  canariesByToken.clear();
+    db.canaryTokens.clear();
 }
