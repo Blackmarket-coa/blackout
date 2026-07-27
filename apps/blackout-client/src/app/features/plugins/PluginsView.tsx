@@ -8,10 +8,7 @@ import {
     getAllFeaturePlugins,
     subscribeFeaturePlugins,
 } from '../../core/features/plugins';
-import {
-    runtimePluginFeatureFlags,
-    type FeatureFlags,
-} from '../../core/features/featureFlags';
+import { runtimePluginFeatureFlags, type FeatureFlags } from '../../core/features/featureFlags';
 import {
     installedPluginsAtom,
     type InstalledPluginRecord,
@@ -20,16 +17,11 @@ import {
     pendingPluginInstallAtom,
     type PendingPluginInstall,
 } from '../monetization/install/pendingPluginInstallAtom';
-import {
-    installEntitlement,
-    uninstallPlugin,
-} from '../monetization/install/pluginInstaller';
+import { installEntitlement, uninstallPlugin } from '../monetization/install/pluginInstaller';
 import { remountSandbox } from '../monetization/install/sandbox/sandboxRegistry';
 import { useConfirm } from '../../components/confirm-dialog';
 
-const RUNTIME_FLAG_KEYS = new Set<keyof FeatureFlags>(
-    Object.values(runtimePluginFeatureFlags),
-);
+const RUNTIME_FLAG_KEYS = new Set<keyof FeatureFlags>(Object.values(runtimePluginFeatureFlags));
 
 const CAPABILITY_LABELS: Record<PluginCapability, string> = {
     'shell.panel.read': 'Read shell panels',
@@ -49,14 +41,11 @@ const CAPABILITY_DESCRIPTIONS: Record<PluginCapability, string> = {
         'Lets the plugin see which panels and tabs are currently mounted in the app shell.',
     'shell.panel.write':
         'Lets the plugin add or modify panels in the app shell (sidebar, mobile tabs, right panel).',
-    'message.read':
-        'Lets the plugin read the contents of messages in dens you have joined.',
+    'message.read': 'Lets the plugin read the contents of messages in dens you have joined.',
     'message.compose':
         'Lets the plugin draft and send messages on your behalf in dens you have joined.',
-    'storage.read':
-        'Lets the plugin read values it has previously stored in your local browser.',
-    'storage.write':
-        'Lets the plugin store data in your local browser. Data stays on this device.',
+    'storage.read': 'Lets the plugin read values it has previously stored in your local browser.',
+    'storage.write': 'Lets the plugin store data in your local browser. Data stays on this device.',
     'http.fetch':
         'Lets the plugin make outbound network requests. Use caution — the plugin can talk to any URL.',
     'ai.inference':
@@ -141,9 +130,7 @@ const InstallApprovalDialog = ({
 }) => {
     const manifest = pending.bundle.manifest;
     const declared = manifest.capabilities;
-    const [selected, setSelected] = useState<Set<PluginCapability>>(
-        () => new Set(declared),
-    );
+    const [selected, setSelected] = useState<Set<PluginCapability>>(() => new Set(declared));
     const [showLowRisk, setShowLowRisk] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -207,12 +194,11 @@ const InstallApprovalDialog = ({
                 <h3 id="plugin-install-title" style={{ marginTop: 0 }}>
                     Install {manifest.name}?
                 </h3>
-                <p
-                    id="plugin-install-desc"
-                    style={{ color: 'var(--text-muted)', marginTop: 0 }}
-                >
-                    <code>{manifest.id}@{manifest.version}</code> from{' '}
-                    {manifest.listing.providerId}
+                <p id="plugin-install-desc" style={{ color: 'var(--text-muted)', marginTop: 0 }}>
+                    <code>
+                        {manifest.id}@{manifest.version}
+                    </code>{' '}
+                    from {manifest.listing.providerId}
                 </p>
                 {manifest.description ? (
                     <p style={{ marginTop: 8 }}>{manifest.description}</p>
@@ -287,8 +273,12 @@ const InstallApprovalDialog = ({
                                     }}
                                 >
                                     {showLowRisk
-                                        ? `Hide ${lowRiskCaps.length} read-only permission${lowRiskCaps.length === 1 ? '' : 's'}`
-                                        : `Show ${lowRiskCaps.length} read-only permission${lowRiskCaps.length === 1 ? '' : 's'}`}
+                                        ? `Hide ${lowRiskCaps.length} read-only permission${
+                                              lowRiskCaps.length === 1 ? '' : 's'
+                                          }`
+                                        : `Show ${lowRiskCaps.length} read-only permission${
+                                              lowRiskCaps.length === 1 ? '' : 's'
+                                          }`}
                                 </button>
                             </li>
                         )}
@@ -338,10 +328,7 @@ const InstallApprovalDialog = ({
                 ) : null}
 
                 {error ? (
-                    <p
-                        style={{ color: 'var(--danger, #b3261e)', marginTop: 12 }}
-                        role="alert"
-                    >
+                    <p style={{ color: 'var(--danger, #b3261e)', marginTop: 12 }} role="alert">
                         {error}
                     </p>
                 ) : null}
@@ -429,7 +416,7 @@ export const PluginsView = () => {
                     runtime: flagKey ? RUNTIME_FLAG_KEYS.has(flagKey) : false,
                 };
             }),
-        [ctx.flags],
+        [ctx.flags]
     );
 
     const applyToggle = (key: keyof FeatureFlags, next: boolean) => {
@@ -460,38 +447,35 @@ export const PluginsView = () => {
         const result = await installEntitlement(pendingInstall.entitlement, {
             fetchSignedBundle: async () => bundle,
             approvedCapabilities: granted,
+            codePluginsEnabled: ctx.flags.pluginCodeSandbox,
         });
         setInstalledList((prev) => {
-            const next = prev.filter(
-                (r) => r.entitlementId !== result.record.entitlementId,
-            );
+            const next = prev.filter((r) => r.entitlementId !== result.record.entitlementId);
             next.push(result.record);
             return next;
         });
         setPendingInstall(null);
     };
 
-    const toggleCapability = (
-        record: InstalledPluginRecord,
-        capability: PluginCapability,
-    ) => {
+    const toggleCapability = (record: InstalledPluginRecord, capability: PluginCapability) => {
         const granted = new Set(record.grantedCapabilities);
         if (granted.has(capability)) granted.delete(capability);
         else granted.add(capability);
-        const nextGranted = record.manifest.capabilities.filter((cap) =>
-            granted.has(cap),
-        );
+        const nextGranted = record.manifest.capabilities.filter((cap) => granted.has(cap));
         const nextRecord: InstalledPluginRecord = {
             ...record,
             grantedCapabilities: nextGranted,
         };
         setInstalled((prev) =>
-            prev.map((r) => (r.entitlementId === record.entitlementId ? nextRecord : r)),
+            prev.map((r) => (r.entitlementId === record.entitlementId ? nextRecord : r))
         );
         if (
             nextRecord.manifest.artifactKind === 'code_plugin' &&
-            nextRecord.status === 'enabled'
+            nextRecord.status === 'enabled' &&
+            ctx.flags.pluginCodeSandbox
         ) {
+            // Audit M19: never (re)mount a code-plugin sandbox while the feature
+            // is gated off — the host RPC surface is stubbed.
             remountSandbox(nextRecord.manifest, nextGranted);
         }
     };
@@ -502,17 +486,15 @@ export const PluginsView = () => {
             description: (
                 <>
                     Are you sure you want to uninstall{' '}
-                    <strong>{record.manifest.name || record.manifest.id}</strong>?
-                    This removes its data and disables the feature for this account.
+                    <strong>{record.manifest.name || record.manifest.id}</strong>? This removes its
+                    data and disables the feature for this account.
                 </>
             ),
             confirmLabel: 'Uninstall',
         });
         if (!confirmed) return;
         uninstallPlugin(record);
-        setInstalled((prev) =>
-            prev.filter((r) => r.entitlementId !== record.entitlementId),
-        );
+        setInstalled((prev) => prev.filter((r) => r.entitlementId !== record.entitlementId));
     };
 
     return (
@@ -574,8 +556,7 @@ export const PluginsView = () => {
                                 <td
                                     style={{
                                         padding: '10px 0',
-                                        fontFamily:
-                                            'JetBrains Mono, ui-monospace, monospace',
+                                        fontFamily: 'JetBrains Mono, ui-monospace, monospace',
                                         fontSize: 12,
                                     }}
                                 >
@@ -615,9 +596,9 @@ export const PluginsView = () => {
                 <h2 style={{ marginTop: 32, fontSize: 16 }}>Module plugins</h2>
                 {allPlugins.length === 0 ? (
                     <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>
-                        No feature module plugins registered. Static plugins are added
-                        through <code>featurePlugins</code>; marketplace installs appear
-                        here once they have been verified and registered.
+                        No feature module plugins registered. Static plugins are added through{' '}
+                        <code>featurePlugins</code>; marketplace installs appear here once they have
+                        been verified and registered.
                     </p>
                 ) : (
                     <ul style={{ paddingLeft: 20 }}>
@@ -635,8 +616,8 @@ export const PluginsView = () => {
                 <h2 style={{ marginTop: 32, fontSize: 16 }}>Marketplace installs</h2>
                 {installed.length === 0 ? (
                     <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>
-                        No marketplace plugins installed yet. Purchases from the
-                        marketplace appear here once their signed bundles are verified.
+                        No marketplace plugins installed yet. Purchases from the marketplace appear
+                        here once their signed bundles are verified.
                     </p>
                 ) : (
                     <ul style={{ paddingLeft: 20 }}>
@@ -662,8 +643,8 @@ export const PluginsView = () => {
                                                 background: record.lastError
                                                     ? 'var(--danger, #b3261e)'
                                                     : record.status === 'enabled'
-                                                      ? 'var(--accent-primary, #4ECDC4)'
-                                                      : 'var(--text-muted, #888)',
+                                                    ? 'var(--accent-primary, #4ECDC4)'
+                                                    : 'var(--text-muted, #888)',
                                                 color: '#fff',
                                             }}
                                         >
@@ -704,8 +685,24 @@ export const PluginsView = () => {
                                             marginTop: 4,
                                         }}
                                     >
-                                        Permissions: {describeCapabilities(record.manifest.capabilities)}
+                                        Permissions:{' '}
+                                        {describeCapabilities(record.manifest.capabilities)}
                                     </small>
+                                    {record.manifest.artifactKind === 'code_plugin' &&
+                                    !ctx.flags.pluginCodeSandbox ? (
+                                        <small
+                                            data-testid={`plugin-unavailable-${record.manifest.id}`}
+                                            style={{
+                                                display: 'block',
+                                                color: 'var(--text-muted)',
+                                                fontSize: 11,
+                                                marginTop: 4,
+                                            }}
+                                        >
+                                            Code plugins are not available yet — installed but
+                                            inactive.
+                                        </small>
+                                    ) : null}
                                     {record.manifest.capabilities.length > 0 ? (
                                         <div
                                             data-testid={`plugin-capability-chips-${record.manifest.id}`}
@@ -722,7 +719,9 @@ export const PluginsView = () => {
                                                     <button
                                                         key={cap}
                                                         type="button"
-                                                        onClick={() => toggleCapability(record, cap)}
+                                                        onClick={() =>
+                                                            toggleCapability(record, cap)
+                                                        }
                                                         aria-pressed={granted}
                                                         title={CAPABILITY_DESCRIPTIONS[cap]}
                                                         data-testid={`plugin-cap-${record.manifest.id}-${cap}`}

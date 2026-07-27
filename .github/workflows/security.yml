@@ -58,6 +58,26 @@ jobs:
                   scan-args: |-
                       --lockfile=pnpm-lock.yaml
 
+    hardening_guards:
+        # Wire the previously-inert hardening guards into the blocking security
+        # lane (audit M21 + M14). Plain node scripts — no dependency install.
+        name: Hardening guards
+        runs-on: ubuntu-24.04
+        steps:
+            - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+              with:
+                  persist-credentials: false
+
+            - uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6
+              with:
+                  node-version-file: '.node-version'
+
+            - name: Auth secret hardening guard (guard:auth-secrets)
+              run: node tools/ci/check-auth-secrets.mjs
+
+            - name: SOPS recipient guard (guard:sops-recipients)
+              run: node tools/ci/check-sops-recipients.mjs
+
     semgrep:
         name: Semgrep SAST
         runs-on: ubuntu-24.04

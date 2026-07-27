@@ -658,6 +658,24 @@ export interface CanopyDirectoryEntryRecord {
     indexedAt: string;
 }
 
+/**
+ * Active-defense canary token (OSS-manifest group G5). Durable replacement for
+ * the former in-memory stub in services/activeDefense.ts. Field names map 1:1 to
+ * the canary_tokens migration columns via camelToSnake.
+ */
+export interface CanaryTokenRecord {
+    id: string;
+    ownerUserId: string;
+    label: string;
+    /** Opaque token an operator embeds in a honeypot artifact. */
+    token: string;
+    createdAt: string;
+    lastTrippedAt: string | null;
+    tripCount: number;
+    /** User-agent of the most recent trip (truncated), when a tripwire fired. */
+    lastTripUserAgent: string | null;
+}
+
 export interface MessageRecord {
     id: UUID;
     channelId: UUID;

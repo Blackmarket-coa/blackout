@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 
 process.env.NODE_ENV = process.env.NODE_ENV ?? 'test';
 process.env.JWT_SECRET_PRIMARY =
-  process.env.JWT_SECRET_PRIMARY ?? 'Str0ng!TestKey-For-Matrix-Exchange-1234#ABCxyzZZ';
+    process.env.JWT_SECRET_PRIMARY ?? 'Str0ng!TestKey-For-Matrix-Exchange-1234#ABCxyzZZ';
 process.env.JWT_ISSUER = process.env.JWT_ISSUER ?? 'blackout-api-test';
 process.env.JWT_AUDIENCE = process.env.JWT_AUDIENCE ?? 'blackout-client-test';
 process.env.AUTH_RATE_LIMIT_MAX = process.env.AUTH_RATE_LIMIT_MAX ?? '1000';
@@ -21,100 +21,168 @@ const { db } = await import('../src/db/store');
 
 type WhoamiResult = Awaited<ReturnType<typeof matrixClient.whoami>>;
 const stubWhoami = (result: WhoamiResult) => {
-  const original = matrixClient.whoami;
-  matrixClient.whoami = async () => result;
-  return () => {
-    matrixClient.whoami = original;
-  };
+    const original = matrixClient.whoami;
+    matrixClient.whoami = async () => result;
+    return () => {
+        matrixClient.whoami = original;
+    };
 };
 
 const exchange = (matrixToken: string | null) =>
-  app.request('/v1/auth/matrix/exchange', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      ...(matrixToken ? { 'x-matrix-access-token': matrixToken } : {}),
-    },
-    body: JSON.stringify({}),
-  });
+    app.request('/v1/auth/matrix/exchange', {
+        method: 'POST',
+        headers: {
+            'content-type': 'application/json',
+            ...(matrixToken ? { 'x-matrix-access-token': matrixToken } : {}),
+        },
+        body: JSON.stringify({}),
+    });
+
+// The provisioning-trust flag (M4) is read at request time. Auto-provisioning is
+// OFF by default; opt in for the tests that exercise it.
+const withProvisioningTrusted = async (fn: () => Promise<void>) => {
+    const prev = process.env.BLACKOUT_MATRIX_EXCHANGE_TRUSTED_HS;
+    process.env.BLACKOUT_MATRIX_EXCHANGE_TRUSTED_HS = '1';
+    try {
+        await fn();
+    } finally {
+        if (prev === undefined) delete process.env.BLACKOUT_MATRIX_EXCHANGE_TRUSTED_HS;
+        else process.env.BLACKOUT_MATRIX_EXCHANGE_TRUSTED_HS = prev;
+    }
+};
 
 test('rejects a request with no Matrix token', async () => {
-  const res = await exchange(null);
-  assert.equal(res.status, 401);
-  const body = (await res.json()) as { code: string };
-  assert.equal(body.code, 'matrix_token_missing');
+    const res = await exchange(null);
+    assert.equal(res.status, 401);
+    const body = (await res.json()) as { code: string };
+    assert.equal(body.code, 'matrix_token_missing');
 });
 
 test('rejects an invalid Matrix token', async () => {
-  const restore = stubWhoami({ ok: false, status: 401, reason: 'invalid_token' });
-  try {
-    const res = await exchange('mx_bogus_token');
-    assert.equal(res.status, 401);
-    const body = (await res.json()) as { code: string };
-    assert.equal(body.code, 'matrix_token_invalid');
-  } finally {
-    restore();
-  }
+    const restore = stubWhoami({ ok: false, status: 401, reason: 'invalid_token' });
+    try {
+        const res = await exchange('mx_bogus_token');
+        assert.equal(res.status, 401);
+        const body = (await res.json()) as { code: string };
+        assert.equal(body.code, 'matrix_token_invalid');
+    } finally {
+        restore();
+    }
 });
 
 test('valid token mints a verifiable Blackout JWT and auto-provisions the user', async () => {
-  const localpart = `mx-exchange-${Date.now()}`;
-  assert.equal(db.findUserByUsername(localpart), undefined);
+    await withProvisioningTrusted(async () => {
+        const localpart = `mx-exchange-${Date.now()}`;
+        assert.equal(db.findUserByUsername(localpart), undefined);
 
-  const restore = stubWhoami({
-    ok: true,
-    status: 200,
-    userId: `@${localpart}:theblackout.app`,
-    deviceId: 'DEVICE1',
-  });
-  try {
-    const res = await exchange('mx_good_token');
-    assert.equal(res.status, 200);
-    const body = (await res.json()) as { token: string; userId: string };
+        const restore = stubWhoami({
+            ok: true,
+            status: 200,
+            userId: `@${localpart}:theblackout.app`,
+            deviceId: 'DEVICE1',
+        });
+        try {
+            const res = await exchange('mx_good_token');
+            assert.equal(res.status, 200);
+            const body = (await res.json()) as { token: string; userId: string };
 
-    const payload = verifyJwt(body.token);
-    assert.ok(payload, 'issued token should verify');
-    assert.equal(payload?.username, localpart);
-    assert.equal(payload?.sub, body.userId);
+            const payload = verifyJwt(body.token);
+            assert.ok(payload, 'issued token should verify');
+            assert.equal(payload?.username, localpart);
+            assert.equal(payload?.sub, body.userId);
 
-    const provisioned = db.findUserByUsername(localpart);
-    assert.ok(provisioned, 'user should be auto-provisioned');
-    assert.equal(provisioned?.id, body.userId);
-  } finally {
-    restore();
-  }
+            const provisioned = db.findUserByUsername(localpart);
+            assert.ok(provisioned, 'user should be auto-provisioned');
+            assert.equal(provisioned?.id, body.userId);
+        } finally {
+            restore();
+        }
+    });
 });
 
 test('a second exchange for the same Matrix user reuses the existing row', async () => {
-  const localpart = `mx-reuse-${Date.now()}`;
-  const restore = stubWhoami({
-    ok: true,
-    status: 200,
-    userId: `@${localpart}:theblackout.app`,
-    deviceId: 'DEVICE1',
-  });
-  try {
-    const first = (await (await exchange('mx_good_token')).json()) as { userId: string };
-    const second = (await (await exchange('mx_good_token')).json()) as { userId: string };
-    assert.equal(first.userId, second.userId, 'no duplicate user row');
-  } finally {
-    restore();
-  }
+    await withProvisioningTrusted(async () => {
+        const localpart = `mx-reuse-${Date.now()}`;
+        const restore = stubWhoami({
+            ok: true,
+            status: 200,
+            userId: `@${localpart}:theblackout.app`,
+            deviceId: 'DEVICE1',
+        });
+        try {
+            const first = (await (await exchange('mx_good_token')).json()) as { userId: string };
+            const second = (await (await exchange('mx_good_token')).json()) as { userId: string };
+            assert.equal(first.userId, second.userId, 'no duplicate user row');
+        } finally {
+            restore();
+        }
+    });
+});
+
+test('untrusted default: unknown Matrix user is rejected and NOT provisioned (M4)', async () => {
+    assert.equal(process.env.BLACKOUT_MATRIX_EXCHANGE_TRUSTED_HS, undefined);
+    const localpart = `mx-untrusted-${Date.now()}`;
+    assert.equal(db.findUserByUsername(localpart), undefined);
+    const restore = stubWhoami({
+        ok: true,
+        status: 200,
+        userId: `@${localpart}:theblackout.app`,
+        deviceId: 'D1',
+    });
+    try {
+        const res = await exchange('mx_good_token');
+        assert.equal(res.status, 403);
+        assert.equal(
+            ((await res.json()) as { code: string }).code,
+            'matrix_exchange_provisioning_disabled'
+        );
+        assert.equal(db.findUserByUsername(localpart), undefined, 'must not create a user');
+    } finally {
+        restore();
+    }
+});
+
+test('untrusted default: an already-linked account can still exchange (login) (M4)', async () => {
+    const localpart = `mx-linked-${Date.now()}`;
+    const existing = db.createUser({
+        id: crypto.randomUUID(),
+        username: localpart,
+        email: '',
+        passwordHash: '',
+        reputationScore: 0,
+        reputationTier: 'member',
+        pubkeyEd25519: crypto.randomUUID().replace(/-/g, ''),
+    });
+    const restore = stubWhoami({
+        ok: true,
+        status: 200,
+        userId: `@${localpart}:theblackout.app`,
+        deviceId: 'D1',
+    });
+    try {
+        const res = await exchange('mx_good_token');
+        assert.equal(res.status, 200);
+        const body = (await res.json()) as { token: string; userId: string };
+        assert.equal(body.userId, existing.id, 'reuses the linked row, no new user');
+        assert.equal(verifyJwt(body.token)?.username, localpart);
+    } finally {
+        restore();
+    }
 });
 
 test('rejects a Matrix user id with an unsupported localpart', async () => {
-  const restore = stubWhoami({
-    ok: true,
-    status: 200,
-    userId: '@Bad Localpart!:theblackout.app',
-    deviceId: 'DEVICE1',
-  });
-  try {
-    const res = await exchange('mx_good_token');
-    assert.equal(res.status, 400);
-    const body = (await res.json()) as { code: string };
-    assert.equal(body.code, 'matrix_user_invalid');
-  } finally {
-    restore();
-  }
+    const restore = stubWhoami({
+        ok: true,
+        status: 200,
+        userId: '@Bad Localpart!:theblackout.app',
+        deviceId: 'DEVICE1',
+    });
+    try {
+        const res = await exchange('mx_good_token');
+        assert.equal(res.status, 400);
+        const body = (await res.json()) as { code: string };
+        assert.equal(body.code, 'matrix_user_invalid');
+    } finally {
+        restore();
+    }
 });

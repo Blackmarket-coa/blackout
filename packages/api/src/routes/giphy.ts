@@ -160,7 +160,11 @@ giphyRoutes.get('/binary', async (c) => {
     }
     let upstream: Response;
     try {
-        upstream = await fetch(target, { method: 'GET' });
+        // redirect: 'manual' — do NOT follow redirects. The allowlist check
+        // above only validates the initial URL; an open redirect on the CDN
+        // could otherwise bounce us to an arbitrary host (SSRF). A 3xx now
+        // surfaces as a non-ok response and fails closed below.
+        upstream = await fetch(target, { method: 'GET', redirect: 'manual' });
     } catch (err) {
         log.warn('giphy: binary upstream fetch failed', { error: String(err) });
         return c.json({ code: 'upstream_error', message: 'Could not fetch GIF.' }, 502);

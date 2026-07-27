@@ -1,1 +1,6 @@
 npx lint-staged --concurrent false
+
+# Fast, targeted secret-hardening guard (audit M21): catches a re-introduced
+# weak/defaulted JWT secret or insecure cookie flag before it can be committed.
+# Full lint/typecheck stay in CI — too slow to gate every commit on.
+node tools/ci/check-auth-secrets.mjs

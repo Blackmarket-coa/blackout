@@ -3,17 +3,12 @@ import { useAtomValue, useSetAtom } from 'jotai';
 import type { NormalizedEntitlement } from '@blackout/core';
 import type { SignedPluginBundle } from '@blackout/sdk';
 import { authStateAtom } from '../../../state/auth';
-import {
-    fetchEntitlements,
-    fetchFulfillmentBundle,
-} from '../marketplace/marketplaceClient';
+import { fetchEntitlements, fetchFulfillmentBundle } from '../marketplace/marketplaceClient';
 import { readBlackoutApiToken } from '../marketplace/useMarketplaceAuth';
 import { ensureBlackoutApiToken } from '../../../../client/blackoutApiSession';
-import {
-    installedPluginsAtom,
-    type InstalledPluginRecord,
-} from './installedPluginsAtom';
+import { installedPluginsAtom, type InstalledPluginRecord } from './installedPluginsAtom';
 import { installEntitlement } from './pluginInstaller';
+import { capabilityContextAtom } from '../../../core/features/capabilityContext';
 
 /**
  * Mount once inside the logged-in tree to re-establish plugin state on
@@ -37,6 +32,10 @@ import { installEntitlement } from './pluginInstaller';
 export const PluginEntitlementHydrator = (): null => {
     const authState = useAtomValue(authStateAtom);
     const setInstalled = useSetAtom(installedPluginsAtom);
+    // Audit M19: boot hydration is the highest-traffic activation path — honor
+    // the code-plugin gate here so granted code_plugin entitlements are not
+    // silently mounted at cold load while the sandbox host RPC is stubbed.
+    const codePluginsEnabled = useAtomValue(capabilityContextAtom).flags.pluginCodeSandbox;
     const hydratedRef = useRef(false);
 
     useEffect(() => {
@@ -83,6 +82,7 @@ export const PluginEntitlementHydrator = (): null => {
                     const result = await installEntitlement(entitlement, {
                         fetchSignedBundle: (id) => fetchBundleAsSignedPlugin(id, token),
                         approvedCapabilities: prior?.grantedCapabilities,
+                        codePluginsEnabled,
                     });
                     // Preserve the user's previously-granted capability
                     // subset and installedAt timestamp across remounts.
@@ -93,13 +93,10 @@ export const PluginEntitlementHydrator = (): null => {
                                   installedAt: prior.installedAt,
                                   grantedCapabilities: prior.grantedCapabilities,
                               }
-                            : result.record,
+                            : result.record
                     );
                 } catch (err) {
-                    console.warn(
-                        `[plugins] failed to hydrate entitlement ${entitlement.id}`,
-                        err,
-                    );
+                    console.warn(`[plugins] failed to hydrate entitlement ${entitlement.id}`, err);
                     if (prior) {
                         nextRecords.push({
                             ...prior,
@@ -134,7 +131,7 @@ export const PluginEntitlementHydrator = (): null => {
         return () => {
             cancelled = true;
         };
-    }, [authState, setInstalled]);
+    }, [authState, setInstalled, codePluginsEnabled]);
 
     return null;
 };
@@ -153,7 +150,7 @@ const readPersistedRecords = (): InstalledPluginRecord[] => {
 
 const fetchBundleAsSignedPlugin = async (
     entitlementId: string,
-    token: string | null,
+    token: string | null
 ): Promise<SignedPluginBundle> => {
     const payload = await fetchFulfillmentBundle(entitlementId, token);
     // SignedBundlePayload.manifest is typed as `Record<string, unknown>`

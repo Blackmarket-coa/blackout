@@ -7,7 +7,9 @@
 #   docs/runbooks/SECRETS_MANAGER_MIGRATION.md §2.C is completed.
 #   Replace the `age1placeholder...` lines with real public keys
 #   generated via `age-keygen` before the first encrypted secret is
-#   committed.
+#   committed. This is enforced by `pnpm guard:sops-recipients`
+#   (tools/ci/check-sops-recipients.mjs), which fails CI if any encrypted
+#   secret file is committed while these placeholders remain.
 #
 # Recipients:
 #   - maintainer        — primary; private key held offline (offsite vault)
@@ -22,20 +24,20 @@
 # files; the runbook §3 covers this.
 
 creation_rules:
-  # Encrypted env-files for the production stack. Plaintext .env files
-  # are .gitignored; only the .sops.env variants are committed.
-  - path_regex: deploy/secrets/.+\.sops\.env$
-    encrypted_regex: '^.+$'
-    age: >-
-      age1placeholder0maintainerpublickeyreplaceaftersopskeyceremonyxxxxxxxxxxxx,
-      age1placeholder1comaintainerpublickeyreplaceaftersopskeyceremonyxxxxxxxxxx,
-      age1placeholder2deployhostpublickeyreplaceaftersopskeyceremonyxxxxxxxxxxxx
+    # Encrypted env-files for the production stack. Plaintext .env files
+    # are .gitignored; only the .sops.env variants are committed.
+    - path_regex: deploy/secrets/.+\.sops\.env$
+      encrypted_regex: '^.+$'
+      age: >-
+          age1placeholder0maintainerpublickeyreplaceaftersopskeyceremonyxxxxxxxxxxxx,
+          age1placeholder1comaintainerpublickeyreplaceaftersopskeyceremonyxxxxxxxxxx,
+          age1placeholder2deployhostpublickeyreplaceaftersopskeyceremonyxxxxxxxxxxxx
 
-  # Structured secrets (yaml/json) — encrypts values only, leaves keys
-  # plaintext for diff readability.
-  - path_regex: deploy/secrets/.+\.sops\.(yaml|yml|json)$
-    encrypted_regex: '^(data|secret|secrets|password|token|key)$'
-    age: >-
-      age1placeholder0maintainerpublickeyreplaceaftersopskeyceremonyxxxxxxxxxxxx,
-      age1placeholder1comaintainerpublickeyreplaceaftersopskeyceremonyxxxxxxxxxx,
-      age1placeholder2deployhostpublickeyreplaceaftersopskeyceremonyxxxxxxxxxxxx
+    # Structured secrets (yaml/json) — encrypts values only, leaves keys
+    # plaintext for diff readability.
+    - path_regex: deploy/secrets/.+\.sops\.(yaml|yml|json)$
+      encrypted_regex: '^(data|secret|secrets|password|token|key)$'
+      age: >-
+          age1placeholder0maintainerpublickeyreplaceaftersopskeyceremonyxxxxxxxxxxxx,
+          age1placeholder1comaintainerpublickeyreplaceaftersopskeyceremonyxxxxxxxxxx,
+          age1placeholder2deployhostpublickeyreplaceaftersopskeyceremonyxxxxxxxxxxxx

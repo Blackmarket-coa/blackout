@@ -394,6 +394,8 @@ const ALL_MAP_NAMES = [
     'coalitionFeedLikes',
     'coalitionFeedComments',
     'canopyDirectoryEntries',
+    'canaryTokens',
+    'meshEnvelopes',
     'clips',
     'coliseumTopics',
     'coliseumChallenges',
@@ -474,7 +476,7 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
         'pendingOAuthLinks'
     ),
     createRefreshToken: upsert('refreshTokens'),
-    markRefreshTokenReplaced: upsert('refreshTokens'),
+    consumeRefreshTokenForRotation: upsert('refreshTokens'),
     revokeRefreshTokenFamily: resync('refreshTokens'),
     revokeRefreshTokensForUser: resync('refreshTokens'),
     revokeSession: upsert('revokedSessions'),
@@ -632,6 +634,10 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
     upsertCoalitionFeedLike: upsert('coalitionFeedLikes'),
     createCoalitionFeedComment: upsert('coalitionFeedComments'),
     upsertCanopyDirectoryEntry: upsert('canopyDirectoryEntries'),
+    upsertCanaryToken: upsert('canaryTokens'),
+    // Whole-set reconciles: enqueue may evict the oldest; replace swaps the set.
+    enqueueMeshEnvelope: resync('meshEnvelopes'),
+    replaceMeshEnvelopes: resync('meshEnvelopes'),
     upsertClip: upsert('clips'),
     updateClip: upsert('clips'),
     deleteClip: resync('clips'),

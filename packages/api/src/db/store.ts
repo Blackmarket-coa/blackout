@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { hashPassword } from '../services/auth';
 import type {
+    CanaryTokenRecord,
     CanopyDirectoryEntryRecord,
     CanopyVoiceRoomRecord,
     FederationLinkRecord,
@@ -129,6 +130,7 @@ import type {
     FbmDisputeRoomRecord,
     FbmAclStateRecord,
 } from './types';
+import type { MeshEnvelope } from '@blackout/protocol';
 import {
     COALITION_SPATIAL_SEED,
     COALITION_AID_SEED,
@@ -145,6 +147,10 @@ import { log } from '../telemetry/logger';
 import { randomUUID } from 'node:crypto';
 
 const nowIso = () => new Date().toISOString();
+
+/** Cap for the durable mesh-relay store-and-forward queue (M17; relocated from
+ *  services/meshRelay.ts). Newest-wins: the oldest envelope is evicted past this. */
+const MESH_MAX_STORE = 10_000;
 const DB_MODE = process.env.BLACKOUT_DB_MODE ?? 'file';
 const DB_FILE_PATH = resolve(
     process.cwd(),
@@ -159,6 +165,8 @@ const USER_TOKEN_CUTOFF_TTL_MS = 25 * 60 * 60 * 1000;
 type PersistedState = {
     users: UserRecord[];
     canopyDirectoryEntries: CanopyDirectoryEntryRecord[];
+    canaryTokens: CanaryTokenRecord[];
+    meshEnvelopes: MeshEnvelope[];
     messages: MessageRecord[];
     scheduledMessages: ScheduledMessageRecord[];
     votes: VoteRecord[];
@@ -284,6 +292,9 @@ class InMemoryDb {
     users = new Map<string, UserRecord>();
     /** Keyed by canopy (Matrix space) id. */
     canopyDirectoryEntries = new Map<string, CanopyDirectoryEntryRecord>();
+    canaryTokens = new Map<string, CanaryTokenRecord>();
+    /** Mesh relay store-and-forward envelopes, keyed by envelope id. Durable; see services/meshRelay.ts. */
+    meshEnvelopes = new Map<string, MeshEnvelope>();
     messages = new Map<string, MessageRecord>();
     /** Keyed by scheduled-message id. */
     scheduledMessages = new Map<string, ScheduledMessageRecord>();
@@ -869,9 +880,26 @@ class InMemoryDb {
         return [...this.refreshTokens.values()].find((t) => t.tokenHash === tokenHash);
     }
 
-    markRefreshTokenReplaced(id: string, replacedBy: string): RefreshTokenRecord | undefined {
+    /**
+     * Atomically claim `id` for rotation: stamp replacedBy + revoke-as-rotated,
+     * but ONLY if the token is still live (replacedBy unset and not revoked).
+     * The get→check→set runs in a single synchronous tick with no await, so two
+     * concurrent rotations of the same token cannot both observe a live row —
+     * exactly one caller wins the compare-and-swap. A loser gets the row back
+     * UNCHANGED (its replacedBy is NOT this caller's id), which
+     * rotateRefreshToken reads as a lost race and treats as reuse. Returns
+     * undefined only when the id is unknown.
+     *
+     * SCOPE: this serializes rotations WITHIN one process (file / memory /
+     * single-instance postgres). It does NOT serialize across postgres replicas,
+     * each of which holds an independent in-memory mirror — true cross-replica
+     * atomicity needs a single-statement conditional UPDATE against Postgres
+     * (see rotateRefreshToken).
+     */
+    consumeRefreshTokenForRotation(id: string, replacedBy: string): RefreshTokenRecord | undefined {
         const existing = this.refreshTokens.get(id);
         if (!existing) return undefined;
+        if (existing.replacedBy || existing.revokedAt) return existing;
         const updated: RefreshTokenRecord = {
             ...existing,
             replacedBy,
@@ -1843,6 +1871,53 @@ class InMemoryDb {
 
     listCanopyDirectoryEntries(): CanopyDirectoryEntryRecord[] {
         return [...this.canopyDirectoryEntries.values()];
+    }
+
+    // --- active-defense canary tokens (durable G5 state, M16) ---
+    listCanaryTokens(ownerUserId: string): CanaryTokenRecord[] {
+        return [...this.canaryTokens.values()]
+            .filter((c) => c.ownerUserId === ownerUserId)
+            .sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1));
+    }
+
+    getCanaryTokenByToken(token: string): CanaryTokenRecord | undefined {
+        return [...this.canaryTokens.values()].find((c) => c.token === token);
+    }
+
+    upsertCanaryToken(record: CanaryTokenRecord): CanaryTokenRecord {
+        this.canaryTokens.set(record.id, record);
+        return record;
+    }
+
+    // --- mesh relay store-and-forward (durable, M17) ---
+    listMeshEnvelopes(): MeshEnvelope[] {
+        return [...this.meshEnvelopes.values()];
+    }
+
+    meshEnvelopeCount(): number {
+        return this.meshEnvelopes.size;
+    }
+
+    /**
+     * Append an envelope, evicting the oldest beyond MESH_MAX_STORE (Map keeps
+     * insertion order — newest-wins, matching the old slice(-MAX_STORE)).
+     */
+    enqueueMeshEnvelope(env: MeshEnvelope): MeshEnvelope {
+        this.meshEnvelopes.set(env.id, env);
+        while (this.meshEnvelopes.size > MESH_MAX_STORE) {
+            const oldest = this.meshEnvelopes.keys().next().value as string;
+            this.meshEnvelopes.delete(oldest);
+        }
+        return env;
+    }
+
+    /** Replace the whole envelope set with a gossip-merge result (uncapped — preserves current sync behavior). */
+    replaceMeshEnvelopes(envelopes: readonly MeshEnvelope[]): void {
+        this.meshEnvelopes = new Map(envelopes.map((e) => [e.id, e]));
+    }
+
+    resetMeshEnvelopesForTest(): void {
+        this.meshEnvelopes.clear();
     }
 
     createMessage(input: Omit<MessageRecord, 'createdAt'>): MessageRecord {
@@ -4391,6 +4466,8 @@ export class FileBackedDb extends InMemoryDb {
         this.canopyDirectoryEntries = new Map(
             (parsed.canopyDirectoryEntries ?? []).map((row) => [row.canopyId, row])
         );
+        this.canaryTokens = new Map((parsed.canaryTokens ?? []).map((row) => [row.id, row]));
+        this.meshEnvelopes = new Map((parsed.meshEnvelopes ?? []).map((row) => [row.id, row]));
         this.messages = new Map(parsed.messages.map((row) => [row.id, row]));
         this.scheduledMessages = new Map(
             (parsed.scheduledMessages ?? []).map((row) => [row.id, row])
@@ -4762,6 +4839,8 @@ export class FileBackedDb extends InMemoryDb {
         return {
             users: [...this.users.values()],
             canopyDirectoryEntries: [...this.canopyDirectoryEntries.values()],
+            canaryTokens: [...this.canaryTokens.values()],
+            meshEnvelopes: [...this.meshEnvelopes.values()],
             messages: [...this.messages.values()],
             scheduledMessages: [...this.scheduledMessages.values()],
             votes: [...this.votes.values()],
@@ -5033,11 +5112,11 @@ export class FileBackedDb extends InMemoryDb {
         return record;
     }
 
-    override markRefreshTokenReplaced(
+    override consumeRefreshTokenForRotation(
         id: string,
         replacedBy: string
     ): RefreshTokenRecord | undefined {
-        const updated = super.markRefreshTokenReplaced(id, replacedBy);
+        const updated = super.consumeRefreshTokenForRotation(id, replacedBy);
         if (updated) this.persist();
         return updated;
     }
@@ -5066,6 +5145,28 @@ export class FileBackedDb extends InMemoryDb {
         const record = super.upsertCanopyDirectoryEntry(input);
         this.persist();
         return record;
+    }
+
+    override upsertCanaryToken(record: CanaryTokenRecord): CanaryTokenRecord {
+        const saved = super.upsertCanaryToken(record);
+        this.persist();
+        return saved;
+    }
+
+    override enqueueMeshEnvelope(env: MeshEnvelope): MeshEnvelope {
+        const saved = super.enqueueMeshEnvelope(env);
+        this.persist();
+        return saved;
+    }
+
+    override replaceMeshEnvelopes(envelopes: readonly MeshEnvelope[]): void {
+        super.replaceMeshEnvelopes(envelopes);
+        this.persist();
+    }
+
+    override resetMeshEnvelopesForTest(): void {
+        super.resetMeshEnvelopesForTest();
+        this.persist();
     }
 
     override createMessage(input: Omit<MessageRecord, 'createdAt'>): MessageRecord {
@@ -6354,11 +6455,21 @@ export class FileBackedDb extends InMemoryDb {
 }
 
 /**
- * Postgres-backed store (BLACKOUT_DB_MODE=postgres). Single-instance
- * write-through: reads are inherited from InMemoryDb (served from the in-memory
- * mirror hydrated on boot), and the 107 mutators are wrapped to enqueue a
- * Postgres write after updating the mirror. Not safe for >1 replica — each
- * process holds its own mirror with no cross-instance invalidation.
+ * Postgres-backed store (BLACKOUT_DB_MODE=postgres). Write-through: reads are
+ * inherited from InMemoryDb (served from the in-memory mirror hydrated on
+ * boot), and the 107 mutators are wrapped to enqueue a durable Postgres write
+ * after updating the mirror.
+ *
+ * Multi-replica consistency: when a change transport is supplied — Postgres
+ * LISTEN/NOTIFY, ON BY DEFAULT (BLACKOUT_DB_PG_NOTIFY=1) — each replica
+ * subscribes to peers' change notifications and refreshes the affected mirror
+ * rows, so a write on one replica becomes visible on the others. This is
+ * EVENTUAL consistency with a bounded stale-read window equal to the NOTIFY
+ * propagation latency (typically sub-second): a read on replica B issued in the
+ * gap between a write committing on replica A and the NOTIFY arriving may still
+ * observe the pre-write value. Durability is unaffected (the write is already
+ * committed to Postgres). With the transport disabled (BLACKOUT_DB_PG_NOTIFY=0)
+ * the store is strictly single-writer and must run at exactly one replica.
  */
 type MutableMap = Map<string, Record<string, unknown>>;
 

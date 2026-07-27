@@ -312,7 +312,42 @@ Fixes landed on branch `claude/pre-launch-app-audit-mp0yvg` (PR #857) after the 
 | L8        | Nightly k6 can't produce a valid signal      | ✅ Fixed — API boot fails fast + logs captured; runs against postgres                                                                |
 | (deps)    | Pillow / rustls-webpki high-sev advisories   | ✅ Fixed — perturbation sidecar pillow → 12.3.0; desktop rustls-webpki → 0.103.13                                                    |
 
-**Deferred (need product/architecture decisions):**
+### Follow-up remediation (second pass)
 
--   **react-router 7→8 / React 18→19** (H8 remainder): the entire react-router 8 line requires **React ≥19.2.7**; the client is on React 18.2 and the `folds` design system (used in 322 files) still peers React 17, so this is a React 18→19 framework migration whose runtime behaviour can't be validated without running the full client — not a router bump. The advisory (GHSA-qwww-vcr4-c8h2) is RSC-mode-only and the client uses library mode, so it does not apply; it is silenced with a time-boxed, documented ignore (`osv-scanner.toml`, `.trivyignore`, `pnpm.auditConfig`) expiring 2026-10-31. A concrete, grounded migration plan is at **`docs/migrations/react-19-and-react-router-8.md`**.
--   **M4/M5/M8/M11/M12/M14/M16-M20**, and the runtime **E2E + load-test** validation (§5) remain from the checklist. (L8 unblocks the load test by making the harness produce a real signal; the actual production-like E2E/load _run_ still needs a live stack.)
+A second pass on the same branch cleared the remaining actionable Medium/Low
+findings. Each was verified before commit (`@blackout/api` typecheck clean; the
+touched suites green; migration guards `check-db-migrations` +
+`verify-migrations-ephemeral` — the latter now enforcing full schema-fidelity —
+pass; client typecheck + affected vitest suites green).
+
+| ID  | Finding                                               | Status                                                                                                                                          |
+| --- | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| M4  | `matrix/exchange` conditional account-takeover        | ✅ Fixed — auto-provisioning gated behind `BLACKOUT_MATRIX_EXCHANGE_TRUSTED_HS` (default off; login for linked users still works) + tests       |
+| M5  | No request body-size limit                            | ✅ Fixed — 16 MiB global cap + 256 KiB cap on unauthenticated raw-body webhooks (413 before buffering) + tests                                  |
+| M6  | No central env-schema validation                      | ✅ Fixed — `config/env.ts` aggregates critical-config problems at boot; fail-fast in prod, warn in dev; non-breaking + 12 tests                 |
+| M8  | Widget-alert SSE token in URL; no concurrency cap     | ✅ Fixed — per-token concurrent-stream cap (429) + `Referrer-Policy: no-referrer` (OBS forces the URL token) + test                             |
+| M11 | Multi-replica story contradicts itself                | ✅ Fixed — store doc + k8s manifest corrected to the accurate model (write-through + pg_notify = eventual consistency, bounded stale-read)      |
+| M12 | Migration checksums recorded but never verified       | ✅ Fixed — `migrateUp`/`status` detect an edited applied migration (checksum drift) and fail fast + test                                        |
+| M13 | Stale SonarQube config (element-web)                  | ✅ Fixed — removed the inert `sonarqube.yml` + `sonar-project.properties` (dead trigger, foreign org/secrets)                                   |
+| M14 | SOPS recipients are placeholders                      | ✅ Guarded — `guard:sops-recipients` fails CI if a secret is committed against placeholder keys (real key ceremony still a human task)          |
+| M16 | Canary-tripwire state in-memory only                  | ✅ Fixed — persisted through the runtime store (migration 074) + file-mode durability test                                                      |
+| M17 | Mesh-relay store-and-forward in-memory only           | ✅ Fixed — persisted through the runtime store (migration 075) + durability tests                                                               |
+| M18 | Dead-drop parity test doesn't compare implementations | ✅ Fixed — real cross-impl parity test runs both validators over an adversarial corpus; wired into CI                                           |
+| M19 | Plugin sandbox RPC stubbed but wired end-to-end       | ✅ Fixed — code-plugin activation gated behind a fail-closed `pluginCodeSandbox` flag; installs inactive + honest "unavailable" surface + tests |
+| M20 | Defect-intake loop not running                        | ✅ Fixed — created `docs/launch/builds/` (README + H0 baseline); de-staled `KNOWN_ISSUES.md`                                                    |
+| M21 | `guard:auth-secrets` / GitGuardian unwired            | ✅ Fixed — `guard:auth-secrets` wired into the blocking security lane + pre-commit                                                              |
+| L1  | JWT `alg` header not validated before verify          | ✅ Fixed — `verifyJwt` pins the header alg to HS256 (defense-in-depth) + test                                                                   |
+| L2  | Refresh rotation not atomic                           | ✅ Fixed — synchronous compare-and-swap consume-and-replace (per-process; cross-replica PG CAS flagged as follow-up) + tests                    |
+| L3  | Appservice token compared non-constant-time           | ✅ Fixed — constant-time (SHA-256 + `timingSafeEqual`) compare                                                                                  |
+| L4  | GIF proxies follow redirects (allowlist bypass)       | ✅ Fixed — `redirect: 'manual'` on Tenor/Giphy binary proxies (fail closed on 3xx)                                                              |
+| L5  | Down-migration test asserts only table count          | ✅ Fixed — round-trip now compares full schema fingerprint (columns/constraints/indexes)                                                        |
+| L6  | `guard:feature-budget` points at archived legacy      | ✅ Fixed — legacy scope made explicit + `FEATURE_UI_TESTS_DIR` override                                                                         |
+| L7  | Soft CI jobs pending unset repo variables             | ✅ Documented — the repo variables that promote qa-monorepo / nav-audit to blocking are now documented in `ci.yml`                              |
+| L9  | ~47 `console.*` in shipped client                     | ✅ Assessed — 45 are legitimate error-path diagnostics (kept); the one stray perf `console.log` removed                                         |
+
+**Still deferred (need a human decision or a live stack):**
+
+-   **react-router 7→8 / React 18→19** (H8 remainder): the entire react-router 8 line requires **React ≥19.2.7**; the client is on React 18.2 and the `folds` design system (used in 322 files) still peers React 17 (confirmed unchanged — latest `folds` 2.7.1 still declares `peerDependencies.react: 17.0.0`), so this is a React 18→19 framework migration whose runtime behaviour can't be validated without running the full client — not a router bump. The advisory (GHSA-qwww-vcr4-c8h2) is RSC-mode-only and the client uses library mode, so it does not apply; it is silenced with a time-boxed, documented ignore (`osv-scanner.toml`, `.trivyignore`, `pnpm.auditConfig`) expiring 2026-10-31. Concrete migration plan: **`docs/migrations/react-19-and-react-router-8.md`**.
+-   **H11 counsel review** of the drafted Privacy Policy / ToS (`docs/legal/`).
+-   **M14 SOPS key ceremony** (generating real `age` recipients, held offline by humans) — the CI guard above prevents the unsafe placeholder state in the meantime.
+-   The production-like **E2E + load-test _run_** (§5): L8 makes the harness produce a real signal, but the actual run still needs a live stack (Synapse + MAS + TURN + media + Postgres/Redis).

@@ -4,14 +4,8 @@ import {
     registerDynamicFeaturePlugin,
     unregisterDynamicFeaturePlugin,
 } from '../../../core/features/plugins';
-import type {
-    FeatureModulePlugin,
-    ShellPanelEntry,
-} from '../../../core/features/types';
-import type {
-    InstalledPluginRecord,
-    InstalledPluginStatus,
-} from './installedPluginsAtom';
+import type { FeatureModulePlugin, ShellPanelEntry } from '../../../core/features/types';
+import type { InstalledPluginRecord, InstalledPluginStatus } from './installedPluginsAtom';
 import { mountSandbox, unmountSandbox } from './sandbox/sandboxRegistry';
 import { verifySignedBundle } from './pluginSignature';
 import { parseOwnedCosmetic, type OwnedCosmetic } from '../../profile/cosmeticTypes';
@@ -56,6 +50,14 @@ export interface InstallContext {
      * `ai.inference` at runtime unless this is `true` for an AI den.
      */
     aiAllowed?: boolean;
+    /**
+     * Whether marketplace code-plugin sandboxes may be activated (audit M19).
+     * Defaults to `false` (fail-closed): a `code_plugin` entitlement is installed
+     * as an inactive record and its sandbox is NOT mounted, because the sandbox
+     * host RPC surface is currently stubbed to `not-implemented`. Callers pass
+     * the resolved `pluginCodeSandbox` feature flag.
+     */
+    codePluginsEnabled?: boolean;
 }
 
 function base64ToBytes(base64: string): Uint8Array {
@@ -73,7 +75,9 @@ function base64ToBytes(base64: string): Uint8Array {
 function decodeBundlePayload(bundleBytes: Uint8Array): unknown {
     try {
         const parsed = JSON.parse(new TextDecoder().decode(bundleBytes)) as Record<string, unknown>;
-        return parsed && typeof parsed === 'object' && 'payload' in parsed ? parsed.payload : parsed;
+        return parsed && typeof parsed === 'object' && 'payload' in parsed
+            ? parsed.payload
+            : parsed;
     } catch {
         return null;
     }
@@ -186,7 +190,9 @@ export async function installEntitlement(
     });
     if (!verification.ok) {
         throw new PluginInstallError(
-            `Refusing to install — signature verification failed (${verification.reason ?? 'unknown'})`,
+            `Refusing to install — signature verification failed (${
+                verification.reason ?? 'unknown'
+            })`,
             verification.reason ?? 'signature-failed'
         );
     }
@@ -242,10 +248,21 @@ export async function installEntitlement(
         case 'manifest_plugin':
             registerDynamicFeaturePlugin(manifestPluginToFeatureModulePlugin(bundle.manifest));
             break;
-        case 'code_plugin':
+        case 'code_plugin': {
+            if (!(ctx.codePluginsEnabled ?? false)) {
+                // Audit M19: the sandbox host RPC surface is stubbed
+                // (not-implemented). Keep the plugin installed but INACTIVE so
+                // nav/home-card surfaces (which require status==='enabled') do
+                // not render, and the Plugins page can show an explicit
+                // "unavailable" state instead of a silent no-op. Not lastError —
+                // this is an intentional gate, not a failure.
+                record.status = 'disabled';
+                break;
+            }
             mountSandbox(bundle.manifest, bundleBytes, grantedCapabilities, ctx.aiAllowed ?? false);
             ctx.onCodePluginLoaded?.(bundle.manifest, bundleBytes);
             break;
+        }
         default:
             throw new PluginInstallError(
                 `Unknown artifact kind: ${bundle.manifest.artifactKind}`,
