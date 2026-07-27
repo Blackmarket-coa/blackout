@@ -869,9 +869,26 @@ class InMemoryDb {
         return [...this.refreshTokens.values()].find((t) => t.tokenHash === tokenHash);
     }
 
-    markRefreshTokenReplaced(id: string, replacedBy: string): RefreshTokenRecord | undefined {
+    /**
+     * Atomically claim `id` for rotation: stamp replacedBy + revoke-as-rotated,
+     * but ONLY if the token is still live (replacedBy unset and not revoked).
+     * The get→check→set runs in a single synchronous tick with no await, so two
+     * concurrent rotations of the same token cannot both observe a live row —
+     * exactly one caller wins the compare-and-swap. A loser gets the row back
+     * UNCHANGED (its replacedBy is NOT this caller's id), which
+     * rotateRefreshToken reads as a lost race and treats as reuse. Returns
+     * undefined only when the id is unknown.
+     *
+     * SCOPE: this serializes rotations WITHIN one process (file / memory /
+     * single-instance postgres). It does NOT serialize across postgres replicas,
+     * each of which holds an independent in-memory mirror — true cross-replica
+     * atomicity needs a single-statement conditional UPDATE against Postgres
+     * (see rotateRefreshToken).
+     */
+    consumeRefreshTokenForRotation(id: string, replacedBy: string): RefreshTokenRecord | undefined {
         const existing = this.refreshTokens.get(id);
         if (!existing) return undefined;
+        if (existing.replacedBy || existing.revokedAt) return existing;
         const updated: RefreshTokenRecord = {
             ...existing,
             replacedBy,
@@ -5033,11 +5050,11 @@ export class FileBackedDb extends InMemoryDb {
         return record;
     }
 
-    override markRefreshTokenReplaced(
+    override consumeRefreshTokenForRotation(
         id: string,
         replacedBy: string
     ): RefreshTokenRecord | undefined {
-        const updated = super.markRefreshTokenReplaced(id, replacedBy);
+        const updated = super.consumeRefreshTokenForRotation(id, replacedBy);
         if (updated) this.persist();
         return updated;
     }

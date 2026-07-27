@@ -474,7 +474,7 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
         'pendingOAuthLinks'
     ),
     createRefreshToken: upsert('refreshTokens'),
-    markRefreshTokenReplaced: upsert('refreshTokens'),
+    consumeRefreshTokenForRotation: upsert('refreshTokens'),
     revokeRefreshTokenFamily: resync('refreshTokens'),
     revokeRefreshTokensForUser: resync('refreshTokens'),
     revokeSession: upsert('revokedSessions'),

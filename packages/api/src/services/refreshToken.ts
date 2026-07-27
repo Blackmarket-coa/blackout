@@ -70,12 +70,27 @@ export const rotateRefreshToken = (presentedToken: string, userAgent?: string): 
     if (existing.revokedAt) return { kind: 'revoked' };
     if (new Date(existing.expiresAt).getTime() <= Date.now()) return { kind: 'expired' };
 
+    // Mint the successor first so its row exists before the old token's
+    // replaced_by references it (preserves FK-safe write ordering under the
+    // postgres write-behind queue), then atomically claim the old token.
     const rotated = issueRefreshToken({
         userId: existing.userId,
         familyId: existing.familyId,
         userAgent,
     });
-    db.markRefreshTokenReplaced(existing.id, rotated.record.id);
+    // Compare-and-swap: stamp replacedBy ONLY if the token is still live. Two
+    // concurrent rotations of the same token cannot both win this within a
+    // process. The loser's freshly-minted successor is burned with the family
+    // below, so no orphan live token survives. (L2)
+    const claimed = db.consumeRefreshTokenForRotation(existing.id, rotated.record.id);
+    if (!claimed || claimed.replacedBy !== rotated.record.id) {
+        // Lost the race: another rotation already consumed this token. Treat as
+        // reuse — burn the whole family (old token, our orphan successor, and
+        // the winner's successor) and invalidate outstanding access tokens.
+        db.revokeRefreshTokenFamily(existing.familyId, 'reuse_detected');
+        db.revokeUserTokensBefore(existing.userId, 'reuse_detected');
+        return { kind: 'reuse_detected', userId: existing.userId, familyId: existing.familyId };
+    }
     return { kind: 'ok', record: existing, rotated };
 };
 

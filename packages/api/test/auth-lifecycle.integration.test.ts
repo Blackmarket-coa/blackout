@@ -63,6 +63,53 @@ test('refresh-token rotation rotates and invalidates the old token', async () =>
     }
 });
 
+test('refresh-token rotation is an atomic single-winner CAS under concurrent double-submit (L2)', async () => {
+    const { refreshToken, db } = await loadModules();
+    const user = await seedUser(db);
+
+    const issued = refreshToken.issueRefreshToken({ userId: user.id });
+    const stored = db.findRefreshTokenByHash(refreshToken.__test__.sha256(issued.token));
+    assert.ok(stored);
+
+    // Model two replicas that each read the SAME live token and race to rotate
+    // it: both mint a successor id and call the consume-and-replace CAS. (A plain
+    // two-fetch HTTP test can't encode this in memory mode — the rotation
+    // critical section is fully synchronous, so two single-process requests
+    // never interleave inside it; the store-level CAS is the honest encoding.)
+    const successorA = randomUUID();
+    const successorB = randomUUID();
+    const claimA = db.consumeRefreshTokenForRotation(stored!.id, successorA);
+    const claimB = db.consumeRefreshTokenForRotation(stored!.id, successorB);
+
+    // Exactly one claim wins: A stamps its successor; B sees the row already
+    // claimed and gets it back UNCHANGED (still pointing at A's successor).
+    assert.equal(claimA?.replacedBy, successorA);
+    assert.equal(claimA?.revokedReason, 'rotated');
+    assert.equal(claimB?.replacedBy, successorA);
+    assert.notEqual(claimB?.replacedBy, successorB);
+    assert.equal(db.refreshTokens.get(stored!.id)?.replacedBy, successorA);
+});
+
+test('a successful rotation leaves exactly one live successor in the family (L2)', async () => {
+    const { refreshToken, db } = await loadModules();
+    const user = await seedUser(db);
+
+    const issued = refreshToken.issueRefreshToken({ userId: user.id });
+    const stored = db.findRefreshTokenByHash(refreshToken.__test__.sha256(issued.token));
+    assert.ok(stored);
+
+    const rotated = refreshToken.rotateRefreshToken(issued.token);
+    assert.equal(rotated.kind, 'ok');
+
+    const liveInFamily = [...db.refreshTokens.values()].filter(
+        (t) => t.familyId === stored!.familyId && !t.revokedAt && !t.replacedBy
+    );
+    assert.equal(liveInFamily.length, 1);
+    if (rotated.kind === 'ok') {
+        assert.equal(liveInFamily[0]?.id, rotated.rotated.record.id);
+    }
+});
+
 test('refresh-token rotation rejects invalid and expired tokens', async () => {
     const { refreshToken, db } = await loadModules();
     const user = await seedUser(db);
