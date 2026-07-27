@@ -103,6 +103,13 @@ import { matrixClient } from './integrations/matrix-client';
 import { drainRuntimeStore, initRuntimeStore, RUNTIME_DB_MODE } from './db/store';
 import { migrateUp, MIGRATIONS_DIR } from './db/migrate';
 import { getSharedPgPool } from './config/postgres';
+import { assertEnvAtBoot } from './config/env';
+
+// Central boot-time env validation (M6): aggregate every critical-config
+// problem into one report and fail fast in production before anything else
+// (security preflight, CORS config, store hydration, listen) runs. No-op-safe
+// in dev/test — it warns, never throws there.
+assertEnvAtBoot();
 
 const securityPreflight = runSecurityPreflight();
 
