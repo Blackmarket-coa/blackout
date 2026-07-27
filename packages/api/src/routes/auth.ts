@@ -478,6 +478,28 @@ auth.post('/login', async (c) => {
 const MATRIX_LOCALPART_RE = /^[a-z0-9._=/+-]{1,255}$/;
 
 /**
+ * Auto-provisioning a Blackout account from a Matrix token is only safe when the
+ * configured homeserver's registration is Blackout-exclusive — i.e. Matrix
+ * accounts can only be minted through our bot-admin register / account-number
+ * flow. If the homeserver allows direct/open registration, an attacker can
+ * register an arbitrary localpart there and exchange the resulting token into a
+ * NEW Blackout account of the same username, pre-empting or hijacking a Blackout
+ * identity. So provisioning-on-exchange is OFF by default and only enabled when
+ * an operator explicitly asserts the homeserver is trusted via
+ * BLACKOUT_MATRIX_EXCHANGE_TRUSTED_HS. When unset we still bridge tokens for
+ * users that ALREADY have a linked Blackout account (login); we just refuse to
+ * create one.
+ *
+ * NOTE: deployments using the /auth/account-number signup path MUST set this,
+ * because that flow creates the Blackout row lazily on first exchange. Those
+ * deployments run a Blackout-exclusive Synapse, so the assertion holds.
+ */
+const matrixExchangeProvisioningTrusted = (): boolean => {
+    const flag = process.env.BLACKOUT_MATRIX_EXCHANGE_TRUSTED_HS?.trim().toLowerCase();
+    return flag === '1' || flag === 'true' || flag === 'yes' || flag === 'on';
+};
+
+/**
  * Bridge a live Matrix session into a Blackout API JWT. The client sends
  * its Matrix access token (in `x-matrix-access-token`, NOT `Authorization`,
  * so it doesn't collide with the JWT bearer path in authMiddleware); we
@@ -517,6 +539,22 @@ auth.post('/matrix/exchange', async (c) => {
 
     let user = db.findUserByUsername(localpart);
     if (!user) {
+        // A whoami-valid token proves a live Matrix session, but NOT that the
+        // account was minted by Blackout. Only auto-create a Blackout row when
+        // the operator has asserted the homeserver's registration is
+        // Blackout-exclusive; otherwise refuse (login for already-linked users
+        // still works above). See matrixExchangeProvisioningTrusted() (M4).
+        if (!matrixExchangeProvisioningTrusted()) {
+            authFailuresTotal.inc({ reason: 'matrix_exchange_provisioning_disabled' });
+            return c.json(
+                {
+                    code: 'matrix_exchange_provisioning_disabled',
+                    message:
+                        'No linked Blackout account for this Matrix user; exchange-based provisioning is disabled',
+                },
+                403
+            );
+        }
         // Auto-provision: the Matrix account already exists (whoami just
         // confirmed it), so there's no second account to create — we only
         // need a Blackout-side row to hang sessions, invitations, and
