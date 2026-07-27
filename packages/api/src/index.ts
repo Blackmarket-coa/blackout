@@ -83,6 +83,7 @@ import bugReportRoutes from './routes/bugReport';
 import widgetReportRoutes from './routes/widgetReport';
 import { authMiddleware } from './middleware/auth';
 import { rateLimit } from './middleware/rate-limit';
+import { jsonBodyLimit, GLOBAL_MAX_BODY_BYTES } from './middleware/body-limit';
 import { securityHeaders } from './middleware/security-headers';
 import {
     recordLegacyApiAliasUsage,
@@ -152,6 +153,11 @@ app.use(
     })
 );
 app.use('*', httpMetricsMiddleware);
+// Global request-body cap (M5): reject absurdly large bodies with 413 before
+// any route buffers them. Runs after CORS + security headers + metrics so the
+// 413 carries them and is counted; on the Content-Length fast path bodyLimit
+// rejects without reading the body at all.
+app.use('*', jsonBodyLimit(GLOBAL_MAX_BODY_BYTES));
 app.use('*', rateLimit);
 
 // Public canary tripwire (OSS-manifest G5) — mounted before the /v1 auth gate
