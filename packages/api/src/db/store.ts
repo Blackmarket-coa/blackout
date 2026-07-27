@@ -130,6 +130,7 @@ import type {
     FbmDisputeRoomRecord,
     FbmAclStateRecord,
 } from './types';
+import type { MeshEnvelope } from '@blackout/protocol';
 import {
     COALITION_SPATIAL_SEED,
     COALITION_AID_SEED,
@@ -146,6 +147,10 @@ import { log } from '../telemetry/logger';
 import { randomUUID } from 'node:crypto';
 
 const nowIso = () => new Date().toISOString();
+
+/** Cap for the durable mesh-relay store-and-forward queue (M17; relocated from
+ *  services/meshRelay.ts). Newest-wins: the oldest envelope is evicted past this. */
+const MESH_MAX_STORE = 10_000;
 const DB_MODE = process.env.BLACKOUT_DB_MODE ?? 'file';
 const DB_FILE_PATH = resolve(
     process.cwd(),
@@ -161,6 +166,7 @@ type PersistedState = {
     users: UserRecord[];
     canopyDirectoryEntries: CanopyDirectoryEntryRecord[];
     canaryTokens: CanaryTokenRecord[];
+    meshEnvelopes: MeshEnvelope[];
     messages: MessageRecord[];
     scheduledMessages: ScheduledMessageRecord[];
     votes: VoteRecord[];
@@ -287,6 +293,8 @@ class InMemoryDb {
     /** Keyed by canopy (Matrix space) id. */
     canopyDirectoryEntries = new Map<string, CanopyDirectoryEntryRecord>();
     canaryTokens = new Map<string, CanaryTokenRecord>();
+    /** Mesh relay store-and-forward envelopes, keyed by envelope id. Durable; see services/meshRelay.ts. */
+    meshEnvelopes = new Map<string, MeshEnvelope>();
     messages = new Map<string, MessageRecord>();
     /** Keyed by scheduled-message id. */
     scheduledMessages = new Map<string, ScheduledMessageRecord>();
@@ -1879,6 +1887,37 @@ class InMemoryDb {
     upsertCanaryToken(record: CanaryTokenRecord): CanaryTokenRecord {
         this.canaryTokens.set(record.id, record);
         return record;
+    }
+
+    // --- mesh relay store-and-forward (durable, M17) ---
+    listMeshEnvelopes(): MeshEnvelope[] {
+        return [...this.meshEnvelopes.values()];
+    }
+
+    meshEnvelopeCount(): number {
+        return this.meshEnvelopes.size;
+    }
+
+    /**
+     * Append an envelope, evicting the oldest beyond MESH_MAX_STORE (Map keeps
+     * insertion order — newest-wins, matching the old slice(-MAX_STORE)).
+     */
+    enqueueMeshEnvelope(env: MeshEnvelope): MeshEnvelope {
+        this.meshEnvelopes.set(env.id, env);
+        while (this.meshEnvelopes.size > MESH_MAX_STORE) {
+            const oldest = this.meshEnvelopes.keys().next().value as string;
+            this.meshEnvelopes.delete(oldest);
+        }
+        return env;
+    }
+
+    /** Replace the whole envelope set with a gossip-merge result (uncapped — preserves current sync behavior). */
+    replaceMeshEnvelopes(envelopes: readonly MeshEnvelope[]): void {
+        this.meshEnvelopes = new Map(envelopes.map((e) => [e.id, e]));
+    }
+
+    resetMeshEnvelopesForTest(): void {
+        this.meshEnvelopes.clear();
     }
 
     createMessage(input: Omit<MessageRecord, 'createdAt'>): MessageRecord {
@@ -4428,6 +4467,7 @@ export class FileBackedDb extends InMemoryDb {
             (parsed.canopyDirectoryEntries ?? []).map((row) => [row.canopyId, row])
         );
         this.canaryTokens = new Map((parsed.canaryTokens ?? []).map((row) => [row.id, row]));
+        this.meshEnvelopes = new Map((parsed.meshEnvelopes ?? []).map((row) => [row.id, row]));
         this.messages = new Map(parsed.messages.map((row) => [row.id, row]));
         this.scheduledMessages = new Map(
             (parsed.scheduledMessages ?? []).map((row) => [row.id, row])
@@ -4800,6 +4840,7 @@ export class FileBackedDb extends InMemoryDb {
             users: [...this.users.values()],
             canopyDirectoryEntries: [...this.canopyDirectoryEntries.values()],
             canaryTokens: [...this.canaryTokens.values()],
+            meshEnvelopes: [...this.meshEnvelopes.values()],
             messages: [...this.messages.values()],
             scheduledMessages: [...this.scheduledMessages.values()],
             votes: [...this.votes.values()],
@@ -5110,6 +5151,22 @@ export class FileBackedDb extends InMemoryDb {
         const saved = super.upsertCanaryToken(record);
         this.persist();
         return saved;
+    }
+
+    override enqueueMeshEnvelope(env: MeshEnvelope): MeshEnvelope {
+        const saved = super.enqueueMeshEnvelope(env);
+        this.persist();
+        return saved;
+    }
+
+    override replaceMeshEnvelopes(envelopes: readonly MeshEnvelope[]): void {
+        super.replaceMeshEnvelopes(envelopes);
+        this.persist();
+    }
+
+    override resetMeshEnvelopesForTest(): void {
+        super.resetMeshEnvelopesForTest();
+        this.persist();
     }
 
     override createMessage(input: Omit<MessageRecord, 'createdAt'>): MessageRecord {

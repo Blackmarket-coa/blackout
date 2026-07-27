@@ -395,6 +395,7 @@ const ALL_MAP_NAMES = [
     'coalitionFeedComments',
     'canopyDirectoryEntries',
     'canaryTokens',
+    'meshEnvelopes',
     'clips',
     'coliseumTopics',
     'coliseumChallenges',
@@ -634,6 +635,9 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
     createCoalitionFeedComment: upsert('coalitionFeedComments'),
     upsertCanopyDirectoryEntry: upsert('canopyDirectoryEntries'),
     upsertCanaryToken: upsert('canaryTokens'),
+    // Whole-set reconciles: enqueue may evict the oldest; replace swaps the set.
+    enqueueMeshEnvelope: resync('meshEnvelopes'),
+    replaceMeshEnvelopes: resync('meshEnvelopes'),
     upsertClip: upsert('clips'),
     updateClip: upsert('clips'),
     deleteClip: resync('clips'),
