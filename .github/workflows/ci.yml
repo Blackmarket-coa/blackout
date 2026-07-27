@@ -79,6 +79,24 @@ jobs:
                   node-version: 22
             - run: node tools/ci/check-feature-registry.mjs
 
+    deaddrop-envelope-parity:
+        # Audit M18: execute BOTH envelope validators (protocol source of truth +
+        # appservice runtime guard) against a shared adversarial corpus and fail
+        # on any divergence — the two are hand-duplicated and must stay in lockstep.
+        name: Dead-drop envelope validator parity
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+            - uses: pnpm/action-setup@v5
+              with:
+                  version: 9.15.4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: pnpm
+            - run: pnpm install --frozen-lockfile
+            - run: pnpm test:guard:deaddrop-parity
+
     matrix-sdk-baseline:
         name: Matrix SDK baseline alignment
         runs-on: ubuntu-latest

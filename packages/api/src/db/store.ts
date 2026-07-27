@@ -6354,11 +6354,21 @@ export class FileBackedDb extends InMemoryDb {
 }
 
 /**
- * Postgres-backed store (BLACKOUT_DB_MODE=postgres). Single-instance
- * write-through: reads are inherited from InMemoryDb (served from the in-memory
- * mirror hydrated on boot), and the 107 mutators are wrapped to enqueue a
- * Postgres write after updating the mirror. Not safe for >1 replica — each
- * process holds its own mirror with no cross-instance invalidation.
+ * Postgres-backed store (BLACKOUT_DB_MODE=postgres). Write-through: reads are
+ * inherited from InMemoryDb (served from the in-memory mirror hydrated on
+ * boot), and the 107 mutators are wrapped to enqueue a durable Postgres write
+ * after updating the mirror.
+ *
+ * Multi-replica consistency: when a change transport is supplied — Postgres
+ * LISTEN/NOTIFY, ON BY DEFAULT (BLACKOUT_DB_PG_NOTIFY=1) — each replica
+ * subscribes to peers' change notifications and refreshes the affected mirror
+ * rows, so a write on one replica becomes visible on the others. This is
+ * EVENTUAL consistency with a bounded stale-read window equal to the NOTIFY
+ * propagation latency (typically sub-second): a read on replica B issued in the
+ * gap between a write committing on replica A and the NOTIFY arriving may still
+ * observe the pre-write value. Durability is unaffected (the write is already
+ * committed to Postgres). With the transport disabled (BLACKOUT_DB_PG_NOTIFY=0)
+ * the store is strictly single-writer and must run at exactly one replica.
  */
 type MutableMap = Map<string, Record<string, unknown>>;
 

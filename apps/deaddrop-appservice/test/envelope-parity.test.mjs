@@ -1,14 +1,18 @@
 /**
- * Parity test — keeps the appservice envelope validator in lockstep with the
- * protocol library's `isOpaqueEnvelope`
- * (`packages/blackout-protocol/src/deaddrop/crypto/envelope.ts`).
+ * Fixture-based contract pin for the appservice envelope validator (fast,
+ * runs under the appservice's plain-node `node --test` runner).
  *
- * The protocol library is TypeScript and has no published build the appservice
- * can import, so this test pins the appservice validator to the SAME published
- * wire contract the library accepts: it MUST accept both a canonical v1
- * (X25519 sealed-box) and a canonical v2 (X25519 + ML-KEM-768 hybrid) envelope,
- * and reject drift. This is what catches a regression like the appservice
- * silently dropping back to v1-only and rejecting valid post-quantum envelopes.
+ * The REAL cross-implementation parity check — which executes BOTH this
+ * validator AND the protocol source of truth
+ * (`packages/blackout-protocol/src/deaddrop/crypto/envelope.ts`) against a
+ * shared adversarial corpus and fails on any divergence — lives in
+ * `tools/ci/deaddrop-envelope-parity.test.ts` (run via
+ * `pnpm test:guard:deaddrop-parity`, wired into CI). That is what actually
+ * keeps the two hand-duplicated implementations in lockstep (audit M18).
+ *
+ * This file remains a quick canonical-shape smoke: it MUST accept both a
+ * canonical v1 (X25519 sealed-box) and a canonical v2 (X25519 + ML-KEM-768
+ * hybrid) envelope, and reject drift.
  *
  * If the library's wire format changes, update BOTH implementations and the
  * fixtures below together.
