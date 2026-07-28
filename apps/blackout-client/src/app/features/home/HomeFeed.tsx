@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import classNames from 'classnames';
-import { useAtomValue } from 'jotai';
+import { useAtomValue, useSetAtom } from 'jotai';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import {
     INVITE_DEN_PARAM,
@@ -20,7 +20,18 @@ import {
 } from '../../pages/paths';
 import { TopicChipBar } from '../topics/TopicChipBar';
 import { installedPluginsAtom } from '../monetization/install/installedPluginsAtom';
+import { grantedFeatureKeySetAtom } from '../monetization/install/grantedFeatureKeysAtom';
+import { betaUnlockAllEnabled } from '../../core/features/betaUnlock';
 import { runtimeFeatureFlags, type FeatureFlags } from '../../core/features/featureFlags';
+import {
+    HOME_WIDGET_BY_ID,
+    isWidgetEntitled,
+    isWidgetFlagEnabled,
+    type HomeWidgetId,
+} from './homeWidgets';
+import { homeLayoutAtom } from './state/homeLayout';
+import { HomeCustomizePanel } from './HomeCustomizePanel';
+import { PrivacyPulseWidget, CoalitionPulseWidget } from './widgets/premiumWidgets';
 import { HomeTourOverlay } from '../onboarding/HomeTourOverlay';
 import { useHomeTour } from '../onboarding/homeTourState';
 import { trackOnboardingTourStarted } from '../onboarding/onboardingTelemetry';
@@ -161,6 +172,18 @@ export const HomeFeed = (): JSX.Element => {
     const [segment, setSegment] = useState<HomeFeedSegment>('forYou');
     const [sort, setSort] = useState<FeedSort>('hot');
     const [query, setQuery] = useState('');
+    const [editingLayout, setEditingLayout] = useState(false);
+    const layout = useAtomValue(homeLayoutAtom);
+    const setLayout = useSetAtom(homeLayoutAtom);
+    const grantedFeatureKeys = useAtomValue(grantedFeatureKeySetAtom);
+    // Premium widgets resolve against the feature keys the caller holds (a
+    // subscription bundle / individual unlock), unioned with beta-unlock. Never
+    // a layout preference — that can't raise a gate.
+    const betaUnlocked = betaUnlockAllEnabled();
+    const hasFeature = useMemo(
+        () => (key: string) => betaUnlocked || grantedFeatureKeys.has(key),
+        [betaUnlocked, grantedFeatureKeys]
+    );
     const feed = useUnifiedFeed(segmentsEnabled ? sort : undefined);
     const bountyBoard = useBountyBoard(runtimeFeatureFlags.homeBountyBoard);
     const creatorContentFeed = useCreatorContentFeed(runtimeFeatureFlags.creatorContent);
@@ -250,6 +273,258 @@ export const HomeFeed = (): JSX.Element => {
             <UnifiedFeedCard key={item.id} item={item} reducedMotion={reducedMotion} />
         ));
 
+    // === Town Square widgets ===
+    // Each modular home section is a node the user can reorder / hide / remove /
+    // add via the Customize panel. The search box + header stay fixed chrome.
+    const featureGuideNode: ReactNode = (
+        <FeatureGuide style={{ borderRadius: 10, border: '1px solid var(--border-default)' }}>
+            The Town Square gathers activity from every corner of Blackout — your{' '}
+            <GlossaryTerm term="den">dens</GlossaryTerm>, live streams, Coliseum debates, market
+            listings, and people you follow — into one feed.
+        </FeatureGuide>
+    );
+
+    const quickActionsNode: ReactNode =
+        quickActions.length > 0 ? (
+            <section
+                className={css.section}
+                data-shell-region="home-quick-actions"
+                data-testid="home-quick-actions"
+            >
+                <header className={css.sectionLabel}>Quick actions</header>
+                <div className={css.quickActions}>
+                    {quickActions.map((action) => (
+                        <Link
+                            key={action.to}
+                            to={action.to}
+                            className={css.quickAction}
+                            data-testid={action.testid}
+                        >
+                            <span className={css.quickActionTitle}>{action.title}</span>
+                            <span className={css.quickActionSubtitle}>{action.subtitle}</span>
+                        </Link>
+                    ))}
+                </div>
+            </section>
+        ) : null;
+
+    const pluginsNode: ReactNode =
+        pluginCards.length > 0 ? (
+            <section
+                className={css.section}
+                data-shell-region="home-plugin-cards"
+                data-testid="home-plugin-cards"
+            >
+                <header className={css.sectionLabel}>Plugins</header>
+                <div className={css.quickActions}>
+                    {pluginCards.map((record) => {
+                        const card = record.manifest.homepageCard!;
+                        return (
+                            <Link
+                                key={record.manifest.id}
+                                to={card.to ?? `/plugins/${encodeURIComponent(record.manifest.id)}`}
+                                className={css.quickAction}
+                                data-testid="home-plugin-card"
+                                data-plugin-id={record.manifest.id}
+                            >
+                                <span className={css.quickActionTitle}>{card.title}</span>
+                                {card.subtitle ? (
+                                    <span className={css.quickActionSubtitle}>{card.subtitle}</span>
+                                ) : null}
+                            </Link>
+                        );
+                    })}
+                </div>
+            </section>
+        ) : null;
+
+    const bountyBoardNode: ReactNode = <BountyBoard items={bountyBoard.bounties} />;
+    const creatorRailNode: ReactNode = <CreatorContentRail items={creatorContentFeed.content} />;
+    const liveRailNode: ReactNode = <LiveNowRail items={feed.liveRail} />;
+
+    const feedNode: ReactNode = (
+        <>
+            <WaveDivider />
+            {segmentsEnabled ? (
+                <div className={css.controlsRow} data-testid="home-feed-controls">
+                    <div className={css.pillGroup} role="tablist" aria-label="Feed">
+                        <button
+                            type="button"
+                            role="tab"
+                            data-testid="home-feed-segment-foryou"
+                            title={SEGMENT_HINTS.forYou}
+                            aria-pressed={segment === 'forYou'}
+                            aria-selected={segment === 'forYou'}
+                            className={classNames(css.pill, segment === 'forYou' && css.pillActive)}
+                            onClick={() => {
+                                setSegment('forYou');
+                                trackHomeSegmentSwitched('forYou');
+                            }}
+                        >
+                            For You
+                        </button>
+                        <button
+                            type="button"
+                            role="tab"
+                            data-testid="home-feed-segment-following"
+                            title={SEGMENT_HINTS.following}
+                            aria-pressed={segment === 'following'}
+                            aria-selected={segment === 'following'}
+                            className={classNames(
+                                css.pill,
+                                segment === 'following' && css.pillActive
+                            )}
+                            onClick={() => {
+                                setSegment('following');
+                                trackHomeSegmentSwitched('following');
+                            }}
+                        >
+                            Following
+                        </button>
+                    </div>
+                    <div className={css.pillGroup} aria-label="Sort">
+                        {FEED_SORTS.map((option) => (
+                            <button
+                                key={option.id}
+                                type="button"
+                                data-testid={`home-feed-sort-${option.id}`}
+                                title={option.hint}
+                                aria-pressed={sort === option.id}
+                                className={classNames(
+                                    css.pill,
+                                    css.sortPill,
+                                    sort === option.id && css.pillActive
+                                )}
+                                onClick={() => {
+                                    setSort(option.id);
+                                    trackHomeSortChanged(option.id);
+                                }}
+                            >
+                                {option.label}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            ) : null}
+            {segmentsEnabled ? (
+                <section
+                    className={css.section}
+                    data-shell-region="home-feed-segment"
+                    data-testid="home-feed-segment-section"
+                >
+                    {segmentItems.length === 0 ? (
+                        <div className={css.emptyState} data-testid="home-feed-empty">
+                            <strong>
+                                {feed.loading
+                                    ? 'Loading your feed…'
+                                    : segment === 'following'
+                                    ? 'No activity yet.'
+                                    : 'Nothing to show right now.'}
+                            </strong>
+                            {!feed.loading && segment === 'following' ? (
+                                <>
+                                    <span>
+                                        Join a{' '}
+                                        <GlossaryTerm term="canopy">
+                                            {BLACKOUT_TERMS.canopy.singular}
+                                        </GlossaryTerm>{' '}
+                                        to start seeing posts in your feed.
+                                    </span>
+                                    <Link to={COMMUNITIES_PATH} className={css.ctaLink}>
+                                        Discover {BLACKOUT_TERMS.canopy.plural}
+                                    </Link>
+                                </>
+                            ) : null}
+                        </div>
+                    ) : (
+                        <div className={css.feedList} data-testid="home-feed-list">
+                            {renderCards(segmentItems)}
+                        </div>
+                    )}
+                </section>
+            ) : (
+                <>
+                    <section
+                        className={css.section}
+                        data-shell-region="home-following"
+                        data-testid="home-following-section"
+                    >
+                        <header className={css.sectionLabel} title={SEGMENT_HINTS.following}>
+                            Following
+                        </header>
+                        {followingItems.length === 0 ? (
+                            <div className={css.emptyState} data-testid="home-feed-empty">
+                                <strong>
+                                    {feed.loading ? 'Loading your feed…' : 'No activity yet.'}
+                                </strong>
+                                {!feed.loading ? (
+                                    <>
+                                        <span>
+                                            Join a{' '}
+                                            <GlossaryTerm term="canopy">
+                                                {BLACKOUT_TERMS.canopy.singular}
+                                            </GlossaryTerm>{' '}
+                                            to start seeing posts in your feed.
+                                        </span>
+                                        <Link to={COMMUNITIES_PATH} className={css.ctaLink}>
+                                            Discover {BLACKOUT_TERMS.canopy.plural}
+                                        </Link>
+                                    </>
+                                ) : null}
+                            </div>
+                        ) : (
+                            <div className={css.feedList} data-testid="home-feed-list">
+                                {renderCards(followingItems)}
+                            </div>
+                        )}
+                    </section>
+                    {discoverItems.length > 0 ? (
+                        <>
+                            <WaveDivider />
+                            <section
+                                className={css.section}
+                                data-shell-region="home-discover"
+                                data-testid="home-discover-section"
+                            >
+                                <header
+                                    className={css.sectionLabel}
+                                    title="Suggestions from across Blackout, beyond what you already follow"
+                                >
+                                    Discover
+                                </header>
+                                <div className={css.feedList} data-testid="home-discover-list">
+                                    {renderCards(discoverItems)}
+                                </div>
+                            </section>
+                        </>
+                    ) : null}
+                </>
+            )}
+        </>
+    );
+
+    const widgetNodes: Record<HomeWidgetId, ReactNode> = {
+        featureGuide: featureGuideNode,
+        quickActions: quickActionsNode,
+        plugins: pluginsNode,
+        bountyBoard: bountyBoardNode,
+        creatorRail: creatorRailNode,
+        liveRail: liveRailNode,
+        feed: feedNode,
+        premiumPrivacyPulse: <PrivacyPulseWidget />,
+        premiumCoalitionPulse: <CoalitionPulseWidget />,
+    };
+
+    // The visible, ordered widget ids: user order minus hidden, gated by feature
+    // flag + entitlement, and only those with something to render right now.
+    const orderedWidgetIds = layout.order.filter((id) => {
+        if (layout.hidden.includes(id)) return false;
+        const def = HOME_WIDGET_BY_ID[id];
+        if (!isWidgetFlagEnabled(def, runtimeFeatureFlags)) return false;
+        if (!isWidgetEntitled(def, hasFeature)) return false;
+        return Boolean(widgetNodes[id]);
+    });
+
     return (
         <section className={css.root} data-shell-region="home-feed">
             <AmbientBackdrop atmosphere={atmosphere} reducedMotion={reducedMotion} />
@@ -309,6 +584,16 @@ export const HomeFeed = (): JSX.Element => {
                     </div>
                     <div className={css.headerActions}>
                         {runtimeFeatureFlags.profile ? <HomeComposer /> : null}
+                        <button
+                            type="button"
+                            className={css.iconButton}
+                            data-testid="home-customize-toggle"
+                            aria-pressed={editingLayout}
+                            title="Customize your Town Square layout"
+                            onClick={() => setEditingLayout((v) => !v)}
+                        >
+                            ⚙ Customize
+                        </button>
                         <Link
                             to={SWIPE_FEED_PATH}
                             className={css.iconButton}
@@ -340,13 +625,6 @@ export const HomeFeed = (): JSX.Element => {
                 </div>
                 <div className={css.grid}>
                     <main className={css.centerColumn}>
-                        <FeatureGuide
-                            style={{ borderRadius: 10, border: '1px solid var(--border-default)' }}
-                        >
-                            The Town Square gathers activity from every corner of Blackout — your{' '}
-                            <GlossaryTerm term="den">dens</GlossaryTerm>, live streams, Coliseum
-                            debates, market listings, and people you follow — into one feed.
-                        </FeatureGuide>
                         <input
                             type="search"
                             value={query}
@@ -355,245 +633,21 @@ export const HomeFeed = (): JSX.Element => {
                             data-testid="home-feed-search"
                             className={css.searchInput}
                         />
-                        {segmentsEnabled ? (
-                            <div className={css.controlsRow} data-testid="home-feed-controls">
-                                <div className={css.pillGroup} role="tablist" aria-label="Feed">
-                                    <button
-                                        type="button"
-                                        role="tab"
-                                        data-testid="home-feed-segment-foryou"
-                                        title={SEGMENT_HINTS.forYou}
-                                        aria-pressed={segment === 'forYou'}
-                                        aria-selected={segment === 'forYou'}
-                                        className={classNames(
-                                            css.pill,
-                                            segment === 'forYou' && css.pillActive
-                                        )}
-                                        onClick={() => {
-                                            setSegment('forYou');
-                                            trackHomeSegmentSwitched('forYou');
-                                        }}
-                                    >
-                                        For You
-                                    </button>
-                                    <button
-                                        type="button"
-                                        role="tab"
-                                        data-testid="home-feed-segment-following"
-                                        title={SEGMENT_HINTS.following}
-                                        aria-pressed={segment === 'following'}
-                                        aria-selected={segment === 'following'}
-                                        className={classNames(
-                                            css.pill,
-                                            segment === 'following' && css.pillActive
-                                        )}
-                                        onClick={() => {
-                                            setSegment('following');
-                                            trackHomeSegmentSwitched('following');
-                                        }}
-                                    >
-                                        Following
-                                    </button>
-                                </div>
-                                <div className={css.pillGroup} aria-label="Sort">
-                                    {FEED_SORTS.map((option) => (
-                                        <button
-                                            key={option.id}
-                                            type="button"
-                                            data-testid={`home-feed-sort-${option.id}`}
-                                            title={option.hint}
-                                            aria-pressed={sort === option.id}
-                                            className={classNames(
-                                                css.pill,
-                                                css.sortPill,
-                                                sort === option.id && css.pillActive
-                                            )}
-                                            onClick={() => {
-                                                setSort(option.id);
-                                                trackHomeSortChanged(option.id);
-                                            }}
-                                        >
-                                            {option.label}
-                                        </button>
-                                    ))}
-                                </div>
+                        {editingLayout ? (
+                            <HomeCustomizePanel
+                                layout={layout}
+                                setLayout={setLayout}
+                                flags={runtimeFeatureFlags}
+                                hasFeature={hasFeature}
+                                onClose={() => setEditingLayout(false)}
+                                onUpsell={(path) => navigate(path)}
+                            />
+                        ) : null}
+                        {orderedWidgetIds.map((id) => (
+                            <div key={id} data-home-widget={id}>
+                                {widgetNodes[id]}
                             </div>
-                        ) : null}
-                        {quickActions.length > 0 ? (
-                            <section
-                                className={css.section}
-                                data-shell-region="home-quick-actions"
-                                data-testid="home-quick-actions"
-                            >
-                                <header className={css.sectionLabel}>Quick actions</header>
-                                <div className={css.quickActions}>
-                                    {quickActions.map((action) => (
-                                        <Link
-                                            key={action.to}
-                                            to={action.to}
-                                            className={css.quickAction}
-                                            data-testid={action.testid}
-                                        >
-                                            <span className={css.quickActionTitle}>
-                                                {action.title}
-                                            </span>
-                                            <span className={css.quickActionSubtitle}>
-                                                {action.subtitle}
-                                            </span>
-                                        </Link>
-                                    ))}
-                                </div>
-                            </section>
-                        ) : null}
-                        {pluginCards.length > 0 ? (
-                            <section
-                                className={css.section}
-                                data-shell-region="home-plugin-cards"
-                                data-testid="home-plugin-cards"
-                            >
-                                <header className={css.sectionLabel}>Plugins</header>
-                                <div className={css.quickActions}>
-                                    {pluginCards.map((record) => {
-                                        const card = record.manifest.homepageCard!;
-                                        return (
-                                            <Link
-                                                key={record.manifest.id}
-                                                to={
-                                                    card.to ??
-                                                    `/plugins/${encodeURIComponent(
-                                                        record.manifest.id
-                                                    )}`
-                                                }
-                                                className={css.quickAction}
-                                                data-testid="home-plugin-card"
-                                                data-plugin-id={record.manifest.id}
-                                            >
-                                                <span className={css.quickActionTitle}>
-                                                    {card.title}
-                                                </span>
-                                                {card.subtitle ? (
-                                                    <span className={css.quickActionSubtitle}>
-                                                        {card.subtitle}
-                                                    </span>
-                                                ) : null}
-                                            </Link>
-                                        );
-                                    })}
-                                </div>
-                            </section>
-                        ) : null}
-                        <BountyBoard items={bountyBoard.bounties} />
-                        <CreatorContentRail items={creatorContentFeed.content} />
-                        <LiveNowRail items={feed.liveRail} />
-                        <WaveDivider />
-                        {segmentsEnabled ? (
-                            <section
-                                className={css.section}
-                                data-shell-region="home-feed-segment"
-                                data-testid="home-feed-segment-section"
-                            >
-                                {segmentItems.length === 0 ? (
-                                    <div className={css.emptyState} data-testid="home-feed-empty">
-                                        <strong>
-                                            {feed.loading
-                                                ? 'Loading your feed…'
-                                                : segment === 'following'
-                                                ? 'No activity yet.'
-                                                : 'Nothing to show right now.'}
-                                        </strong>
-                                        {!feed.loading && segment === 'following' ? (
-                                            <>
-                                                <span>
-                                                    Join a{' '}
-                                                    <GlossaryTerm term="canopy">
-                                                        {BLACKOUT_TERMS.canopy.singular}
-                                                    </GlossaryTerm>{' '}
-                                                    to start seeing posts in your feed.
-                                                </span>
-                                                <Link to={COMMUNITIES_PATH} className={css.ctaLink}>
-                                                    Discover {BLACKOUT_TERMS.canopy.plural}
-                                                </Link>
-                                            </>
-                                        ) : null}
-                                    </div>
-                                ) : (
-                                    <div className={css.feedList} data-testid="home-feed-list">
-                                        {renderCards(segmentItems)}
-                                    </div>
-                                )}
-                            </section>
-                        ) : (
-                            <>
-                                <section
-                                    className={css.section}
-                                    data-shell-region="home-following"
-                                    data-testid="home-following-section"
-                                >
-                                    <header
-                                        className={css.sectionLabel}
-                                        title={SEGMENT_HINTS.following}
-                                    >
-                                        Following
-                                    </header>
-                                    {followingItems.length === 0 ? (
-                                        <div
-                                            className={css.emptyState}
-                                            data-testid="home-feed-empty"
-                                        >
-                                            <strong>
-                                                {feed.loading
-                                                    ? 'Loading your feed…'
-                                                    : 'No activity yet.'}
-                                            </strong>
-                                            {!feed.loading ? (
-                                                <>
-                                                    <span>
-                                                        Join a{' '}
-                                                        <GlossaryTerm term="canopy">
-                                                            {BLACKOUT_TERMS.canopy.singular}
-                                                        </GlossaryTerm>{' '}
-                                                        to start seeing posts in your feed.
-                                                    </span>
-                                                    <Link
-                                                        to={COMMUNITIES_PATH}
-                                                        className={css.ctaLink}
-                                                    >
-                                                        Discover {BLACKOUT_TERMS.canopy.plural}
-                                                    </Link>
-                                                </>
-                                            ) : null}
-                                        </div>
-                                    ) : (
-                                        <div className={css.feedList} data-testid="home-feed-list">
-                                            {renderCards(followingItems)}
-                                        </div>
-                                    )}
-                                </section>
-                                {discoverItems.length > 0 ? (
-                                    <>
-                                        <WaveDivider />
-                                        <section
-                                            className={css.section}
-                                            data-shell-region="home-discover"
-                                            data-testid="home-discover-section"
-                                        >
-                                            <header
-                                                className={css.sectionLabel}
-                                                title="Suggestions from across Blackout, beyond what you already follow"
-                                            >
-                                                Discover
-                                            </header>
-                                            <div
-                                                className={css.feedList}
-                                                data-testid="home-discover-list"
-                                            >
-                                                {renderCards(discoverItems)}
-                                            </div>
-                                        </section>
-                                    </>
-                                ) : null}
-                            </>
-                        )}
+                        ))}
                     </main>
                     <aside className={css.rightColumn} data-shell-region="home-context">
                         <ContextSidebar feed={feed} atmosphere={atmosphere} />
