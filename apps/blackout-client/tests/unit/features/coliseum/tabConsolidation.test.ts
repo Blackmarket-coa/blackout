@@ -7,9 +7,9 @@ import {
 } from '../../../../src/app/features/coliseum/tabConsolidation';
 
 describe('splitColiseumTabs', () => {
-    it('splits the full tab set into 4 primary + specialist secondary, dropping debate', () => {
+    it('splits the full tab set into 5 primary + specialist secondary, dropping debate', () => {
         const { primary, secondary } = splitColiseumTabs([...COLISEUM_TABS]);
-        expect(primary).toEqual(['reel', 'topics', 'live', 'challenges']);
+        expect(primary).toEqual(['reel', 'topics', 'knowledge', 'live', 'challenges']);
         expect(secondary).toEqual(['arena', 'match', 'shouts', 'leaderboards', 'sources']);
         expect([...primary, ...secondary]).not.toContain('debate');
     });
@@ -21,6 +21,8 @@ describe('splitColiseumTabs', () => {
     });
 
     it('promotes secondary tabs when a den enables only specialist surfaces', () => {
+        // The promotion cap tracks PRIMARY_COLISEUM_TABS.length (currently 5),
+        // so all five specialist tabs fit the strip and nothing overflows.
         const { primary, secondary } = splitColiseumTabs([
             'arena',
             'match',
@@ -28,8 +30,8 @@ describe('splitColiseumTabs', () => {
             'leaderboards',
             'sources',
         ]);
-        expect(primary).toEqual(['arena', 'match', 'shouts', 'leaderboards']);
-        expect(secondary).toEqual(['sources']);
+        expect(primary).toEqual(['arena', 'match', 'shouts', 'leaderboards', 'sources']);
+        expect(secondary).toEqual([]);
     });
 
     it('covers every tab id exactly once across the two constant lists (minus debate)', () => {

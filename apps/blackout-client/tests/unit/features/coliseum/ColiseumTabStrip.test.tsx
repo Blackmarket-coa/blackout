@@ -36,7 +36,7 @@ describe('ColiseumTabStrip', () => {
         const stripTabs = Array.from(
             container.querySelectorAll('[role="tab"][data-coliseum-tab]')
         ).map((el) => el.getAttribute('data-coliseum-tab'));
-        expect(stripTabs).toEqual(['reel', 'topics', 'live', 'challenges']);
+        expect(stripTabs).toEqual(['reel', 'topics', 'knowledge', 'live', 'challenges']);
         expect(container.querySelector('[data-testid="coliseum-more-tab"]')).toBeTruthy();
         // Specialist tabs are not on the strip.
         expect(container.querySelector('[role="tab"][data-coliseum-tab="arena"]')).toBeNull();
