@@ -7,6 +7,7 @@ import { fetchEntitlements, fetchFulfillmentBundle } from '../marketplace/market
 import { readBlackoutApiToken } from '../marketplace/useMarketplaceAuth';
 import { ensureBlackoutApiToken } from '../../../../client/blackoutApiSession';
 import { installedPluginsAtom, type InstalledPluginRecord } from './installedPluginsAtom';
+import { grantedFeatureKeysAtom } from './grantedFeatureKeysAtom';
 import { installEntitlement } from './pluginInstaller';
 import { capabilityContextAtom } from '../../../core/features/capabilityContext';
 
@@ -32,6 +33,7 @@ import { capabilityContextAtom } from '../../../core/features/capabilityContext'
 export const PluginEntitlementHydrator = (): null => {
     const authState = useAtomValue(authStateAtom);
     const setInstalled = useSetAtom(installedPluginsAtom);
+    const setGrantedFeatureKeys = useSetAtom(grantedFeatureKeysAtom);
     // Audit M19: boot hydration is the highest-traffic activation path — honor
     // the code-plugin gate here so granted code_plugin entitlements are not
     // silently mounted at cold load while the sandbox host RPC is stubbed.
@@ -73,10 +75,25 @@ export const PluginEntitlementHydrator = (): null => {
             const granted = entitlements.filter((e) => e.status === 'granted');
             const grantedIds = new Set(granted.map((e) => e.id));
 
+            // Union every granted entitlement's feature keys (individual items
+            // AND subscription tiers) into the feature-key atom that gates
+            // premium features/widgets. Recomputed from scratch each boot so a
+            // lapse/refund drops the keys.
+            const featureKeyUnion = new Set<string>();
+            for (const e of granted) {
+                for (const key of e.featureKeys ?? []) featureKeyUnion.add(key);
+            }
+            setGrantedFeatureKeys([...featureKeyUnion].sort());
+
             const nextRecords: InstalledPluginRecord[] = [];
 
             for (const entitlement of granted) {
                 if (cancelled) return;
+                // Subscription-tier grants ship no artifact bundle — they only
+                // carry a feature-key bundle (already folded into the atom
+                // above). Skip the bundle installer so we don't fetch a
+                // non-existent fulfillment or trip the unknown-artifact guard.
+                if (entitlement.kind === 'subscription_tier') continue;
                 const prior = storedById.get(entitlement.id);
                 try {
                     const result = await installEntitlement(entitlement, {
@@ -131,7 +148,7 @@ export const PluginEntitlementHydrator = (): null => {
         return () => {
             cancelled = true;
         };
-    }, [authState, setInstalled, codePluginsEnabled]);
+    }, [authState, setInstalled, setGrantedFeatureKeys, codePluginsEnabled]);
 
     return null;
 };

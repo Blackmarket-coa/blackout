@@ -105,6 +105,7 @@ export function parseNormalizedListing(input: unknown): NormalizedListing {
     const availableSkus = Array.isArray(input.availableSkus)
         ? input.availableSkus.filter((v): v is string => typeof v === 'string')
         : undefined;
+    const featureKeys = parseFeatureKeys(input.featureKeys);
 
     const priceRaw = input.priceCents;
     if (typeof priceRaw !== 'number' || !Number.isFinite(priceRaw) || priceRaw < 0) {
@@ -114,7 +115,7 @@ export function parseNormalizedListing(input: unknown): NormalizedListing {
     const artifactKind =
         typeof input.artifactKind === 'string' &&
         (artifactKinds as readonly string[]).includes(input.artifactKind)
-            ? (input.artifactKind as (typeof artifactKinds)[number])
+            ? (input.artifactKind as typeof artifactKinds[number])
             : undefined;
 
     return {
@@ -133,7 +134,20 @@ export function parseNormalizedListing(input: unknown): NormalizedListing {
         artifactKind,
         tags,
         availableSkus,
+        featureKeys,
     };
+}
+
+/**
+ * Parse a `featureKeys` field, accepting camelCase `featureKeys` or snake_case
+ * `feature_keys` upstream shapes. Returns undefined when absent so listings
+ * that predate the field are untouched. Keeps only `features.*`-shaped strings
+ * so a malformed upstream row can't inject an arbitrary entitlement key.
+ */
+function parseFeatureKeys(raw: unknown): string[] | undefined {
+    if (!Array.isArray(raw)) return undefined;
+    const keys = raw.filter((v): v is string => typeof v === 'string' && v.startsWith('features.'));
+    return keys.length > 0 ? keys : undefined;
 }
 
 export function parseNormalizedEntitlement(input: unknown): NormalizedEntitlement {
@@ -149,6 +163,7 @@ export function parseNormalizedEntitlement(input: unknown): NormalizedEntitlemen
         grantedAt: requireString(input, 'grantedAt'),
         expiresAt: typeof input.expiresAt === 'string' ? input.expiresAt : null,
         sourceEventId: requireString(input, 'sourceEventId'),
+        featureKeys: parseFeatureKeys(input.featureKeys),
         metadata: isRecord(input.metadata) ? input.metadata : {},
     };
 }
@@ -164,15 +179,11 @@ export function parseNormalizedLifecycleEvent(input: unknown): NormalizedLifecyc
         sku: typeof input.sku === 'string' ? input.sku : null,
         kind: oneOf(input.kind, entitlementKinds, 'kind'),
         occurredAt: requireString(input, 'occurredAt'),
+        featureKeys: parseFeatureKeys(input.featureKeys),
         metadata: isRecord(input.metadata) ? input.metadata : {},
     };
 }
 
-export {
-    entitlementKinds,
-    entitlementStatuses,
-    marketplaceCategories,
-    lifecycleEventTypes,
-};
+export { entitlementKinds, entitlementStatuses, marketplaceCategories, lifecycleEventTypes };
 
 export type MarketplaceProviderIdType = MarketplaceProviderId;

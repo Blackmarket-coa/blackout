@@ -66,8 +66,9 @@ interface PurchaseEventOptions {
     listingId?: string;
     sku?: string | null;
     type?: 'purchase.succeeded' | 'purchase.refunded' | 'purchase.failed' | 'purchase.chargebacked';
-    kind?: 'emoji_pack' | 'asset_bundle' | 'software_license';
+    kind?: 'emoji_pack' | 'asset_bundle' | 'software_license' | 'subscription_tier';
     metadata?: Record<string, unknown>;
+    featureKeys?: string[];
 }
 
 function purchaseEventBody(options: PurchaseEventOptions = {}): string {
@@ -80,6 +81,7 @@ function purchaseEventBody(options: PurchaseEventOptions = {}): string {
         kind: options.kind ?? 'asset_bundle',
         occurredAt: '2026-05-02T12:00:00.000Z',
         metadata: options.metadata ?? {},
+        ...(options.featureKeys ? { featureKeys: options.featureKeys } : {}),
     });
 }
 
@@ -117,6 +119,32 @@ test('webhook happy path: signed purchase grants entitlement', async () => {
     assert.equal(entitlements[0]!.status, 'granted');
     assert.equal(getCounter('marketplace_webhook_received_total'), 1);
     assert.equal(getCounter('marketplace_entitlement_granted_total'), 1);
+});
+
+test('subscription_tier purchase surfaces the feature-key bundle on the entitlement', async () => {
+    resetForEachTest();
+    const featureKeys = ['features.hardening.torTransport', 'features.persona.compartments'];
+    const body = purchaseEventBody({
+        eventId: 'evt-tier',
+        listingId: 'listing-signal-tier',
+        kind: 'subscription_tier',
+        featureKeys,
+    });
+    const response = await app.request('/v1/marketplace/webhooks/freeblackmarket', {
+        method: 'POST',
+        headers: {
+            'content-type': 'application/json',
+            'x-fbm-event-id': 'evt-tier',
+            'x-fbm-signature': signWebhook(body),
+        },
+        body,
+    });
+    assert.equal(response.status, 200);
+
+    const entitlements = listEntitlementsForUser(USER_ID);
+    assert.equal(entitlements.length, 1);
+    assert.equal(entitlements[0]!.kind, 'subscription_tier');
+    assert.deepEqual(entitlements[0]!.featureKeys, featureKeys);
 });
 
 test('webhook replay is idempotent: same eventId twice does not double-grant', async () => {

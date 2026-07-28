@@ -24,6 +24,7 @@ import { ListingCard } from './ListingCard';
 import { LibraryView } from './LibraryView';
 import { resolveMarketplaceProvider } from './providerMetadata';
 import { EmbeddedCheckoutOverlay } from './EmbeddedCheckoutOverlay';
+import { useFeatureAccess } from './useFeatureAccess';
 
 type View = 'catalog' | 'library';
 
@@ -69,6 +70,10 @@ const kindTabs: { id: KindFilter; label: string }[] = [
     { id: 'ai_persona', label: 'AI personas' },
     { id: 'stream_asset', label: 'Stream assets' },
     { id: 'privacy_tool', label: 'Privacy tools' },
+    { id: 'community_template', label: 'Templates' },
+    { id: 'coalition_kit', label: 'Coalition kits' },
+    { id: 'asset_bundle', label: 'Asset packs' },
+    { id: 'vault_item', label: 'Digital goods' },
 ];
 
 const matchesKindFilter = (
@@ -199,6 +204,11 @@ export function MarketplaceSlice() {
                 .map(ownedListingKey)
         );
     }, [entitlements]);
+
+    // Resolves whether a listing's `features.*` bundle is already held via the
+    // caller's plan/tier (or beta-unlock) or a prior marketplace grant, so the
+    // CTA can read "Included in your access" instead of prompting a charge.
+    const featureAccess = useFeatureAccess(entitlements);
 
     const handlePurchase = useCallback(
         async (listing: NormalizedListing) => {
@@ -387,6 +397,9 @@ export function MarketplaceSlice() {
                           onMessageVendor: handleMessageVendor,
                           purchasing: purchasingId === listingKey(listing),
                           alreadyOwned: ownedKeys.has(listingKey(listing)),
+                          includedInAccess:
+                              !ownedKeys.has(listingKey(listing)) &&
+                              featureAccess.hasAllFeatures(listing.featureKeys),
                           detailPath: buildMarketListingPath(
                               listing.providerId,
                               listing.providerListingId

@@ -52,6 +52,7 @@ function toNormalized(raw: UpstreamListing): NormalizedListing {
         artifactKind: raw.artifactKind ?? raw.artifact_kind,
         tags: raw.tags,
         availableSkus: raw.availableSkus ?? raw.available_skus,
+        featureKeys: raw.featureKeys ?? raw.feature_keys,
     });
 }
 

@@ -3,6 +3,14 @@ import { Link } from 'react-router';
 import { categoryLabel, type NormalizedListing } from '@blackout/core';
 import type { MarketplaceProviderSummary } from './marketplaceClient';
 import { resolveMarketplaceProvider } from './providerMetadata';
+import { PaywallCta, resolvePaywallState } from '../components/PaywallCta';
+
+/** Human label for a `features.*` key, e.g. `features.hardening.torTransport` → "Tor transport". */
+function featureKeyLabel(key: string): string {
+    const leaf = key.split('.').pop() ?? key;
+    const spaced = leaf.replace(/[_-]+/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2');
+    return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
 
 const cardStyle: Record<string, string | number> = {
     border: '1px solid var(--border-default)',
@@ -41,6 +49,12 @@ interface ListingCardProps {
     onMessageVendor?: (listing: NormalizedListing) => void;
     purchasing?: boolean;
     alreadyOwned?: boolean;
+    /**
+     * True when the caller already holds every `features.*` key this listing
+     * grants via their current plan/tier (or beta-unlock) — the CTA collapses
+     * to "Included in your access" instead of a charge.
+     */
+    includedInAccess?: boolean;
     /** When set, the listing title links through to this detail route. */
     detailPath?: string;
 }
@@ -52,6 +66,7 @@ export function ListingCard({
     onMessageVendor,
     purchasing,
     alreadyOwned,
+    includedInAccess,
     detailPath,
 }: ListingCardProps): ReactNode {
     const provider = resolveMarketplaceProvider(listing.providerId, providers);
@@ -126,6 +141,16 @@ export function ListingCard({
             { style: priceStyle },
             formatPrice(listing.priceCents, listing.currency)
         ),
+        listing.featureKeys && listing.featureKeys.length > 0
+            ? createElement(
+                  'p',
+                  {
+                      style: { margin: 0, fontSize: 12, color: 'var(--text-secondary)' },
+                      'data-testid': 'listing-card-feature-keys',
+                  },
+                  `Unlocks: ${listing.featureKeys.map(featureKeyLabel).join(', ')}`
+              )
+            : null,
         createElement(
             'a',
             {
@@ -144,23 +169,18 @@ export function ListingCard({
         createElement(
             'div',
             { style: { display: 'flex', gap: 8, flexWrap: 'wrap' } },
-            createElement(
-                'button',
-                {
-                    type: 'button',
-                    onClick: () => onPurchase(listing),
-                    disabled: Boolean(purchasing) || Boolean(alreadyOwned),
-                    style: {
-                        padding: '8px 12px',
-                        borderRadius: 8,
-                        border: '1px solid var(--border-default)',
-                        background: alreadyOwned ? 'var(--bg-input)' : 'var(--bg-accent)',
-                        color: alreadyOwned ? 'var(--text-secondary)' : 'var(--text-on-accent)',
-                        cursor: alreadyOwned || purchasing ? 'default' : 'pointer',
-                    },
-                },
-                alreadyOwned ? 'Owned' : purchasing ? 'Opening checkout…' : 'Purchase'
-            ),
+            createElement(PaywallCta, {
+                state: resolvePaywallState({
+                    owned: Boolean(alreadyOwned),
+                    includedInAccess: Boolean(includedInAccess),
+                }),
+                priceLabel: formatPrice(listing.priceCents, listing.currency),
+                onPurchase: () => onPurchase(listing),
+                busy: Boolean(purchasing),
+                actionLabel:
+                    listing.entitlementKind === 'subscription_tier' ? 'Subscribe' : 'Purchase',
+                'data-testid': 'listing-card-cta',
+            }),
             // Encrypted-DM entrypoint (§2.1). Only offered when the parent can
             // resolve the seller and the listing carries a vendor id.
             onMessageVendor && listing.sellerId
