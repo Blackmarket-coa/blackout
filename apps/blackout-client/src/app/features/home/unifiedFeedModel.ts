@@ -567,3 +567,17 @@ export const filterToUnseen = (
     items.filter((item) =>
         item.source === 'den' ? item.unreadCount > 0 : !seenKeys.has(feedSeenKey(item))
     );
+
+/**
+ * Topic-scoped view of the feed: only items carrying `tag`. Exact-match on
+ * purpose — it mirrors the interest-boost matching in `effectiveScore`, so the
+ * chip a user follows and the filter it drives agree on what "the topic" is.
+ * A null/empty tag is a no-op.
+ */
+export const filterByTag = (
+    items: readonly UnifiedFeedItem[],
+    tag: string | null | undefined
+): UnifiedFeedItem[] => {
+    if (!tag) return [...items];
+    return items.filter((item) => item.tags.includes(tag));
+};

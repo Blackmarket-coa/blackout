@@ -7,6 +7,7 @@ import {
     type ListCanopiesByTagResponse,
     type TopicCanopySummary,
 } from './topicsClient';
+import { useTopicFollows } from '../home/discoveryInterests';
 import { TopicChipBar } from './TopicChipBar';
 
 const layoutStyle: CSSProperties = {
@@ -28,6 +29,30 @@ const headerStyle: CSSProperties = {
 
 const titleStyle: CSSProperties = { margin: 0, fontSize: 20 };
 const subStyle: CSSProperties = { margin: 0, color: 'var(--text-muted, #9ca3af)', fontSize: 13 };
+
+const titleRowStyle: CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 12,
+    flexWrap: 'wrap',
+};
+
+const followButtonStyle: CSSProperties = {
+    padding: '6px 14px',
+    borderRadius: 999,
+    border: '1px solid var(--accent-primary, #3b82f6)',
+    background: 'var(--accent-primary, #3b82f6)',
+    color: 'var(--text-primary, #f8fafc)',
+    fontSize: 13,
+    fontWeight: 600,
+    cursor: 'pointer',
+};
+
+const followingButtonStyle: CSSProperties = {
+    ...followButtonStyle,
+    background: 'transparent',
+    color: 'var(--accent-primary, #3b82f6)',
+};
 
 const listStyle: CSSProperties = {
     display: 'flex',
@@ -82,6 +107,8 @@ export const TopicView = (): JSX.Element => {
     const decoded = tag ? decodeURIComponent(tag) : '';
     const [response, setResponse] = useState<ListCanopiesByTagResponse | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const { isFollowing, follow, unfollow, canFollow } = useTopicFollows();
+    const following = decoded ? isFollowing(decoded) : false;
 
     useEffect(() => {
         if (!decoded) return;
@@ -105,9 +132,29 @@ export const TopicView = (): JSX.Element => {
     return (
         <section style={layoutStyle} data-shell-region="topic-view" data-topic-tag={decoded}>
             <header style={headerStyle}>
-                <h1 style={titleStyle}>#{decoded || 'topic'}</h1>
+                <div style={titleRowStyle}>
+                    <h1 style={titleStyle}>#{decoded || 'topic'}</h1>
+                    {canFollow && decoded ? (
+                        <button
+                            type="button"
+                            style={following ? followingButtonStyle : followButtonStyle}
+                            aria-pressed={following}
+                            data-testid="topic-follow-button"
+                            onClick={() => {
+                                void (following ? unfollow(decoded) : follow(decoded)).catch(
+                                    () => undefined
+                                );
+                            }}
+                        >
+                            {following ? 'Following ✓' : 'Follow topic'}
+                        </button>
+                    ) : null}
+                </div>
                 <p style={subStyle}>
                     {BLACKOUT_TERMS.canopy.titlePlural} tagged with #{decoded || 'this topic'}.
+                    {following
+                        ? ' Followed — posts with this tag rank higher in your For You feed.'
+                        : ''}
                 </p>
             </header>
             <TopicChipBar activeTag={decoded} />

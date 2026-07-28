@@ -38,7 +38,7 @@ import { trackOnboardingTourStarted } from '../onboarding/onboardingTelemetry';
 import { useUnifiedFeed } from './hooks/useUnifiedFeed';
 import { useBountyBoard } from './hooks/useBountyBoard';
 import { useCreatorContentFeed } from './hooks/useCreatorContentFeed';
-import type { FeedSort, UnifiedFeedItem } from './unifiedFeedModel';
+import { filterByTag, type FeedSort, type UnifiedFeedItem } from './unifiedFeedModel';
 import { useStreak } from './streakState';
 import {
     trackHomeSegmentSwitched,
@@ -172,6 +172,7 @@ export const HomeFeed = (): JSX.Element => {
     const [segment, setSegment] = useState<HomeFeedSegment>('forYou');
     const [sort, setSort] = useState<FeedSort>('hot');
     const [query, setQuery] = useState('');
+    const [topicFilter, setTopicFilter] = useState<string | null>(null);
     const [editingLayout, setEditingLayout] = useState(false);
     const layout = useAtomValue(homeLayoutAtom);
     const setLayout = useSetAtom(homeLayoutAtom);
@@ -269,7 +270,7 @@ export const HomeFeed = (): JSX.Element => {
         : 'nearby off';
 
     const renderCards = (items: readonly UnifiedFeedItem[]): JSX.Element[] =>
-        filterFeedByQuery(items, query).map((item) => (
+        filterFeedByQuery(filterByTag(items, topicFilter), query).map((item) => (
             <UnifiedFeedCard key={item.id} item={item} reducedMotion={reducedMotion} />
         ));
 
@@ -621,7 +622,12 @@ export const HomeFeed = (): JSX.Element => {
                     </div>
                 </header>
                 <div className={css.topicBar}>
-                    <TopicChipBar />
+                    <TopicChipBar
+                        activeTag={topicFilter}
+                        onSelect={(tag) =>
+                            setTopicFilter((previous) => (previous === tag ? null : tag))
+                        }
+                    />
                 </div>
                 <div className={css.grid}>
                     <main className={css.centerColumn}>
