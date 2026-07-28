@@ -35,8 +35,24 @@ function toNormalized(record: MarketplaceEntitlementRecord): NormalizedEntitleme
         grantedAt: record.grantedAt,
         expiresAt: record.expiresAt,
         sourceEventId: record.sourceEventId,
+        featureKeys: extractFeatureKeys(record.metadata),
         metadata: record.metadata,
     };
+}
+
+/**
+ * Feature keys ride in the entitlement metadata (no db-schema change needed):
+ * a `subscription_tier` grant carries its whole tier bundle, an individual item
+ * its single key. Kept `features.*`-shaped only so a malformed upstream payload
+ * can't inject an arbitrary key.
+ */
+function extractFeatureKeys(
+    metadata: Record<string, unknown> | undefined | null
+): string[] | undefined {
+    const raw = metadata?.['featureKeys'];
+    if (!Array.isArray(raw)) return undefined;
+    const keys = raw.filter((v): v is string => typeof v === 'string' && v.startsWith('features.'));
+    return keys.length > 0 ? keys : undefined;
 }
 
 export function hasProcessedWebhookEvent(
@@ -67,10 +83,7 @@ export function recordWebhookReceipt(
     incrementCounter('marketplace_webhook_received_total', { providerId, signatureOk });
 }
 
-export function markWebhookProcessed(
-    providerId: MarketplaceProviderId,
-    eventId: string
-): void {
+export function markWebhookProcessed(providerId: MarketplaceProviderId, eventId: string): void {
     db.markMarketplaceWebhookProcessed(
         providerId as MarketplaceProviderIdString,
         eventId,
@@ -113,7 +126,13 @@ export function applyLifecycleEvent(event: NormalizedLifecycleEvent): ApplyEvent
             grantedAt: event.occurredAt,
             expiresAt: null,
             sourceEventId: event.eventId,
-            metadata: event.metadata,
+            // Persist the event's feature-key bundle into metadata so it
+            // survives on the entitlement (a subscription tier's whole bundle,
+            // or an individual item's key). `toNormalized` surfaces it.
+            metadata:
+                event.featureKeys && event.featureKeys.length > 0
+                    ? { ...event.metadata, featureKeys: event.featureKeys }
+                    : event.metadata,
             createdAt: timestamp,
             updatedAt: timestamp,
         };
@@ -197,9 +216,7 @@ export function getEntitlementById(entitlementId: string): NormalizedEntitlement
     return record ? toNormalized(record) : undefined;
 }
 
-export function getLicenseKey(
-    entitlementId: string
-): MarketplaceLicenseKeyRecord | undefined {
+export function getLicenseKey(entitlementId: string): MarketplaceLicenseKeyRecord | undefined {
     return db.getMarketplaceLicenseKey(entitlementId);
 }
 
