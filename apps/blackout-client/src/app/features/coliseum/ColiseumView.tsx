@@ -21,6 +21,7 @@ import SourcesTab from './tabs/SourcesTab';
 import ArenaTab from './tabs/ArenaTab';
 import MatchTab from './tabs/MatchTab';
 import ShoutsTab from './tabs/ShoutsTab';
+import KnowledgeTab from './tabs/KnowledgeTab';
 import { coliseumArenaTheme } from './coliseumArenaTheme.css';
 import * as css from './ColiseumView.css';
 
@@ -141,6 +142,7 @@ export function ColiseumView({
                 {activeTab === 'challenges' ? <ChallengesTab /> : null}
                 {activeTab === 'leaderboards' ? <LeaderboardsTab /> : null}
                 {activeTab === 'sources' ? <SourcesTab /> : null}
+                {activeTab === 'knowledge' ? <KnowledgeTab /> : null}
             </div>
         </section>
     );

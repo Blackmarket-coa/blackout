@@ -2,6 +2,8 @@ import type {
     ColiseumArgument,
     ColiseumArgumentMedia,
     ColiseumCitation,
+    ColiseumKnowledgeEntry,
+    ColiseumKnowledgeKind,
     ColiseumLiveSession,
     ColiseumNewsAnchor,
     ColiseumStance,
@@ -160,6 +162,33 @@ export function castColiseumVote(
         body,
         token
     );
+}
+
+// --- Knowledge repository (searchable archive of resolved conflict) ---
+
+export interface ColiseumKnowledgeResponse {
+    generatedAt: string;
+    entries: ColiseumKnowledgeEntry[];
+}
+
+export interface FetchColiseumKnowledgeOptions {
+    query?: string;
+    domain?: ColiseumTopicCategoryKey;
+    kind?: ColiseumKnowledgeKind;
+    limit?: number;
+}
+
+export function fetchColiseumKnowledge(
+    options: FetchColiseumKnowledgeOptions = {},
+    token: string | null = readBlackoutApiToken()
+): Promise<ColiseumKnowledgeResponse> {
+    const path = appendQuery(`${COLISEUM_BASE}/knowledge`, {
+        q: options.query,
+        domain: options.domain,
+        kind: options.kind,
+        limit: options.limit !== undefined ? String(options.limit) : undefined,
+    });
+    return getJson<ColiseumKnowledgeResponse>(path, token);
 }
 
 // --- Cross-topic discourse reel (Feature 3) ---

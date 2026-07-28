@@ -1,6 +1,7 @@
 import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import {
+    COLISEUM_KNOWLEDGE_KINDS,
     COLISEUM_STANCES,
     COLISEUM_TOPIC_CATEGORY_KEYS,
     COLISEUM_ROUND_KINDS,
@@ -41,6 +42,7 @@ import {
     postRound,
     roundTally,
 } from '../services/coliseumMatchStore';
+import { listKnowledgeEntries } from '../services/coliseumKnowledge';
 import {
     createShout,
     getShout,
@@ -939,6 +941,31 @@ coliseum.get('/briefs/:id', (c) => {
     const brief = getBrief(c.req.param('id'));
     if (!brief) return c.json({ code: 'not_found', message: 'Brief not found' }, 404);
     return c.json({ brief });
+});
+
+// --- Knowledge repository (unified archive of resolved conflict) ---
+
+const knowledgeQuerySchema = z.object({
+    q: z.string().max(200).optional(),
+    domain: domainEnum.optional(),
+    kind: z.enum(COLISEUM_KNOWLEDGE_KINDS as unknown as [string, ...string[]]).optional(),
+    limit: z.coerce.number().int().min(1).max(100).optional(),
+});
+
+coliseum.get('/knowledge', (c) => {
+    const parsed = knowledgeQuerySchema.safeParse(c.req.query());
+    if (!parsed.success) {
+        return c.json({ code: 'invalid_request', message: 'Invalid knowledge query' }, 400);
+    }
+    return c.json({
+        generatedAt: new Date().toISOString(),
+        entries: listKnowledgeEntries({
+            query: parsed.data.q,
+            domain: parsed.data.domain as never,
+            kind: parsed.data.kind as never,
+            limit: parsed.data.limit,
+        }),
+    });
 });
 
 // --- Shouts (unstructured intake) ---
