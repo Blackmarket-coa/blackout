@@ -53,6 +53,13 @@ export interface InstalledPluginRecord {
     streamAsset?: OwnedStreamAsset;
     /** For `privacy_tool` entitlements: the decoded advanced-tier grant. */
     privacyTier?: OwnedPrivacyTier;
+    /**
+     * `features.*` entitlement keys this grant unlocks, carried from the
+     * marketplace entitlement. Populated for any grant that ships feature keys
+     * (an individual privacy tool, a bundled plugin). Subscription-tier grants
+     * that ship no artifact are tracked separately in `grantedFeatureKeysAtom`.
+     */
+    grantedFeatureKeys?: string[];
 }
 
 const INSTALLED_PLUGINS_STORAGE_KEY = 'blackout.plugins.installed.v1';
@@ -87,7 +94,7 @@ const safeJsonStorage = createJSONStorage<InstalledPluginRecord[]>(() => {
 export const installedPluginsAtom = atomWithStorage<InstalledPluginRecord[]>(
     INSTALLED_PLUGINS_STORAGE_KEY,
     [],
-    safeJsonStorage,
+    safeJsonStorage
 );
 
 export const installedPluginByIdAtom = atom((get) => {
@@ -128,7 +135,10 @@ export const effectiveInstallScopeAtom = atom<InstallScope | null>((get) => {
     return get(currentInstallScopeAtom) ?? get(navigationInstallScopeAtom);
 });
 
-export function installScopesEqual(a: InstallScope | undefined | null, b: InstallScope | undefined | null): boolean {
+export function installScopesEqual(
+    a: InstallScope | undefined | null,
+    b: InstallScope | undefined | null
+): boolean {
     if (!a || !b) return false;
     return a.type === b.type && a.id === b.id;
 }
@@ -140,7 +150,7 @@ export function installScopesEqual(a: InstallScope | undefined | null, b: Instal
  */
 export function installVisibleInScope(
     record: InstalledPluginRecord,
-    currentScope: InstallScope | null,
+    currentScope: InstallScope | null
 ): boolean {
     if (!currentScope) return true;
     if (!record.scope) return true;
@@ -150,12 +160,12 @@ export function installVisibleInScope(
 /** Installed plugins visible in the effective scope (see `installVisibleInScope`). */
 export const installedPluginsForScopeAtom = atom((get) => {
     const currentScope = get(effectiveInstallScopeAtom);
-    return get(installedPluginsAtom).filter((record) => installVisibleInScope(record, currentScope));
+    return get(installedPluginsAtom).filter((record) =>
+        installVisibleInScope(record, currentScope)
+    );
 });
 
-export function effectiveCapabilities(
-    record: InstalledPluginRecord,
-): PluginCapability[] {
+export function effectiveCapabilities(record: InstalledPluginRecord): PluginCapability[] {
     const granted = new Set(record.grantedCapabilities);
     return record.manifest.capabilities.filter((cap) => granted.has(cap));
 }

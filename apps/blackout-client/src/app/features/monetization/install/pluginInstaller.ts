@@ -208,6 +208,9 @@ export async function installEntitlement(
         status,
         installedAt: new Date().toISOString(),
         grantedCapabilities,
+        ...(entitlement.featureKeys && entitlement.featureKeys.length > 0
+            ? { grantedFeatureKeys: entitlement.featureKeys }
+            : {}),
         ...(ctx.scope ? { scope: ctx.scope } : {}),
     };
 
