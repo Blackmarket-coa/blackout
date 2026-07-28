@@ -121,6 +121,8 @@ import type {
     ColiseumResponseDropRecord,
     ColiseumResponseDropVoteRecord,
     ColiseumBriefRecord,
+    ColiseumExplainerRecord,
+    ColiseumExplainerVoteRecord,
     ColiseumCrucibleStatementRecord,
     ColiseumCrucibleVoteRecord,
     ReputationEventRecord,
@@ -279,6 +281,8 @@ type PersistedState = {
     coliseumBriefs: ColiseumBriefRecord[];
     coliseumCrucibleStatements: ColiseumCrucibleStatementRecord[];
     coliseumCrucibleVotes: ColiseumCrucibleVoteRecord[];
+    coliseumExplainers: ColiseumExplainerRecord[];
+    coliseumExplainerVotes: ColiseumExplainerVoteRecord[];
     reputationEvents: ReputationEventRecord[];
     referrals: ReferralRecord[];
     ambassadors: AmbassadorRecord[];
@@ -496,6 +500,10 @@ class InMemoryDb {
     coliseumCrucibleStatements = new Map<string, ColiseumCrucibleStatementRecord>();
     /** Crucible synthesis votes, keyed by `${matchId}::${questionId}::${voterId}`. */
     coliseumCrucibleVotes = new Map<string, ColiseumCrucibleVoteRecord>();
+    /** Authored explainers, keyed by explainer id. */
+    coliseumExplainers = new Map<string, ColiseumExplainerRecord>();
+    /** Explainer helpful-votes, keyed by `${explainerId}::${voterId}`. */
+    coliseumExplainerVotes = new Map<string, ColiseumExplainerVoteRecord>();
     /** Subject-scoped reputation awards, keyed by event id. */
     reputationEvents = new Map<string, ReputationEventRecord>();
 
@@ -4389,6 +4397,35 @@ class InMemoryDb {
         return record;
     }
 
+    listColiseumExplainers(): ColiseumExplainerRecord[] {
+        return [...this.coliseumExplainers.values()];
+    }
+
+    getColiseumExplainer(id: string): ColiseumExplainerRecord | undefined {
+        return this.coliseumExplainers.get(id);
+    }
+
+    upsertColiseumExplainer(record: ColiseumExplainerRecord): ColiseumExplainerRecord {
+        this.coliseumExplainers.set(record.id, record);
+        return record;
+    }
+
+    private static coliseumExplainerVoteKey(explainerId: string, voterId: string): string {
+        return `${explainerId}::${voterId}`;
+    }
+
+    listColiseumExplainerVotes(): ColiseumExplainerVoteRecord[] {
+        return [...this.coliseumExplainerVotes.values()];
+    }
+
+    upsertColiseumExplainerVote(record: ColiseumExplainerVoteRecord): ColiseumExplainerVoteRecord {
+        this.coliseumExplainerVotes.set(
+            InMemoryDb.coliseumExplainerVoteKey(record.explainerId, record.voterId),
+            record
+        );
+        return record;
+    }
+
     listColiseumCrucibleStatements(): ColiseumCrucibleStatementRecord[] {
         return [...this.coliseumCrucibleStatements.values()];
     }
@@ -4830,6 +4867,19 @@ export class FileBackedDb extends InMemoryDb {
                 ])
             );
         }
+        if (parsed.coliseumExplainers) {
+            this.coliseumExplainers = new Map(
+                parsed.coliseumExplainers.map((row) => [row.id, row])
+            );
+        }
+        if (parsed.coliseumExplainerVotes) {
+            this.coliseumExplainerVotes = new Map(
+                parsed.coliseumExplainerVotes.map((row) => [
+                    `${row.explainerId}::${row.voterId}`,
+                    row,
+                ])
+            );
+        }
         if (parsed.reputationEvents) {
             this.reputationEvents = new Map(parsed.reputationEvents.map((row) => [row.id, row]));
         }
@@ -4959,6 +5009,8 @@ export class FileBackedDb extends InMemoryDb {
             coliseumBriefs: [...this.coliseumBriefs.values()],
             coliseumCrucibleStatements: [...this.coliseumCrucibleStatements.values()],
             coliseumCrucibleVotes: [...this.coliseumCrucibleVotes.values()],
+            coliseumExplainers: [...this.coliseumExplainers.values()],
+            coliseumExplainerVotes: [...this.coliseumExplainerVotes.values()],
             reputationEvents: [...this.reputationEvents.values()],
         };
     }
@@ -6422,6 +6474,20 @@ export class FileBackedDb extends InMemoryDb {
 
     override upsertColiseumBrief(record: ColiseumBriefRecord): ColiseumBriefRecord {
         const saved = super.upsertColiseumBrief(record);
+        this.persist();
+        return saved;
+    }
+
+    override upsertColiseumExplainer(record: ColiseumExplainerRecord): ColiseumExplainerRecord {
+        const saved = super.upsertColiseumExplainer(record);
+        this.persist();
+        return saved;
+    }
+
+    override upsertColiseumExplainerVote(
+        record: ColiseumExplainerVoteRecord
+    ): ColiseumExplainerVoteRecord {
+        const saved = super.upsertColiseumExplainerVote(record);
         this.persist();
         return saved;
     }

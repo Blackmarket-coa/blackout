@@ -9,9 +9,13 @@
 import {
     briefToKnowledgeEntry,
     debateVerdictToKnowledgeEntry,
+    explainerToKnowledgeEntry,
     rankKnowledgeEntries,
     searchKnowledgeEntries,
+    validateCitations,
+    type ColiseumExplainer,
     type ColiseumKnowledgeEntry,
+    type ColiseumTopicCategoryKey,
     type ColiseumTopicStatus,
     type KnowledgeSearchFilter,
 } from '@blackout/core';
@@ -65,7 +69,11 @@ export interface KnowledgeListOptions extends KnowledgeSearchFilter {
 
 export function listKnowledgeEntries(options: KnowledgeListOptions = {}): ColiseumKnowledgeEntry[] {
     const nowMs = options.nowMs ?? Date.now();
-    const all = [...briefKnowledgeEntries(), ...debateKnowledgeEntries(nowMs)];
+    const all = [
+        ...briefKnowledgeEntries(),
+        ...debateKnowledgeEntries(nowMs),
+        ...db.listColiseumExplainers().map(explainerToKnowledgeEntry),
+    ];
     const filtered = searchKnowledgeEntries(all, {
         query: options.query,
         domain: options.domain,
@@ -73,4 +81,71 @@ export function listKnowledgeEntries(options: KnowledgeListOptions = {}): Colise
     });
     const ranked = rankKnowledgeEntries(filtered);
     return options.limit !== undefined ? ranked.slice(0, options.limit) : ranked;
+}
+
+// --- Explainers (standalone authored knowledge) ---
+
+function newExplainerId(): string {
+    return `exp_${Math.random().toString(36).slice(2, 10)}_${Date.now().toString(36)}`;
+}
+
+export interface CreateExplainerInput {
+    authorId: string;
+    title: string;
+    body: string;
+    domain?: ColiseumTopicCategoryKey;
+    tags?: string[];
+    /** Loose citation payloads; invalid entries are silently dropped. */
+    citations?: unknown[];
+    counterpoints?: string[];
+}
+
+export function createExplainer(
+    input: CreateExplainerInput,
+    nowMs: number = Date.now()
+): ColiseumExplainer {
+    const explainer: ColiseumExplainer = {
+        id: newExplainerId(),
+        authorId: input.authorId,
+        title: input.title.trim(),
+        body: input.body.trim(),
+        domain: input.domain,
+        tags: [...new Set((input.tags ?? []).map((tag) => tag.trim()).filter(Boolean))],
+        citations: validateCitations(input.citations ?? []),
+        counterpoints: (input.counterpoints ?? []).map((point) => point.trim()).filter(Boolean),
+        upVotes: 0,
+        downVotes: 0,
+        createdAt: new Date(nowMs).toISOString(),
+    };
+    db.upsertColiseumExplainer(explainer);
+    return explainer;
+}
+
+export function getExplainer(id: string): ColiseumExplainer | null {
+    return db.getColiseumExplainer(id) ?? null;
+}
+
+/**
+ * Cast (or flip) a helpful/unhelpful vote and recompute the explainer's
+ * denormalized tallies from the vote rows — one vote per (explainer, voter).
+ * Returns null when the explainer does not exist.
+ */
+export function voteExplainer(
+    input: { explainerId: string; voterId: string; direction: 'up' | 'down' },
+    nowMs: number = Date.now()
+): ColiseumExplainer | null {
+    const explainer = db.getColiseumExplainer(input.explainerId);
+    if (!explainer) return null;
+    db.upsertColiseumExplainerVote({
+        explainerId: input.explainerId,
+        voterId: input.voterId,
+        direction: input.direction,
+        createdAt: new Date(nowMs).toISOString(),
+    });
+    const votes = db
+        .listColiseumExplainerVotes()
+        .filter((vote) => vote.explainerId === input.explainerId);
+    const upVotes = votes.filter((vote) => vote.direction === 'up').length;
+    const downVotes = votes.length - upVotes;
+    return db.upsertColiseumExplainer({ ...explainer, upVotes, downVotes });
 }

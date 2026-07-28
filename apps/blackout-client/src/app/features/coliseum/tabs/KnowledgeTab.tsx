@@ -6,7 +6,8 @@ import {
     type ColiseumTopicCategoryKey,
 } from '@blackout/core';
 import { EmptyState } from '@blackout/ui/primitives';
-import { fetchColiseumKnowledge } from '../coliseumClient';
+import { fetchColiseumKnowledge, voteColiseumExplainer } from '../coliseumClient';
+import { ExplainerComposer } from '../components/ExplainerComposer';
 import { RelativeTime } from '../components/RelativeTime';
 import { cx } from '../components/cx';
 import * as ui from '../components/coliseumUi.css';
@@ -18,11 +19,13 @@ const KIND_FILTERS: Array<{ key: KindFilter; label: string }> = [
     { key: 'all', label: 'Everything' },
     { key: 'brief', label: 'Match Briefs' },
     { key: 'debate_verdict', label: 'Debate verdicts' },
+    { key: 'explainer', label: 'Explainers' },
 ];
 
 const KIND_BADGE: Record<ColiseumKnowledgeKind, string> = {
     brief: '⚔️ Brief',
     debate_verdict: '🏛️ Verdict',
+    explainer: '📖 Explainer',
 };
 
 const SEARCH_DEBOUNCE_MS = 250;
@@ -31,7 +34,14 @@ function percent(value: number): string {
     return `${Math.round(value * 100)}%`;
 }
 
-function KnowledgeCard({ entry }: { entry: ColiseumKnowledgeEntry }) {
+function KnowledgeCard({
+    entry,
+    onEndorse,
+}: {
+    entry: ColiseumKnowledgeEntry;
+    /** Present only for explainer entries; casts a helpful vote. */
+    onEndorse?: (explainerId: string) => void;
+}) {
     const domainLabel = COLISEUM_TOPIC_CATEGORIES.find(
         (category) => category.key === entry.domain
     )?.label;
@@ -48,6 +58,19 @@ function KnowledgeCard({ entry }: { entry: ColiseumKnowledgeEntry }) {
             <p className={ui.mutedText} style={{ margin: 0 }}>
                 {entry.summary}
             </p>
+            {entry.kind === 'explainer' && onEndorse ? (
+                <div className={ui.actionRow}>
+                    <button
+                        type="button"
+                        className={ui.actionButton}
+                        data-testid="knowledge-endorse-button"
+                        title="Endorse this explanation as sound"
+                        onClick={() => onEndorse(entry.sourceId)}
+                    >
+                        ▲ Helpful
+                    </button>
+                </div>
+            ) : null}
             <div className={ui.tagRow}>
                 <span className={ui.tagChip} title="How decisively this resolved">
                     Confidence {percent(entry.verdictConfidence)}
@@ -83,6 +106,9 @@ export function KnowledgeTab() {
     const [kind, setKind] = useState<KindFilter>('all');
     const [entries, setEntries] = useState<ColiseumKnowledgeEntry[]>([]);
     const [loading, setLoading] = useState(true);
+    const [composing, setComposing] = useState(false);
+    // Bumped after a publish or endorsement to refetch the ranked list.
+    const [refreshKey, setRefreshKey] = useState(0);
 
     const [debouncedQuery, setDebouncedQuery] = useState('');
     useEffect(() => {
@@ -110,7 +136,13 @@ export function KnowledgeTab() {
         return () => {
             active = false;
         };
-    }, [debouncedQuery, domain, kind]);
+    }, [debouncedQuery, domain, kind, refreshKey]);
+
+    const handleEndorse = (explainerId: string) => {
+        voteColiseumExplainer(explainerId, 'up')
+            .then(() => setRefreshKey((key) => key + 1))
+            .catch(() => undefined);
+    };
 
     const hasFilters = useMemo(
         () => debouncedQuery.length > 0 || domain !== 'all' || kind !== 'all',
@@ -138,7 +170,26 @@ export function KnowledgeTab() {
                         fontSize: 14,
                     }}
                 />
+                <button
+                    type="button"
+                    className={cx(composing ? ui.chipActive : ui.chip)}
+                    aria-expanded={composing}
+                    data-testid="knowledge-compose-toggle"
+                    onClick={() => setComposing((open) => !open)}
+                >
+                    ✍️ Write an explainer
+                </button>
             </div>
+            {composing ? (
+                <ExplainerComposer
+                    onPublished={() => {
+                        setComposing(false);
+                        setKind('explainer');
+                        setRefreshKey((key) => key + 1);
+                    }}
+                    onCancel={() => setComposing(false)}
+                />
+            ) : null}
             <div className={ui.chipRow} role="group" aria-label="Knowledge kind">
                 {KIND_FILTERS.map((filter) => (
                     <button
@@ -186,13 +237,13 @@ export function KnowledgeTab() {
                     description={
                         hasFilters
                             ? 'Try a different search, domain, or kind — only resolved matches and debates live here.'
-                            : 'When a match mints its Brief or a debate closes with a verdict, it lands here permanently.'
+                            : 'When a match mints its Brief, a debate closes with a verdict, or someone publishes an explainer, it lands here permanently.'
                     }
                 />
             ) : (
                 <div className={ui.feedColumn}>
                     {entries.map((entry) => (
-                        <KnowledgeCard key={entry.id} entry={entry} />
+                        <KnowledgeCard key={entry.id} entry={entry} onEndorse={handleEndorse} />
                     ))}
                 </div>
             )}

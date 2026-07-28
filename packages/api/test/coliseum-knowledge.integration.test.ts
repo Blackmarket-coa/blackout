@@ -283,3 +283,95 @@ test('unified knowledge repository archives briefs and resolved topic debates', 
     const badKind = await app.request('/v1/coliseum/knowledge?kind=not-a-kind');
     assert.equal(badKind.status, 400);
 });
+
+test('explainers publish into the knowledge repository and endorsements build confidence', async () => {
+    const author = 'knw-exp-author';
+
+    const unauthenticated = await app.request('/v1/coliseum/knowledge/explainers', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ title: 'x', body: 'y' }),
+    });
+    assert.equal(unauthenticated.status, 401);
+
+    const created = await app.request('/v1/coliseum/knowledge/explainers', {
+        method: 'POST',
+        headers: auth(author),
+        body: JSON.stringify({
+            title: 'How the Vrellik battery recycling loop works',
+            body: 'Vrellik cells are smelted in three stages; the slag is reused as ballast.',
+            domain: 'science',
+            tags: ['batteries', 'recycling'],
+            citations: [
+                {
+                    kind: 'article',
+                    sourceUrl: 'https://news.example/vrellik',
+                    title: 'Inside the Vrellik loop',
+                },
+            ],
+            counterpoints: [
+                'Smelting is energy-intensive; critics argue direct reuse beats recycling.',
+            ],
+        }),
+    });
+    assert.equal(created.status, 201);
+    const explainer = (await json(created)).explainer as {
+        id: string;
+        upVotes: number;
+        citations: unknown[];
+        counterpoints: string[];
+    };
+    assert.equal(explainer.upVotes, 0);
+    assert.equal(explainer.citations.length, 1);
+    assert.equal(explainer.counterpoints.length, 1);
+
+    // Publishing alone surfaces it, ranked on sourcing + steel-manning only.
+    const entries = await knowledge('?kind=explainer&q=vrellik');
+    const entry = entries.find((e) => e.id === `explainer:${explainer.id}`);
+    assert.ok(entry, 'expected the explainer in the knowledge feed');
+    assert.equal(entry!.kind, 'explainer');
+    assert.equal(entry!.domain, 'science');
+    assert.deepEqual(entry!.authorIds, [author]);
+    assert.equal(entry!.verdictConfidence, 0);
+    const preVoteInsight = entry!.insightScore;
+
+    // Endorsements lift confidence; a repeated vote is not double-counted.
+    for (const voter of ['knw-e1', 'knw-e2', 'knw-e3']) {
+        const vote = await app.request(`/v1/coliseum/knowledge/explainers/${explainer.id}/vote`, {
+            method: 'POST',
+            headers: auth(voter),
+            body: JSON.stringify({ direction: 'up' }),
+        });
+        assert.equal(vote.status, 201);
+    }
+    const repeated = await app.request(`/v1/coliseum/knowledge/explainers/${explainer.id}/vote`, {
+        method: 'POST',
+        headers: auth('knw-e1'),
+        body: JSON.stringify({ direction: 'up' }),
+    });
+    const repeatedBody = (await json(repeated)).explainer as {
+        upVotes: number;
+        downVotes: number;
+    };
+    assert.equal(repeatedBody.upVotes, 3);
+    assert.equal(repeatedBody.downVotes, 0);
+
+    const endorsed = await knowledge('?kind=explainer&q=vrellik');
+    const endorsedEntry = endorsed.find((e) => e.id === `explainer:${explainer.id}`)!;
+    assert.ok(endorsedEntry.verdictConfidence > 0);
+    assert.ok(endorsedEntry.insightScore > preVoteInsight);
+
+    // Voting a missing explainer 404s; malformed payloads 400.
+    const missing = await app.request('/v1/coliseum/knowledge/explainers/nope/vote', {
+        method: 'POST',
+        headers: auth(author),
+        body: JSON.stringify({ direction: 'up' }),
+    });
+    assert.equal(missing.status, 404);
+    const badBody = await app.request('/v1/coliseum/knowledge/explainers', {
+        method: 'POST',
+        headers: auth(author),
+        body: JSON.stringify({ title: '', body: 'y' }),
+    });
+    assert.equal(badBody.status, 400);
+});

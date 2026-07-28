@@ -2,6 +2,7 @@ import type {
     ColiseumArgument,
     ColiseumArgumentMedia,
     ColiseumCitation,
+    ColiseumExplainer,
     ColiseumKnowledgeEntry,
     ColiseumKnowledgeKind,
     ColiseumLiveSession,
@@ -189,6 +190,39 @@ export function fetchColiseumKnowledge(
         limit: options.limit !== undefined ? String(options.limit) : undefined,
     });
     return getJson<ColiseumKnowledgeResponse>(path, token);
+}
+
+export interface CreateColiseumExplainerInput {
+    title: string;
+    body: string;
+    domain?: ColiseumTopicCategoryKey;
+    tags?: string[];
+    citations?: ColiseumCitation[];
+    /** Opposing arguments the author acknowledges — the steel-man signal. */
+    counterpoints?: string[];
+}
+
+export function createColiseumExplainer(
+    input: CreateColiseumExplainerInput,
+    token: string | null = readBlackoutApiToken()
+): Promise<{ explainer: ColiseumExplainer }> {
+    return postJson<{ explainer: ColiseumExplainer }>(
+        `${COLISEUM_BASE}/knowledge/explainers`,
+        input,
+        token
+    );
+}
+
+export function voteColiseumExplainer(
+    explainerId: string,
+    direction: 'up' | 'down',
+    token: string | null = readBlackoutApiToken()
+): Promise<{ explainer: ColiseumExplainer }> {
+    return postJson<{ explainer: ColiseumExplainer }>(
+        `${COLISEUM_BASE}/knowledge/explainers/${encodeURIComponent(explainerId)}/vote`,
+        { direction },
+        token
+    );
 }
 
 // --- Cross-topic discourse reel (Feature 3) ---

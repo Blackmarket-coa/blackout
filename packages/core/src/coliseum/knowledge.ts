@@ -12,21 +12,22 @@
  */
 
 import type { ColiseumBrief } from './brief';
-import { citationDepthScore } from './citations';
+import { citationDepthScore, type ColiseumCitation } from './citations';
 import type { ColiseumWinnerVerdictResult } from './consensus';
-import type { ColiseumArgument, ColiseumTopic } from './feed';
+import { wilsonLowerBound, type ColiseumArgument, type ColiseumTopic } from './feed';
 import type { ColiseumTopicCategoryKey } from './taxonomy';
 
 /**
  * Where a knowledge entry came from. `brief` = a 1v1 match's minted Brief;
- * `debate_verdict` = a resolved topic debate's winner verdict. Future formats
- * (e.g. standalone explainers) extend this union.
+ * `debate_verdict` = a resolved topic debate's winner verdict; `explainer` = a
+ * standalone authored explanation, endorsed (or not) by the community.
  */
-export type ColiseumKnowledgeKind = 'brief' | 'debate_verdict';
+export type ColiseumKnowledgeKind = 'brief' | 'debate_verdict' | 'explainer';
 
 export const COLISEUM_KNOWLEDGE_KINDS: readonly ColiseumKnowledgeKind[] = [
     'brief',
     'debate_verdict',
+    'explainer',
 ] as const;
 
 export function isColiseumKnowledgeKind(value: unknown): value is ColiseumKnowledgeKind {
@@ -298,4 +299,71 @@ export function rankKnowledgeEntries(
     return [...entries].sort(
         (a, b) => b.insightScore - a.insightScore || b.resolvedAt.localeCompare(a.resolvedAt)
     );
+}
+
+// --- Explainers (standalone authored knowledge) ---
+
+export const EXPLAINER_TITLE_MAX_CHARS = 200;
+export const EXPLAINER_BODY_MAX_CHARS = 12_000;
+export const EXPLAINER_MAX_TAGS = 12;
+export const EXPLAINER_MAX_COUNTERPOINTS = 8;
+
+/**
+ * A standalone authored explanation — knowledge that doesn't need a fight to
+ * exist. Explainers carry citations (sourcing) and explicitly acknowledged
+ * counterpoints (steel-manning), and the community endorses or disputes them
+ * with helpful votes; all three feed the same insight ranking as verdicts.
+ */
+export interface ColiseumExplainer {
+    id: string;
+    authorId: string;
+    title: string;
+    body: string;
+    domain?: ColiseumTopicCategoryKey;
+    tags: string[];
+    citations: ColiseumCitation[];
+    /** Opposing arguments the author explicitly acknowledges and addresses. */
+    counterpoints: string[];
+    /** Community endorsement tallies ("was this explanation sound?"). */
+    upVotes: number;
+    downVotes: number;
+    createdAt: string;
+}
+
+/** Counterpoints acknowledged before the steel-man signal saturates. */
+const EXPLAINER_STEELMAN_SATURATION = 3;
+
+/**
+ * Fold an explainer into a knowledge entry.
+ *
+ * confidence → Wilson lower bound on helpful votes — how confidently the
+ *              community endorses the explanation (0 until votes arrive)
+ * sourcing   → citation depth, same measure arguments use
+ * steelman   → share of the counterpoint saturation met: explicitly
+ *              acknowledging opposing arguments is literal steel-manning
+ */
+export function explainerToKnowledgeEntry(explainer: ColiseumExplainer): ColiseumKnowledgeEntry {
+    const verdictConfidence = wilsonLowerBound(explainer.upVotes, explainer.downVotes);
+    const sourcingScore = citationDepthScore(explainer.citations);
+    const steelmanScore = clamp01(explainer.counterpoints.length / EXPLAINER_STEELMAN_SATURATION);
+
+    const body = explainer.body.trim();
+    const summary = body.length > 140 ? `${body.slice(0, 139)}…` : body;
+
+    const components = { verdictConfidence, sourcingScore, steelmanScore };
+    return {
+        id: `explainer:${explainer.id}`,
+        kind: 'explainer',
+        title: explainer.title,
+        domain: explainer.domain,
+        tags: explainer.tags,
+        summary,
+        authorIds: [explainer.authorId],
+        verdictConfidence,
+        sourcingScore,
+        steelmanScore,
+        insightScore: computeInsightScore(components),
+        resolvedAt: explainer.createdAt,
+        sourceId: explainer.id,
+    };
 }
