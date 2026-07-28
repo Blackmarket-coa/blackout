@@ -7,7 +7,7 @@ export const marketplaceProviderIds = [
     'antin-amazon',
 ] as const;
 
-export type MarketplaceProviderId = (typeof marketplaceProviderIds)[number];
+export type MarketplaceProviderId = typeof marketplaceProviderIds[number];
 
 export type MarketplaceAuthScheme = 'api-key' | 'oauth2' | 'hmac-shared-secret';
 
@@ -168,7 +168,10 @@ export interface MarketplaceProvider extends MarketplaceProviderInfo {
     createCreatorListing?(input: CreatorListingDraftInput): Promise<CreatorListingResult>;
     publishCreatorListing?(providerListingId: string): Promise<CreatorListingResult>;
     archiveCreatorListing?(providerListingId: string): Promise<void>;
-    startCreatorOnboarding?(sellerUserId: string, returnUrl?: string): Promise<CreatorOnboardingHandle>;
+    startCreatorOnboarding?(
+        sellerUserId: string,
+        returnUrl?: string
+    ): Promise<CreatorOnboardingHandle>;
 
     /**
      * Optional bundle issuer for direct fulfillment. Used by stub/test
@@ -216,6 +219,14 @@ export interface NormalizedListing {
     artifactKind?: import('./creator').CreatorArtifactKind;
     tags?: string[];
     availableSkus?: string[];
+    /**
+     * `features.*` entitlement keys this listing grants when purchased. For an
+     * individual item this is usually one key (or empty for pure artifact
+     * goods); for a `subscription_tier` listing it is the whole tier bundle.
+     * This is the single field that bridges System A (marketplace listings) to
+     * System B (`features.*` tier entitlements). Optional for legacy providers.
+     */
+    featureKeys?: string[];
 }
 
 export interface NormalizedEntitlement {
@@ -229,6 +240,9 @@ export interface NormalizedEntitlement {
     grantedAt: string;
     expiresAt: string | null;
     sourceEventId: string;
+    /** `features.*` keys this grant unlocks; carried through so the client can
+     *  light up gated features/widgets without a second lookup. */
+    featureKeys?: string[];
     metadata: Record<string, unknown>;
 }
 
@@ -241,5 +255,8 @@ export interface NormalizedLifecycleEvent {
     sku: string | null;
     kind: EntitlementKind;
     occurredAt: string;
+    /** `features.*` keys this event grants/revokes; for `subscription_tier`
+     *  events this is the full tier bundle to fan out into per-key grants. */
+    featureKeys?: string[];
     metadata: Record<string, unknown>;
 }

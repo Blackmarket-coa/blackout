@@ -48,6 +48,10 @@ export * from './entitlements/schema';
 
 export * from './entitlements/fullyUnlocked';
 
+export * from './entitlements/consumerTiers';
+
+export * from './entitlements/bundles';
+
 export * from './plugins';
 
 export * from './split-contract';
