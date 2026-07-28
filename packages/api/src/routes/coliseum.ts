@@ -1,8 +1,13 @@
 import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import {
+    COLISEUM_KNOWLEDGE_KINDS,
     COLISEUM_STANCES,
     COLISEUM_TOPIC_CATEGORY_KEYS,
+    EXPLAINER_BODY_MAX_CHARS,
+    EXPLAINER_MAX_COUNTERPOINTS,
+    EXPLAINER_MAX_TAGS,
+    EXPLAINER_TITLE_MAX_CHARS,
     COLISEUM_ROUND_KINDS,
     CRUCIBLE_CHOICES,
     CRUCIBLE_QUESTIONS,
@@ -41,6 +46,12 @@ import {
     postRound,
     roundTally,
 } from '../services/coliseumMatchStore';
+import {
+    createExplainer,
+    getExplainer,
+    listKnowledgeEntries,
+    voteExplainer,
+} from '../services/coliseumKnowledge';
 import {
     createShout,
     getShout,
@@ -939,6 +950,89 @@ coliseum.get('/briefs/:id', (c) => {
     const brief = getBrief(c.req.param('id'));
     if (!brief) return c.json({ code: 'not_found', message: 'Brief not found' }, 404);
     return c.json({ brief });
+});
+
+// --- Knowledge repository (unified archive of resolved conflict) ---
+
+const knowledgeQuerySchema = z.object({
+    q: z.string().max(200).optional(),
+    domain: domainEnum.optional(),
+    kind: z.enum(COLISEUM_KNOWLEDGE_KINDS as unknown as [string, ...string[]]).optional(),
+    limit: z.coerce.number().int().min(1).max(100).optional(),
+});
+
+coliseum.get('/knowledge', (c) => {
+    const parsed = knowledgeQuerySchema.safeParse(c.req.query());
+    if (!parsed.success) {
+        return c.json({ code: 'invalid_request', message: 'Invalid knowledge query' }, 400);
+    }
+    return c.json({
+        generatedAt: new Date().toISOString(),
+        entries: listKnowledgeEntries({
+            query: parsed.data.q,
+            domain: parsed.data.domain as never,
+            kind: parsed.data.kind as never,
+            limit: parsed.data.limit,
+        }),
+    });
+});
+
+// --- Explainers (standalone authored knowledge) ---
+
+const explainerRateLimit = createRateLimit({
+    bucket: 'coliseum-explainer',
+    windowMs: 60_000,
+    maxRequests: envMax('COLISEUM_EXPLAINER_RATE_LIMIT_MAX', 10),
+    identify: rateLimitUser,
+});
+
+const createExplainerSchema = z.object({
+    title: z.string().min(1).max(EXPLAINER_TITLE_MAX_CHARS),
+    body: z.string().min(1).max(EXPLAINER_BODY_MAX_CHARS),
+    domain: domainEnum.optional(),
+    tags: z.array(z.string().min(1).max(40)).max(EXPLAINER_MAX_TAGS).default([]),
+    // Loose at the boundary; `validateCitations` drops invalid entries.
+    citations: z.array(z.record(z.string(), z.unknown())).max(16).default([]),
+    counterpoints: z.array(z.string().min(1).max(500)).max(EXPLAINER_MAX_COUNTERPOINTS).default([]),
+});
+
+coliseum.post('/knowledge/explainers', explainerRateLimit, async (c) => {
+    const user = requireUser(c, 'Sign in to publish an explainer');
+    if (user instanceof Response) return user;
+    const parsed = await readJsonBody(c, createExplainerSchema);
+    if (parsed instanceof Response) return parsed;
+    const explainer = createExplainer({
+        authorId: user.sub,
+        title: parsed.title,
+        body: parsed.body,
+        domain: parsed.domain as never,
+        tags: parsed.tags,
+        citations: parsed.citations,
+        counterpoints: parsed.counterpoints,
+    });
+    return c.json({ explainer }, 201);
+});
+
+coliseum.get('/knowledge/explainers/:id', (c) => {
+    const explainer = getExplainer(c.req.param('id'));
+    if (!explainer) return c.json({ code: 'not_found', message: 'Explainer not found' }, 404);
+    return c.json({ explainer });
+});
+
+const explainerVoteSchema = z.object({ direction: z.enum(['up', 'down']) });
+
+coliseum.post('/knowledge/explainers/:id/vote', voteRateLimit, async (c) => {
+    const user = requireUser(c, 'Sign in to rate an explainer');
+    if (user instanceof Response) return user;
+    const parsed = await readJsonBody(c, explainerVoteSchema);
+    if (parsed instanceof Response) return parsed;
+    const explainer = voteExplainer({
+        explainerId: c.req.param('id') ?? '',
+        voterId: user.sub,
+        direction: parsed.direction,
+    });
+    if (!explainer) return c.json({ code: 'not_found', message: 'Explainer not found' }, 404);
+    return c.json({ explainer }, 201);
 });
 
 // --- Shouts (unstructured intake) ---

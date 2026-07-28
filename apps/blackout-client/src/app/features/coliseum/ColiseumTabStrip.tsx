@@ -24,7 +24,7 @@ function SearchIcon() {
 }
 
 /**
- * TikTok-slim tab strip: at most four primary destinations plus a "More"
+ * TikTok-slim tab strip: a handful of primary destinations plus a "More"
  * button that opens the specialist surfaces in a bottom sheet. `debate` never
  * appears here — it's a drill-in owned by ColiseumView.
  */

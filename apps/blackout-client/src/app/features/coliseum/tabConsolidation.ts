@@ -9,6 +9,7 @@ import type { ColiseumTabId } from '@blackout/core';
 export const PRIMARY_COLISEUM_TABS: readonly ColiseumTabId[] = [
     'reel',
     'topics',
+    'knowledge',
     'live',
     'challenges',
 ];

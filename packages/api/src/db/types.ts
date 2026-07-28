@@ -39,6 +39,7 @@ import type {
     ColiseumResponseDrop,
     ColiseumResponseDropVote,
     ColiseumBrief,
+    ColiseumExplainer,
     CrucibleFinalStatement,
     CrucibleSynthesisVote,
     ProductReview,
@@ -1619,6 +1620,15 @@ export type ColiseumResponseDropVoteRecord = ColiseumResponseDropVote;
 export type ColiseumBriefRecord = ColiseumBrief;
 export type ColiseumCrucibleStatementRecord = CrucibleFinalStatement;
 export type ColiseumCrucibleVoteRecord = CrucibleSynthesisVote;
+export type ColiseumExplainerRecord = ColiseumExplainer;
+
+/** One helpful/unhelpful vote per (explainer, voter); flips overwrite. */
+export interface ColiseumExplainerVoteRecord {
+    explainerId: string;
+    voterId: string;
+    direction: 'up' | 'down';
+    createdAt: string;
+}
 
 /**
  * A subject-scoped reputation award. Persisted so per-subject standing survives

@@ -11,6 +11,7 @@ export const COLISEUM_TABS = [
     'challenges',
     'leaderboards',
     'sources',
+    'knowledge',
 ] as const;
 export type ColiseumTabId = typeof COLISEUM_TABS[number];
 

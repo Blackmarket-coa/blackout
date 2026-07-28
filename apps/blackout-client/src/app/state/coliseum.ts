@@ -47,6 +47,7 @@ export const COLISEUM_TAB_LABELS: Record<ColiseumTabId, string> = {
     challenges: 'Challenges',
     leaderboards: 'Leaderboards',
     sources: 'Sources',
+    knowledge: 'Knowledge',
 };
 
 /**
@@ -65,6 +66,7 @@ export const COLISEUM_TAB_HINTS: Record<ColiseumTabId, string> = {
     challenges: 'Community challenges — enter your attempt and vote on others',
     leaderboards: 'Who is leading across the ecosystem',
     sources: 'Curated news to cite in your arguments',
+    knowledge: 'The searchable archive of settled debates and verdicts',
 };
 
 export const COLISEUM_TAB_ORDER: ColiseumTabId[] = [...COLISEUM_TABS];

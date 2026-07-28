@@ -78,6 +78,10 @@ const OVERRIDES: Record<string, DescriptorOverride> = {
         keyOf: (r) => `${r.matchId}::${r.questionId}::${r.voterId}`,
         conflictColumns: ['match_id', 'question_id', 'voter_id'],
     },
+    coliseumExplainerVotes: {
+        keyOf: (r) => `${r.explainerId}::${r.voterId}`,
+        conflictColumns: ['explainer_id', 'voter_id'],
+    },
     eventRsvps: {
         keyOf: (r) => `${r.eventId}::${r.userId}`,
         conflictColumns: ['event_id', 'user_id'],
@@ -413,6 +417,8 @@ const ALL_MAP_NAMES = [
     'coliseumBriefs',
     'coliseumCrucibleStatements',
     'coliseumCrucibleVotes',
+    'coliseumExplainers',
+    'coliseumExplainerVotes',
     'pluginInstallations',
     'reputationEvents',
     'pluginDens',
@@ -661,6 +667,8 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
     upsertColiseumBrief: upsert('coliseumBriefs'),
     upsertColiseumCrucibleStatement: upsert('coliseumCrucibleStatements'),
     upsertColiseumCrucibleVote: upsert('coliseumCrucibleVotes'),
+    upsertColiseumExplainer: upsert('coliseumExplainers'),
+    upsertColiseumExplainerVote: upsert('coliseumExplainerVotes'),
     createPluginInstallation: upsert('pluginInstallations'),
     updatePluginInstallation: upsert('pluginInstallations'),
     deletePluginInstallation: resync('pluginInstallations'),

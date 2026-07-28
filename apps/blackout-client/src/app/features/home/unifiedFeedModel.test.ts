@@ -4,6 +4,7 @@ import type { StreamSummary } from '../streams/streamsClient';
 import type { RoomLike } from './feedModel';
 import {
     feedSeenKey,
+    filterByTag,
     filterToUnseen,
     mapCoalition,
     mapColiseum,
@@ -330,6 +331,24 @@ describe('mergeAndRank', () => {
             'coalition:c2',
             'coalition:c3',
             'coliseum:t1',
+        ]);
+    });
+});
+
+describe('filterByTag', () => {
+    it('keeps only items carrying the exact tag and no-ops on null', () => {
+        const items: UnifiedFeedItem[] = [
+            ...mapCoalition([coalition({ id: 'a', score: 0.5, tags: ['gardens'] })], NOW),
+            ...mapCoalition([coalition({ id: 'b', score: 0.5, tags: ['music'] })], NOW),
+            ...mapCoalition([coalition({ id: 'c', score: 0.5, tags: [] })], NOW),
+        ];
+        expect(filterByTag(items, 'gardens').map((i) => i.id)).toEqual(['coalition:a']);
+        // Exact match — mirrors the interest-boost matching, no substring hits.
+        expect(filterByTag(items, 'garden')).toEqual([]);
+        expect(filterByTag(items, null).map((i) => i.id)).toEqual([
+            'coalition:a',
+            'coalition:b',
+            'coalition:c',
         ]);
     });
 });

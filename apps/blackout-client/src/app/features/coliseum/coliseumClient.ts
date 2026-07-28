@@ -2,6 +2,9 @@ import type {
     ColiseumArgument,
     ColiseumArgumentMedia,
     ColiseumCitation,
+    ColiseumExplainer,
+    ColiseumKnowledgeEntry,
+    ColiseumKnowledgeKind,
     ColiseumLiveSession,
     ColiseumNewsAnchor,
     ColiseumStance,
@@ -158,6 +161,66 @@ export function castColiseumVote(
     return postJson<ColiseumVoteResponse>(
         `${COLISEUM_BASE}/arguments/${encodeURIComponent(argumentId)}/vote`,
         body,
+        token
+    );
+}
+
+// --- Knowledge repository (searchable archive of resolved conflict) ---
+
+export interface ColiseumKnowledgeResponse {
+    generatedAt: string;
+    entries: ColiseumKnowledgeEntry[];
+}
+
+export interface FetchColiseumKnowledgeOptions {
+    query?: string;
+    domain?: ColiseumTopicCategoryKey;
+    kind?: ColiseumKnowledgeKind;
+    limit?: number;
+}
+
+export function fetchColiseumKnowledge(
+    options: FetchColiseumKnowledgeOptions = {},
+    token: string | null = readBlackoutApiToken()
+): Promise<ColiseumKnowledgeResponse> {
+    const path = appendQuery(`${COLISEUM_BASE}/knowledge`, {
+        q: options.query,
+        domain: options.domain,
+        kind: options.kind,
+        limit: options.limit !== undefined ? String(options.limit) : undefined,
+    });
+    return getJson<ColiseumKnowledgeResponse>(path, token);
+}
+
+export interface CreateColiseumExplainerInput {
+    title: string;
+    body: string;
+    domain?: ColiseumTopicCategoryKey;
+    tags?: string[];
+    citations?: ColiseumCitation[];
+    /** Opposing arguments the author acknowledges — the steel-man signal. */
+    counterpoints?: string[];
+}
+
+export function createColiseumExplainer(
+    input: CreateColiseumExplainerInput,
+    token: string | null = readBlackoutApiToken()
+): Promise<{ explainer: ColiseumExplainer }> {
+    return postJson<{ explainer: ColiseumExplainer }>(
+        `${COLISEUM_BASE}/knowledge/explainers`,
+        input,
+        token
+    );
+}
+
+export function voteColiseumExplainer(
+    explainerId: string,
+    direction: 'up' | 'down',
+    token: string | null = readBlackoutApiToken()
+): Promise<{ explainer: ColiseumExplainer }> {
+    return postJson<{ explainer: ColiseumExplainer }>(
+        `${COLISEUM_BASE}/knowledge/explainers/${encodeURIComponent(explainerId)}/vote`,
+        { direction },
         token
     );
 }

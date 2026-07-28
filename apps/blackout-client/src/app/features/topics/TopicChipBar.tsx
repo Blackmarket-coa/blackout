@@ -1,5 +1,6 @@
-import { useEffect, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { TagChip } from '../../components/tag-chip/TagChip';
+import { useTopicFollows } from '../home/discoveryInterests';
 import { listTopics, type TopicSummary } from './topicsClient';
 
 const containerStyle: CSSProperties = {
@@ -49,7 +50,7 @@ export const TopicChipBar = ({
     limit = 12,
 }: TopicChipBarProps): JSX.Element | null => {
     const [topics, setTopics] = useState<TopicSummary[]>([]);
-    const [error, setError] = useState<string | null>(null);
+    const { followed } = useTopicFollows();
 
     useEffect(() => {
         let cancelled = false;
@@ -58,28 +59,46 @@ export const TopicChipBar = ({
                 if (cancelled) return;
                 setTopics(response.items);
             })
-            .catch((err) => {
+            .catch(() => {
+                // Trending is best-effort; followed pins still render below.
                 if (cancelled) return;
-                setError(err instanceof Error ? err.message : 'failed to load topics');
+                setTopics([]);
             });
         return () => {
             cancelled = true;
         };
     }, [limit]);
 
-    if (error || topics.length === 0) return null;
+    // Followed topics lead the strip (with trending counts when known) and
+    // stay visible even when they fall out of the trending window; trending
+    // fills the rest up to `limit`.
+    const entries = useMemo(() => {
+        const trendingCount = new Map(topics.map((entry) => [entry.tag, entry.count]));
+        const pinned: TopicSummary[] = [...followed]
+            .sort()
+            .map((tag) => ({ tag, count: trendingCount.get(tag) ?? 0 }));
+        const rest = topics.filter((entry) => !followed.has(entry.tag));
+        return [...pinned, ...rest].slice(0, Math.max(limit, pinned.length));
+    }, [topics, followed, limit]);
+
+    // Followed pins render even when trending fails or is empty; the bar only
+    // disappears when there is truly nothing to show.
+    if (entries.length === 0) return null;
 
     return (
         <nav aria-label="Topic chips" data-testid="topic-chip-bar" style={containerStyle}>
-            {topics.map((entry) => (
+            {entries.map((entry) => (
                 <TagChip
                     key={entry.tag}
                     label={entry.tag}
-                    count={entry.count}
+                    count={entry.count > 0 ? entry.count : undefined}
                     to={buildTopicPath(entry.tag)}
                     active={entry.tag === activeTag}
                     onSelect={onSelect}
-                />
+                    data-testid={followed.has(entry.tag) ? 'topic-chip-followed' : 'tag-chip'}
+                >
+                    {followed.has(entry.tag) ? `★ ${entry.tag}` : entry.tag}
+                </TagChip>
             ))}
         </nav>
     );

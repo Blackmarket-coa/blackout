@@ -161,3 +161,217 @@ test('verdict wires steelman/credibility reputation and archives a searchable br
     assert.equal(hit!.type, 'brief');
     assert.equal(hit!.subtitle, 'business');
 });
+
+interface KnowledgeEntry {
+    id: string;
+    kind: string;
+    title: string;
+    domain?: string;
+    summary: string;
+    authorIds: string[];
+    insightScore: number;
+    verdictConfidence: number;
+}
+
+async function knowledge(query: string): Promise<KnowledgeEntry[]> {
+    const res = await app.request(`/v1/coliseum/knowledge${query}`);
+    assert.equal(res.status, 200);
+    return ((await res.json()) as { entries: KnowledgeEntry[] }).entries;
+}
+
+test('unified knowledge repository archives briefs and resolved topic debates', async () => {
+    const author = 'knw-deb-author';
+    const rival = 'knw-deb-rival';
+    const now = Date.now();
+
+    // A topic whose voting window has already closed → status 'closing',
+    // i.e. resolved enough to archive.
+    const createdTopic = await app.request('/v1/coliseum/topics', {
+        method: 'POST',
+        headers: auth(author),
+        body: JSON.stringify({
+            title: 'Should Quorlith Bay ban gill nets?',
+            category: 'science',
+            tags: ['fisheries'],
+            closesAt: new Date(now - 60_000).toISOString(),
+            newsAnchor: {
+                sourceUrl: 'https://news.example/quorlith',
+                headline: 'Quorlith Bay fish stocks collapse',
+                publishedAt: new Date(now - 3_600_000).toISOString(),
+            },
+        }),
+    });
+    assert.equal(createdTopic.status, 201);
+    const topicId = ((await json(createdTopic)).topic as { id: string }).id;
+
+    // A sourced argument plus a cross-stance rebuttal, then crowd votes.
+    const argRes = await app.request('/v1/coliseum/arguments', {
+        method: 'POST',
+        headers: auth(author),
+        body: JSON.stringify({
+            topicId,
+            stance: 'for',
+            body: 'Ban gill nets — bycatch collapsed the herring run.',
+            citations: [
+                {
+                    kind: 'article',
+                    sourceUrl: 'https://news.example/quorlith',
+                    title: 'Quorlith Bay fish stocks collapse',
+                },
+            ],
+        }),
+    });
+    assert.equal(argRes.status, 201);
+    const argumentId = ((await json(argRes)).argument as { id: string }).id;
+    const rebuttal = await app.request('/v1/coliseum/arguments', {
+        method: 'POST',
+        headers: auth(rival),
+        body: JSON.stringify({
+            topicId,
+            parentArgumentId: argumentId,
+            stance: 'against',
+            body: 'A ban strands the small-boat fleet with no transition plan.',
+        }),
+    });
+    assert.equal(rebuttal.status, 201);
+    for (const voter of ['knw-d1', 'knw-d2', 'knw-d3']) {
+        const vote = await app.request(
+            `/v1/coliseum/arguments/${encodeURIComponent(argumentId)}/vote`,
+            {
+                method: 'POST',
+                headers: auth(voter),
+                body: JSON.stringify({ direction: 'up' }),
+            }
+        );
+        assert.equal(vote.status, 201);
+    }
+
+    // The resolved debate surfaces as a `debate_verdict` knowledge entry…
+    const entries = await knowledge('?q=quorlith');
+    const debateEntry = entries.find((e) => e.id === `debate:${topicId}`);
+    assert.ok(debateEntry, 'expected the resolved debate in the knowledge feed');
+    assert.equal(debateEntry!.kind, 'debate_verdict');
+    assert.equal(debateEntry!.domain, 'science');
+    assert.deepEqual(debateEntry!.authorIds, [author]);
+    assert.ok(debateEntry!.verdictConfidence > 0);
+    assert.ok(debateEntry!.summary.startsWith('Winner:'));
+
+    // …alongside the match brief minted in the earlier test.
+    const briefEntries = await knowledge('?kind=brief&q=xylotherm');
+    assert.ok(briefEntries.length >= 1, 'expected the xylotherm brief as a knowledge entry');
+    assert.ok(briefEntries.every((e) => e.kind === 'brief'));
+
+    // Domain + kind filters compose; text search is scoped by them.
+    const scienceOnly = await knowledge('?domain=science&q=quorlith');
+    assert.ok(scienceOnly.some((e) => e.id === `debate:${topicId}`));
+    const businessOnly = await knowledge('?domain=business&q=quorlith');
+    assert.equal(businessOnly.length, 0);
+    const kindScoped = await knowledge('?kind=brief&q=quorlith');
+    assert.ok(!kindScoped.some((e) => e.id === `debate:${topicId}`));
+
+    // Ranking is insight-ordered, not insertion-ordered.
+    const all = await knowledge('');
+    for (let i = 1; i < all.length; i++) {
+        assert.ok(
+            all[i - 1]!.insightScore >= all[i]!.insightScore,
+            'knowledge entries must rank by insight score'
+        );
+    }
+
+    const badDomain = await app.request('/v1/coliseum/knowledge?domain=not-a-domain');
+    assert.equal(badDomain.status, 400);
+    const badKind = await app.request('/v1/coliseum/knowledge?kind=not-a-kind');
+    assert.equal(badKind.status, 400);
+});
+
+test('explainers publish into the knowledge repository and endorsements build confidence', async () => {
+    const author = 'knw-exp-author';
+
+    const unauthenticated = await app.request('/v1/coliseum/knowledge/explainers', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ title: 'x', body: 'y' }),
+    });
+    assert.equal(unauthenticated.status, 401);
+
+    const created = await app.request('/v1/coliseum/knowledge/explainers', {
+        method: 'POST',
+        headers: auth(author),
+        body: JSON.stringify({
+            title: 'How the Vrellik battery recycling loop works',
+            body: 'Vrellik cells are smelted in three stages; the slag is reused as ballast.',
+            domain: 'science',
+            tags: ['batteries', 'recycling'],
+            citations: [
+                {
+                    kind: 'article',
+                    sourceUrl: 'https://news.example/vrellik',
+                    title: 'Inside the Vrellik loop',
+                },
+            ],
+            counterpoints: [
+                'Smelting is energy-intensive; critics argue direct reuse beats recycling.',
+            ],
+        }),
+    });
+    assert.equal(created.status, 201);
+    const explainer = (await json(created)).explainer as {
+        id: string;
+        upVotes: number;
+        citations: unknown[];
+        counterpoints: string[];
+    };
+    assert.equal(explainer.upVotes, 0);
+    assert.equal(explainer.citations.length, 1);
+    assert.equal(explainer.counterpoints.length, 1);
+
+    // Publishing alone surfaces it, ranked on sourcing + steel-manning only.
+    const entries = await knowledge('?kind=explainer&q=vrellik');
+    const entry = entries.find((e) => e.id === `explainer:${explainer.id}`);
+    assert.ok(entry, 'expected the explainer in the knowledge feed');
+    assert.equal(entry!.kind, 'explainer');
+    assert.equal(entry!.domain, 'science');
+    assert.deepEqual(entry!.authorIds, [author]);
+    assert.equal(entry!.verdictConfidence, 0);
+    const preVoteInsight = entry!.insightScore;
+
+    // Endorsements lift confidence; a repeated vote is not double-counted.
+    for (const voter of ['knw-e1', 'knw-e2', 'knw-e3']) {
+        const vote = await app.request(`/v1/coliseum/knowledge/explainers/${explainer.id}/vote`, {
+            method: 'POST',
+            headers: auth(voter),
+            body: JSON.stringify({ direction: 'up' }),
+        });
+        assert.equal(vote.status, 201);
+    }
+    const repeated = await app.request(`/v1/coliseum/knowledge/explainers/${explainer.id}/vote`, {
+        method: 'POST',
+        headers: auth('knw-e1'),
+        body: JSON.stringify({ direction: 'up' }),
+    });
+    const repeatedBody = (await json(repeated)).explainer as {
+        upVotes: number;
+        downVotes: number;
+    };
+    assert.equal(repeatedBody.upVotes, 3);
+    assert.equal(repeatedBody.downVotes, 0);
+
+    const endorsed = await knowledge('?kind=explainer&q=vrellik');
+    const endorsedEntry = endorsed.find((e) => e.id === `explainer:${explainer.id}`)!;
+    assert.ok(endorsedEntry.verdictConfidence > 0);
+    assert.ok(endorsedEntry.insightScore > preVoteInsight);
+
+    // Voting a missing explainer 404s; malformed payloads 400.
+    const missing = await app.request('/v1/coliseum/knowledge/explainers/nope/vote', {
+        method: 'POST',
+        headers: auth(author),
+        body: JSON.stringify({ direction: 'up' }),
+    });
+    assert.equal(missing.status, 404);
+    const badBody = await app.request('/v1/coliseum/knowledge/explainers', {
+        method: 'POST',
+        headers: auth(author),
+        body: JSON.stringify({ title: '', body: 'y' }),
+    });
+    assert.equal(badBody.status, 400);
+});
