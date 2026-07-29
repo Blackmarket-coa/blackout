@@ -321,6 +321,58 @@ test('catalog falls back to last known snapshot when freeblackmarket is unreacha
     assert.equal(getCounter('marketplace_catalog_fetch_failed_total'), 1);
 });
 
+test('FREEBLACKMARKET_API_PREFIX rewrites outbound commerce paths', async () => {
+    resetForEachTest();
+    const { resetMarketplaceRegistry } = await import('../src/integrations/marketplace');
+    const { normalizeFreeblackmarketApiPrefix } = await import(
+        '../src/integrations/marketplace/freeblackmarket'
+    );
+
+    assert.equal(normalizeFreeblackmarketApiPrefix(undefined), '/v1');
+    assert.equal(normalizeFreeblackmarketApiPrefix('  '), '/v1');
+    assert.equal(normalizeFreeblackmarketApiPrefix('v1/nested'), '/v1/nested');
+    assert.equal(normalizeFreeblackmarketApiPrefix('/v1/nested/'), '/v1/nested');
+    assert.equal(normalizeFreeblackmarketApiPrefix('/'), '');
+
+    const saved = process.env.FREEBLACKMARKET_API_PREFIX;
+    try {
+        // Unique q per request: the listings cache key includes q, so this is a
+        // guaranteed cache miss and must trigger an outbound fetch.
+        const unprefixed = await app.request(
+            '/v1/marketplace/listings?providerId=freeblackmarket&q=prefix-default-buster',
+            { headers: authHeaders() }
+        );
+        assert.equal(unprefixed.status, 200);
+        assert.ok(
+            fetchCalls.some((call) =>
+                call.url.startsWith('https://api.freeblackmarket.test/v1/catalog/listings')
+            )
+        );
+
+        fetchCalls.length = 0;
+        process.env.FREEBLACKMARKET_API_PREFIX = '/v1/integrations/blackout/commerce';
+        // The provider captures env at construction; rebuild the registry.
+        resetMarketplaceRegistry();
+
+        const prefixed = await app.request(
+            '/v1/marketplace/listings?providerId=freeblackmarket&q=prefix-nested-buster',
+            { headers: authHeaders() }
+        );
+        assert.equal(prefixed.status, 200);
+        const catalogCall = fetchCalls.find((call) => call.url.includes('/catalog/listings'));
+        assert.ok(catalogCall, 'expected an outbound catalog fetch');
+        assert.ok(
+            catalogCall.url.startsWith(
+                'https://api.freeblackmarket.test/v1/integrations/blackout/commerce/catalog/listings'
+            )
+        );
+    } finally {
+        if (saved === undefined) delete process.env.FREEBLACKMARKET_API_PREFIX;
+        else process.env.FREEBLACKMARKET_API_PREFIX = saved;
+        resetMarketplaceRegistry();
+    }
+});
+
 test('checkout records counter and returns redirect from freeblackmarket', async () => {
     resetForEachTest();
     fetchHandler = () =>

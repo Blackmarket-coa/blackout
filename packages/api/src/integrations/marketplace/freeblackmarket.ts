@@ -21,8 +21,22 @@ function envBool(key: string, fallback: boolean, env: NodeJS.ProcessEnv = proces
     return raw === '1' || raw.toLowerCase() === 'true';
 }
 
-function buildCatalogUrl(base: string, query: CatalogQuery): string {
-    const url = new URL('/v1/catalog/listings', base);
+/**
+ * Path prefix prepended to every commerce endpoint. Defaults to '/v1' (the
+ * documented public surface); deployments where FBM mounts the commerce API
+ * under a nested path (e.g. '/v1/integrations/blackout/commerce') set
+ * FREEBLACKMARKET_API_PREFIX instead of forking the base URL — URL resolution
+ * discards any path component of FREEBLACKMARKET_BASE_URL.
+ */
+export function normalizeFreeblackmarketApiPrefix(raw?: string): string {
+    const trimmed = raw?.trim();
+    if (!trimmed) return '/v1';
+    const withLeading = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+    return withLeading.replace(/\/+$/, '');
+}
+
+function buildCatalogUrl(base: string, query: CatalogQuery, prefix: string): string {
+    const url = new URL(`${prefix}/catalog/listings`, base);
     if (query.category) url.searchParams.set('category', query.category);
     if (query.artifactKind) url.searchParams.set('artifactKind', query.artifactKind);
     if (query.q) url.searchParams.set('q', query.q);
@@ -75,6 +89,7 @@ export function assertFreeblackmarketSecretsForProduction(
 
 export function createFreeblackmarketProvider(): MarketplaceProvider {
     const baseUrl = process.env.FREEBLACKMARKET_BASE_URL ?? 'https://api.freeblackmarket.com';
+    const apiPrefix = normalizeFreeblackmarketApiPrefix(process.env.FREEBLACKMARKET_API_PREFIX);
     const apiKey = process.env.FREEBLACKMARKET_API_KEY ?? '';
     const webhookSecret = process.env.FREEBLACKMARKET_WEBHOOK_SECRET ?? '';
     const enabled = envBool('FREEBLACKMARKET_ENABLED', true);
@@ -127,7 +142,7 @@ export function createFreeblackmarketProvider(): MarketplaceProvider {
         async fetchCatalog(query: CatalogQuery): Promise<NormalizedListing[]> {
             if (!enabled || !apiKey) return [];
             const data = await call<{ listings: UpstreamListing[] }>(
-                buildCatalogUrl(baseUrl, query).replace(baseUrl, '')
+                buildCatalogUrl(baseUrl, query, apiPrefix).replace(baseUrl, '')
             );
             return (
                 data.listings
@@ -148,7 +163,9 @@ export function createFreeblackmarketProvider(): MarketplaceProvider {
         async getListing(listingId: string): Promise<NormalizedListing | null> {
             if (!enabled || !apiKey) return null;
             try {
-                const raw = await call<UpstreamListing>(`/v1/catalog/listings/${listingId}`);
+                const raw = await call<UpstreamListing>(
+                    `${apiPrefix}/catalog/listings/${listingId}`
+                );
                 return toNormalized(raw);
             } catch {
                 return null;
@@ -156,7 +173,9 @@ export function createFreeblackmarketProvider(): MarketplaceProvider {
         },
 
         async createCheckoutSession(input: CheckoutInput): Promise<CheckoutResult> {
-            const path = input.embed ? '/v1/checkout/sessions?embed=1' : '/v1/checkout/sessions';
+            const path = input.embed
+                ? `${apiPrefix}/checkout/sessions?embed=1`
+                : `${apiPrefix}/checkout/sessions`;
             const raw = await call<{ url: string; id: string }>(path, {
                 method: 'POST',
                 headers: { 'idempotency-key': input.idempotencyKey },
@@ -176,7 +195,7 @@ export function createFreeblackmarketProvider(): MarketplaceProvider {
                 id: string;
                 slug?: string | null;
                 status?: CreatorListingResult['status'];
-            }>('/v1/seller/listings', {
+            }>(`${apiPrefix}/seller/listings`, {
                 method: 'POST',
                 body: JSON.stringify(input),
             });
@@ -192,7 +211,7 @@ export function createFreeblackmarketProvider(): MarketplaceProvider {
                 id: string;
                 slug?: string | null;
                 status?: CreatorListingResult['status'];
-            }>(`/v1/seller/listings/${providerListingId}/publish`, {
+            }>(`${apiPrefix}/seller/listings/${providerListingId}/publish`, {
                 method: 'POST',
                 body: JSON.stringify({}),
             });
@@ -204,7 +223,7 @@ export function createFreeblackmarketProvider(): MarketplaceProvider {
         },
 
         async archiveCreatorListing(providerListingId: string): Promise<void> {
-            await call<{ ok: boolean }>(`/v1/seller/listings/${providerListingId}`, {
+            await call<{ ok: boolean }>(`${apiPrefix}/seller/listings/${providerListingId}`, {
                 method: 'DELETE',
             });
         },
@@ -213,10 +232,13 @@ export function createFreeblackmarketProvider(): MarketplaceProvider {
             sellerUserId: string,
             returnUrl?: string
         ): Promise<CreatorOnboardingHandle> {
-            const raw = await call<{ url: string; expiresAt: string }>('/v1/seller/onboarding', {
-                method: 'POST',
-                body: JSON.stringify({ sellerUserId, returnUrl }),
-            });
+            const raw = await call<{ url: string; expiresAt: string }>(
+                `${apiPrefix}/seller/onboarding`,
+                {
+                    method: 'POST',
+                    body: JSON.stringify({ sellerUserId, returnUrl }),
+                }
+            );
             return { onboardingUrl: raw.url, expiresAt: raw.expiresAt };
         },
 

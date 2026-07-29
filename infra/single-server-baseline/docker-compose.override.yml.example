@@ -3,6 +3,11 @@
 # Copy to docker-compose.override.yml to enable. Requires BLACKOUT_DB_PASSWORD
 # and JWT_SECRET_PRIMARY in .env (see .env.example). Adjust CORS_ALLOWED_ORIGINS
 # to the frontend host(s) that will call this API.
+#
+# The FREEBLACKMARKET_* block wires the marketplace to a Free Black Market
+# backend running on the same host (RUNBOOK §19). One-time prerequisite:
+#   docker network create --internal bmc-bridge
+# Secrets come from .env; never inline them here.
 
 services:
 
@@ -15,9 +20,25 @@ services:
       MAIL_PROVIDER: "console"
       CORS_ALLOWED_ORIGINS: "https://chat.theblackout.app"
       CORS_ALLOW_CREDENTIALS: "true"
+      # Free Black Market marketplace link. The base URL targets the FBM
+      # container over bmc-bridge (the public hostname would hairpin through
+      # Cloudflare back to this host); the prefix replaces the provider's
+      # default '/v1' because FBM mounts the commerce surface under
+      # /v1/integrations/blackout/commerce.
+      FREEBLACKMARKET_BASE_URL: "http://free-black-market-backend-1:9000"
+      FREEBLACKMARKET_API_PREFIX: "/v1/integrations/blackout/commerce"
+      FREEBLACKMARKET_API_KEY: "${FREEBLACKMARKET_API_KEY}"
+      FREEBLACKMARKET_WEBHOOK_SECRET: "${FREEBLACKMARKET_WEBHOOK_SECRET}"
     depends_on:
       api-migrate:
         condition: service_completed_successfully
+    # Compose v2 unions this with the base file's [app, data]; all three are
+    # listed anyway so the full attachment set is visible here (and because
+    # legacy docker-compose v1 replaced lists instead of merging them).
+    networks:
+      - app
+      - data
+      - bmc-bridge
 
   api-migrate:
     image: blackout-api:hono
@@ -39,3 +60,12 @@ services:
       options:
         max-size: "10m"
         max-file: "5"
+
+networks:
+  # Dedicated cross-stack bridge shared with the Free Black Market compose
+  # project. Created once, out of band, as INTERNAL so joining it grants no
+  # internet egress (blackout-app/blackout-data stay internal: true too):
+  #   docker network create --internal bmc-bridge
+  bmc-bridge:
+    external: true
+    name: bmc-bridge
