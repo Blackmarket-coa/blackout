@@ -13,6 +13,9 @@ process.env.FREEBLACKMARKET_BASE_URL =
 process.env.FREEBLACKMARKET_API_KEY = process.env.FREEBLACKMARKET_API_KEY ?? 'test-api-key';
 process.env.FREEBLACKMARKET_WEBHOOK_SECRET =
     process.env.FREEBLACKMARKET_WEBHOOK_SECRET ?? 'test-webhook-secret';
+// URL assertions below expect the default '/v1' prefix; an ambient value
+// (e.g. a deploy .env loaded into the shell) must not leak into the suite.
+delete process.env.FREEBLACKMARKET_API_PREFIX;
 process.env.BLACKOUT_DB_MODE = process.env.BLACKOUT_DB_MODE ?? 'memory';
 
 const WEBHOOK_SECRET = process.env.FREEBLACKMARKET_WEBHOOK_SECRET;
@@ -332,6 +335,7 @@ test('FREEBLACKMARKET_API_PREFIX rewrites outbound commerce paths', async () => 
     assert.equal(normalizeFreeblackmarketApiPrefix('  '), '/v1');
     assert.equal(normalizeFreeblackmarketApiPrefix('v1/nested'), '/v1/nested');
     assert.equal(normalizeFreeblackmarketApiPrefix('/v1/nested/'), '/v1/nested');
+    assert.equal(normalizeFreeblackmarketApiPrefix('//v1//'), '/v1');
     assert.equal(normalizeFreeblackmarketApiPrefix('/'), '');
 
     const saved = process.env.FREEBLACKMARKET_API_PREFIX;

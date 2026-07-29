@@ -13,6 +13,9 @@ process.env.FREEBLACKMARKET_API_KEY = process.env.FREEBLACKMARKET_API_KEY ?? 'te
 process.env.FREEBLACKMARKET_WEBHOOK_SECRET =
     process.env.FREEBLACKMARKET_WEBHOOK_SECRET ?? 'test-webhook-secret';
 process.env.BLACKOUT_DB_MODE = process.env.BLACKOUT_DB_MODE ?? 'memory';
+// URL assertions below expect the default '/v1' prefix; an ambient value
+// (e.g. a deploy .env loaded into the shell) must not leak into the suite.
+delete process.env.FREEBLACKMARKET_API_PREFIX;
 
 interface FetchCall {
     url: string;
@@ -149,13 +152,12 @@ test('POST /v1/creator/listings rejects invalid drafts', async () => {
     assert.equal(response.status, 400);
 });
 
-test('GET /v1/creator/listings/mine returns the caller\'s listings only', async () => {
+test("GET /v1/creator/listings/mine returns the caller's listings only", async () => {
     resetForEachTest();
     fetchHandler = () =>
-        new Response(
-            JSON.stringify({ id: 'fbm-listing-2', slug: 'theme-x', status: 'draft' }),
-            { headers: { 'content-type': 'application/json' } }
-        );
+        new Response(JSON.stringify({ id: 'fbm-listing-2', slug: 'theme-x', status: 'draft' }), {
+            headers: { 'content-type': 'application/json' },
+        });
     await app.request('/v1/creator/listings', {
         method: 'POST',
         headers: authHeaders(),

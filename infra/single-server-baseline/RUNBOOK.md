@@ -577,8 +577,10 @@ docker network create --internal bmc-bridge
 
 ```bash
 # 1) Rebuild the api image from a repo checkout that has the
-#    FREEBLACKMARKET_API_PREFIX support (context is the repo root).
-cd ~/blackout-new
+#    FREEBLACKMARKET_API_PREFIX support (context is the repo root; the
+#    checkout lives wherever this host keeps it, e.g. ~/blackout-new on
+#    the current production host).
+cd <your-blackout-repo-checkout>
 docker build -f infra/single-server-baseline/Dockerfile.blackout-api-hono -t blackout-api:hono .
 
 # 2) FBM side: pull the override that attaches the backend to bmc-bridge.

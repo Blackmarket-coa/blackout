@@ -32,17 +32,20 @@ export function normalizeFreeblackmarketApiPrefix(raw?: string): string {
     const trimmed = raw?.trim();
     if (!trimmed) return '/v1';
     const withLeading = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
-    return withLeading.replace(/\/+$/, '');
+    // Collapse repeated leading slashes: a '//'-leading path would resolve as
+    // a protocol-relative URL and send the bearer key to a different host.
+    return withLeading.replace(/^\/+/, '/').replace(/\/+$/, '');
 }
 
-function buildCatalogUrl(base: string, query: CatalogQuery, prefix: string): string {
-    const url = new URL(`${prefix}/catalog/listings`, base);
-    if (query.category) url.searchParams.set('category', query.category);
-    if (query.artifactKind) url.searchParams.set('artifactKind', query.artifactKind);
-    if (query.q) url.searchParams.set('q', query.q);
-    if (query.cursor) url.searchParams.set('cursor', query.cursor);
-    if (query.limit) url.searchParams.set('limit', String(query.limit));
-    return url.toString();
+function buildCatalogPath(query: CatalogQuery, prefix: string): string {
+    const params = new URLSearchParams();
+    if (query.category) params.set('category', query.category);
+    if (query.artifactKind) params.set('artifactKind', query.artifactKind);
+    if (query.q) params.set('q', query.q);
+    if (query.cursor) params.set('cursor', query.cursor);
+    if (query.limit) params.set('limit', String(query.limit));
+    const qs = params.toString();
+    return qs ? `${prefix}/catalog/listings?${qs}` : `${prefix}/catalog/listings`;
 }
 
 interface UpstreamListing {
@@ -142,7 +145,7 @@ export function createFreeblackmarketProvider(): MarketplaceProvider {
         async fetchCatalog(query: CatalogQuery): Promise<NormalizedListing[]> {
             if (!enabled || !apiKey) return [];
             const data = await call<{ listings: UpstreamListing[] }>(
-                buildCatalogUrl(baseUrl, query, apiPrefix).replace(baseUrl, '')
+                buildCatalogPath(query, apiPrefix)
             );
             return (
                 data.listings
