@@ -81,12 +81,13 @@ rows), which returned empty before.
     leave the mock path. New `test/subscriptions-stripe-webhook.integration.test.ts` (4).
 -   **✅ Tier mapping (FBM).** `mapSubscriptionTier` (FBM
     `modules/marketplace-webhooks/models/blackout-events.ts`) only recognized the
-    §3 wire vocabulary (signal/signal*plus/community), but the first-party catalog
-    labels tiers with Blackout's consumer names (signal/coalition/sovereign), so
-    Coalition and Sovereign subscriptions silently collapsed to Signal at the emit
-    point. Now translates both vocabularies (unit-tested). Independent of the
-    native **Canopy** platform subscription (`services/subscriptions.ts`
-    `STRIPE_PRICE_CANOPY*\*`) — the two tier systems remain distinct by design.
+    §3 wire vocabulary (`signal` / `signal_plus` / `community`), but the
+    first-party catalog labels tiers with Blackout's consumer names
+    (`signal` / `coalition` / `sovereign`), so Coalition and Sovereign
+    subscriptions silently collapsed to Signal at the emit point. Now translates
+    both vocabularies (unit-tested). Independent of the native **Canopy** platform
+    subscription (`services/subscriptions.ts`, `STRIPE_PRICE_CANOPY_*`) — the two
+    tier systems remain distinct by design.
 
 ## 5. Blackout buyer/seller surfaces — status
 
