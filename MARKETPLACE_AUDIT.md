@@ -183,3 +183,42 @@ concurrency / after flag flips**, via the CI money-path soak.
 _All code changes in this session are committed on
 `claude/blackout-marketplace-audit-y51303` in both repos; each fix ships with
 tests. This document is the standing map for the remaining 🔧 items._
+
+## 11. Follow-ups landed (2026-07-30 addendum)
+
+Six of the §5–§7 🔧 items above have since landed on the same branch (each with
+its own commit + unit tests; 268 targeted backend tests green, backend
+`tsc --noEmit` clean):
+
+-   **✅ POS inventory** — POS orders now decrement stock via a compensated
+    workflow step (`workflows/pos/adjust-pos-inventory.ts`); unmanaged/missing
+    inventory is skipped, never failing the counter sale.
+-   **✅ `unique_inventory` complete** — beyond the create-time guard, a new
+    `order.placed` subscriber retires a sold one-of-a-kind listing (stock zeroed,
+    product → draft, `metadata.unique_inventory_sold`), idempotent on duplicate
+    events.
+-   **✅ Settlement emitters** — `quest.reward_settled` wired at the demand-bounty
+    milestone payout (fire-and-forget, PII-safe via `blackout-identity`);
+    `referral.attributed` + `ledger.usdc_converted` verified already wired.
+    `purchase.failed` / `purchase.chargebacked` / `ambassador.commission_paid`
+    remain documented blockers — FBM has no payment-failed, chargeback, or
+    ambassador flow to hook.
+-   **✅ Campaign escrow (dark)** — all-or-nothing settlement behind
+    `FBM_CAMPAIGN_ESCROW_LIVE`: backings escrow backer-wallet funds before the
+    row persists (402 + no row on ledger failure), `mark-failed` refunds every
+    escrowed backing idempotently, and a new admin `resolve-escrow` route
+    releases seller + optional platform-fee legs that sum exactly. Flag off =
+    byte-identical behavior.
+-   **✅ Wholesale v1** — `POST /store/carts/:id/wholesale` applies the buyer's
+    tier `discount_percent` with the shared base-price stash (no compounding)
+    and enforces MOQ before any write; quantity brackets can layer later.
+-   **✅ Per-listing-type rendering** — detail pages fetch `catalog_id` via a new
+    `GET /store/products/:id/listing-type` and render type-appropriate chrome,
+    with an extension slot reserved for the event/ticket panel.
+-   **✅ E2E buyer-journey spec** — `playwright/e2e/marketplace-buyer-journey.spec.ts`
+    (blackout), live-stack-gated like launch-smoke, covering browse → stub
+    checkout → entitlement → Library.
+
+**Still open:** consignment split (dark-flagged primitive), the ticket/event
+buyer path (per-listing-type event slot is ready for it), and the ticket-step
+unit-test backfill.
