@@ -15,6 +15,27 @@ import { parseNormalizedLifecycleEvent, parseNormalizedListing } from '@blackout
 
 const PROVIDER_ID = 'freeblackmarket' as const;
 
+// The §5 commerce API is served on FBM's Blackout integration surface, not at the
+// bare work-order paths. The bare paths either 404 or collide with FBM's public
+// storefront / seller-JWT routes (wrong auth). See the contract table in
+// free-black-market/docs/contracts/blackout-integration.md (§5).
+const COMMERCE_BASE = '/v1/integrations/blackout/commerce';
+
+/**
+ * Derive an FBM listing slug from a title. FBM's commerce/seller/listings route
+ * requires a `slug` matching /^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$/ (3–64 chars);
+ * the Blackout creator draft carries no slug, so synthesize a deterministic one.
+ */
+function slugifyTitle(title: string): string {
+    const slug = title
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 64)
+        .replace(/-+$/g, '');
+    return slug.length >= 3 ? slug : 'listing';
+}
+
 function envBool(key: string, fallback: boolean, env: NodeJS.ProcessEnv = process.env): boolean {
     const raw = env[key];
     if (raw === undefined) return fallback;
@@ -22,7 +43,7 @@ function envBool(key: string, fallback: boolean, env: NodeJS.ProcessEnv = proces
 }
 
 function buildCatalogUrl(base: string, query: CatalogQuery): string {
-    const url = new URL('/v1/catalog/listings', base);
+    const url = new URL(`${COMMERCE_BASE}/catalog/listings`, base);
     if (query.category) url.searchParams.set('category', query.category);
     if (query.artifactKind) url.searchParams.set('artifactKind', query.artifactKind);
     if (query.q) url.searchParams.set('q', query.q);
@@ -148,7 +169,9 @@ export function createFreeblackmarketProvider(): MarketplaceProvider {
         async getListing(listingId: string): Promise<NormalizedListing | null> {
             if (!enabled || !apiKey) return null;
             try {
-                const raw = await call<UpstreamListing>(`/v1/catalog/listings/${listingId}`);
+                const raw = await call<UpstreamListing>(
+                    `${COMMERCE_BASE}/catalog/listings/${listingId}`
+                );
                 return toNormalized(raw);
             } catch {
                 return null;
@@ -156,7 +179,9 @@ export function createFreeblackmarketProvider(): MarketplaceProvider {
         },
 
         async createCheckoutSession(input: CheckoutInput): Promise<CheckoutResult> {
-            const path = input.embed ? '/v1/checkout/sessions?embed=1' : '/v1/checkout/sessions';
+            const path = input.embed
+                ? `${COMMERCE_BASE}/checkout/sessions?embed=1`
+                : `${COMMERCE_BASE}/checkout/sessions`;
             const raw = await call<{ url: string; id: string }>(path, {
                 method: 'POST',
                 headers: { 'idempotency-key': input.idempotencyKey },
@@ -172,13 +197,30 @@ export function createFreeblackmarketProvider(): MarketplaceProvider {
         },
 
         async createCreatorListing(input: CreatorListingDraftInput): Promise<CreatorListingResult> {
+            // FBM's commerce/seller/listings route is strict: it requires a `slug`
+            // and rejects the artifact-specific fields (artifactKind/artifactPayload/
+            // artifactUploadId). Map the Blackout draft onto the catalog shape the
+            // route accepts; artifact bytes are delivered via the signed-bundle
+            // publish path, not this metadata call.
+            const body = {
+                sellerUserId: input.sellerUserId,
+                slug: slugifyTitle(input.title),
+                title: input.title,
+                description: input.description,
+                category: input.category,
+                priceCents: input.priceCents,
+                currency: input.currency,
+                entitlementKind: input.entitlementKind,
+                mediaUrls: input.mediaUrls,
+                tags: input.tags,
+            };
             const raw = await call<{
                 id: string;
                 slug?: string | null;
                 status?: CreatorListingResult['status'];
-            }>('/v1/seller/listings', {
+            }>(`${COMMERCE_BASE}/seller/listings`, {
                 method: 'POST',
-                body: JSON.stringify(input),
+                body: JSON.stringify(body),
             });
             return {
                 providerListingId: raw.id,
@@ -192,7 +234,7 @@ export function createFreeblackmarketProvider(): MarketplaceProvider {
                 id: string;
                 slug?: string | null;
                 status?: CreatorListingResult['status'];
-            }>(`/v1/seller/listings/${providerListingId}/publish`, {
+            }>(`${COMMERCE_BASE}/seller/listings/${providerListingId}/publish`, {
                 method: 'POST',
                 body: JSON.stringify({}),
             });
@@ -204,7 +246,7 @@ export function createFreeblackmarketProvider(): MarketplaceProvider {
         },
 
         async archiveCreatorListing(providerListingId: string): Promise<void> {
-            await call<{ ok: boolean }>(`/v1/seller/listings/${providerListingId}`, {
+            await call<{ ok: boolean }>(`${COMMERCE_BASE}/seller/listings/${providerListingId}`, {
                 method: 'DELETE',
             });
         },
@@ -213,10 +255,13 @@ export function createFreeblackmarketProvider(): MarketplaceProvider {
             sellerUserId: string,
             returnUrl?: string
         ): Promise<CreatorOnboardingHandle> {
-            const raw = await call<{ url: string; expiresAt: string }>('/v1/seller/onboarding', {
-                method: 'POST',
-                body: JSON.stringify({ sellerUserId, returnUrl }),
-            });
+            const raw = await call<{ url: string; expiresAt: string }>(
+                `${COMMERCE_BASE}/seller/onboarding`,
+                {
+                    method: 'POST',
+                    body: JSON.stringify({ sellerUserId, returnUrl }),
+                }
+            );
             return { onboardingUrl: raw.url, expiresAt: raw.expiresAt };
         },
 

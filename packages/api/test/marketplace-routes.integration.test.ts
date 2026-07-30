@@ -347,7 +347,9 @@ test('checkout records counter and returns redirect from freeblackmarket', async
     assert.match(json.redirectUrl, /sess-1$/);
     assert.equal(getCounter('marketplace_checkout_created_total'), 1);
 
-    const checkoutCall = fetchCalls.find((call) => call.url.includes('/v1/checkout/sessions'));
+    const checkoutCall = fetchCalls.find((call) =>
+        call.url.includes('/v1/integrations/blackout/commerce/checkout/sessions')
+    );
     assert.notEqual(checkoutCall, undefined);
     const idemHeader = (checkoutCall!.init?.headers as Record<string, string>)['idempotency-key'];
     assert.equal(typeof idemHeader, 'string');

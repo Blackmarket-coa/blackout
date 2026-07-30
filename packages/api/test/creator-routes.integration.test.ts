@@ -99,7 +99,9 @@ test('POST /v1/creator/listings creates a draft via the upstream provider', asyn
     assert.equal(json.listing.title, 'Cool stickers');
     assert.equal(json.listing.providerListingId, 'fbm-listing-1');
     assert.equal(json.listing.status, 'draft');
-    const sellerCalls = fetchCalls.filter((c) => c.url.endsWith('/v1/seller/listings'));
+    const sellerCalls = fetchCalls.filter((c) =>
+        c.url.endsWith('/v1/integrations/blackout/commerce/seller/listings')
+    );
     assert.equal(sellerCalls.length, 1);
 });
 
@@ -149,13 +151,12 @@ test('POST /v1/creator/listings rejects invalid drafts', async () => {
     assert.equal(response.status, 400);
 });
 
-test('GET /v1/creator/listings/mine returns the caller\'s listings only', async () => {
+test("GET /v1/creator/listings/mine returns the caller's listings only", async () => {
     resetForEachTest();
     fetchHandler = () =>
-        new Response(
-            JSON.stringify({ id: 'fbm-listing-2', slug: 'theme-x', status: 'draft' }),
-            { headers: { 'content-type': 'application/json' } }
-        );
+        new Response(JSON.stringify({ id: 'fbm-listing-2', slug: 'theme-x', status: 'draft' }), {
+            headers: { 'content-type': 'application/json' },
+        });
     await app.request('/v1/creator/listings', {
         method: 'POST',
         headers: authHeaders(),
@@ -290,7 +291,7 @@ test('DELETE /v1/creator/listings/:id 404s for an unknown listing', async () => 
 test('POST /v1/creator/payouts/onboarding returns the provider onboarding handle', async () => {
     resetForEachTest();
     fetchHandler = (url) => {
-        if (url.endsWith('/v1/seller/onboarding')) {
+        if (url.endsWith('/v1/integrations/blackout/commerce/seller/onboarding')) {
             return new Response(
                 JSON.stringify({
                     url: 'https://api.freeblackmarket.test/onboard/abc',
@@ -316,7 +317,7 @@ test('POST /v1/creator/payouts/onboarding returns the provider onboarding handle
 test('POST /v1/marketplace/checkout passes embed flag to provider', async () => {
     resetForEachTest();
     fetchHandler = (url) => {
-        if (url.includes('/v1/checkout/sessions')) {
+        if (url.includes('/v1/integrations/blackout/commerce/checkout/sessions')) {
             return new Response(
                 JSON.stringify({ url: 'https://api.freeblackmarket.test/embed/x', id: 'sess-1' }),
                 { headers: { 'content-type': 'application/json' } }
@@ -336,7 +337,9 @@ test('POST /v1/marketplace/checkout passes embed flag to provider', async () => 
     assert.equal(response.status, 200);
     const json = (await response.json()) as { embed: boolean };
     assert.equal(json.embed, true);
-    const checkoutCall = fetchCalls.find((c) => c.url.includes('/v1/checkout/sessions'));
+    const checkoutCall = fetchCalls.find((c) =>
+        c.url.includes('/v1/integrations/blackout/commerce/checkout/sessions')
+    );
     assert.ok(checkoutCall, 'should have called upstream checkout');
     assert.ok(checkoutCall!.url.includes('embed=1'), 'embed query param should be set');
 });
