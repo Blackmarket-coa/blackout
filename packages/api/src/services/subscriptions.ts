@@ -299,6 +299,61 @@ function ensureUserRecord(userId: string): SubscriptionRecord {
     return seed;
 }
 
+/**
+ * Sync the real Stripe customer id (`cus_…`) onto a user's subscription record.
+ * Checkout passes `client_reference_id` (the Blackout user id), not a customer
+ * id, so the real `cus_…` only becomes known via the checkout.session.completed
+ * webhook. Until this runs, `getSubscription` keeps the mock `cus_<userId>` and
+ * the Billing Portal falls back to its mock path. Idempotent — re-syncing the
+ * same id only bumps `updatedAt`.
+ */
+export function syncStripeCustomerId(
+    userId: string,
+    stripeCustomerId: string
+): { updated: boolean; stripeCustomerId: string } {
+    const record = ensureUserRecord(userId);
+    const updated = record.stripeCustomerId !== stripeCustomerId;
+    record.stripeCustomerId = stripeCustomerId;
+    record.updatedAt = nowIso();
+    subscriptions.set(userId, record);
+    if (updated) addAudit(userId, 'stripe.customer_synced', 'system', { stripeCustomerId });
+    return { updated, stripeCustomerId };
+}
+
+export type StripeCheckoutCompletedEvent = {
+    id: string;
+    type: string;
+    data: { object: { client_reference_id?: string | null; customer?: string | null } };
+};
+
+/**
+ * Handle a Stripe `checkout.session.completed` event by syncing the real
+ * `cus_…` onto the subscription record identified by `client_reference_id`.
+ * This is the step the go-live runbook calls out as required before advertising
+ * the Billing Portal. Idempotent by Stripe event id (shared de-dupe set).
+ */
+export function applyStripeCheckoutCompleted(event: StripeCheckoutCompletedEvent): {
+    processed: boolean;
+    reason?: string;
+    userId?: string;
+} {
+    if (event.type !== 'checkout.session.completed') {
+        return { processed: false, reason: 'ignored_event_type' };
+    }
+    if (processedWebhookEvents.has(event.id)) {
+        return { processed: false, reason: 'already_processed' };
+    }
+    const session = event.data?.object ?? {};
+    const userId = session.client_reference_id ?? undefined;
+    const customer = typeof session.customer === 'string' ? session.customer : undefined;
+    if (!userId || !customer) {
+        return { processed: false, reason: 'missing_reference_or_customer' };
+    }
+    syncStripeCustomerId(userId, customer);
+    processedWebhookEvents.add(event.id);
+    return { processed: true, userId };
+}
+
 export type SubscriptionWebhookEvent = {
     eventId: string;
     type:
