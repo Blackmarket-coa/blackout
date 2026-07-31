@@ -53,7 +53,14 @@ export type UUID = string;
 export interface UserRecord {
     id: UUID;
     username: string;
-    email: string;
+    /**
+     * Unset for emailless accounts (Matrix token-exchange / account-number
+     * provisioning). Stored as NULL in Postgres — never '' — so the
+     * users_email_key UNIQUE constraint (which exempts NULL but not '')
+     * cannot collide between emailless users. Legacy file-store records may
+     * still carry '', so treat '' and undefined alike when reading.
+     */
+    email?: string;
     passwordHash: string;
     reputationScore: number;
     reputationTier: 'member' | 'vendor' | 'coordinator' | 'arbiter';

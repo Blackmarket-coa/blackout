@@ -270,18 +270,14 @@ auth.post('/register', async (c) => {
     // because the user is already past the credential-check step.
     const issued = issueEmailVerificationToken({
         userId: user.id,
-        email: user.email,
+        email,
         ip: c.req.header('x-forwarded-for')?.split(',')[0]?.trim(),
         userAgent: c.req.header('user-agent'),
     });
     let emailVerificationSent = false;
     if (issued.kind === 'ok') {
         emailVerificationTokensIssuedTotal.inc({ outcome: 'register' });
-        const dispatch = await dispatchVerificationEmail(
-            user.email,
-            issued.token,
-            issued.record.id
-        );
+        const dispatch = await dispatchVerificationEmail(email, issued.token, issued.record.id);
         emailVerificationSent = dispatch.ok;
     }
 
@@ -372,6 +368,11 @@ auth.post('/email/verify/request', async (c) => {
     // logged-in attacker from triggering verification mails to an arbitrary
     // address.
     const target = parsed.email ?? userRecord.email;
+    if (!target) {
+        // Emailless account (Matrix exchange / account-number signup): there
+        // is no address on file to verify.
+        return c.json({ code: 'no_email_on_file', message: 'Account has no email address' }, 400);
+    }
     const issued = issueEmailVerificationToken({
         userId: userRecord.id,
         email: target,
@@ -559,10 +560,12 @@ auth.post('/matrix/exchange', async (c) => {
         // confirmed it), so there's no second account to create — we only
         // need a Blackout-side row to hang sessions, invitations, and
         // entitlements off of. Mirrors the register flow minus the Matrix call.
+        // No email on these accounts: leave it unset (NULL in Postgres, where
+        // '' would collide on users_email_key as soon as a second emailless
+        // user exists — UNIQUE exempts NULL, not '').
         user = db.createUser({
             id: crypto.randomUUID(),
             username: localpart,
-            email: '',
             passwordHash: '',
             reputationScore: 0,
             reputationTier: 'member',
@@ -715,7 +718,7 @@ auth.post('/password/reset/request', async (c) => {
     if (issued) {
         try {
             await getMailer().send({
-                to: issued.user.email,
+                to: issued.email,
                 subject: 'Reset your Blackout password',
                 text: `Use this token to reset your password: ${issued.token}\n\nIt expires in 30 minutes. If you did not request this, ignore this email.`,
                 kind: 'password_reset',
@@ -786,6 +789,15 @@ auth.post('/account/delete/request', async (c) => {
     if (userOrResp instanceof Response) return userOrResp;
     const user = userOrResp;
 
+    // The confirmation token is only ever delivered by email; an emailless
+    // account could never complete the flow, so refuse up front instead of
+    // returning an ok it can't act on.
+    const record = db.getUserById(user.sub);
+    if (!record) return c.json({ code: 'unauthorized', message: 'Unauthorized' }, 401);
+    if (!record.email) {
+        return c.json({ code: 'no_email_on_file', message: 'Account has no email address' }, 400);
+    }
+
     const issued = requestAccountDeletion({
         userId: user.sub,
         ip: c.req.header('x-forwarded-for')?.split(',')[0]?.trim(),
@@ -795,7 +807,7 @@ auth.post('/account/delete/request', async (c) => {
 
     try {
         await getMailer().send({
-            to: issued.user.email,
+            to: record.email,
             subject: 'Confirm Blackout account deletion',
             text: `You (or someone with access to your account) requested account deletion.\n\nUse this token to confirm deletion: ${issued.token}\n\nIt expires in 30 minutes. If this was not you, change your password immediately and ignore this email — no data has been deleted.`,
             kind: 'account_deletion',
