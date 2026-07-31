@@ -1,5 +1,6 @@
 import type { Context, Next } from 'hono';
 import { readRedisRuntimeConfig } from '../config/redis';
+import { getAuthUser } from './require-user';
 import { log } from '../telemetry/logger';
 import { rateLimitHitsTotal } from '../telemetry/metrics';
 
@@ -204,14 +205,21 @@ export const clipWriteRateLimit = createRateLimit({
     maxRequests: Number.isFinite(clipWriteMax) && clipWriteMax > 0 ? clipWriteMax : 30,
 });
 
-// User-facing integration token endpoints (twitch-compat bot tokens, widget
-// alert tokens) are fetched on settings-page mount. They must NOT share the
-// tight `auth` bucket with login/exchange, or a normal page load competes with
-// sign-in traffic and 429s. Own bucket, more generous. Override with
-// INTEGRATIONS_RATE_LIMIT_MAX.
+// User-facing integration settings surfaces: chat bridges (Twitch/YouTube/
+// Kick), discord-compat + outbound webhooks, simulcast destinations + RTMP
+// fanout, OBS-WS passwords, twitch-compat bot tokens, Twitch extensions, and
+// widget alert tokens. The streaming hub stacks these panels and each fires a
+// list fetch on mount, so a single page view is ~10 requests. They must NOT
+// share the tight `auth` bucket with login/exchange, or a normal page load
+// competes with sign-in traffic and 429s — and, because `auth` is fail-closed,
+// a Redis blip would take the whole settings page down with it. Own bucket,
+// sized for a few page views per minute, keyed per authenticated user (IP for
+// anonymous callers) so users behind one NAT don't share a budget. Override
+// with INTEGRATIONS_RATE_LIMIT_MAX.
 const integrationsMax = Number.parseInt(process.env.INTEGRATIONS_RATE_LIMIT_MAX ?? '', 10);
 export const integrationsRateLimit = createRateLimit({
     bucket: 'integrations',
     windowMs: 60_000,
-    maxRequests: Number.isFinite(integrationsMax) && integrationsMax > 0 ? integrationsMax : 30,
+    maxRequests: Number.isFinite(integrationsMax) && integrationsMax > 0 ? integrationsMax : 60,
+    identify: (c) => getAuthUser(c)?.sub ?? null,
 });
