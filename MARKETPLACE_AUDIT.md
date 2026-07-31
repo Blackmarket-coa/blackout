@@ -219,6 +219,45 @@ its own commit + unit tests; 268 targeted backend tests green, backend
     (blackout), live-stack-gated like launch-smoke, covering browse → stub
     checkout → entitlement → Library.
 
-**Still open:** consignment split (dark-flagged primitive), the ticket/event
-buyer path (per-listing-type event slot is ready for it), and the ticket-step
-unit-test backfill.
+## 12. Follow-ups landed — wave 2 + adversarial hardening (2026-07-30)
+
+The remaining items from §11 landed, and an adversarial money-path review (three
+lenses: ledger correctness, compliance/dark-flag, partial-failure) drove a round
+of fixes before commit. All backend suites, lint, and `medusa build` green;
+storefront `tsc` + vitest green.
+
+-   **✅ Consignment split (dark, `FBM_CONSIGNMENT_SPLIT_LIVE`)** — atomic
+    multi-party split at order complete. Review-driven fixes: `processRefund`
+    now reverses **both** seller-side legs (was one → overdraw); an idempotency
+    guard skips re-settlement when the order's `-purchase` leg exists (a
+    flag-flip redelivery would otherwise double-debit escrow); `consignor_seller_id`
+    (vendor-editable metadata) is verified against a real seller before routing
+    revenue; a stray NUL byte that made the helper a binary file was removed.
+-   **✅ Ledger hardening (core)** — `getOrCreateSystemAccount` now pins
+    `owner_id:"system"`. Per-subject escrows (subcontract, campaign) are also
+    `ESCROW`+`SYSTEM`, so the singleton lookup could return the wrong account and
+    misroute an order payment/refund. This was a latent bug in the pre-existing
+    `processOrderPayment`/`processRefund` paths, widened by campaign escrow.
+-   **✅ Ticket/event buyer path** — full storefront path (date → seat → cart →
+    `complete-tickets`). Review-driven fixes: seat identity keyed on
+    `venue_row_id` (was variant/row-type → cross-row collisions); mixed carts
+    (tickets + non-tickets) are blocked at checkout so they can't bypass the
+    marketplace split completion.
+-   **✅ Ticket-booking correctness (pre-existing bugs surfaced by the new
+    tests)** — the already-purchased-seat guard compared a DB `Date` to a string
+    with `===` (always false → seats sellable twice); seated items missing
+    `venue_row_id` passed validation then were silently dropped by
+    create-ticket-purchases (charged, no admission); the compensation handler
+    wasn't awaited. All fixed, with 21 step-level unit tests.
+
+**Open security follow-up (documented, not yet fixed):** the wholesale and
+**pre-existing** sliding-scale tier repricing routes read the pricing base from
+buyer-writable line-item metadata (`sliding_scale_base_unit_price`). A buyer able
+to write line-item metadata could poison the base to enlarge a discount. Fix:
+re-derive the base from the variant's calculated price set instead of trusting
+the stash (applies to both `carts/[id]/tier` and `carts/[id]/wholesale`). Not
+introduced here — the wholesale route inherited the pattern — but worth closing.
+
+**Also deferred:** deeper server-side venue-binding validation (that
+`venue_row_id` belongs to the purchased variant's row type/venue), beyond the
+presence + identity checks landed here.
