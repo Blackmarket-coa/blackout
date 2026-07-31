@@ -13,6 +13,9 @@ process.env.FREEBLACKMARKET_BASE_URL =
 process.env.FREEBLACKMARKET_API_KEY = process.env.FREEBLACKMARKET_API_KEY ?? 'test-api-key';
 process.env.FREEBLACKMARKET_WEBHOOK_SECRET =
     process.env.FREEBLACKMARKET_WEBHOOK_SECRET ?? 'test-webhook-secret';
+// URL assertions below expect the default commerce prefix; an ambient value
+// (e.g. a deploy .env loaded into the shell) must not leak into the suite.
+delete process.env.FREEBLACKMARKET_API_PREFIX;
 process.env.BLACKOUT_DB_MODE = process.env.BLACKOUT_DB_MODE ?? 'memory';
 
 const WEBHOOK_SECRET = process.env.FREEBLACKMARKET_WEBHOOK_SECRET;
@@ -319,6 +322,62 @@ test('catalog falls back to last known snapshot when freeblackmarket is unreacha
     assert.equal(fallbackBody.listings.length, 1);
     assert.equal(fallbackBody.listings[0]!.providerListingId, 'listing-cached');
     assert.equal(getCounter('marketplace_catalog_fetch_failed_total'), 1);
+});
+
+test('FREEBLACKMARKET_API_PREFIX rewrites outbound commerce paths', async () => {
+    resetForEachTest();
+    const { resetMarketplaceRegistry } = await import('../src/integrations/marketplace');
+    const { normalizeFreeblackmarketApiPrefix } = await import(
+        '../src/integrations/marketplace/freeblackmarket'
+    );
+
+    const COMMERCE_BASE = '/v1/integrations/blackout/commerce';
+    assert.equal(normalizeFreeblackmarketApiPrefix(undefined), COMMERCE_BASE);
+    assert.equal(normalizeFreeblackmarketApiPrefix('  '), COMMERCE_BASE);
+    assert.equal(normalizeFreeblackmarketApiPrefix('v1/nested'), '/v1/nested');
+    assert.equal(normalizeFreeblackmarketApiPrefix('/v1/nested/'), '/v1/nested');
+    assert.equal(normalizeFreeblackmarketApiPrefix('//v1//'), '/v1');
+    assert.equal(normalizeFreeblackmarketApiPrefix('/'), '');
+
+    const saved = process.env.FREEBLACKMARKET_API_PREFIX;
+    try {
+        // Unique q per request: the listings cache key includes q, so this is a
+        // guaranteed cache miss and must trigger an outbound fetch.
+        const defaulted = await app.request(
+            '/v1/marketplace/listings?providerId=freeblackmarket&q=prefix-default-buster',
+            { headers: authHeaders() }
+        );
+        assert.equal(defaulted.status, 200);
+        assert.ok(
+            fetchCalls.some((call) =>
+                call.url.startsWith(
+                    `https://api.freeblackmarket.test${COMMERCE_BASE}/catalog/listings`
+                )
+            )
+        );
+
+        fetchCalls.length = 0;
+        process.env.FREEBLACKMARKET_API_PREFIX = '/custom/mount';
+        // The provider captures env at construction; rebuild the registry.
+        resetMarketplaceRegistry();
+
+        const prefixed = await app.request(
+            '/v1/marketplace/listings?providerId=freeblackmarket&q=prefix-custom-buster',
+            { headers: authHeaders() }
+        );
+        assert.equal(prefixed.status, 200);
+        const catalogCall = fetchCalls.find((call) => call.url.includes('/catalog/listings'));
+        assert.ok(catalogCall, 'expected an outbound catalog fetch');
+        assert.ok(
+            catalogCall.url.startsWith(
+                'https://api.freeblackmarket.test/custom/mount/catalog/listings'
+            )
+        );
+    } finally {
+        if (saved === undefined) delete process.env.FREEBLACKMARKET_API_PREFIX;
+        else process.env.FREEBLACKMARKET_API_PREFIX = saved;
+        resetMarketplaceRegistry();
+    }
 });
 
 test('checkout records counter and returns redirect from freeblackmarket', async () => {

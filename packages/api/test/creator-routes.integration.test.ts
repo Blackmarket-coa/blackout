@@ -13,6 +13,9 @@ process.env.FREEBLACKMARKET_API_KEY = process.env.FREEBLACKMARKET_API_KEY ?? 'te
 process.env.FREEBLACKMARKET_WEBHOOK_SECRET =
     process.env.FREEBLACKMARKET_WEBHOOK_SECRET ?? 'test-webhook-secret';
 process.env.BLACKOUT_DB_MODE = process.env.BLACKOUT_DB_MODE ?? 'memory';
+// URL assertions below expect the default commerce prefix; an ambient value
+// (e.g. a deploy .env loaded into the shell) must not leak into the suite.
+delete process.env.FREEBLACKMARKET_API_PREFIX;
 
 interface FetchCall {
     url: string;

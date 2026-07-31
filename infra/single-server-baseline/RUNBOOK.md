@@ -1,49 +1,52 @@
 # Blackout single-server production baseline runbook
 
 This runbook provides deployment manifests and operating steps for:
-- Blackout frontend static app
-- Blackout API
-- Synapse
-- PostgreSQL
-- Redis
-- coturn
+
+-   Blackout frontend static app
+-   Blackout API
+-   Synapse
+-   PostgreSQL
+-   Redis
+-   coturn
 
 ## 1) Layout and persistence model
 
 ## Persistent volumes
 
-| Volume | Contents | Backup criticality |
-|---|---|---|
-| `blackout-postgres-data` | PostgreSQL data files | Critical |
-| `blackout-redis-data` | Redis AOF | Medium |
-| `blackout-synapse-data` | Synapse config/state/keys | Critical |
-| `blackout-synapse-media` | Synapse media store | Critical |
-| `blackout-coturn-data` | coturn runtime state | Medium |
-| `blackout-letsencrypt` | TLS certificates and renewal state | Critical |
-| `blackout-certbot-webroot` | ACME webroot challenge files | Low |
+| Volume                     | Contents                           | Backup criticality |
+| -------------------------- | ---------------------------------- | ------------------ |
+| `blackout-postgres-data`   | PostgreSQL data files              | Critical           |
+| `blackout-redis-data`      | Redis AOF                          | Medium             |
+| `blackout-synapse-data`    | Synapse config/state/keys          | Critical           |
+| `blackout-synapse-media`   | Synapse media store                | Critical           |
+| `blackout-coturn-data`     | coturn runtime state               | Medium             |
+| `blackout-letsencrypt`     | TLS certificates and renewal state | Critical           |
+| `blackout-certbot-webroot` | ACME webroot challenge files       | Low                |
 
 ## Least-privilege networking
 
-- `edge` network: externally reachable services (`reverse-proxy`, `coturn`, `certbot`).
-- `app` network (`internal: true`): east-west app traffic (`frontend`, `api`, `synapse`, plus proxy/coturn).
-- `data` network (`internal: true`): only stateful services and consumers (`postgres`, `redis`, `api`, `synapse`).
+-   `edge` network: externally reachable services (`reverse-proxy`, `coturn`, `certbot`).
+-   `app` network (`internal: true`): east-west app traffic (`frontend`, `api`, `synapse`, plus proxy/coturn).
+-   `data` network (`internal: true`): only stateful services and consumers (`postgres`, `redis`, `api`, `synapse`).
+-   `bmc-bridge` network (external, created `--internal`): cross-stack link
+    between `api` and the Free Black Market backend only — see §19.
 
 No database or Redis ports are published to the host.
 
 ## 2) Pre-deploy checklist
 
 1. DNS records point all required names to this server:
-   - `theblackout.app`
-   - `chat.theblackout.app`
-   - `api.theblackout.app`
-   - `matrix.theblackout.app`
-   - `turn.theblackout.app`
+    - `theblackout.app`
+    - `chat.theblackout.app`
+    - `api.theblackout.app`
+    - `matrix.theblackout.app`
+    - `turn.theblackout.app`
 2. Open firewall ports:
-   - `80/tcp`, `443/tcp`
-   - `3478/tcp`, `3478/udp`, `5349/tcp`
-   - relay range `49160-49200/udp`
-   - LiveKit RTC: `7881/tcp`, media range `50100-50200/udp` (the SFU
-     websocket itself stays behind nginx at `/livekit/sfu`)
+    - `80/tcp`, `443/tcp`
+    - `3478/tcp`, `3478/udp`, `5349/tcp`
+    - relay range `49160-49200/udp`
+    - LiveKit RTC: `7881/tcp`, media range `50100-50200/udp` (the SFU
+      websocket itself stays behind nginx at `/livekit/sfu`)
 3. Install Docker Engine and Compose plugin.
 4. Copy this folder to `/opt/blackout`.
 5. Create env file:
@@ -144,11 +147,12 @@ sudo systemctl enable --now blackout-certbot-renew.timer
 Backup hook script: `backup/backup.sh`
 
 Captured artifacts:
-- Postgres logical dump (`postgres.sql.gz`)
-- Synapse volumes archive (`synapse-data-media.tgz`)
-- Rendered Synapse and coturn config
-- Compose manifest and `.env`
-- SHA256 manifest
+
+-   Postgres logical dump (`postgres.sql.gz`)
+-   Synapse volumes archive (`synapse-data-media.tgz`)
+-   Rendered Synapse and coturn config
+-   Compose manifest and `.env`
+-   SHA256 manifest
 
 Manual run:
 
@@ -214,11 +218,13 @@ docker compose up -d
 ```bash
 docker compose ps
 ```
+
 Expected: core services `Up` and healthy; `certbot` is a manual profile service used by systemd renewal jobs.
 
 ```bash
 docker compose logs --tail=100 synapse api reverse-proxy
 ```
+
 Expected: no crash loops; successful upstream traffic.
 
 ```bash
@@ -228,35 +234,36 @@ curl -I https://api.theblackout.app/health
 curl -I https://matrix.theblackout.app/_matrix/client/versions
 curl -I https://turn.theblackout.app/healthz
 ```
+
 Expected: `200`/`204` (or `404` for `/healthz` if coturn metrics disabled).
 
 ## 10) Launch security baseline (single-server)
 
 ### Security controls table
 
-| Control area | Baseline control | Implementation location | Owner | Cadence |
-|---|---|---|---|---|
-| Public surface minimization | Only `80/443` (web) and TURN listener ports are exposed; DB/Redis stay private on internal networks. | `docker-compose.yml` (`ports`, `expose`, internal networks), Nginx host routing. | Platform Ops | Continuous |
-| Admin route lockdown | Deny `/_synapse/admin` at the reverse proxy so admin APIs are not internet-reachable. | `nginx/sites-available/theblackout.app.conf` | Platform Ops + Security | Continuous |
-| Login rate limiting | Nginx IP-based request throttling on Matrix login API. | `nginx/nginx.conf` + matrix server `location` limits | Security Engineering | Continuous |
-| Registration rate limiting | Nginx IP-based throttling on Matrix registration API plus Synapse registration enabled by default with verification requirements enforced. | `nginx/nginx.conf`, `theblackout.app.conf`, `synapse/homeserver.yaml.template` | Security Engineering | Continuous |
-| Media upload rate limiting | Nginx throttling on media upload route to reduce flood and storage abuse risk. | `nginx/nginx.conf` + matrix server `location` limits | Platform Ops | Continuous |
-| Federation ingress rate limiting | Nginx throttling on federation/key ingress endpoints to contain burst abuse from remote homeservers. | `nginx/nginx.conf` + matrix server `location` limits | Security Engineering | Continuous |
-| Secret rotation policy | Rotate DB/Redis/Synapse/TURN secrets on a fixed schedule and after incidents; document completion in change log. | `.env`, `synapse/homeserver.yaml`, `coturn/turnserver.conf` | Security + On-call | Every 90 days + on incident |
-| TLS expiry alerting | Weekly certificate expiry check with warning threshold at 21 days; alert on-call if below threshold. | systemd timer + OpenSSL check command | Platform Ops | Weekly |
-| Bot abuse mitigation runbook | Tie launch baseline to bot-abuse incident workflow (detect, contain, challenge, block, review). | `RUNBOOK.md` §11 | Security On-call | During incidents + monthly tabletop |
+| Control area                     | Baseline control                                                                                                                           | Implementation location                                                          | Owner                   | Cadence                             |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------- | ----------------------- | ----------------------------------- |
+| Public surface minimization      | Only `80/443` (web) and TURN listener ports are exposed; DB/Redis stay private on internal networks.                                       | `docker-compose.yml` (`ports`, `expose`, internal networks), Nginx host routing. | Platform Ops            | Continuous                          |
+| Admin route lockdown             | Deny `/_synapse/admin` at the reverse proxy so admin APIs are not internet-reachable.                                                      | `nginx/sites-available/theblackout.app.conf`                                     | Platform Ops + Security | Continuous                          |
+| Login rate limiting              | Nginx IP-based request throttling on Matrix login API.                                                                                     | `nginx/nginx.conf` + matrix server `location` limits                             | Security Engineering    | Continuous                          |
+| Registration rate limiting       | Nginx IP-based throttling on Matrix registration API plus Synapse registration enabled by default with verification requirements enforced. | `nginx/nginx.conf`, `theblackout.app.conf`, `synapse/homeserver.yaml.template`   | Security Engineering    | Continuous                          |
+| Media upload rate limiting       | Nginx throttling on media upload route to reduce flood and storage abuse risk.                                                             | `nginx/nginx.conf` + matrix server `location` limits                             | Platform Ops            | Continuous                          |
+| Federation ingress rate limiting | Nginx throttling on federation/key ingress endpoints to contain burst abuse from remote homeservers.                                       | `nginx/nginx.conf` + matrix server `location` limits                             | Security Engineering    | Continuous                          |
+| Secret rotation policy           | Rotate DB/Redis/Synapse/TURN secrets on a fixed schedule and after incidents; document completion in change log.                           | `.env`, `synapse/homeserver.yaml`, `coturn/turnserver.conf`                      | Security + On-call      | Every 90 days + on incident         |
+| TLS expiry alerting              | Weekly certificate expiry check with warning threshold at 21 days; alert on-call if below threshold.                                       | systemd timer + OpenSSL check command                                            | Platform Ops            | Weekly                              |
+| Bot abuse mitigation runbook     | Tie launch baseline to bot-abuse incident workflow (detect, contain, challenge, block, review).                                            | `RUNBOOK.md` §11                                                                 | Security On-call        | During incidents + monthly tabletop |
 
 ### Implementation checklist
 
-- [ ] Confirm host firewall allows only required ingress: `80/tcp`, `443/tcp`, TURN (`3478/tcp+udp`, `5349/tcp`, relay UDP range).
-- [ ] Deploy latest Nginx config with rate-limit zones and admin API deny rule.
-- [ ] Confirm Synapse launch posture matches intended registration posture (open by default, or explicitly disabled for invite-only cohorts). For the invite-only / one-time-token flow see [`synapse/ENABLE_REGISTRATION.md`](synapse/ENABLE_REGISTRATION.md).
-- [ ] Set and store strong unique secrets in `.env` for DB/Redis/Synapse/TURN.
-- [ ] Execute secret rotation procedure (generate new secrets, update templates, restart impacted services, revoke old material).
-- [ ] Install weekly TLS expiry alert via systemd timer or cron (21-day warning threshold).
-- [ ] Wire alerts to on-call channel (email/PagerDuty/Slack webhook) and record test alert evidence.
-- [ ] Review bot-abuse mitigation runbook with on-call before launch.
-- [ ] Run verification commands in §12 and attach outputs to launch ticket.
+-   [ ] Confirm host firewall allows only required ingress: `80/tcp`, `443/tcp`, TURN (`3478/tcp+udp`, `5349/tcp`, relay UDP range).
+-   [ ] Deploy latest Nginx config with rate-limit zones and admin API deny rule.
+-   [ ] Confirm Synapse launch posture matches intended registration posture (open by default, or explicitly disabled for invite-only cohorts). For the invite-only / one-time-token flow see [`synapse/ENABLE_REGISTRATION.md`](synapse/ENABLE_REGISTRATION.md).
+-   [ ] Set and store strong unique secrets in `.env` for DB/Redis/Synapse/TURN.
+-   [ ] Execute secret rotation procedure (generate new secrets, update templates, restart impacted services, revoke old material).
+-   [ ] Install weekly TLS expiry alert via systemd timer or cron (21-day warning threshold).
+-   [ ] Wire alerts to on-call channel (email/PagerDuty/Slack webhook) and record test alert evidence.
+-   [ ] Review bot-abuse mitigation runbook with on-call before launch.
+-   [ ] Run verification commands in §12 and attach outputs to launch ticket.
 
 ## 11) Bot abuse mitigation runbook integration
 
@@ -346,10 +353,11 @@ stat -c '%n %y' .env synapse/homeserver.yaml coturn/turnserver.conf
 ```
 
 Expected outcomes:
-- Nginx config test passes.
-- Admin API returns `403`/`401` at edge (not open access).
-- Burst login/registration tests produce `429` responses.
-- TLS check reports >=21 days remaining (or triggers alert path).
+
+-   Nginx config test passes.
+-   Admin API returns `403`/`401` at edge (not open access).
+-   Burst login/registration tests produce `429` responses.
+-   TLS check reports >=21 days remaining (or triggers alert path).
 
 ## 13) Capacity telemetry
 
@@ -398,10 +406,10 @@ substrate for setting them once the data is in.
 Media retention is configured under the `media_retention:` block in
 `synapse/homeserver.yaml.template`:
 
-| Class | Retained for | Why |
-|-------|--------------|-----|
-| Local media (uploaded by our users) | 365 days | Cannot be re-fetched from elsewhere; treat as user data |
-| Remote media (federation-cached) | 30 days | Re-fetchable from the originating homeserver on demand |
+| Class                               | Retained for | Why                                                     |
+| ----------------------------------- | ------------ | ------------------------------------------------------- |
+| Local media (uploaded by our users) | 365 days     | Cannot be re-fetched from elsewhere; treat as user data |
+| Remote media (federation-cached)    | 30 days      | Re-fetchable from the originating homeserver on demand  |
 
 To widen retention, increase the values; to tighten, decrease and run
 a manual GC pass through the Synapse admin API. Synapse runs a media
@@ -422,19 +430,19 @@ live as comments in the config file itself.
 
 Headlines:
 
-- **Memory**: `shared_buffers=8GB`, `effective_cache_size=24GB`,
-  `work_mem=32MB`, `maintenance_work_mem=2GB`. Conservative for the
-  consolidated DL360; widen once telemetry shows the planner spilling.
-- **Autovacuum**: more aggressive than Postgres defaults
-  (`autovacuum_vacuum_scale_factor=0.05`,
-  `autovacuum_analyze_scale_factor=0.025`,
-  `autovacuum_max_workers=4`). Synapse state-table churn is the
-  rationale.
-- **WAL**: `wal_level=replica` plus `wal_compression=on`, ready for
-  the Differentiation milestone streaming-replication deliverable.
-- **Observability**: `pg_stat_statements` preloaded;
-  `track_io_timing=on`; `log_autovacuum_min_duration=1s` so autovacuum
-  starvation surfaces in logs.
+-   **Memory**: `shared_buffers=8GB`, `effective_cache_size=24GB`,
+    `work_mem=32MB`, `maintenance_work_mem=2GB`. Conservative for the
+    consolidated DL360; widen once telemetry shows the planner spilling.
+-   **Autovacuum**: more aggressive than Postgres defaults
+    (`autovacuum_vacuum_scale_factor=0.05`,
+    `autovacuum_analyze_scale_factor=0.025`,
+    `autovacuum_max_workers=4`). Synapse state-table churn is the
+    rationale.
+-   **WAL**: `wal_level=replica` plus `wal_compression=on`, ready for
+    the Differentiation milestone streaming-replication deliverable.
+-   **Observability**: `pg_stat_statements` preloaded;
+    `track_io_timing=on`; `log_autovacuum_min_duration=1s` so autovacuum
+    starvation surfaces in logs.
 
 Reload non-restart parameters with `pg_ctl reload` from inside the
 postgres container; restart the service for memory-related changes.
@@ -444,11 +452,11 @@ postgres container; restart the service for memory-related changes.
 Synapse runs as a single process by default. Worker-mode artifacts are
 pre-staged but not enabled:
 
-- Worker config files: `synapse/workers/{federation_sender,generic_worker,background_worker}.yaml`.
-- Commented-in main-process stanzas: bottom of
-  `synapse/homeserver.yaml.template`.
-- Enablement runbook (when, how, validation, rollback):
-  `docs/runbooks/SYNAPSE_WORKER_ENABLEMENT.md`.
+-   Worker config files: `synapse/workers/{federation_sender,generic_worker,background_worker}.yaml`.
+-   Commented-in main-process stanzas: bottom of
+    `synapse/homeserver.yaml.template`.
+-   Enablement runbook (when, how, validation, rollback):
+    `docs/runbooks/SYNAPSE_WORKER_ENABLEMENT.md`.
 
 The triggers that justify enabling workers are panels on the
 `synapse_capacity` dashboard (§13 above); the runbook lists the
@@ -478,30 +486,30 @@ live in `docs/runbooks/SPATIAL_LAYER_BASE.md`.
 
 Hardening backlog:
 
-- **Read-only `martin` Postgres role.** Currently Martin connects as
-  `POSTGRES_USER` (the app superuser) for first-deploy simplicity. The
-  upgrade path to a dedicated read-only role is in
-  `docs/runbooks/SPATIAL_LAYER_BASE.md` §3 and parallels the
-  `pg_monitor` upgrade for the postgres-exporter (§13 above).
-- **Cert SAN for `tiles.theblackout.app`.** The Differentiation
-  milestone (17 heatmap layers + flash mob layer) may want tiles on a
-  dedicated hostname for cache-header divergence and observability
-  separation. Path-based routing is fine until then.
+-   **Read-only `martin` Postgres role.** Currently Martin connects as
+    `POSTGRES_USER` (the app superuser) for first-deploy simplicity. The
+    upgrade path to a dedicated read-only role is in
+    `docs/runbooks/SPATIAL_LAYER_BASE.md` §3 and parallels the
+    `pg_monitor` upgrade for the postgres-exporter (§13 above).
+-   **Cert SAN for `tiles.theblackout.app`.** The Differentiation
+    milestone (17 heatmap layers + flash mob layer) may want tiles on a
+    dedicated hostname for cache-header divergence and observability
+    separation. Path-based routing is fine until then.
 
 ## 18) Analytics warehouse (ClickHouse + Cube + Metabase)
 
 The Foundation milestone analytics consolidation (AOG §9.3) ships
 three OSS services on the same host:
 
-- **ClickHouse** (`clickhouse/clickhouse-server:24.3-alpine`) — OLAP
-  store. Memory cap 8 GB via `clickhouse/config.d/blackout.xml`.
-  Schemas `analytics` and `analytics_raw` created by initdb.
-- **Cube** (`cubejs/cube:v0.36.0`) — semantic layer reading from
-  ClickHouse. One seed model in `cube/schema/Events.yml`.
-- **Metabase** (`metabase/metabase:v0.50.0`) — BI / dashboarding,
-  AGPL-3.0 Community Edition. App data in the `metabase` Postgres
-  database created by `postgres/initdb/02-metabase-database.sql`.
-  Listens on 3001 (3000 is taken by Martin per §17).
+-   **ClickHouse** (`clickhouse/clickhouse-server:24.3-alpine`) — OLAP
+    store. Memory cap 8 GB via `clickhouse/config.d/blackout.xml`.
+    Schemas `analytics` and `analytics_raw` created by initdb.
+-   **Cube** (`cubejs/cube:v0.36.0`) — semantic layer reading from
+    ClickHouse. One seed model in `cube/schema/Events.yml`.
+-   **Metabase** (`metabase/metabase:v0.50.0`) — BI / dashboarding,
+    AGPL-3.0 Community Edition. App data in the `metabase` Postgres
+    database created by `postgres/initdb/02-metabase-database.sql`.
+    Listens on 3001 (3000 is taken by Martin per §17).
 
 All three are internal-only at this milestone. Maintainer access to
 Metabase is via SSH tunnel (`ssh -L 3001:localhost:3001`). Public
@@ -514,13 +522,111 @@ migration path live in `docs/runbooks/ANALYTICS_WAREHOUSE.md`.
 
 Hardening backlog:
 
-- **Dedicated read-only ClickHouse users** for Cube and Metabase
-  (currently both connect as `default`). Parallels the `pg_monitor`
-  upgrade for postgres-exporter (§13) and the read-only `martin`
-  role (§17).
-- **clickhouse-backup cron** integrated into
-  `infra/single-server-baseline/backup/`. Skip until the analytics
-  workload becomes load-bearing.
-- **Metabase SSO** against the Matrix/Keycloak surface so admin
-  access stops depending on a separate password store.
+-   **Dedicated read-only ClickHouse users** for Cube and Metabase
+    (currently both connect as `default`). Parallels the `pg_monitor`
+    upgrade for postgres-exporter (§13) and the read-only `martin`
+    role (§17).
+-   **clickhouse-backup cron** integrated into
+    `infra/single-server-baseline/backup/`. Skip until the analytics
+    workload becomes load-bearing.
+-   **Metabase SSO** against the Matrix/Keycloak surface so admin
+    access stops depending on a separate password store.
 
+## 19) Free Black Market marketplace link (cross-stack networking)
+
+The Blackout marketplace ("The Black Market" in the client) sources its
+catalog from a Free Black Market (FBM) backend running as a _separate_
+Compose project on the same host (`~/free-black-market`, container
+`free-black-market-backend-1`). The two stacks are joined by a dedicated
+bridge network so the link survives container recreates — never by a manual
+`docker network connect`, which is runtime-only state that silently
+disappears on the next `--force-recreate`.
+
+Note on paths: this section uses `/opt/blackout-infra` for the live deploy
+directory; §2 says `/opt/blackout`. Some deployments copied this folder to
+`/opt/blackout-infra` — use whatever directory holds your live
+`docker-compose.yml` + `docker-compose.override.yml`.
+
+Topology rules:
+
+-   The shared network is created **once**, out of band, and declared
+    `external: true` in both stacks' override files.
+-   It is created with `--internal`. This is load-bearing: `api` otherwise
+    sits only on `internal: true` networks, and a plain bridge would grant it
+    NAT egress to the internet. `--internal` still allows container-to-container
+    traffic and DNS on that network.
+-   Only two containers join it: `blackout-api` and the FBM `backend`. FBM's
+    postgres/redis/minio stay on FBM's own default network, unreachable from
+    Blackout.
+-   `FREEBLACKMARKET_BASE_URL` targets the container directly
+    (`http://free-black-market-backend-1:9000`). Do not point it at the
+    public `https://api.freeblackmarket.com` — that hairpins out through
+    Cloudflare and back into the same host.
+-   FBM mounts the commerce surface at `/v1/integrations/blackout/commerce`,
+    which is the provider's default path prefix. `FREEBLACKMARKET_API_PREFIX`
+    exists as an override if FBM ever moves that mount (a path packed into
+    the base URL would be discarded by URL resolution).
+
+### One-time prerequisite
+
+```bash
+docker network create --internal bmc-bridge
+```
+
+### Rollout
+
+```bash
+# 1) Rebuild the api image from a repo checkout whose provider targets the
+#    FBM commerce mount (context is the repo root; the checkout lives
+#    wherever this host keeps it, e.g. ~/blackout-new on the current
+#    production host).
+cd <your-blackout-repo-checkout>
+docker build -f infra/single-server-baseline/Dockerfile.blackout-api-hono -t blackout-api:hono .
+
+# 2) FBM side: pull the override that attaches the backend to bmc-bridge.
+cd ~/free-black-market
+git pull
+docker compose config >/dev/null   # validate merge before touching containers
+docker compose up -d backend
+# FBM env prerequisites (already-live deployments have these):
+#   FBM_BLACKOUT_INTEGRATION=1 and FREEBLACKMARKET_API_KEY matching
+#   Blackout's — otherwise the commerce surface answers 503/401, which
+#   Blackout's logs still report as marketplace.catalog.fetch_failed.
+
+# 3) Blackout side: back up, then mirror the FREEBLACKMARKET_* environment
+#    block and the api networks list from docker-compose.override.yml.example
+#    into the live override, and add the two secrets to .env.
+cd /opt/blackout-infra
+cp docker-compose.override.yml docker-compose.override.yml.bak.$(date +%Y%m%d-%H%M%S)
+# edit docker-compose.override.yml per the .example (env block + networks +
+# top-level bmc-bridge declaration); then append to .env (chmod 600):
+#   FREEBLACKMARKET_API_KEY=...
+#   FREEBLACKMARKET_WEBHOOK_SECRET=...
+docker compose config >/dev/null   # validate before recreating
+docker compose up -d --force-recreate api
+```
+
+### Acceptance checks
+
+```bash
+# 1) Catalog reachable end to end (expect the seeded listings, not [])
+curl -s 'https://chat.theblackout.app/v1/marketplace/listings' | head -c 400
+
+# 2) No fetch failures; no provider silently dropped (provider_init_failed
+#    means the FBM secrets are missing/empty in the api environment)
+docker logs blackout-api --since 10m 2>&1 | grep -Ei 'fetch_failed|provider_init_failed' || echo OK
+
+# 3) Wiring survives recreate (the whole point of the declarative setup)
+docker compose up -d --force-recreate api
+docker inspect blackout-api -f '{{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{end}}'
+#   expect bmc-bridge alongside blackout-app/blackout-data, and NOT
+#   free-black-market_default (the old manual connect must be gone)
+docker exec blackout-api wget -qO- http://free-black-market-backend-1:9000/health
+
+# 4) Still no internet egress from the api container (must FAIL)
+docker exec blackout-api wget -qO- --timeout=5 https://api.github.com \
+  && echo 'ALERT: api has internet egress' || echo OK
+
+# 5) Shared network exists and is internal (expect: true)
+docker network inspect bmc-bridge -f '{{.Internal}}'
+```

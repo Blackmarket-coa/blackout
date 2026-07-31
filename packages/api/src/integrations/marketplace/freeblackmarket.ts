@@ -42,14 +42,31 @@ function envBool(key: string, fallback: boolean, env: NodeJS.ProcessEnv = proces
     return raw === '1' || raw.toLowerCase() === 'true';
 }
 
-function buildCatalogUrl(base: string, query: CatalogQuery): string {
-    const url = new URL(`${COMMERCE_BASE}/catalog/listings`, base);
-    if (query.category) url.searchParams.set('category', query.category);
-    if (query.artifactKind) url.searchParams.set('artifactKind', query.artifactKind);
-    if (query.q) url.searchParams.set('q', query.q);
-    if (query.cursor) url.searchParams.set('cursor', query.cursor);
-    if (query.limit) url.searchParams.set('limit', String(query.limit));
-    return url.toString();
+/**
+ * Path prefix prepended to every commerce endpoint. Defaults to COMMERCE_BASE
+ * (the only mount that works against a real FBM — see the comment above);
+ * FREEBLACKMARKET_API_PREFIX overrides it if FBM ever moves the surface.
+ * Configure the mount here, not as a path inside FREEBLACKMARKET_BASE_URL —
+ * URL resolution discards any path component of the base URL.
+ */
+export function normalizeFreeblackmarketApiPrefix(raw?: string): string {
+    const trimmed = raw?.trim();
+    if (!trimmed) return COMMERCE_BASE;
+    const withLeading = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+    // Collapse repeated leading slashes: a '//'-leading path would resolve as
+    // a protocol-relative URL and send the bearer key to a different host.
+    return withLeading.replace(/^\/+/, '/').replace(/\/+$/, '');
+}
+
+function buildCatalogPath(query: CatalogQuery, prefix: string): string {
+    const params = new URLSearchParams();
+    if (query.category) params.set('category', query.category);
+    if (query.artifactKind) params.set('artifactKind', query.artifactKind);
+    if (query.q) params.set('q', query.q);
+    if (query.cursor) params.set('cursor', query.cursor);
+    if (query.limit) params.set('limit', String(query.limit));
+    const qs = params.toString();
+    return qs ? `${prefix}/catalog/listings?${qs}` : `${prefix}/catalog/listings`;
 }
 
 interface UpstreamListing {
@@ -96,6 +113,7 @@ export function assertFreeblackmarketSecretsForProduction(
 
 export function createFreeblackmarketProvider(): MarketplaceProvider {
     const baseUrl = process.env.FREEBLACKMARKET_BASE_URL ?? 'https://api.freeblackmarket.com';
+    const apiPrefix = normalizeFreeblackmarketApiPrefix(process.env.FREEBLACKMARKET_API_PREFIX);
     const apiKey = process.env.FREEBLACKMARKET_API_KEY ?? '';
     const webhookSecret = process.env.FREEBLACKMARKET_WEBHOOK_SECRET ?? '';
     const enabled = envBool('FREEBLACKMARKET_ENABLED', true);
@@ -148,7 +166,7 @@ export function createFreeblackmarketProvider(): MarketplaceProvider {
         async fetchCatalog(query: CatalogQuery): Promise<NormalizedListing[]> {
             if (!enabled || !apiKey) return [];
             const data = await call<{ listings: UpstreamListing[] }>(
-                buildCatalogUrl(baseUrl, query).replace(baseUrl, '')
+                buildCatalogPath(query, apiPrefix)
             );
             return (
                 data.listings
@@ -170,7 +188,7 @@ export function createFreeblackmarketProvider(): MarketplaceProvider {
             if (!enabled || !apiKey) return null;
             try {
                 const raw = await call<UpstreamListing>(
-                    `${COMMERCE_BASE}/catalog/listings/${listingId}`
+                    `${apiPrefix}/catalog/listings/${listingId}`
                 );
                 return toNormalized(raw);
             } catch {
@@ -180,8 +198,8 @@ export function createFreeblackmarketProvider(): MarketplaceProvider {
 
         async createCheckoutSession(input: CheckoutInput): Promise<CheckoutResult> {
             const path = input.embed
-                ? `${COMMERCE_BASE}/checkout/sessions?embed=1`
-                : `${COMMERCE_BASE}/checkout/sessions`;
+                ? `${apiPrefix}/checkout/sessions?embed=1`
+                : `${apiPrefix}/checkout/sessions`;
             const raw = await call<{ url: string; id: string }>(path, {
                 method: 'POST',
                 headers: { 'idempotency-key': input.idempotencyKey },
@@ -218,7 +236,7 @@ export function createFreeblackmarketProvider(): MarketplaceProvider {
                 id: string;
                 slug?: string | null;
                 status?: CreatorListingResult['status'];
-            }>(`${COMMERCE_BASE}/seller/listings`, {
+            }>(`${apiPrefix}/seller/listings`, {
                 method: 'POST',
                 body: JSON.stringify(body),
             });
@@ -234,7 +252,7 @@ export function createFreeblackmarketProvider(): MarketplaceProvider {
                 id: string;
                 slug?: string | null;
                 status?: CreatorListingResult['status'];
-            }>(`${COMMERCE_BASE}/seller/listings/${providerListingId}/publish`, {
+            }>(`${apiPrefix}/seller/listings/${providerListingId}/publish`, {
                 method: 'POST',
                 body: JSON.stringify({}),
             });
@@ -246,7 +264,7 @@ export function createFreeblackmarketProvider(): MarketplaceProvider {
         },
 
         async archiveCreatorListing(providerListingId: string): Promise<void> {
-            await call<{ ok: boolean }>(`${COMMERCE_BASE}/seller/listings/${providerListingId}`, {
+            await call<{ ok: boolean }>(`${apiPrefix}/seller/listings/${providerListingId}`, {
                 method: 'DELETE',
             });
         },
@@ -256,7 +274,7 @@ export function createFreeblackmarketProvider(): MarketplaceProvider {
             returnUrl?: string
         ): Promise<CreatorOnboardingHandle> {
             const raw = await call<{ url: string; expiresAt: string }>(
-                `${COMMERCE_BASE}/seller/onboarding`,
+                `${apiPrefix}/seller/onboarding`,
                 {
                     method: 'POST',
                     body: JSON.stringify({ sellerUserId, returnUrl }),

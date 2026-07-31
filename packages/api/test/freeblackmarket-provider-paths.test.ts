@@ -13,6 +13,9 @@ process.env.NODE_ENV = 'test';
 process.env.FREEBLACKMARKET_ENABLED = 'true';
 process.env.FREEBLACKMARKET_API_KEY = 'fbm_test_key';
 process.env.FREEBLACKMARKET_BASE_URL = 'https://fbm.example.test';
+// PREFIX below is the provider's default; an ambient override (e.g. a deploy
+// .env loaded into the shell) must not leak into the suite.
+delete process.env.FREEBLACKMARKET_API_PREFIX;
 
 const { createFreeblackmarketProvider } = await import(
     '../src/integrations/marketplace/freeblackmarket'
