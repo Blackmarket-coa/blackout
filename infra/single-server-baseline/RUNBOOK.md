@@ -563,9 +563,9 @@ Topology rules:
     public `https://api.freeblackmarket.com` — that hairpins out through
     Cloudflare and back into the same host.
 -   FBM mounts the commerce surface at `/v1/integrations/blackout/commerce`,
-    so `FREEBLACKMARKET_API_PREFIX` is set to that path (the provider's
-    default is `/v1`; a path packed into the base URL would be discarded by
-    URL resolution).
+    which is the provider's default path prefix. `FREEBLACKMARKET_API_PREFIX`
+    exists as an override if FBM ever moves that mount (a path packed into
+    the base URL would be discarded by URL resolution).
 
 ### One-time prerequisite
 
@@ -576,10 +576,10 @@ docker network create --internal bmc-bridge
 ### Rollout
 
 ```bash
-# 1) Rebuild the api image from a repo checkout that has the
-#    FREEBLACKMARKET_API_PREFIX support (context is the repo root; the
-#    checkout lives wherever this host keeps it, e.g. ~/blackout-new on
-#    the current production host).
+# 1) Rebuild the api image from a repo checkout whose provider targets the
+#    FBM commerce mount (context is the repo root; the checkout lives
+#    wherever this host keeps it, e.g. ~/blackout-new on the current
+#    production host).
 cd <your-blackout-repo-checkout>
 docker build -f infra/single-server-baseline/Dockerfile.blackout-api-hono -t blackout-api:hono .
 

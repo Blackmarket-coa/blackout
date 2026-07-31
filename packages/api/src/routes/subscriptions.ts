@@ -13,13 +13,15 @@ import {
     forwardGift,
     getMyGifts,
     getSubscription,
+    applyStripeCheckoutCompleted,
     getSubscriptionAuditTimeline,
     listAvailableGifts,
     listCanopyProducts,
     syncRefund,
+    type StripeCheckoutCompletedEvent,
     type SubscriptionWebhookEvent,
 } from '../services/subscriptions';
-import { verifyBillingWebhook } from '../services/billingWebhookSignature';
+import { verifyBillingWebhook, verifyStripeWebhook } from '../services/billingWebhookSignature';
 import { log } from '../telemetry/logger';
 
 const subscriptions = new Hono();
@@ -46,6 +48,26 @@ const webhookSchema = z
         eventId: z.string().min(1),
         type: z.enum(webhookEventTypes),
         userId: z.string().min(1),
+    })
+    .loose();
+
+// Stripe event envelope for the checkout webhook. We only act on
+// `checkout.session.completed`, reading `client_reference_id` (the Blackout user
+// id set at checkout) and `customer` (the real `cus_…`).
+const stripeWebhookSchema = z
+    .object({
+        id: z.string().min(1),
+        type: z.string().min(1),
+        data: z
+            .object({
+                object: z
+                    .object({
+                        client_reference_id: z.string().nullish(),
+                        customer: z.string().nullish(),
+                    })
+                    .loose(),
+            })
+            .loose(),
     })
     .loose();
 
@@ -150,6 +172,55 @@ subscriptions.post('/webhooks/lago', async (c) => {
         ok: true,
         processed: result.processed,
         status: result.status,
+        userId: result.userId,
+    });
+});
+
+// Stripe checkout webhook: on `checkout.session.completed`, sync the real
+// `cus_…` onto the subscription record so the Billing Portal can leave the mock
+// path. Signature is verified byte-exact against STRIPE_WEBHOOK_SECRET.
+subscriptions.post('/webhooks/stripe', async (c) => {
+    const rawBody = await c.req.text();
+    const headers: Record<string, string | undefined> = {};
+    for (const [key, value] of Object.entries(c.req.header())) {
+        headers[key.toLowerCase()] = value;
+    }
+    const verification = verifyStripeWebhook(rawBody, headers);
+    if (!verification.ok) {
+        log.warn('stripe_webhook_rejected', { reason: verification.reason });
+        return c.json(
+            {
+                code: 'webhook_unauthorized',
+                message: 'Stripe signature verification failed',
+                reason: verification.reason,
+            },
+            401
+        );
+    }
+
+    let payload: unknown;
+    try {
+        payload = JSON.parse(rawBody);
+    } catch {
+        return c.json({ code: 'invalid_json', message: 'Webhook payload is not valid JSON' }, 400);
+    }
+    const parsed = stripeWebhookSchema.safeParse(payload);
+    if (!parsed.success) {
+        return c.json(
+            {
+                code: 'invalid_payload',
+                message: 'Webhook payload failed validation',
+                issues: parsed.error.issues,
+            },
+            400
+        );
+    }
+
+    const result = applyStripeCheckoutCompleted(parsed.data as StripeCheckoutCompletedEvent);
+    return c.json({
+        ok: true,
+        processed: result.processed,
+        reason: result.reason,
         userId: result.userId,
     });
 });

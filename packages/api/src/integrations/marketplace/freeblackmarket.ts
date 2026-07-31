@@ -15,6 +15,27 @@ import { parseNormalizedLifecycleEvent, parseNormalizedListing } from '@blackout
 
 const PROVIDER_ID = 'freeblackmarket' as const;
 
+// The §5 commerce API is served on FBM's Blackout integration surface, not at the
+// bare work-order paths. The bare paths either 404 or collide with FBM's public
+// storefront / seller-JWT routes (wrong auth). See the contract table in
+// free-black-market/docs/contracts/blackout-integration.md (§5).
+const COMMERCE_BASE = '/v1/integrations/blackout/commerce';
+
+/**
+ * Derive an FBM listing slug from a title. FBM's commerce/seller/listings route
+ * requires a `slug` matching /^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$/ (3–64 chars);
+ * the Blackout creator draft carries no slug, so synthesize a deterministic one.
+ */
+function slugifyTitle(title: string): string {
+    const slug = title
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 64)
+        .replace(/-+$/g, '');
+    return slug.length >= 3 ? slug : 'listing';
+}
+
 function envBool(key: string, fallback: boolean, env: NodeJS.ProcessEnv = process.env): boolean {
     const raw = env[key];
     if (raw === undefined) return fallback;
@@ -22,15 +43,15 @@ function envBool(key: string, fallback: boolean, env: NodeJS.ProcessEnv = proces
 }
 
 /**
- * Path prefix prepended to every commerce endpoint. Defaults to '/v1' (the
- * documented public surface); deployments where FBM mounts the commerce API
- * under a nested path (e.g. '/v1/integrations/blackout/commerce') set
- * FREEBLACKMARKET_API_PREFIX instead of forking the base URL — URL resolution
- * discards any path component of FREEBLACKMARKET_BASE_URL.
+ * Path prefix prepended to every commerce endpoint. Defaults to COMMERCE_BASE
+ * (the only mount that works against a real FBM — see the comment above);
+ * FREEBLACKMARKET_API_PREFIX overrides it if FBM ever moves the surface.
+ * Configure the mount here, not as a path inside FREEBLACKMARKET_BASE_URL —
+ * URL resolution discards any path component of the base URL.
  */
 export function normalizeFreeblackmarketApiPrefix(raw?: string): string {
     const trimmed = raw?.trim();
-    if (!trimmed) return '/v1';
+    if (!trimmed) return COMMERCE_BASE;
     const withLeading = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
     // Collapse repeated leading slashes: a '//'-leading path would resolve as
     // a protocol-relative URL and send the bearer key to a different host.
@@ -194,13 +215,30 @@ export function createFreeblackmarketProvider(): MarketplaceProvider {
         },
 
         async createCreatorListing(input: CreatorListingDraftInput): Promise<CreatorListingResult> {
+            // FBM's commerce/seller/listings route is strict: it requires a `slug`
+            // and rejects the artifact-specific fields (artifactKind/artifactPayload/
+            // artifactUploadId). Map the Blackout draft onto the catalog shape the
+            // route accepts; artifact bytes are delivered via the signed-bundle
+            // publish path, not this metadata call.
+            const body = {
+                sellerUserId: input.sellerUserId,
+                slug: slugifyTitle(input.title),
+                title: input.title,
+                description: input.description,
+                category: input.category,
+                priceCents: input.priceCents,
+                currency: input.currency,
+                entitlementKind: input.entitlementKind,
+                mediaUrls: input.mediaUrls,
+                tags: input.tags,
+            };
             const raw = await call<{
                 id: string;
                 slug?: string | null;
                 status?: CreatorListingResult['status'];
             }>(`${apiPrefix}/seller/listings`, {
                 method: 'POST',
-                body: JSON.stringify(input),
+                body: JSON.stringify(body),
             });
             return {
                 providerListingId: raw.id,

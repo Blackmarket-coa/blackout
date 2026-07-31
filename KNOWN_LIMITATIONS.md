@@ -46,11 +46,11 @@ For the source-of-truth triage with tier/owner detail see
     -   Production-ready when `FREEBLACKMARKET_API_KEY` and
         `FREEBLACKMARKET_WEBHOOK_SECRET` are set. Falls back to an in-memory
         stub when `FREEBLACKMARKET_STUB=1`.
-    -   Endpoint paths are built as `FREEBLACKMARKET_API_PREFIX` + resource
-        (default `/v1`). FBM's deployment serves the commerce surface at
-        `/v1/integrations/blackout/commerce`, so real deployments set the
-        prefix var — a path inside `FREEBLACKMARKET_BASE_URL` is discarded by
-        URL resolution.
+    -   Endpoint paths are built as `FREEBLACKMARKET_API_PREFIX` + resource,
+        defaulting to `/v1/integrations/blackout/commerce` — FBM's integration
+        surface, the only mount that works against a real FBM. The var exists
+        as an override if FBM ever moves the mount; a path inside
+        `FREEBLACKMARKET_BASE_URL` is discarded by URL resolution.
     -   Set `FREEBLACKMARKET_ENABLED=false` to opt out entirely.
 -   **Placeholder integrations:** Blamazon, MayhemMarketplaze, AntinAmazon
     (`packages/api/src/integrations/marketplace/{blamazon,mayhemMarketplaze,antinAmazon}.ts`).

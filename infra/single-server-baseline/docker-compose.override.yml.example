@@ -22,11 +22,10 @@ services:
       CORS_ALLOW_CREDENTIALS: "true"
       # Free Black Market marketplace link. The base URL targets the FBM
       # container over bmc-bridge (the public hostname would hairpin through
-      # Cloudflare back to this host); the prefix replaces the provider's
-      # default '/v1' because FBM mounts the commerce surface under
-      # /v1/integrations/blackout/commerce.
+      # Cloudflare back to this host). The provider already defaults its path
+      # prefix to FBM's mount (/v1/integrations/blackout/commerce); set
+      # FREEBLACKMARKET_API_PREFIX here only if FBM ever moves that surface.
       FREEBLACKMARKET_BASE_URL: "http://free-black-market-backend-1:9000"
-      FREEBLACKMARKET_API_PREFIX: "/v1/integrations/blackout/commerce"
       FREEBLACKMARKET_API_KEY: "${FREEBLACKMARKET_API_KEY}"
       FREEBLACKMARKET_WEBHOOK_SECRET: "${FREEBLACKMARKET_WEBHOOK_SECRET}"
     depends_on:

@@ -280,9 +280,11 @@ waiting for the reconcile poll:
 
 Blackout's provider calls these with `Authorization: Bearer ${FREEBLACKMARKET_API_KEY}`,
 base `FREEBLACKMARKET_BASE_URL` (default `https://api.freeblackmarket.com`), `content-type: application/json`.
-The `/v1` segment in the table below is `FREEBLACKMARKET_API_PREFIX` (default `/v1`);
-deployments where FBM mounts this surface at `/v1/integrations/blackout/commerce` set the
-prefix var — a path packed into `FREEBLACKMARKET_BASE_URL` is discarded by URL resolution.
+The `/v1` segment in the table below is `FREEBLACKMARKET_API_PREFIX`, which defaults to
+`/v1/integrations/blackout/commerce` — FBM serves this surface only on its Blackout
+integration mount (the bare paths 404 or collide with FBM's storefront/seller routes).
+Override the var if FBM ever moves the mount; a path packed into
+`FREEBLACKMARKET_BASE_URL` is discarded by URL resolution.
 
 | Method & path                                                     | request                                           | response                  |
 | ----------------------------------------------------------------- | ------------------------------------------------- | ------------------------- |
@@ -524,14 +526,14 @@ per-user "wallet/rewards" room + persistence, which is a separate slice.
 
 ## 7. Secrets & config to coordinate
 
-| Secret / var                     | Owner      | Used for                                                                                           |
-| -------------------------------- | ---------- | -------------------------------------------------------------------------------------------------- |
-| `FREEBLACKMARKET_WEBHOOK_SECRET` | shared     | HMAC signing of §1–§3/§6 webhooks                                                                  |
-| `FREEBLACKMARKET_API_KEY`        | FBM issues | Blackout → FBM commerce API bearer (§5)                                                            |
-| `FREEBLACKMARKET_BASE_URL`       | FBM        | commerce API base                                                                                  |
-| `FREEBLACKMARKET_API_PREFIX`     | FBM        | commerce API path prefix (default `/v1`; `/v1/integrations/blackout/commerce` on FBM's deployment) |
-| Entitlements **service token**   | FBM issues | Blackout → entitlements service bearer (§4)                                                        |
-| Entitlements **base URL**        | FBM        | §4 service location                                                                                |
+| Secret / var                     | Owner      | Used for                                                                             |
+| -------------------------------- | ---------- | ------------------------------------------------------------------------------------ |
+| `FREEBLACKMARKET_WEBHOOK_SECRET` | shared     | HMAC signing of §1–§3/§6 webhooks                                                    |
+| `FREEBLACKMARKET_API_KEY`        | FBM issues | Blackout → FBM commerce API bearer (§5)                                              |
+| `FREEBLACKMARKET_BASE_URL`       | FBM        | commerce API base                                                                    |
+| `FREEBLACKMARKET_API_PREFIX`     | FBM        | commerce API path prefix override (defaults to `/v1/integrations/blackout/commerce`) |
+| Entitlements **service token**   | FBM issues | Blackout → entitlements service bearer (§4)                                          |
+| Entitlements **base URL**        | FBM        | §4 service location                                                                  |
 
 ---
 
