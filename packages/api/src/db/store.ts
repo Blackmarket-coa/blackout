@@ -535,8 +535,12 @@ class InMemoryDb {
     }
 
     findUserByEmail(email: string): UserRecord | undefined {
+        // Emailless accounts (email unset, or '' in legacy file-store records)
+        // are not reachable by email lookup — and an empty query must never
+        // match one of them.
+        if (!email) return undefined;
         return [...this.users.values()].find(
-            (user) => user.email.toLowerCase() === email.toLowerCase()
+            (user) => !!user.email && user.email.toLowerCase() === email.toLowerCase()
         );
     }
 

@@ -94,6 +94,10 @@ test('valid token mints a verifiable Blackout JWT and auto-provisions the user',
             const provisioned = db.findUserByUsername(localpart);
             assert.ok(provisioned, 'user should be auto-provisioned');
             assert.equal(provisioned?.id, body.userId);
+            // Emailless provisioning must leave email unset — never '' — so
+            // Postgres stores NULL and users_email_key cannot collide when a
+            // second emailless user arrives.
+            assert.equal(provisioned?.email, undefined);
         } finally {
             restore();
         }

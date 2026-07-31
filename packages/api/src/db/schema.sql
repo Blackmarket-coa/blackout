@@ -1,7 +1,9 @@
 CREATE TABLE IF NOT EXISTS users (
   id UUID PRIMARY KEY,
   username VARCHAR(255) UNIQUE NOT NULL,
-  email VARCHAR(255) UNIQUE NOT NULL,
+  -- Nullable since 077: emailless accounts (Matrix exchange / account-number)
+  -- store NULL, which UNIQUE exempts — '' would collide on the second one.
+  email VARCHAR(255) UNIQUE,
   password_hash VARCHAR(255) NOT NULL,
   reputation_score INT DEFAULT 0,
   reputation_tier VARCHAR(50),
