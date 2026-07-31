@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { requireUser } from '../middleware/require-user';
-import { authRateLimit } from '../middleware/rate-limit';
+import { integrationsRateLimit } from '../middleware/rate-limit';
 import { getLinkedAccount } from '../services/linkedAccounts';
 import { db } from '../db/store';
 import { signEbsJwt, type TwitchExtRole } from '../integrations/twitch/ebsJwt';
@@ -18,11 +18,13 @@ import { signEbsJwt, type TwitchExtRole } from '../integrations/twitch/ebsJwt';
  */
 
 const router = new Hono();
-router.use('*', authRateLimit);
+// Settings-surface bucket, NOT the tight fail-closed `auth` bucket: the
+// broadcast panel fetches extension state on mount alongside its siblings.
+router.use('*', integrationsRateLimit);
 
 const readSecret = (): string | null => {
-  const raw = (process.env.TWITCH_EXTENSION_SECRET ?? '').trim();
-  return raw || null;
+    const raw = (process.env.TWITCH_EXTENSION_SECRET ?? '').trim();
+    return raw || null;
 };
 
 /**
@@ -31,8 +33,8 @@ const readSecret = (): string | null => {
  * actual channel); otherwise fall back to the deterministic Blackout id.
  */
 const channelIdForCreator = (creatorId: string): string => {
-  const link = getLinkedAccount(creatorId, 'twitch');
-  return link?.providerUserId ?? creatorId;
+    const link = getLinkedAccount(creatorId, 'twitch');
+    return link?.providerUserId ?? creatorId;
 };
 
 /**
@@ -41,51 +43,51 @@ const channelIdForCreator = (creatorId: string): string => {
  * Returns an EBS JWT for the calling viewer scoped to the stream's channel.
  */
 router.get('/token', (c) => {
-  const userOrResp = requireUser(c, 'Sign in to load stream extensions');
-  if (userOrResp instanceof Response) return userOrResp;
+    const userOrResp = requireUser(c, 'Sign in to load stream extensions');
+    if (userOrResp instanceof Response) return userOrResp;
 
-  const secret = readSecret();
-  if (!secret) {
-    // Operator misconfiguration — recoverable, so 503 rather than a 4xx.
-    return c.json(
-      { code: 'extensions_not_configured', message: 'TWITCH_EXTENSION_SECRET is not set.' },
-      503,
-    );
-  }
+    const secret = readSecret();
+    if (!secret) {
+        // Operator misconfiguration — recoverable, so 503 rather than a 4xx.
+        return c.json(
+            { code: 'extensions_not_configured', message: 'TWITCH_EXTENSION_SECRET is not set.' },
+            503
+        );
+    }
 
-  const streamId = c.req.query('streamId');
-  if (!streamId) {
-    return c.json({ code: 'missing_stream_id', message: 'streamId is required.' }, 400);
-  }
-  const stream = db.getStream(streamId);
-  if (!stream) {
-    return c.json({ code: 'stream_not_found', message: 'No such stream.' }, 404);
-  }
+    const streamId = c.req.query('streamId');
+    if (!streamId) {
+        return c.json({ code: 'missing_stream_id', message: 'streamId is required.' }, 400);
+    }
+    const stream = db.getStream(streamId);
+    if (!stream) {
+        return c.json({ code: 'stream_not_found', message: 'No such stream.' }, 404);
+    }
 
-  const channelId = channelIdForCreator(stream.creatorId);
-  const role: TwitchExtRole = userOrResp.sub === stream.creatorId ? 'broadcaster' : 'viewer';
+    const channelId = channelIdForCreator(stream.creatorId);
+    const role: TwitchExtRole = userOrResp.sub === stream.creatorId ? 'broadcaster' : 'viewer';
 
-  // Identity-share: only attach the real Twitch user_id when the viewer both
-  // opted in AND has a linked Twitch account to share.
-  const shareIdentity = c.req.query('shareIdentity') === 'true';
-  const viewerTwitch = shareIdentity ? getLinkedAccount(userOrResp.sub, 'twitch') : null;
+    // Identity-share: only attach the real Twitch user_id when the viewer both
+    // opted in AND has a linked Twitch account to share.
+    const shareIdentity = c.req.query('shareIdentity') === 'true';
+    const viewerTwitch = shareIdentity ? getLinkedAccount(userOrResp.sub, 'twitch') : null;
 
-  const signed = signEbsJwt({
-    secret,
-    channelId,
-    role,
-    blackoutUserId: userOrResp.sub,
-    userId: viewerTwitch?.providerUserId,
-  });
+    const signed = signEbsJwt({
+        secret,
+        channelId,
+        role,
+        blackoutUserId: userOrResp.sub,
+        userId: viewerTwitch?.providerUserId,
+    });
 
-  return c.json({
-    token: signed.token,
-    channelId,
-    role,
-    opaqueUserId: signed.opaqueUserId,
-    userId: viewerTwitch?.providerUserId ?? null,
-    expiresAt: new Date(signed.exp * 1000).toISOString(),
-  });
+    return c.json({
+        token: signed.token,
+        channelId,
+        role,
+        opaqueUserId: signed.opaqueUserId,
+        userId: viewerTwitch?.providerUserId ?? null,
+        expiresAt: new Date(signed.exp * 1000).toISOString(),
+    });
 });
 
 export default router;
