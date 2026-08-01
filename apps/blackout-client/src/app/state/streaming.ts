@@ -16,7 +16,7 @@ import { atomWithStorage } from 'jotai/utils';
 export type StreamingTabId = 'overview' | 'content' | 'kits' | 'earnings' | 'integrations';
 
 export type ContentViewId = 'live' | 'replays' | 'clips';
-export type EarningsViewId = 'rewards' | 'listings' | 'splits';
+export type EarningsViewId = 'rewards' | 'listings' | 'splits' | 'credits';
 export type IntegrationsViewId = 'broadcast' | 'connections' | 'bridges' | 'health';
 
 export type StreamingHubViewId = ContentViewId | EarningsViewId | IntegrationsViewId;
@@ -64,6 +64,7 @@ export const EARNINGS_VIEW_HINTS: Record<EarningsViewId, string> = {
     rewards: 'Tips, subscriptions, and reward payouts',
     listings: 'Your marketplace listings',
     splits: 'Revenue-split contracts with collaborators',
+    credits: 'Your Coalition Credits balance, pending payouts, and reward-program eligibility',
 };
 
 export const INTEGRATIONS_VIEW_HINTS: Record<IntegrationsViewId, string> = {
@@ -81,12 +82,13 @@ export const CONTENT_VIEW_LABELS: Record<ContentViewId, string> = {
     clips: 'Clips',
 };
 
-export const EARNINGS_VIEW_ORDER: EarningsViewId[] = ['rewards', 'listings', 'splits'];
+export const EARNINGS_VIEW_ORDER: EarningsViewId[] = ['rewards', 'listings', 'splits', 'credits'];
 
 export const EARNINGS_VIEW_LABELS: Record<EarningsViewId, string> = {
     rewards: 'Rewards',
     listings: 'Listings',
     splits: 'Splits',
+    credits: 'Coalition Credits',
 };
 
 export const INTEGRATIONS_VIEW_ORDER: IntegrationsViewId[] = [
@@ -133,6 +135,7 @@ export const LEGACY_STREAMING_TAB_REMAP: Record<LegacyStreamingTabId, StreamingH
     rewards: { tab: 'earnings', view: 'rewards' },
     listings: { tab: 'earnings', view: 'listings' },
     splits: { tab: 'earnings', view: 'splits' },
+    credits: { tab: 'earnings', view: 'credits' },
     broadcast: { tab: 'integrations', view: 'broadcast' },
     connections: { tab: 'integrations', view: 'connections' },
     bridges: { tab: 'integrations', view: 'bridges' },

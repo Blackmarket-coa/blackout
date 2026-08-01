@@ -9,11 +9,13 @@
 //
 // Companion document: docs/contracts/fbm-entitlements-consumer.md.
 //
-// No runtime client implementation lives here. The Coalition Credits
-// widget and cooperative governance UI (Foundation milestone rows in
-// AOG §9.2) target this interface; a stub fixture is used in
-// dev/test until FBM publishes the OpenAPI spec and we generate or
-// hand-write the HTTP client.
+// This file holds only the consumer-side types and the client interface. The
+// concrete implementations live beside it: a live HTTP client
+// (entitlementsClient.ts — `FbmEntitlementsHttpClient`) and an in-memory
+// fixture for dev/test (entitlementsStubClient.ts), selected at runtime by
+// `getEntitlementsClient()` in entitlementsClientFactory.ts. The Coalition
+// Credits widget and cooperative governance UI (Foundation milestone rows in
+// AOG §9.2) consume this interface.
 
 /** Matrix MXID, e.g. "@alice:example.org". */
 export type Mxid = string;
@@ -100,12 +102,7 @@ export interface GovernanceRole {
 // Question 4 — Coalition membership
 // ---------------------------------------------------------------------------
 
-export type CoalitionMembershipStatus =
-    | 'active'
-    | 'pending'
-    | 'suspended'
-    | 'expelled'
-    | 'former';
+export type CoalitionMembershipStatus = 'active' | 'pending' | 'suspended' | 'expelled' | 'former';
 
 export interface CoalitionMembership {
     coalitionId: string;
@@ -140,9 +137,9 @@ export interface EntitlementsSummary {
 /**
  * Read-only client for the FBM Entitlements Service. Implementations:
  *
- * - HTTP client against a live FBM service (not yet written; awaiting
- *   the FBM-side OpenAPI specification).
- * - In-memory fixture for dev/test.
+ * - HTTP client against a live FBM service (entitlementsClient.ts —
+ *   `FbmEntitlementsHttpClient`).
+ * - In-memory fixture for dev/test (entitlementsStubClient.ts).
  *
  * Consumer-side conventions (timeouts, retries, cache-control,
  * fallback behaviour) are documented in
@@ -150,10 +147,7 @@ export interface EntitlementsSummary {
  */
 export interface FbmEntitlementsClient {
     checkAccess(mxid: Mxid, request: AccessCheckRequest): Promise<AccessCheckResult>;
-    checkAccessBatch(
-        mxid: Mxid,
-        requests: AccessCheckRequest[]
-    ): Promise<AccessCheckResult[]>;
+    checkAccessBatch(mxid: Mxid, requests: AccessCheckRequest[]): Promise<AccessCheckResult[]>;
     getEconomicStanding(mxid: Mxid): Promise<EconomicStanding>;
     getGovernanceRoles(mxid: Mxid): Promise<GovernanceRole[]>;
     getCoalitionMemberships(mxid: Mxid): Promise<CoalitionMembership[]>;
