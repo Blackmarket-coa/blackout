@@ -148,6 +148,12 @@ export type FeatureFlags = {
      */
     marketTab: boolean;
     /**
+     * Create hub (`/create`) — landing surface for creation flows and the
+     * Discord structure importer. Onboarding links here, so it defaults on;
+     * gated together with `shellAppShell` since it lives inside the shell.
+     */
+    createHub: boolean;
+    /**
      * Product-attachment surface flag. Owns the `co.bmc.product_attachments`
      * Matrix custom-event renderer + attach dialog used to bind FBM
      * listings onto messages, canopy state, and stream descriptions.
@@ -407,6 +413,7 @@ export const defaultFeatureFlags: FeatureFlags = {
     homeBountyBoard: true,
     seriesTag: false,
     marketTab: true,
+    createHub: true,
     productsAttachments: false,
     productsAttachComposer: false,
     // Creator Hub production readiness: the listings/storefront/dashboard
@@ -783,6 +790,12 @@ export const resolveFeatureFlags = (
         if (env.BLACKOUT_MARKET_TAB === 'false') {
             nextFlags.marketTab = false;
         }
+        if (env.BLACKOUT_CREATE_HUB === 'true') {
+            nextFlags.createHub = true;
+        }
+        if (env.BLACKOUT_CREATE_HUB === 'false') {
+            nextFlags.createHub = false;
+        }
         if (env.BLACKOUT_PRODUCTS_ATTACHMENTS === 'true') {
             nextFlags.productsAttachments = true;
         }
@@ -1124,6 +1137,12 @@ export const resolveFeatureFlags = (
     }
     if (env.BLACKOUT_MARKET_TAB === 'false') {
         nextFlags.marketTab = false;
+    }
+    if (env.BLACKOUT_CREATE_HUB === 'true') {
+        nextFlags.createHub = true;
+    }
+    if (env.BLACKOUT_CREATE_HUB === 'false') {
+        nextFlags.createHub = false;
     }
     if (env.BLACKOUT_PRODUCTS_ATTACHMENTS === 'true') {
         nextFlags.productsAttachments = true;
