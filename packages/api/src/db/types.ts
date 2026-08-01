@@ -1186,6 +1186,76 @@ export interface CreatorSubscriptionRecord {
     updatedAt: string;
 }
 
+// --- Canopy subscription billing (durable; migration 078) -------------------
+// These four records were module-level Maps in services/subscriptions.ts and
+// were wiped on every restart — losing Stripe cus_ links, tiers, comps and
+// gifts. They now live in the runtime store; field names map 1:1 to the
+// 078_canopy_subscriptions columns via camelToSnake. The service re-exports
+// the public-facing aliases (SubscriptionStatus, CanopyTier, SubscriptionGift,
+// …) so its consumers are unaffected.
+
+export type CanopySubscriptionStatus = 'trialing' | 'active' | 'past_due' | 'canceled';
+export type CanopyBillingInterval = 'monthly' | 'annual';
+export type CanopySubscriptionTier = 'free' | 'sprout' | 'canopy_pro';
+
+/** A user's Canopy subscription, keyed by userId (one live record per user). */
+export interface CanopySubscriptionRecord {
+    userId: string;
+    customerId: string;
+    stripeCustomerId: string;
+    lagoCustomerExternalId: string;
+    planCode: string;
+    tier: CanopySubscriptionTier;
+    interval: CanopyBillingInterval;
+    status: CanopySubscriptionStatus;
+    trialEndsAt: string | null;
+    currentPeriodEndsAt: string | null;
+    gracePeriodEndsAt: string | null;
+    canceledAt: string | null;
+    comped: boolean;
+    metadata: Record<string, unknown>;
+    updatedAt: string;
+}
+
+/** Append-only billing audit trail entry (checkouts, webhooks, admin actions, gifts). */
+export interface SubscriptionAuditEventRecord {
+    id: string;
+    userId: string;
+    type: string;
+    actor: string;
+    detail: Record<string, unknown>;
+    occurredAt: string;
+}
+
+/**
+ * Billing-webhook de-dupe ledger (Stripe event ids). Stored as records rather
+ * than a Set so the generic write-through/hydration machinery applies.
+ */
+export interface ProcessedBillingWebhookEventRecord {
+    eventId: string;
+    processedAt: string;
+}
+
+export type SubscriptionGiftStatus = 'pending' | 'claimed' | 'forwarded' | 'expired';
+
+/** Pay-it-forward subscription gift (donate/claim/forward chain). */
+export interface SubscriptionGiftRecord {
+    id: string;
+    donorUserId: string;
+    donorPlanCode: string;
+    donorTier: Exclude<CanopySubscriptionTier, 'free'>;
+    status: SubscriptionGiftStatus;
+    claimedByUserId: string | null;
+    claimedAt: string | null;
+    forwardedToGiftId: string | null;
+    expiresAt: string;
+    createdAt: string;
+    updatedAt: string;
+    rootGiftId: string;
+    chainDepth: number;
+    metadata: Record<string, unknown>;
+}
+
 export type CommunityBoostPledgeStatus = 'pending' | 'active' | 'canceled' | 'refunded' | 'expired';
 
 export type AidPoolStatus = 'open' | 'fulfilled' | 'closed';

@@ -4,7 +4,11 @@ import { hashPassword } from '../services/auth';
 import type {
     CanaryTokenRecord,
     CanopyDirectoryEntryRecord,
+    CanopySubscriptionRecord,
     CanopyVoiceRoomRecord,
+    ProcessedBillingWebhookEventRecord,
+    SubscriptionAuditEventRecord,
+    SubscriptionGiftRecord,
     FederationLinkRecord,
     MarketplaceEntitlementRecord,
     MarketplaceLicenseKeyRecord,
@@ -290,6 +294,10 @@ type PersistedState = {
     questCompletions: QuestCompletionRecord[];
     migrationCredits: MigrationCreditRecord[];
     bountyRewards: BountyRewardRecord[];
+    canopySubscriptions: CanopySubscriptionRecord[];
+    subscriptionAuditEvents: SubscriptionAuditEventRecord[];
+    processedBillingWebhookEvents: ProcessedBillingWebhookEventRecord[];
+    subscriptionGifts: SubscriptionGiftRecord[];
 };
 
 class InMemoryDb {
@@ -297,6 +305,14 @@ class InMemoryDb {
     /** Keyed by canopy (Matrix space) id. */
     canopyDirectoryEntries = new Map<string, CanopyDirectoryEntryRecord>();
     canaryTokens = new Map<string, CanaryTokenRecord>();
+    /** Canopy subscription billing state, keyed by user id (one live record per user). */
+    canopySubscriptions = new Map<string, CanopySubscriptionRecord>();
+    /** Append-only billing audit trail, keyed by event id. */
+    subscriptionAuditEvents = new Map<string, SubscriptionAuditEventRecord>();
+    /** Billing-webhook de-dupe ledger, keyed by provider event id. */
+    processedBillingWebhookEvents = new Map<string, ProcessedBillingWebhookEventRecord>();
+    /** Pay-it-forward subscription gifts, keyed by gift id. */
+    subscriptionGifts = new Map<string, SubscriptionGiftRecord>();
     /** Mesh relay store-and-forward envelopes, keyed by envelope id. Durable; see services/meshRelay.ts. */
     meshEnvelopes = new Map<string, MeshEnvelope>();
     messages = new Map<string, MessageRecord>();
@@ -1899,6 +1915,59 @@ class InMemoryDb {
     upsertCanaryToken(record: CanaryTokenRecord): CanaryTokenRecord {
         this.canaryTokens.set(record.id, record);
         return record;
+    }
+
+    // --- Canopy subscription billing (durable; was module-level Maps in
+    // services/subscriptions.ts, wiped on every restart) ---
+    getCanopySubscription(userId: string): CanopySubscriptionRecord | undefined {
+        return this.canopySubscriptions.get(userId);
+    }
+
+    upsertCanopySubscription(record: CanopySubscriptionRecord): CanopySubscriptionRecord {
+        this.canopySubscriptions.set(record.userId, record);
+        return record;
+    }
+
+    addSubscriptionAuditEvent(record: SubscriptionAuditEventRecord): SubscriptionAuditEventRecord {
+        this.subscriptionAuditEvents.set(record.id, record);
+        return record;
+    }
+
+    /** Insertion-ordered (callers sort by occurredAt; stable sort keeps write order for ties). */
+    listSubscriptionAuditEventsByUser(userId: string): SubscriptionAuditEventRecord[] {
+        return [...this.subscriptionAuditEvents.values()].filter((e) => e.userId === userId);
+    }
+
+    hasProcessedBillingWebhookEvent(eventId: string): boolean {
+        return this.processedBillingWebhookEvents.has(eventId);
+    }
+
+    markBillingWebhookEventProcessed(eventId: string): ProcessedBillingWebhookEventRecord {
+        const existing = this.processedBillingWebhookEvents.get(eventId);
+        if (existing) return existing;
+        const record: ProcessedBillingWebhookEventRecord = { eventId, processedAt: nowIso() };
+        this.processedBillingWebhookEvents.set(eventId, record);
+        return record;
+    }
+
+    getSubscriptionGift(id: string): SubscriptionGiftRecord | undefined {
+        return this.subscriptionGifts.get(id);
+    }
+
+    listSubscriptionGifts(): SubscriptionGiftRecord[] {
+        return [...this.subscriptionGifts.values()];
+    }
+
+    upsertSubscriptionGift(record: SubscriptionGiftRecord): SubscriptionGiftRecord {
+        this.subscriptionGifts.set(record.id, record);
+        return record;
+    }
+
+    resetCanopyBillingForTest(): void {
+        this.canopySubscriptions.clear();
+        this.subscriptionAuditEvents.clear();
+        this.processedBillingWebhookEvents.clear();
+        this.subscriptionGifts.clear();
     }
 
     // --- mesh relay store-and-forward (durable, M17) ---
@@ -4887,6 +4956,24 @@ export class FileBackedDb extends InMemoryDb {
         if (parsed.reputationEvents) {
             this.reputationEvents = new Map(parsed.reputationEvents.map((row) => [row.id, row]));
         }
+        if (parsed.canopySubscriptions) {
+            this.canopySubscriptions = new Map(
+                parsed.canopySubscriptions.map((row) => [row.userId, row])
+            );
+        }
+        if (parsed.subscriptionAuditEvents) {
+            this.subscriptionAuditEvents = new Map(
+                parsed.subscriptionAuditEvents.map((row) => [row.id, row])
+            );
+        }
+        if (parsed.processedBillingWebhookEvents) {
+            this.processedBillingWebhookEvents = new Map(
+                parsed.processedBillingWebhookEvents.map((row) => [row.eventId, row])
+            );
+        }
+        if (parsed.subscriptionGifts) {
+            this.subscriptionGifts = new Map(parsed.subscriptionGifts.map((row) => [row.id, row]));
+        }
     }
 
     private snapshot(): PersistedState {
@@ -5016,6 +5103,10 @@ export class FileBackedDb extends InMemoryDb {
             coliseumExplainers: [...this.coliseumExplainers.values()],
             coliseumExplainerVotes: [...this.coliseumExplainerVotes.values()],
             reputationEvents: [...this.reputationEvents.values()],
+            canopySubscriptions: [...this.canopySubscriptions.values()],
+            subscriptionAuditEvents: [...this.subscriptionAuditEvents.values()],
+            processedBillingWebhookEvents: [...this.processedBillingWebhookEvents.values()],
+            subscriptionGifts: [...this.subscriptionGifts.values()],
         };
     }
 
@@ -5205,6 +5296,32 @@ export class FileBackedDb extends InMemoryDb {
 
     override upsertCanaryToken(record: CanaryTokenRecord): CanaryTokenRecord {
         const saved = super.upsertCanaryToken(record);
+        this.persist();
+        return saved;
+    }
+
+    override upsertCanopySubscription(record: CanopySubscriptionRecord): CanopySubscriptionRecord {
+        const saved = super.upsertCanopySubscription(record);
+        this.persist();
+        return saved;
+    }
+
+    override addSubscriptionAuditEvent(
+        record: SubscriptionAuditEventRecord
+    ): SubscriptionAuditEventRecord {
+        const saved = super.addSubscriptionAuditEvent(record);
+        this.persist();
+        return saved;
+    }
+
+    override markBillingWebhookEventProcessed(eventId: string): ProcessedBillingWebhookEventRecord {
+        const saved = super.markBillingWebhookEventProcessed(eventId);
+        this.persist();
+        return saved;
+    }
+
+    override upsertSubscriptionGift(record: SubscriptionGiftRecord): SubscriptionGiftRecord {
+        const saved = super.upsertSubscriptionGift(record);
         this.persist();
         return saved;
     }
@@ -6527,8 +6644,8 @@ export class FileBackedDb extends InMemoryDb {
 /**
  * Postgres-backed store (BLACKOUT_DB_MODE=postgres). Write-through: reads are
  * inherited from InMemoryDb (served from the in-memory mirror hydrated on
- * boot), and the 107 mutators are wrapped to enqueue a durable Postgres write
- * after updating the mirror.
+ * boot), and every MUTATOR_SPECS mutator is wrapped to enqueue a durable
+ * Postgres write after updating the mirror.
  *
  * Multi-replica consistency: when a change transport is supplied — Postgres
  * LISTEN/NOTIFY, ON BY DEFAULT (BLACKOUT_DB_PG_NOTIFY=1) — each replica

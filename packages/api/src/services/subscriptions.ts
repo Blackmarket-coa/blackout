@@ -1,5 +1,15 @@
 import crypto from 'node:crypto';
 import type { EntitlementTier } from '@blackout/protocol';
+import { db } from '../db/store';
+import type {
+    CanopyBillingInterval,
+    CanopySubscriptionRecord,
+    CanopySubscriptionStatus,
+    CanopySubscriptionTier,
+    SubscriptionAuditEventRecord,
+    SubscriptionGiftRecord,
+    SubscriptionGiftStatus,
+} from '../db/types';
 import {
     createStripeCheckoutSession,
     createStripePortalSession,
@@ -7,61 +17,28 @@ import {
     stripePriceIdForPlan,
 } from './stripeCheckout';
 
-export type SubscriptionStatus = 'trialing' | 'active' | 'past_due' | 'canceled';
-export type BillingInterval = 'monthly' | 'annual';
-export type CanopyTier = 'free' | 'sprout' | 'canopy_pro';
+// Subscription state is DURABLE: records live in the runtime store (persisted
+// in file/postgres modes, hydrated on boot) instead of the former module-level
+// Maps that were wiped on every restart — losing real Stripe customer ids
+// (cus_…), paid tiers, comps, webhook idempotency, and gifts. The public type
+// names below are stable re-exports of the db/types records so consumers keep
+// importing them from this service.
+export type SubscriptionStatus = CanopySubscriptionStatus;
+export type BillingInterval = CanopyBillingInterval;
+export type CanopyTier = CanopySubscriptionTier;
 
 type CheckoutProvider = 'stripe' | 'lago';
 
-type SubscriptionRecord = {
-    userId: string;
-    customerId: string;
-    stripeCustomerId: string;
-    lagoCustomerExternalId: string;
-    planCode: string;
-    tier: CanopyTier;
-    interval: BillingInterval;
-    status: SubscriptionStatus;
-    trialEndsAt: string | null;
-    currentPeriodEndsAt: string | null;
-    gracePeriodEndsAt: string | null;
-    canceledAt: string | null;
-    comped: boolean;
-    metadata: Record<string, unknown>;
-    updatedAt: string;
-};
-
-type SubscriptionAuditEvent = {
-    id: string;
-    userId: string;
-    type: string;
-    actor: string;
-    detail: Record<string, unknown>;
-    occurredAt: string;
-};
+type SubscriptionRecord = CanopySubscriptionRecord;
+type SubscriptionAuditEvent = SubscriptionAuditEventRecord;
 
 export type SubscriptionSnapshot = SubscriptionRecord & {
     entitlementActive: boolean;
 };
 
-export type GiftStatus = 'pending' | 'claimed' | 'forwarded' | 'expired';
+export type GiftStatus = SubscriptionGiftStatus;
 
-export type SubscriptionGift = {
-    id: string;
-    donorUserId: string;
-    donorPlanCode: string;
-    donorTier: Exclude<CanopyTier, 'free'>;
-    status: GiftStatus;
-    claimedByUserId: string | null;
-    claimedAt: string | null;
-    forwardedToGiftId: string | null;
-    expiresAt: string;
-    createdAt: string;
-    updatedAt: string;
-    rootGiftId: string;
-    chainDepth: number;
-    metadata: Record<string, unknown>;
-};
+export type SubscriptionGift = SubscriptionGiftRecord;
 
 const CANOPY_PRODUCTS = [
     {
@@ -104,11 +81,6 @@ const productsByPlan = new Map<string, typeof CANOPY_PRODUCTS[number]>(
     CANOPY_PRODUCTS.map((p) => [p.planCode, p])
 );
 
-const subscriptions = new Map<string, SubscriptionRecord>();
-const auditTimelineByUser = new Map<string, SubscriptionAuditEvent[]>();
-const processedWebhookEvents = new Set<string>();
-const subscriptionGifts = new Map<string, SubscriptionGift>();
-
 const DEFAULT_GIFT_EXPIRY_DAYS = 30;
 
 function nowIso(): string {
@@ -128,9 +100,7 @@ function addAudit(userId: string, type: string, actor: string, detail: Record<st
         detail,
         occurredAt: nowIso(),
     };
-    const list = auditTimelineByUser.get(userId) ?? [];
-    list.push(event);
-    auditTimelineByUser.set(userId, list);
+    db.addSubscriptionAuditEvent(event);
 }
 
 function entitlementActiveFor(record: SubscriptionRecord): boolean {
@@ -146,7 +116,7 @@ export function listCanopyProducts() {
 }
 
 export function getSubscription(userId: string): SubscriptionSnapshot {
-    const existing = subscriptions.get(userId);
+    const existing = db.getCanopySubscription(userId);
     if (existing) {
         return { ...existing, entitlementActive: entitlementActiveFor(existing) };
     }
@@ -276,7 +246,7 @@ export async function createCustomerPortalSession(userId: string, returnUrl?: st
 }
 
 function ensureUserRecord(userId: string): SubscriptionRecord {
-    const existing = subscriptions.get(userId);
+    const existing = db.getCanopySubscription(userId);
     if (existing) return existing;
     const seed: SubscriptionRecord = {
         userId,
@@ -295,8 +265,7 @@ function ensureUserRecord(userId: string): SubscriptionRecord {
         metadata: {},
         updatedAt: nowIso(),
     };
-    subscriptions.set(userId, seed);
-    return seed;
+    return db.upsertCanopySubscription(seed);
 }
 
 /**
@@ -313,9 +282,7 @@ export function syncStripeCustomerId(
 ): { updated: boolean; stripeCustomerId: string } {
     const record = ensureUserRecord(userId);
     const updated = record.stripeCustomerId !== stripeCustomerId;
-    record.stripeCustomerId = stripeCustomerId;
-    record.updatedAt = nowIso();
-    subscriptions.set(userId, record);
+    db.upsertCanopySubscription({ ...record, stripeCustomerId, updatedAt: nowIso() });
     if (updated) addAudit(userId, 'stripe.customer_synced', 'system', { stripeCustomerId });
     return { updated, stripeCustomerId };
 }
@@ -330,7 +297,8 @@ export type StripeCheckoutCompletedEvent = {
  * Handle a Stripe `checkout.session.completed` event by syncing the real
  * `cus_…` onto the subscription record identified by `client_reference_id`.
  * This is the step the go-live runbook calls out as required before advertising
- * the Billing Portal. Idempotent by Stripe event id (shared de-dupe set).
+ * the Billing Portal. Idempotent by Stripe event id (shared durable de-dupe
+ * ledger, so a restart between deliveries cannot double-process).
  */
 export function applyStripeCheckoutCompleted(event: StripeCheckoutCompletedEvent): {
     processed: boolean;
@@ -340,7 +308,7 @@ export function applyStripeCheckoutCompleted(event: StripeCheckoutCompletedEvent
     if (event.type !== 'checkout.session.completed') {
         return { processed: false, reason: 'ignored_event_type' };
     }
-    if (processedWebhookEvents.has(event.id)) {
+    if (db.hasProcessedBillingWebhookEvent(event.id)) {
         return { processed: false, reason: 'already_processed' };
     }
     const session = event.data?.object ?? {};
@@ -350,7 +318,7 @@ export function applyStripeCheckoutCompleted(event: StripeCheckoutCompletedEvent
         return { processed: false, reason: 'missing_reference_or_customer' };
     }
     syncStripeCustomerId(userId, customer);
-    processedWebhookEvents.add(event.id);
+    db.markBillingWebhookEventProcessed(event.id);
     return { processed: true, userId };
 }
 
@@ -374,7 +342,7 @@ export function applySubscriptionWebhookEvent(event: SubscriptionWebhookEvent): 
     status: SubscriptionStatus;
     userId: string;
 } {
-    if (processedWebhookEvents.has(event.eventId)) {
+    if (db.hasProcessedBillingWebhookEvent(event.eventId)) {
         const snapshot = getSubscription(event.userId);
         return { processed: false, status: snapshot.status, userId: event.userId };
     }
@@ -446,8 +414,8 @@ export function applySubscriptionWebhookEvent(event: SubscriptionWebhookEvent): 
         };
     }
 
-    subscriptions.set(event.userId, next);
-    processedWebhookEvents.add(event.eventId);
+    db.upsertCanopySubscription(next);
+    db.markBillingWebhookEventProcessed(event.eventId);
     addAudit(event.userId, `webhook.${event.type}`, 'webhook', {
         planCode: event.planCode ?? null,
         metadata: event.metadata ?? {},
@@ -473,7 +441,7 @@ export function applyManualComp(
         currentPeriodEndsAt: daysFromNow(31),
         updatedAt: nowIso(),
     };
-    subscriptions.set(userId, updated);
+    db.upsertCanopySubscription(updated);
     addAudit(userId, 'admin.manual_comp', actor, { detail: detail ?? null });
     return { ...updated, entitlementActive: true };
 }
@@ -493,13 +461,13 @@ export function syncRefund(userId: string, actor: string, reason?: string): Subs
             refundReason: reason ?? null,
         },
     };
-    subscriptions.set(userId, updated);
+    db.upsertCanopySubscription(updated);
     addAudit(userId, 'admin.refund_sync', actor, { reason: reason ?? null });
     return { ...updated, entitlementActive: false };
 }
 
 export function getSubscriptionAuditTimeline(userId: string): SubscriptionAuditEvent[] {
-    return [...(auditTimelineByUser.get(userId) ?? [])].sort((a, b) =>
+    return [...db.listSubscriptionAuditEventsByUser(userId)].sort((a, b) =>
         a.occurredAt.localeCompare(b.occurredAt)
     );
 }
@@ -521,9 +489,9 @@ export function entitlementTierForUser(userId: string): EntitlementTier {
 
 function expireStaleGifts(): void {
     const now = Date.now();
-    for (const [id, gift] of subscriptionGifts) {
+    for (const gift of db.listSubscriptionGifts()) {
         if (gift.status === 'pending' && Date.parse(gift.expiresAt) <= now) {
-            subscriptionGifts.set(id, { ...gift, status: 'expired', updatedAt: nowIso() });
+            db.upsertSubscriptionGift({ ...gift, status: 'expired', updatedAt: nowIso() });
         }
     }
 }
@@ -563,7 +531,7 @@ export function donateForward(
         chainDepth: 0,
         metadata: opts?.metadata ?? {},
     };
-    subscriptionGifts.set(id, gift);
+    db.upsertSubscriptionGift(gift);
     addAudit(userId, 'gift.donated', actor, {
         giftId: id,
         rootGiftId: id,
@@ -577,7 +545,7 @@ export function listAvailableGifts(opts?: { limit?: number }): SubscriptionGift[
     expireStaleGifts();
     const limit = opts?.limit ?? 50;
     const list: SubscriptionGift[] = [];
-    for (const gift of subscriptionGifts.values()) {
+    for (const gift of db.listSubscriptionGifts()) {
         if (gift.status === 'pending') list.push(gift);
     }
     list.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
@@ -585,7 +553,7 @@ export function listAvailableGifts(opts?: { limit?: number }): SubscriptionGift[
 }
 
 export function getGift(giftId: string): SubscriptionGift | undefined {
-    return subscriptionGifts.get(giftId);
+    return db.getSubscriptionGift(giftId);
 }
 
 export function claimGift(
@@ -593,11 +561,11 @@ export function claimGift(
     userId: string,
     actor: string
 ): { gift: SubscriptionGift; subscription: SubscriptionSnapshot } {
-    const gift = subscriptionGifts.get(giftId);
+    const gift = db.getSubscriptionGift(giftId);
     if (!gift) throw new Error('gift_not_found');
     if (gift.status !== 'pending') throw new Error('gift_unavailable');
     if (Date.parse(gift.expiresAt) <= Date.now()) {
-        subscriptionGifts.set(gift.id, { ...gift, status: 'expired', updatedAt: nowIso() });
+        db.upsertSubscriptionGift({ ...gift, status: 'expired', updatedAt: nowIso() });
         throw new Error('gift_expired');
     }
     if (gift.donorUserId === userId) throw new Error('cannot_claim_own_gift');
@@ -609,7 +577,7 @@ export function claimGift(
         claimedAt: nowIso(),
         updatedAt: nowIso(),
     };
-    subscriptionGifts.set(gift.id, updated);
+    db.upsertSubscriptionGift(updated);
 
     const subscription = applyManualComp(userId, actor, `pay_forward:${gift.id}`);
     addAudit(userId, 'gift.claimed', actor, {
@@ -627,11 +595,11 @@ export function forwardGift(
     actor: string,
     opts?: DonateForwardOptions
 ): { previous: SubscriptionGift; next: SubscriptionGift } {
-    const gift = subscriptionGifts.get(giftId);
+    const gift = db.getSubscriptionGift(giftId);
     if (!gift) throw new Error('gift_not_found');
     if (gift.status !== 'pending') throw new Error('gift_unavailable');
     if (Date.parse(gift.expiresAt) <= Date.now()) {
-        subscriptionGifts.set(gift.id, { ...gift, status: 'expired', updatedAt: nowIso() });
+        db.upsertSubscriptionGift({ ...gift, status: 'expired', updatedAt: nowIso() });
         throw new Error('gift_expired');
     }
     if (gift.donorUserId === recipientUserId) throw new Error('cannot_forward_own_gift');
@@ -653,7 +621,7 @@ export function forwardGift(
         chainDepth: gift.chainDepth + 1,
         metadata: { ...(opts?.metadata ?? {}), previousGiftId: gift.id },
     };
-    subscriptionGifts.set(nextId, next);
+    db.upsertSubscriptionGift(next);
 
     const previous: SubscriptionGift = {
         ...gift,
@@ -663,7 +631,7 @@ export function forwardGift(
         forwardedToGiftId: nextId,
         updatedAt: nowIso(),
     };
-    subscriptionGifts.set(gift.id, previous);
+    db.upsertSubscriptionGift(previous);
 
     addAudit(recipientUserId, 'gift.forwarded', actor, {
         giftId: gift.id,
@@ -681,7 +649,7 @@ export function getMyGifts(userId: string): {
     expireStaleGifts();
     const donated: SubscriptionGift[] = [];
     const received: SubscriptionGift[] = [];
-    for (const gift of subscriptionGifts.values()) {
+    for (const gift of db.listSubscriptionGifts()) {
         if (gift.donorUserId === userId) donated.push(gift);
         if (gift.claimedByUserId === userId) received.push(gift);
     }
