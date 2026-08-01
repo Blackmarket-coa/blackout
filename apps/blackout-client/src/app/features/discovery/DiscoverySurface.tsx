@@ -20,6 +20,7 @@ import {
     DiscoveryItem,
     DiscoverySort,
     getNextKeyboardIndex,
+    isLikelySandbox,
     performDiscoveryAction,
     rankDiscoveryItems,
 } from './model';
@@ -30,6 +31,7 @@ const DEFAULT_FILTERS: DiscoveryFilters = {
     type: 'all',
     access: 'all',
     activity: 'all',
+    includeEmpty: false,
 };
 
 const SORT_OPTIONS: Array<{ label: string; value: DiscoverySort }> = [
@@ -218,6 +220,18 @@ export function DiscoverySurface({ onSelectRoom, onSelectSpace }: DiscoverySurfa
                                         <Text size="T200">Activity: {value}</Text>
                                     </Chip>
                                 ))}
+                                <Chip
+                                    aria-pressed={filters.includeEmpty === true}
+                                    variant={filters.includeEmpty ? 'Success' : 'Surface'}
+                                    onClick={() =>
+                                        setFilters((prev) => ({
+                                            ...prev,
+                                            includeEmpty: !prev.includeEmpty,
+                                        }))
+                                    }
+                                >
+                                    <Text size="T200">Include empty</Text>
+                                </Chip>
                             </Box>
                         </Box>
 
@@ -318,6 +332,11 @@ export function DiscoverySurface({ onSelectRoom, onSelectSpace }: DiscoverySurfa
                                                     {item.inHierarchy && (
                                                         <Chip variant="Success">
                                                             <Text size="T200">In hierarchy</Text>
+                                                        </Chip>
+                                                    )}
+                                                    {isLikelySandbox(item) && (
+                                                        <Chip variant="Surface">
+                                                            <Text size="T200">Sandbox</Text>
                                                         </Chip>
                                                     )}
                                                 </Box>
