@@ -3,6 +3,7 @@ import { dirname, resolve } from 'node:path';
 import { hashPassword } from '../services/auth';
 import type {
     CanaryTokenRecord,
+    DenGreetingRecord,
     CanopyDirectoryEntryRecord,
     CanopySubscriptionRecord,
     CanopyVoiceRoomRecord,
@@ -172,6 +173,7 @@ type PersistedState = {
     users: UserRecord[];
     canopyDirectoryEntries: CanopyDirectoryEntryRecord[];
     canaryTokens: CanaryTokenRecord[];
+    denGreetings: DenGreetingRecord[];
     meshEnvelopes: MeshEnvelope[];
     messages: MessageRecord[];
     scheduledMessages: ScheduledMessageRecord[];
@@ -305,6 +307,8 @@ class InMemoryDb {
     /** Keyed by canopy (Matrix space) id. */
     canopyDirectoryEntries = new Map<string, CanopyDirectoryEntryRecord>();
     canaryTokens = new Map<string, CanaryTokenRecord>();
+    /** Den auto-welcome ledger (BLACKOUT_DEN_GREETER), keyed by `${roomId}:${userId}`. */
+    denGreetings = new Map<string, DenGreetingRecord>();
     /** Canopy subscription billing state, keyed by user id (one live record per user). */
     canopySubscriptions = new Map<string, CanopySubscriptionRecord>();
     /** Append-only billing audit trail, keyed by event id. */
@@ -1914,6 +1918,30 @@ class InMemoryDb {
 
     upsertCanaryToken(record: CanaryTokenRecord): CanaryTokenRecord {
         this.canaryTokens.set(record.id, record);
+        return record;
+    }
+
+    // --- den auto-welcome ledger (BLACKOUT_DEN_GREETER; one greet per join) ---
+    private static denGreetingKey(roomId: string, userId: string): string {
+        return `${roomId}:${userId}`;
+    }
+
+    /** True once the bot has greeted `userId` in `roomId` (dedupe guard). */
+    hasGreeted(roomId: string, userId: string): boolean {
+        return this.denGreetings.has(InMemoryDb.denGreetingKey(roomId, userId));
+    }
+
+    /**
+     * Record that `userId` was greeted in `roomId`. Idempotent on the
+     * `(roomId, userId)` pair: a repeat call returns the first record without
+     * moving its timestamp, so a re-greet never happens.
+     */
+    markGreeted(roomId: string, userId: string): DenGreetingRecord {
+        const key = InMemoryDb.denGreetingKey(roomId, userId);
+        const existing = this.denGreetings.get(key);
+        if (existing) return existing;
+        const record: DenGreetingRecord = { roomId, userId, greetedAt: nowIso() };
+        this.denGreetings.set(key, record);
         return record;
     }
 
@@ -4577,6 +4605,9 @@ export class FileBackedDb extends InMemoryDb {
             (parsed.canopyDirectoryEntries ?? []).map((row) => [row.canopyId, row])
         );
         this.canaryTokens = new Map((parsed.canaryTokens ?? []).map((row) => [row.id, row]));
+        this.denGreetings = new Map(
+            (parsed.denGreetings ?? []).map((row) => [`${row.roomId}:${row.userId}`, row])
+        );
         this.meshEnvelopes = new Map((parsed.meshEnvelopes ?? []).map((row) => [row.id, row]));
         this.messages = new Map(parsed.messages.map((row) => [row.id, row]));
         this.scheduledMessages = new Map(
@@ -4981,6 +5012,7 @@ export class FileBackedDb extends InMemoryDb {
             users: [...this.users.values()],
             canopyDirectoryEntries: [...this.canopyDirectoryEntries.values()],
             canaryTokens: [...this.canaryTokens.values()],
+            denGreetings: [...this.denGreetings.values()],
             meshEnvelopes: [...this.meshEnvelopes.values()],
             messages: [...this.messages.values()],
             scheduledMessages: [...this.scheduledMessages.values()],
@@ -5298,6 +5330,12 @@ export class FileBackedDb extends InMemoryDb {
         const saved = super.upsertCanaryToken(record);
         this.persist();
         return saved;
+    }
+
+    override markGreeted(roomId: string, userId: string): DenGreetingRecord {
+        const record = super.markGreeted(roomId, userId);
+        this.persist();
+        return record;
     }
 
     override upsertCanopySubscription(record: CanopySubscriptionRecord): CanopySubscriptionRecord {

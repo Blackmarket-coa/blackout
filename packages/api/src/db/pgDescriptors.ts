@@ -63,6 +63,11 @@ const OVERRIDES: Record<string, DescriptorOverride> = {
     },
     widgetAlertTokens: { keyOf: (r) => String(r.secretHash), conflictColumns: ['secret_hash'] },
     canopyDirectoryEntries: { keyOf: (r) => String(r.canopyId), conflictColumns: ['canopy_id'] },
+    // Composite key: one greeting row per (room, user) join — no `id` column.
+    denGreetings: {
+        keyOf: (r) => `${r.roomId}:${r.userId}`,
+        conflictColumns: ['room_id', 'user_id'],
+    },
     coliseumVotes: {
         keyOf: (r) => `${r.argumentId}::${r.voterId}`,
         conflictColumns: ['argument_id', 'voter_id'],
@@ -404,6 +409,7 @@ const ALL_MAP_NAMES = [
     'coalitionFeedComments',
     'canopyDirectoryEntries',
     'canaryTokens',
+    'denGreetings',
     'meshEnvelopes',
     'clips',
     'coliseumTopics',
@@ -650,6 +656,7 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
     createCoalitionFeedComment: upsert('coalitionFeedComments'),
     upsertCanopyDirectoryEntry: upsert('canopyDirectoryEntries'),
     upsertCanaryToken: upsert('canaryTokens'),
+    markGreeted: upsert('denGreetings'),
     upsertCanopySubscription: upsert('canopySubscriptions'),
     addSubscriptionAuditEvent: upsert('subscriptionAuditEvents'),
     markBillingWebhookEventProcessed: upsert('processedBillingWebhookEvents'),

@@ -684,6 +684,20 @@ export interface CanaryTokenRecord {
     lastTripUserAgent: string | null;
 }
 
+/**
+ * A record that the appservice bot has already sent its one-time welcome message
+ * to `userId` on their first join of den `roomId` (BLACKOUT_DEN_GREETER). Durable
+ * so a re-join — or a Synapse transaction replay under a new txn id — never
+ * re-greets. Keyed in-memory by `${roomId}:${userId}`; the table's primary key is
+ * the (room_id, user_id) pair. Field names map 1:1 to the den_greetings migration
+ * columns via camelToSnake.
+ */
+export interface DenGreetingRecord {
+    roomId: string;
+    userId: string;
+    greetedAt: string;
+}
+
 export interface MessageRecord {
     id: UUID;
     channelId: UUID;
