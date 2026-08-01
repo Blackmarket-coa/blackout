@@ -34,7 +34,7 @@ export interface BountiesResponse {
 
 export function fetchBounties(
     query: BountiesQuery = {},
-    token: string | null = readBlackoutApiToken(),
+    token: string | null = readBlackoutApiToken()
 ): Promise<BountiesResponse> {
     const params = new URLSearchParams();
     if (query.category) params.set('category', query.category);
@@ -44,11 +44,21 @@ export function fetchBounties(
     return getJson<BountiesResponse>(`${BOUNTY_BASE}${qs ? `?${qs}` : ''}`, token);
 }
 
-/** Auto-matched open bounties for the signed-in creator (Creator Hub growth panel). */
+/**
+ * Auto-matched open bounties for the signed-in creator (Creator Hub growth
+ * panel). Optional `categories` are the viewer's interest-derived bounty
+ * categories; they are joined into the `?categories=` filter so the server ranks
+ * matching categories first. An empty/omitted list sends no filter (the server
+ * falls back to its creator-relevant default).
+ */
 export function fetchRecommendedBounties(
-    token: string | null = readBlackoutApiToken(),
+    categories: readonly BountyCategory[] = [],
+    token: string | null = readBlackoutApiToken()
 ): Promise<BountiesResponse> {
-    return getJson<BountiesResponse>(`${BOUNTY_BASE}/recommended`, token);
+    const qs = categories.length
+        ? `?categories=${categories.map(encodeURIComponent).join(',')}`
+        : '';
+    return getJson<BountiesResponse>(`${BOUNTY_BASE}/recommended${qs}`, token);
 }
 
 export interface CreateBountyInput {
@@ -65,19 +75,19 @@ export interface CreateBountyInput {
 
 export function createBounty(
     input: CreateBountyInput,
-    token: string | null = readBlackoutApiToken(),
+    token: string | null = readBlackoutApiToken()
 ): Promise<{ bounty: Bounty }> {
     return postJson<{ bounty: Bounty }>(BOUNTY_BASE, input, token);
 }
 
 export function claimBounty(
     id: string,
-    token: string | null = readBlackoutApiToken(),
+    token: string | null = readBlackoutApiToken()
 ): Promise<{ bounty: Bounty }> {
     return postJson<{ bounty: Bounty }>(
         `${BOUNTY_BASE}/${encodeURIComponent(id)}/claim`,
         {},
-        token,
+        token
     );
 }
 
@@ -86,36 +96,36 @@ export function claimBounty(
 export function applyToBounty(
     id: string,
     message?: string,
-    token: string | null = readBlackoutApiToken(),
+    token: string | null = readBlackoutApiToken()
 ): Promise<{ application: BountyApplication }> {
     return postJson<{ application: BountyApplication }>(
         `${BOUNTY_BASE}/${encodeURIComponent(id)}/applications`,
         message ? { message } : {},
-        token,
+        token
     );
 }
 
 export function fetchBountyApplications(
     id: string,
-    token: string | null = readBlackoutApiToken(),
+    token: string | null = readBlackoutApiToken()
 ): Promise<{ applications: BountyApplication[] }> {
     return getJson<{ applications: BountyApplication[] }>(
         `${BOUNTY_BASE}/${encodeURIComponent(id)}/applications`,
-        token,
+        token
     );
 }
 
 export function acceptBountyApplication(
     id: string,
     applicantId: string,
-    token: string | null = readBlackoutApiToken(),
+    token: string | null = readBlackoutApiToken()
 ): Promise<{ bounty: Bounty; application: BountyApplication }> {
     return postJson<{ bounty: Bounty; application: BountyApplication }>(
         `${BOUNTY_BASE}/${encodeURIComponent(id)}/applications/${encodeURIComponent(
-            applicantId,
+            applicantId
         )}/accept`,
         {},
-        token,
+        token
     );
 }
 
@@ -146,21 +156,21 @@ export interface BountyRewardSummary {
 export function updateBountyStatus(
     id: string,
     status: BountyStatus,
-    token: string | null = readBlackoutApiToken(),
+    token: string | null = readBlackoutApiToken()
 ): Promise<{ bounty: Bounty; reward: BountyReward | null }> {
     return patchJson<{ bounty: Bounty; reward: BountyReward | null }>(
         `${BOUNTY_BASE}/${encodeURIComponent(id)}`,
         { status },
-        token,
+        token
     );
 }
 
 /** The signed-in creator's bounty reward earnings (for the rewards dashboard). */
 export function fetchMyBountyRewards(
-    token: string | null = readBlackoutApiToken(),
+    token: string | null = readBlackoutApiToken()
 ): Promise<{ rewards: BountyReward[]; summary: BountyRewardSummary }> {
     return getJson<{ rewards: BountyReward[]; summary: BountyRewardSummary }>(
         `${BOUNTY_BASE}/rewards/me`,
-        token,
+        token
     );
 }

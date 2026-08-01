@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { Bounty } from '@blackout/core';
 import { applyToBounty } from '../bounty/bountyClient';
+import { CREATE_PATH } from '../../pages/paths';
 import { BOUNTY_CATEGORY_LABELS } from './bountyCategoryLabels';
 import { BountyDetailPanel } from './BountyDetailPanel';
 import * as css from './BountyBoard.css';
@@ -68,12 +69,36 @@ const BountyCard = ({
  * card carries an Apply action and a Details button that opens a panel (the
  * poster sees applicants to accept; everyone else can apply). Blackout-home
  * presents the community-and-creation categories; the same engine drives
- * FBM-home with producer/vendor categories. Renders nothing when there are no
- * open bounties, so it stays invisible until the board has content.
+ * FBM-home with producer/vendor categories. When the board is empty it shows a
+ * small activation empty state — a "Post the first bounty" CTA — rather than
+ * disappearing, so the surface invites the first post instead of staying hidden.
  */
-export const BountyBoard = ({ items }: { items: Bounty[] }): JSX.Element | null => {
+export const BountyBoard = ({ items }: { items: Bounty[] }): JSX.Element => {
     const [selected, setSelected] = useState<Bounty | null>(null);
-    if (items.length === 0) return null;
+    if (items.length === 0) {
+        return (
+            <section
+                className={css.section}
+                data-shell-region="home-bounty-board"
+                data-testid="home-bounty-board-empty"
+            >
+                <header className={css.label}>Bounty board</header>
+                <div className={css.emptyCard}>
+                    <p className={css.emptyText}>
+                        No open bounties yet. Post the first one to invite creators, developers, and
+                        coalition builders to pick it up.
+                    </p>
+                    <a
+                        className={css.postFirstButton}
+                        href={CREATE_PATH}
+                        data-testid="home-bounty-post-first"
+                    >
+                        Post the first bounty
+                    </a>
+                </div>
+            </section>
+        );
+    }
     return (
         <section
             className={css.section}
