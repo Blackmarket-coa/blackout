@@ -11,22 +11,24 @@ the repo already runs.
 Workstreams WS1–WS5 have landed on disk; the "Status in repo" column below is
 updated to match. Each capability ships behind an env gate and is off by default:
 
-- **WS1 — Analytics:** client transport `apps/blackout-client/src/app/sdk/viewEvents.ts`
-  → `POST /v1/telemetry/events` (`packages/api/src/routes/telemetry.ts`); Owncast
-  metrics poller `packages/api/src/services/owncastMetricsScheduler.ts`, registered in
-  `backgroundLoops.ts` behind `BLACKOUT_OWNCAST_METRICS`. Remaining: Creator Hub
-  Insights panel polish.
-- **WS2 — VOD recording:** `packages/api/src/services/vodRecorderWorker.ts`
-  (`isVodRecordingEnabled`, `BLACKOUT_VOD_RECORDING`), invoked from
-  `modules/streaming.ts` on session start.
-- **WS3 — Clips:** client composer
-  `apps/blackout-client/src/app/features/streaming/composer/ClipComposer.tsx`
-  (`@ffmpeg/ffmpeg`); server cut + captions `packages/api/src/services/clipCutterWorker.ts`
-  (captions gated `BLACKOUT_CLIP_CAPTIONS=1` **and** a `WHISPER_CPP_MODEL` on disk).
-- **WS4 — Proximity:** `GET /v1/coalition/nearby` (`packages/api/src/routes/coalition.ts`)
-  surfaced on the Home chip via `useNearbySignals` (`HomeFeed.tsx`).
-- **WS5 — Quick wins:** feed diversity cap `capBySource` / `maxPerSource` in
-  `unifiedFeedModel.ts`; payout-transparency surfacing shipped.
+-   **WS1 — Analytics:** client transport `apps/blackout-client/src/app/sdk/viewEvents.ts`
+    → `POST /v1/telemetry/events` (`packages/api/src/routes/telemetry.ts`); Owncast
+    metrics poller `packages/api/src/services/owncastMetricsScheduler.ts`, registered in
+    `backgroundLoops.ts` behind `BLACKOUT_OWNCAST_METRICS`. The Creator Hub
+    Insights strip has since shipped (`features/streaming/sections/CreatorHubOverview.tsx`
+    reads `insightsClient` → `GET /v1/telemetry/creator/summary`, hiding rather
+    than zeroing when no warehouse is configured), so WS1 is complete.
+-   **WS2 — VOD recording:** `packages/api/src/services/vodRecorderWorker.ts`
+    (`isVodRecordingEnabled`, `BLACKOUT_VOD_RECORDING`), invoked from
+    `modules/streaming.ts` on session start.
+-   **WS3 — Clips:** client composer
+    `apps/blackout-client/src/app/features/streaming/composer/ClipComposer.tsx`
+    (`@ffmpeg/ffmpeg`); server cut + captions `packages/api/src/services/clipCutterWorker.ts`
+    (captions gated `BLACKOUT_CLIP_CAPTIONS=1` **and** a `WHISPER_CPP_MODEL` on disk).
+-   **WS4 — Proximity:** `GET /v1/coalition/nearby` (`packages/api/src/routes/coalition.ts`)
+    surfaced on the Home chip via `useNearbySignals` (`HomeFeed.tsx`).
+-   **WS5 — Quick wins:** feed diversity cap `capBySource` / `maxPerSource` in
+    `unifiedFeedModel.ts`; payout-transparency surfacing shipped.
 
 The workstream write-ups below are retained as the design/rationale record.
 
@@ -49,16 +51,16 @@ The workstream write-ups below are retained as the design/rationale record.
 
 ## Gap → OSS mapping
 
-| Gap (audit finding) | OSS | License | Integration mode | Status in repo |
-| --- | --- | --- | --- | --- |
-| Creator/audience analytics (ABSENT) | ClickHouse + Cube | Apache-2.0 | Already-deployed services; add ingestion + query routes | **Shipped** — transport + `/v1/telemetry/events` ingest; Insights panel remains |
-| Live viewer metrics (ABSENT) | Owncast admin API (`/api/admin/viewersOverTime`, `/api/admin/viewers`, `/api/admin/prometheus`) | MIT | HTTP poller scheduler | **Shipped** — `owncastMetricsScheduler.ts`, gated `BLACKOUT_OWNCAST_METRICS` |
-| VOD recording (pointer-only) | ffmpeg (phase 1), MediaMTX (phase 2 option) | GPL/LGPL spawned; MIT | Spawned recorder job; optional ingest/record/playback server | **Shipped (phase 1)** — `vodRecorderWorker.ts`, gated `BLACKOUT_VOD_RECORDING` |
-| Clips editing (ABSENT) | ffmpeg.wasm (client trim/crop), ffmpeg (server cut) | MIT wrapper / LGPL core; GPL/LGPL spawned | Browser wasm asset; spawned job | **Shipped** — `ClipComposer.tsx` + `clipCutterWorker.ts` |
-| Auto-captions (ABSENT) | whisper.cpp (`--output-srt`/`--output-vtt`) | MIT | Spawned job, SRT/VTT sidecar | **Shipped, gated** — `clipCutterWorker.ts`, needs `BLACKOUT_CLIP_CAPTIONS=1` + `WHISPER_CPP_MODEL` |
-| Proximity discovery (SHELL-ONLY) | PostGIS + martin + MapLibre; h3-js if cell-bucketing needed | GPL (separate DB service) / MIT / BSD / Apache-2.0 | Already-deployed DB + tiles; add opt-in coarse location + nearby query | **Shipped** — `GET /v1/coalition/nearby` + `useNearbySignals` on Home chip |
-| Payout transparency (surfacing) | — none needed | — | Surface `packages/core/src/marketplace/fees.ts` constants + FBM data in UI | **Shipped** |
-| Feed diversity caps (missing) | — none needed | — | Pure code in `unifiedFeedModel.ts` `mergeAndRank` | **Shipped** — `capBySource` / `maxPerSource` |
+| Gap (audit finding)                 | OSS                                                                                             | License                                            | Integration mode                                                           | Status in repo                                                                                     |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------- | -------------------------------------------------- | -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Creator/audience analytics (ABSENT) | ClickHouse + Cube                                                                               | Apache-2.0                                         | Already-deployed services; add ingestion + query routes                    | **Shipped** — transport + `/v1/telemetry/events` ingest; Insights panel remains                    |
+| Live viewer metrics (ABSENT)        | Owncast admin API (`/api/admin/viewersOverTime`, `/api/admin/viewers`, `/api/admin/prometheus`) | MIT                                                | HTTP poller scheduler                                                      | **Shipped** — `owncastMetricsScheduler.ts`, gated `BLACKOUT_OWNCAST_METRICS`                       |
+| VOD recording (pointer-only)        | ffmpeg (phase 1), MediaMTX (phase 2 option)                                                     | GPL/LGPL spawned; MIT                              | Spawned recorder job; optional ingest/record/playback server               | **Shipped (phase 1)** — `vodRecorderWorker.ts`, gated `BLACKOUT_VOD_RECORDING`                     |
+| Clips editing (ABSENT)              | ffmpeg.wasm (client trim/crop), ffmpeg (server cut)                                             | MIT wrapper / LGPL core; GPL/LGPL spawned          | Browser wasm asset; spawned job                                            | **Shipped** — `ClipComposer.tsx` + `clipCutterWorker.ts`                                           |
+| Auto-captions (ABSENT)              | whisper.cpp (`--output-srt`/`--output-vtt`)                                                     | MIT                                                | Spawned job, SRT/VTT sidecar                                               | **Shipped, gated** — `clipCutterWorker.ts`, needs `BLACKOUT_CLIP_CAPTIONS=1` + `WHISPER_CPP_MODEL` |
+| Proximity discovery (SHELL-ONLY)    | PostGIS + martin + MapLibre; h3-js if cell-bucketing needed                                     | GPL (separate DB service) / MIT / BSD / Apache-2.0 | Already-deployed DB + tiles; add opt-in coarse location + nearby query     | **Shipped** — `GET /v1/coalition/nearby` + `useNearbySignals` on Home chip                         |
+| Payout transparency (surfacing)     | — none needed                                                                                   | —                                                  | Surface `packages/core/src/marketplace/fees.ts` constants + FBM data in UI | **Shipped**                                                                                        |
+| Feed diversity caps (missing)       | — none needed                                                                                   | —                                                  | Pure code in `unifiedFeedModel.ts` `mergeAndRank`                          | **Shipped** — `capBySource` / `maxPerSource`                                                       |
 
 ## Workstream 1 — Analytics layer (top gap; mostly wiring)
 
@@ -90,55 +92,55 @@ The warehouse is chosen and running; ingestion and creator-facing display are th
 
 ## Workstream 2 — VOD recording (make Replays real)
 
-- **Phase 1 (no new services):** clone the `rtmpFanoutWorker` supervisor into a
-  `vodRecorderWorker` that, on stream-session start, spawns
-  `ffmpeg -i <OWNCAST_BASE_URL>/hls/stream.m3u8 -c copy -movflags +faststart <session>.mp4`
-  and on clean exit sets the session's `replayPointer` automatically (today it is
-  client-supplied). Storage: a dedicated volume served by the existing Caddy/nginx reverse
-  proxy (there is **no S3/minio in the stack**; Matrix media is the only blob store and is
-  wrong for multi-GB VODs).
-- **Phase 2 (option, evaluate):** adopt **MediaMTX** (MIT) as the ingest+record+playback server —
-  it natively records to fMP4 with segmenting, exposes a playback endpoint
-  (`/get?path=&start=&duration=`) and a control API, which would replace both the ffmpeg
-  recorder and ad-hoc file serving, and could eventually replace the Owncast ingest path
-  entirely. Decide after Phase 1 proves demand.
+-   **Phase 1 (no new services):** clone the `rtmpFanoutWorker` supervisor into a
+    `vodRecorderWorker` that, on stream-session start, spawns
+    `ffmpeg -i <OWNCAST_BASE_URL>/hls/stream.m3u8 -c copy -movflags +faststart <session>.mp4`
+    and on clean exit sets the session's `replayPointer` automatically (today it is
+    client-supplied). Storage: a dedicated volume served by the existing Caddy/nginx reverse
+    proxy (there is **no S3/minio in the stack**; Matrix media is the only blob store and is
+    wrong for multi-GB VODs).
+-   **Phase 2 (option, evaluate):** adopt **MediaMTX** (MIT) as the ingest+record+playback server —
+    it natively records to fMP4 with segmenting, exposes a playback endpoint
+    (`/get?path=&start=&duration=`) and a control API, which would replace both the ffmpeg
+    recorder and ad-hoc file serving, and could eventually replace the Owncast ingest path
+    entirely. Decide after Phase 1 proves demand.
 
 ## Workstream 3 — Clips: trim + vertical crop + auto-captions
 
-- **Client-side trim/crop:** `@ffmpeg/ffmpeg` (ffmpeg.wasm — MIT wrapper, LGPL core loaded as a
-  runtime wasm asset, consistent with the license posture) in a new clip composer on the Clips
-  tab: trim handles, 9:16 crop preset, then upload the result through the existing Matrix media
-  upload (`integrations/matrix-client.ts` → `mxc://`) into the existing
-  `POST /v1/streaming/clips` (`mediaPointer`). Keyframe-copy for instant cuts; re-encode only
-  when crop is applied.
-- **"Clip the last 60s" from live:** once Workstream 2 records sessions, a server-side
-  `ffmpeg -ss ... -t ... -c copy` job (same supervisor pattern) cuts from the recording — this
-  is the capture-from-stream path Discord Clips has and Blackout currently lacks.
-- **Auto-captions:** spawn **whisper.cpp** (MIT, models MIT) server-side on clip publish with
-  `--output-vtt`; store the VTT as a sidecar pointer next to `mediaPointer`; the reel viewer
-  (`ClipViewer.tsx`) adds a `<track>`. Burn-in via ffmpeg is optional later. This combination
-  (trim + captions + vertical) clears Discord Clips and reaches entry-level TikTok, per the
-  competitive analysis.
+-   **Client-side trim/crop:** `@ffmpeg/ffmpeg` (ffmpeg.wasm — MIT wrapper, LGPL core loaded as a
+    runtime wasm asset, consistent with the license posture) in a new clip composer on the Clips
+    tab: trim handles, 9:16 crop preset, then upload the result through the existing Matrix media
+    upload (`integrations/matrix-client.ts` → `mxc://`) into the existing
+    `POST /v1/streaming/clips` (`mediaPointer`). Keyframe-copy for instant cuts; re-encode only
+    when crop is applied.
+-   **"Clip the last 60s" from live:** once Workstream 2 records sessions, a server-side
+    `ffmpeg -ss ... -t ... -c copy` job (same supervisor pattern) cuts from the recording — this
+    is the capture-from-stream path Discord Clips has and Blackout currently lacks.
+-   **Auto-captions:** spawn **whisper.cpp** (MIT, models MIT) server-side on clip publish with
+    `--output-vtt`; store the VTT as a sidecar pointer next to `mediaPointer`; the reel viewer
+    (`ClipViewer.tsx`) adds a `<track>`. Burn-in via ffmpeg is optional later. This combination
+    (trim + captions + vertical) clears Discord Clips and reaches entry-level TikTok, per the
+    competitive analysis.
 
 ## Workstream 4 — Real "signals nearby" (opt-in proximity)
 
-- Substrate already deployed: PostGIS 16-3.4 with a dedicated `spatial` database, `martin` tile
-  server, MapLibre-ready. Nothing feeds it from the product.
-- Add **opt-in, coarse** location on coalition signals/events/market listings (round to ~1km or
-  an H3 cell via `h3-js`, Apache-2.0 — never store raw coordinates), a
-  `GET /v1/discovery/nearby` route using `ST_DWithin`, and replace the Home chip's current
-  item-count stand-in (`signalCount` in `HomeFeed.tsx`) with the real nearby count; chip opens
-  a nearby-signals panel. Ties to the Coalition mutual-aid mission, which is where the
-  competitive analysis says this wedge is defensible.
+-   Substrate already deployed: PostGIS 16-3.4 with a dedicated `spatial` database, `martin` tile
+    server, MapLibre-ready. Nothing feeds it from the product.
+-   Add **opt-in, coarse** location on coalition signals/events/market listings (round to ~1km or
+    an H3 cell via `h3-js`, Apache-2.0 — never store raw coordinates), a
+    `GET /v1/discovery/nearby` route using `ST_DWithin`, and replace the Home chip's current
+    item-count stand-in (`signalCount` in `HomeFeed.tsx`) with the real nearby count; chip opens
+    a nearby-signals panel. Ties to the Coalition mutual-aid mission, which is where the
+    competitive analysis says this wedge is defensible.
 
 ## Workstream 5 — No-OSS-needed quick wins (do alongside WS1)
 
-- **Payout transparency:** surface the existing `fees.ts` schedule (FBM 3%, weekly cadence) and
-  FBM payout status in `CreatorEarningsDashboard.tsx`; add a "How payouts work" panel with the
-  concrete numbers, Discord-style.
-- **Feed diversity cap:** per-source cap in `mergeAndRank`
-  (`apps/blackout-client/src/app/features/home/unifiedFeedModel.ts`) so one surface can't flood
-  Following. Scoring/affinity already exist; this is the only missing ranking piece.
+-   **Payout transparency:** surface the existing `fees.ts` schedule (FBM 3%, weekly cadence) and
+    FBM payout status in `CreatorEarningsDashboard.tsx`; add a "How payouts work" panel with the
+    concrete numbers, Discord-style.
+-   **Feed diversity cap:** per-source cap in `mergeAndRank`
+    (`apps/blackout-client/src/app/features/home/unifiedFeedModel.ts`) so one surface can't flood
+    Following. Scoring/affinity already exist; this is the only missing ranking piece.
 
 ## Suggested order
 
@@ -149,10 +151,10 @@ The warehouse is chosen and running; ingestion and creator-facing display are th
 
 ## Explicitly not adopted
 
-- **Umami / Plausible / PostHog** — redundant: the repo already standardized on
-  ClickHouse + Cube + Metabase; adding a second analytics stack would split the event stream.
-- **PeerTube** (AGPL, full video platform) — far heavier than the recorder + composer needed.
-- **Remotion / AutoCut-class editors** — per the competitive analysis, wrong battle at this
-  scale; ffmpeg.wasm trim/crop/captions is the 80/20.
-- **Recommendation engines** (Gorse etc.) — the follow-graph + score model is the deliberate
-  architectural bet; keep it.
+-   **Umami / Plausible / PostHog** — redundant: the repo already standardized on
+    ClickHouse + Cube + Metabase; adding a second analytics stack would split the event stream.
+-   **PeerTube** (AGPL, full video platform) — far heavier than the recorder + composer needed.
+-   **Remotion / AutoCut-class editors** — per the competitive analysis, wrong battle at this
+    scale; ffmpeg.wasm trim/crop/captions is the 80/20.
+-   **Recommendation engines** (Gorse etc.) — the follow-graph + score model is the deliberate
+    architectural bet; keep it.

@@ -125,9 +125,11 @@ services:
             # Runtime store mode. `postgres` makes the API persist all state to the
             # Postgres service above via the write-through store: it runs migrations
             # on boot, hydrates an in-memory read mirror, and write-throughs every
-            # mutation. SAFE here because this baseline runs a SINGLE api container —
-            # the mirror is per-process, so multi-replica deployments (Helm/k8s) must
-            # NOT use this mode until cross-replica invalidation exists.
+            # mutation. This baseline runs a SINGLE api container. Multi-replica
+            # deployments (Helm/k8s) are supported too: cross-replica cache
+            # invalidation ships via Postgres LISTEN/NOTIFY (PgNotifyTransport, on
+            # by default; the Helm chart runs multiple replicas), leaving only a
+            # bounded stale-read window equal to NOTIFY latency.
             - BLACKOUT_DB_MODE=postgres
             # Legacy file-store path. Unused in postgres mode (kept for the named
             # volume + an easy rollback to file mode by removing BLACKOUT_DB_MODE).
