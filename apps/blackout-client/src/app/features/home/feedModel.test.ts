@@ -11,8 +11,12 @@ const fakeRoom = (overrides: Partial<RoomLike> & { roomId: string; name?: string
     getLastActiveTimestamp: () => 0,
     getUnreadNotificationCount: () => 0,
     getCanonicalParent: () => null,
+    getMember: () => null,
     ...overrides,
 });
+
+/** DM exclusion inputs are required (fail closed); this is the "no DMs" base. */
+const noDms = { dmRoomIds: new Set<string>(), myUserId: null };
 
 describe('resolveBucket', () => {
     const now = 1_700_000_000_000;
@@ -52,13 +56,14 @@ describe('buildHomeFeed', () => {
                     getLastActiveTimestamp: () => now,
                 }),
             ],
-            now
+            now,
+            noDms
         );
 
         expect(items.map((i) => i.denId)).toEqual(['!den:s']);
     });
 
-    it('drops DM rooms when their ids are passed via dmRoomIds', () => {
+    it('drops rooms registered in m.direct and keeps real dens', () => {
         const rooms = [
             fakeRoom({ roomId: '!dm:s', name: 'friend', getLastActiveTimestamp: () => now }),
             fakeRoom({
@@ -68,12 +73,48 @@ describe('buildHomeFeed', () => {
             }),
         ];
 
-        const withExclusion = buildHomeFeed(rooms, now, { dmRoomIds: new Set(['!dm:s']) });
-        expect(withExclusion.map((i) => i.denId)).toEqual(['!den:s']);
+        const items = buildHomeFeed(rooms, now, {
+            dmRoomIds: new Set(['!dm:s']),
+            myUserId: null,
+        });
+        expect(items.map((i) => i.denId)).toEqual(['!den:s']);
+    });
 
-        // Without the option every joined non-space room still qualifies.
-        const withoutExclusion = buildHomeFeed(rooms, now);
-        expect(withoutExclusion.map((i) => i.denId).sort()).toEqual(['!den:s', '!dm:s']);
+    it('drops DMs only detectable via is_direct on our own member event', () => {
+        // The DM never made it into m.direct (e.g. created without the
+        // registration), but the direct invite stamped is_direct on the
+        // recipient's member event.
+        const rooms = [
+            fakeRoom({
+                roomId: '!unregistered-dm:s',
+                name: 'friend',
+                getLastActiveTimestamp: () => now,
+                getMember: (userId: string) =>
+                    userId === '@me:s'
+                        ? {
+                              events: {
+                                  member: {
+                                      getContent: () => ({
+                                          membership: 'join',
+                                          is_direct: true,
+                                      }),
+                                  },
+                              },
+                          }
+                        : null,
+            }),
+            fakeRoom({
+                roomId: '!den:s',
+                name: 'Mutual aid den',
+                getLastActiveTimestamp: () => now,
+            }),
+        ];
+
+        const items = buildHomeFeed(rooms, now, {
+            dmRoomIds: new Set<string>(),
+            myUserId: '@me:s',
+        });
+        expect(items.map((i) => i.denId)).toEqual(['!den:s']);
     });
 
     it('orders by lastActiveAt desc and tie-breaks on name', () => {
@@ -100,7 +141,8 @@ describe('buildHomeFeed', () => {
                     getLastActiveTimestamp: () => 0,
                 }),
             ],
-            now
+            now,
+            noDms
         );
 
         expect(items.map((i) => i.denId)).toEqual([
@@ -119,8 +161,8 @@ describe('buildHomeFeed', () => {
                 getLastActiveTimestamp: () => now - i,
             })
         );
-        expect(buildHomeFeed(rooms, now, { limit: 10 })).toHaveLength(10);
-        expect(buildHomeFeed(rooms, now)).toHaveLength(50);
+        expect(buildHomeFeed(rooms, now, { ...noDms, limit: 10 })).toHaveLength(10);
+        expect(buildHomeFeed(rooms, now, noDms)).toHaveLength(50);
     });
 
     it('captures parent canopy id when the room reports one', () => {
@@ -133,7 +175,8 @@ describe('buildHomeFeed', () => {
                     getCanonicalParent: () => '!canopy:s',
                 }),
             ],
-            now
+            now,
+            noDms
         );
         expect(items[0]?.canopyId).toBe('!canopy:s');
     });
@@ -162,7 +205,8 @@ describe('buildHomeFeed', () => {
                     getLastActiveTimestamp: () => 0,
                 }),
             ],
-            now
+            now,
+            noDms
         );
 
         const map = Object.fromEntries(items.map((i) => [i.denId, i.subtitle]));
@@ -188,7 +232,8 @@ describe('groupHomeFeedByBucket', () => {
                     getLastActiveTimestamp: () => now - 30 * ONE_DAY,
                 }),
             ],
-            now
+            now,
+            noDms
         );
 
         const groups = groupHomeFeedByBucket(items);
@@ -199,7 +244,8 @@ describe('groupHomeFeedByBucket', () => {
     it('omits empty buckets', () => {
         const items = buildHomeFeed(
             [fakeRoom({ roomId: '!t:s', getLastActiveTimestamp: () => now })],
-            now
+            now,
+            noDms
         );
         const groups = groupHomeFeedByBucket(items);
         expect(groups.map((g) => g.bucket)).toEqual(['today']);

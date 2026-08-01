@@ -38,7 +38,12 @@ import { trackOnboardingTourStarted } from '../onboarding/onboardingTelemetry';
 import { useUnifiedFeed } from './hooks/useUnifiedFeed';
 import { useBountyBoard } from './hooks/useBountyBoard';
 import { useCreatorContentFeed } from './hooks/useCreatorContentFeed';
-import { filterByTag, type FeedSort, type UnifiedFeedItem } from './unifiedFeedModel';
+import {
+    filterByTag,
+    partitionQuietDens,
+    type FeedSort,
+    type UnifiedFeedItem,
+} from './unifiedFeedModel';
 import { useStreak } from './streakState';
 import {
     trackHomeSegmentSwitched,
@@ -269,10 +274,48 @@ export const HomeFeed = (): JSX.Element => {
             : `${nearby.count ?? 0} signal${nearby.count === 1 ? '' : 's'} nearby`
         : 'nearby off';
 
+    const visibleItems = (items: readonly UnifiedFeedItem[]): UnifiedFeedItem[] =>
+        filterFeedByQuery(filterByTag(items, topicFilter), query);
+
     const renderCards = (items: readonly UnifiedFeedItem[]): JSX.Element[] =>
-        filterFeedByQuery(filterByTag(items, topicFilter), query).map((item) => (
+        visibleItems(items).map((item) => (
             <UnifiedFeedCard key={item.id} item={item} reducedMotion={reducedMotion} />
         ));
+
+    // Following only: dens quiet past the 7-day window collapse behind one
+    // disclosure (closed by default) instead of interleaving with fresh
+    // activity. Applied after the search/topic filters so the count matches
+    // what expanding would actually show.
+    const renderFollowingCards = (items: readonly UnifiedFeedItem[]): JSX.Element => {
+        const { fresh, quiet } = partitionQuietDens(visibleItems(items));
+        return (
+            <>
+                {fresh.map((item) => (
+                    <UnifiedFeedCard key={item.id} item={item} reducedMotion={reducedMotion} />
+                ))}
+                {quiet.length > 0 ? (
+                    <details data-testid="home-quiet-dens">
+                        <summary
+                            className={css.sectionLabel}
+                            style={{ cursor: 'pointer' }}
+                            data-testid="home-quiet-dens-toggle"
+                        >
+                            Quiet dens ({quiet.length})
+                        </summary>
+                        <div className={css.feedList} data-testid="home-quiet-dens-list">
+                            {quiet.map((item) => (
+                                <UnifiedFeedCard
+                                    key={item.id}
+                                    item={item}
+                                    reducedMotion={reducedMotion}
+                                />
+                            ))}
+                        </div>
+                    </details>
+                ) : null}
+            </>
+        );
+    };
 
     // === Town Square widgets ===
     // Each modular home section is a node the user can reorder / hide / remove /
@@ -439,7 +482,9 @@ export const HomeFeed = (): JSX.Element => {
                         </div>
                     ) : (
                         <div className={css.feedList} data-testid="home-feed-list">
-                            {renderCards(segmentItems)}
+                            {segment === 'following'
+                                ? renderFollowingCards(segmentItems)
+                                : renderCards(segmentItems)}
                         </div>
                     )}
                 </section>
@@ -475,7 +520,7 @@ export const HomeFeed = (): JSX.Element => {
                             </div>
                         ) : (
                             <div className={css.feedList} data-testid="home-feed-list">
-                                {renderCards(followingItems)}
+                                {renderFollowingCards(followingItems)}
                             </div>
                         )}
                     </section>
@@ -656,7 +701,7 @@ export const HomeFeed = (): JSX.Element => {
                         ))}
                     </main>
                     <aside className={css.rightColumn} data-shell-region="home-context">
-                        <ContextSidebar feed={feed} atmosphere={atmosphere} />
+                        <ContextSidebar feed={feed} />
                     </aside>
                 </div>
             </div>

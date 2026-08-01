@@ -1,38 +1,13 @@
+import { SEVEN_DAYS_MS } from '../feedModel';
 import type { UnifiedFeedItem } from '../unifiedFeedModel';
-import type { TimeOfDayPhase } from '../useTimeOfDay';
 
 /**
  * Placeholder data for context-sidebar modules that have no backend yet
- * (weather, community health, volunteer requests). Isolated here and clearly
- * labelled so each block can be swapped for a real client/endpoint later
- * without touching the sidebar layout. Everything below is SAMPLE data.
+ * (upcoming events, community health, volunteer requests). Isolated here and
+ * clearly labelled so each block can be swapped for a real client/endpoint
+ * later without touching the sidebar layout. Everything below except
+ * `deriveEcosystemPulse` is SAMPLE data.
  */
-
-export interface MockWeather {
-    condition: string;
-    temp: string;
-    note: string;
-    icon: string;
-}
-
-export const mockWeatherForPhase = (phase: TimeOfDayPhase): MockWeather => {
-    switch (phase) {
-        case 'dawn':
-            return { condition: 'Clear skies', temp: '14°', note: 'Cool morning air', icon: '🌅' };
-        case 'day':
-            return {
-                condition: 'Sunny',
-                temp: '22°',
-                note: 'Good light for the garden',
-                icon: '☀️',
-            };
-        case 'dusk':
-            return { condition: 'Golden hour', temp: '19°', note: 'Warm winds easing', icon: '🌇' };
-        case 'night':
-        default:
-            return { condition: 'Clear night', temp: '12°', note: 'Calm and quiet', icon: '🌙' };
-    }
-};
 
 export interface CommunityHealthMetric {
     label: string;
@@ -90,20 +65,27 @@ export interface EcosystemPulseStat {
 }
 
 /**
- * Real-ish "community nervous system" reading derived from the live feed:
- * counts of the activity already loaded on the page. Not mocked — reflects the
- * actual `useUnifiedFeed` result — but lives here next to its sidebar siblings.
+ * Real "community nervous system" reading derived from the live feed: counts
+ * of the activity already loaded on the page. Not mocked — reflects the actual
+ * `useUnifiedFeed` result — but lives here next to its sidebar siblings.
+ * Honest counts: a den is "active" only with activity inside the 7-day
+ * staleness window, and a debate is "open" only while not archived.
  */
-export const deriveEcosystemPulse = (items: readonly UnifiedFeedItem[]): EcosystemPulseStat[] => {
+export const deriveEcosystemPulse = (
+    items: readonly UnifiedFeedItem[],
+    now: number
+): EcosystemPulseStat[] => {
     let dens = 0;
     let live = 0;
     let debates = 0;
     let actions = 0;
     for (const item of items) {
-        if (item.source === 'den') dens += 1;
-        else if (item.source === 'stream' && item.live) live += 1;
-        else if (item.source === 'coliseum') debates += 1;
-        else if (item.source === 'coalition') actions += 1;
+        if (item.source === 'den') {
+            if (item.timestamp !== null && now - item.timestamp < SEVEN_DAYS_MS) dens += 1;
+        } else if (item.source === 'stream' && item.live) live += 1;
+        else if (item.source === 'coliseum') {
+            if (item.status !== 'archived') debates += 1;
+        } else if (item.source === 'coalition') actions += 1;
     }
     return [
         { label: 'Active dens', value: dens },

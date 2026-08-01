@@ -35,22 +35,47 @@ export interface RoomLike {
      * fake-room test fixtures.
      */
     getCanonicalParent?(): string | null;
+    /**
+     * Best-effort accessor for a member, shrunk to the slice needed to read
+     * `is_direct` off our own `m.room.member` event (the DM marker a direct
+     * invite stamps on the recipient — see `utils/room.ts#isDirectInvite`).
+     * Structural so this pure model stays free of matrix-js-sdk.
+     */
+    getMember?(userId: string): {
+        events?: { member?: { getContent?: () => Record<string, unknown> | undefined } };
+    } | null;
 }
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
-const SEVEN_DAYS_MS = 7 * ONE_DAY_MS;
+/** Staleness window shared by feed buckets, den collapsing, and pulse stats. */
+export const SEVEN_DAYS_MS = 7 * ONE_DAY_MS;
 
 const HOME_FEED_DEFAULT_LIMIT = 50;
 
 const safeNumber = (raw: unknown): number =>
     typeof raw === 'number' && Number.isFinite(raw) ? raw : 0;
 
-const isJoinedDen = (room: RoomLike, dmRoomIds?: ReadonlySet<string>): boolean => {
+/** Mirrors `utils/room.ts#isDirectInvite` on the `RoomLike` surface. */
+const isDirectByMemberEvent = (room: RoomLike, myUserId: string | null): boolean => {
+    if (!myUserId) return false;
+    const content = room.getMember?.(myUserId)?.events?.member?.getContent?.();
+    return content?.is_direct === true;
+};
+
+const isJoinedDen = (
+    room: RoomLike,
+    dmRoomIds: ReadonlySet<string>,
+    myUserId: string | null
+): boolean => {
     if (room.getType?.() === 'm.space') return false;
     // DMs are conversations, not dens — they must never surface as DEN cards.
     // `dmRoomIds` comes from m.direct account data, this app's authoritative DM
-    // registry (both friend-request paths register their rooms there).
-    if (dmRoomIds?.has(room.roomId)) return false;
+    // registry, and is required so callers can't silently skip the filter.
+    if (dmRoomIds.has(room.roomId)) return false;
+    // Belt-and-braces for DMs that never made it into m.direct: a direct
+    // invite stamps `is_direct` on our own member event, so treat those rooms
+    // as DMs even without an m.direct entry.
+    if (isDirectByMemberEvent(room, myUserId)) return false;
     if (typeof room.getMyMembership === 'function' && room.getMyMembership() !== 'join')
         return false;
     return true;
@@ -97,7 +122,11 @@ const buildSubtitle = (room: RoomLike, lastActiveAt: number | null, now: number)
  *     out automatically; we only render dens)
  *   - now: ms-since-epoch reference time. Tests pass a fixed value;
  *     production passes `Date.now()`.
- *   - limit: max number of feed items to return; default 50.
+ *   - options.dmRoomIds: m.direct room ids — REQUIRED so DM exclusion fails
+ *     closed (a forgotten set once leaked private 1:1 DMs as den cards).
+ *   - options.myUserId: viewer's mxid for the `is_direct` member-event check;
+ *     pass null only when no client is available.
+ *   - options.limit: max number of feed items to return; default 50.
  *
  * Sort order:
  *   1. items with `lastActiveAt` desc
@@ -105,11 +134,11 @@ const buildSubtitle = (room: RoomLike, lastActiveAt: number | null, now: number)
  */
 export const buildHomeFeed = (
     rooms: readonly RoomLike[],
-    now: number = Date.now(),
-    options: { limit?: number; dmRoomIds?: ReadonlySet<string> } = {}
+    now: number,
+    options: { dmRoomIds: ReadonlySet<string>; myUserId: string | null; limit?: number }
 ): HomeFeedItem[] => {
     const limit = options.limit ?? HOME_FEED_DEFAULT_LIMIT;
-    const dens = rooms.filter((room) => isJoinedDen(room, options.dmRoomIds));
+    const dens = rooms.filter((room) => isJoinedDen(room, options.dmRoomIds, options.myUserId));
 
     const items: HomeFeedItem[] = dens.map((room) => {
         const lastActiveRaw = room.getLastActiveTimestamp?.();

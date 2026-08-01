@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { RoomEvent } from 'matrix-js-sdk';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { addRoomIdToMDirect } from '../../utils/matrix';
+import { isDirectInvite } from '../../utils/room';
 import { joinDenWithCanopy } from './joinDenWithCanopy';
 
 const MAX_ATTEMPTS = 5;
@@ -46,7 +48,7 @@ export const RoomInviteAcceptGate: React.FC<{
 }> = ({ roomId, canopyId, children }) => {
     const mx = useMatrixClient();
     const [membership, setMembership] = useState<string | null>(
-        () => mx.getRoom(roomId)?.getMyMembership() ?? null,
+        () => mx.getRoom(roomId)?.getMyMembership() ?? null
     );
     const [failed, setFailed] = useState(false);
     const [retryKey, setRetryKey] = useState(0);
@@ -78,10 +80,29 @@ export const RoomInviteAcceptGate: React.FC<{
         let cancelled = false;
         setFailed(false);
 
+        // A direct (DM) invite stamps `is_direct` on our own member event, but
+        // joining replaces that event — so decide up front whether this room
+        // belongs in m.direct, and with whom, before the join rewrites it.
+        // Without the registration the accepted DM leaks into the home feed as
+        // a den card.
+        const invitedRoom = mx.getRoom(roomId);
+        const dmInviter = isDirectInvite(invitedRoom, mx.getUserId())
+            ? invitedRoom?.getDMInviter()
+            : undefined;
+
         void (async () => {
             for (let attempt = 1; attempt <= MAX_ATTEMPTS && !cancelled; attempt += 1) {
                 try {
                     await joinDenWithCanopy(mx, roomId, canopyId);
+                    if (dmInviter) {
+                        // Best-effort: never block rendering the joined room on
+                        // the account-data write.
+                        try {
+                            await addRoomIdToMDirect(mx, roomId, dmInviter);
+                        } catch {
+                            /* no-op */
+                        }
+                    }
                     if (!cancelled) setMembership('join');
                     return;
                 } catch {
