@@ -191,6 +191,7 @@ describe('RegistryRouteList + buildRegistryRouteObjects', () => {
                 coliseum: false,
                 streaming: false,
                 marketTab: false,
+                createHub: false,
                 migrationHub: false,
                 creatorsListings: false,
                 creatorsStorefront: false,

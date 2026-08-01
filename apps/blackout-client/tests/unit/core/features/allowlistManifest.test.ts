@@ -39,6 +39,7 @@ describe('feature allowlist manifest', () => {
             'growth-ambassadors',
             'growth-quests',
             'market',
+            'create',
             'creators',
             'creators-storefront',
             'streams',
