@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
     DEFAULT_ONBOARDING_POLICY,
     onboardingBlocked,
+    selectKeyBackupNudge,
     summarizePosture,
     type AccountPosture,
 } from './encryptionPosture';
@@ -93,6 +94,32 @@ describe('summarizePosture', () => {
     });
 });
 
+describe('selectKeyBackupNudge', () => {
+    it('nudges a cross-signed account that has no key backup', () => {
+        const v = selectKeyBackupNudge({ crossSigningReady: true, keyBackupReady: false });
+        expect(v).not.toBeNull();
+        expect(v?.severity).toBe('warn');
+        expect(v?.actions[0].id).toBe('enable_key_backup');
+        // The detail must flag that the action resets device verification,
+        // since the consumer routes cross-signed users through the
+        // explicitly-confirmed reset flow.
+        expect(v?.detail).toMatch(/resets device verification/i);
+    });
+
+    it('nudges when encryption is not set up at all', () => {
+        const v = selectKeyBackupNudge({ crossSigningReady: false, keyBackupReady: false });
+        expect(v).not.toBeNull();
+        expect(v?.severity).toBe('warn');
+        expect(v?.headline).toMatch(/backup/i);
+        expect(v?.actions[0].id).toBe('enable_key_backup');
+    });
+
+    it('stays silent once a key backup exists', () => {
+        expect(selectKeyBackupNudge({ crossSigningReady: false, keyBackupReady: true })).toBeNull();
+        expect(selectKeyBackupNudge({ crossSigningReady: true, keyBackupReady: true })).toBeNull();
+    });
+});
+
 describe('onboardingBlocked', () => {
     it('blocks when cross-signing is missing under default policy', () => {
         expect(onboardingBlocked({ crossSigningReady: false })).toBe(true);
@@ -104,7 +131,7 @@ describe('onboardingBlocked', () => {
 
     it('honors a relaxed policy', () => {
         expect(
-            onboardingBlocked({ crossSigningReady: false }, { requireCrossSigning: false }),
+            onboardingBlocked({ crossSigningReady: false }, { requireCrossSigning: false })
         ).toBe(false);
     });
 

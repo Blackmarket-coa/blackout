@@ -2,6 +2,7 @@ import React, { type KeyboardEvent, useCallback, useEffect, useMemo, useState } 
 import { useAtom, useSetAtom } from 'jotai';
 import type { Room, RoomMember } from 'matrix-js-sdk';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { addRoomIdToMDirect } from '../../utils/matrix';
 import { useMentionNavigation } from './useMentionNavigation';
 import { selectedRoomIdAtom, selectedSpaceIdAtom } from '../../state/navigation';
 import { settingsPageAtom, type SettingsSectionId } from '../settings/settingsAtoms';
@@ -558,6 +559,11 @@ export const QuickSwitcher = ({
                     invite: [result.id],
                     preset: 'private_chat' as never,
                 });
+                // Register the new DM in m.direct (mirrors friendActions'
+                // ensureDmRoom) — the home feed treats m.direct as the
+                // authoritative DM registry, so an unregistered DM would leak
+                // into the Town Square as a den card.
+                await addRoomIdToMDirect(client, room.room_id, result.id);
                 setSelectedRoomId(room.room_id);
                 onClose();
                 return;

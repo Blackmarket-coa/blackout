@@ -15,9 +15,16 @@ describe('selectKeyBackupNudge', () => {
         expect(selectKeyBackupNudge({ crossSigningReady: true, keyBackupReady: true })).toBeNull();
     });
 
-    it('stays silent when cross-signing already exists (avoids a destructive reset)', () => {
-        // Verified/cross-signed but no backup: the from-scratch setup flow would
-        // reset secret storage, so the focused nudge must not offer it here.
-        expect(selectKeyBackupNudge({ crossSigningReady: true, keyBackupReady: false })).toBeNull();
+    it('nudges cross-signed accounts that have no backup', () => {
+        // Cross-signed but no backup is exactly the population that hits
+        // "no key backup on the server" decryption failures, so the nudge
+        // must show. The consumer routes this case through the
+        // explicitly-confirmed DeviceVerificationReset flow (never the
+        // silent from-scratch bootstrap), and the detail copy says so.
+        const v = selectKeyBackupNudge({ crossSigningReady: true, keyBackupReady: false });
+        expect(v).not.toBeNull();
+        expect(v?.severity).toBe('warn');
+        expect(v?.actions[0].id).toBe('enable_key_backup');
+        expect(v?.detail).toMatch(/resets device verification/i);
     });
 });

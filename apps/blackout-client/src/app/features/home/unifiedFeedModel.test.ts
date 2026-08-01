@@ -420,7 +420,8 @@ describe('mapDens', () => {
         const dens = mapDens(
             [room({ roomId: '!dm:s' }), room({ roomId: '!den:s' })],
             NOW,
-            new Set(['!dm:s'])
+            new Set(['!dm:s']),
+            null
         );
         expect(dens.map((i) => i.id)).toEqual(['den:!den:s']);
     });
@@ -430,7 +431,9 @@ describe('partitionFollowing', () => {
     it('keeps den + status items and canopy-matched items only', () => {
         const dens = mapDens(
             [room({ roomId: '!d:s', getCanonicalParent: () => '!joined:s' })],
-            NOW
+            NOW,
+            new Set(),
+            null
         );
         const statuses = mapStatuses([{ userId: '@me:s', displayName: 'Me', text: 'hi' }], NOW);
         const inCanopy = mapCoalition([coalition({ id: 'in', canopyId: '!joined:s' })], NOW);
@@ -457,7 +460,9 @@ describe('filterToUnseen', () => {
                 room({ roomId: '!read:s' }),
                 room({ roomId: '!unread:s', getUnreadNotificationCount: () => 3 }),
             ],
-            NOW
+            NOW,
+            new Set(),
+            null
         );
         const kept = filterToUnseen(dens, new Set());
         expect(kept.map((i) => i.id)).toEqual(['den:!unread:s']);

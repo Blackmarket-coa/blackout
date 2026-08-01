@@ -13,6 +13,12 @@ process.env.JWT_SECRET_PRIMARY =
 process.env.JWT_ISSUER = process.env.JWT_ISSUER ?? 'blackout-api-test';
 process.env.JWT_AUDIENCE = process.env.JWT_AUDIENCE ?? 'blackout-client-test';
 process.env.STRIPE_WEBHOOK_SECRET = 'whsec_test_secret';
+// Subscription/webhook state is now DURABLE (services/subscriptions.ts writes to
+// db.*), so a file-mode store persists processed event ids (evt_a3_*) across runs
+// and re-reads them as already-processed. Pin a fresh in-memory store — matching
+// every other db-touching integration suite — so this webhook ledger starts empty
+// and stays deterministic regardless of test file load order.
+process.env.BLACKOUT_DB_MODE = 'memory';
 
 const { default: app } = await import('../src/index');
 const { getSubscription } = await import('../src/services/subscriptions');

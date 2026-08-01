@@ -11,6 +11,7 @@ import {
     endowedProgressFraming,
     evaluateMilestones,
     projectProgress,
+    scoreCoalitionItem,
     type CoalitionProject,
     type EndowedProgressFraming,
     type ProjectMomentum,
@@ -19,7 +20,7 @@ import { db } from '../db/store';
 import type { CoalitionProjectSupportRecord, CoalitionSurgeRecord } from '../db/types';
 import { emitDomainEvent } from '../modules/domain-events';
 import { notifyProjectContributors } from './coalitionNotifications';
-import { newProjectSupportId } from './coalitionStore';
+import { newFeedItemId, newProjectSupportId, saveFeedItem } from './coalitionStore';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -109,6 +110,27 @@ export function recordProjectSupport(
             body: `The community has raised enough to reach "${milestone.label}".`,
             milestoneId: milestone.id,
         });
+        // …and surface it in the unified Home/Discover feed as a modest feed item
+        // so the moment is visible beyond the contributor inbox. Idempotent for
+        // the same reason the broadcast is: `reached` only ever holds a milestone
+        // on its first crossing, so a later contribution past it makes no second
+        // item. Conservative importance/impact defaults mirror the create-feed
+        // route so ranking treats it like an ordinary community post.
+        const feedBase = {
+            id: newFeedItemId(),
+            kind: 'milestone' as const,
+            title: `${finalProject.title} hit a milestone: ${milestone.label}`,
+            body: `The community has raised enough to reach "${milestone.label}".`,
+            canopyId: finalProject.canopyId,
+            authorId: finalProject.leadId,
+            projectId: finalProject.id,
+            milestoneId: milestone.id,
+            importance: 0.5,
+            impact: 0.5,
+            socialImpact: 0.5,
+            createdAt: new Date().toISOString(),
+        };
+        saveFeedItem({ ...feedBase, score: scoreCoalitionItem(feedBase, {}) });
     }
 
     return { project: finalProject, support, reachedMilestones: reached, deduped: false };

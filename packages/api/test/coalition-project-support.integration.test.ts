@@ -149,3 +149,60 @@ test('coalition project support: unknown project is 404', async () => {
     });
     assert.equal(res.status, 404);
 });
+
+test('coalition project support: crossing a milestone posts exactly one feed item, never duplicated', async () => {
+    // A project with a single low milestone so one contribution crosses it.
+    const created = await app.request('/v1/coalition/projects', {
+        method: 'POST',
+        headers: headers(LEAD_ID, 'lead'),
+        body: JSON.stringify({
+            canopyId: CANOPY,
+            title: 'Tool library expansion',
+            category: 'tool_library',
+            fundingGoalCents: 100000,
+            currency: 'USD',
+            milestones: [{ label: 'Kickoff', thresholdCents: 2000 }],
+        }),
+    });
+    assert.equal(created.status, 201);
+    const { project } = (await created.json()) as { project: { id: string } };
+
+    // Only this project's milestone feed items (other tests seed their own).
+    const milestoneItems = () =>
+        db
+            .listCoalitionFeedItems({ kind: 'milestone' })
+            .filter((item) => item.projectId === project.id);
+
+    assert.equal(milestoneItems().length, 0, 'no feed item before any milestone is crossed');
+
+    // First contribution: captured, it crosses the 2000 milestone.
+    const first = await app.request(`/v1/coalition/projects/${project.id}/support`, {
+        method: 'POST',
+        headers: headers(SUPPORTER_ID, 'supporter'),
+        body: JSON.stringify({ grossCents: 5000, currency: 'USD' }),
+    });
+    const { tip: tip1 } = (await first.json()) as { tip: { id: string } };
+    captureTip(tip1.id);
+
+    const afterFirst = milestoneItems();
+    assert.equal(afterFirst.length, 1, 'the crossed milestone yields one feed item');
+    assert.equal(afterFirst[0].kind, 'milestone');
+    assert.ok(afterFirst[0].milestoneId, 'the feed item is stamped with the milestone id');
+    assert.equal(afterFirst[0].projectId, project.id);
+    assert.match(afterFirst[0].title, /milestone/i);
+
+    // A second contribution pushes further past the SAME milestone (no new one).
+    const second = await app.request(`/v1/coalition/projects/${project.id}/support`, {
+        method: 'POST',
+        headers: headers(SUPPORTER_ID, 'supporter'),
+        body: JSON.stringify({ grossCents: 3000, currency: 'USD' }),
+    });
+    const { tip: tip2 } = (await second.json()) as { tip: { id: string } };
+    captureTip(tip2.id);
+
+    assert.equal(
+        milestoneItems().length,
+        1,
+        'contributing past an already-reached milestone does not duplicate the feed item'
+    );
+});

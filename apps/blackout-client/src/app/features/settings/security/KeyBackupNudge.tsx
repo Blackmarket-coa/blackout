@@ -14,7 +14,10 @@ import FocusTrap from 'focus-trap-react';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { useAlive } from '../../../hooks/useAlive';
 import { useKeyBackupStatusChange } from '../../../hooks/useKeyBackup';
-import { DeviceVerificationSetup } from '../../../components/DeviceVerificationSetup';
+import {
+    DeviceVerificationReset,
+    DeviceVerificationSetup,
+} from '../../../components/DeviceVerificationSetup';
 import {
     atomWithLocalStorage,
     getLocalStorageItem,
@@ -29,11 +32,17 @@ import { selectKeyBackupNudge } from './encryptionPosture';
  * for messages sent before a backup exists can never be recovered, but turning
  * on backup makes everything from here on recoverable.
  *
- * Safety: it only appears (and only offers the from-scratch DeviceVerificationSetup
- * flow) when cross-signing is NOT yet set up — see `selectKeyBackupNudge`. The
- * action reuses the exact overlay flow from Settings → Security so no crypto is
- * driven directly from here. Dismissing snoozes the nudge for a week; it hides
- * permanently the moment a backup exists.
+ * It appears whenever no key backup exists — see `selectKeyBackupNudge` —
+ * which includes accounts that already have cross-signing (exactly the
+ * population that hits "no key backup on the server").
+ *
+ * Safety: the action never drives crypto directly from here. When
+ * cross-signing is NOT set up it opens the from-scratch
+ * DeviceVerificationSetup flow (non-destructive — nothing exists yet). When
+ * cross-signing IS set up, the from-scratch flow would silently RESET existing
+ * secret storage, so the action opens DeviceVerificationReset instead, whose
+ * own warning + confirm step gates the reset. Dismissing snoozes the nudge for
+ * a week; it hides permanently the moment a backup exists.
  */
 
 const SNOOZE_KEY = 'blackout.keyBackupNudge.snoozeUntil';
@@ -150,7 +159,12 @@ export function KeyBackupNudge() {
                             Not now
                         </Text>
                     </Button>
-                    <Button size="300" variant="Primary" radii="300" onClick={() => setSetupOpen(true)}>
+                    <Button
+                        size="300"
+                        variant="Primary"
+                        radii="300"
+                        onClick={() => setSetupOpen(true)}
+                    >
                         <Text as="span" size="B300">
                             {action?.label ?? 'Set up backup'}
                         </Text>
@@ -168,7 +182,11 @@ export function KeyBackupNudge() {
                                 escapeDeactivates: false,
                             }}
                         >
-                            <DeviceVerificationSetup onCancel={() => setSetupOpen(false)} />
+                            {crossSigningReady ? (
+                                <DeviceVerificationReset onCancel={() => setSetupOpen(false)} />
+                            ) : (
+                                <DeviceVerificationSetup onCancel={() => setSetupOpen(false)} />
+                            )}
                         </FocusTrap>
                     </OverlayCenter>
                 </Overlay>

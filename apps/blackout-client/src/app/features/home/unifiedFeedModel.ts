@@ -14,7 +14,7 @@ import {
     GOVERNANCE_PATH,
     MARKET_PATH,
 } from '../../pages/paths';
-import { buildHomeFeed, type RoomLike } from './feedModel';
+import { buildHomeFeed, SEVEN_DAYS_MS, type RoomLike } from './feedModel';
 import type { StreamSummary } from '../streams/streamsClient';
 
 export type UnifiedFeedSource =
@@ -51,6 +51,9 @@ interface UnifiedFeedItemBase {
 export interface DenFeedItem extends UnifiedFeedItemBase {
     source: 'den';
     unreadCount: number;
+    /** True past the 7-day staleness window (or with no activity at all), so
+     * Following can collapse the den instead of interleaving it. */
+    stale: boolean;
 }
 export interface StreamFeedItem extends UnifiedFeedItemBase {
     source: 'stream';
@@ -119,7 +122,6 @@ export interface WallEntry {
 }
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
-const SEVEN_DAYS_MS = 7 * ONE_DAY_MS;
 const UNIFIED_FEED_DEFAULT_LIMIT = 50;
 const LIVE_RAIL_DEFAULT_LIMIT = 8;
 /**
@@ -181,12 +183,24 @@ export const mapStreams = (streams: readonly StreamSummary[], now: number): Stre
         };
     });
 
+/**
+ * Bonus for milestone broadcasts (`milestoneId` set — a project win) less than
+ * seven days old. Matches the INTEREST_BOOST magnitude and stays clamped, so a
+ * fresh win gets a modest lift and decays back to the server score after a
+ * week rather than pinning the feed.
+ */
+const MILESTONE_WIN_BOOST = 0.15;
+
 export const mapCoalition = (
     items: readonly CoalitionFeedItem[],
     now: number
 ): CoalitionFeedCardItem[] =>
     items.map((item) => {
         const timestamp = parseTimestamp(item.createdAt);
+        const freshWin =
+            typeof item.milestoneId === 'string' &&
+            timestamp !== null &&
+            now - timestamp < SEVEN_DAYS_MS;
         return {
             id: `coalition:${item.id}`,
             source: 'coalition',
@@ -196,7 +210,7 @@ export const mapCoalition = (
             canopyId: item.canopyId ?? null,
             denId: item.denId ?? null,
             timestamp,
-            score: clamp01(item.score),
+            score: clamp01(item.score + (freshWin ? MILESTONE_WIN_BOOST : 0)),
             href: COALITION_PATH,
             mediaUrl: item.mediaUrl,
             tags: item.tags ?? [],
@@ -285,12 +299,15 @@ export const mapGovernance = (
 export const mapDens = (
     rooms: readonly RoomLike[],
     now: number,
-    dmRoomIds?: ReadonlySet<string>
+    // Required (not defaulted) so DM exclusion fails closed at every call site.
+    dmRoomIds: ReadonlySet<string>,
+    myUserId: string | null
 ): DenFeedItem[] =>
-    buildHomeFeed(rooms, now, { dmRoomIds }).map((item) => ({
+    buildHomeFeed(rooms, now, { dmRoomIds, myUserId }).map((item) => ({
         id: `den:${item.denId}`,
         source: 'den',
         unreadCount: item.unreadCount,
+        stale: item.bucket === 'older',
         title: item.title,
         subtitle: item.subtitle,
         canopyId: item.canopyId,
@@ -544,6 +561,24 @@ export const partitionFollowing = (
             return true;
         return item.canopyId !== null && joinedCanopyIds.has(item.canopyId);
     });
+
+/**
+ * Splits a render-ready list into fresh items and stale dens so Following can
+ * fold weeks-quiet campfires behind one disclosure instead of interleaving
+ * them. Order is preserved on both sides; non-den sources are never "quiet"
+ * here — their recency already drives their rank.
+ */
+export const partitionQuietDens = (
+    items: readonly UnifiedFeedItem[]
+): { fresh: UnifiedFeedItem[]; quiet: DenFeedItem[] } => {
+    const fresh: UnifiedFeedItem[] = [];
+    const quiet: DenFeedItem[] = [];
+    for (const item of items) {
+        if (item.source === 'den' && item.stale) quiet.push(item);
+        else fresh.push(item);
+    }
+    return { fresh, quiet };
+};
 
 /**
  * Identity for "has the viewer opened this item". Statuses reuse one id per

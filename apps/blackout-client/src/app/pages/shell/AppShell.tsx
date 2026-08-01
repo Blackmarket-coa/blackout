@@ -18,6 +18,8 @@ import { DialogHost } from '../../shell/DialogHost';
 import { getModalCloser, getModalOpener } from '../../shell/modalOpenerRegistry';
 import { runtimeFeatureFlags } from '../../core/features/featureFlags';
 import { BugReportFab } from '../../features/bug-widget/BugReportFab';
+import { KeyBackupNudge } from '../../features/settings/security/KeyBackupNudge';
+import { AutoRestoreBackupOnVerification } from '../../components/BackupRestore';
 
 const ROOT_STYLE: CSSProperties = {
     display: 'flex',

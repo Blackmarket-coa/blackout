@@ -186,6 +186,82 @@ export const detectChecksumDrift = (
     return drift;
 };
 
+export interface ChecksumVerificationResult {
+    ok: boolean;
+    /** Applied migrations whose on-disk `.up.sql` hash differs from the recorded checksum. */
+    mismatches: ChecksumMismatch[];
+    /** Applied migration ids recorded in schema_migrations with no `.up.sql` on disk at all. */
+    missingOnDisk: string[];
+}
+
+/** Human-readable multi-line detail for a failed checksum verification. */
+export const formatChecksumVerificationFailure = (result: ChecksumVerificationResult): string => {
+    const lines: string[] = [];
+    for (const d of result.mismatches) {
+        lines.push(
+            `  edited since apply: ${d.id} (recorded ${d.recorded.slice(
+                0,
+                12
+            )}… on-disk ${d.actual.slice(0, 12)}…)`
+        );
+    }
+    for (const id of result.missingOnDisk) {
+        lines.push(`  applied but missing on disk: ${id}`);
+    }
+    return (
+        'Migration checksum verification failed — the applied migration history does not match ' +
+        'the migration files on disk:\n' +
+        `${lines.join('\n')}\n` +
+        'An edited or deleted applied migration causes silent schema drift across environments. ' +
+        'Restore the original file(s) and ship schema changes as a NEW migration instead.'
+    );
+};
+
+/**
+ * Boot-time checksum audit (M12): compare every APPLIED migration against the
+ * on-disk migration files without applying anything. Catches the two
+ * silent-drift hazards a boot that skips migrateUp
+ * (BLACKOUT_DB_MIGRATE_ON_START=0) would otherwise never see:
+ *   - an applied migration file edited after it was applied, and
+ *   - an applied migration whose file is missing from disk entirely
+ *     (detectChecksumDrift alone silently skips those).
+ * Read-only apart from ensuring schema_migrations exists.
+ */
+export const verifyMigrationChecksums = async (
+    pool: PgPool,
+    migrationsDir: string = MIGRATIONS_DIR
+): Promise<ChecksumVerificationResult> => {
+    const all = discoverMigrations(migrationsDir);
+    const onDisk = new Set(all.map((m) => m.id));
+    const client = await pool.connect();
+    try {
+        await ensureSchemaMigrations(client);
+        const applied = await fetchApplied(client);
+        const mismatches = detectChecksumDrift(applied, all);
+        const missingOnDisk = applied.filter((a) => !onDisk.has(a.id)).map((a) => a.id);
+        return {
+            ok: mismatches.length === 0 && missingOnDisk.length === 0,
+            mismatches,
+            missingOnDisk,
+        };
+    } finally {
+        client.release?.();
+    }
+};
+
+/**
+ * Assert-style wrapper over verifyMigrationChecksums: throws one aggregated
+ * error listing every mismatch and missing file when verification fails.
+ */
+export const assertMigrationChecksums = async (
+    pool: PgPool,
+    migrationsDir: string = MIGRATIONS_DIR
+): Promise<ChecksumVerificationResult> => {
+    const result = await verifyMigrationChecksums(pool, migrationsDir);
+    if (!result.ok) throw new Error(formatChecksumVerificationFailure(result));
+    return result;
+};
+
 const assertNoChecksumDrift = (applied: AppliedMigration[], all: MigrationFile[]): void => {
     const drift = detectChecksumDrift(applied, all);
     if (drift.length === 0) return;

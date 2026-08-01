@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { atmosphereForDate, phaseForHour } from './useTimeOfDay';
-import { deriveEcosystemPulse, mockWeatherForPhase } from './context/contextMocks';
+import { deriveEcosystemPulse } from './context/contextMocks';
 import type { UnifiedFeedItem } from './unifiedFeedModel';
 
 describe('phaseForHour', () => {
@@ -26,16 +26,8 @@ describe('atmosphereForDate', () => {
     });
 });
 
-describe('mockWeatherForPhase', () => {
-    it('gives distinct sample weather per phase', () => {
-        expect(mockWeatherForPhase('dawn').condition).not.toBe(
-            mockWeatherForPhase('night').condition
-        );
-        expect(mockWeatherForPhase('day').icon).toBeTruthy();
-    });
-});
-
 describe('deriveEcosystemPulse', () => {
+    const now = 1_700_000_000_000;
     const item = (over: Partial<UnifiedFeedItem>): UnifiedFeedItem =>
         ({
             id: 'x',
@@ -51,15 +43,22 @@ describe('deriveEcosystemPulse', () => {
             ...over,
         } as UnifiedFeedItem);
 
-    it('counts each source into its pulse stat', () => {
-        const pulse = deriveEcosystemPulse([
-            item({ source: 'den' }),
-            item({ source: 'den' }),
-            item({ source: 'stream', live: true } as Partial<UnifiedFeedItem>),
-            item({ source: 'stream', live: false } as Partial<UnifiedFeedItem>),
-            item({ source: 'coliseum' }),
-            item({ source: 'coalition' }),
-        ]);
+    it('counts each source into its pulse stat, dens only within the 7-day window', () => {
+        const pulse = deriveEcosystemPulse(
+            [
+                item({ source: 'den', timestamp: now - 1000 }),
+                item({ source: 'den', timestamp: now - 2 * 24 * 60 * 60 * 1000 }),
+                // Stale den (> 7 days) must NOT count toward "Active dens".
+                item({ source: 'den', timestamp: now - 30 * 24 * 60 * 60 * 1000 }),
+                item({ source: 'stream', live: true } as Partial<UnifiedFeedItem>),
+                item({ source: 'stream', live: false } as Partial<UnifiedFeedItem>),
+                item({ source: 'coliseum' }),
+                // Archived debate must NOT count toward "Open debates".
+                item({ source: 'coliseum', status: 'archived' } as Partial<UnifiedFeedItem>),
+                item({ source: 'coalition' }),
+            ],
+            now
+        );
         const byLabel = Object.fromEntries(pulse.map((p) => [p.label, p.value]));
         expect(byLabel['Active dens']).toBe(2);
         expect(byLabel['Live now']).toBe(1);

@@ -151,7 +151,12 @@ jobs:
             # emits ~1.9MB more than rollup did for the same sources (the wasm/worker
             # payloads are unchanged; the delta is JS chunk output). Raised from
             # 24576 to 28672 with ~2MB headroom to keep catching unexpected growth.
-            MAX_BUNDLE_KB: 28672
+            # Re-baselined again (28672 -> 29696) for the feature-gaps work: the
+            # Create hub + Discord structure importer, the Coalition Credits earnings
+            # panel, and the interest-aware bounty matching added ~32KB of genuine
+            # feature code (no new heavy deps), consuming the prior headroom. Restores
+            # ~1MB headroom.
+            MAX_BUNDLE_KB: 29696
         steps:
             - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
             - uses: pnpm/action-setup@v5

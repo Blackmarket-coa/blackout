@@ -50,7 +50,7 @@ export interface PostureAction {
 const countUnverified = (members: MemberSummary[]) =>
     members.reduce(
         (acc, m) => acc + m.devices.filter((d) => d.verification !== 'verified').length,
-        0,
+        0
     );
 
 export const summarizePosture = (input: AccountPosture): PostureVerdict => {
@@ -60,8 +60,7 @@ export const summarizePosture = (input: AccountPosture): PostureVerdict => {
         return {
             severity: 'critical',
             headline: 'End-to-end encryption is not set up',
-            detail:
-                'Set up cross-signing so messages can be verified across your devices and shared with new sessions.',
+            detail: 'Set up cross-signing so messages can be verified across your devices and shared with new sessions.',
             actions: [{ id: 'enable_cross_signing', label: 'Set up cross-signing' }],
         };
     }
@@ -82,7 +81,9 @@ export const summarizePosture = (input: AccountPosture): PostureVerdict => {
     if (unverifiedCount > 0) {
         return {
             severity: 'info',
-            headline: `${unverifiedCount} unverified ${unverifiedCount === 1 ? 'device' : 'devices'} in this conversation`,
+            headline: `${unverifiedCount} unverified ${
+                unverifiedCount === 1 ? 'device' : 'devices'
+            } in this conversation`,
             detail: 'Messages remain end-to-end encrypted. Verify members to confirm their identity.',
             actions: [{ id: 'review_unverified_members', label: 'Review members' }],
         };
@@ -99,13 +100,15 @@ export const summarizePosture = (input: AccountPosture): PostureVerdict => {
 /**
  * Focused selector for the "set up message backup" nudge.
  *
- * Returns a verdict only when encryption isn't set up yet (no cross-signing)
- * AND there's no key backup — the case where running the from-scratch
- * DeviceVerificationSetup flow (which bootstraps secret storage + cross-signing
- * + key backup) is the correct, non-destructive action. When cross-signing
- * already exists, that flow would RESET existing secret storage, so we
- * deliberately stay silent here and leave the rarer "verified but no backup"
- * recovery to Settings → Security. Returns null when nothing should be shown.
+ * Returns a verdict whenever the account has no key backup — including when
+ * cross-signing is already set up. (An earlier revision stayed silent once
+ * cross-signing existed, which hid the nudge from exactly the population that
+ * hits "no key backup on the server" decryption failures.) Consumers must pick
+ * the action flow by cross-signing state: without cross-signing the
+ * from-scratch DeviceVerificationSetup flow is safe; with cross-signing the
+ * action has to route through the explicitly-confirmed DeviceVerificationReset
+ * flow instead, because re-bootstrapping resets existing secret storage.
+ * Returns null once a backup exists (nothing to nudge about).
  */
 export const selectKeyBackupNudge = (input: {
     crossSigningReady: boolean;
@@ -113,12 +116,12 @@ export const selectKeyBackupNudge = (input: {
 }): PostureVerdict | null => {
     const { crossSigningReady, keyBackupReady } = input;
     if (keyBackupReady) return null;
-    if (crossSigningReady) return null;
     return {
         severity: 'warn',
         headline: 'Turn on encrypted message backup',
-        detail:
-            'Set up secure backup so you don’t lose access to your encrypted message history when you sign in on a new device.',
+        detail: crossSigningReady
+            ? 'This account has no encrypted message backup, so history can’t be recovered when you sign in on a new device. Turning it on resets device verification and gives you a new recovery key.'
+            : 'Set up secure backup so you don’t lose access to your encrypted message history when you sign in on a new device.',
         actions: [{ id: 'enable_key_backup', label: 'Set up backup' }],
     };
 };
@@ -137,5 +140,5 @@ export const DEFAULT_ONBOARDING_POLICY: OnboardingPolicy = {
 
 export const onboardingBlocked = (
     posture: Pick<AccountPosture, 'crossSigningReady'>,
-    policy: OnboardingPolicy = DEFAULT_ONBOARDING_POLICY,
+    policy: OnboardingPolicy = DEFAULT_ONBOARDING_POLICY
 ): boolean => policy.requireCrossSigning && !posture.crossSigningReady;

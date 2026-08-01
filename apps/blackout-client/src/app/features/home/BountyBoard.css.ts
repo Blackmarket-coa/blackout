@@ -24,6 +24,44 @@ export const rail = style({
     scrollbarWidth: 'thin',
 });
 
+export const emptyCard = style({
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: 8,
+    padding: '14px 16px',
+    borderRadius: 18,
+    border: '1px dashed var(--border-default, #2E5A42)',
+    background: `linear-gradient(150deg, color-mix(in srgb, ${bmcPalette.forest} 14%, var(--bg-input)), color-mix(in srgb, var(--bg-surface) 90%, transparent))`,
+});
+
+export const emptyText = style({
+    margin: 0,
+    fontSize: 13,
+    color: 'var(--text-muted, #9EC4AF)',
+});
+
+export const postFirstButton = style({
+    alignSelf: 'flex-start',
+    display: 'inline-flex',
+    alignItems: 'center',
+    padding: '6px 14px',
+    fontSize: 12,
+    fontWeight: 600,
+    borderRadius: 999,
+    border: `1px solid ${bmcPalette.forest}`,
+    background: 'transparent',
+    color: 'inherit',
+    textDecoration: 'none',
+    cursor: 'pointer',
+    transition: 'background 140ms ease',
+    selectors: {
+        '&:hover': {
+            background: 'color-mix(in srgb, currentColor 12%, transparent)',
+        },
+    },
+});
+
 export const card = style({
     position: 'relative',
     flex: '0 0 auto',

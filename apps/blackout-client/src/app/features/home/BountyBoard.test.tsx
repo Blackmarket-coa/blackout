@@ -56,16 +56,24 @@ describe('BountyBoard', () => {
         acceptBountyApplication.mockReset();
     });
 
-    it('renders nothing when there are no bounties', async () => {
+    it('renders the activation empty state with a post-first CTA when there are no bounties', async () => {
         const container = await render(React.createElement(BountyBoard, { items: [] }));
+        // The card board is absent, but the empty-state surface invites the first post.
         expect(container.querySelector('[data-testid="home-bounty-board"]')).toBeNull();
+        expect(container.querySelector('[data-testid="home-bounty-board-empty"]')).not.toBeNull();
+        const cta = container.querySelector('[data-testid="home-bounty-post-first"]');
+        expect(cta).not.toBeNull();
+        expect(cta?.getAttribute('href')).toBe('/create');
     });
 
     it('renders a card per bounty with its category and reward', async () => {
         const container = await render(
             React.createElement(BountyBoard, {
-                items: [bounty(), bounty({ id: 'b2', category: 'tester', rewardSummary: '1 theme' })],
-            }),
+                items: [
+                    bounty(),
+                    bounty({ id: 'b2', category: 'tester', rewardSummary: '1 theme' }),
+                ],
+            })
         );
         expect(container.querySelector('[data-testid="home-bounty-board"]')).not.toBeNull();
         const cards = container.querySelectorAll('[data-testid="home-bounty-card"]');
@@ -77,11 +85,9 @@ describe('BountyBoard', () => {
 
     it('applies to a bounty and reflects the applied state', async () => {
         applyToBounty.mockResolvedValue({ application: { id: 'a1', status: 'pending' } });
-        const container = await render(
-            React.createElement(BountyBoard, { items: [bounty()] }),
-        );
+        const container = await render(React.createElement(BountyBoard, { items: [bounty()] }));
         const button = container.querySelector(
-            '[data-testid="home-bounty-apply"]',
+            '[data-testid="home-bounty-apply"]'
         ) as HTMLButtonElement;
         expect(button.textContent).toBe('Apply');
         await act(async () => {
@@ -99,7 +105,7 @@ describe('BountyBoard', () => {
         const container = await render(React.createElement(BountyBoard, { items: [bounty()] }));
         expect(container.querySelector('[data-testid="bounty-detail-overlay"]')).toBeNull();
         const details = container.querySelector(
-            '[data-testid="home-bounty-details"]',
+            '[data-testid="home-bounty-details"]'
         ) as HTMLButtonElement;
         await act(async () => {
             details.click();
@@ -110,7 +116,7 @@ describe('BountyBoard', () => {
         expect(container.querySelector('[data-testid="bounty-detail-apply"]')).not.toBeNull();
         // Close via backdrop.
         const backdrop = container.querySelector(
-            '[data-testid="bounty-detail-backdrop"]',
+            '[data-testid="bounty-detail-backdrop"]'
         ) as HTMLElement;
         await act(async () => {
             backdrop.click();

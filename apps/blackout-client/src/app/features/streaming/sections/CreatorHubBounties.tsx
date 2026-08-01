@@ -1,6 +1,8 @@
-import React, { type CSSProperties, useEffect, useState } from 'react';
+import React, { type CSSProperties, useEffect, useMemo, useState } from 'react';
 import type { Bounty, BountyCategory } from '@blackout/core';
 import { applyToBounty, fetchRecommendedBounties } from '../../bounty/bountyClient';
+import { interestTagsToBountyCategories } from '../../bounty/bountyInterestMatch';
+import { useDiscoveryInterestTags } from '../../home/discoveryInterests';
 import { HubSection, hubEmptyStyle } from '../components/HubSection';
 
 const CATEGORY_LABELS: Record<BountyCategory, string> = {
@@ -23,7 +25,12 @@ const rowStyle: CSSProperties = {
     background: 'var(--bg-input, #0f172a)',
 };
 
-const metaColStyle: CSSProperties = { display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 };
+const metaColStyle: CSSProperties = {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 2,
+    minWidth: 0,
+};
 
 const labelStyle: CSSProperties = {
     fontSize: 11,
@@ -60,9 +67,13 @@ export const CreatorHubBounties = (): JSX.Element => {
     const [bounties, setBounties] = useState<Bounty[] | null>(null);
     const [applied, setApplied] = useState<Record<string, ApplyStatus>>({});
 
+    // Bias the server-side match toward the viewer's onboarding interests.
+    const interestTags = useDiscoveryInterestTags();
+    const categories = useMemo(() => interestTagsToBountyCategories(interestTags), [interestTags]);
+
     useEffect(() => {
         let cancelled = false;
-        fetchRecommendedBounties()
+        fetchRecommendedBounties(categories)
             .then((res) => {
                 if (!cancelled) setBounties(res.bounties);
             })
@@ -72,7 +83,7 @@ export const CreatorHubBounties = (): JSX.Element => {
         return () => {
             cancelled = true;
         };
-    }, []);
+    }, [categories]);
 
     const onApply = (id: string) => {
         setApplied((prev) => ({ ...prev, [id]: 'applying' }));
@@ -101,9 +112,15 @@ export const CreatorHubBounties = (): JSX.Element => {
                     {list.map((bounty) => {
                         const status = applied[bounty.id] ?? 'idle';
                         return (
-                            <div key={bounty.id} style={rowStyle} data-testid="creator-hub-bounty-row">
+                            <div
+                                key={bounty.id}
+                                style={rowStyle}
+                                data-testid="creator-hub-bounty-row"
+                            >
                                 <span style={metaColStyle}>
-                                    <span style={labelStyle}>{CATEGORY_LABELS[bounty.category]}</span>
+                                    <span style={labelStyle}>
+                                        {CATEGORY_LABELS[bounty.category]}
+                                    </span>
                                     <span style={titleStyle}>{bounty.title}</span>
                                     <span style={rewardStyle}>{bounty.rewardSummary}</span>
                                 </span>

@@ -32,6 +32,11 @@ const CreatorHubListings = lazy(() =>
 const SplitContracts = lazy(() =>
     import('../sections/SplitContracts').then((mod) => ({ default: mod.SplitContracts }))
 );
+const CoalitionCreditsSection = lazy(() =>
+    import('../sections/CoalitionCreditsSection').then((mod) => ({
+        default: mod.CoalitionCreditsSection,
+    }))
+);
 
 const sectionStackStyle: CSSProperties = {
     display: 'flex',
@@ -108,6 +113,13 @@ export function EarningsTab({ initialView }: EarningsTabProps) {
                 <div data-testid="streaming-subview-splits">
                     <Suspense fallback={null}>
                         <SplitContracts />
+                    </Suspense>
+                </div>
+            ) : null}
+            {activeView === 'credits' ? (
+                <div style={sectionStackStyle} data-testid="streaming-subview-credits">
+                    <Suspense fallback={null}>
+                        <CoalitionCreditsSection />
                     </Suspense>
                 </div>
             ) : null}

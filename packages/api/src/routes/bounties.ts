@@ -4,7 +4,9 @@ import {
     BOUNTY_CATEGORIES,
     BOUNTY_REWARD_TYPES,
     BOUNTY_STATUSES,
+    isBountyCategory,
     recommendBounties,
+    type BountyCategory,
 } from '@blackout/core';
 import {
     acceptBountyApplication,
@@ -38,16 +40,40 @@ bounties.get('/', (c) => {
     return c.json({ bounties: listBounties(parsed.data) });
 });
 
+/**
+ * Parse the optional `?categories=a,b,c` interest filter: split on commas, trim,
+ * keep only values in the fixed BOUNTY_CATEGORIES set (unknown tags dropped), and
+ * de-duplicate. Returns undefined when nothing valid is present so the matcher
+ * falls back to its creator-relevant default rather than an empty preference set.
+ */
+const parsePreferredCategories = (raw: string | undefined): BountyCategory[] | undefined => {
+    if (!raw) return undefined;
+    const valid = raw
+        .split(',')
+        .map((part) => part.trim())
+        .filter(isBountyCategory);
+    if (valid.length === 0) return undefined;
+    return [...new Set(valid)];
+};
+
 // Auto-matching: open bounties recommended to the signed-in creator. Declared
-// before the `/:id/...` routes so the static path is matched first.
+// before the `/:id/...` routes so the static path is matched first. An optional
+// `?categories=` interest filter (validated against BOUNTY_CATEGORIES) narrows
+// the ranking toward the viewer's stated interests via `preferredCategories`.
 bounties.get('/recommended', (c) => {
     const user = requireUser(c, 'Sign in to see recommended bounties');
     if (user instanceof Response) return user;
     const open = listBounties({ status: 'open' });
     const appliedBountyIds = listBountyApplications({ applicantId: user.sub }).map(
-        (app) => app.bountyId,
+        (app) => app.bountyId
     );
-    const recommended = recommendBounties({ open, viewerId: user.sub, appliedBountyIds });
+    const preferredCategories = parsePreferredCategories(c.req.query('categories'));
+    const recommended = recommendBounties({
+        open,
+        viewerId: user.sub,
+        appliedBountyIds,
+        preferredCategories,
+    });
     return c.json({ bounties: recommended });
 });
 
@@ -100,10 +126,7 @@ bounties.post('/:id/claim', (c) => {
     if (user instanceof Response) return user;
     const bounty = claimBounty(c.req.param('id'), user.sub);
     if (!bounty) {
-        return c.json(
-            { code: 'not_found', message: 'Bounty not found or no longer open' },
-            404,
-        );
+        return c.json({ code: 'not_found', message: 'Bounty not found or no longer open' }, 404);
     }
     return c.json({ bounty });
 });
@@ -126,16 +149,10 @@ bounties.post('/:id/applications', async (c) => {
         message: parsed.message,
     });
     if (result === 'not_open') {
-        return c.json(
-            { code: 'not_found', message: 'Bounty not found or no longer open' },
-            404,
-        );
+        return c.json({ code: 'not_found', message: 'Bounty not found or no longer open' }, 404);
     }
     if (result === 'duplicate') {
-        return c.json(
-            { code: 'conflict', message: 'You already have a pending application' },
-            409,
-        );
+        return c.json({ code: 'conflict', message: 'You already have a pending application' }, 409);
     }
     return c.json({ application: result }, 201);
 });
@@ -148,10 +165,7 @@ bounties.get('/:id/applications', (c) => {
         return c.json({ code: 'not_found', message: 'Bounty not found' }, 404);
     }
     if (bounty.creatorId !== user.sub) {
-        return c.json(
-            { code: 'forbidden', message: 'Only the poster can view applicants' },
-            403,
-        );
+        return c.json({ code: 'forbidden', message: 'Only the poster can view applicants' }, 403);
     }
     return c.json({ applications: listBountyApplications({ bountyId: bounty.id }) });
 });
@@ -166,14 +180,14 @@ bounties.post('/:id/applications/:applicantId/accept', (c) => {
     if (bounty.creatorId !== user.sub) {
         return c.json(
             { code: 'forbidden', message: 'Only the poster can accept an applicant' },
-            403,
+            403
         );
     }
     const result = acceptBountyApplication(bounty.id, c.req.param('applicantId'));
     if (!result) {
         return c.json(
             { code: 'not_found', message: 'No pending application from that applicant' },
-            404,
+            404
         );
     }
     return c.json(result);
@@ -195,7 +209,7 @@ bounties.patch('/:id', async (c) => {
     if (existing.creatorId !== user.sub) {
         return c.json(
             { code: 'forbidden', message: 'Only the poster can update this bounty' },
-            403,
+            403
         );
     }
     const bounty = updateBountyStatus(existing.id, parsed.status);

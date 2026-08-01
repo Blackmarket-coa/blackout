@@ -41,7 +41,12 @@ export interface SpatialFeedItem {
 
 export interface CoalitionFeedItem {
     id: string;
-    kind: 'video' | 'event' | 'aid' | 'listing' | 'proposal';
+    /**
+     * `milestone` items are system-generated when a Coalition project crosses a
+     * funding milestone (see services/coalitionProjectSupport.ts) — users cannot
+     * post them; the create-feed route only accepts the other kinds.
+     */
+    kind: 'video' | 'event' | 'aid' | 'listing' | 'proposal' | 'milestone';
     title: string;
     body?: string;
     createdAt: string;

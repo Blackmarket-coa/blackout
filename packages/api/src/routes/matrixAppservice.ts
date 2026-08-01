@@ -1,6 +1,8 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { Hono } from 'hono';
 import { routeOutboundMatrixMessage, shouldRouteOutbound } from '../services/outboundMessageRouter';
+import { db } from '../db/store';
+import { matrixClient } from '../integrations/matrix-client';
 import { log } from '../telemetry/logger';
 
 /**
@@ -84,9 +86,29 @@ export interface AppserviceRouteOptions {
     asTokenResolver?: () => string | undefined;
     /** Route handler hook; default: outboundMessageRouter.routeOutboundMatrixMessage. */
     onMessage?: (roomId: string, body: string) => Promise<unknown> | unknown;
+    /**
+     * Den auto-welcome hook, fired once when a user first joins a den (gated on
+     * BLACKOUT_DEN_GREETER and deduped per (roomId,userId) before this runs).
+     * Default: a fire-and-forget appservice-bot post of {@link DEN_GREETING}.
+     */
+    greetRoom?: (roomId: string, userId: string) => Promise<unknown> | unknown;
     /** Reset the seen-txn cache. Tests use this. */
     resetCache?: boolean;
 }
+
+/** Short, warm starter posted to a den the first time someone joins it. */
+export const DEN_GREETING =
+    'Welcome to the den! 👋 Say hi, share what brought you here, and jump into anything that catches your eye.';
+
+/** Fire-and-forget the welcome via the appservice bot; never blocks or throws. */
+const defaultGreetRoom = (roomId: string): void => {
+    void matrixClient.sendMessage(roomId, DEN_GREETING).catch((err: unknown) =>
+        log.warn('matrix_appservice_den_greeting_threw', {
+            roomId,
+            error: String(err),
+        })
+    );
+};
 
 export const buildMatrixAppserviceRoute = (options: AppserviceRouteOptions = {}): Hono => {
     const router = new Hono();
@@ -94,6 +116,7 @@ export const buildMatrixAppserviceRoute = (options: AppserviceRouteOptions = {})
     const onMessage =
         options.onMessage ??
         ((roomId: string, body: string) => routeOutboundMatrixMessage(roomId, body));
+    const greetRoom = options.greetRoom ?? defaultGreetRoom;
     if (options.resetCache) seenTxnIds.clear();
 
     router.put('/transactions/:txnId', async (c) => {
@@ -139,7 +162,7 @@ export const buildMatrixAppserviceRoute = (options: AppserviceRouteOptions = {})
 
         for (const event of events) {
             try {
-                await processEvent(event, onMessage);
+                await processEvent(event, onMessage, greetRoom);
             } catch (err) {
                 log.warn('matrix_appservice_event_handler_threw', {
                     eventType: typeof event?.type === 'string' ? event.type : '?',
@@ -156,8 +179,13 @@ export const buildMatrixAppserviceRoute = (options: AppserviceRouteOptions = {})
 
 const processEvent = async (
     event: Record<string, unknown>,
-    onMessage: (roomId: string, body: string) => Promise<unknown> | unknown
+    onMessage: (roomId: string, body: string) => Promise<unknown> | unknown,
+    greetRoom: (roomId: string, userId: string) => Promise<unknown> | unknown
 ): Promise<void> => {
+    if (event?.type === 'm.room.member') {
+        await maybeGreetOnJoin(event, greetRoom);
+        return;
+    }
     if (event?.type !== 'm.room.message') return;
     const roomId = typeof event.room_id === 'string' ? event.room_id : null;
     const content = (event.content ?? {}) as Record<string, unknown>;
@@ -166,6 +194,36 @@ const processEvent = async (
     const text = typeof content.body === 'string' ? content.body : '';
     if (!text) return;
     await onMessage(roomId, text);
+};
+
+/**
+ * Auto-welcome a first-time joiner of a den. Flag-gated OFF by default
+ * (BLACKOUT_DEN_GREETER === '1'). Only a *first* join fires — a membership
+ * event whose `prev_content.membership` was already 'join' is a profile/avatar
+ * change, not a join, and is skipped. Deduped per (roomId,userId) via the
+ * durable `denGreetings` ledger so a re-join, or a Synapse transaction replay
+ * under a fresh txn id, never re-greets. The greet itself is fire-and-forget.
+ */
+const maybeGreetOnJoin = async (
+    event: Record<string, unknown>,
+    greetRoom: (roomId: string, userId: string) => Promise<unknown> | unknown
+): Promise<void> => {
+    if (process.env.BLACKOUT_DEN_GREETER !== '1') return;
+    const roomId = typeof event.room_id === 'string' ? event.room_id : null;
+    // For m.room.member, the state_key is the user the membership applies to.
+    const userId = typeof event.state_key === 'string' ? event.state_key : null;
+    if (!roomId || !userId) return;
+    const content = (event.content ?? {}) as Record<string, unknown>;
+    if (content.membership !== 'join') return;
+    const prevContent = (event.unsigned as Record<string, unknown> | undefined)?.prev_content as
+        | Record<string, unknown>
+        | undefined;
+    if (prevContent?.membership === 'join') return; // not a first join
+    if (db.hasGreeted(roomId, userId)) return;
+    // Stamp before sending so a concurrent replay can't double-greet; the send is
+    // best-effort and a failed post simply means this joiner isn't greeted.
+    db.markGreeted(roomId, userId);
+    await greetRoom(roomId, userId);
 };
 
 export const __test__ = {

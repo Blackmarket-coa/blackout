@@ -37,18 +37,27 @@ hs_token: ${MATRIX_APPSERVICE_HS_TOKEN}
 sender_localpart: blackout
 rate_limited: false
 protocols:
-  - blackout
+    - blackout
 namespaces:
-  users:
-    - exclusive: true
-      regex: '@blackout_.*'
-  aliases:
-    - exclusive: true
-      regex: '#blackout_.*'
-  # Blackout claims no specific room IDs. Inbound events arrive via
-  # federation or other bridges (the appservice transactions endpoint
-  # only consumes them; it doesn't claim ownership).
-  rooms: []
+    users:
+        - exclusive: true
+          regex: '@blackout_.*'
+    aliases:
+        - exclusive: true
+          regex: '#blackout_.*'
+    # Non-exclusive interest in all rooms. Synapse only forwards an event to an
+    # appservice it's "interested" in — a room in its `rooms` namespace, or a room
+    # where a `users`-namespace user is present. The `@blackout_.*` users regex is
+    # too narrow to guarantee delivery of ordinary members' `m.room.member` joins
+    # in a den, which the Den auto-greeter (BLACKOUT_DEN_GREETER) needs. `.*` is the
+    # minimal widening that makes Synapse deliver those joins. `exclusive: false`
+    # so we only OBSERVE — we claim ownership of no room id, and the transactions
+    # endpoint filters everything it doesn't act on (unbridged rooms no-op). Cost:
+    # more inbound transaction volume. If that ever matters, replace with a regex
+    # scoped to your den room-id convention.
+    rooms:
+        - exclusive: false
+          regex: '.*'
 # Ephemeral events (typing, presence, receipts) are not consumed.
 # Set to true if a future feature needs them, but expect ~10x the
 # traffic volume.

@@ -4,13 +4,11 @@ import { ContextModule } from './ContextModule';
 import { bmcPalette } from '../../../styles/theme-engine';
 import type { UnifiedFeedResult } from '../hooks/useUnifiedFeed';
 import type { UnifiedFeedItem } from '../unifiedFeedModel';
-import type { TimeOfDayAtmosphere } from '../useTimeOfDay';
 import {
     MOCK_COMMUNITY_HEALTH,
     MOCK_UPCOMING_EVENTS,
     MOCK_VOLUNTEER_REQUESTS,
     deriveEcosystemPulse,
-    mockWeatherForPhase,
 } from './contextMocks';
 
 const SIDEBAR_LIMIT = 4;
@@ -20,19 +18,17 @@ const bySource = (items: readonly UnifiedFeedItem[], source: UnifiedFeedItem['so
 
 interface ContextSidebarProps {
     feed: UnifiedFeedResult;
-    atmosphere: TimeOfDayAtmosphere;
 }
 
 /**
  * Right-hand "context & spatial awareness" column. Grounds the feed in place
- * and time: an ecosystem pulse + weather up top, then live/nearby/den/debate
- * modules wired to the same `useUnifiedFeed` result the centre column uses, and
+ * and time: an ecosystem pulse up top, then live/nearby/den/debate modules
+ * wired to the same `useUnifiedFeed` result the centre column uses, and
  * sample-data modules (events, community health, volunteer needs) below.
  */
-export const ContextSidebar = ({ feed, atmosphere }: ContextSidebarProps): JSX.Element => {
+export const ContextSidebar = ({ feed }: ContextSidebarProps): JSX.Element => {
     const ranked = feed.discover;
-    const pulse = deriveEcosystemPulse(ranked);
-    const weather = mockWeatherForPhase(atmosphere.phase);
+    const pulse = deriveEcosystemPulse(ranked, Date.now());
     const live = feed.liveRail.slice(0, SIDEBAR_LIMIT);
     const coalition = bySource(ranked, 'coalition');
     const dens = bySource(ranked, 'den');
@@ -53,26 +49,6 @@ export const ContextSidebar = ({ feed, atmosphere }: ContextSidebarProps): JSX.E
                         </div>
                     ))}
                 </div>
-            </ContextModule>
-
-            <ContextModule
-                title="Local sky"
-                accent={bmcPalette.warning}
-                mock
-                testid="home-context-weather"
-            >
-                <div className={css.weatherRow}>
-                    <span className={css.weatherIcon} aria-hidden="true">
-                        {weather.icon}
-                    </span>
-                    <div>
-                        <div className={css.weatherTemp}>{weather.temp}</div>
-                        <div className={css.rowMeta}>
-                            {atmosphere.label} · {weather.condition}
-                        </div>
-                    </div>
-                </div>
-                <span className={css.emptyNote}>{weather.note}</span>
             </ContextModule>
 
             <ContextModule title="Live now" accent={bmcPalette.danger} testid="home-context-live">

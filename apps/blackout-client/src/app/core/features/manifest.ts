@@ -35,6 +35,7 @@ export const featureModuleManifest = [
     'growth-ambassadors',
     'growth-quests',
     'market',
+    'create',
     'creators',
     'creators-storefront',
     'streams',

@@ -10,6 +10,7 @@ import {
 import { deaddropFeature } from '../../features/deaddrop';
 import { deadmanFeature } from '../../features/deadman';
 import { marketFeature } from '../../features/market';
+import { createFeature } from '../../features/create';
 import { migrationHubFeature } from '../../features/migration-hub';
 import { pluginsFeature } from '../../features/plugins';
 import { profileFeature } from '../../features/profile';
@@ -152,6 +153,10 @@ export const coreFeatureModules: FeatureModule[] = [
     {
         feature: marketFeature,
         flag: 'marketTab',
+    },
+    {
+        feature: createFeature,
+        flag: 'createHub',
     },
     {
         feature: creatorsFeature,

@@ -3,6 +3,7 @@ import { useAtomValue } from 'jotai';
 import type { Room } from 'matrix-js-sdk';
 import { joinedRoomsAtom } from '../../../state/rooms';
 import { mDirectAtom } from '../../../state/mDirectList';
+import { useMatrixClientOrNull } from '../../../hooks/useMatrixClient';
 import { runtimeFeatureFlags } from '../../../core/features/featureFlags';
 import { listStreams } from '../../streams/streamsClient';
 import { fetchCoalitionFeed } from '../../coalition/coalitionClient';
@@ -117,6 +118,9 @@ const collectGovernanceProposals = (rooms: readonly Room[]): GovernanceProposalE
 export function useUnifiedFeed(sort?: FeedSort): UnifiedFeedResult {
     const rooms = useAtomValue(joinedRoomsAtom) as unknown as Room[];
     const mDirects = useAtomValue(mDirectAtom);
+    // Own mxid for the belt-and-braces DM check (`is_direct` on our member
+    // event) covering DMs that never made it into m.direct.
+    const myUserId = useMatrixClientOrNull()?.getUserId() ?? null;
     const seenKeys = useAtomValue(seenFeedKeySetAtom);
     const flags = runtimeFeatureFlags;
     // Stream cards/rail link into the `/live/:streamId` viewer, which is owned
@@ -201,7 +205,7 @@ export function useUnifiedFeed(sort?: FeedSort): UnifiedFeedResult {
 
     return useMemo(() => {
         const now = Date.now();
-        const denItems = mapDens(rooms as unknown as RoomLike[], now, mDirects);
+        const denItems = mapDens(rooms as unknown as RoomLike[], now, mDirects, myUserId);
         const statusItems = mapStatuses(activity.statuses, now);
         const wallItems = mapWallPosts(activity.walls, now);
         const governanceItems = flags.governance
@@ -243,5 +247,5 @@ export function useUnifiedFeed(sort?: FeedSort): UnifiedFeedResult {
             loading: remote.loading,
             errorsBySource: remote.errorsBySource,
         };
-    }, [rooms, mDirects, seenKeys, activity, remote, boostTags, sort]);
+    }, [rooms, mDirects, myUserId, seenKeys, activity, remote, boostTags, sort]);
 }
