@@ -112,6 +112,18 @@ const ASIDE_STYLE: CSSProperties = {
     minHeight: 0,
 };
 
+/**
+ * Drawer variant: the canopy rail sits beside the channel list inside a
+ * width-capped drawer, so the list gives up its fixed 248px and flexes into
+ * whatever remains.
+ */
+const FLUID_ASIDE_STYLE: CSSProperties = {
+    ...ASIDE_STYLE,
+    width: 'auto',
+    flex: '1 1 auto',
+    minWidth: 0,
+};
+
 const HEADER_STYLE: CSSProperties = {
     display: 'flex',
     alignItems: 'center',
@@ -158,7 +170,7 @@ const channelStyle = (active: boolean): CSSProperties => ({
     padding: '6px 10px',
     borderRadius: 8,
     border: 'none',
-    background: active ? 'var(--bg-hover, rgba(255,255,255,0.08))' : 'transparent',
+    background: active ? 'var(--bg-surface-hover, rgba(255,255,255,0.08))' : 'transparent',
     color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
     fontSize: 14,
     fontWeight: active ? 600 : 500,
@@ -932,10 +944,13 @@ export const CanopyChannelSidebar = ({
     canopy,
     onOpenSettings,
     onNavigate,
+    fluid = false,
 }: {
     canopy: Room;
     onOpenSettings: () => void;
     onNavigate?: () => void;
+    /** Flex into the remaining drawer width instead of the fixed 248px. */
+    fluid?: boolean;
 }) => {
     const mx = useMatrixClient();
     const rooms = useAtomValue(joinedRoomsAtom);
@@ -1089,7 +1104,7 @@ export const CanopyChannelSidebar = ({
             data-testid="canopy-channel-sidebar"
             data-shell-region="canopy-channels"
             aria-label={`${canopy.name} channels`}
-            style={ASIDE_STYLE}
+            style={fluid ? FLUID_ASIDE_STYLE : ASIDE_STYLE}
         >
             <div style={HEADER_STYLE}>
                 <strong

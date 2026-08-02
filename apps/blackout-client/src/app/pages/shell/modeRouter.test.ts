@@ -17,6 +17,9 @@ describe('resolveShellMode', () => {
     it('maps canopy/den paths onto community mode', () => {
         expect(resolveShellMode('/communities')).toBe('community');
         expect(resolveShellMode('/communities/!c:server/dens/!d:server')).toBe('community');
+        // The canopies hub is the browse face of the same mode, so the
+        // mobile top bar gets a real title instead of mode "other"'s blank.
+        expect(resolveShellMode('/canopies')).toBe('community');
     });
 
     it('maps livestream, marketplace, creator, inbox and events paths onto distinct modes', () => {
@@ -56,6 +59,7 @@ describe('isShellModeRoot', () => {
         expect(isShellModeRoot('/streaming')).toBe(true);
         expect(isShellModeRoot('/coalition')).toBe(true);
         expect(isShellModeRoot('/coliseum/')).toBe(true);
+        expect(isShellModeRoot('/canopies')).toBe(true);
     });
 
     it('treats leaf views as non-roots', () => {

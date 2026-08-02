@@ -15,6 +15,8 @@ export const resolveShellMode = (pathname: string): ShellMode => {
     if (pathname.startsWith('/explore')) return 'discovery';
     if (pathname.startsWith('/topics')) return 'discovery';
     if (pathname.startsWith('/communities')) return 'community';
+    // The canopies hub is the browse/discover face of the community mode.
+    if (pathname.startsWith('/canopies')) return 'community';
     if (pathname.startsWith('/live')) return 'livestream';
     if (pathname.startsWith('/market')) return 'marketplace';
     if (pathname.startsWith('/coalition')) return 'coalition';
@@ -54,6 +56,7 @@ const SHELL_ROOT_PATHS = new Set<string>([
     '/explore',
     '/topics',
     '/communities',
+    '/canopies',
     '/live',
     '/market',
     '/creator',
@@ -83,7 +86,7 @@ export const isShellModeRoot = (pathname: string): boolean => {
  */
 export const SHELL_MODE_TITLES: Record<ShellMode, string> = {
     discovery: 'Town Square',
-    community: BLACKOUT_TERMS.canopy.title,
+    community: BLACKOUT_TERMS.canopy.titlePlural,
     livestream: 'Live',
     marketplace: 'The Black Market',
     creator: 'Creator',

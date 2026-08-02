@@ -71,6 +71,7 @@ export const WEB_ROUTES: readonly WebRoute[] = [
 
     // Communities.
     { id: 'communities', path: '/communities', mode: 'community' },
+    { id: 'canopies', path: '/canopies', mode: 'community' },
     {
         id: 'communities-canopy',
         path: `/communities/${encodeURIComponent(SENTINEL_SPACE)}`,
@@ -152,6 +153,7 @@ export const SHELL_ROOT_PATHS: readonly string[] = [
     '/explore',
     '/topics',
     '/communities',
+    '/canopies',
     '/live',
     '/market',
     '/creator',
