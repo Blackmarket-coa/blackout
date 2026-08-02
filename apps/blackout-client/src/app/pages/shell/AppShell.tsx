@@ -13,7 +13,7 @@ import { MobileTopBar } from './MobileTopBar';
 import { DynamicRightPanel } from './DynamicRightPanel';
 import { WorkspaceTabBar } from './WorkspaceTabBar';
 import { PrimaryNavBar } from './PrimaryNavBar';
-import { CanopySidebar } from './CanopySidebar';
+import { CanopyRail } from './CanopyRail';
 import { DialogHost } from '../../shell/DialogHost';
 import { getModalCloser, getModalOpener } from '../../shell/modalOpenerRegistry';
 import { runtimeFeatureFlags } from '../../core/features/featureFlags';
@@ -149,7 +149,7 @@ export const AppShell = () => {
         >
             {mobile ? <MobileTopBar /> : <PrimaryNavBar />}
             <div style={mobile ? BODY_MOBILE_STYLE : BODY_DESKTOP_STYLE}>
-                {mobile ? null : <CanopySidebar />}
+                {mobile ? null : <CanopyRail />}
                 <main style={mobile ? OUTLET_MOBILE_STYLE : OUTLET_DESKTOP_STYLE}>
                     {mobile ? null : <WorkspaceTabBar />}
                     <Outlet />

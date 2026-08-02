@@ -3,6 +3,7 @@ import { useAtomValue, useSetAtom } from 'jotai';
 import type { Room } from 'matrix-js-sdk';
 import { joinedRoomsAtom } from '../../state/rooms';
 import { roomToParentsAtom } from '../../state/room/roomToParents';
+import { canopyUnreadsAtom } from '../../state/canopyUnreads';
 import { createSpaceModalAtom } from '../../state/createSpaceModal';
 import { useRoomNavigate } from '../../hooks/useRoomNavigate';
 import { DiscoverySurface } from '../discovery/DiscoverySurface';
@@ -93,14 +94,6 @@ const readTopic = (room: Room): string =>
     room.currentState.getStateEvents('m.room.topic', '')?.getContent<{ topic?: string }>()?.topic ??
     '';
 
-const unreadCount = (room: Room): number => {
-    try {
-        return room.getUnreadNotificationCount?.() ?? 0;
-    } catch {
-        return 0;
-    }
-};
-
 interface ActivityPreview {
     sender: string;
     body: string;
@@ -144,25 +137,10 @@ export const CanopyHub = () => {
     const setCreateSpaceModal = useSetAtom(createSpaceModalAtom);
     const { navigateRoom, navigateSpace } = useRoomNavigate();
 
-    const canopies = useMemo(
-        () => rooms.filter((room) => room.getType() === 'm.space'),
-        [rooms]
-    );
+    const canopies = useMemo(() => rooms.filter((room) => room.getType() === 'm.space'), [rooms]);
 
-    const unreadByCanopy = useMemo(() => {
-        const totals = new Map<string, number>();
-        rooms.forEach((room) => {
-            if (room.getType() === 'm.space') return;
-            const parents = roomToParents.get(room.roomId);
-            if (!parents) return;
-            const count = unreadCount(room);
-            if (count <= 0) return;
-            parents.forEach((parentId) => {
-                totals.set(parentId, (totals.get(parentId) ?? 0) + count);
-            });
-        });
-        return totals;
-    }, [rooms, roomToParents]);
+    // Shared with the canopy rail badges so the two rollups never drift.
+    const unreadByCanopy = useAtomValue(canopyUnreadsAtom);
 
     const latestByCanopy = useMemo(() => {
         const latest = new Map<string, ActivityPreview>();
@@ -181,11 +159,7 @@ export const CanopyHub = () => {
     }, [rooms, roomToParents]);
 
     return (
-        <section
-            data-testid="canopy-hub"
-            data-shell-region="room"
-            style={PAGE_STYLE}
-        >
+        <section data-testid="canopy-hub" data-shell-region="room" style={PAGE_STYLE}>
             <header style={HEADER_STYLE}>
                 <div>
                     <h1 style={{ margin: 0, fontSize: 20 }}>{BLACKOUT_TERMS.canopy.titlePlural}</h1>
@@ -193,8 +167,8 @@ export const CanopyHub = () => {
                         Your{' '}
                         <GlossaryTerm term="canopy">{BLACKOUT_TERMS.canopy.plural}</GlossaryTerm> —
                         communities made of{' '}
-                        <GlossaryTerm term="den">{BLACKOUT_TERMS.den.plural}</GlossaryTerm>. Open one
-                        or discover more below.
+                        <GlossaryTerm term="den">{BLACKOUT_TERMS.den.plural}</GlossaryTerm>. Open
+                        one or discover more below.
                     </p>
                 </div>
                 <button
@@ -211,7 +185,7 @@ export const CanopyHub = () => {
                 {canopies.length > 0 ? (
                     <div style={GRID_STYLE} aria-label={`Your ${BLACKOUT_TERMS.canopy.plural}`}>
                         {canopies.map((canopy) => {
-                            const unread = unreadByCanopy.get(canopy.roomId) ?? 0;
+                            const unread = unreadByCanopy.get(canopy.roomId)?.total ?? 0;
                             const topic = readTopic(canopy);
                             const latest = latestByCanopy.get(canopy.roomId) ?? null;
                             return (
@@ -238,7 +212,9 @@ export const CanopyHub = () => {
                                             {canopy.name}
                                         </span>
                                         {unread > 0 ? (
-                                            <span style={badgeStyle}>{unread > 99 ? '99+' : unread}</span>
+                                            <span style={badgeStyle}>
+                                                {unread > 99 ? '99+' : unread}
+                                            </span>
                                         ) : null}
                                     </div>
                                     <div

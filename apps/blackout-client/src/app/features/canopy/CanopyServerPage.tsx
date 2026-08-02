@@ -1,11 +1,13 @@
 import { type CSSProperties, type ReactNode, useEffect, useState } from 'react';
 import { useAtomValue } from 'jotai';
-import { Link } from 'react-router';
+import { Link, useParams } from 'react-router';
 import { selectedRoomIdAtom, selectedSpaceIdAtom } from '../../state/navigation';
 import { joinedRoomsAtom } from '../../state/rooms';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 import { CANOPIES_PATH } from '../../pages/paths';
+import { CanopyRail } from '../../pages/shell/CanopyRail';
+import { isMobileViewport } from '../../pages/client/layoutMetrics';
 import { CanopyChannelSidebar } from './CanopyChannelSidebar';
 import { CanopyDenSurface, type RightDock } from './CanopyDenSurface';
 import { CanopyMemberPanel } from './CanopyMemberPanel';
@@ -47,10 +49,13 @@ const useViewportWidth = (): number => {
 const Drawer = ({
     side,
     onClose,
+    width,
     children,
 }: {
     side: 'left' | 'right';
     onClose: () => void;
+    /** Fixed drawer width; defaults to content-sized capped at 85%. */
+    width?: string;
     children: ReactNode;
 }) => (
     <>
@@ -67,7 +72,7 @@ const Drawer = ({
                 ...(side === 'left' ? { left: 0 } : { right: 0 }),
                 zIndex: 31,
                 display: 'flex',
-                maxWidth: '85%',
+                ...(width ? { width, maxWidth: width } : { maxWidth: '85%' }),
                 boxShadow:
                     side === 'left' ? '4px 0 24px rgba(0,0,0,0.4)' : '-4px 0 24px rgba(0,0,0,0.4)',
             }}
@@ -94,11 +99,20 @@ export const CanopyServerPage = () => {
     const width = useViewportWidth();
     const compact = width < COMPACT_MAX_WIDTH;
     const dockInline = width >= DOCK_MIN_WIDTH;
+    // The canopy-only and den routes are separate route entries, so switching
+    // canopies from the drawer's rail remounts this page. Deriving the initial
+    // drawer state from the route (open on a canopy root, closed on a den)
+    // keeps the drawer up while the user hops between canopies — Discord's
+    // mobile behavior — and route params are synchronously correct at mount,
+    // unlike the selection atoms which CommunitiesRoute writes in an effect.
+    const { denId: routeDenId } = useParams<{ denId?: string }>();
 
     const [rightDock, setRightDock] = useState<RightDock>(() =>
         typeof window !== 'undefined' && window.innerWidth >= DOCK_MIN_WIDTH ? 'members' : null
     );
-    const [channelsOpen, setChannelsOpen] = useState(false);
+    const [channelsOpen, setChannelsOpen] = useState(
+        () => typeof window !== 'undefined' && window.innerWidth < COMPACT_MAX_WIDTH && !routeDenId
+    );
     const [settingsOpen, setSettingsOpen] = useState(false);
 
     // Closing the channel drawer whenever the layout stops being compact keeps
@@ -160,20 +174,29 @@ export const CanopyServerPage = () => {
             <CanopyPinsPanel roomId={selectedRoomId} />
         ) : null;
 
-    const channelRail = (
-        <CanopyChannelSidebar
-            canopy={canopy}
-            onOpenSettings={() => setSettingsOpen(true)}
-            onNavigate={() => setChannelsOpen(false)}
-        />
-    );
+    // In the 751–767px overlap the AppShell still runs its desktop layout
+    // (which already renders the canopy rail) while this page is compact, so
+    // the drawer only embeds its own rail at true-mobile widths.
+    const railInDrawer = isMobileViewport(width);
 
     return (
         <section style={ROW_STYLE} data-testid="canopy-server-page" data-shell-region="room">
-            {compact ? null : channelRail}
+            {compact ? null : (
+                <CanopyChannelSidebar
+                    canopy={canopy}
+                    onOpenSettings={() => setSettingsOpen(true)}
+                    onNavigate={() => setChannelsOpen(false)}
+                />
+            )}
             {compact && channelsOpen ? (
-                <Drawer side="left" onClose={() => setChannelsOpen(false)}>
-                    {channelRail}
+                <Drawer side="left" width="min(85%, 336px)" onClose={() => setChannelsOpen(false)}>
+                    {railInDrawer ? <CanopyRail variant="drawer" /> : null}
+                    <CanopyChannelSidebar
+                        canopy={canopy}
+                        fluid
+                        onOpenSettings={() => setSettingsOpen(true)}
+                        onNavigate={() => setChannelsOpen(false)}
+                    />
                 </Drawer>
             ) : null}
 
