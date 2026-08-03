@@ -125,6 +125,15 @@ For defects discovered **during** the 96 hours, we publish a running list at
 
 ---
 
+## Selling on the black market
+
+Testing the marketplace? You can post a digital product — a blackout product
+that unlocks features in the app, or a plain digital download. The full path is
+in [`docs/guides/selling-on-the-black-market.md`](docs/guides/selling-on-the-black-market.md).
+It's a config-gated beta; the guide explains how to try it locally.
+
+---
+
 ## How recognition works
 
 We name testers in the **daily build reports** (`docs/launch/builds/H{N}.md`)

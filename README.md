@@ -30,6 +30,9 @@ Capacitor mobile, a Synapse-derived homeserver, and a Node/Hono API server.
 - Browse public rooms before signing up at
   [`https://matrix.theblackout.app/explore`](https://matrix.theblackout.app/explore).
 - See [`TESTERS.md`](TESTERS.md) for the 5-minute orientation and what to try first.
+- **Sell a digital product:** the black market is open to sellers — see
+  [`docs/guides/selling-on-the-black-market.md`](docs/guides/selling-on-the-black-market.md)
+  for the full path (blackout products and plain digital goods).
 - During the **96-hour V1 Test Flight**, open the Coliseum Coalition once
   you're signed in — eight challenges, each a real area we want stress-tested.
   Briefs: [`docs/coliseum/`](docs/coliseum/README.md).

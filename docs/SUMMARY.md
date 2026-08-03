@@ -6,6 +6,10 @@
 
 - [Betas](betas.md)
 - [Labs](labs.md)
+- [Selling on the black market](guides/selling-on-the-black-market.md)
+  - [Creating blackout products](guides/creating-blackout-products.md)
+  - [Non-blackout digital goods](guides/non-blackout-digital-goods.md)
+  - [Marketplace architecture](guides/marketplace-architecture.md)
 
 # Setup
 

@@ -20,6 +20,7 @@ vi.mock('./creatorClient', () => ({
     startCreatorPayoutOnboarding: (...a: unknown[]) => startCreatorPayoutOnboardingMock(...a),
 }));
 
+import { MemoryRouter } from 'react-router';
 import CreatorListings from './CreatorListings';
 import { ConfirmProvider } from '../../components/confirm-dialog';
 
@@ -37,9 +38,11 @@ const mountPage = async () => {
         // CreatorListings calls useConfirm(), which requires a ConfirmProvider
         // ancestor.
         root.render(
-            <ConfirmProvider>
-                <CreatorListings />
-            </ConfirmProvider>
+            <MemoryRouter>
+                <ConfirmProvider>
+                    <CreatorListings />
+                </ConfirmProvider>
+            </MemoryRouter>
         );
         await flush();
     });
