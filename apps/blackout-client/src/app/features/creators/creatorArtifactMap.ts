@@ -34,6 +34,8 @@ export function categoryForArtifact(kind: CreatorArtifactKind): CreatorListingCa
         case 'ai_persona':
         case 'automation_recipe':
             return 'ai-automation';
+        case 'privacy_tool':
+            return 'security-tool';
     }
 }
 
@@ -59,6 +61,8 @@ export function entitlementForArtifact(kind: CreatorArtifactKind): CreatorEntitl
         case 'ai_persona':
         case 'automation_recipe':
             return 'plugin_flag';
+        case 'privacy_tool':
+            return 'privacy_tool';
     }
 }
 
@@ -75,6 +79,7 @@ export const CREATOR_ARTIFACT_LABELS: Record<CreatorArtifactKind, string> = {
     vault_item: 'Security item',
     ai_persona: 'AI persona',
     automation_recipe: 'Automation recipe',
+    privacy_tool: 'Privacy tool',
 };
 
 export const CREATOR_ARTIFACT_KINDS: CreatorArtifactKind[] = Object.keys(

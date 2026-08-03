@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState, type CSSProperties } from 'react';
+import { Link } from 'react-router';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
+import { CREATOR_SELL_PATH } from '../../pages/paths';
 import { useConfirm } from '../../components/confirm-dialog';
 import {
     archiveCreatorListing,
@@ -301,15 +303,26 @@ export const CreatorListings = (): JSX.Element => {
                     }}
                 >
                     <h1 style={titleStyle}>Creator listings</h1>
-                    <button
-                        type="button"
-                        style={accentButton}
-                        onClick={() => setComposerOpen((open) => !open)}
-                        data-testid="creator-listing-new-toggle"
-                        aria-expanded={composerOpen}
+                    <div
+                        style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}
                     >
-                        {composerOpen ? 'Close' : 'New listing'}
-                    </button>
+                        <Link
+                            to={CREATOR_SELL_PATH}
+                            style={{ ...accentButton, textDecoration: 'none' }}
+                            data-testid="creator-listing-guided-link"
+                        >
+                            Guided sell flow
+                        </Link>
+                        <button
+                            type="button"
+                            style={accentButton}
+                            onClick={() => setComposerOpen((open) => !open)}
+                            data-testid="creator-listing-new-toggle"
+                            aria-expanded={composerOpen}
+                        >
+                            {composerOpen ? 'Close' : 'New listing'}
+                        </button>
+                    </div>
                 </div>
                 <p style={subtitleStyle}>
                     Publish, manage, and archive products you sell to your{' '}

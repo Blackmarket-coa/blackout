@@ -125,6 +125,7 @@ export const PROFILE_SELF_PATH = '/profile/me';
 export const buildLivePath = (streamId: string): string => `/live/${encodeURIComponent(streamId)}`;
 export const CREATOR_DASHBOARD_PATH = '/creator';
 export const CREATOR_LISTINGS_PATH = '/creator/listings';
+export const CREATOR_SELL_PATH = '/creator/sell';
 export const CREATOR_STOREFRONT_PATH = '/creators/:userId';
 export const EVENTS_PATH = '/events';
 /**

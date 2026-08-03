@@ -2,8 +2,9 @@ import { type CSSProperties } from 'react';
 import { Link } from 'react-router';
 import { useSetAtom } from 'jotai';
 import { createSpaceModalAtom, type CreateSpaceModalState } from '../../state/createSpaceModal';
-import { CANOPIES_PATH, CREATE_IMPORT_PATH } from '../../pages/paths';
+import { CANOPIES_PATH, CREATE_IMPORT_PATH, CREATOR_SELL_PATH } from '../../pages/paths';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
+import { useCapabilityContext } from '../../core/features/capabilityContext';
 
 // Stable payload identity for the create-space modal atom — same frozen-{}
 // pattern the AppShell audit bridge uses (`pages/shell/AppShell.tsx`), so
@@ -82,6 +83,7 @@ const actionStyle: CSSProperties = {
  */
 export const CreateHub = (): JSX.Element => {
     const setCreateSpaceModal = useSetAtom(createSpaceModalAtom);
+    const { flags } = useCapabilityContext();
 
     return (
         <section style={layoutStyle} data-shell-region="create" data-testid="create-hub">
@@ -135,6 +137,23 @@ export const CreateHub = (): JSX.Element => {
                         Import structure
                     </Link>
                 </article>
+                {flags?.creatorsListings ? (
+                    <article style={cardStyle}>
+                        <h2 style={cardTitleStyle}>Sell a digital product</h2>
+                        <p style={cardTextStyle}>
+                            List a product on the black market — a plain digital download, or a
+                            blackout product (theme, plugin, cosmetic, or tool) that unlocks
+                            features in the app. A guided flow walks you through it.
+                        </p>
+                        <Link
+                            to={CREATOR_SELL_PATH}
+                            style={actionStyle}
+                            data-testid="create-hub-sell"
+                        >
+                            Start selling
+                        </Link>
+                    </article>
+                ) : null}
             </div>
         </section>
     );
