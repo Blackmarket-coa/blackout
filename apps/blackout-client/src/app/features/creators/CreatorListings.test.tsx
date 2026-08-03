@@ -221,8 +221,12 @@ describe('CreatorListings', () => {
             title: 'Overlay pack',
             description: 'A neon overlay set',
         });
-        // A clean empty payload — never the `{ placeholder: true }` sentinel.
-        expect(body.artifactPayload).toEqual({});
+        // The registry's prefilled default for the chosen kind (matching the
+        // guided wizard) — never the old `{}` / `{ placeholder: true }` values.
+        expect(body.artifactPayload).toEqual({
+            assetType: 'overlay',
+            scenes: ['starting-soon', 'live'],
+        });
     });
 
     it('keeps submit disabled until both title and description are provided', async () => {
