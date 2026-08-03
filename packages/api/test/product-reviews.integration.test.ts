@@ -99,3 +99,35 @@ test('product version history: append-only, newest first', async () => {
     // newest-first ordering
     assert.equal(versions[0]?.version, '1.1.0');
 });
+
+test('product version history: same-millisecond releases still return newest-first', async () => {
+    // Regression: `listVersions` sorted on `releasedAt` alone, so two versions
+    // published inside the same millisecond compared equal and the stable sort
+    // left them in insertion order — i.e. oldest-first. Pinning an identical
+    // timestamp reproduces that deterministically instead of relying on how
+    // fast the host happens to run (it passed locally and failed in CI).
+    const { db } = await import('../src/db/store');
+    const { listVersions } = await import('../src/services/productReviews');
+    const listingId = 'listing-same-ms';
+    const releasedAt = '2026-01-01T00:00:00.000Z';
+
+    db.addProductVersion({
+        id: 'pver_same_ms_older',
+        providerId: PROVIDER,
+        listingId,
+        version: '1.0.0',
+        releasedAt,
+    });
+    db.addProductVersion({
+        id: 'pver_same_ms_newer',
+        providerId: PROVIDER,
+        listingId,
+        version: '1.1.0',
+        releasedAt,
+    });
+
+    const versions = listVersions(PROVIDER, listingId);
+    assert.equal(versions.length, 2);
+    assert.equal(versions[0]?.version, '1.1.0');
+    assert.equal(versions[1]?.version, '1.0.0');
+});
