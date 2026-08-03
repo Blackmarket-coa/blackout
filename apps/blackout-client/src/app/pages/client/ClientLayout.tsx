@@ -51,6 +51,8 @@ import { usePowerLevels } from '../../hooks/usePowerLevels';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 import { formatMatrixError } from '../../utils/matrixError';
 import { buildCommunitiesPath } from '../paths';
+import { isMobileViewport, isTabletViewport } from './layoutMetrics';
+import { useViewportWidth } from '../../hooks/useViewportWidth';
 import { settingsPageAtom } from '../../features/settings/settingsAtoms';
 import { hasModeratorAccess } from '../../features/moderation/draupnir';
 import {
@@ -148,8 +150,12 @@ const roomKindIcon = (room: Room): string => {
 
 const roomUnread = (room: Room): number => room.getUnreadNotificationCount() || 0;
 
-const isTablet = (width: number): boolean => width < 1100;
-const isMobile = (width: number): boolean => width < 760;
+// Breakpoints come from the shared design tokens via layoutMetrics so this
+// legacy shell agrees with the AppShell chrome and CanopyServerPage — the
+// old local 760/1100 constants drifted from the 750/1124 tokens and left a
+// narrow band with no den navigation at all.
+const isTablet = (width: number): boolean => isTabletViewport(width);
+const isMobile = (width: number): boolean => isMobileViewport(width);
 
 export const ClientLayout = () => {
     const client = useMatrixClient();
@@ -172,7 +178,7 @@ export const ClientLayout = () => {
     const [composerCommandStatus, setComposerCommandStatus] = useAtom(composerCommandStatusAtom);
     const { openRoomWithContext } = useMentionNavigation();
 
-    const [viewportWidth, setViewportWidth] = useState(window.innerWidth);
+    const viewportWidth = useViewportWidth();
     const [quickOpen, setQuickOpen] = useState(false);
     const [quickActionsCollapsed, setQuickActionsCollapsed] = useState(() =>
         readQuickActionCollapsed()
@@ -236,12 +242,6 @@ export const ClientLayout = () => {
         () => [...BASE_RIGHT_PANELS, ...(rolesEnabled ? (['roles'] as const) : [])],
         [rolesEnabled]
     );
-
-    useEffect(() => {
-        const onResize = () => setViewportWidth(window.innerWidth);
-        window.addEventListener('resize', onResize);
-        return () => window.removeEventListener('resize', onResize);
-    }, []);
 
     useEffect(() => {
         const handler = (event: globalThis.KeyboardEvent) => {

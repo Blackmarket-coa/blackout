@@ -4,6 +4,7 @@ import type { Room } from 'matrix-js-sdk';
 import { joinedRoomsAtom } from '../../state/rooms';
 import { roomToParentsAtom } from '../../state/room/roomToParents';
 import { canopyUnreadsAtom } from '../../state/canopyUnreads';
+import { canopyRailLayoutAtom, orderCanopiesByLayout } from '../../state/canopyLayout';
 import { createSpaceModalAtom } from '../../state/createSpaceModal';
 import { useRoomNavigate } from '../../hooks/useRoomNavigate';
 import { DiscoverySurface } from '../discovery/DiscoverySurface';
@@ -137,7 +138,17 @@ export const CanopyHub = () => {
     const setCreateSpaceModal = useSetAtom(createSpaceModalAtom);
     const { navigateRoom, navigateSpace } = useRoomNavigate();
 
-    const canopies = useMemo(() => rooms.filter((room) => room.getType() === 'm.space'), [rooms]);
+    const railLayout = useAtomValue(canopyRailLayoutAtom);
+    // Same order as the rail (folders flattened in place) so the hub cards
+    // and the rail never disagree about where a canopy lives.
+    const canopies = useMemo(
+        () =>
+            orderCanopiesByLayout(
+                rooms.filter((room) => room.getType() === 'm.space'),
+                railLayout
+            ),
+        [rooms, railLayout]
+    );
 
     // Shared with the canopy rail badges so the two rollups never drift.
     const unreadByCanopy = useAtomValue(canopyUnreadsAtom);
