@@ -19,6 +19,37 @@ in [`../guides/`](../guides/README.md) — the seller how-to
 and the developer reference
 ([`marketplace-architecture.md`](../guides/marketplace-architecture.md)).
 
+## The non-code gate: legal/compliance sign-off
+
+Configuration is not the only launch blocker. `MARKETPLACE_AUDIT.md` §9 names
+the items that **cannot be machine-checked** and need explicit human sign-off
+before Step 5 (charging real money): ToS / Privacy / Refund pages linked at
+registration and checkout, seller KYC / W-9 / 1099 handling, a prohibited-items
+policy with a working DMCA/abuse intake, and the money-transmitter posture.
+The preflight tool below reminds you of this gate; it cannot verify it.
+
+## Step 0 — Preflight
+
+A go-live preflight tool verifies every configuration step in this runbook
+(`tools/ops/monetization-go-live-preflight.mjs`; unit tests via
+`pnpm test:preflight:monetization`):
+
+```
+# In the API's deploy environment — validates env the way the boot guards will:
+pnpm preflight:monetization
+
+# Probe a running stack read-only (catalog, seller surface, webhook hardening):
+pnpm preflight:monetization -- --base-url https://api.theblackout.app
+
+# Strict mode for the final Step-5 flip: beta-unlock must be OFF and stub
+# catalog data becomes a failure instead of a warning:
+pnpm preflight:monetization -- --base-url https://api.theblackout.app --charge
+```
+
+Run it before the flip (expect WARNs for steps you haven't reached), after each
+step, and in `--charge` mode as the last check before Step 5. A non-zero exit
+means at least one FAIL finding.
+
 ## How it fits together
 
 -   FBM holds the priced catalog (`creator_listing` rows) and emits purchase /
@@ -123,10 +154,26 @@ Now entitlements resolve from real purchases/subscriptions: a paid tier grants
 its `features.*` bundle, gated features and Town Square premium widgets light up,
 and unlocked items show a purchase CTA.
 
+## The seller surface goes live with the same flip
+
+Going live is not buyer-only: the seller path (the guided sell flow at
+`/creator/sell`, listing management at `/creator/listings`, and payout
+onboarding) rides the `creatorsListings` flag (env `BLACKOUT_CREATORS_LISTINGS`,
+**default on**) and becomes real as soon as the FBM provider is connected —
+creator listing writes and payout onboarding go to FBM instead of failing.
+Seller docs: [`../guides/selling-on-the-black-market.md`](../guides/selling-on-the-black-market.md).
+
 ## Verify end-to-end
 
+The preflight's `--base-url` mode automates checks 1, 6, and 7; the purchase
+legs (2–5) and the seller create/publish leg (6) also have Playwright specs —
+`playwright/e2e/marketplace-buyer-journey.spec.ts` (MKT-01/02) and
+`playwright/e2e/creator-sell-journey.spec.ts` (SEL-01) — which run against a
+stub-backed stack, so use them as the rehearsal before flipping the real
+provider.
+
 1. `GET /v1/marketplace/listings` returns the seeded FBM rows, each with
-   `featureKeys`.
+   `featureKeys` — and none with a `stub-` id.
 2. Buy an individual item → webhook grants a `NormalizedEntitlement` carrying its
    `featureKeys`; the client shows it owned.
 3. Subscribe to a tier → the entitlement carries the tier bundle; the client
@@ -135,3 +182,8 @@ and unlocked items show a purchase CTA.
 4. With beta-unlock ON vs OFF the catalog **structure** is identical — only the
    CTA copy differs. (Regression covered by the beta-parity expectation.)
 5. Refund → the entitlement is revoked and the unlock disappears on next boot.
+6. Seller journey: `GET /v1/creator/providers` advertises `freeblackmarket` with
+   `creator-write`; a draft created via `/creator/sell` publishes and appears
+   under `/creator/listings`; payout onboarding returns a real FBM URL.
+7. An **unsigned** POST to `/v1/marketplace/webhooks/freeblackmarket` is
+   rejected (signature verification live).

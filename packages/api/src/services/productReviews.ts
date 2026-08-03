@@ -34,9 +34,19 @@ export function upsertReview(input: {
 }
 
 export function listVersions(providerId: string, listingId: string): ProductVersion[] {
+    // Newest-first. The history is append-only, so the store returns rows in
+    // insertion order; ties on `releasedAt` break on that order (later wins).
+    // Without the tiebreak, two versions published inside the same millisecond
+    // compare equal and the stable sort leaves them oldest-first — the opposite
+    // of this function's contract. Version labels are free text, so they can't
+    // be ordered semantically, and ids are random.
     return db
         .listProductVersions({ providerId, listingId })
-        .sort((a, b) => b.releasedAt.localeCompare(a.releasedAt));
+        .map((version, index) => ({ version, index }))
+        .sort(
+            (a, b) => b.version.releasedAt.localeCompare(a.version.releasedAt) || b.index - a.index
+        )
+        .map((entry) => entry.version);
 }
 
 export function addVersion(input: {
