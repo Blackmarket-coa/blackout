@@ -20,6 +20,21 @@ import {
     CREATOR_ARTIFACT_KINDS,
     CREATOR_ARTIFACT_LABELS,
 } from './creatorArtifactMap';
+import { ARTIFACT_FORM_REGISTRY } from './sell/artifactFormRegistry';
+
+/**
+ * The registry's prefilled default payload for a kind — the same values the
+ * guided wizard opens with, so a quick-create draft carries a valid example
+ * shape instead of an empty object the seller then has to replace elsewhere.
+ */
+function defaultPayloadForKind(kind: CreatorArtifactKind): unknown {
+    const descriptor = ARTIFACT_FORM_REGISTRY[kind];
+    try {
+        return descriptor.buildPayload(descriptor.defaults);
+    } catch {
+        return {};
+    }
+}
 
 const layoutStyle: CSSProperties = {
     display: 'flex',
@@ -227,9 +242,11 @@ export const CreatorListings = (): JSX.Element => {
                 description: draft.description.trim(),
                 priceCents: draft.priceCents,
                 currency: draft.currency.trim() || 'USD',
-                // Metadata-only draft — the server requires a payload (or upload
-                // id); an empty object is the honest "no inline artifact" value.
-                artifactPayload: {},
+                // The server requires a payload (or upload id). Match the guided
+                // wizard's prefilled defaults for the chosen kind so the draft
+                // carries a valid example shape (the wizard remains the place to
+                // actually author it).
+                artifactPayload: defaultPayloadForKind(draft.artifactKind),
             });
             setDraft(emptyDraft(draft.providerId));
             setComposerOpen(false);

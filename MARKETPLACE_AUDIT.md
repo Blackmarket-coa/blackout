@@ -25,6 +25,11 @@ Commerce Hub), and **legal/compliance** (ToS/Privacy/KYC/1099/money-transmitter)
 Status legend: **✅ fixed here** · **🔧 fix designed (reuse target named)** ·
 **📋 documented / intentional** · **⚖️ out of code scope (legal/roadmap)**.
 
+User- and developer-facing documentation for the seller path this audit covers
+now lives in [`docs/guides/`](docs/guides/README.md) (selling how-to, per-kind
+blackout-product reference, non-blackout digital goods, and the marketplace
+architecture reference).
+
 ## 2. Architecture & the "offerings"
 
 -   **Blackout monetization catalog** (the offerings "for Blackout"): individual

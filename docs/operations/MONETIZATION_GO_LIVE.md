@@ -13,6 +13,12 @@ so nothing is charged. Going live is a deliberate flip.
 Spans two repos: **`blackout`** (client + API) and **`free-black-market` / FBM**
 (commerce backend: catalog, subscriptions, entitlements, Stripe rails).
 
+Seller/developer-facing documentation for the surface this runbook enables lives
+in [`../guides/`](../guides/README.md) — the seller how-to
+([`selling-on-the-black-market.md`](../guides/selling-on-the-black-market.md))
+and the developer reference
+([`marketplace-architecture.md`](../guides/marketplace-architecture.md)).
+
 ## How it fits together
 
 -   FBM holds the priced catalog (`creator_listing` rows) and emits purchase /

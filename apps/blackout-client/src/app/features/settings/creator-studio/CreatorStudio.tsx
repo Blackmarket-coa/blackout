@@ -12,9 +12,26 @@ import {
     type CreatorProviderSummary,
     type CreateListingInput,
 } from './creatorClient';
-import { categoryForArtifact, entitlementForArtifact } from '../../creators/creatorArtifactMap';
+import {
+    categoryForArtifact,
+    entitlementForArtifact,
+    CREATOR_ARTIFACT_KINDS,
+} from '../../creators/creatorArtifactMap';
+import { ARTIFACT_FORM_REGISTRY } from '../../creators/sell/artifactFormRegistry';
 
 type TabId = CreatorArtifactKind | 'listings' | 'payouts';
+
+/**
+ * Per-kind payload hint, sourced from the shared artifactFormRegistry (the
+ * same source that drives the guided wizard's forms and
+ * `docs/guides/creating-blackout-products.md`) so this raw-JSON surface can't
+ * drift from the real payload shapes.
+ */
+function payloadHintFor(kind: CreatorArtifactKind): string {
+    const descriptor = ARTIFACT_FORM_REGISTRY[kind];
+    if (!descriptor.supportsGuided) return descriptor.fields[0]?.help ?? '';
+    return `Example: ${JSON.stringify(descriptor.example)}`;
+}
 
 interface DraftState {
     title: string;
@@ -32,62 +49,15 @@ const DEFAULT_DRAFT: DraftState = {
     payloadJson: '',
 };
 
+// One tab per sellable artifact kind, generated from the shared registry
+// (label + summary) instead of a hand-maintained copy — this also picks up
+// kinds the hand-written list had missed (e.g. privacy_tool).
 const TABS: Array<{ id: TabId; label: string; description: string }> = [
-    {
-        id: 'theme',
-        label: 'Theme pack',
-        description: 'Palette + token bundle. Reuses the customization bundle format.',
-    },
-    {
-        id: 'manifest_plugin',
-        label: 'Manifest plugin',
-        description: 'Declarative-only feature plugin. No JavaScript executes.',
-    },
-    {
-        id: 'code_plugin',
-        label: 'Code plugin',
-        description: 'Sandboxed JavaScript bundle running in a worker boundary.',
-    },
-    {
-        id: 'asset_bundle',
-        label: 'Asset bundle',
-        description: 'Emoji, sticker, or meme assets exposed as an entitlement pack.',
-    },
-    {
-        id: 'profile_cosmetic',
-        label: 'Profile cosmetic',
-        description: 'Avatar decoration, nameplate, profile effect, or collectible badge.',
-    },
-    {
-        id: 'sound_pack',
-        label: 'Sound pack',
-        description: 'Soundboard clips, notification sounds, or voice-filter presets.',
-    },
-    {
-        id: 'community_template',
-        label: 'Community template',
-        description: 'Den layout, role + permission bundle, or moderation rule pack.',
-    },
-    {
-        id: 'stream_asset',
-        label: 'Stream asset',
-        description: 'Overlay pack, alert pack, channel-point reward kit, or badge set.',
-    },
-    {
-        id: 'vault_item',
-        label: 'Security item',
-        description: 'Encrypted vault slot/template or privacy toolkit.',
-    },
-    {
-        id: 'ai_persona',
-        label: 'AI persona',
-        description: 'AI persona or prompt pack, confined to AI dens.',
-    },
-    {
-        id: 'automation_recipe',
-        label: 'Automation recipe',
-        description: 'Declarative trigger/action automation.',
-    },
+    ...CREATOR_ARTIFACT_KINDS.map((kind) => ({
+        id: kind as TabId,
+        label: ARTIFACT_FORM_REGISTRY[kind].label,
+        description: ARTIFACT_FORM_REGISTRY[kind].summary,
+    })),
     { id: 'listings', label: 'My listings', description: 'Manage your published artifacts.' },
     { id: 'payouts', label: 'Payouts', description: 'Connect your seller account for payouts.' },
 ];
@@ -325,59 +295,13 @@ export const CreatorStudio: React.FC = () => {
     );
 
     const tabContent = (() => {
+        // Every artifact tab renders the same raw-JSON draft form; the payload
+        // hint comes from the shared registry (see payloadHintFor) so the
+        // per-kind shapes live in exactly one place.
+        if (tab !== 'listings' && tab !== 'payouts') {
+            return renderDraftForm(tab, payloadHintFor(tab));
+        }
         switch (tab) {
-            case 'theme':
-                return renderDraftForm('theme', 'Paste a serialized BlackoutCustomizationBundle.');
-            case 'manifest_plugin':
-                return renderDraftForm(
-                    'manifest_plugin',
-                    'A FeatureCustomizationManifest object (no JS).'
-                );
-            case 'code_plugin':
-                return renderDraftForm(
-                    'code_plugin',
-                    'Object with { manifest, bundleBase64, sha256 } — runs in the sandbox.'
-                );
-            case 'asset_bundle':
-                return renderDraftForm(
-                    'asset_bundle',
-                    'Object with { files: [{ name, mime, base64 }] }.'
-                );
-            case 'profile_cosmetic':
-                return renderDraftForm(
-                    'profile_cosmetic',
-                    'Object with { cosmeticType: avatar_decoration|nameplate|profile_effect|badge, ... }.'
-                );
-            case 'sound_pack':
-                return renderDraftForm(
-                    'sound_pack',
-                    'Object with { soundKind: soundboard|notification|voice_filter, ... }.'
-                );
-            case 'community_template':
-                return renderDraftForm(
-                    'community_template',
-                    'Object with { template: { dens, roles, moderation, onboarding } }.'
-                );
-            case 'stream_asset':
-                return renderDraftForm(
-                    'stream_asset',
-                    'Object with { assetType: overlay|alert|channel_point_kit|badge_set, ... }.'
-                );
-            case 'vault_item':
-                return renderDraftForm(
-                    'vault_item',
-                    'Object with { vaultKind: slot|template, ... }.'
-                );
-            case 'ai_persona':
-                return renderDraftForm(
-                    'ai_persona',
-                    'Object with { persona: { name, systemPrompt } }. AI-den only.'
-                );
-            case 'automation_recipe':
-                return renderDraftForm(
-                    'automation_recipe',
-                    'Object with { triggers: [...], actions: [...] }.'
-                );
             case 'listings':
                 return (
                     <div style={{ display: 'grid', gap: 8 }}>

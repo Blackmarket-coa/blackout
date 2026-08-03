@@ -135,6 +135,50 @@ test('POST /v1/creator/listings accepts a privacy_tool draft', async () => {
     assert.equal(json.listing.providerListingId, 'fbm-listing-priv');
 });
 
+test('POST /v1/creator/listings forwards mediaUrls to FBM but drops artifact fields', async () => {
+    // Pins the metadata-only create boundary end-to-end: preview media survives
+    // to the FBM seller body while the artifact payload/kind/upload-id are
+    // intentionally dropped (bytes ship via the signed-bundle path). See
+    // docs/guides/marketplace-architecture.md, "The metadata-only boundary".
+    resetForEachTest();
+    fetchHandler = () =>
+        new Response(
+            JSON.stringify({ id: 'fbm-listing-media', slug: 'field-guide', status: 'draft' }),
+            { headers: { 'content-type': 'application/json' } }
+        );
+    const mediaUrls = [
+        'https://media.blackout.test/_matrix/media/v3/download/blackout.test/abc123',
+    ];
+    const response = await app.request('/v1/creator/listings', {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({
+            providerId: 'freeblackmarket',
+            artifactKind: 'vault_item',
+            category: 'security-tool',
+            entitlementKind: 'vault_item',
+            title: 'Field Guide (PDF)',
+            description: 'Digital download with a preview image',
+            priceCents: 499,
+            currency: 'USD',
+            mediaUrls,
+            artifactPayload: {
+                files: [{ name: 'guide.pdf', mime: 'application/pdf', base64: 'AA==' }],
+            },
+        }),
+    });
+    assert.equal(response.status, 201);
+    const sellerCall = fetchCalls.find((c) =>
+        c.url.endsWith('/v1/integrations/blackout/commerce/seller/listings')
+    );
+    assert.ok(sellerCall?.bodyText, 'seller create call should carry a JSON body');
+    const upstreamBody = JSON.parse(sellerCall!.bodyText!) as Record<string, unknown>;
+    assert.deepEqual(upstreamBody.mediaUrls, mediaUrls, 'preview media reaches FBM');
+    assert.ok(!('artifactPayload' in upstreamBody), 'artifactPayload is dropped');
+    assert.ok(!('artifactKind' in upstreamBody), 'artifactKind is dropped');
+    assert.ok(!('artifactUploadId' in upstreamBody), 'artifactUploadId is dropped');
+});
+
 test('POST /v1/creator/listings rejects invalid drafts', async () => {
     resetForEachTest();
     const response = await app.request('/v1/creator/listings', {
