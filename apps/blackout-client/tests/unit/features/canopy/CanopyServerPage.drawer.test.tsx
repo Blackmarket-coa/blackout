@@ -157,13 +157,16 @@ describe('CanopyServerPage drawer', () => {
         expect(channels?.getAttribute('data-fluid')).toBe('false');
     });
 
-    it('omits the rail from the drawer in the tablet dead-zone where AppShell already shows it', () => {
-        // 751–767px: AppShell renders its desktop rail while this page is
-        // still compact — the drawer must not double-mount the rail.
+    it('renders inline at tablet widths that used to be the drawer dead-zone', () => {
+        // Breakpoints are unified with the AppShell (mobileMaxPx = 750), so
+        // 751px+ is no longer compact: the channel sidebar sits inline and
+        // the drawer — and its embedded rail — never mounts. The AppShell's
+        // own desktop rail covers canopy switching at these widths.
         setViewportWidth(760);
         const container = render(`/communities/${encodeURIComponent(CANOPY_ID)}`);
-        expect(container.querySelector('[data-testid="canopy-drawer-scrim"]')).toBeTruthy();
+        expect(container.querySelector('[data-testid="canopy-drawer-scrim"]')).toBeNull();
         expect(container.querySelector('[data-testid="canopy-rail-stub"]')).toBeNull();
-        expect(container.querySelector('[data-testid="canopy-channels-stub"]')).toBeTruthy();
+        const channels = container.querySelector('[data-testid="canopy-channels-stub"]');
+        expect(channels?.getAttribute('data-fluid')).toBe('false');
     });
 });

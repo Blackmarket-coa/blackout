@@ -4,10 +4,11 @@ import { Link, useParams } from 'react-router';
 import { selectedRoomIdAtom, selectedSpaceIdAtom } from '../../state/navigation';
 import { joinedRoomsAtom } from '../../state/rooms';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { useViewportWidth } from '../../hooks/useViewportWidth';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 import { CANOPIES_PATH } from '../../pages/paths';
 import { CanopyRail } from '../../pages/shell/CanopyRail';
-import { isMobileViewport } from '../../pages/client/layoutMetrics';
+import { isMobileViewport, isTabletViewport } from '../../pages/client/layoutMetrics';
 import { CanopyChannelSidebar } from './CanopyChannelSidebar';
 import { CanopyDenSurface, type RightDock } from './CanopyDenSurface';
 import { CanopyMemberPanel } from './CanopyMemberPanel';
@@ -26,24 +27,6 @@ const ROW_STYLE: CSSProperties = {
     background: 'var(--bg-surface)',
     color: 'var(--text-primary)',
     overflow: 'hidden',
-};
-
-// Below this the channel rail becomes a slide-in drawer; above the upper
-// breakpoint the right dock (members/threads) sits inline instead of overlaying.
-const COMPACT_MAX_WIDTH = 768;
-const DOCK_MIN_WIDTH = 1100;
-
-const useViewportWidth = (): number => {
-    const [width, setWidth] = useState(() =>
-        typeof window === 'undefined' ? DOCK_MIN_WIDTH : window.innerWidth
-    );
-    useEffect(() => {
-        if (typeof window === 'undefined') return undefined;
-        const onResize = () => setWidth(window.innerWidth);
-        window.addEventListener('resize', onResize);
-        return () => window.removeEventListener('resize', onResize);
-    }, []);
-    return width;
 };
 
 const Drawer = ({
@@ -96,9 +79,13 @@ export const CanopyServerPage = () => {
     const selectedRoomId = useAtomValue(selectedRoomIdAtom);
     const rooms = useAtomValue(joinedRoomsAtom);
     const mx = useMatrixClient();
+    // Breakpoints come from the shared design tokens (mobileMaxPx /
+    // tabletMaxPx), so this page flips to compact exactly when the AppShell
+    // flips to its mobile chrome — the old local 768/1100 constants left a
+    // 751–767px dead zone with a drawer but no rail.
     const width = useViewportWidth();
-    const compact = width < COMPACT_MAX_WIDTH;
-    const dockInline = width >= DOCK_MIN_WIDTH;
+    const compact = isMobileViewport(width);
+    const dockInline = !isTabletViewport(width);
     // The canopy-only and den routes are separate route entries, so switching
     // canopies from the drawer's rail remounts this page. Deriving the initial
     // drawer state from the route (open on a canopy root, closed on a den)
@@ -108,10 +95,10 @@ export const CanopyServerPage = () => {
     const { denId: routeDenId } = useParams<{ denId?: string }>();
 
     const [rightDock, setRightDock] = useState<RightDock>(() =>
-        typeof window !== 'undefined' && window.innerWidth >= DOCK_MIN_WIDTH ? 'members' : null
+        typeof window !== 'undefined' && !isTabletViewport(window.innerWidth) ? 'members' : null
     );
     const [channelsOpen, setChannelsOpen] = useState(
-        () => typeof window !== 'undefined' && window.innerWidth < COMPACT_MAX_WIDTH && !routeDenId
+        () => typeof window !== 'undefined' && isMobileViewport(window.innerWidth) && !routeDenId
     );
     const [settingsOpen, setSettingsOpen] = useState(false);
 
@@ -174,11 +161,6 @@ export const CanopyServerPage = () => {
             <CanopyPinsPanel roomId={selectedRoomId} />
         ) : null;
 
-    // In the 751–767px overlap the AppShell still runs its desktop layout
-    // (which already renders the canopy rail) while this page is compact, so
-    // the drawer only embeds its own rail at true-mobile widths.
-    const railInDrawer = isMobileViewport(width);
-
     return (
         <section style={ROW_STYLE} data-testid="canopy-server-page" data-shell-region="room">
             {compact ? null : (
@@ -190,7 +172,9 @@ export const CanopyServerPage = () => {
             )}
             {compact && channelsOpen ? (
                 <Drawer side="left" width="min(85%, 336px)" onClose={() => setChannelsOpen(false)}>
-                    {railInDrawer ? <CanopyRail variant="drawer" /> : null}
+                    {/* `compact` now equals the AppShell's mobile switch, so the
+                        shell rail is never mounted at the same time as this one. */}
+                    <CanopyRail variant="drawer" />
                     <CanopyChannelSidebar
                         canopy={canopy}
                         fluid
