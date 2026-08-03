@@ -22,6 +22,8 @@ import { PluginEntitlementHydrator } from './app/features/monetization/install/P
 import { SelfProfileHydrator } from './app/features/profile/SelfProfileHydrator';
 import { useMatrixClient } from './app/hooks/useMatrixClient';
 import { useBindAllRoomsAtom } from './app/state/rooms';
+import { roomToParentsAtom, useBindRoomToParentsAtom } from './app/state/room/roomToParents';
+import { useBindCanopyRailLayoutAtom } from './app/state/canopyLayout';
 import { LoginPage } from './app/components/bmc/auth';
 import { RuntimeSettingsBridge } from './app/components/RuntimeSettingsBridge';
 import { authStateAtom, cryptoInitErrorAtom } from './app/state/auth';
@@ -310,6 +312,13 @@ const buildAppRouter = (capabilityContext: {
 const RoomsAtomBinder = () => {
     const mx = useMatrixClient();
     useBindAllRoomsAtom(mx);
+    // The canopy rail lives in the AppShell chrome on every page, so the
+    // space-parent map and the persisted rail layout must bind globally —
+    // ClientLayout's useBindAtoms only runs once a chat surface mounts.
+    // (Re-binding roomToParents there is harmless: both writers derive the
+    // same content from the client.)
+    useBindRoomToParentsAtom(mx, roomToParentsAtom);
+    useBindCanopyRailLayoutAtom(mx);
     return null;
 };
 

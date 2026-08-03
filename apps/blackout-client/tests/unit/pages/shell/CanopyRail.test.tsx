@@ -11,6 +11,11 @@ import { CanopyRail } from '../../../../src/app/pages/shell/CanopyRail';
 import { allRoomsBaseAtom } from '../../../../src/app/state/rooms';
 import { roomToParentsAtom } from '../../../../src/app/state/room/roomToParents';
 import { selectedRoomIdAtom, selectedSpaceIdAtom } from '../../../../src/app/state/navigation';
+import {
+    canopyRailLayoutAtom,
+    itemKey,
+    type CanopyRailLayout,
+} from '../../../../src/app/state/canopyLayout';
 import { capabilityContextAtom } from '../../../../src/app/core/features/capabilityContext';
 import { defaultFeatureFlags } from '../../../../src/app/core/features/featureFlags';
 
@@ -40,6 +45,7 @@ type RenderOptions = {
     parents?: Map<string, Set<string>>;
     selectedSpaceId?: string;
     selectedRoomId?: string;
+    layout?: CanopyRailLayout;
 };
 
 const render = (
@@ -57,6 +63,7 @@ const render = (
     }
     if (options.selectedSpaceId) store.set(selectedSpaceIdAtom, options.selectedSpaceId);
     if (options.selectedRoomId) store.set(selectedRoomIdAtom, options.selectedRoomId);
+    if (options.layout) store.set(canopyRailLayoutAtom, options.layout);
     const container = document.createElement('div');
     document.body.appendChild(container);
     const router = createMemoryRouter(
@@ -182,5 +189,118 @@ describe('CanopyRail', () => {
         });
         expect(store.get(selectedSpaceIdAtom)).toBe('!canopy:example.org');
         expect(store.get(selectedRoomIdAtom)).toBeNull();
+    });
+
+    it('orders tiles by the persisted layout, appending unlisted canopies', () => {
+        const { container } = render(
+            [
+                makeSpace('!a:example.org', 'Alpha'),
+                makeSpace('!b:example.org', 'Beta'),
+                makeSpace('!c:example.org', 'Gamma'),
+            ],
+            {
+                layout: {
+                    version: 1,
+                    items: [
+                        { type: 'canopy', canopyId: '!b:example.org' },
+                        { type: 'canopy', canopyId: '!a:example.org' },
+                    ],
+                },
+            }
+        );
+        const ids = Array.from(
+            container.querySelectorAll('[data-testid^="canopy-sidebar-item-"]')
+        ).map((el) => el.getAttribute('data-testid'));
+        expect(ids).toEqual([
+            'canopy-sidebar-item-!b:example.org',
+            'canopy-sidebar-item-!a:example.org',
+            'canopy-sidebar-item-!c:example.org',
+        ]);
+    });
+
+    it('renders folders, toggles collapse, and rolls member unreads onto the collapsed tile', () => {
+        const layout: CanopyRailLayout = {
+            version: 1,
+            items: [
+                {
+                    type: 'folder',
+                    id: 'f1',
+                    collapsed: false,
+                    canopyIds: ['!a:example.org', '!b:example.org'],
+                },
+            ],
+        };
+        const { container, store } = render(
+            [
+                makeSpace('!a:example.org', 'Alpha'),
+                makeSpace('!b:example.org', 'Beta'),
+                makeDen('!den:example.org', 'den', 4, 3),
+            ],
+            {
+                layout,
+                parents: new Map([['!den:example.org', new Set(['!a:example.org'])]]),
+            }
+        );
+
+        const folderTile = container.querySelector<HTMLButtonElement>(
+            '[data-testid="canopy-rail-folder-f1"]'
+        );
+        expect(folderTile?.getAttribute('aria-expanded')).toBe('true');
+        expect(
+            container.querySelector('[data-testid="canopy-sidebar-item-!a:example.org"]')
+        ).toBeTruthy();
+        // Expanded: the member carries its own badge, the folder shows none.
+        expect(container.querySelector('[data-testid="canopy-rail-badge-f1"]')).toBeNull();
+        expect(
+            container.querySelector('[data-testid="canopy-rail-badge-!a:example.org"]')?.textContent
+        ).toBe('3');
+
+        act(() => {
+            folderTile?.click();
+        });
+        expect(folderTile?.getAttribute('aria-expanded')).toBe('false');
+        expect(
+            container.querySelector('[data-testid="canopy-sidebar-item-!a:example.org"]')
+        ).toBeNull();
+        // Collapsed: the rollup moves onto the folder tile.
+        expect(container.querySelector('[data-testid="canopy-rail-badge-f1"]')?.textContent).toBe(
+            '3'
+        );
+        const stored = store.get(canopyRailLayoutAtom);
+        expect(stored.items[0]).toMatchObject({ type: 'folder', id: 'f1', collapsed: true });
+    });
+
+    it('reorders with Alt+ArrowDown and persists the new layout', () => {
+        const { container, store } = render(
+            [makeSpace('!a:example.org', 'Alpha'), makeSpace('!b:example.org', 'Beta')],
+            {
+                layout: {
+                    version: 1,
+                    items: [
+                        { type: 'canopy', canopyId: '!a:example.org' },
+                        { type: 'canopy', canopyId: '!b:example.org' },
+                    ],
+                },
+            }
+        );
+        const first = container.querySelector<HTMLButtonElement>(
+            '[data-testid="canopy-sidebar-item-!a:example.org"]'
+        );
+        act(() => {
+            first?.dispatchEvent(
+                new KeyboardEvent('keydown', { key: 'ArrowDown', altKey: true, bubbles: true })
+            );
+        });
+        expect(store.get(canopyRailLayoutAtom).items.map(itemKey)).toEqual([
+            '!b:example.org',
+            '!a:example.org',
+        ]);
+        const ids = Array.from(
+            container.querySelectorAll('[data-testid^="canopy-sidebar-item-"]')
+        ).map((el) => el.getAttribute('data-testid'));
+        expect(ids).toEqual([
+            'canopy-sidebar-item-!b:example.org',
+            'canopy-sidebar-item-!a:example.org',
+        ]);
     });
 });

@@ -92,6 +92,12 @@ export const tile = style({
             background: 'var(--accent-muted, #2E5A42)',
             borderColor: 'var(--border-active, #2EF2C5)',
         },
+        // Drop-to-combine highlight while a dragged canopy hovers the center.
+        '&[data-combine="true"]': {
+            borderColor: 'var(--accent-primary, #D7FF3F)',
+            boxShadow: '0 0 0 2px var(--accent-primary, #D7FF3F)',
+        },
+        '&[data-dragging="true"]': { opacity: 0.5 },
         [REDUCED_MOTION_ANCESTOR]: { transition: 'none' },
     },
     '@media': {
@@ -191,3 +197,58 @@ export const divider = style({
     flexShrink: 0,
     background: 'var(--border-default, #2E5A42)',
 });
+
+/**
+ * Expanded folder: a tinted group wrapping the folder tile and its member
+ * tiles. Tint via color-mix (HomeFeed chip convention) so it tracks the
+ * theme instead of hardcoding an overlay color.
+ */
+export const folderGroup = style({
+    width: 'calc(100% - 8px)',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: 8,
+    padding: '4px 0 6px',
+    borderRadius: 14,
+    border: '1px solid var(--border-default, #2E5A42)',
+    background: 'color-mix(in srgb, var(--bg-input, #1A2420) 55%, transparent)',
+});
+
+/** 2×2 preview of up to four folder members inside the folder tile. */
+export const folderChipGrid = style({
+    display: 'grid',
+    gridTemplateColumns: 'repeat(2, 1fr)',
+    gap: 2,
+    width: 30,
+    height: 30,
+    pointerEvents: 'none',
+});
+
+export const folderChip = style({
+    background: 'var(--accent-muted, #2E5A42)',
+    borderRadius: 4,
+    fontSize: 8,
+    fontWeight: 700,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    color: 'var(--text-primary, #F7FFF9)',
+});
+
+/** Reorder indicator line shown while dragging over a row edge. */
+const dropLine = style({
+    position: 'absolute',
+    left: 6,
+    right: 6,
+    height: 2,
+    borderRadius: 1,
+    background: 'var(--accent-primary, #D7FF3F)',
+    pointerEvents: 'none',
+    zIndex: 1,
+});
+
+export const dropLineTop = style([dropLine, { top: -5 }]);
+
+export const dropLineBottom = style([dropLine, { bottom: -5 }]);
