@@ -51,5 +51,49 @@ describe('MobileTopBar — auto back affordance (audit B)', () => {
         );
         expect(container.querySelector('[data-testid="custom-leading"]')).toBeTruthy();
         expect(container.querySelector('[data-testid="mobile-top-bar-back"]')).toBeNull();
+        expect(container.querySelector('[data-testid="mobile-top-bar-canopies"]')).toBeNull();
+    });
+});
+
+/**
+ * The CanopyRail is desktop-only (`AppShell` renders it behind `!mobile`), so
+ * without this control `/canopies` has no permanent entry point on a phone.
+ */
+describe('MobileTopBar — canopies entry', () => {
+    beforeEach(() => {
+        document.body.innerHTML = '';
+    });
+
+    it('offers a canopies button on a shell-mode root, where there is no back', () => {
+        const container = renderAt('/', <MobileTopBar />);
+        const canopies = container.querySelector('[data-testid="mobile-top-bar-canopies"]');
+        expect(canopies).toBeTruthy();
+        expect(canopies?.getAttribute('aria-label')).toBe('Open canopies');
+        expect(container.querySelector('[data-testid="mobile-top-bar-back"]')).toBeNull();
+    });
+
+    it('yields to the back button on a leaf route', () => {
+        const container = renderAt('/settings/about', <MobileTopBar />);
+        expect(container.querySelector('[data-testid="mobile-top-bar-back"]')).toBeTruthy();
+        expect(container.querySelector('[data-testid="mobile-top-bar-canopies"]')).toBeNull();
+    });
+
+    it('navigates to the canopies hub when tapped', () => {
+        const container = renderAt('/coliseum', <MobileTopBar />);
+        expect(container.querySelector('[data-testid="mobile-top-bar-title"]')?.textContent).toBe(
+            'Coliseum'
+        );
+        act(() => {
+            (
+                container.querySelector(
+                    '[data-testid="mobile-top-bar-canopies"]'
+                ) as HTMLButtonElement
+            ).click();
+        });
+        // `/canopies` is itself a mode root, so the button stays put — the
+        // title is what tells us the navigation landed.
+        expect(container.querySelector('[data-testid="mobile-top-bar-title"]')?.textContent).toBe(
+            'Canopies'
+        );
     });
 });
