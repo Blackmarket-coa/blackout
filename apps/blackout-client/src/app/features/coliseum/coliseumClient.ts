@@ -133,6 +133,23 @@ export function createColiseumTopic(
     return postJson<{ topic: ColiseumTopic }>(`${COLISEUM_BASE}/topics`, input, token);
 }
 
+/**
+ * Register the canopy den backing this topic's discussion. Idempotent and
+ * first-writer-wins — `created: false` means someone else linked a den first
+ * and the returned topic carries theirs.
+ */
+export function linkColiseumTopicDen(
+    topicId: string,
+    denRoomId: string,
+    token: string | null = readBlackoutApiToken()
+): Promise<{ topic: ColiseumTopic; created: boolean }> {
+    return postJson<{ topic: ColiseumTopic; created: boolean }>(
+        `${COLISEUM_BASE}/topics/${encodeURIComponent(topicId)}/den`,
+        { denRoomId },
+        token
+    );
+}
+
 export interface CreateColiseumArgumentInput {
     topicId: string;
     /** When set, this argument rebuts the given argument on the same topic. */

@@ -10,6 +10,7 @@ import { fetchColiseumMatches } from './coliseumMatchClient';
 import { coliseumArenaTheme } from './coliseumArenaTheme.css';
 import PropositionSection from './sections/PropositionSection';
 import PulseSection from './sections/PulseSection';
+import DiscussionSection from './sections/DiscussionSection';
 import DebateTab from './tabs/DebateTab';
 import MatchTab from './tabs/MatchTab';
 import LiveTab from './tabs/LiveTab';
@@ -18,11 +19,12 @@ import { cx } from './components/cx';
 import * as ui from './components/coliseumUi.css';
 import * as css from './TopicPage.css';
 
-type SectionId = 'proposition' | 'arguments' | 'match' | 'live' | 'sources';
+type SectionId = 'proposition' | 'arguments' | 'discussion' | 'match' | 'live' | 'sources';
 
 const SECTION_LABELS: Record<SectionId, string> = {
     proposition: 'Topic',
     arguments: 'Arguments',
+    discussion: 'Discussion',
     match: 'Match',
     live: 'Live',
     sources: 'Sources',
@@ -55,7 +57,7 @@ export function TopicPage() {
         if (topicId) setSelectedTopicId(topicId);
     }, [topicId, setSelectedTopicId]);
 
-    const { data, loading, error } = useColiseumTopic(topicId);
+    const { data, loading, error, refetch } = useColiseumTopic(topicId);
     const { data: verdict } = useColiseumVerdict(topicId);
 
     // `propositionTopicId` has been stored since matches shipped but nothing
@@ -85,6 +87,9 @@ export function TopicPage() {
     const sections = useMemo<SectionId[]>(() => {
         const visible: SectionId[] = ['proposition'];
         if (args.length > 0) visible.push('arguments');
+        // Always offered: the den is created on first use, so this is the
+        // affordance that starts the conversation, not just a view of one.
+        visible.push('discussion');
         if (match) visible.push('match');
         visible.push('live');
         if (args.some((argument) => argument.citations.length > 0)) visible.push('sources');
@@ -167,6 +172,8 @@ export function TopicPage() {
                         <DebateTab />
                     </div>
                 ) : null}
+
+                <DiscussionSection topic={data.topic} onLinked={refetch} />
 
                 {sections.includes('match') ? (
                     <div id="topic-match" className={css.section} data-testid="topic-match">

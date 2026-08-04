@@ -47,12 +47,11 @@ import {
     listSellerLocations,
     listSpatialItems,
     getFeedItem,
+    linkFeedItemDen,
     listFeedLikes,
     saveFeedLike,
     listFeedComments,
-    createFeedComment,
     newFeedLikeId,
-    newFeedCommentId,
     listVolunteerSignups,
     listVolunteerSlots,
     getRing,
@@ -259,33 +258,60 @@ coalition.post('/feed/:id/likes', async (c) => {
     return c.json(likeState(id, user.sub));
 });
 
+/**
+ * Archived comment thread.
+ *
+ * Every conversation in Blackout is a Matrix event in a canopy den — no feature
+ * ships its own message store. `coalition_feed_comments` was the last one that
+ * did, so it is now read-only: existing threads stay visible, and new comments
+ * go to the feed item's den (see `POST /feed/:id/den`).
+ *
+ * The rows are deliberately *not* backfilled into Matrix. They have no sender
+ * device, no event ids and no room; synthesising events for them would put
+ * unverifiable entries in a real timeline. An honest archive beats a forged one.
+ */
 coalition.get('/feed/:id/comments', (c) => {
     // Reads are public (the feed itself is public).
     const id = c.req.param('id');
     if (!getFeedItem(id)) {
         return c.json({ code: 'not_found', message: 'Feed item not found' }, 404);
     }
-    return c.json({ comments: listFeedComments(id) });
+    return c.json({ comments: listFeedComments(id), archived: true });
 });
 
-const commentSchema = z.object({ body: z.string().min(1).max(2000) });
-
-coalition.post('/feed/:id/comments', async (c) => {
-    const user = requireUser(c, 'Sign in to comment');
-    if (user instanceof Response) return user;
+coalition.post('/feed/:id/comments', (c) => {
     const id = c.req.param('id');
     if (!getFeedItem(id)) {
         return c.json({ code: 'not_found', message: 'Feed item not found' }, 404);
     }
-    const parsed = await readJsonBody(c, commentSchema);
+    return c.json(
+        {
+            code: 'gone',
+            message:
+                'Comments moved to this item’s canopy den. Link one with POST /feed/:id/den, then post there.',
+        },
+        410
+    );
+});
+
+const linkFeedDenSchema = z.object({ denRoomId: z.string().min(1).max(255) });
+
+/**
+ * Attach the canopy den backing a feed item's discussion. Same lazy,
+ * client-created, first-writer-wins contract as a Coliseum topic's den.
+ */
+coalition.post('/feed/:id/den', async (c) => {
+    const user = requireUser(c, 'Sign in to start a discussion');
+    if (user instanceof Response) return user;
+    const parsed = await readJsonBody(c, linkFeedDenSchema);
     if (parsed instanceof Response) return parsed;
-    const comment = createFeedComment({
-        id: newFeedCommentId(),
-        feedItemId: id,
-        authorId: user.sub,
-        body: parsed.body,
-    });
-    return c.json({ comment }, 201);
+
+    const feedItemId = c.req.param('id');
+    const result = feedItemId ? linkFeedItemDen(feedItemId, parsed.denRoomId) : null;
+    if (!result) {
+        return c.json({ code: 'not_found', message: 'Feed item not found' }, 404);
+    }
+    return c.json({ item: result.item, created: result.created }, result.created ? 201 : 200);
 });
 
 const spatialQuerySchema = z.object({

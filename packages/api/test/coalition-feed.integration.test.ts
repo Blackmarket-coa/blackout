@@ -56,30 +56,75 @@ test('coalition feed likes: toggle is idempotent on (item, user) and counts acti
     assert.deepEqual(await state.json(), { count: 1, likedByMe: false });
 });
 
-test('coalition feed comments: create returns 201 and lists newest-first', async () => {
-    const post = async (body: string) =>
-        app.request(`/v1/coalition/feed/${VIDEO_ID}/comments`, {
-            method: 'POST',
-            headers: authHeader('comment-author'),
-            body: JSON.stringify({ body }),
-        });
+/**
+ * Every conversation in Blackout is a Matrix event in a canopy den — no feature
+ * ships its own message store. `coalition_feed_comments` was the last one that
+ * did, so the write path is retired and the read path is a labelled archive.
+ */
+test('coalition feed comments: writes are gone, reads stay as an archive', async () => {
+    const write = await app.request(`/v1/coalition/feed/${VIDEO_ID}/comments`, {
+        method: 'POST',
+        headers: authHeader('comment-author'),
+        body: JSON.stringify({ body: 'first comment' }),
+    });
+    assert.equal(write.status, 410);
+    const gone = (await write.json()) as { code: string; message: string };
+    assert.equal(gone.code, 'gone');
+    // The error has to say where comments went, or it is just a dead end.
+    assert.match(gone.message, /den/i);
 
-    const a = await post('first comment');
-    assert.equal(a.status, 201);
-    const { comment } = (await a.json()) as { comment: { authorId: string; body: string } };
-    assert.equal(comment.authorId, 'comment-author');
-    assert.equal(comment.body, 'first comment');
-
-    await post('second comment');
-
+    // Existing threads keep rendering rather than vanishing on deploy.
     const listed = await app.request(`/v1/coalition/feed/${VIDEO_ID}/comments`, {
         headers: authHeader(),
     });
     assert.equal(listed.status, 200);
-    const { comments } = (await listed.json()) as { comments: Array<{ body: string }> };
-    assert.ok(comments.length >= 2);
-    // Newest-first ordering.
-    assert.equal(comments[0].body, 'second comment');
+    const body = (await listed.json()) as { comments: unknown[]; archived: boolean };
+    assert.ok(Array.isArray(body.comments));
+    assert.equal(body.archived, true);
+});
+
+test('coalition feed den: first writer wins, so simultaneous commenters share one den', async () => {
+    const link = async (denRoomId: string) =>
+        app.request(`/v1/coalition/feed/${VIDEO_ID}/den`, {
+            method: 'POST',
+            headers: authHeader('den-linker'),
+            body: JSON.stringify({ denRoomId }),
+        });
+
+    const first = await link('!first-den:server');
+    assert.equal(first.status, 201);
+    const firstBody = (await first.json()) as {
+        item: { discussionDenId: string };
+        created: boolean;
+    };
+    assert.equal(firstBody.created, true);
+    assert.equal(firstBody.item.discussionDenId, '!first-den:server');
+
+    // The loser gets the winner's den back and should abandon the room it made.
+    const second = await link('!second-den:server');
+    assert.equal(second.status, 200);
+    const secondBody = (await second.json()) as {
+        item: { discussionDenId: string };
+        created: boolean;
+    };
+    assert.equal(secondBody.created, false);
+    assert.equal(secondBody.item.discussionDenId, '!first-den:server');
+});
+
+test('coalition feed den: linking requires auth and a real feed item', async () => {
+    const noAuth = await app.request(`/v1/coalition/feed/${VIDEO_ID}/den`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ denRoomId: '!x:server' }),
+    });
+    assert.equal(noAuth.status, 401);
+
+    const missing = await app.request('/v1/coalition/feed/does-not-exist/den', {
+        method: 'POST',
+        headers: authHeader(),
+        body: JSON.stringify({ denRoomId: '!x:server' }),
+    });
+    assert.equal(missing.status, 404);
 });
 
 test('coalition feed engagement: reads are public (likedByMe false when signed out)', async () => {
@@ -108,12 +153,14 @@ test('coalition feed engagement: writes require auth', async () => {
     });
     assert.equal(likeNoAuth.status, 401);
 
+    // Commenting no longer has an auth gate to fail: the endpoint is retired
+    // outright, so it answers 410 before it ever looks at a caller.
     const commentNoAuth = await app.request(`/v1/coalition/feed/${VIDEO_ID}/comments`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ body: 'hi' }),
     });
-    assert.equal(commentNoAuth.status, 401);
+    assert.equal(commentNoAuth.status, 410);
 });
 
 test('coalition feed engagement: unknown feed item returns 404', async () => {

@@ -74,6 +74,7 @@ import {
     getTopic,
     getVerdict,
     grantSpeak,
+    linkTopicDiscussionDen,
     listArgumentsForTopic,
     listCrossTopicReel,
     listTopics,
@@ -285,6 +286,35 @@ coliseum.post('/topics', topicRateLimit, async (c) => {
         archivesAt: parsed.archivesAt,
     });
     return c.json({ topic }, 201);
+});
+
+const linkDenSchema = z.object({
+    denRoomId: z.string().min(1).max(255),
+});
+
+/**
+ * Attach the canopy den backing a topic's discussion.
+ *
+ * Every conversation in Blackout is a Matrix room — no feature ships its own
+ * message store. The den is created client-side (the API has no Matrix identity
+ * for the user) and lazily, on the first comment, so a throwaway topic never
+ * mints a room and clutters a canopy's channel list.
+ *
+ * Idempotent and first-writer-wins: a caller that loses the race gets the
+ * existing den back with `created: false` and should abandon the room it made.
+ */
+coliseum.post('/topics/:id/den', topicRateLimit, async (c) => {
+    const user = requireUser(c, 'Sign in to start a discussion');
+    if (user instanceof Response) return user;
+    const parsed = await readJsonBody(c, linkDenSchema);
+    if (parsed instanceof Response) return parsed;
+
+    const topicId = c.req.param('id');
+    const result = topicId ? linkTopicDiscussionDen(topicId, parsed.denRoomId) : null;
+    if (!result) {
+        return c.json({ code: 'not_found', message: 'Topic not found' }, 404);
+    }
+    return c.json({ topic: result.topic, created: result.created }, result.created ? 201 : 200);
 });
 
 // Loose at the boundary; ColiseumCitation discriminator + identifier checks are

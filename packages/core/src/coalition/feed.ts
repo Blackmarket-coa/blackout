@@ -52,6 +52,12 @@ export interface CoalitionFeedItem {
     createdAt: string;
     canopyId?: string;
     denId?: string;
+    /**
+     * The canopy den backing this item's discussion, created lazily on the
+     * first comment. Distinct from `denId`, which records which den the item
+     * was posted in and is only ever a scope filter.
+     */
+    discussionDenId?: string;
     authorId?: string;
     mediaUrl?: string;
     /** Optional location so a video can surface as a pin on the map (Snap Map style). */

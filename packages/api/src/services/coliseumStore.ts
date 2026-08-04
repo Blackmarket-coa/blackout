@@ -438,6 +438,31 @@ export function createTopic(input: CreateTopicInput, nowMs: number = Date.now())
     return topic;
 }
 
+/**
+ * Attach the canopy den that backs a topic's free-form discussion.
+ *
+ * **First writer wins.** The den is created client-side and lazily, on the
+ * first comment, so two people commenting at once can each mint a room. The
+ * first link is authoritative and every later caller gets it back — that is the
+ * signal for the loser to abandon the room it just created rather than leaving
+ * the topic with two rival discussions.
+ *
+ * Returns null when the topic does not exist.
+ */
+export function linkTopicDiscussionDen(
+    topicId: string,
+    discussionDenId: string
+): { topic: ColiseumTopic; created: boolean } | null {
+    const topic = db.getColiseumTopic(topicId);
+    if (!topic) return null;
+    if (topic.discussionDenId) {
+        return { topic, created: false };
+    }
+    const updated: ColiseumTopic = { ...topic, discussionDenId };
+    db.upsertColiseumTopic(updated);
+    return { topic: updated, created: true };
+}
+
 export function listArgumentsForTopic(
     topicId: string,
     options: { nowMs?: number } = {}
