@@ -4,7 +4,8 @@ import React from 'react';
 import { act } from 'react-dom/test-utils';
 import ReactDOM from 'react-dom/client';
 import { Provider, createStore } from 'jotai';
-import { coliseumTabAtom, selectedColiseumTopicIdAtom } from '../../../../src/app/state/coliseum';
+import { createMemoryRouter, RouterProvider } from 'react-router';
+import { selectedColiseumTopicIdAtom } from '../../../../src/app/state/coliseum';
 import { TopicsTab } from '../../../../src/app/features/coliseum/tabs/TopicsTab';
 
 const fetchColiseumTopics = vi.fn(async () => ({
@@ -50,15 +51,60 @@ const renderTopics = () => {
     document.body.appendChild(container);
     const root = ReactDOM.createRoot(container);
     const store = createStore();
+    // TopicsTab navigates to the topic's own route on select, so it needs a
+    // router in the tree.
+    const router = createMemoryRouter(
+        [{ path: '*', element: <TopicsTab scope={{ denId: '!den:example.org' }} /> }],
+        { initialEntries: ['/coliseum'] }
+    );
     act(() => {
         root.render(
             <Provider store={store}>
-                <TopicsTab scope={{ denId: '!den:example.org' }} />
+                <RouterProvider router={router} />
             </Provider>
         );
     });
     mountedRoots.push(root);
-    return { container, store };
+    return { container, store, router };
+};
+
+const openComposer = async (container: HTMLElement) => {
+    act(() => {
+        (
+            container.querySelector('[data-testid="coliseum-new-topic"]') as HTMLButtonElement
+        ).click();
+    });
+    await flush();
+};
+
+const pickKind = (kind: string) => {
+    act(() => {
+        (
+            document.querySelector(
+                `[data-testid="coliseum-topic-kind-${kind}"]`
+            ) as HTMLButtonElement
+        ).click();
+    });
+};
+
+const setTitle = (value: string) => {
+    act(() => {
+        setReactValue(
+            document.querySelector('[data-testid="coliseum-topic-title"]') as HTMLInputElement,
+            value
+        );
+    });
+};
+
+const submit = async () => {
+    await act(async () => {
+        (
+            document.querySelector(
+                '[data-testid="coliseum-topic-form-submit"]'
+            ) as HTMLButtonElement
+        ).click();
+    });
+    await flush();
 };
 
 afterEach(() => {
@@ -69,83 +115,162 @@ afterEach(() => {
     vi.clearAllMocks();
 });
 
-describe('TopicsTab topic creation', () => {
-    it('creates a topic from the form and selects it', async () => {
-        const { container, store } = renderTopics();
+describe('TopicsTab — proposing a topic in any form', () => {
+    /**
+     * The headline change: this used to be impossible. The composer refused to
+     * submit without a title, a headline *and* a source URL.
+     */
+    it('proposes a bare question with no link at all', async () => {
+        const { container, store, router } = renderTopics();
         await flush();
+        await openComposer(container);
 
-        act(() => {
-            (
-                container.querySelector('[data-testid="coliseum-new-topic"]') as HTMLButtonElement
-            ).click();
-        });
-        await flush();
-
-        // The composer sheet portals to document.body.
-        act(() => {
-            const inputs = document.querySelectorAll(
-                '[data-testid="coliseum-topic-form"] input'
-            ) as NodeListOf<HTMLInputElement>;
-            setReactValue(inputs[0], 'Should we ratify?');
-            setReactValue(inputs[1], 'Council debates the measure');
-            setReactValue(inputs[2], 'https://example.org/story');
-        });
-
-        await act(async () => {
-            (
-                document.querySelector(
-                    '[data-testid="coliseum-topic-form-submit"]'
-                ) as HTMLButtonElement
-            ).click();
-        });
-        await flush();
+        pickKind('text');
+        setTitle('Should we ratify?');
+        await submit();
 
         expect(createColiseumTopic).toHaveBeenCalledTimes(1);
         const arg = createColiseumTopic.mock.calls[0][0] as Record<string, unknown>;
         expect(arg.title).toBe('Should we ratify?');
-        expect(arg.newsAnchor).toMatchObject({
-            headline: 'Council debates the measure',
-            sourceUrl: 'https://example.org/story',
-        });
+        expect(arg.seed).toEqual({ kind: 'text' });
         expect(arg.denId).toBe('!den:example.org');
 
-        // Selecting the new topic routes to the debate tab.
+        // The new topic is opened at its own address, not a tab selection.
         expect(store.get(selectedColiseumTopicIdAtom)).toBe('topic-new');
-        expect(store.get(coliseumTabAtom)).toBe('debate');
+        expect(router.state.location.pathname).toBe('/coliseum/topics/topic-new');
     });
 
-    it('rejects an invalid source link', async () => {
+    it('proposes a link topic, carrying the article into a link seed', async () => {
         const { container } = renderTopics();
         await flush();
+        await openComposer(container);
 
-        act(() => {
-            (
-                container.querySelector('[data-testid="coliseum-new-topic"]') as HTMLButtonElement
-            ).click();
-        });
-        await flush();
-
+        pickKind('link');
+        setTitle('Should we ratify?');
         act(() => {
             const inputs = document.querySelectorAll(
                 '[data-testid="coliseum-topic-form"] input'
             ) as NodeListOf<HTMLInputElement>;
-            setReactValue(inputs[0], 'Title');
+            // title, headline, sourceUrl, publishedAt, tags
+            setReactValue(inputs[1], 'Council debates the measure');
+            setReactValue(inputs[2], 'https://example.org/story');
+        });
+        await submit();
+
+        const arg = createColiseumTopic.mock.calls[0][0] as Record<string, unknown>;
+        expect(arg.seed).toMatchObject({
+            kind: 'link',
+            headline: 'Council debates the measure',
+            sourceUrl: 'https://example.org/story',
+        });
+    });
+
+    it('proposes a challenge, open when no opponent is named', async () => {
+        const { container } = renderTopics();
+        await flush();
+        await openComposer(container);
+
+        pickKind('challenge');
+        setTitle('I say the grid holds');
+        await submit();
+
+        expect(createColiseumTopic.mock.calls[0][0]).toMatchObject({
+            seed: { kind: 'challenge', open: true },
+        });
+    });
+
+    it('proposes a challenge aimed at a named opponent', async () => {
+        const { container } = renderTopics();
+        await flush();
+        await openComposer(container);
+
+        pickKind('challenge');
+        setTitle('I say the grid holds');
+        act(() => {
+            setReactValue(
+                document.querySelector(
+                    '[data-testid="coliseum-topic-opponent"]'
+                ) as HTMLInputElement,
+                '@rival:server'
+            );
+        });
+        await submit();
+
+        expect(createColiseumTopic.mock.calls[0][0]).toMatchObject({
+            seed: { kind: 'challenge', opponentId: '@rival:server' },
+        });
+    });
+
+    it('proposes a media take from an mxc reference', async () => {
+        const { container } = renderTopics();
+        await flush();
+        await openComposer(container);
+
+        pickKind('media');
+        setTitle('My take');
+        act(() => {
+            setReactValue(
+                document.querySelector('[data-testid="coliseum-topic-media"]') as HTMLInputElement,
+                'mxc://example.org/abc'
+            );
+        });
+        await submit();
+
+        expect(createColiseumTopic.mock.calls[0][0]).toMatchObject({
+            seed: { kind: 'media', media: { kind: 'video', mxc: 'mxc://example.org/abc' } },
+        });
+    });
+});
+
+describe('TopicsTab — composer validation', () => {
+    it('requires a title whatever the form', async () => {
+        const { container } = renderTopics();
+        await flush();
+        await openComposer(container);
+
+        pickKind('text');
+        await submit();
+
+        expect(createColiseumTopic).not.toHaveBeenCalled();
+        expect(
+            document.querySelector('[data-testid="coliseum-topic-form-error"]')?.textContent
+        ).toContain('what the topic is');
+    });
+
+    it('rejects an invalid source link on a link topic', async () => {
+        const { container } = renderTopics();
+        await flush();
+        await openComposer(container);
+
+        pickKind('link');
+        setTitle('Title');
+        act(() => {
+            const inputs = document.querySelectorAll(
+                '[data-testid="coliseum-topic-form"] input'
+            ) as NodeListOf<HTMLInputElement>;
             setReactValue(inputs[1], 'Headline');
             setReactValue(inputs[2], 'not-a-url');
         });
-
-        await act(async () => {
-            (
-                document.querySelector(
-                    '[data-testid="coliseum-topic-form-submit"]'
-                ) as HTMLButtonElement
-            ).click();
-        });
-        await flush();
+        await submit();
 
         expect(createColiseumTopic).not.toHaveBeenCalled();
         expect(
             document.querySelector('[data-testid="coliseum-topic-form-error"]')?.textContent
         ).toContain('valid');
+    });
+
+    it('rejects a media topic with no attachment', async () => {
+        const { container } = renderTopics();
+        await flush();
+        await openComposer(container);
+
+        pickKind('media');
+        setTitle('My take');
+        await submit();
+
+        expect(createColiseumTopic).not.toHaveBeenCalled();
+        expect(
+            document.querySelector('[data-testid="coliseum-topic-form-error"]')?.textContent
+        ).toContain('Attach');
     });
 });

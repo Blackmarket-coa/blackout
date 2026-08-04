@@ -722,6 +722,7 @@ const matchesQuerySchema = z.object({
     domain: domainEnum.optional(),
     status: z.enum(['pending', 'accepted', 'live', 'crucible', 'verdict', 'archived']).optional(),
     fighterId: z.string().optional(),
+    propositionTopicId: z.string().min(1).optional(),
     limit: z.coerce.number().int().min(1).max(100).optional(),
 });
 
@@ -734,6 +735,7 @@ coliseum.get('/matches', (c) => {
         domain: parsed.data.domain as never,
         status: parsed.data.status,
         fighterId: parsed.data.fighterId,
+        propositionTopicId: parsed.data.propositionTopicId,
     });
     return c.json({
         generatedAt: new Date().toISOString(),

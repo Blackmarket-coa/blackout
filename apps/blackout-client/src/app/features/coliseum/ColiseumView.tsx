@@ -1,26 +1,15 @@
 import React, { useCallback, useEffect, useMemo } from 'react';
 import { useAtom } from 'jotai';
 import { isValidColiseumTab, type ColiseumTabId } from '@blackout/core';
-import {
-    coliseumReturnTabAtom,
-    coliseumTabAtom,
-    COLISEUM_TAB_ORDER,
-    selectedColiseumTopicIdAtom,
-} from '../../state/coliseum';
+import { coliseumTabAtom, COLISEUM_TAB_ORDER } from '../../state/coliseum';
 import ColiseumTabStrip from './ColiseumTabStrip';
 import { FeatureGuide } from '../../components/feature-guide/FeatureGuide';
 import { COLISEUM_TAB_GUIDES } from './coliseumTabGuides';
 import { splitColiseumTabs } from './tabConsolidation';
 import TopicsTab from './tabs/TopicsTab';
-import DebateTab from './tabs/DebateTab';
 import ReelTab from './tabs/ReelTab';
-import LiveTab from './tabs/LiveTab';
 import ChallengesTab from './tabs/ChallengesTab';
 import LeaderboardsTab from './tabs/LeaderboardsTab';
-import SourcesTab from './tabs/SourcesTab';
-import ArenaTab from './tabs/ArenaTab';
-import MatchTab from './tabs/MatchTab';
-import ShoutsTab from './tabs/ShoutsTab';
 import KnowledgeTab from './tabs/KnowledgeTab';
 import { coliseumArenaTheme } from './coliseumArenaTheme.css';
 import * as css from './ColiseumView.css';
@@ -49,8 +38,6 @@ export function ColiseumView({
     onSearch,
 }: ColiseumViewProps) {
     const [storedTab, setTab] = useAtom(coliseumTabAtom);
-    const [selectedTopicId] = useAtom(selectedColiseumTopicIdAtom);
-    const [returnTab] = useAtom(coliseumReturnTabAtom);
 
     const tabs = useMemo<ColiseumTabId[]>(
         () => (enabledTabs && enabledTabs.length > 0 ? enabledTabs : COLISEUM_TAB_ORDER),
@@ -66,22 +53,18 @@ export function ColiseumView({
 
     const activeTab = useMemo<ColiseumTabId>(() => {
         if (!isValidColiseumTab(storedTab)) return fallbackTab;
-        // The debate drill-in is never a strip destination (see
-        // splitColiseumTabs), so a den's enabledTabs gate doesn't apply to it:
-        // it's valid whenever a topic is selected, and meaningless without one
-        // (e.g. a stale persisted tab) — show the topics feed instead.
-        if (storedTab === 'debate') {
-            if (selectedTopicId) return 'debate';
-            return tabs.includes('topics') ? 'topics' : fallbackTab;
-        }
-        if (!tabs.includes(storedTab)) return fallbackTab;
+        // Tabs that became topic sections (debate, match, arena, shouts,
+        // sources, live) are no longer strip destinations. A value persisted
+        // before the consolidation must not blank the surface — fall back to
+        // the feed, which is where those things are now reached from.
+        if (!primary.includes(storedTab)) return fallbackTab;
         return storedTab;
-    }, [storedTab, tabs, fallbackTab, selectedTopicId]);
+    }, [storedTab, primary, fallbackTab]);
 
-    // Keep the persisted atom in sync when the debate drill-in was redirected.
+    // Rewrite a stale persisted tab so the next visit lands directly.
     useEffect(() => {
-        if (storedTab === 'debate' && !selectedTopicId) setTab(activeTab);
-    }, [storedTab, selectedTopicId, activeTab, setTab]);
+        if (storedTab !== activeTab) setTab(activeTab);
+    }, [storedTab, activeTab, setTab]);
 
     const handleSelect = useCallback(
         (tab: ColiseumTabId) => {
@@ -91,11 +74,6 @@ export function ColiseumView({
         [setTab, tabs]
     );
 
-    const handleBack = useCallback(() => {
-        const target = tabs.includes(returnTab) && returnTab !== 'debate' ? returnTab : fallbackTab;
-        setTab(target);
-    }, [tabs, returnTab, fallbackTab, setTab]);
-
     const scope = useMemo(
         () => ({
             canopyId: canopyId ?? undefined,
@@ -103,8 +81,6 @@ export function ColiseumView({
         }),
         [canopyId, denId]
     );
-
-    const isDebateDrillIn = activeTab === 'debate';
 
     return (
         <section className={`${coliseumArenaTheme} ${css.root}`} data-testid="coliseum-view">
@@ -115,34 +91,18 @@ export function ColiseumView({
                 onSearch={onSearch}
                 scopeLabel={scopeLabel}
             />
-            {isDebateDrillIn ? (
-                <div className={css.backBar} data-testid="coliseum-debate-back-bar">
-                    <button
-                        type="button"
-                        className={css.backButton}
-                        aria-label="Back"
-                        data-testid="coliseum-debate-back"
-                        onClick={handleBack}
-                    >
-                        ←
-                    </button>
-                    <span className={css.backTitle}>Debate</span>
-                </div>
-            ) : (
-                <FeatureGuide>{COLISEUM_TAB_GUIDES[activeTab]}</FeatureGuide>
-            )}
+            <FeatureGuide>{COLISEUM_TAB_GUIDES[activeTab]}</FeatureGuide>
+            {/*
+             * Only cross-topic surfaces render here. Debate, match, arena,
+             * shouts, sources and live are sections of `TopicPage` — reached by
+             * drilling into the topic that produced them, not by a sibling tab.
+             */}
             <div className={css.body}>
-                {activeTab === 'arena' ? <ArenaTab /> : null}
-                {activeTab === 'match' ? <MatchTab /> : null}
-                {activeTab === 'shouts' ? <ShoutsTab /> : null}
                 {activeTab === 'topics' ? <TopicsTab scope={scope} /> : null}
-                {activeTab === 'debate' ? <DebateTab /> : null}
                 {activeTab === 'reel' ? <ReelTab /> : null}
-                {activeTab === 'live' ? <LiveTab /> : null}
+                {activeTab === 'knowledge' ? <KnowledgeTab /> : null}
                 {activeTab === 'challenges' ? <ChallengesTab /> : null}
                 {activeTab === 'leaderboards' ? <LeaderboardsTab /> : null}
-                {activeTab === 'sources' ? <SourcesTab /> : null}
-                {activeTab === 'knowledge' ? <KnowledgeTab /> : null}
             </div>
         </section>
     );
