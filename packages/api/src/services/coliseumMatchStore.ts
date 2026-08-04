@@ -112,6 +112,12 @@ export interface MatchFilter {
     domain?: ColiseumTopicCategoryKey;
     status?: ColiseumMatch['status'];
     fighterId?: string;
+    /**
+     * Matches fought over a given topic. `propositionTopicId` has been stored
+     * since matches shipped but nothing ever read it back — this is what makes
+     * a topic able to show the fights it produced.
+     */
+    propositionTopicId?: string;
 }
 
 export function listMatches(filter: MatchFilter = {}, nowMs: number = Date.now()): ColiseumMatch[] {
@@ -121,6 +127,9 @@ export function listMatches(filter: MatchFilter = {}, nowMs: number = Date.now()
         .filter((m) => {
             if (filter.domain && m.domain !== filter.domain) return false;
             if (filter.status && m.status !== filter.status) return false;
+            if (filter.propositionTopicId && m.propositionTopicId !== filter.propositionTopicId) {
+                return false;
+            }
             if (
                 filter.fighterId &&
                 m.challengerId !== filter.fighterId &&

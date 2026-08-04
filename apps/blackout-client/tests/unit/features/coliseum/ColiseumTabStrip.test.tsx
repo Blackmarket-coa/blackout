@@ -29,54 +29,59 @@ afterEach(() => {
 });
 
 describe('ColiseumTabStrip', () => {
-    it('renders only primary tabs on the strip, plus a More button', () => {
+    it('renders the five cross-topic destinations and no overflow button', () => {
         const container = render(
-            <ColiseumTabStrip activeTab="reel" onSelectTab={() => undefined} />
+            <ColiseumTabStrip activeTab="topics" onSelectTab={() => undefined} />
         );
         const stripTabs = Array.from(
             container.querySelectorAll('[role="tab"][data-coliseum-tab]')
         ).map((el) => el.getAttribute('data-coliseum-tab'));
-        expect(stripTabs).toEqual(['reel', 'topics', 'knowledge', 'live', 'challenges']);
-        expect(container.querySelector('[data-testid="coliseum-more-tab"]')).toBeTruthy();
-        // Specialist tabs are not on the strip.
-        expect(container.querySelector('[role="tab"][data-coliseum-tab="arena"]')).toBeNull();
-        expect(container.querySelector('[role="tab"][data-coliseum-tab="debate"]')).toBeNull();
+        expect(stripTabs).toEqual(['topics', 'reel', 'knowledge', 'challenges', 'leaderboards']);
+        // The "More" sheet is gone: it held five surfaces that are now sections
+        // of a topic, and it was what pushed the strip off a phone screen.
+        expect(container.querySelector('[data-testid="coliseum-more-tab"]')).toBeNull();
     });
 
-    it('opens the More sheet and selects a secondary tab', () => {
+    it('keeps topic-scoped surfaces off the strip entirely', () => {
+        const container = render(
+            <ColiseumTabStrip activeTab="topics" onSelectTab={() => undefined} />
+        );
+        for (const tab of ['arena', 'match', 'shouts', 'sources', 'live', 'debate']) {
+            expect(container.querySelector(`[role="tab"][data-coliseum-tab="${tab}"]`)).toBeNull();
+        }
+    });
+
+    it('shortens Leaderboards so five labels fit a phone', () => {
+        const container = render(
+            <ColiseumTabStrip activeTab="topics" onSelectTab={() => undefined} />
+        );
+        expect(container.querySelector('[data-coliseum-tab="leaderboards"]')?.textContent).toBe(
+            'Ranks'
+        );
+    });
+
+    it('reports the picked tab to the caller', () => {
         const onSelectTab = vi.fn();
-        const container = render(<ColiseumTabStrip activeTab="reel" onSelectTab={onSelectTab} />);
+        const container = render(<ColiseumTabStrip activeTab="topics" onSelectTab={onSelectTab} />);
         act(() => {
             (
-                container.querySelector('[data-testid="coliseum-more-tab"]') as HTMLButtonElement
+                container.querySelector('[data-coliseum-tab="knowledge"]') as HTMLButtonElement
             ).click();
         });
-        // The Sheet portals to document.body.
-        const sheet = document.querySelector('[data-testid="coliseum-more-sheet"]');
-        expect(sheet).toBeTruthy();
-        act(() => {
-            (sheet?.querySelector('[data-coliseum-tab="arena"]') as HTMLButtonElement).click();
-        });
-        expect(onSelectTab).toHaveBeenCalledWith('arena');
-        expect(document.querySelector('[data-testid="coliseum-more-sheet"]')).toBeNull();
+        expect(onSelectTab).toHaveBeenCalledWith('knowledge');
     });
 
-    it('marks More as active while a secondary tab is open', () => {
-        const container = render(
-            <ColiseumTabStrip activeTab="leaderboards" onSelectTab={() => undefined} />
-        );
-        const more = container.querySelector('[data-testid="coliseum-more-tab"]');
-        expect(more?.textContent).toContain('Leaderboards');
-    });
-
-    it('hides More when a den only enables primary tabs', () => {
+    it('honours per-den enabledTabs gating', () => {
         const container = render(
             <ColiseumTabStrip
                 activeTab="topics"
-                enabledTabs={['topics', 'live']}
+                enabledTabs={['topics', 'knowledge']}
                 onSelectTab={() => undefined}
             />
         );
-        expect(container.querySelector('[data-testid="coliseum-more-tab"]')).toBeNull();
+        const stripTabs = Array.from(
+            container.querySelectorAll('[role="tab"][data-coliseum-tab]')
+        ).map((el) => el.getAttribute('data-coliseum-tab'));
+        expect(stripTabs).toEqual(['topics', 'knowledge']);
     });
 });

@@ -7,6 +7,7 @@ import type {
     ColiseumKnowledgeKind,
     ColiseumLiveSession,
     ColiseumNewsAnchor,
+    ColiseumTopicSeed,
     ColiseumStance,
     ColiseumTopic,
     ColiseumTopicCategoryKey,
@@ -113,7 +114,10 @@ export function fetchColiseumVerdict(
 
 export interface CreateColiseumTopicInput {
     title: string;
-    newsAnchor: ColiseumNewsAnchor;
+    /** How the topic is being proposed — text, link, media, or challenge. */
+    seed?: ColiseumTopicSeed;
+    /** @deprecated Supply a `link` seed instead; accepted for back-compat. */
+    newsAnchor?: ColiseumNewsAnchor;
     tags?: string[];
     category?: ColiseumTopicCategoryKey;
     canopyId?: string;
@@ -127,6 +131,23 @@ export function createColiseumTopic(
     token: string | null = readBlackoutApiToken()
 ): Promise<{ topic: ColiseumTopic }> {
     return postJson<{ topic: ColiseumTopic }>(`${COLISEUM_BASE}/topics`, input, token);
+}
+
+/**
+ * Register the canopy den backing this topic's discussion. Idempotent and
+ * first-writer-wins — `created: false` means someone else linked a den first
+ * and the returned topic carries theirs.
+ */
+export function linkColiseumTopicDen(
+    topicId: string,
+    denRoomId: string,
+    token: string | null = readBlackoutApiToken()
+): Promise<{ topic: ColiseumTopic; created: boolean }> {
+    return postJson<{ topic: ColiseumTopic; created: boolean }>(
+        `${COLISEUM_BASE}/topics/${encodeURIComponent(topicId)}/den`,
+        { denRoomId },
+        token
+    );
 }
 
 export interface CreateColiseumArgumentInput {

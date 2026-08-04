@@ -8,46 +8,121 @@ module (distinct from the launch test-flight Coalition described in
 
 ## Surfaces
 
-The feature renders as a tab shell (`co.bmc.coliseum` state event,
-`COLISEUM_TABS`) with five tabs
-([`apps/blackout-client/src/app/features/coliseum/`](../../apps/blackout-client/src/app/features/coliseum/)):
+**The topic is the spine.** A _proposed topic_ is the only thing a user creates
+in Coliseum, and everything it produces — arguments, discussion, a match, a live
+session, sources, a resolved brief — is a section of that topic rather than a
+sibling tab.
 
-- **Topics** — debate topics ranked by "debate heat" (recency × velocity), each
-  anchored to a news source.
-- **Debate** — structured arguments under a topic, threaded into rebuttal chains,
-  with a composer (stance + body + optional short video) and a community verdict.
-- **Reel** — a vertical, swipe-to-vote video reel. Swipe right = agree, left =
-  disagree, scroll up = next/neutral. With a topic selected it plays that topic's
-  arguments; with none selected it plays a **cross-topic** reel that paginates as
-  you scroll.
-- **Live** — a live debate session for the topic (see Transport below).
-- **Sources** — the citations attached across a topic's arguments.
+### The strip: five cross-topic destinations
+
+`co.bmc.coliseum` still carries the full 11-id `COLISEUM_TABS` taxonomy (a
+persisted tab or an old link must never throw), but only five are strip
+destinations. The split is decided by one test — _is the entity topic-keyed?_
+See [`tabConsolidation.ts`](../../apps/blackout-client/src/app/features/coliseum/tabConsolidation.ts).
+
+-   **Topics** — the feed of proposed topics, ranked by "debate heat"
+    (recency × velocity), filterable by category.
+-   **For You** — a vertical, swipe-to-vote reel of the strongest arguments across
+    every topic. Swipe right = agree, left = disagree, scroll up = next/neutral.
+-   **Knowledge** — the searchable archive of settled debates, briefs and
+    explainers.
+-   **Challenges** — community challenges ("start a business", "grow food"). The
+    one surface here that is _not_ topic-keyed: `ColiseumChallenge` has no
+    `topicId` and is a parallel entity, not a child of a topic.
+-   **Ranks** — cross-ecosystem leaderboards.
+
+There is no "More" sheet. Its five former occupants are topic sections now.
+
+### The topic page — `/coliseum/topics/:topicId`
+
+A topic is addressable, so it can be linked and shared.
+[`TopicPage.tsx`](../../apps/blackout-client/src/app/features/coliseum/TopicPage.tsx)
+renders a section rail over one scroll. Sections are **content-gated**: a
+freshly asked question is a short page; a resolved match is a rich one.
+
+-   **Topic** — the proposition, with its seed rendered in whatever form it
+    arrived (a player for a video take, the article card for a link, plain type
+    for a question, the callout for a challenge), plus the stance bar.
+-   **Pulse** — argument and voice counts, the stance split, and whether a verdict
+    has landed.
+-   **Arguments** — structured stance-arguments threaded into rebuttal chains,
+    with a composer (stance + body + optional short video) and a community verdict.
+-   **Discussion** — free-form talk, in a canopy den. See _Conversation_ below.
+-   **Match** — the 1v1 match fought over this topic, if there is one.
+-   **Live** — a live debate session for the topic (see Transport below).
+-   **Sources** — the citations attached across the topic's arguments.
+
+Old deep links keep working: `/coliseum?topic=<id>` (including every
+`?tab=debate&topic=` share URL already in the wild) redirects to the topic page,
+and a `bmc-coliseum-tab` persisted as any of the six now-section tabs is
+rewritten to the feed.
+
+## Proposing a topic
+
+A topic carries a **seed** describing how it arrived
+([`seed.ts`](../../packages/core/src/coliseum/seed.ts)):
+
+| Kind        | What it is                                  | What it absorbed              |
+| ----------- | ------------------------------------------- | ----------------------------- |
+| `text`      | A bare question or statement                | — (previously impossible)     |
+| `link`      | An article URL, headline, publish date      | the old required `newsAnchor` |
+| `media`     | A video or image take                       | standalone Shouts             |
+| `challenge` | A proposition aimed at a user, or left open | the Arena callout             |
+
+`newsAnchor` is retained as a deprecated, derived field so readers written
+before seeds keep working; `resolveTopicSeed` accepts either representation on
+both the read and write paths.
+
+Note that only a `link` seed has an article publish date. `seedPublishedAt`
+falls back to the topic's creation time for every other kind — passing an
+absent date to `computeTopicHeat` scores recency as a flat `0`, which is 55% of
+a topic's heat, and would quietly bury every non-link topic in the ranked feed.
+
+## Conversation
+
+Every chat, comment, or piece of written media in Blackout is a Matrix event in
+a canopy den. No feature ships its own message store or its own comment UI.
+
+A topic's **Discussion** section mounts the same components the canopy server
+page mounts (`ForumView`, or `RoomTimeline` + `MessageComposer`), so the
+composer, uploads, threads, moderation, redaction and E2EE behave identically
+wherever a user meets a conversation. The den is created **lazily** on the first
+comment — creating one per proposed topic would bury a canopy's channel list —
+**client-side**, since the API has no Matrix identity for the user, and linked
+back via `POST /v1/coliseum/topics/:id/den` on a **first-writer-wins** basis so
+two simultaneous commenters can't leave a topic with two rival discussions.
+
+Structured stance-arguments are _not_ chat and stay in `coliseum_arguments`:
+they carry a stance, citations, a Wilson vote score and a Polis consensus value,
+and the ranking, reel and verdict stack all read them. They are artifacts.
 
 ## Data model
 
 Core types live in
 [`packages/core/src/coliseum/`](../../packages/core/src/coliseum/):
 
-- **Topic** (`feed.ts`) — title, news anchor, tags, category, status
-  (`emerging → active → closing → archived`), and denormalized
-  `recencyScore`/`velocityScore`/`debateHeat`.
-- **Argument** (`feed.ts`) — `stance` (`for`/`against`/`nuance`), `stanceWeight`,
-  body, citations, optional video `media`, an optional `parentArgumentId` (the
-  rebuttal link), and denormalized `voteScore` (Wilson lower bound) +
-  `nuanceScore` (cross-cluster consensus).
-- **Vote** (`feed.ts`) — one per `(argument, voter)`; a re-vote overwrites.
-- **Citation** (`citations.ts`) — a discriminated union (`live`, `townhall`,
-  `subscription`, `audio`, `article`, `proposal`) that composes existing
-  Blackout surfaces.
-- **Live session** (`live.ts`) — a topic-keyed room with a moderator-gated
-  speaking queue and pinned evidence; pure immutable transition helpers.
+-   **Topic** (`feed.ts`) — title, `seed` (see _Proposing a topic_ above), tags,
+    category, status (`emerging → active → closing → archived`), an optional
+    `discussionDenId`, and denormalized `recencyScore`/`velocityScore`/`debateHeat`.
+    Note `denId` (which den it was posted in — a scope filter) and
+    `discussionDenId` (the room holding its conversation) are different fields.
+-   **Argument** (`feed.ts`) — `stance` (`for`/`against`/`nuance`), `stanceWeight`,
+    body, citations, optional video `media`, an optional `parentArgumentId` (the
+    rebuttal link), and denormalized `voteScore` (Wilson lower bound) +
+    `nuanceScore` (cross-cluster consensus).
+-   **Vote** (`feed.ts`) — one per `(argument, voter)`; a re-vote overwrites.
+-   **Citation** (`citations.ts`) — a discriminated union (`live`, `townhall`,
+    `subscription`, `audio`, `article`, `proposal`) that composes existing
+    Blackout surfaces.
+-   **Live session** (`live.ts`) — a topic-keyed room with a moderator-gated
+    speaking queue and pinned evidence; pure immutable transition helpers.
 
 ### Ranking & consensus
 
 `scoreColiseumArgument` blends votes, recency, citation depth, stance balance,
 and consensus. `deriveColiseumWinnerVerdict` ports the Polis model
 (`consensus.ts`): voters are k-means-clustered and an argument's consensus is the
-*minimum* agree-rate across clusters, so a broadly-acceptable argument can win
+_minimum_ agree-rate across clusters, so a broadly-acceptable argument can win
 without dominating any one faction. `buildColiseumArgumentTree` folds the flat
 argument list into rebuttal threads client-side. `rankCrossTopicArguments`
 heat-blends arguments across topics for the global reel.
@@ -57,21 +132,26 @@ heat-blends arguments across topics for the global reel.
 Routes are mounted at `/v1/coliseum`
 ([`packages/api/src/routes/coliseum.ts`](../../packages/api/src/routes/coliseum.ts)):
 
-| Method & path | Purpose |
-|---|---|
-| `GET /topics` | List topics (filter by canopy/den/category/tag/status). |
-| `GET /topics/:id` | Topic + its ranked arguments. |
-| `POST /topics` | Create a topic. |
-| `POST /arguments` | Post an argument or rebuttal (`parentArgumentId`). |
-| `POST /arguments/:id/vote` | Up/down vote. |
-| `GET /verdict/:topicId` | Community winner + consensus diagnostic. |
-| `GET /reel` | Cross-topic ranked argument feed (paginated: `limit`/`offset`/`nextOffset`). |
-| `POST /live/sessions` | Start a live session (caller becomes moderator). |
-| `GET /live/sessions/:topicId` | Active session for a topic, or `null`. |
-| `POST /live/sessions/:id/speak` | Request to speak. |
-| `POST /live/sessions/:id/speak/:userId/(grant\|revoke)` | Moderator-gated. |
-| `POST /live/sessions/:id/(pin\|unpin)` | Pin/unpin an argument or citation (moderator-gated). |
-| `POST /live/sessions/:id/end` | End the session (moderator-gated). |
+| Method & path                                           | Purpose                                                                            |
+| ------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `GET /topics`                                           | List topics (filter by canopy/den/category/tag/status).                            |
+| `GET /topics/:id`                                       | Topic + its ranked arguments.                                                      |
+| `POST /topics`                                          | Propose a topic (`seed`, or a legacy bare `newsAnchor`).                           |
+| `POST /topics/:id/den`                                  | Link the canopy den backing the topic's discussion. Idempotent, first-writer-wins. |
+| `POST /arguments`                                       | Post an argument or rebuttal (`parentArgumentId`).                                 |
+| `POST /arguments/:id/vote`                              | Up/down vote.                                                                      |
+| `GET /verdict/:topicId`                                 | Community winner + consensus diagnostic.                                           |
+| `GET /reel`                                             | Cross-topic ranked argument feed (paginated: `limit`/`offset`/`nextOffset`).       |
+| `POST /live/sessions`                                   | Start a live session (caller becomes moderator).                                   |
+| `GET /live/sessions/:topicId`                           | Active session for a topic, or `null`.                                             |
+| `POST /live/sessions/:id/speak`                         | Request to speak.                                                                  |
+| `POST /live/sessions/:id/speak/:userId/(grant\|revoke)` | Moderator-gated.                                                                   |
+| `POST /live/sessions/:id/(pin\|unpin)`                  | Pin/unpin an argument or citation (moderator-gated).                               |
+| `POST /live/sessions/:id/end`                           | End the session (moderator-gated).                                                 |
+| `GET /matches`                                          | List matches. `propositionTopicId` filters to one topic's fight.                   |
+
+The match layer (`/matches`, `/shouts`, `/knowledge`, `/briefs`, `/challenges`,
+`/leaderboards`) is documented in the route file rather than duplicated here.
 
 Write endpoints are **rate-limited per authenticated user** (topic, argument,
 vote, and live mutations each have their own bucket); over the limit returns

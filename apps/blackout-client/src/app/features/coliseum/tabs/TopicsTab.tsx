@@ -1,4 +1,5 @@
 import React, { useCallback, useState } from 'react';
+import { useNavigate } from 'react-router';
 import {
     COLISEUM_TOPIC_CATEGORIES,
     type ColiseumTopic,
@@ -7,15 +8,13 @@ import {
 import { useAtom } from 'jotai';
 import { EmptyState } from '@blackout/ui/primitives';
 import { useColiseumTopics, type ColiseumScopeQuery } from '../hooks/useColiseumTopics';
-import {
-    coliseumReturnTabAtom,
-    coliseumTabAtom,
-    selectedColiseumTopicIdAtom,
-} from '../../../state/coliseum';
+import { coliseumReturnTabAtom, selectedColiseumTopicIdAtom } from '../../../state/coliseum';
+import { buildColiseumTopicPath } from '../../../pages/paths';
 import { HeatBadge } from '../components/HeatBadge';
 import { RelativeTime } from '../components/RelativeTime';
 import { ColiseumFab } from '../components/ColiseumFab';
 import { TopicComposerSheet } from '../components/TopicComposerSheet';
+import { TopicSeedLine } from '../components/TopicSeedLine';
 import { cx } from '../components/cx';
 import * as ui from '../components/coliseumUi.css';
 
@@ -32,7 +31,7 @@ function TopicCard({
     topic: ColiseumTopic;
     onSelect: (topicId: string) => void;
 }) {
-    const { newsAnchor, tags, debateHeat, status } = topic;
+    const { seed, newsAnchor, tags, debateHeat, status } = topic;
     const categoryLabel = COLISEUM_TOPIC_CATEGORIES.find(
         (category) => category.key === topic.category
     )?.label;
@@ -54,15 +53,9 @@ function TopicCard({
                 </span>
             </div>
             <h3 className={ui.cardTitle}>{topic.title}</h3>
-            <a
-                href={newsAnchor.sourceUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={(event) => event.stopPropagation()}
-                className={ui.mutedLink}
-            >
-                📰 {newsAnchor.headline}
-            </a>
+            {/* The card is itself a button, so the link must not be clickable
+                here — a nested anchor would swallow the tap that opens the topic. */}
+            <TopicSeedLine seed={seed} newsAnchor={newsAnchor} inert />
             {tags.length > 0 ? (
                 <div className={ui.tagRow}>
                     {tags.slice(0, 6).map((tag) => (
@@ -88,17 +81,19 @@ export function TopicsTab({ scope }: TopicsTabProps) {
         category: category === 'all' ? undefined : category,
     });
     const [, setSelectedTopicId] = useAtom(selectedColiseumTopicIdAtom);
-    const [, setTab] = useAtom(coliseumTabAtom);
     const [, setReturnTab] = useAtom(coliseumReturnTabAtom);
     const [composerOpen, setComposerOpen] = useState(false);
+    const navigate = useNavigate();
 
     const handleSelect = useCallback(
         (topicId: string) => {
+            // The atom still backs the reused section bodies, but the URL is
+            // what a topic *is* now — so a deep dive can be linked and shared.
             setSelectedTopicId(topicId);
             setReturnTab('topics');
-            setTab('debate');
+            navigate(buildColiseumTopicPath(topicId));
         },
-        [setSelectedTopicId, setReturnTab, setTab]
+        [setSelectedTopicId, setReturnTab, navigate]
     );
 
     const onCreated = useCallback(

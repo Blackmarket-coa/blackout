@@ -1,20 +1,33 @@
 import { createElement, useEffect } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
-import { useSearchParams } from 'react-router';
+import { useNavigate, useSearchParams } from 'react-router';
 import { isValidColiseumTab } from '@blackout/core';
+import { buildColiseumTopicPath, COLISEUM_TOPIC_PATH } from '../../pages/paths';
 import { selectedRoomIdAtom, selectedSpaceIdAtom } from '../../state/navigation';
 import { coliseumTabAtom, selectedColiseumTopicIdAtom } from '../../state/coliseum';
 import type { FeatureRoute } from '../../core/features/types';
 import ColiseumView from './ColiseumView';
+import TopicPage from './TopicPage';
 import { useColiseumStateForRoom } from './useColiseumState';
 
 /**
- * Apply shareable deep links once on mount: `/coliseum?tab=<id>` selects a
- * tab, `/coliseum?topic=<id>` opens that topic (defaulting to its debate
- * thread). The params are then cleared so in-app navigation takes over.
+ * Tabs that used to be reachable from the strip but are now sections of a
+ * topic. A stored tab or a shared link naming one of these should land on the
+ * topic page rather than on a surface that no longer exists standalone.
+ */
+const TOPIC_SECTION_TABS = new Set(['debate', 'match', 'arena', 'shouts', 'sources', 'live']);
+
+/**
+ * Apply shareable deep links once on mount.
+ *
+ * `/coliseum?topic=<id>` now redirects to the topic's own route — a topic is an
+ * addressable page rather than a selection carried in `localStorage`. Links
+ * that predate that (including every `?tab=debate&topic=` share URL already in
+ * the wild) keep working. `/coliseum?tab=<id>` still selects a strip tab.
  */
 const useColiseumDeepLink = () => {
     const [searchParams, setSearchParams] = useSearchParams();
+    const navigate = useNavigate();
     const setTab = useSetAtom(coliseumTabAtom);
     const setSelectedTopicId = useSetAtom(selectedColiseumTopicIdAtom);
 
@@ -22,10 +35,14 @@ const useColiseumDeepLink = () => {
         const tabParam = searchParams.get('tab');
         const topicParam = searchParams.get('topic');
         if (!tabParam && !topicParam) return;
+
         if (topicParam) {
             setSelectedTopicId(topicParam);
-            setTab(tabParam && isValidColiseumTab(tabParam) ? tabParam : 'debate');
-        } else if (tabParam && isValidColiseumTab(tabParam)) {
+            setSearchParams({}, { replace: true });
+            navigate(buildColiseumTopicPath(topicParam), { replace: true });
+            return;
+        }
+        if (tabParam && isValidColiseumTab(tabParam) && !TOPIC_SECTION_TABS.has(tabParam)) {
             setTab(tabParam);
         }
         setSearchParams({}, { replace: true });
@@ -51,4 +68,7 @@ const ColiseumRoutePage = () => {
     });
 };
 
-export const coliseumRoutes: FeatureRoute[] = [{ path: '/coliseum', component: ColiseumRoutePage }];
+export const coliseumRoutes: FeatureRoute[] = [
+    { path: '/coliseum', component: ColiseumRoutePage },
+    { path: COLISEUM_TOPIC_PATH, component: TopicPage },
+];

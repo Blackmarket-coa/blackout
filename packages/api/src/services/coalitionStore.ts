@@ -44,6 +44,26 @@ export function getFeedItem(id: string) {
     return db.getCoalitionFeedItem(id);
 }
 
+/**
+ * Attach the canopy den that backs a feed item's discussion.
+ *
+ * Mirrors `linkTopicDiscussionDen`: the den is created client-side and lazily,
+ * and the first link wins so two simultaneous commenters can't leave the item
+ * with two rival discussions.
+ *
+ * Returns null when the feed item does not exist.
+ */
+export function linkFeedItemDen(feedItemId: string, discussionDenId: string) {
+    const item = db.getCoalitionFeedItem(feedItemId);
+    if (!item) return null;
+    if (item.discussionDenId) {
+        return { item, created: false };
+    }
+    const updated = { ...item, discussionDenId };
+    db.upsertCoalitionFeedItem(updated);
+    return { item: updated, created: true };
+}
+
 export function listFeedLikes(feedItemId: string) {
     return db.listCoalitionFeedLikes(feedItemId);
 }

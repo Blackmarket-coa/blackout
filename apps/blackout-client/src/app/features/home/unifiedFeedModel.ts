@@ -10,7 +10,7 @@ import {
     buildCommunitiesPath,
     buildLivePath,
     COALITION_PATH,
-    COLISEUM_PATH,
+    buildColiseumTopicPath,
     GOVERNANCE_PATH,
     MARKET_PATH,
 } from '../../pages/paths';
@@ -233,7 +233,9 @@ export const mapColiseum = (
             denId: topic.denId ?? null,
             timestamp,
             score: clamp01(topic.debateHeat),
-            href: COLISEUM_PATH,
+            // Per-topic, not the generic arena: every coliseum card used to
+            // land on `/coliseum` regardless of which topic it advertised.
+            href: buildColiseumTopicPath(topic.id),
             mediaUrl: topic.newsAnchor?.opengraphImage,
             tags: topic.tags ?? [],
         };

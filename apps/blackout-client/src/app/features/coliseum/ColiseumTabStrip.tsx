@@ -1,8 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import type { ColiseumTabId } from '@blackout/core';
 import { COLISEUM_TAB_HINTS, COLISEUM_TAB_LABELS, COLISEUM_TAB_ORDER } from '../../state/coliseum';
 import { splitColiseumTabs } from './tabConsolidation';
-import { ColiseumMoreSheet } from './components/ColiseumMoreSheet';
 import { cx } from './components/cx';
 import * as css from './ColiseumTabStrip.css';
 
@@ -24,9 +23,9 @@ function SearchIcon() {
 }
 
 /**
- * TikTok-slim tab strip: a handful of primary destinations plus a "More"
- * button that opens the specialist surfaces in a bottom sheet. `debate` never
- * appears here — it's a drill-in owned by ColiseumView.
+ * Slim tab strip of the five cross-topic destinations. There is deliberately no
+ * "More" sheet: everything that used to hide in one — arena, match, shouts,
+ * sources — is now a section of the topic that produced it.
  */
 export function ColiseumTabStrip({
     activeTab,
@@ -36,10 +35,7 @@ export function ColiseumTabStrip({
     scopeLabel,
 }: ColiseumTabStripProps) {
     const tabs = enabledTabs && enabledTabs.length > 0 ? enabledTabs : COLISEUM_TAB_ORDER;
-    const { primary, secondary } = useMemo(() => splitColiseumTabs(tabs), [tabs]);
-    const [moreOpen, setMoreOpen] = useState(false);
-
-    const secondaryActive = secondary.includes(activeTab);
+    const { primary } = useMemo(() => splitColiseumTabs(tabs), [tabs]);
 
     return (
         <nav className={css.strip} role="tablist" aria-label="Coliseum tabs">
@@ -58,19 +54,6 @@ export function ColiseumTabStrip({
                     {COLISEUM_TAB_LABELS[tab]}
                 </button>
             ))}
-            {secondary.length > 0 ? (
-                <button
-                    type="button"
-                    className={cx(css.tab, secondaryActive && css.tabActive)}
-                    title="More Coliseum surfaces — arena matches, shouts, leaderboards, and sources"
-                    aria-haspopup="dialog"
-                    aria-expanded={moreOpen}
-                    data-testid="coliseum-more-tab"
-                    onClick={() => setMoreOpen(true)}
-                >
-                    {secondaryActive ? `More · ${COLISEUM_TAB_LABELS[activeTab]}` : 'More'}
-                </button>
-            ) : null}
             <span className={css.spacer} />
             {onSearch ? (
                 <button
@@ -82,13 +65,6 @@ export function ColiseumTabStrip({
                     <SearchIcon />
                 </button>
             ) : null}
-            <ColiseumMoreSheet
-                open={moreOpen}
-                onClose={() => setMoreOpen(false)}
-                tabs={secondary}
-                activeTab={activeTab}
-                onSelectTab={onSelectTab}
-            />
         </nav>
     );
 }

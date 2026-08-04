@@ -58,6 +58,12 @@ export interface ChallengeLinkResponse {
 
 export interface CreateMatchInput {
     proposition: string;
+    /**
+     * The topic this match is fought over. Sending it is what makes a match
+     * show up on its topic's page — the column has existed since matches
+     * shipped, but no client ever populated it.
+     */
+    propositionTopicId?: string;
     domain?: ColiseumTopicCategoryKey;
     opponentId?: string;
     open?: boolean;
@@ -69,6 +75,7 @@ export function fetchColiseumMatches(
         domain?: ColiseumTopicCategoryKey;
         status?: ColiseumMatch['status'];
         fighterId?: string;
+        propositionTopicId?: string;
         limit?: number;
     } = {},
     token: string | null = readBlackoutApiToken()
@@ -77,6 +84,7 @@ export function fetchColiseumMatches(
         domain: options.domain,
         status: options.status,
         fighterId: options.fighterId,
+        propositionTopicId: options.propositionTopicId,
         limit: options.limit !== undefined ? String(options.limit) : undefined,
     });
     return getJson<MatchesResponse>(path, token);

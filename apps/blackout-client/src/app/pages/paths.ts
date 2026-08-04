@@ -116,6 +116,17 @@ export const CREATOR_HUB_PATH = '/creator-hub';
 /** Top-level Coalition and Coliseum destinations (see their feature `routes.ts`). */
 export const COALITION_PATH = '/coalition';
 export const COLISEUM_PATH = '/coliseum';
+
+/**
+ * A single Coliseum topic. Everything a topic produces — its arguments, the
+ * match fought over it, its live session, its sources, its resolved brief —
+ * is a section of this page rather than a sibling tab, so a topic is one
+ * addressable thing rather than a selection carried in `localStorage`.
+ */
+export const COLISEUM_TOPIC_PATH = '/coliseum/topics/:topicId';
+
+export const buildColiseumTopicPath = (topicId: string): string =>
+    `/coliseum/topics/${encodeURIComponent(topicId)}`;
 export const GOVERNANCE_PATH = '/governance';
 
 /** The signed-in user's own profile ("personal headquarters"); see `features/profile/routes.ts`. */

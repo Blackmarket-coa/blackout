@@ -1,6 +1,8 @@
 import { type CSSProperties } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { isShellModeRoot, resolveShellMode, SHELL_MODE_TITLES } from './modeRouter';
+import { CANOPIES_PATH } from '../paths';
+import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 
 const TOP_BAR_STYLE: CSSProperties = {
     position: 'sticky',
@@ -76,20 +78,41 @@ export const MobileTopBar = ({ title, trailing, leading }: MobileTopBarProps) =>
     const navigate = useNavigate();
     const mode = resolveShellMode(location.pathname);
     const resolvedTitle = title ?? SHELL_MODE_TITLES[mode];
-    const showDefaultBack = leading === undefined && !isShellModeRoot(location.pathname);
-    const resolvedLeading = showDefaultBack ? (
-        <button
-            type="button"
-            onClick={() => navigate(-1)}
-            aria-label="Go back"
-            data-testid="mobile-top-bar-back"
-            style={BACK_BUTTON_STYLE}
-        >
-            ‹
-        </button>
-    ) : (
-        leading
-    );
+    const onModeRoot = isShellModeRoot(location.pathname);
+    const showDefaultBack = leading === undefined && !onModeRoot;
+
+    let resolvedLeading = leading;
+    if (showDefaultBack) {
+        resolvedLeading = (
+            <button
+                type="button"
+                onClick={() => navigate(-1)}
+                aria-label="Go back"
+                data-testid="mobile-top-bar-back"
+                style={BACK_BUTTON_STYLE}
+            >
+                ‹
+            </button>
+        );
+    } else if (leading === undefined) {
+        // On a mode root there is nothing to go back to, and the CanopyRail —
+        // the only permanent way into the canopies hub — is desktop-only
+        // (`AppShell` renders it behind `!mobile`). Without this, `/canopies`
+        // is unreachable on a phone except via a Town Square card. Discord puts
+        // the same control in the same corner.
+        resolvedLeading = (
+            <button
+                type="button"
+                onClick={() => navigate(CANOPIES_PATH)}
+                aria-label={`Open ${BLACKOUT_TERMS.canopy.plural}`}
+                title={`Open ${BLACKOUT_TERMS.canopy.plural}`}
+                data-testid="mobile-top-bar-canopies"
+                style={BACK_BUTTON_STYLE}
+            >
+                🗂️
+            </button>
+        );
+    }
 
     return (
         <header style={TOP_BAR_STYLE} data-shell-region="mobile-top-bar" data-shell-mode={mode}>

@@ -45,7 +45,9 @@ export const COLISEUM_TAB_LABELS: Record<ColiseumTabId, string> = {
     debate: 'Debate',
     live: 'Live',
     challenges: 'Challenges',
-    leaderboards: 'Leaderboards',
+    // Shortened so five labels fit a 390px phone without the strip scrolling —
+    // the overflow this consolidation exists to remove.
+    leaderboards: 'Ranks',
     sources: 'Sources',
     knowledge: 'Knowledge',
 };

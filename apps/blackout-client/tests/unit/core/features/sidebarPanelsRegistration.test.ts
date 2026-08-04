@@ -3,10 +3,7 @@ import {
     composeShellPanels,
     selectPanelsByKind,
 } from '../../../../src/app/core/features/composition';
-import type {
-    BlackoutFeature,
-    ShellPanelEntry,
-} from '../../../../src/app/core/features/types';
+import type { BlackoutFeature, ShellPanelEntry } from '../../../../src/app/core/features/types';
 import { coalitionPanels } from '../../../../src/app/features/coalition/panels';
 import { coliseumPanels } from '../../../../src/app/features/coliseum/panels';
 import { communitiesPanels } from '../../../../src/app/features/communities/panels';
@@ -16,7 +13,7 @@ const buildSyntheticFeature = (
     id: string,
     panels: ShellPanelEntry[],
     capabilityGate: { allOf?: string[]; flags?: string[] },
-    capabilities: string[],
+    capabilities: string[]
 ): BlackoutFeature => ({
     id,
     name: id,
@@ -33,30 +30,18 @@ const buildSyntheticFeature = (
 });
 
 const REGISTRY: BlackoutFeature[] = [
-    buildSyntheticFeature(
-        'communities',
-        communitiesPanels,
-        { flags: ['communities'] },
-        ['communities.read'],
-    ),
-    buildSyntheticFeature(
-        'coalition',
-        coalitionPanels,
-        { flags: ['coalition'] },
-        ['coalition.read', 'coalition.write'],
-    ),
-    buildSyntheticFeature(
-        'coliseum',
-        coliseumPanels,
-        { flags: ['coliseum'] },
-        ['coliseum.read', 'coliseum.write'],
-    ),
-    buildSyntheticFeature(
-        'plugins',
-        pluginsPanels,
-        { flags: ['plugins'] },
-        ['plugins.read'],
-    ),
+    buildSyntheticFeature('communities', communitiesPanels, { flags: ['communities'] }, [
+        'communities.read',
+    ]),
+    buildSyntheticFeature('coalition', coalitionPanels, { flags: ['coalition'] }, [
+        'coalition.read',
+        'coalition.write',
+    ]),
+    buildSyntheticFeature('coliseum', coliseumPanels, { flags: ['coliseum'] }, [
+        'coliseum.read',
+        'coliseum.write',
+    ]),
+    buildSyntheticFeature('plugins', pluginsPanels, { flags: ['plugins'] }, ['plugins.read']),
 ];
 
 const ALL_CAPABILITIES = [
@@ -82,7 +67,7 @@ describe('primary rail sidebar panel registration', () => {
                 capabilities: ALL_CAPABILITIES,
                 flags: ALL_FLAGS_ON,
             }),
-            'sidebar',
+            'sidebar'
         );
 
         expect(sidebar.map((entry) => entry.id)).toEqual(
@@ -91,7 +76,7 @@ describe('primary rail sidebar panel registration', () => {
                 'coalition.sidebar',
                 'coliseum.sidebar',
                 'plugins.sidebar',
-            ]),
+            ])
         );
     });
 
@@ -101,7 +86,7 @@ describe('primary rail sidebar panel registration', () => {
                 capabilities: ALL_CAPABILITIES,
                 flags: ALL_FLAGS_ON,
             }),
-            'sidebar',
+            'sidebar'
         );
 
         expect(sidebar.map((entry) => entry.id)).toEqual([
@@ -118,7 +103,7 @@ describe('primary rail sidebar panel registration', () => {
                 capabilities: ALL_CAPABILITIES,
                 flags: { ...ALL_FLAGS_ON, communities: false },
             }),
-            'sidebar',
+            'sidebar'
         );
         expect(sidebar.map((entry) => entry.id)).not.toContain('communities.sidebar');
     });
@@ -129,7 +114,7 @@ describe('primary rail sidebar panel registration', () => {
                 capabilities: ALL_CAPABILITIES,
                 flags: { ...ALL_FLAGS_ON, plugins: false },
             }),
-            'sidebar',
+            'sidebar'
         );
         expect(sidebar.map((entry) => entry.id)).not.toContain('plugins.sidebar');
     });
@@ -145,7 +130,7 @@ describe('primary rail sidebar panel registration', () => {
                 capabilities: ['communities.read', 'plugins.read'],
                 flags: ALL_FLAGS_ON,
             }),
-            'sidebar',
+            'sidebar'
         );
         const ids = sidebar.map((entry) => entry.id);
         expect(ids).toContain('coalition.sidebar');
@@ -160,7 +145,7 @@ describe('primary rail sidebar panel registration', () => {
                 capabilities: ALL_CAPABILITIES,
                 flags: { ...ALL_FLAGS_ON, coalition: false, coliseum: false },
             }),
-            'sidebar',
+            'sidebar'
         );
         const ids = sidebar.map((entry) => entry.id);
         expect(ids).not.toContain('coalition.sidebar');
@@ -175,7 +160,10 @@ describe('primary rail sidebar panel registration', () => {
             ...pluginsPanels,
         ];
         const byId = new Map(allPanels.map((entry) => [entry.id, entry.to]));
-        expect(byId.get('communities.sidebar')).toBe('/communities');
+        // Labelled "Canopies", so it points at the canopies hub. It used to
+        // target `/communities`, which rendered a near-duplicate of that hub —
+        // the bare index now redirects to `/canopies`.
+        expect(byId.get('communities.sidebar')).toBe('/canopies');
         expect(byId.get('coalition.sidebar')).toBe('/coalition');
         expect(byId.get('coliseum.sidebar')).toBe('/coliseum');
         expect(byId.get('plugins.sidebar')).toBe('/plugins');

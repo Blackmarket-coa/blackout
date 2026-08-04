@@ -1,5 +1,6 @@
 import type { BlackoutFeature } from '../../core/features/types';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
+import { canopyNavItems } from './nav';
 import { canopyRoutes } from './routes';
 
 export const canopyFeature: BlackoutFeature = {
@@ -14,6 +15,7 @@ export const canopyFeature: BlackoutFeature = {
                 flags: ['canopyServer'],
             },
             routes: canopyRoutes,
+            navItems: canopyNavItems,
         },
     ],
     capabilities: ['communities.read'],

@@ -50,6 +50,12 @@ const coalition = (overrides: Partial<CoalitionFeedItem> & { id: string }): Coal
 
 const topic = (overrides: Partial<ColiseumTopic> & { id: string }): ColiseumTopic => ({
     title: overrides.id,
+    seed: {
+        kind: 'link',
+        sourceUrl: 'https://x',
+        headline: 'Headline',
+        publishedAt: '',
+    },
     newsAnchor: { sourceUrl: 'https://x', headline: 'Headline', publishedAt: '' },
     createdAt: new Date(NOW - HOUR).toISOString(),
     tags: [],
