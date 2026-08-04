@@ -8,6 +8,7 @@ import {
     rankColiseumTopics,
     rankCrossTopicArguments,
     scoreColiseumArgument,
+    seedPublishedAt,
     wilsonLowerBound,
     type ColiseumArgument,
     type ColiseumArgumentMedia,
@@ -16,6 +17,7 @@ import {
     type ColiseumStance,
     type ColiseumTopic,
     type ColiseumTopicCategoryKey,
+    type ColiseumTopicSeed,
     type ColiseumTopicStatus,
     type ColiseumVote,
     type ColiseumWinnerVerdictResult,
@@ -53,7 +55,11 @@ function awardEndorsement(argumentId: string, voterId: string): void {
     });
 }
 
-interface TopicSeed {
+/**
+ * Demo fixture shape. Named to keep it distinct from `ColiseumTopicSeed`, which
+ * is the domain concept describing how a topic was proposed.
+ */
+interface DemoTopicFixture {
     id: string;
     title: string;
     newsAnchor: ColiseumNewsAnchor;
@@ -66,7 +72,7 @@ interface TopicSeed {
     denId?: string;
 }
 
-const seedTopics: TopicSeed[] = [
+const seedTopics: DemoTopicFixture[] = [
     {
         id: 'topic-grid-resilience',
         title: 'Mutual aid microgrids vs. utility relief',
@@ -118,7 +124,11 @@ const seedArguments: ArgumentSeed[] = [
         stanceWeight: 0.85,
         body: 'Co-ops restored 60% of affected feeders in <8h vs. utility median of 36h.',
         citations: [
-            { kind: 'article', sourceUrl: 'https://news.example/grid-resilience', title: 'Storms knock out power for 200k' },
+            {
+                kind: 'article',
+                sourceUrl: 'https://news.example/grid-resilience',
+                title: 'Storms knock out power for 200k',
+            },
             { kind: 'townhall', meetingId: 'meeting-grid-debrief' },
         ],
         createdAt: '2026-05-02T10:00:00Z',
@@ -130,7 +140,13 @@ const seedArguments: ArgumentSeed[] = [
         stance: 'against',
         stanceWeight: 0.7,
         body: 'Microgrids cherry-pick easy feeders; utilities own backbone substations.',
-        citations: [{ kind: 'article', sourceUrl: 'https://news.example/grid-baseline', title: 'Substation responsibilities matter' }],
+        citations: [
+            {
+                kind: 'article',
+                sourceUrl: 'https://news.example/grid-baseline',
+                title: 'Substation responsibilities matter',
+            },
+        ],
         createdAt: '2026-05-02T10:25:00Z',
     },
     {
@@ -151,7 +167,11 @@ const seedArguments: ArgumentSeed[] = [
         stanceWeight: 0.9,
         body: 'No provenance ⇒ no audit trail. Audits are how we keep models honest.',
         citations: [
-            { kind: 'article', sourceUrl: 'https://news.example/ai-licensing', title: 'EU draft floats provenance' },
+            {
+                kind: 'article',
+                sourceUrl: 'https://news.example/ai-licensing',
+                title: 'EU draft floats provenance',
+            },
         ],
         createdAt: '2026-05-01T19:00:00Z',
     },
@@ -168,21 +188,96 @@ const seedArguments: ArgumentSeed[] = [
 ];
 
 const seedVotes: ColiseumVote[] = [
-    { argumentId: 'arg-grid-1', voterId: '@u1:server', direction: 'up', createdAt: '2026-05-02T10:10:00Z' },
-    { argumentId: 'arg-grid-1', voterId: '@u2:server', direction: 'up', createdAt: '2026-05-02T10:11:00Z' },
-    { argumentId: 'arg-grid-1', voterId: '@u3:server', direction: 'up', createdAt: '2026-05-02T10:12:00Z' },
-    { argumentId: 'arg-grid-1', voterId: '@u4:server', direction: 'down', createdAt: '2026-05-02T10:13:00Z' },
-    { argumentId: 'arg-grid-2', voterId: '@u1:server', direction: 'down', createdAt: '2026-05-02T10:30:00Z' },
-    { argumentId: 'arg-grid-2', voterId: '@u4:server', direction: 'up', createdAt: '2026-05-02T10:31:00Z' },
-    { argumentId: 'arg-grid-2', voterId: '@u5:server', direction: 'up', createdAt: '2026-05-02T10:32:00Z' },
-    { argumentId: 'arg-grid-3', voterId: '@u1:server', direction: 'up', createdAt: '2026-05-02T11:10:00Z' },
-    { argumentId: 'arg-grid-3', voterId: '@u2:server', direction: 'up', createdAt: '2026-05-02T11:11:00Z' },
-    { argumentId: 'arg-grid-3', voterId: '@u3:server', direction: 'up', createdAt: '2026-05-02T11:12:00Z' },
-    { argumentId: 'arg-grid-3', voterId: '@u4:server', direction: 'up', createdAt: '2026-05-02T11:13:00Z' },
-    { argumentId: 'arg-grid-3', voterId: '@u5:server', direction: 'up', createdAt: '2026-05-02T11:14:00Z' },
-    { argumentId: 'arg-ai-1', voterId: '@u1:server', direction: 'up', createdAt: '2026-05-01T19:30:00Z' },
-    { argumentId: 'arg-ai-1', voterId: '@u2:server', direction: 'up', createdAt: '2026-05-01T19:35:00Z' },
-    { argumentId: 'arg-ai-2', voterId: '@u1:server', direction: 'up', createdAt: '2026-05-01T20:00:00Z' },
+    {
+        argumentId: 'arg-grid-1',
+        voterId: '@u1:server',
+        direction: 'up',
+        createdAt: '2026-05-02T10:10:00Z',
+    },
+    {
+        argumentId: 'arg-grid-1',
+        voterId: '@u2:server',
+        direction: 'up',
+        createdAt: '2026-05-02T10:11:00Z',
+    },
+    {
+        argumentId: 'arg-grid-1',
+        voterId: '@u3:server',
+        direction: 'up',
+        createdAt: '2026-05-02T10:12:00Z',
+    },
+    {
+        argumentId: 'arg-grid-1',
+        voterId: '@u4:server',
+        direction: 'down',
+        createdAt: '2026-05-02T10:13:00Z',
+    },
+    {
+        argumentId: 'arg-grid-2',
+        voterId: '@u1:server',
+        direction: 'down',
+        createdAt: '2026-05-02T10:30:00Z',
+    },
+    {
+        argumentId: 'arg-grid-2',
+        voterId: '@u4:server',
+        direction: 'up',
+        createdAt: '2026-05-02T10:31:00Z',
+    },
+    {
+        argumentId: 'arg-grid-2',
+        voterId: '@u5:server',
+        direction: 'up',
+        createdAt: '2026-05-02T10:32:00Z',
+    },
+    {
+        argumentId: 'arg-grid-3',
+        voterId: '@u1:server',
+        direction: 'up',
+        createdAt: '2026-05-02T11:10:00Z',
+    },
+    {
+        argumentId: 'arg-grid-3',
+        voterId: '@u2:server',
+        direction: 'up',
+        createdAt: '2026-05-02T11:11:00Z',
+    },
+    {
+        argumentId: 'arg-grid-3',
+        voterId: '@u3:server',
+        direction: 'up',
+        createdAt: '2026-05-02T11:12:00Z',
+    },
+    {
+        argumentId: 'arg-grid-3',
+        voterId: '@u4:server',
+        direction: 'up',
+        createdAt: '2026-05-02T11:13:00Z',
+    },
+    {
+        argumentId: 'arg-grid-3',
+        voterId: '@u5:server',
+        direction: 'up',
+        createdAt: '2026-05-02T11:14:00Z',
+    },
+    {
+        argumentId: 'arg-ai-1',
+        voterId: '@u1:server',
+        direction: 'up',
+        createdAt: '2026-05-01T19:30:00Z',
+    },
+    {
+        argumentId: 'arg-ai-1',
+        voterId: '@u2:server',
+        direction: 'up',
+        createdAt: '2026-05-01T19:35:00Z',
+    },
+    {
+        argumentId: 'arg-ai-2',
+        voterId: '@u1:server',
+        direction: 'up',
+        createdAt: '2026-05-01T20:00:00Z',
+    },
 ];
 
 function countVotesByArgument(): Map<string, { up: number; down: number }> {
@@ -231,7 +326,10 @@ function recomputeTopicHeat(topicId: string, nowMs: number = Date.now()): void {
     const voteCount = votesForTopic(topicArgs).length;
 
     const heat = computeTopicHeat({
-        publishedAt: topic.newsAnchor.publishedAt,
+        // Only a link seed carries an article publish date; every other kind
+        // decays from when it was proposed. An absent date scores recency as a
+        // flat 0, which would silently bury non-link topics in the ranked feed.
+        publishedAt: seedPublishedAt(topic.seed, topic.createdAt),
         createdAt: topic.createdAt,
         argumentCount,
         voteCount,
@@ -239,7 +337,7 @@ function recomputeTopicHeat(topicId: string, nowMs: number = Date.now()): void {
     });
     const status = deriveColiseumTopicStatus(
         { createdAt: topic.createdAt, closesAt: topic.closesAt, archivesAt: topic.archivesAt },
-        nowMs,
+        nowMs
     );
     db.upsertColiseumTopic({
         ...topic,
@@ -268,7 +366,7 @@ function seedColiseumIfEmpty(): void {
     const seedNow = Date.parse('2026-05-02T12:00:00Z');
     for (const seed of seedTopics) {
         db.upsertColiseumTopic(
-            normalizeColiseumTopic({ ...seed, argumentCount: 0, voteCount: 0 }, seedNow),
+            normalizeColiseumTopic({ ...seed, argumentCount: 0, voteCount: 0 }, seedNow)
         );
     }
     for (const seed of seedArguments) {
@@ -314,7 +412,10 @@ export function getTopic(topicId: string): ColiseumTopic | null {
 export interface CreateTopicInput {
     id: string;
     title: string;
-    newsAnchor: ColiseumNewsAnchor;
+    /** How the topic was proposed. Omit only when supplying a legacy anchor. */
+    seed?: ColiseumTopicSeed;
+    /** @deprecated Pre-seed clients post a bare anchor; normalized to a link seed. */
+    newsAnchor?: ColiseumNewsAnchor;
     tags: string[];
     category?: ColiseumTopicCategoryKey;
     canopyId?: string;
@@ -331,7 +432,7 @@ export function createTopic(input: CreateTopicInput, nowMs: number = Date.now())
             argumentCount: 0,
             voteCount: 0,
         },
-        nowMs,
+        nowMs
     );
     db.upsertColiseumTopic(topic);
     return topic;
@@ -339,7 +440,7 @@ export function createTopic(input: CreateTopicInput, nowMs: number = Date.now())
 
 export function listArgumentsForTopic(
     topicId: string,
-    options: { nowMs?: number } = {},
+    options: { nowMs?: number } = {}
 ): RankedColiseumArgument[] {
     const args = db.listColiseumArguments().filter((a) => a.topicId === topicId);
     return rankColiseumArguments(args, { nowMs: options.nowMs });
@@ -360,7 +461,7 @@ export interface CrossTopicReelResult {
 }
 
 export function listCrossTopicReel(
-    options: { limit?: number; offset?: number; nowMs?: number } = {},
+    options: { limit?: number; offset?: number; nowMs?: number } = {}
 ): CrossTopicReelResult {
     const limit = options.limit ?? 20;
     const offset = options.offset ?? 0;
@@ -399,7 +500,7 @@ export interface CreateArgumentInput {
 
 export function createArgument(
     input: CreateArgumentInput,
-    nowMs: number = Date.now(),
+    nowMs: number = Date.now()
 ): ColiseumArgument | null {
     if (!db.getColiseumTopic(input.topicId)) return null;
     if (input.parentArgumentId !== undefined) {
@@ -461,7 +562,10 @@ export function listVotesForArgument(argumentId: string): ColiseumVote[] {
     return db.listColiseumVotes().filter((v) => v.argumentId === argumentId);
 }
 
-export function getVerdict(topicId: string, nowMs: number = Date.now()): ColiseumWinnerVerdictResult | null {
+export function getVerdict(
+    topicId: string,
+    nowMs: number = Date.now()
+): ColiseumWinnerVerdictResult | null {
     if (!db.getColiseumTopic(topicId)) return null;
     const topicArgs = db.listColiseumArguments().filter((a) => a.topicId === topicId);
     return deriveColiseumWinnerVerdict({
@@ -489,7 +593,7 @@ export interface CreateLiveSessionInput {
  */
 export function createLiveSession(
     input: CreateLiveSessionInput,
-    nowMs: number = Date.now(),
+    nowMs: number = Date.now()
 ): ColiseumLiveSession | null {
     if (!db.getColiseumTopic(input.topicId)) return null;
     const existing = getActiveSessionForTopic(input.topicId);
@@ -525,7 +629,7 @@ export function getActiveSessionForTopic(topicId: string): ColiseumLiveSession |
 export function requestSpeak(
     sessionId: string,
     userId: string,
-    nowMs: number = Date.now(),
+    nowMs: number = Date.now()
 ): ColiseumLiveSession | null {
     const session = db.getColiseumLiveSession(sessionId);
     if (!session || session.status === 'ended') return null;
@@ -538,7 +642,7 @@ export function grantSpeak(
     sessionId: string,
     moderatorId: string,
     targetUserId: string,
-    nowMs: number = Date.now(),
+    nowMs: number = Date.now()
 ): ColiseumLiveSession | null | 'forbidden' {
     const session = db.getColiseumLiveSession(sessionId);
     if (!session || session.status === 'ended') return null;
@@ -551,7 +655,7 @@ export function grantSpeak(
 export function revokeSpeak(
     sessionId: string,
     moderatorId: string,
-    targetUserId: string,
+    targetUserId: string
 ): ColiseumLiveSession | null | 'forbidden' {
     const session = db.getColiseumLiveSession(sessionId);
     if (!session || session.status === 'ended') return null;
@@ -564,7 +668,7 @@ export function revokeSpeak(
 export function pinSessionEvidence(
     sessionId: string,
     moderatorId: string,
-    evidence: PinnedEvidence,
+    evidence: PinnedEvidence
 ): ColiseumLiveSession | null | 'forbidden' {
     const session = db.getColiseumLiveSession(sessionId);
     if (!session || session.status === 'ended') return null;
@@ -577,7 +681,7 @@ export function pinSessionEvidence(
 export function unpinSessionEvidence(
     sessionId: string,
     moderatorId: string,
-    evidence: PinnedEvidence,
+    evidence: PinnedEvidence
 ): ColiseumLiveSession | null | 'forbidden' {
     const session = db.getColiseumLiveSession(sessionId);
     if (!session || session.status === 'ended') return null;
@@ -590,7 +694,7 @@ export function unpinSessionEvidence(
 export function endLiveSession(
     sessionId: string,
     moderatorId: string,
-    nowMs: number = Date.now(),
+    nowMs: number = Date.now()
 ): ColiseumLiveSession | null | 'forbidden' {
     const session = db.getColiseumLiveSession(sessionId);
     if (!session) return null;

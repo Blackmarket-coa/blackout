@@ -1,6 +1,6 @@
 import React from 'react';
 import { useAtom } from 'jotai';
-import type { ColiseumCitation } from '@blackout/core';
+import { resolveTopicSeed, type ColiseumCitation } from '@blackout/core';
 import { EmptyState } from '@blackout/ui/primitives';
 import { useColiseumTopic } from '../hooks/useColiseumTopics';
 import { coliseumTabAtom, selectedColiseumTopicIdAtom } from '../../../state/coliseum';
@@ -48,6 +48,7 @@ export function SourcesTab() {
     if (!data) return null;
 
     const allCitations: ColiseumCitation[] = data.arguments.flatMap((arg) => arg.citations);
+    const topicSeed = resolveTopicSeed(data.topic);
 
     if (allCitations.length === 0) {
         return (
@@ -75,21 +76,28 @@ export function SourcesTab() {
 
     return (
         <div className={ui.feedColumn} data-testid="coliseum-sources">
-            <article className={ui.card}>
-                <h3 className={ui.cardTitle}>Anchor news</h3>
-                <a
-                    href={data.topic.newsAnchor.sourceUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={ui.mutedLink}
-                    style={{ fontSize: 14, color: 'var(--text-primary)' }}
-                >
-                    📰 {data.topic.newsAnchor.headline}
-                </a>
-                <span className={ui.mutedText} style={{ fontSize: 12 }}>
-                    Published {new Date(data.topic.newsAnchor.publishedAt).toLocaleString()}
-                </span>
-            </article>
+            {/* Only a link-seeded topic has an article behind it. A topic
+                proposed as a bare question, a video, or a challenge has no
+                anchor to show — its citations below are the whole story.
+                Resolved rather than read directly so a topic from a server
+                that predates seeds still shows its headline. */}
+            {topicSeed.kind === 'link' ? (
+                <article className={ui.card} data-testid="coliseum-sources-anchor">
+                    <h3 className={ui.cardTitle}>Anchor news</h3>
+                    <a
+                        href={topicSeed.sourceUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={ui.mutedLink}
+                        style={{ fontSize: 14, color: 'var(--text-primary)' }}
+                    >
+                        📰 {topicSeed.headline}
+                    </a>
+                    <span className={ui.mutedText} style={{ fontSize: 12 }}>
+                        Published {new Date(topicSeed.publishedAt).toLocaleString()}
+                    </span>
+                </article>
+            ) : null}
 
             {grouped.map((group) => (
                 <article key={group.kind} className={ui.card}>

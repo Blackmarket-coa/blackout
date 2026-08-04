@@ -7,6 +7,7 @@ import type {
     ColiseumKnowledgeKind,
     ColiseumLiveSession,
     ColiseumNewsAnchor,
+    ColiseumTopicSeed,
     ColiseumStance,
     ColiseumTopic,
     ColiseumTopicCategoryKey,
@@ -113,7 +114,10 @@ export function fetchColiseumVerdict(
 
 export interface CreateColiseumTopicInput {
     title: string;
-    newsAnchor: ColiseumNewsAnchor;
+    /** How the topic is being proposed — text, link, media, or challenge. */
+    seed?: ColiseumTopicSeed;
+    /** @deprecated Supply a `link` seed instead; accepted for back-compat. */
+    newsAnchor?: ColiseumNewsAnchor;
     tags?: string[];
     category?: ColiseumTopicCategoryKey;
     canopyId?: string;

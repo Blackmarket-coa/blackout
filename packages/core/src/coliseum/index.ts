@@ -2,6 +2,7 @@ export * from './taxonomy';
 export * from './status';
 export * from './citations';
 export * from './events';
+export * from './seed';
 export * from './feed';
 export * from './consensus';
 export * from './live';

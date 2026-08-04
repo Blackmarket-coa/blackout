@@ -13,6 +13,7 @@ import ColiseumCitationChip from '../ColiseumCitationChip';
 import { StanceBadge } from '../components/StanceBadge';
 import { StanceBar } from '../components/StanceBar';
 import { AuthorLine } from '../components/AuthorLine';
+import { TopicSeedLine } from '../components/TopicSeedLine';
 import { ArgumentComposerSheet } from '../components/ArgumentComposerSheet';
 import { useArgumentShare } from '../components/useArgumentShare';
 import { STANCE_COLOR } from '../components/stance';
@@ -301,14 +302,7 @@ export function DebateTab({ client = defaultClient }: { client?: DebateTabClient
                     <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800, lineHeight: 1.3 }}>
                         {topic.title}
                     </h2>
-                    <a
-                        href={topic.newsAnchor.sourceUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className={ui.mutedLink}
-                    >
-                        📰 {topic.newsAnchor.headline}
-                    </a>
+                    <TopicSeedLine seed={topic.seed} newsAnchor={topic.newsAnchor} />
                     <StanceBar items={args} />
                     <span className={ui.mutedText}>
                         {args.length} argument{args.length === 1 ? '' : 's'}

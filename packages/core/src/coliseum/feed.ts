@@ -5,18 +5,36 @@ import {
     type ColiseumTopicTimeline,
 } from './status';
 import { normalizeColiseumCategoryKey, type ColiseumTopicCategoryKey } from './taxonomy';
+import {
+    resolveTopicSeed,
+    seedPublishedAt,
+    seedToNewsAnchor,
+    type ColiseumLinkSeedSource,
+    type ColiseumTopicSeed,
+} from './seed';
 
-export interface ColiseumNewsAnchor {
-    sourceUrl: string;
-    headline: string;
-    publishedAt: string;
-    opengraphImage?: string;
-}
+export type ColiseumNewsAnchor = ColiseumLinkSeedSource;
 
 export interface ColiseumTopic {
     id: string;
     title: string;
-    newsAnchor: ColiseumNewsAnchor;
+    /**
+     * How this topic was proposed — text, link, media, or challenge. The single
+     * intake shape that Matches, Shouts and news-anchored debates all collapse
+     * into.
+     */
+    seed: ColiseumTopicSeed;
+    /**
+     * @deprecated Derived from a `link` seed. Retained so readers written
+     * before seeds keep working; switch on `seed.kind` in new code.
+     */
+    newsAnchor?: ColiseumNewsAnchor;
+    /**
+     * The canopy den backing this topic's free-form discussion, created lazily
+     * on the first comment. Distinct from `denId`, which records which den the
+     * topic was *posted in* and is only ever a scope filter.
+     */
+    discussionDenId?: string;
     createdAt: string;
     closesAt?: string;
     archivesAt?: string;
@@ -76,10 +94,7 @@ export interface ColiseumWinnerVerdict {
     model: 'coliseum_polis_v1';
 }
 
-export type ColiseumRankingModel =
-    | 'coliseum_polis_v1'
-    | 'recency_only'
-    | 'votes_only';
+export type ColiseumRankingModel = 'coliseum_polis_v1' | 'recency_only' | 'votes_only';
 
 export interface ColiseumRankingWeights {
     votes: number;
@@ -130,7 +145,7 @@ export function scoreColiseumArgument(
         model?: ColiseumRankingModel;
         weights?: Partial<ColiseumRankingWeights>;
         nowMs?: number;
-    } = {},
+    } = {}
 ): number {
     const model = options.model ?? 'coliseum_polis_v1';
     const weights = { ...DEFAULT_COLISEUM_WEIGHTS, ...options.weights };
@@ -152,7 +167,7 @@ export function scoreColiseumArgument(
             weights.recency * recency +
             weights.citationDepth * citation +
             weights.stanceBalance * balance +
-            weights.consensus * clamp01(argument.nuanceScore),
+            weights.consensus * clamp01(argument.nuanceScore)
     );
 }
 
@@ -162,7 +177,7 @@ export interface RankedColiseumArgument extends ColiseumArgument {
 
 export function rankColiseumArguments(
     args: ReadonlyArray<ColiseumArgument>,
-    options: Parameters<typeof scoreColiseumArgument>[1] = {},
+    options: Parameters<typeof scoreColiseumArgument>[1] = {}
 ): RankedColiseumArgument[] {
     return args
         .map((argument) => ({ ...argument, score: scoreColiseumArgument(argument, options) }))
@@ -182,7 +197,7 @@ export interface ColiseumArgumentTreeNode<T extends ColiseumArgument = ColiseumA
  * list are treated as roots, so the tree never drops an argument.
  */
 export function buildColiseumArgumentTree<T extends ColiseumArgument>(
-    args: ReadonlyArray<T>,
+    args: ReadonlyArray<T>
 ): ColiseumArgumentTreeNode<T>[] {
     const nodes = new Map<string, ColiseumArgumentTreeNode<T>>();
     for (const argument of args) {
@@ -228,7 +243,7 @@ export interface RankedCrossTopicArgument<T extends ColiseumArgument = ColiseumA
  */
 export function rankCrossTopicArguments<T extends ColiseumArgument>(
     entries: ReadonlyArray<CrossTopicReelEntry<T>>,
-    options: Parameters<typeof scoreColiseumArgument>[1] = {},
+    options: Parameters<typeof scoreColiseumArgument>[1] = {}
 ): Array<T & { score: number }> {
     return entries
         .map(({ argument, debateHeat }) => {
@@ -262,9 +277,7 @@ export function computeTopicHeat(input: {
     const recency = recencyScore(input.publishedAt, halfLife, nowMs);
 
     const createdMs = Date.parse(input.createdAt);
-    const ageHours = Number.isNaN(createdMs)
-        ? 0
-        : Math.max(0.25, (nowMs - createdMs) / 3_600_000);
+    const ageHours = Number.isNaN(createdMs) ? 0 : Math.max(0.25, (nowMs - createdMs) / 3_600_000);
     const interactions = input.argumentCount + input.voteCount;
     const velocity = clamp01(interactions / ageHours / norm);
 
@@ -273,12 +286,16 @@ export function computeTopicHeat(input: {
 }
 
 export function normalizeColiseumTopic<
-    T extends Omit<ColiseumTopic, 'status' | 'recencyScore' | 'velocityScore' | 'debateHeat' | 'category'> & {
+    T extends Omit<
+        ColiseumTopic,
+        'seed' | 'status' | 'recencyScore' | 'velocityScore' | 'debateHeat' | 'category'
+    > & {
+        seed?: ColiseumTopicSeed;
         status?: ColiseumTopicStatus;
         category?: string;
         argumentCount?: number;
         voteCount?: number;
-    },
+    }
 >(input: T, nowMs: number = Date.now()): ColiseumTopic {
     const timeline: ColiseumTopicTimeline = {
         createdAt: input.createdAt,
@@ -286,19 +303,28 @@ export function normalizeColiseumTopic<
         archivesAt: input.archivesAt,
     };
     const status = input.status ?? deriveColiseumTopicStatus(timeline, nowMs);
+    // Accepts either representation: a `seed`, or a legacy bare `newsAnchor`
+    // from a pre-seed client or an un-migrated row.
+    const seed = resolveTopicSeed(input);
     const heat = computeTopicHeat({
-        publishedAt: input.newsAnchor.publishedAt,
+        // Only a link seed has an article publish date; everything else decays
+        // from when it was proposed. Passing an absent date here would score
+        // recency as 0 and quietly bury every non-link topic.
+        publishedAt: seedPublishedAt(seed, input.createdAt),
         createdAt: input.createdAt,
         argumentCount: input.argumentCount ?? 0,
         voteCount: input.voteCount ?? 0,
         nowMs,
     });
     const category = normalizeColiseumCategoryKey(input.category) ?? undefined;
+    const newsAnchor = seedToNewsAnchor(seed);
 
     return {
         id: input.id,
         title: input.title,
-        newsAnchor: input.newsAnchor,
+        seed,
+        ...(newsAnchor ? { newsAnchor } : {}),
+        ...(input.discussionDenId ? { discussionDenId: input.discussionDenId } : {}),
         createdAt: input.createdAt,
         closesAt: input.closesAt,
         archivesAt: input.archivesAt,

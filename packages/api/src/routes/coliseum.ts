@@ -22,6 +22,7 @@ import {
     validateCitations,
     type ColiseumArgumentMedia,
     type ColiseumCitation,
+    type ColiseumTopicSeed,
     type ColiseumTopicStatus,
     type PinnedEvidence,
 } from '@blackout/core';
@@ -222,16 +223,47 @@ const newsAnchorSchema = z.object({
     opengraphImage: z.string().url().max(2048).optional(),
 });
 
-const createTopicSchema = z.object({
-    title: z.string().min(1).max(200),
-    newsAnchor: newsAnchorSchema,
-    tags: z.array(z.string().min(1).max(40)).max(12).default([]),
-    category: z.enum(COLISEUM_TOPIC_CATEGORY_KEYS as [string, ...string[]]).optional(),
-    canopyId: z.string().optional(),
-    denId: z.string().optional(),
-    closesAt: z.string().datetime().optional(),
-    archivesAt: z.string().datetime().optional(),
+const topicSeedMediaSchema = z.object({
+    kind: z.enum(['video', 'image']),
+    mxc: z.string().min(1).max(2048),
+    posterMxc: z.string().min(1).max(2048).optional(),
+    durationMs: z.number().int().nonnegative().optional(),
 });
+
+/**
+ * A topic can be proposed in any of four forms. `link` carries the same fields
+ * the old required `newsAnchor` did, so the migration is a rename plus a
+ * discriminator.
+ */
+const topicSeedSchema = z.discriminatedUnion('kind', [
+    z.object({ kind: z.literal('text') }),
+    newsAnchorSchema.extend({ kind: z.literal('link') }),
+    z.object({ kind: z.literal('media'), media: topicSeedMediaSchema }),
+    z.object({
+        kind: z.literal('challenge'),
+        opponentId: z.string().min(1).max(255).optional(),
+        open: z.boolean().optional(),
+    }),
+]);
+
+const createTopicSchema = z
+    .object({
+        title: z.string().min(1).max(200),
+        seed: topicSeedSchema.optional(),
+        // Kept so a client built before seeds keeps working; normalized to a
+        // link seed below.
+        newsAnchor: newsAnchorSchema.optional(),
+        tags: z.array(z.string().min(1).max(40)).max(12).default([]),
+        category: z.enum(COLISEUM_TOPIC_CATEGORY_KEYS as [string, ...string[]]).optional(),
+        canopyId: z.string().optional(),
+        denId: z.string().optional(),
+        closesAt: z.string().datetime().optional(),
+        archivesAt: z.string().datetime().optional(),
+    })
+    .refine((body) => body.seed !== undefined || body.newsAnchor !== undefined, {
+        message: 'Provide a seed describing how the topic was proposed',
+        path: ['seed'],
+    });
 
 coliseum.post('/topics', topicRateLimit, async (c) => {
     const user = requireUser(c, 'Sign in to create a debate topic');
@@ -241,6 +273,9 @@ coliseum.post('/topics', topicRateLimit, async (c) => {
     const topic = createTopic({
         id: newTopicId(),
         title: parsed.title,
+        // `createTopic` resolves seed-or-anchor; a challenge seed additionally
+        // records who was called out.
+        seed: parsed.seed as ColiseumTopicSeed | undefined,
         newsAnchor: parsed.newsAnchor,
         tags: parsed.tags,
         category: parsed.category as never,

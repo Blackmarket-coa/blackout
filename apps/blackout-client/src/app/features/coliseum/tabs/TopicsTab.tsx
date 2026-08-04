@@ -16,6 +16,7 @@ import { HeatBadge } from '../components/HeatBadge';
 import { RelativeTime } from '../components/RelativeTime';
 import { ColiseumFab } from '../components/ColiseumFab';
 import { TopicComposerSheet } from '../components/TopicComposerSheet';
+import { TopicSeedLine } from '../components/TopicSeedLine';
 import { cx } from '../components/cx';
 import * as ui from '../components/coliseumUi.css';
 
@@ -32,7 +33,7 @@ function TopicCard({
     topic: ColiseumTopic;
     onSelect: (topicId: string) => void;
 }) {
-    const { newsAnchor, tags, debateHeat, status } = topic;
+    const { seed, newsAnchor, tags, debateHeat, status } = topic;
     const categoryLabel = COLISEUM_TOPIC_CATEGORIES.find(
         (category) => category.key === topic.category
     )?.label;
@@ -54,15 +55,9 @@ function TopicCard({
                 </span>
             </div>
             <h3 className={ui.cardTitle}>{topic.title}</h3>
-            <a
-                href={newsAnchor.sourceUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={(event) => event.stopPropagation()}
-                className={ui.mutedLink}
-            >
-                📰 {newsAnchor.headline}
-            </a>
+            {/* The card is itself a button, so the link must not be clickable
+                here — a nested anchor would swallow the tap that opens the topic. */}
+            <TopicSeedLine seed={seed} newsAnchor={newsAnchor} inert />
             {tags.length > 0 ? (
                 <div className={ui.tagRow}>
                     {tags.slice(0, 6).map((tag) => (
