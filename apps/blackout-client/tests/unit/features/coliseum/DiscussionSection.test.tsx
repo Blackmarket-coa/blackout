@@ -8,6 +8,7 @@ import { DiscussionSection } from '../../../../src/app/features/coliseum/section
 
 const linkColiseumTopicDen = vi.fn();
 const createDenInCanopy = vi.fn();
+const findOrCreateCategory = vi.fn();
 const createRoom = vi.fn();
 const leave = vi.fn(async () => undefined);
 const sendStateEvent = vi.fn(async () => ({ event_id: '$e' }));
@@ -19,6 +20,7 @@ vi.mock('../../../../src/app/features/coliseum/coliseumClient', () => ({
 
 vi.mock('../../../../src/app/features/canopy/denKind', () => ({
     createDenInCanopy: (...args: unknown[]) => createDenInCanopy(...(args as [])),
+    findOrCreateCategory: (...args: unknown[]) => findOrCreateCategory(...(args as [])),
     DEN_KIND_STATE_EVENT_TYPE: 'co.bmc.den.kind',
     // The den body renders as a forum; stub the hook so no Matrix room is needed.
     useDenKind: () => 'forum',
@@ -94,6 +96,7 @@ const clickStart = async (container: HTMLElement) => {
 
 beforeEach(() => {
     createDenInCanopy.mockResolvedValue('!new-den:server');
+    findOrCreateCategory.mockResolvedValue('!topics-category:server');
     createRoom.mockResolvedValue({ room_id: '!standalone-den:server' });
 });
 
@@ -115,7 +118,7 @@ describe('DiscussionSection — the den is created lazily', () => {
         expect(createRoom).not.toHaveBeenCalled();
     });
 
-    it('creates a forum den under the canopy on first use', async () => {
+    it("creates a forum den in the canopy's Topics category on first use", async () => {
         linkColiseumTopicDen.mockResolvedValue({
             topic: { ...TOPIC, discussionDenId: '!new-den:server' },
             created: true,
@@ -123,9 +126,15 @@ describe('DiscussionSection — the den is created lazily', () => {
         const container = render({ ...TOPIC, canopyId: '!canopy:server' });
         await clickStart(container);
 
+        // Auto-created dens are grouped under a category rather than dropped
+        // loose into General, where they'd bury the hand-made channels.
+        expect(findOrCreateCategory).toHaveBeenCalledWith(
+            expect.anything(),
+            expect.objectContaining({ canopyId: '!canopy:server', purpose: 'topics' })
+        );
         expect(createDenInCanopy).toHaveBeenCalledWith(
             expect.anything(),
-            expect.objectContaining({ canopyId: '!canopy:server', kind: 'forum' })
+            expect.objectContaining({ canopyId: '!topics-category:server', kind: 'forum' })
         );
         expect(linkColiseumTopicDen).toHaveBeenCalledWith('topic-1', '!new-den:server');
         expect(

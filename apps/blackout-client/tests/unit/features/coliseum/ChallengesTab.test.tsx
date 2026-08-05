@@ -28,6 +28,7 @@ vi.mock('../../../../src/app/features/coliseum/challengesClient', () => ({
 
 vi.mock('../../../../src/app/features/canopy/denKind', () => ({
     createDenInCanopy: vi.fn(),
+    findOrCreateCategory: vi.fn(),
     DEN_KIND_STATE_EVENT_TYPE: 'co.bmc.den.kind',
     useDenKind: () => 'forum',
 }));
