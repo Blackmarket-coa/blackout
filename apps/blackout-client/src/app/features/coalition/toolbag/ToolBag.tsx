@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import type { CoalitionTabId, DenType } from '@blackout/core';
 import { Sheet } from '@blackout/ui/primitives';
 import { COALITION_TAB_LABELS } from '../../../state/coalition';
@@ -24,6 +24,12 @@ export interface ToolBagProps {
     aiEnabled: boolean;
     /** Per-den gate from the `co.bmc.coalition` state event. */
     enabledTabs?: readonly CoalitionTabId[];
+    /**
+     * The tool currently in hand, or null for the bag grid. Controlled by the
+     * parent so a map pin can send you straight to its board.
+     */
+    tool: CoalitionTabId | null;
+    onSetTool: (tool: CoalitionTabId | null) => void;
 }
 
 function ToolBody({
@@ -81,9 +87,9 @@ export function ToolBag({
     denType,
     aiEnabled,
     enabledTabs,
+    tool,
+    onSetTool,
 }: ToolBagProps) {
-    const [tool, setTool] = useState<CoalitionTabId | null>(null);
-
     const entries = useMemo(
         () => resolveToolBag({ enabledTabs, hasDen: Boolean(denId), aiEnabled }),
         [enabledTabs, denId, aiEnabled]
@@ -93,8 +99,8 @@ export function ToolBag({
     // rather than dropping you back into whatever you last used.
     const close = useCallback(() => {
         onSetOpen(false);
-        setTool(null);
-    }, [onSetOpen]);
+        onSetTool(null);
+    }, [onSetOpen, onSetTool]);
 
     const title = tool ? COALITION_TAB_LABELS[tool] : 'Tool bag';
 
@@ -122,7 +128,7 @@ export function ToolBag({
                             <button
                                 type="button"
                                 className={css.backButton}
-                                onClick={() => setTool(null)}
+                                onClick={() => onSetTool(null)}
                                 data-testid="coalition-tool-back"
                             >
                                 ← Bag
@@ -144,7 +150,7 @@ export function ToolBag({
                                 key={entry.id}
                                 type="button"
                                 className={css.tile}
-                                onClick={() => setTool(entry.id)}
+                                onClick={() => onSetTool(entry.id)}
                                 data-coalition-tool={entry.id}
                                 data-testid={`coalition-toolbag-tile-${entry.id}`}
                             >

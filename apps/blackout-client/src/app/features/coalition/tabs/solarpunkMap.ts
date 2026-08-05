@@ -101,6 +101,11 @@ export const SOLARPUNK_LAYER_STYLE: Record<string, SolarpunkLayerStyle> = {
     vendors: { color: T.clay.solid, ink: T.clay.ink, icon: ICONS.bag },
     jobs: { color: T.slate.solid, ink: T.slate.ink, icon: ICONS.briefcase },
     aid: { color: T.ember.solid, ink: T.ember.ink, icon: ICONS.heart },
+    // Needs read as asks (a heart, like mutual aid) and resources as shared
+    // capacity (a wrench, like projects) — but each keeps its own hue, so the
+    // legend can distinguish them at a glance.
+    needs: { color: T.clay.solid, ink: T.clay.ink, icon: ICONS.heart },
+    resources: { color: T.pine.solid, ink: T.pine.ink, icon: ICONS.wrench },
     votes: { color: T.dusk.solid, ink: T.dusk.ink, icon: ICONS.vote },
     streams: { color: T.lichen.solid, ink: T.lichen.ink, icon: ICONS.play },
     mycelium: { color: T.dusk.solid, ink: T.dusk.ink, icon: ICONS.mushroom },

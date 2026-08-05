@@ -7,6 +7,7 @@ import type {
     CoalitionRankingModel,
     CoalitionRing,
     CoalitionNeed,
+    CoalitionPlace,
     CoalitionProject,
     CoalitionResource,
     EndowedProgressFraming,
@@ -291,6 +292,8 @@ export interface CreateNeedInput {
     kind: string;
     title: string;
     description?: string;
+    /** Pin or area of operations. Omit for a need that is genuinely placeless. */
+    place?: CoalitionPlace;
 }
 
 export function fetchCoalitionNeeds(
@@ -310,7 +313,7 @@ export function createCoalitionNeed(
 
 export function updateCoalitionNeed(
     id: string,
-    patch: { status?: NeedStatus; fulfilledByListingId?: string },
+    patch: { status?: NeedStatus; fulfilledByListingId?: string; place?: CoalitionPlace | null },
     token: string | null = readBlackoutApiToken()
 ): Promise<{ need: CoalitionNeed }> {
     return patchJson<{ need: CoalitionNeed }>(
@@ -332,6 +335,8 @@ export interface CreateProjectInput {
     category: string;
     description?: string;
     proposalEventId?: string;
+    /** Pin or area of operations. Omit for a project with no location. */
+    place?: CoalitionPlace;
 }
 
 export function fetchCoalitionProjects(
@@ -497,8 +502,11 @@ export interface CreateResourceInput {
     name: string;
     kind: string;
     description?: string;
-    availability?: ResourceAvailability;
+    /** Free-text directions. {@link place} is the geo truth beside it. */
     location?: string;
+    availability?: ResourceAvailability;
+    /** Pin or area of operations. Omit for a resource with no fixed location. */
+    place?: CoalitionPlace;
 }
 
 export function fetchCoalitionResources(
@@ -516,14 +524,22 @@ export function createCoalitionResource(
     return postJson<{ resource: CoalitionResource }>(`${COALITION_BASE}/resources`, input, token);
 }
 
-export function updateCoalitionResourceAvailability(
+/**
+ * Patch a resource. `place: null` takes it off the map; omitting `place`
+ * leaves whatever it already had.
+ */
+export function updateCoalitionResource(
     id: string,
-    availability: ResourceAvailability,
+    patch: {
+        availability?: ResourceAvailability;
+        location?: string;
+        place?: CoalitionPlace | null;
+    },
     token: string | null = readBlackoutApiToken()
 ): Promise<{ resource: CoalitionResource }> {
     return patchJson<{ resource: CoalitionResource }>(
         `${COALITION_BASE}/resources/${encodeURIComponent(id)}`,
-        { availability },
+        patch,
         token
     );
 }

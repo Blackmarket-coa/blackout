@@ -3,8 +3,15 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
 import { act } from 'react-dom/test-utils';
 import ReactDOM from 'react-dom/client';
-import type { SpatialLayerKey } from '@blackout/core';
+import { SPATIAL_LAYER_KEYS, type SpatialLayerKey } from '@blackout/core';
 import { MapLegend } from '../../../../src/app/features/coalition/map/MapLegend';
+
+/**
+ * Derived, not hardcoded: the legend is keyed to the taxonomy, so adding a
+ * layer there (needs and resources, when they gained coordinates) must not
+ * break these — it should just be counted.
+ */
+const LAYER_COUNT = SPATIAL_LAYER_KEYS.length;
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -56,13 +63,13 @@ describe('MapLegend', () => {
         const puck = container.querySelector('[data-testid="coalition-legend-toggle"]');
         expect(puck).toBeTruthy();
         // The puck reports how much of the world is currently visible.
-        expect(puck?.textContent).toContain('2/13');
+        expect(puck?.textContent).toContain(`2/${LAYER_COUNT}`);
     });
 
     it('lists every layer when open', () => {
         const container = render(<MapLegend {...defaults} />);
         const rows = container.querySelectorAll('[data-coalition-layer]');
-        expect(rows).toHaveLength(13);
+        expect(rows).toHaveLength(LAYER_COUNT);
     });
 
     /**
@@ -119,7 +126,7 @@ describe('MapLegend', () => {
         expect(on.querySelector('[data-testid="coalition-map-radius-5"]')).toBeTruthy();
     });
 
-    it('offers show-all and hide-all rather than thirteen taps', () => {
+    it('offers show-all and hide-all rather than one tap per layer', () => {
         const onSetLayers = vi.fn();
         const container = render(<MapLegend {...defaults} onSetLayers={onSetLayers} />);
         act(() => {
@@ -135,7 +142,7 @@ describe('MapLegend', () => {
                 container.querySelector('[data-testid="coalition-legend-all"]') as HTMLButtonElement
             ).click();
         });
-        expect(onSetLayers.mock.calls[1][0]).toHaveLength(13);
+        expect(onSetLayers.mock.calls[1][0]).toHaveLength(LAYER_COUNT);
     });
 
     it('surfaces a location error inline', () => {

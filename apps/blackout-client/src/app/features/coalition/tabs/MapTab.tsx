@@ -10,6 +10,11 @@ import {
     normalizeSpatialLayerKey,
     spatialHeatWeight,
     type AidPost,
+    type CoalitionNeed,
+    type CoalitionPlace,
+    type CoalitionProject,
+    type CoalitionResource,
+    type CoalitionTabId,
     type SellerLocation,
     type SpatialEventStatus,
     type SpatialFeedItem,
@@ -18,6 +23,9 @@ import {
 import type { CoalitionFeedItem } from '@blackout/core';
 import {
     useCoalitionFeed,
+    useCoalitionNeeds,
+    useCoalitionProjects,
+    useCoalitionResources,
     useMutualAid,
     useSellerLocations,
     useSpatialFeed,
@@ -42,6 +50,12 @@ const CoalitionMap = React.lazy(() => import('./CoalitionMap'));
 
 export interface MapTabProps {
     scope: CoalitionScopeQuery;
+    /**
+     * Put a tool-bag board in the viewer's hand. Tapping a need, project or
+     * resource pin opens its board, where claiming, supporting and booking
+     * already live with their composers.
+     */
+    onOpenTool?: (tool: CoalitionTabId) => void;
 }
 
 interface PinDetails {
@@ -58,6 +72,12 @@ interface PinDetails {
     startsAt?: string;
     /** Present on `video` pins — tapping the pin opens the story reel (Snap Map style). */
     mediaUrl?: string;
+    /**
+     * Area of operations, in metres. Absent means the pin is an address; present
+     * means the coordinates are a centre and this is the actual claim, drawn on
+     * the map as a circle.
+     */
+    radiusMeters?: number;
 }
 
 // The selectable labels live with the legend that renders them (`MAP_TIME_MODES`).
@@ -66,6 +86,23 @@ type TemporalMode = 'now' | 'today' | 'week' | 'all';
 const RADIUS_OPTIONS_KM = [1, 5, 25] as const;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * How far a viewer is from the *nearest part* of a pin, in metres.
+ *
+ * For an address this is just the distance to it. For an area of operations it
+ * is the distance to the edge of the circle, and zero when the viewer is inside
+ * — which is the whole point of drawing one. Measuring an area from its centre
+ * would rank a crew that covers your street below a pin two blocks away, and
+ * would hide a 20km-radius group whose centre sits outside your search.
+ */
+function edgeDistance(pin: PinDetails, viewer: { latitude: number; longitude: number }): number {
+    const separation = haversineDistanceMeters(
+        { latitude: pin.latitude, longitude: pin.longitude },
+        viewer
+    );
+    return Math.max(0, separation - (pin.radiusMeters ?? 0));
+}
 
 /**
  * Whether a pin belongs in the selected time window. Standing pins (no
@@ -266,7 +303,7 @@ function AidPostForm({
     );
 }
 
-export function MapTab({ scope }: MapTabProps) {
+export function MapTab({ scope, onOpenTool }: MapTabProps) {
     const [activeLayers, setActiveLayers] = useState<Set<SpatialLayerKey>>(
         () => new Set(SPATIAL_LAYER_DEFINITIONS.map((definition) => definition.key))
     );
@@ -352,6 +389,12 @@ export function MapTab({ scope }: MapTabProps) {
         [videoState.data]
     );
     const videosVisible = activeLayers.has('video');
+    // Needs, projects and resources are canopy-scoped boards, not spatial-feed
+    // layers, so they are fetched from their own endpoints and merged in — the
+    // same shape aid, sellers and stories already take.
+    const needsState = useCoalitionNeeds(scope);
+    const projectsState = useCoalitionProjects(scope);
+    const resourcesState = useCoalitionResources(scope);
 
     const requestNearby = (km: number) => {
         if (!navigator.geolocation) {
@@ -409,13 +452,25 @@ export function MapTab({ scope }: MapTabProps) {
 
     const allPins = useMemo(
         () =>
-            pinList(
-                spatialState.data?.items ?? [],
-                aidState.data?.posts ?? [],
-                sellerState.data?.locations ?? [],
-                videosVisible ? videoItems : []
-            ),
-        [spatialState.data, aidState.data, sellerState.data, videosVisible, videoItems]
+            pinList({
+                spatial: spatialState.data?.items ?? [],
+                aid: aidState.data?.posts ?? [],
+                sellers: sellerState.data?.locations ?? [],
+                videos: videosVisible ? videoItems : [],
+                needs: needsState.data?.needs ?? [],
+                projects: projectsState.data?.projects ?? [],
+                resources: resourcesState.data?.resources ?? [],
+            }),
+        [
+            spatialState.data,
+            aidState.data,
+            sellerState.data,
+            videosVisible,
+            videoItems,
+            needsState.data,
+            projectsState.data,
+            resourcesState.data,
+        ]
     );
 
     // Apply the temporal window, then (when "Near me" is active) sort by distance.
@@ -424,17 +479,7 @@ export function MapTab({ scope }: MapTabProps) {
         const filtered = allPins.filter((pin) => passesTemporal(pin, temporalMode, nowMs));
         if (!nearby) return filtered;
         const viewer = { latitude: nearby.lat, longitude: nearby.lng };
-        return [...filtered].sort((a, b) => {
-            const da = haversineDistanceMeters(
-                { latitude: a.latitude, longitude: a.longitude },
-                viewer
-            );
-            const db = haversineDistanceMeters(
-                { latitude: b.latitude, longitude: b.longitude },
-                viewer
-            );
-            return da - db;
-        });
+        return [...filtered].sort((a, b) => edgeDistance(a, viewer) - edgeDistance(b, viewer));
     }, [allPins, temporalMode, nearby]);
 
     const nearbyCount = useMemo(() => {
@@ -445,10 +490,7 @@ export function MapTab({ scope }: MapTabProps) {
             (pin) =>
                 Number.isFinite(pin.latitude) &&
                 Number.isFinite(pin.longitude) &&
-                haversineDistanceMeters(
-                    { latitude: pin.latitude, longitude: pin.longitude },
-                    viewer
-                ) <= radiusMeters
+                edgeDistance(pin, viewer) <= radiusMeters
         ).length;
     }, [pins, nearby]);
 
@@ -819,6 +861,14 @@ export function MapTab({ scope }: MapTabProps) {
                             setSelectedPin(null);
                             setReelStartId(pinId);
                         }}
+                        onOpenBoard={
+                            onOpenTool
+                                ? (tool) => {
+                                      setSelectedPin(null);
+                                      onOpenTool(tool);
+                                  }
+                                : undefined
+                        }
                     />
                 ) : null}
 
@@ -880,12 +930,41 @@ export function MapTab({ scope }: MapTabProps) {
     );
 }
 
-function pinList(
-    spatial: SpatialFeedItem[],
-    aid: AidPost[],
-    sellers: SellerLocation[],
-    videos: CoalitionFeedItem[]
-): PinDetails[] {
+/**
+ * Turn a place into the coordinate fields a pin carries. Returns null for a
+ * record with no place — plenty of needs are genuinely placeless, and a pin at
+ * `0,0` in the Gulf of Guinea is worse than no pin at all.
+ */
+function placePinFields(
+    place: CoalitionPlace | undefined
+): Pick<PinDetails, 'latitude' | 'longitude' | 'radiusMeters'> | null {
+    if (!place) return null;
+    return {
+        latitude: place.latitude,
+        longitude: place.longitude,
+        radiusMeters: place.kind === 'area' ? place.radiusMeters : undefined,
+    };
+}
+
+interface PinSources {
+    spatial: SpatialFeedItem[];
+    aid: AidPost[];
+    sellers: SellerLocation[];
+    videos: CoalitionFeedItem[];
+    needs: CoalitionNeed[];
+    projects: CoalitionProject[];
+    resources: CoalitionResource[];
+}
+
+function pinList({
+    spatial,
+    aid,
+    sellers,
+    videos,
+    needs,
+    projects,
+    resources,
+}: PinSources): PinDetails[] {
     const nowMs = Date.now();
     const pins: PinDetails[] = [];
     for (const item of videos) {
@@ -938,6 +1017,43 @@ function pinList(
             layer: 'vendors',
             latitude: seller.coordinates.latitude,
             longitude: seller.coordinates.longitude,
+        });
+    }
+    // Needs, projects and resources: real-world things that had no coordinates
+    // until `CoalitionPlace`, so the map could not show them and they were
+    // reachable only from the tool bag. Records without a place stay off it.
+    for (const need of needs) {
+        const fields = placePinFields(need.place);
+        if (!fields) continue;
+        pins.push({
+            id: need.id,
+            title: need.title,
+            subtitle: `Need · ${need.kind} · ${need.status}`,
+            layer: 'needs',
+            denId: undefined,
+            ...fields,
+        });
+    }
+    for (const project of projects) {
+        const fields = placePinFields(project.place);
+        if (!fields) continue;
+        pins.push({
+            id: project.id,
+            title: project.title,
+            subtitle: `Project · ${project.category} · ${project.status}`,
+            layer: 'projects',
+            ...fields,
+        });
+    }
+    for (const resource of resources) {
+        const fields = placePinFields(resource.place);
+        if (!fields) continue;
+        pins.push({
+            id: resource.id,
+            title: resource.name,
+            subtitle: `Resource · ${resource.kind} · ${resource.availability}`,
+            layer: 'resources',
+            ...fields,
         });
     }
     return pins;

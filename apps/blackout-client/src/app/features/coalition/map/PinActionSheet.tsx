@@ -1,4 +1,5 @@
 import React from 'react';
+import { formatRadius, type CoalitionTabId } from '@blackout/core';
 import { buildCommunitiesPath } from '../../../pages/paths';
 import { directionsHref, resolvePinActions, type PinLayer } from './pinActions';
 import * as css from './MapLegend.css';
@@ -12,13 +13,24 @@ export interface PinActionSheetPin {
     longitude: number;
     denId?: string;
     mediaUrl?: string;
+    /** Present when the pin is an area of operations rather than an address. */
+    radiusMeters?: number;
 }
+
+/** Pin layers whose record lives on a tool-bag board. */
+const BOARD_FOR_LAYER: Partial<Record<PinLayer, CoalitionTabId>> = {
+    needs: 'needs',
+    projects: 'projects',
+    resources: 'resources',
+};
 
 export interface PinActionSheetProps {
     pin: PinActionSheetPin;
     onClose: () => void;
     /** Open the story reel starting at this pin. */
     onWatch: (pinId: string) => void;
+    /** Put the pin's board in the viewer's hand (needs, projects, resources). */
+    onOpenBoard?: (tool: CoalitionTabId) => void;
 }
 
 /**
@@ -29,13 +41,16 @@ export interface PinActionSheetProps {
  * the pin's verbs for every pin: watch the story, open the thread, get
  * directions to the actual place.
  */
-export function PinActionSheet({ pin, onClose, onWatch }: PinActionSheetProps) {
+export function PinActionSheet({ pin, onClose, onWatch, onOpenBoard }: PinActionSheetProps) {
     const hasCoordinates = Number.isFinite(pin.latitude) && Number.isFinite(pin.longitude);
+    const isArea = (pin.radiusMeters ?? 0) > 0;
+    const board = BOARD_FOR_LAYER[pin.layer];
     const actions = resolvePinActions({
         layer: pin.layer,
         hasDen: Boolean(pin.denId),
         hasCoordinates,
         hasMedia: Boolean(pin.mediaUrl),
+        isArea,
     });
 
     return (
@@ -80,6 +95,13 @@ export function PinActionSheet({ pin, onClose, onWatch }: PinActionSheetProps) {
                     </button>
                 </div>
                 <small style={{ color: 'var(--text-secondary)' }}>{pin.subtitle}</small>
+                {isArea ? (
+                    // Say it out loud. Without this the marker reads as an
+                    // address, and the circle on the map is easy to miss.
+                    <small style={{ color: 'var(--text-muted)' }} data-testid="coalition-pin-area">
+                        ◎ Operates within {formatRadius(pin.radiusMeters as number)} of here
+                    </small>
+                ) : null}
 
                 {actions.length > 0 ? (
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 2 }}>
@@ -115,6 +137,17 @@ export function PinActionSheet({ pin, onClose, onWatch }: PinActionSheetProps) {
                                     >
                                         {action.glyph} {action.label}
                                     </a>
+                                );
+                            }
+                            if (action.id === 'board' && board && onOpenBoard) {
+                                return (
+                                    <button
+                                        {...shared}
+                                        type="button"
+                                        onClick={() => onOpenBoard(board)}
+                                    >
+                                        {action.glyph} {action.label}
+                                    </button>
                                 );
                             }
                             if (action.id === 'watch') {

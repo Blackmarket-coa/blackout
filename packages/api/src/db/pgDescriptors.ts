@@ -644,7 +644,7 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
     addCoalitionNotification: upsert('coalitionNotifications'),
     markCoalitionNotificationRead: upsert('coalitionNotifications'),
     createCoalitionResource: upsert('coalitionResources'),
-    updateCoalitionResourceAvailability: upsert('coalitionResources'),
+    updateCoalitionResource: upsert('coalitionResources'),
     createCreatorContent: upsert('creatorContent'),
     updateCreatorContent: upsert('creatorContent'),
     addContentDistribution: upsert('contentDistributions'),

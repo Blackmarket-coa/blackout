@@ -2,10 +2,13 @@ import React, { useCallback, useState, type CSSProperties } from 'react';
 import {
     RESOURCE_AVAILABILITY,
     SUGGESTED_RESOURCE_KINDS,
+    describePlace,
+    type CoalitionPlace,
     type ResourceAvailability,
 } from '@blackout/core';
 import { useCoalitionResources, type CoalitionScopeQuery } from '../hooks/useCoalitionFeed';
-import { createCoalitionResource, updateCoalitionResourceAvailability } from '../coalitionClient';
+import { createCoalitionResource, updateCoalitionResource } from '../coalitionClient';
+import { PlacePicker } from '../map/PlacePicker';
 
 export interface ResourcesTabProps {
     scope: CoalitionScopeQuery;
@@ -80,6 +83,7 @@ export function ResourcesTab({ scope }: ResourcesTabProps) {
     const [name, setName] = useState('');
     const [kind, setKind] = useState<string>(SUGGESTED_RESOURCE_KINDS[0]);
     const [location, setLocation] = useState('');
+    const [place, setPlace] = useState<CoalitionPlace | null>(null);
     const [pending, setPending] = useState(false);
 
     const onAdd = useCallback(
@@ -94,23 +98,25 @@ export function ResourcesTab({ scope }: ResourcesTabProps) {
                     name: trimmed,
                     kind,
                     location: location.trim() || undefined,
+                    place: place ?? undefined,
                 });
                 setName('');
                 setLocation('');
+                setPlace(null);
                 refetch();
             } finally {
                 setPending(false);
             }
         },
-        [name, kind, location, scope.canopyId, pending, refetch],
+        [name, kind, location, place, scope.canopyId, pending, refetch]
     );
 
     const onAvailability = useCallback(
         async (id: string, availability: ResourceAvailability) => {
-            await updateCoalitionResourceAvailability(id, availability);
+            await updateCoalitionResource(id, { availability });
             refetch();
         },
-        [refetch],
+        [refetch]
     );
 
     if (!scope.canopyId) {
@@ -127,48 +133,61 @@ export function ResourcesTab({ scope }: ResourcesTabProps) {
         <div style={containerStyle} data-testid="coalition-resources">
             <form
                 onSubmit={onAdd}
-                style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}
+                style={{ display: 'flex', flexDirection: 'column', gap: 8 }}
                 data-testid="coalition-resource-composer"
             >
-                <select
-                    value={kind}
-                    onChange={(event) => setKind(event.target.value)}
-                    style={selectStyle}
-                    aria-label="Resource kind"
-                >
-                    {SUGGESTED_RESOURCE_KINDS.map((k) => (
-                        <option key={k} value={k}>
-                            {KIND_LABEL[k] ?? k}
-                        </option>
-                    ))}
-                </select>
-                <input
-                    value={name}
-                    onChange={(event) => setName(event.target.value)}
-                    placeholder="Resource name…"
-                    data-testid="coalition-resource-input"
-                    style={inputStyle}
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <select
+                        value={kind}
+                        onChange={(event) => setKind(event.target.value)}
+                        style={selectStyle}
+                        aria-label="Resource kind"
+                    >
+                        {SUGGESTED_RESOURCE_KINDS.map((k) => (
+                            <option key={k} value={k}>
+                                {KIND_LABEL[k] ?? k}
+                            </option>
+                        ))}
+                    </select>
+                    <input
+                        value={name}
+                        onChange={(event) => setName(event.target.value)}
+                        placeholder="Resource name…"
+                        data-testid="coalition-resource-input"
+                        style={inputStyle}
+                    />
+                    <input
+                        value={location}
+                        onChange={(event) => setLocation(event.target.value)}
+                        placeholder="Location (optional)"
+                        style={{ ...inputStyle, flexBasis: 160 }}
+                    />
+                    <button
+                        type="submit"
+                        disabled={pending || name.trim().length === 0}
+                        style={{
+                            padding: '8px 14px',
+                            borderRadius: 8,
+                            border: '1px solid var(--accent-primary, #1ABC9C)',
+                            background: 'var(--accent-primary, #1ABC9C)',
+                            color: '#fff',
+                            cursor: pending ? 'progress' : 'pointer',
+                        }}
+                    >
+                        Register
+                    </button>
+                </div>
+                {/*
+                 * `location` above is free-text directions ("side door, ask for
+                 * Ray"); this is the geo truth that puts the resource on the map.
+                 * A greenhouse is a pin, a mobile tool library is an area.
+                 */}
+                <PlacePicker
+                    value={place}
+                    onChange={setPlace}
+                    label="On the map"
+                    testId="coalition-resource-place"
                 />
-                <input
-                    value={location}
-                    onChange={(event) => setLocation(event.target.value)}
-                    placeholder="Location (optional)"
-                    style={{ ...inputStyle, flexBasis: 160 }}
-                />
-                <button
-                    type="submit"
-                    disabled={pending || name.trim().length === 0}
-                    style={{
-                        padding: '8px 14px',
-                        borderRadius: 8,
-                        border: '1px solid var(--accent-primary, #1ABC9C)',
-                        background: 'var(--accent-primary, #1ABC9C)',
-                        color: '#fff',
-                        cursor: pending ? 'progress' : 'pointer',
-                    }}
-                >
-                    Register
-                </button>
             </form>
 
             {error ? (
@@ -176,7 +195,9 @@ export function ResourcesTab({ scope }: ResourcesTabProps) {
                     Couldn't load resources: {error}
                 </div>
             ) : null}
-            {loading && !data ? <div style={{ color: 'var(--text-secondary)' }}>Loading…</div> : null}
+            {loading && !data ? (
+                <div style={{ color: 'var(--text-secondary)' }}>Loading…</div>
+            ) : null}
             {!loading && resources.length === 0 ? (
                 <div style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
                     No shared resources registered yet.
@@ -192,12 +213,23 @@ export function ResourcesTab({ scope }: ResourcesTabProps) {
                 >
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <span style={badgeStyle}>{KIND_LABEL[resource.kind] ?? resource.kind}</span>
-                        <span style={{ fontSize: 14, fontWeight: 600, flex: 1 }}>{resource.name}</span>
+                        <span style={{ fontSize: 14, fontWeight: 600, flex: 1 }}>
+                            {resource.name}
+                        </span>
                         <span style={badgeStyle}>{AVAILABILITY_LABEL[resource.availability]}</span>
                     </div>
                     {resource.location ? (
                         <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                            📍 {resource.location}
+                            🚪 {resource.location}
+                        </span>
+                    ) : null}
+                    {resource.place ? (
+                        <span
+                            style={{ fontSize: 12, color: 'var(--text-secondary)' }}
+                            data-testid="coalition-resource-place-line"
+                        >
+                            {resource.place.kind === 'area' ? '◎' : '📍'}{' '}
+                            {describePlace(resource.place)}
                         </span>
                     ) : null}
                     {resource.description ? (

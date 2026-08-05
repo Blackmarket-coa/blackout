@@ -8,8 +8,10 @@
  * system hangs off of.
  */
 
+import type { CoalitionPlace } from './place';
+
 export const NEED_STATUSES = ['open', 'claimed', 'fulfilled', 'closed'] as const;
-export type NeedStatus = (typeof NEED_STATUSES)[number];
+export type NeedStatus = typeof NEED_STATUSES[number];
 
 /** Suggested kinds for UI affordances; the stored value is free-text. */
 export const SUGGESTED_NEED_KINDS = [
@@ -34,6 +36,12 @@ export interface CoalitionNeed {
     authorId: string;
     /** Set when an FBM listing fulfils the need — the FBM-opportunity seam. */
     fulfilledByListingId?: string;
+    /**
+     * Where the need is, so it can be a map pin. Optional: plenty of needs are
+     * genuinely placeless ("we need a developer"), and forcing a location on
+     * those would put fictional pins on the map.
+     */
+    place?: CoalitionPlace;
     createdAt: string;
     updatedAt: string;
 }

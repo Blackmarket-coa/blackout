@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { aiToolsEnabled, type CoalitionTabId } from '@blackout/core';
 import { useDenType } from '../../hooks/useDenType';
 import { FeatureGuide } from '../../components/feature-guide/FeatureGuide';
@@ -42,6 +42,14 @@ export function CoalitionView({ denId, canopyId, enabledTabs, scopeLabel }: Coal
     const denType = useDenType(denId ?? null);
     const aiEnabled = aiToolsEnabled(denType);
     const [bagOpen, setBagOpen] = useState(false);
+    // Held here rather than inside the bag so a map pin can put a specific tool
+    // in your hand: tapping a need on the map opens the needs board on it.
+    const [tool, setTool] = useState<CoalitionTabId | null>(null);
+
+    const openTool = useCallback((next: CoalitionTabId) => {
+        setTool(next);
+        setBagOpen(true);
+    }, []);
 
     const scope = useMemo(
         () => ({
@@ -69,7 +77,7 @@ export function CoalitionView({ denId, canopyId, enabledTabs, scopeLabel }: Coal
             </FeatureGuide>
 
             <div style={{ position: 'relative', minHeight: 0, overflow: 'hidden' }}>
-                <MapTab scope={scope} />
+                <MapTab scope={scope} onOpenTool={openTool} />
                 <ToolBag
                     open={bagOpen}
                     onSetOpen={setBagOpen}
@@ -78,6 +86,8 @@ export function CoalitionView({ denId, canopyId, enabledTabs, scopeLabel }: Coal
                     denType={denType}
                     aiEnabled={aiEnabled}
                     enabledTabs={enabledTabs}
+                    tool={tool}
+                    onSetTool={setTool}
                 />
             </div>
         </section>

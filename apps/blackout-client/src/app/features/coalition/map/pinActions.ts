@@ -9,7 +9,7 @@ import type { SpatialLayerKey } from '@blackout/core';
  */
 export type PinLayer = SpatialLayerKey | 'aid' | 'vendors';
 
-export type PinActionId = 'watch' | 'den' | 'directions' | 'details';
+export type PinActionId = 'watch' | 'den' | 'directions' | 'details' | 'board';
 
 export interface PinActionSpec {
     id: PinActionId;
@@ -34,6 +34,13 @@ const LAYER_ACTIONS: Partial<Record<PinLayer, PinActionSpec[]>> = {
     events: [{ id: 'den', label: 'Open the event', glyph: '📅', primary: true }],
     dens: [{ id: 'den', label: 'Open den', glyph: '🚪', primary: true }],
     communities: [{ id: 'den', label: 'Open canopy', glyph: '🗂️', primary: true }],
+    // The three boards that gained coordinates. Their verb is to open the
+    // record on its board, where claiming, supporting and booking already live
+    // with their composers — the map sends you there rather than reimplementing
+    // them as buttons that half-work.
+    needs: [{ id: 'board', label: 'Open on the needs board', glyph: '🙋', primary: true }],
+    projects: [{ id: 'board', label: 'Open the project', glyph: '🌱', primary: true }],
+    resources: [{ id: 'board', label: 'Open in the registry', glyph: '🧰', primary: true }],
 };
 
 export interface PinActionContext {
@@ -41,6 +48,11 @@ export interface PinActionContext {
     hasDen: boolean;
     hasCoordinates: boolean;
     hasMedia: boolean;
+    /**
+     * True when the pin is an area of operations rather than an address. Its
+     * centre is a reference point, so navigating to it is meaningless.
+     */
+    isArea?: boolean;
 }
 
 /**
@@ -48,7 +60,7 @@ export interface PinActionContext {
  *
  * Filters the catalogue down to what this pin can actually do — no "Open den"
  * on a pin with no den, no "Watch" on a story with no media. Directions is
- * offered for anything with real coordinates, because a map that connects to
+ * offered for anything with an exact position, because a map that connects to
  * the real world should be able to send you there.
  */
 export function resolvePinActions(context: PinActionContext): PinActionSpec[] {
@@ -59,8 +71,10 @@ export function resolvePinActions(context: PinActionContext): PinActionSpec[] {
         return true;
     });
 
-    // Anything with a real position can be navigated to.
-    if (context.hasCoordinates) {
+    // Anything with a real address can be navigated to. An area is deliberately
+    // excluded: routing someone to the centre of a 25km service radius sends
+    // them to a field, not to the thing.
+    if (context.hasCoordinates && !context.isArea) {
         actions.push({ id: 'directions', label: 'Directions', glyph: '🧭' });
     }
     // A den link is worth offering even on layers with no catalogue entry.

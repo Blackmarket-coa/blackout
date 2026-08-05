@@ -6,6 +6,8 @@
  * originate from a vote.
  */
 
+import type { CoalitionPlace } from './place';
+
 export const PROJECT_STATUSES = ['proposed', 'active', 'paused', 'complete'] as const;
 export type ProjectStatus = typeof PROJECT_STATUSES[number];
 
@@ -61,6 +63,12 @@ export interface CoalitionProject {
     deadlineAt?: string;
     /** Funding/progress milestones, ascending by threshold. */
     milestones: ProjectMilestone[];
+    /**
+     * Where the project is, so it can be a map pin. A community garden is an
+     * address; a mutual-aid route or an open-source build is an area, or
+     * nowhere at all. Optional for exactly that reason.
+     */
+    place?: CoalitionPlace;
     createdAt: string;
     updatedAt: string;
 }
