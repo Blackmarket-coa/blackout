@@ -1,0 +1,14 @@
+-- Challenge entries get a discussion den, closing the last Coliseum surface
+-- that held user prose with nowhere to talk about it.
+--
+-- Every chat, comment and piece of written media in Blackout is a Matrix event
+-- in a canopy den — no feature ships its own message store. `challenge_entries`
+-- already carries `body` and `media_url` for the entry *itself*, which is an
+-- authored artifact and stays a record; this column is for the conversation
+-- around it, exactly as `coliseum_topics.discussion_den_id` is (migration 080).
+--
+-- Nullable by design: the den is created lazily on the first comment, so most
+-- entries never have one. TEXT id, no cross-table FK, matching the
+-- string-keyed write-through store. `discussion_den_id` is camelToSnake of
+-- ChallengeEntry.discussionDenId, so pgDescriptors needs no override.
+ALTER TABLE challenge_entries ADD COLUMN IF NOT EXISTS discussion_den_id TEXT;

@@ -4311,8 +4311,19 @@ class InMemoryDb {
         );
     }
 
+    /** Keyed lookup — the map is already indexed by id, so no scan is needed. */
+    getChallengeEntry(entryId: string): ChallengeEntryRecord | undefined {
+        return this.challengeEntries.get(entryId);
+    }
+
     createChallengeEntry(input: Omit<ChallengeEntryRecord, 'createdAt'>): ChallengeEntryRecord {
         const record: ChallengeEntryRecord = { ...input, createdAt: nowIso() };
+        this.challengeEntries.set(record.id, record);
+        return record;
+    }
+
+    /** Replace an entry wholesale (used to attach its discussion den). */
+    upsertChallengeEntry(record: ChallengeEntryRecord): ChallengeEntryRecord {
         this.challengeEntries.set(record.id, record);
         return record;
     }

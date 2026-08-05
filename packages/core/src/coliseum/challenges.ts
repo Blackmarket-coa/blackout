@@ -6,7 +6,7 @@
  */
 
 export const CHALLENGE_STATUSES = ['open', 'judging', 'closed'] as const;
-export type ChallengeStatus = (typeof CHALLENGE_STATUSES)[number];
+export type ChallengeStatus = typeof CHALLENGE_STATUSES[number];
 
 /** Suggested categories for UI affordances; the stored value is free-text. */
 export const SUGGESTED_CHALLENGE_CATEGORIES = [
@@ -36,6 +36,13 @@ export interface ChallengeEntry {
     body?: string;
     /** Optional mxc:// or https URL for an entry's media (photo/video). */
     mediaUrl?: string;
+    /**
+     * The canopy den backing this entry's discussion, created lazily on the
+     * first comment. Mirrors `ColiseumTopic.discussionDenId`: every chat,
+     * comment and piece of written media in Blackout is a Matrix event in a
+     * den, so an entry never grows a comment store of its own.
+     */
+    discussionDenId?: string;
     createdAt: string;
 }
 
@@ -59,7 +66,7 @@ export function isChallengeStatus(value: unknown): value is ChallengeStatus {
 /** Rank entries by vote count (descending), ties broken by recency. */
 export function rankChallengeEntries(
     entries: readonly ChallengeEntry[],
-    votes: readonly ChallengeVote[],
+    votes: readonly ChallengeVote[]
 ): RankedChallengeEntry[] {
     const counts = new Map<string, number>();
     for (const vote of votes) counts.set(vote.entryId, (counts.get(vote.entryId) ?? 0) + 1);
