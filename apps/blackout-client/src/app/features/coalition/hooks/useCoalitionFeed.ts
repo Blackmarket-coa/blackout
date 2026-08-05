@@ -50,17 +50,39 @@ interface FetchStateWithRefetch<T> extends FetchState<T> {
     refetch: () => void;
 }
 
-function useAsync<T>(loader: () => Promise<T>, deps: unknown[]): FetchStateWithRefetch<T> {
+/**
+ * Fetch on mount and whenever `deps` change.
+ *
+ * `enabled` makes a toggle a real toggle. The map's legend switches layers on
+ * and off, but every source except the spatial feed used to load regardless —
+ * so hiding a layer only stopped it being *drawn*, after paying for it. A
+ * disabled hook issues no request, and drops whatever it was holding so a
+ * re-enabled layer cannot flash the previous canopy's data before its own
+ * arrives.
+ */
+function useAsync<T>(
+    loader: () => Promise<T>,
+    deps: unknown[],
+    enabled = true
+): FetchStateWithRefetch<T> {
     const [state, setState] = useState<FetchState<T>>({
         data: null,
-        loading: true,
+        // A disabled hook is not pending; reporting `loading` would leave every
+        // hidden layer's spinner up forever.
+        loading: enabled,
         error: null,
     });
     const [tick, setTick] = useState(0);
     const requestId = useRef(0);
 
     useEffect(() => {
+        // Bump the id either way, so a response already in flight when the
+        // layer is switched off is discarded rather than landing later.
         const id = ++requestId.current;
+        if (!enabled) {
+            setState({ data: null, loading: false, error: null });
+            return;
+        }
         setState((prev: FetchState<T>) => ({ ...prev, loading: true, error: null }));
         loader()
             .then((data) => {
@@ -73,7 +95,7 @@ function useAsync<T>(loader: () => Promise<T>, deps: unknown[]): FetchStateWithR
                 setState({ data: null, loading: false, error: message });
             });
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [...deps, tick]);
+    }, [...deps, tick, enabled]);
 
     const refetch = useCallback(() => setTick((value) => value + 1), []);
 
@@ -88,11 +110,14 @@ export function useCoalitionFeed(
         kind?: CoalitionFeedItem['kind'];
         model?: CoalitionRankingModel;
         limit?: number;
+        /** Skip the request entirely — e.g. the map's Stories layer is hidden. */
+        enabled?: boolean;
     } = {}
 ) {
     return useAsync<CoalitionFeedResponse>(
         () => fetchCoalitionFeed(scope, options),
-        [scope.canopyId, scope.denId, options.kind, options.model, options.limit]
+        [scope.canopyId, scope.denId, options.kind, options.model, options.limit],
+        options.enabled ?? true
     );
 }
 
@@ -101,26 +126,33 @@ export function useSpatialFeed(scope: CoalitionScopeQuery, layers?: string[]) {
         () => (layers && layers.length > 0 ? layers.join(',') : ''),
         [layers]
     );
+    // An empty layer list means "every layer hidden", not "no filter" — the
+    // endpoint treats an absent filter as all-layers, so asking for nothing
+    // would return everything.
+    const enabled = Boolean(layers && layers.length > 0);
     return useAsync<SpatialFeedResponse>(
         () => fetchSpatialFeed(scope, layers),
-        [scope.canopyId, layersKey]
+        [scope.canopyId, layersKey],
+        enabled
     );
 }
 
 const nearbyKey = (nearby?: NearbyQuery): string =>
     nearby ? `${nearby.lat},${nearby.lng},${nearby.radiusKm}` : '';
 
-export function useMutualAid(scope: CoalitionScopeQuery, nearby?: NearbyQuery) {
+export function useMutualAid(scope: CoalitionScopeQuery, nearby?: NearbyQuery, enabled = true) {
     return useAsync<MutualAidResponse>(
         () => fetchMutualAid(scope, nearby),
-        [scope.denId, nearbyKey(nearby)]
+        [scope.denId, nearbyKey(nearby)],
+        enabled
     );
 }
 
-export function useSellerLocations(nearby?: NearbyQuery) {
+export function useSellerLocations(nearby?: NearbyQuery, enabled = true) {
     return useAsync<SellerLocationsResponse>(
         () => fetchSellerLocations(nearby),
-        [nearbyKey(nearby)]
+        [nearbyKey(nearby)],
+        enabled
     );
 }
 
@@ -128,12 +160,16 @@ export function useCoalitionTasks(scope: CoalitionScopeQuery) {
     return useAsync<TasksResponse>(() => fetchCoalitionTasks(scope), [scope.denId]);
 }
 
-export function useCoalitionNeeds(scope: CoalitionScopeQuery) {
-    return useAsync<NeedsResponse>(() => fetchCoalitionNeeds(scope), [scope.canopyId]);
+export function useCoalitionNeeds(scope: CoalitionScopeQuery, enabled = true) {
+    return useAsync<NeedsResponse>(() => fetchCoalitionNeeds(scope), [scope.canopyId], enabled);
 }
 
-export function useCoalitionProjects(scope: CoalitionScopeQuery) {
-    return useAsync<ProjectsResponse>(() => fetchCoalitionProjects(scope), [scope.canopyId]);
+export function useCoalitionProjects(scope: CoalitionScopeQuery, enabled = true) {
+    return useAsync<ProjectsResponse>(
+        () => fetchCoalitionProjects(scope),
+        [scope.canopyId],
+        enabled
+    );
 }
 
 /**
@@ -187,8 +223,12 @@ export function useProjectSupporters(projectId: string | null) {
     );
 }
 
-export function useCoalitionResources(scope: CoalitionScopeQuery) {
-    return useAsync<ResourcesResponse>(() => fetchCoalitionResources(scope), [scope.canopyId]);
+export function useCoalitionResources(scope: CoalitionScopeQuery, enabled = true) {
+    return useAsync<ResourcesResponse>(
+        () => fetchCoalitionResources(scope),
+        [scope.canopyId],
+        enabled
+    );
 }
 
 export function useCoalitionEvents(scope: CoalitionScopeQuery) {

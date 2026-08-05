@@ -1,4 +1,5 @@
 import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useAtom } from 'jotai';
 import {
     AID_POST_CATEGORIES,
     AID_POST_TYPES,
@@ -39,6 +40,12 @@ import PinActionSheet from '../map/PinActionSheet';
 import { listLocalVideos, localVideoVaultSupported } from '../../../../platform/localVideoVault';
 import { layerStyleFor, SOLARPUNK_CONTROL_ACTIVE, SOLARPUNK_PANEL_GLOW } from './solarpunkMap';
 import { MyceliumLayer, useMyceliumGraph } from './mycelium';
+import {
+    coalitionMapHeatAtom,
+    coalitionMapLayersAtom,
+    coalitionMapRadiusKmAtom,
+    coalitionMapTimeModeAtom,
+} from '../../../state/coalition';
 import { useViewportWidth } from '../../../hooks/useViewportWidth';
 import { isMobileViewport } from '../../../pages/client/layoutMetrics';
 import { LocationConsentDialog } from '../../location/LocationConsentDialog';
@@ -304,9 +311,9 @@ function AidPostForm({
 }
 
 export function MapTab({ scope, onOpenTool }: MapTabProps) {
-    const [activeLayers, setActiveLayers] = useState<Set<SpatialLayerKey>>(
-        () => new Set(SPATIAL_LAYER_DEFINITIONS.map((definition) => definition.key))
-    );
+    // Persisted: a layer you switch off stays off across visits. See
+    // `state/coalition.ts` for the read-time guards.
+    const [activeLayers, setActiveLayers] = useAtom(coalitionMapLayersAtom);
     const [selectedPin, setSelectedPin] = useState<PinDetails | null>(null);
     const [nearby, setNearby] = useState<NearbyQuery | undefined>(undefined);
     const [nearbyError, setNearbyError] = useState<string | null>(null);
@@ -314,9 +321,9 @@ export function MapTab({ scope, onOpenTool }: MapTabProps) {
     // disclosure opens and we locate them only once they confirm.
     const [locatePending, setLocatePending] = useState(false);
     const locationConsent = useLocationConsentFlow();
-    const [temporalMode, setTemporalMode] = useState<TemporalMode>('all');
-    const [radiusKm, setRadiusKm] = useState<number>(5);
-    const [showHeat, setShowHeat] = useState(false);
+    const [temporalMode, setTemporalMode] = useAtom(coalitionMapTimeModeAtom);
+    const [radiusKm, setRadiusKm] = useAtom(coalitionMapRadiusKmAtom);
+    const [showHeat, setShowHeat] = useAtom(coalitionMapHeatAtom);
     const [showAidForm, setShowAidForm] = useState(false);
     // Legend starts closed on a phone, where an open panel would cover the map
     // it is meant to explain; open on desktop, where there is room for both.
@@ -375,10 +382,24 @@ export function MapTab({ scope, onOpenTool }: MapTabProps) {
     );
 
     const layersArray = useMemo(() => [...activeLayers], [activeLayers]);
+
+    /*
+     * Every source is gated on its own legend switch.
+     *
+     * Only the spatial feed used to be — the rest loaded whether or not their
+     * layer was showing, so hiding one stopped it being drawn but not fetched.
+     * A toggle that still pays for the thing it hides is a filter, not a
+     * toggle.
+     */
     const spatialState = useSpatialFeed(scope, layersArray);
-    const aidState = useMutualAid(scope, nearby);
-    const sellerState = useSellerLocations(nearby);
-    const videoState = useCoalitionFeed(scope, { kind: 'video', limit: 20 });
+    const aidState = useMutualAid(scope, nearby, activeLayers.has('aid'));
+    const sellerState = useSellerLocations(nearby, activeLayers.has('vendors'));
+    const videosVisible = activeLayers.has('video');
+    const videoState = useCoalitionFeed(scope, {
+        kind: 'video',
+        limit: 20,
+        enabled: videosVisible,
+    });
 
     // Only geo-tagged videos belong on the map; others stay in the standalone reel.
     const videoItems = useMemo<CoalitionFeedItem[]>(
@@ -388,13 +409,12 @@ export function MapTab({ scope, onOpenTool }: MapTabProps) {
             ),
         [videoState.data]
     );
-    const videosVisible = activeLayers.has('video');
     // Needs, projects and resources are canopy-scoped boards, not spatial-feed
     // layers, so they are fetched from their own endpoints and merged in — the
     // same shape aid, sellers and stories already take.
-    const needsState = useCoalitionNeeds(scope);
-    const projectsState = useCoalitionProjects(scope);
-    const resourcesState = useCoalitionResources(scope);
+    const needsState = useCoalitionNeeds(scope, activeLayers.has('needs'));
+    const projectsState = useCoalitionProjects(scope, activeLayers.has('projects'));
+    const resourcesState = useCoalitionResources(scope, activeLayers.has('resources'));
 
     const requestNearby = (km: number) => {
         if (!navigator.geolocation) {
@@ -513,13 +533,13 @@ export function MapTab({ scope, onOpenTool }: MapTabProps) {
     const myceliumGraph = useMyceliumGraph();
     const myceliumActive = activeLayers.has('mycelium');
 
+    // The persisted atom's setter takes a value, not an updater — derive the
+    // next set from the current one rather than passing a function.
     const toggleLayer = (key: SpatialLayerKey) => {
-        setActiveLayers((prev) => {
-            const next = new Set(prev);
-            if (next.has(key)) next.delete(key);
-            else next.add(key);
-            return next;
-        });
+        const next = new Set(activeLayers);
+        if (next.has(key)) next.delete(key);
+        else next.add(key);
+        setActiveLayers(next);
     };
 
     // A video pin opens the story reel (Snap Map tap-to-play); any other pin
