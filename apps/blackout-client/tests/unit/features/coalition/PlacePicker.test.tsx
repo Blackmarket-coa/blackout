@@ -8,6 +8,11 @@ import { PlacePicker } from '../../../../src/app/features/coalition/map/PlacePic
 
 const granted = { value: true };
 const requestEnable = vi.fn();
+const geocodeAddress = vi.fn();
+
+vi.mock('../../../../src/app/features/coalition/coalitionClient', () => ({
+    geocodeAddress: (...a: unknown[]) => geocodeAddress(...(a as [])),
+}));
 
 vi.mock('../../../../src/app/features/location/locationConsent', () => ({
     useLocationConsentFlow: () => ({
@@ -69,6 +74,7 @@ const setNativeValue = (el: HTMLInputElement | HTMLSelectElement, value: string)
 beforeEach(() => {
     granted.value = true;
     requestEnable.mockClear();
+    geocodeAddress.mockReset();
 });
 
 afterEach(() => {
@@ -230,6 +236,159 @@ describe('PlacePicker — typing a coordinate', () => {
         await click(container, 'p-mode-area');
         const field = container.querySelector('[data-testid="p-latitude"]') as HTMLInputElement;
         expect(field.value).toBe('10');
+    });
+});
+
+describe('PlacePicker — searching an address', () => {
+    const SEATTLE = {
+        label: 'Seattle, King County, Washington',
+        latitude: 47.6062,
+        longitude: -122.3321,
+    };
+
+    const searchFor = async (container: HTMLElement, text: string) => {
+        const field = container.querySelector('[data-testid="p-address"]') as HTMLInputElement;
+        await act(async () => setNativeValue(field, text));
+        await click(container, 'p-address-search');
+        await act(async () => {
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+    };
+
+    it('turns a chosen result into a pin', async () => {
+        geocodeAddress.mockResolvedValue({ results: [SEATTLE] });
+        const { container, state } = render();
+        await click(container, 'p-mode-pin');
+        await searchFor(container, 'Seattle');
+
+        const result = container.querySelector('[data-testid="p-address-result"]');
+        expect(result?.textContent).toContain('Seattle, King County');
+        await act(async () => (result as HTMLButtonElement).click());
+
+        expect(state.place).toEqual({
+            kind: 'pin',
+            latitude: 47.6062,
+            longitude: -122.3321,
+            label: SEATTLE.label,
+        });
+    });
+
+    /**
+     * A geocoder answers "where is this address", which is a point — but the
+     * radius is a claim only the author can make, so choosing a result moves an
+     * area's centre rather than collapsing it to a pin.
+     */
+    it('moves an area rather than collapsing it to a pin', async () => {
+        geocodeAddress.mockResolvedValue({ results: [SEATTLE] });
+        const { container, state } = render();
+        await click(container, 'p-mode-area');
+        await searchFor(container, 'Seattle');
+        await act(async () =>
+            (
+                container.querySelector('[data-testid="p-address-result"]') as HTMLButtonElement
+            ).click()
+        );
+
+        expect(state.place).toMatchObject({
+            kind: 'area',
+            latitude: 47.6062,
+            radiusMeters: 5000,
+        });
+    });
+
+    it('says so when the server has no geocoder configured', async () => {
+        geocodeAddress.mockRejectedValue(new Error('Address search is not set up on this server.'));
+        const { container } = render();
+        await click(container, 'p-mode-pin');
+        await searchFor(container, 'Seattle');
+
+        // Swallowing this would make an unconfigured server look broken.
+        expect(container.querySelector('[data-testid="p-address-error"]')?.textContent).toContain(
+            'not set up on this server'
+        );
+    });
+
+    it('distinguishes no matches from a failure', async () => {
+        geocodeAddress.mockResolvedValue({ results: [] });
+        const { container } = render();
+        await click(container, 'p-mode-pin');
+        await searchFor(container, 'Nowhere at all');
+
+        expect(container.querySelector('[data-testid="p-address-empty"]')).toBeTruthy();
+        expect(container.querySelector('[data-testid="p-address-error"]')).toBeNull();
+    });
+
+    it('does not search on fewer than three characters', async () => {
+        const { container } = render();
+        await click(container, 'p-mode-pin');
+        const field = container.querySelector('[data-testid="p-address"]') as HTMLInputElement;
+        await act(async () => setNativeValue(field, 'ab'));
+
+        const button = container.querySelector(
+            '[data-testid="p-address-search"]'
+        ) as HTMLButtonElement;
+        expect(button.disabled).toBe(true);
+        await click(container, 'p-address-search');
+        expect(geocodeAddress).not.toHaveBeenCalled();
+    });
+
+    /**
+     * The picker sits inside each composer's form. Enter in the address box has
+     * to search, not post a half-filled need.
+     */
+    it('searches on Enter without submitting the surrounding form', async () => {
+        geocodeAddress.mockResolvedValue({ results: [SEATTLE] });
+        const onSubmit = vi.fn();
+
+        const container = document.createElement('div');
+        document.body.appendChild(container);
+        const root = ReactDOM.createRoot(container);
+        const Harness = () => {
+            const [place, setPlace] = React.useState<CoalitionPlace | null>({
+                kind: 'pin',
+                latitude: 0,
+                longitude: 0,
+            });
+            return (
+                <form onSubmit={onSubmit}>
+                    <PlacePicker value={place} onChange={setPlace} testId="p" />
+                </form>
+            );
+        };
+        act(() => {
+            root.render(<Harness />);
+        });
+        mountedRoots.push(root);
+
+        const field = container.querySelector('[data-testid="p-address"]') as HTMLInputElement;
+        await act(async () => setNativeValue(field, 'Seattle'));
+        await act(async () => {
+            field.dispatchEvent(
+                new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+            );
+        });
+        await act(async () => {
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+
+        expect(geocodeAddress).toHaveBeenCalledWith('Seattle');
+        expect(onSubmit).not.toHaveBeenCalled();
+    });
+
+    it('clears the results once one is chosen', async () => {
+        geocodeAddress.mockResolvedValue({ results: [SEATTLE] });
+        const { container } = render();
+        await click(container, 'p-mode-pin');
+        await searchFor(container, 'Seattle');
+        await act(async () =>
+            (
+                container.querySelector('[data-testid="p-address-result"]') as HTMLButtonElement
+            ).click()
+        );
+
+        expect(container.querySelector('[data-testid="p-address-results"]')).toBeNull();
     });
 });
 

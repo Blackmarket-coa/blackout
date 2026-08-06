@@ -8,6 +8,7 @@ import type {
     CoalitionRing,
     CoalitionNeed,
     CoalitionPlace,
+    GeocodeResult,
     CoalitionProject,
     CoalitionResource,
     EndowedProgressFraming,
@@ -285,6 +286,28 @@ export function updateCoalitionTaskStatus(
 
 export interface NeedsResponse {
     needs: CoalitionNeed[];
+}
+
+export interface GeocodeResponse {
+    results: GeocodeResult[];
+}
+
+/**
+ * Search an address against the operator's geocoder, via the API.
+ *
+ * Proxied rather than called from the browser: the shipped CSP pins
+ * `connect-src` to self/API/Matrix, and a direct call would hand the geocoder
+ * each user's IP alongside the address they typed. Rejects with the API's
+ * message — a 503 means the operator has not configured one.
+ */
+export function geocodeAddress(
+    query: string,
+    token: string | null = readBlackoutApiToken()
+): Promise<GeocodeResponse> {
+    return getJson<GeocodeResponse>(
+        `${COALITION_BASE}/geocode?q=${encodeURIComponent(query)}`,
+        token
+    );
 }
 
 export interface CreateNeedInput {

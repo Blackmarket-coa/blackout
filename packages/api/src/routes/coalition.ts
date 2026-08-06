@@ -116,8 +116,24 @@ import { db } from '../db/store';
 import { matrixClient } from '../integrations/matrix-client';
 import { readJsonBody } from '../middleware/validate';
 import { getAuthUser, requireUser } from '../middleware/require-user';
+import { createRateLimit } from '../middleware/rate-limit';
+import { geocode } from '../services/geocoder';
 
 const coalition = new Hono();
+
+/**
+ * Address lookup is rate limited per account, not per IP.
+ *
+ * A geocoder is expensive per query and a self-hosted Nominatim asks callers to
+ * be sparing. The proxy is the only caller it sees, so this limit is the only
+ * thing standing between one impatient composer and the operator's instance.
+ */
+const geocodeRateLimit = createRateLimit({
+    bucket: 'coalition-geocode',
+    windowMs: 60_000,
+    maxRequests: Number.parseInt(process.env.GEOCODE_RATE_LIMIT_MAX ?? '20', 10) || 20,
+    identify: (c) => (c.get('user') as { sub?: string } | undefined)?.sub ?? undefined,
+});
 
 const feedQuerySchema = z.object({
     canopyId: z.string().optional(),
@@ -551,6 +567,49 @@ const placePatchSchema = placeSchema.nullable().optional();
 /** `null` from the wire means "clear it", which the record models as absent. */
 const applyPlacePatch = (place: z.infer<typeof placePatchSchema>) =>
     place === undefined ? {} : { place: place ?? undefined };
+
+// --- address lookup ---
+
+/**
+ * Search an operator-configured geocoder for an address.
+ *
+ * Proxied rather than called from the browser: the shipped CSP pins
+ * `connect-src` to self/API/Matrix, and a direct call would also hand the
+ * geocoder each user's IP alongside the address they typed. See
+ * `services/geocoder.ts`; the same reasoning as the Tenor proxy.
+ *
+ * 503 when unconfigured. There is no default provider, so an operator who has
+ * not chosen one sends nothing anywhere.
+ */
+coalition.get('/geocode', geocodeRateLimit, async (c) => {
+    const user = requireUser(c, 'Sign in to search for an address');
+    if (user instanceof Response) return user;
+
+    const query = (c.req.query('q') ?? '').trim();
+    if (query.length < 3) {
+        return c.json(
+            { code: 'bad_request', message: 'Enter at least 3 characters to search.' },
+            400
+        );
+    }
+    if (query.length > 300) {
+        return c.json({ code: 'bad_request', message: 'Search text is too long.' }, 400);
+    }
+
+    const outcome = await geocode(query);
+    if (!outcome.ok) {
+        return outcome.code === 'disabled'
+            ? c.json(
+                  {
+                      code: 'geocoder_disabled',
+                      message: 'Address search is not set up on this server.',
+                  },
+                  503
+              )
+            : c.json({ code: 'upstream_error', message: outcome.message }, 502);
+    }
+    return c.json({ results: outcome.results });
+});
 
 // --- Coalition Needs Board ---
 

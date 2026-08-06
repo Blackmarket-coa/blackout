@@ -157,6 +157,37 @@ export function circleRingCoordinates(
     return ring;
 }
 
+/**
+ * One candidate from an address lookup.
+ *
+ * Geocoding is proxied by the API against an operator-configured service, so
+ * this is the narrow shape both ends agree on — deliberately not a passthrough
+ * of any provider's schema, which would leak that choice into the client and
+ * into whatever gets stored.
+ */
+export interface GeocodeResult {
+    /** What to show in the results list, e.g. "Elm St, Seattle, WA". */
+    label: string;
+    latitude: number;
+    longitude: number;
+}
+
+/**
+ * A chosen search result becomes a pin.
+ *
+ * A pin rather than an area, because a geocoder answers "where is this
+ * address", which is a point. Widening it to a service radius is a separate
+ * statement only the person placing it can make.
+ */
+export function geocodeResultToPlace(result: GeocodeResult): PinPlace {
+    return {
+        kind: 'pin',
+        latitude: result.latitude,
+        longitude: result.longitude,
+        label: result.label,
+    };
+}
+
 /** Human-readable radius: "800 m", "5 km", "12.5 km". */
 export function formatRadius(radiusMeters: number): string {
     if (radiusMeters < 1000) return `${Math.round(radiusMeters)} m`;
