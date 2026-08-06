@@ -94,6 +94,7 @@ import {
     createEntry,
     getChallenge,
     getEntry,
+    linkEntryDiscussionDen,
     listChallenges,
     listRankedEntries,
     newChallengeId,
@@ -631,6 +632,27 @@ coliseum.post('/challenges/entries/:entryId/vote', (c) => {
     if (!entry) return c.json({ code: 'not_found', message: 'Entry not found' }, 404);
     voteForEntry(entry.id, user.sub);
     return c.json({ entries: listRankedEntries(entry.challengeId) });
+});
+
+/**
+ * Attach the canopy den backing a challenge entry's discussion.
+ *
+ * Same lazy, client-created, first-writer-wins contract as
+ * `POST /topics/:id/den` — the API has no Matrix identity for the user, and a
+ * den per entry created eagerly would bury a canopy's channel list.
+ */
+coliseum.post('/challenges/entries/:entryId/den', topicRateLimit, async (c) => {
+    const user = requireUser(c, 'Sign in to start a discussion');
+    if (user instanceof Response) return user;
+    const parsed = await readJsonBody(c, linkDenSchema);
+    if (parsed instanceof Response) return parsed;
+
+    const entryId = c.req.param('entryId');
+    const result = entryId ? linkEntryDiscussionDen(entryId, parsed.denRoomId) : null;
+    if (!result) {
+        return c.json({ code: 'not_found', message: 'Entry not found' }, 404);
+    }
+    return c.json({ entry: result.entry, created: result.created }, result.created ? 201 : 200);
 });
 
 // --- leaderboards ---

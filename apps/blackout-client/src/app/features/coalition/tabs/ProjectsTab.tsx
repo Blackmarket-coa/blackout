@@ -2,10 +2,13 @@ import React, { useCallback, useState, type CSSProperties } from 'react';
 import {
     PROJECT_STATUSES,
     SUGGESTED_PROJECT_CATEGORIES,
+    describePlace,
+    type CoalitionPlace,
     type ProjectStatus,
 } from '@blackout/core';
 import { useCoalitionProjects, type CoalitionScopeQuery } from '../hooks/useCoalitionFeed';
 import { createCoalitionProject, updateCoalitionProjectStatus } from '../coalitionClient';
+import { PlacePicker } from '../map/PlacePicker';
 
 export interface ProjectsTabProps {
     scope: CoalitionScopeQuery;
@@ -78,6 +81,7 @@ export function ProjectsTab({ scope }: ProjectsTabProps) {
     const { data, loading, error, refetch } = useCoalitionProjects(scope);
     const [title, setTitle] = useState('');
     const [category, setCategory] = useState<string>(SUGGESTED_PROJECT_CATEGORIES[0]);
+    const [place, setPlace] = useState<CoalitionPlace | null>(null);
     const [pending, setPending] = useState(false);
 
     const onAdd = useCallback(
@@ -87,14 +91,20 @@ export function ProjectsTab({ scope }: ProjectsTabProps) {
             if (!trimmed || !scope.canopyId || pending) return;
             setPending(true);
             try {
-                await createCoalitionProject({ canopyId: scope.canopyId, title: trimmed, category });
+                await createCoalitionProject({
+                    canopyId: scope.canopyId,
+                    title: trimmed,
+                    category,
+                    place: place ?? undefined,
+                });
                 setTitle('');
+                setPlace(null);
                 refetch();
             } finally {
                 setPending(false);
             }
         },
-        [title, category, scope.canopyId, pending, refetch],
+        [title, category, place, scope.canopyId, pending, refetch]
     );
 
     const onStatus = useCallback(
@@ -102,7 +112,7 @@ export function ProjectsTab({ scope }: ProjectsTabProps) {
             await updateCoalitionProjectStatus(id, status);
             refetch();
         },
-        [refetch],
+        [refetch]
     );
 
     if (!scope.canopyId) {
@@ -117,40 +127,56 @@ export function ProjectsTab({ scope }: ProjectsTabProps) {
 
     return (
         <div style={containerStyle} data-testid="coalition-projects">
-            <form onSubmit={onAdd} style={{ display: 'flex', gap: 8 }} data-testid="coalition-project-composer">
-                <select
-                    value={category}
-                    onChange={(event) => setCategory(event.target.value)}
-                    style={selectStyle}
-                    aria-label="Project category"
-                >
-                    {SUGGESTED_PROJECT_CATEGORIES.map((c) => (
-                        <option key={c} value={c}>
-                            {CATEGORY_LABEL[c] ?? c}
-                        </option>
-                    ))}
-                </select>
-                <input
-                    value={title}
-                    onChange={(event) => setTitle(event.target.value)}
-                    placeholder="Launch a project…"
-                    data-testid="coalition-project-input"
-                    style={inputStyle}
+            <form
+                onSubmit={onAdd}
+                style={{ display: 'flex', flexDirection: 'column', gap: 8 }}
+                data-testid="coalition-project-composer"
+            >
+                <div style={{ display: 'flex', gap: 8 }}>
+                    <select
+                        value={category}
+                        onChange={(event) => setCategory(event.target.value)}
+                        style={selectStyle}
+                        aria-label="Project category"
+                    >
+                        {SUGGESTED_PROJECT_CATEGORIES.map((c) => (
+                            <option key={c} value={c}>
+                                {CATEGORY_LABEL[c] ?? c}
+                            </option>
+                        ))}
+                    </select>
+                    <input
+                        value={title}
+                        onChange={(event) => setTitle(event.target.value)}
+                        placeholder="Launch a project…"
+                        data-testid="coalition-project-input"
+                        style={inputStyle}
+                    />
+                    <button
+                        type="submit"
+                        disabled={pending || title.trim().length === 0}
+                        style={{
+                            padding: '8px 14px',
+                            borderRadius: 8,
+                            border: '1px solid var(--accent-primary, #1ABC9C)',
+                            background: 'var(--accent-primary, #1ABC9C)',
+                            color: '#fff',
+                            cursor: pending ? 'progress' : 'pointer',
+                        }}
+                    >
+                        Launch
+                    </button>
+                </div>
+                {/*
+                 * A community garden is an address; a mutual-aid route or an
+                 * open-source build is an area, or nowhere. All three are valid.
+                 */}
+                <PlacePicker
+                    value={place}
+                    onChange={setPlace}
+                    label="Where?"
+                    testId="coalition-project-place"
                 />
-                <button
-                    type="submit"
-                    disabled={pending || title.trim().length === 0}
-                    style={{
-                        padding: '8px 14px',
-                        borderRadius: 8,
-                        border: '1px solid var(--accent-primary, #1ABC9C)',
-                        background: 'var(--accent-primary, #1ABC9C)',
-                        color: '#fff',
-                        cursor: pending ? 'progress' : 'pointer',
-                    }}
-                >
-                    Launch
-                </button>
             </form>
 
             {error ? (
@@ -158,7 +184,9 @@ export function ProjectsTab({ scope }: ProjectsTabProps) {
                     Couldn't load projects: {error}
                 </div>
             ) : null}
-            {loading && !data ? <div style={{ color: 'var(--text-secondary)' }}>Loading…</div> : null}
+            {loading && !data ? (
+                <div style={{ color: 'var(--text-secondary)' }}>Loading…</div>
+            ) : null}
             {!loading && projects.length === 0 ? (
                 <div style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
                     No projects yet. Launch your coalition's first initiative.
@@ -173,10 +201,23 @@ export function ProjectsTab({ scope }: ProjectsTabProps) {
                     data-project-id={project.id}
                 >
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={badgeStyle}>{CATEGORY_LABEL[project.category] ?? project.category}</span>
-                        <span style={{ fontSize: 14, fontWeight: 600, flex: 1 }}>{project.title}</span>
+                        <span style={badgeStyle}>
+                            {CATEGORY_LABEL[project.category] ?? project.category}
+                        </span>
+                        <span style={{ fontSize: 14, fontWeight: 600, flex: 1 }}>
+                            {project.title}
+                        </span>
                         <span style={badgeStyle}>{STATUS_LABEL[project.status]}</span>
                     </div>
+                    {project.place ? (
+                        <span
+                            style={{ fontSize: 12, color: 'var(--text-secondary)' }}
+                            data-testid="coalition-project-place-line"
+                        >
+                            {project.place.kind === 'area' ? '◎' : '📍'}{' '}
+                            {describePlace(project.place)}
+                        </span>
+                    ) : null}
                     {project.description ? (
                         <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0 }}>
                             {project.description}
@@ -184,7 +225,9 @@ export function ProjectsTab({ scope }: ProjectsTabProps) {
                     ) : null}
                     <select
                         value={project.status}
-                        onChange={(event) => onStatus(project.id, event.target.value as ProjectStatus)}
+                        onChange={(event) =>
+                            onStatus(project.id, event.target.value as ProjectStatus)
+                        }
                         style={{ ...selectStyle, alignSelf: 'flex-start' }}
                         aria-label="Update project status"
                     >

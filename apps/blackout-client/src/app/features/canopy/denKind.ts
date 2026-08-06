@@ -141,6 +141,25 @@ export const createDenInCanopy = async (
 };
 
 /**
+ * Machine-readable marker for a category, following the `co.bmc.den.kind`
+ * pattern. Without it a category is identifiable only by
+ * `getType() === 'm.space'` plus its display name, and matching "the Topics
+ * category" by name is fragile — names are user-editable, localizable, and
+ * collide with any hand-made category someone happens to call Topics.
+ */
+export const CATEGORY_STATE_EVENT_TYPE = 'co.bmc.category';
+
+/**
+ * What an auto-created category is *for*. Stable across renames, unlike the
+ * display name. Hand-made categories carry no purpose.
+ */
+export type CategoryPurpose = 'topics';
+
+export interface CategoryContent {
+    purpose?: CategoryPurpose;
+}
+
+/**
  * Create a category inside a canopy. A category is a Matrix **sub-space**
  * (`type: 'm.space'`) linked to the canopy via the same `m.space.parent` /
  * `m.space.child` edges as a den — `buildSpaceGroups` already renders any child
@@ -150,7 +169,12 @@ export const createDenInCanopy = async (
  */
 export const createCategoryInCanopy = async (
     mx: MatrixClient,
-    { canopyId, name }: { canopyId: string; name: string }
+    {
+        canopyId,
+        name,
+        purpose,
+        order,
+    }: { canopyId: string; name: string; purpose?: CategoryPurpose; order?: string }
 ): Promise<string> => {
     const via = localDomain(mx);
     const { room_id: roomId } = await mx.createRoom({
@@ -159,9 +183,68 @@ export const createCategoryInCanopy = async (
         // Match the canopy's own space convention: only moderators add channels.
         power_level_content_override: { events_default: 50 },
     });
+    if (purpose) {
+        await mx.sendStateEvent(roomId, CATEGORY_STATE_EVENT_TYPE as any, { purpose }, '');
+    }
     await mx.sendStateEvent(roomId, 'm.space.parent' as any, { via, canonical: true }, canopyId);
-    await mx.sendStateEvent(canopyId, 'm.space.child' as any, { via, suggested: true }, roomId);
+    await mx.sendStateEvent(
+        canopyId,
+        'm.space.child' as any,
+        order ? { via, suggested: true, order } : { via, suggested: true },
+        roomId
+    );
     return roomId;
+};
+
+/** The purpose stamped on a category room, if any. */
+export const readCategoryPurpose = (room: Room | undefined): CategoryPurpose | null => {
+    if (!room || room.getType() !== 'm.space') return null;
+    const content = room.currentState
+        ?.getStateEvents(CATEGORY_STATE_EVENT_TYPE, '')
+        ?.getContent<CategoryContent>();
+    return content?.purpose === 'topics' ? 'topics' : null;
+};
+
+/**
+ * `getOrderedChildIds` gives an unordered child the literal `'zzz'`, so this
+ * sorts an auto-created category *after* every hand-made channel that has no
+ * explicit order. Deliberate: a category the app made on someone's behalf
+ * should not outrank the channels they built themselves.
+ */
+export const AUTO_CATEGORY_ORDER = 'zzzz';
+
+const TOPICS_CATEGORY_NAME = 'Topics';
+
+/**
+ * Find the canopy's category for `purpose`, creating it if absent.
+ *
+ * Matching is on the `co.bmc.category` marker, never on the display name — a
+ * renamed category still holds its dens, and a hand-made category that happens
+ * to be called "Topics" is left alone.
+ *
+ * First-writer-wins is *not* enforced here: two clients racing can each mint a
+ * category. That is a cosmetic duplicate in the channel list, unlike two rival
+ * discussion dens, and resolving it would need a lock the client does not have.
+ * Both categories work; the loser simply holds one den.
+ */
+export const findOrCreateCategory = async (
+    mx: MatrixClient,
+    { canopyId, purpose }: { canopyId: string; purpose: CategoryPurpose }
+): Promise<string> => {
+    const childIds = (mx.getRoom(canopyId)?.currentState.getStateEvents('m.space.child') ?? [])
+        .map((event) => event.getStateKey())
+        .filter((childId): childId is string => Boolean(childId));
+    const existing = childIds.find(
+        (childId) => readCategoryPurpose(mx.getRoom(childId) ?? undefined) === purpose
+    );
+    if (existing) return existing;
+
+    return createCategoryInCanopy(mx, {
+        canopyId,
+        name: TOPICS_CATEGORY_NAME,
+        purpose,
+        order: AUTO_CATEGORY_ORDER,
+    });
 };
 
 /**

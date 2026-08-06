@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import maplibregl, { type LngLatLike, type StyleSpecification } from 'maplibre-gl';
+import { circleRingCoordinates } from '@blackout/core';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { buildCommunitiesPath } from '../../../pages/paths';
 import {
@@ -27,6 +28,11 @@ export interface CoalitionMapPin {
     status?: 'upcoming' | 'live' | 'past';
     /** Activity-heat weight (0..1); feeds the heat overlay and the pulse threshold. */
     heat?: number;
+    /**
+     * Area of operations, in metres. Present means the coordinates are a centre
+     * and this radius is the claim; the pin is drawn with a circle around it.
+     */
+    radiusMeters?: number;
 }
 
 /** Map padding (px) reserved for the overlays floating above the canvas. */
@@ -54,6 +60,9 @@ export interface CoalitionMapProps {
 
 const HEAT_SOURCE_ID = 'coalition-heat';
 const HEAT_LAYER_ID = 'coalition-heat-layer';
+const AREA_SOURCE_ID = 'coalition-areas';
+const AREA_FILL_LAYER_ID = 'coalition-areas-fill';
+const AREA_LINE_LAYER_ID = 'coalition-areas-line';
 const PULSE_STYLE_ID = 'coalition-pulse-keyframes';
 /** Pins at or above this heat radiate the ambient pulse even when not live. */
 const PULSE_HEAT_THRESHOLD = 0.7;
@@ -177,6 +186,40 @@ function isPinPulsing(pin: CoalitionMapPin): boolean {
     return pin.status === 'live' || (pin.heat ?? 0) >= PULSE_HEAT_THRESHOLD;
 }
 
+/**
+ * Build a GeoJSON FeatureCollection of the areas of operation among these pins.
+ *
+ * Each is a real polygon rather than a MapLibre `circle` layer, because that
+ * layer's radius is in *screen pixels* — it would keep its size as you zoom and
+ * stop describing any distance on the ground. A polygon lives in map
+ * coordinates, so a 5km area stays 5km at every zoom.
+ */
+function areaGeoJson(pins: CoalitionMapPin[]) {
+    return {
+        type: 'FeatureCollection' as const,
+        features: pins
+            .filter(
+                (pin) =>
+                    Number.isFinite(pin.latitude) &&
+                    Number.isFinite(pin.longitude) &&
+                    (pin.radiusMeters ?? 0) > 0
+            )
+            .map((pin) => ({
+                type: 'Feature' as const,
+                properties: { color: layerStyleFor(pin.layer).color },
+                geometry: {
+                    type: 'Polygon' as const,
+                    coordinates: [
+                        circleRingCoordinates(
+                            { latitude: pin.latitude, longitude: pin.longitude },
+                            pin.radiusMeters as number
+                        ),
+                    ],
+                },
+            })),
+    };
+}
+
 /** Build a GeoJSON FeatureCollection of geocoded pins weighted by heat. */
 function heatGeoJson(pins: CoalitionMapPin[]) {
     return {
@@ -264,6 +307,17 @@ export function CoalitionMap({
             const marker = new maplibregl.Marker({ element: el }).setLngLat(coords).addTo(map);
             markersRef.current.push(marker);
             bounds.extend(coords);
+            // Frame the whole area, not just its centre — fitting to the centre
+            // of a 25km radius crops most of what the pin is claiming.
+            if ((pin.radiusMeters ?? 0) > 0) {
+                for (const ring of circleRingCoordinates(
+                    { latitude: pin.latitude, longitude: pin.longitude },
+                    pin.radiusMeters as number,
+                    8
+                )) {
+                    bounds.extend(ring);
+                }
+            }
             plotted += 1;
         }
 
@@ -333,6 +387,63 @@ export function CoalitionMap({
 
         return closePopup;
     }, [focusPinId, pins]);
+
+    /**
+     * Areas of operation, drawn under the markers.
+     *
+     * A need, project or resource can say "somewhere in this radius" rather than
+     * "at this address" — a crew covering the north side, a delivery range, a
+     * mobile tool library. Without the circle the pin lies: it looks like a
+     * doorstep.
+     */
+    useEffect(() => {
+        const map = mapRef.current;
+        if (!map) return undefined;
+
+        const apply = () => {
+            if (typeof map.isStyleLoaded === 'function' && !map.isStyleLoaded()) return;
+            const data = areaGeoJson(pins);
+            const existing = map.getSource(AREA_SOURCE_ID) as
+                | { setData?: (value: unknown) => void }
+                | undefined;
+            if (data.features.length === 0) {
+                if (map.getLayer?.(AREA_LINE_LAYER_ID)) map.removeLayer(AREA_LINE_LAYER_ID);
+                if (map.getLayer?.(AREA_FILL_LAYER_ID)) map.removeLayer(AREA_FILL_LAYER_ID);
+                if (existing) map.removeSource(AREA_SOURCE_ID);
+                return;
+            }
+            if (existing?.setData) {
+                existing.setData(data);
+                return;
+            }
+            map.addSource(AREA_SOURCE_ID, { type: 'geojson', data } as never);
+            map.addLayer({
+                id: AREA_FILL_LAYER_ID,
+                type: 'fill',
+                source: AREA_SOURCE_ID,
+                // Faint enough that overlapping areas stay readable — coverage
+                // gaps and hand-offs are exactly what someone reads this for.
+                paint: { 'fill-color': ['get', 'color'], 'fill-opacity': 0.12 },
+            } as never);
+            map.addLayer({
+                id: AREA_LINE_LAYER_ID,
+                type: 'line',
+                source: AREA_SOURCE_ID,
+                paint: {
+                    'line-color': ['get', 'color'],
+                    'line-width': 1.5,
+                    'line-opacity': 0.6,
+                    'line-dasharray': [2, 2],
+                },
+            } as never);
+        };
+
+        if (readyRef.current) apply();
+        else map.on('load', apply);
+        return () => {
+            map.off?.('load', apply);
+        };
+    }, [pins]);
 
     // Activity-heat overlay: a native MapLibre heatmap weighted by each pin's heat.
     useEffect(() => {

@@ -10,15 +10,17 @@ export const SPATIAL_LAYER_DEFINITIONS = [
     { key: 'dens', label: 'Dens', aliases: ['dens', 'den'] },
     { key: 'streams', label: 'Streams', aliases: ['streams', 'stream', 'livestreams'] },
     { key: 'projects', label: 'Projects', aliases: ['projects', 'project'] },
+    { key: 'needs', label: 'Needs', aliases: ['needs', 'need'] },
+    { key: 'resources', label: 'Resources', aliases: ['resources', 'resource'] },
     { key: 'communities', label: 'Communities', aliases: ['communities', 'community', 'canopies'] },
     { key: 'mycelium', label: 'Federation', aliases: ['mycelium', 'federation', 'constellation'] },
 ] as const;
 
-export type SpatialLayerKey = (typeof SPATIAL_LAYER_DEFINITIONS)[number]['key'];
-export type SpatialLayerLabel = (typeof SPATIAL_LAYER_DEFINITIONS)[number]['label'];
+export type SpatialLayerKey = typeof SPATIAL_LAYER_DEFINITIONS[number]['key'];
+export type SpatialLayerLabel = typeof SPATIAL_LAYER_DEFINITIONS[number]['label'];
 
 export const SPATIAL_LAYER_KEYS: SpatialLayerKey[] = SPATIAL_LAYER_DEFINITIONS.map(
-    (definition) => definition.key,
+    (definition) => definition.key
 );
 
 const ALIAS_MAP: Record<string, SpatialLayerKey> = (() => {
@@ -53,4 +55,4 @@ export const SPATIAL_EVENT_CATEGORIES = [
     { key: 'mass_shooting', label: 'Mass Shooting Alerts' },
 ] as const;
 
-export type SpatialEventCategoryKey = (typeof SPATIAL_EVENT_CATEGORIES)[number]['key'];
+export type SpatialEventCategoryKey = typeof SPATIAL_EVENT_CATEGORIES[number]['key'];

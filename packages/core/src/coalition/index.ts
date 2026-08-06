@@ -4,6 +4,7 @@ export * from './feed';
 export * from './support';
 export * from './mutualAid';
 export * from './sellerLocation';
+export * from './place';
 export * from './tasks';
 export * from './needs';
 export * from './projects';

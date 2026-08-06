@@ -31,111 +31,188 @@ import { expect, test, type Page } from '@playwright/test';
 const requiresSeededColiseum = test.extend({});
 
 requiresSeededColiseum.beforeEach(async ({}, testInfo) => {
-  if (!process.env.BLACKOUT_E2E_BASE_URL && !process.env.CI) {
-    testInfo.skip(true, 'BLACKOUT_E2E_BASE_URL not set — skipping live-stack E2E.');
-  }
-  if (!process.env.LS_COLISEUM_ROOM_ALIAS) {
-    testInfo.skip(
-      true,
-      'LS_COLISEUM_ROOM_ALIAS not set — Coliseum Coalition not seeded yet (launch prep B6).',
-    );
-  }
+    if (!process.env.BLACKOUT_E2E_BASE_URL && !process.env.CI) {
+        testInfo.skip(true, 'BLACKOUT_E2E_BASE_URL not set — skipping live-stack E2E.');
+    }
+    if (!process.env.LS_COLISEUM_ROOM_ALIAS) {
+        testInfo.skip(
+            true,
+            'LS_COLISEUM_ROOM_ALIAS not set — Coliseum Coalition not seeded yet (launch prep B6).'
+        );
+    }
 });
 
 async function loginAs(page: Page, username: string, password: string) {
-  await page.goto('/');
-  await page.getByLabel(/username/i).fill(username);
-  await page.getByLabel(/password/i).fill(password);
-  await page.getByRole('button', { name: /sign in|log in/i }).click();
-  await expect(page).not.toHaveURL(/\/login/i, { timeout: 20_000 });
+    await page.goto('/');
+    await page.getByLabel(/username/i).fill(username);
+    await page.getByLabel(/password/i).fill(password);
+    await page.getByRole('button', { name: /sign in|log in/i }).click();
+    await expect(page).not.toHaveURL(/\/login/i, { timeout: 20_000 });
 }
 
 async function openColiseumCoalition(page: Page) {
-  const alias = process.env.LS_COLISEUM_ROOM_ALIAS ?? '';
-  // Join/open the Coliseum room by alias, then move to the Coalition surface.
-  await page.goto(`/#/room/${encodeURIComponent(alias)}`);
-  const joinButton = page.getByRole('button', { name: /^join/i }).first();
-  if (await joinButton.isVisible().catch(() => false)) {
-    await joinButton.click();
-  }
-  await page.goto('/#/coalition');
-  await expect(page.getByTestId('coalition-view')).toBeVisible({ timeout: 20_000 });
+    const alias = process.env.LS_COLISEUM_ROOM_ALIAS ?? '';
+    // Join/open the Coliseum room by alias, then move to the Coalition surface.
+    await page.goto(`/#/room/${encodeURIComponent(alias)}`);
+    const joinButton = page.getByRole('button', { name: /^join/i }).first();
+    if (await joinButton.isVisible().catch(() => false)) {
+        await joinButton.click();
+    }
+    await page.goto('/#/coalition');
+    await expect(page.getByTestId('coalition-view')).toBeVisible({ timeout: 20_000 });
 }
 
 requiresSeededColiseum(
-  'coliseum coalition: every enabled tab renders',
-  async ({ page }) => {
+    'coliseum coalition: every enabled tool opens from the bag',
+    async ({ page }) => {
+        await loginAs(
+            page,
+            process.env.LS_MEMBER_A_USERNAME ?? 'smoke_member_a',
+            process.env.LS_MEMBER_A_PASSWORD ?? 'change-me'
+        );
+        await openColiseumCoalition(page);
+
+        // Coalition is a map now: the twelve-tab strip is gone and everything that
+        // isn't a place lives in the tool bag. The bag renders exactly the enabled
+        // tools (falling back to the full set when the state event enables none),
+        // so walking its tiles is the same enabledTabs check the strip used to be.
+        await page.getByTestId('coalition-toolbag-button').click();
+        const tiles = page.locator('[data-coalition-tool]');
+        const count = await tiles.count();
+        expect(count).toBeGreaterThan(0);
+
+        for (let i = 0; i < count; i += 1) {
+            const id = await tiles.nth(i).getAttribute('data-coalition-tool');
+            await tiles.nth(i).click();
+            // The tool must stay mounted — one that crashes its panel takes the
+            // whole view with it.
+            await expect(
+                page.getByTestId(`coalition-tool-${id}`),
+                `tool "${id}" rendered`
+            ).toBeVisible();
+            await expect(
+                page.getByTestId('coalition-view'),
+                `coalition view survived opening tool "${id}"`
+            ).toBeVisible();
+            // Back to the bag for the next tile.
+            await page.getByTestId('coalition-tool-back').click();
+        }
+    }
+);
+
+requiresSeededColiseum('coliseum coalition: the legend fits and filters', async ({ page }) => {
     await loginAs(
-      page,
-      process.env.LS_MEMBER_A_USERNAME ?? 'smoke_member_a',
-      process.env.LS_MEMBER_A_PASSWORD ?? 'change-me',
+        page,
+        process.env.LS_MEMBER_A_USERNAME ?? 'smoke_member_a',
+        process.env.LS_MEMBER_A_PASSWORD ?? 'change-me'
     );
     await openColiseumCoalition(page);
 
-    // The strip renders exactly the enabled tabs (falls back to the full
-    // canonical set when the state event enables none), so walking the
-    // rendered [data-coalition-tab] buttons IS the enabledTabs check.
-    const tabs = page.locator('[data-coalition-tab]');
-    const count = await tabs.count();
-    expect(count).toBeGreaterThan(0);
+    // The legend replaced two absolutely-positioned filter rows that overlapped
+    // each other and ran off the right edge of a phone.
+    const toggle = page.getByTestId('coalition-legend-toggle');
+    await expect(toggle).toBeVisible();
 
-    for (let i = 0; i < count; i += 1) {
-      const tab = tabs.nth(i);
-      const id = await tab.getAttribute('data-coalition-tab');
-      await tab.click();
-      await expect(tab).toHaveAttribute('aria-selected', 'true');
-      // The surface must stay mounted after every activation — a tab that
-      // crashes its panel unmounts the whole view.
-      await expect(
-        page.getByTestId('coalition-view'),
-        `coalition view survived activating tab "${id}"`,
-      ).toBeVisible();
+    const box = await toggle.boundingBox();
+    const viewport = page.viewportSize();
+    if (box && viewport) {
+        expect(box.x + box.width).toBeLessThanOrEqual(viewport.width);
     }
-  },
+
+    await toggle.click();
+    await expect(page.getByTestId('coalition-legend')).toBeVisible();
+
+    const aid = page.getByTestId('coalition-legend-layer-aid');
+    await expect(aid).toHaveAttribute('aria-pressed', 'true');
+    await aid.click();
+    await expect(aid).toHaveAttribute('aria-pressed', 'false');
+    await expect(page.getByTestId('coalition-view')).toBeVisible();
+});
+
+/**
+ * A layer you switch off stays off.
+ *
+ * The legend's switches used to be component state, so hiding a layer lasted
+ * until you navigated away — and they only stopped pins being *drawn*, not
+ * fetched. Persistence is the half of that only a real browser can prove, since
+ * it rides on localStorage surviving a reload.
+ */
+requiresSeededColiseum('coliseum coalition: a hidden layer stays hidden', async ({ page }) => {
+    await loginAs(
+        page,
+        process.env.LS_MEMBER_A_USERNAME ?? 'smoke_member_a',
+        process.env.LS_MEMBER_A_PASSWORD ?? 'change-me'
+    );
+    await openColiseumCoalition(page);
+
+    await page.getByTestId('coalition-legend-toggle').click();
+    await page.getByTestId('coalition-legend-layer-aid').click();
+    await expect(page.getByTestId('coalition-legend-layer-aid')).toHaveAttribute(
+        'aria-pressed',
+        'false'
+    );
+
+    await page.reload();
+    await expect(page.getByTestId('coalition-view')).toBeVisible({ timeout: 20_000 });
+    await page.getByTestId('coalition-legend-toggle').click();
+    await expect(page.getByTestId('coalition-legend-layer-aid')).toHaveAttribute(
+        'aria-pressed',
+        'false'
+    );
+
+    // Everything else is untouched — hiding one layer must not blank the map.
+    await expect(page.getByTestId('coalition-legend-layer-events')).toHaveAttribute(
+        'aria-pressed',
+        'true'
+    );
+});
+
+requiresSeededColiseum(
+    'coliseum coalition: seeded mutual-aid post is visible',
+    async ({ page }) => {
+        await loginAs(
+            page,
+            process.env.LS_MEMBER_A_USERNAME ?? 'smoke_member_a',
+            process.env.LS_MEMBER_A_PASSWORD ?? 'change-me'
+        );
+        await openColiseumCoalition(page);
+
+        // Needs is reachable both ways now: placed needs are map pins, and the
+        // board itself is a tool in the bag — which is where a need with no
+        // location, and the composer, still live.
+        await page.getByTestId('coalition-toolbag-button').click();
+        await page.getByTestId('coalition-toolbag-tile-needs').click();
+        const cards = page.getByTestId('coalition-need-card');
+        await expect(cards.first()).toBeVisible({ timeout: 15_000 });
+
+        const seededText = process.env.LS_COLISEUM_MUTUAL_AID_TEXT;
+        if (seededText) {
+            await expect(page.getByText(seededText).first()).toBeVisible();
+        }
+    }
 );
 
 requiresSeededColiseum(
-  'coliseum coalition: seeded mutual-aid post is visible',
-  async ({ page }) => {
-    await loginAs(
-      page,
-      process.env.LS_MEMBER_A_USERNAME ?? 'smoke_member_a',
-      process.env.LS_MEMBER_A_PASSWORD ?? 'change-me',
-    );
-    await openColiseumCoalition(page);
+    'coliseum coalition: seeded governance proposal is visible',
+    async ({ page }) => {
+        await loginAs(
+            page,
+            process.env.LS_MEMBER_A_USERNAME ?? 'smoke_member_a',
+            process.env.LS_MEMBER_A_PASSWORD ?? 'change-me'
+        );
+        await openColiseumCoalition(page);
 
-    await page.locator('[data-coalition-tab="needs"]').click();
-    const cards = page.getByTestId('coalition-need-card');
-    await expect(cards.first()).toBeVisible({ timeout: 15_000 });
-
-    const seededText = process.env.LS_COLISEUM_MUTUAL_AID_TEXT;
-    if (seededText) {
-      await expect(page.getByText(seededText).first()).toBeVisible();
+        // Governance lives on its own surface; the seeded proposal must show
+        // up in the proposals list.
+        await page.goto('/#/governance');
+        const seededText = process.env.LS_COLISEUM_PROPOSAL_TEXT;
+        if (seededText) {
+            await expect(page.getByText(seededText).first()).toBeVisible({ timeout: 15_000 });
+        } else {
+            await expect(
+                page.getByText(/proposal/i).first(),
+                'governance surface renders at least one proposal reference'
+            ).toBeVisible({ timeout: 15_000 });
+        }
     }
-  },
-);
-
-requiresSeededColiseum(
-  'coliseum coalition: seeded governance proposal is visible',
-  async ({ page }) => {
-    await loginAs(
-      page,
-      process.env.LS_MEMBER_A_USERNAME ?? 'smoke_member_a',
-      process.env.LS_MEMBER_A_PASSWORD ?? 'change-me',
-    );
-    await openColiseumCoalition(page);
-
-    // Governance lives on its own surface; the seeded proposal must show
-    // up in the proposals list.
-    await page.goto('/#/governance');
-    const seededText = process.env.LS_COLISEUM_PROPOSAL_TEXT;
-    if (seededText) {
-      await expect(page.getByText(seededText).first()).toBeVisible({ timeout: 15_000 });
-    } else {
-      await expect(
-        page.getByText(/proposal/i).first(),
-        'governance surface renders at least one proposal reference',
-      ).toBeVisible({ timeout: 15_000 });
-    }
-  },
 );

@@ -1,4 +1,5 @@
 import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useAtom } from 'jotai';
 import {
     AID_POST_CATEGORIES,
     AID_POST_TYPES,
@@ -7,8 +8,14 @@ import {
     URGENCY_RANK,
     deriveSpatialEventStatus,
     haversineDistanceMeters,
+    normalizeSpatialLayerKey,
     spatialHeatWeight,
     type AidPost,
+    type CoalitionNeed,
+    type CoalitionPlace,
+    type CoalitionProject,
+    type CoalitionResource,
+    type CoalitionTabId,
     type SellerLocation,
     type SpatialEventStatus,
     type SpatialFeedItem,
@@ -17,6 +24,9 @@ import {
 import type { CoalitionFeedItem } from '@blackout/core';
 import {
     useCoalitionFeed,
+    useCoalitionNeeds,
+    useCoalitionProjects,
+    useCoalitionResources,
     useMutualAid,
     useSellerLocations,
     useSpatialFeed,
@@ -25,15 +35,17 @@ import {
 import { createCoalitionAidPost, type NearbyQuery } from '../coalitionClient';
 import { VideoReel, useVideoShare } from './VideoReel';
 import { VideoComposer } from '../composer/VideoComposer';
+import MapLegend from '../map/MapLegend';
+import PinActionSheet from '../map/PinActionSheet';
 import { listLocalVideos, localVideoVaultSupported } from '../../../../platform/localVideoVault';
-import {
-    buildLayerIconSvg,
-    layerStyleFor,
-    SOLARPUNK_CONTROL_ACTIVE,
-    SOLARPUNK_PANEL_GLOW,
-} from './solarpunkMap';
+import { layerStyleFor, SOLARPUNK_CONTROL_ACTIVE, SOLARPUNK_PANEL_GLOW } from './solarpunkMap';
 import { MyceliumLayer, useMyceliumGraph } from './mycelium';
-import { buildCommunitiesPath } from '../../../pages/paths';
+import {
+    coalitionMapHeatAtom,
+    coalitionMapLayersAtom,
+    coalitionMapRadiusKmAtom,
+    coalitionMapTimeModeAtom,
+} from '../../../state/coalition';
 import { useViewportWidth } from '../../../hooks/useViewportWidth';
 import { isMobileViewport } from '../../../pages/client/layoutMetrics';
 import { LocationConsentDialog } from '../../location/LocationConsentDialog';
@@ -41,30 +53,16 @@ import { coarsenCoordinate, useLocationConsentFlow } from '../../location/locati
 
 const CoalitionMap = React.lazy(() => import('./CoalitionMap'));
 
-/**
- * Renders a layer's solarpunk glyph inside a control pill, tying the toggle to
- * its map markers. Appends the static SVG via a ref (reusing the marker icon
- * builder) so we avoid dangerouslySetInnerHTML; stroke contrasts its surface.
- */
-function LayerGlyph({ layer, active }: { layer: string; active: boolean }) {
-    const ref = useRef<HTMLSpanElement>(null);
-    useEffect(() => {
-        const host = ref.current;
-        if (!host) return;
-        const style = layerStyleFor(layer);
-        host.replaceChildren(buildLayerIconSvg(style, active ? style.ink : style.color));
-    }, [layer, active]);
-    return (
-        <span
-            ref={ref}
-            aria-hidden="true"
-            style={{ display: 'inline-flex', marginRight: 5, verticalAlign: '-2px' }}
-        />
-    );
-}
+// The layer glyph moved to `../map/MapLegend`, which owns layer presentation now.
 
 export interface MapTabProps {
     scope: CoalitionScopeQuery;
+    /**
+     * Put a tool-bag board in the viewer's hand. Tapping a need, project or
+     * resource pin opens its board, where claiming, supporting and booking
+     * already live with their composers.
+     */
+    onOpenTool?: (tool: CoalitionTabId) => void;
 }
 
 interface PinDetails {
@@ -81,20 +79,37 @@ interface PinDetails {
     startsAt?: string;
     /** Present on `video` pins — tapping the pin opens the story reel (Snap Map style). */
     mediaUrl?: string;
+    /**
+     * Area of operations, in metres. Absent means the pin is an address; present
+     * means the coordinates are a centre and this is the actual claim, drawn on
+     * the map as a circle.
+     */
+    radiusMeters?: number;
 }
 
+// The selectable labels live with the legend that renders them (`MAP_TIME_MODES`).
 type TemporalMode = 'now' | 'today' | 'week' | 'all';
-
-const TEMPORAL_FILTERS: ReadonlyArray<{ key: TemporalMode; label: string }> = [
-    { key: 'now', label: 'Now' },
-    { key: 'today', label: 'Today' },
-    { key: 'week', label: 'This week' },
-    { key: 'all', label: 'All' },
-];
 
 const RADIUS_OPTIONS_KM = [1, 5, 25] as const;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * How far a viewer is from the *nearest part* of a pin, in metres.
+ *
+ * For an address this is just the distance to it. For an area of operations it
+ * is the distance to the edge of the circle, and zero when the viewer is inside
+ * — which is the whole point of drawing one. Measuring an area from its centre
+ * would rank a crew that covers your street below a pin two blocks away, and
+ * would hide a 20km-radius group whose centre sits outside your search.
+ */
+function edgeDistance(pin: PinDetails, viewer: { latitude: number; longitude: number }): number {
+    const separation = haversineDistanceMeters(
+        { latitude: pin.latitude, longitude: pin.longitude },
+        viewer
+    );
+    return Math.max(0, separation - (pin.radiusMeters ?? 0));
+}
 
 /**
  * Whether a pin belongs in the selected time window. Standing pins (no
@@ -295,10 +310,10 @@ function AidPostForm({
     );
 }
 
-export function MapTab({ scope }: MapTabProps) {
-    const [activeLayers, setActiveLayers] = useState<Set<SpatialLayerKey>>(
-        () => new Set(SPATIAL_LAYER_DEFINITIONS.map((definition) => definition.key))
-    );
+export function MapTab({ scope, onOpenTool }: MapTabProps) {
+    // Persisted: a layer you switch off stays off across visits. See
+    // `state/coalition.ts` for the read-time guards.
+    const [activeLayers, setActiveLayers] = useAtom(coalitionMapLayersAtom);
     const [selectedPin, setSelectedPin] = useState<PinDetails | null>(null);
     const [nearby, setNearby] = useState<NearbyQuery | undefined>(undefined);
     const [nearbyError, setNearbyError] = useState<string | null>(null);
@@ -306,10 +321,15 @@ export function MapTab({ scope }: MapTabProps) {
     // disclosure opens and we locate them only once they confirm.
     const [locatePending, setLocatePending] = useState(false);
     const locationConsent = useLocationConsentFlow();
-    const [temporalMode, setTemporalMode] = useState<TemporalMode>('all');
-    const [radiusKm, setRadiusKm] = useState<number>(5);
-    const [showHeat, setShowHeat] = useState(false);
+    const [temporalMode, setTemporalMode] = useAtom(coalitionMapTimeModeAtom);
+    const [radiusKm, setRadiusKm] = useAtom(coalitionMapRadiusKmAtom);
+    const [showHeat, setShowHeat] = useAtom(coalitionMapHeatAtom);
     const [showAidForm, setShowAidForm] = useState(false);
+    // Legend starts closed on a phone, where an open panel would cover the map
+    // it is meant to explain; open on desktop, where there is room for both.
+    const [legendOpen, setLegendOpen] = useState<boolean>(
+        () => !isMobileViewport(typeof window === 'undefined' ? 1280 : window.innerWidth)
+    );
     const viewportWidth = useViewportWidth();
     const mobile = isMobileViewport(viewportWidth);
     // Results list starts collapsed on phones, where it would otherwise cover the map.
@@ -362,10 +382,24 @@ export function MapTab({ scope }: MapTabProps) {
     );
 
     const layersArray = useMemo(() => [...activeLayers], [activeLayers]);
+
+    /*
+     * Every source is gated on its own legend switch.
+     *
+     * Only the spatial feed used to be — the rest loaded whether or not their
+     * layer was showing, so hiding one stopped it being drawn but not fetched.
+     * A toggle that still pays for the thing it hides is a filter, not a
+     * toggle.
+     */
     const spatialState = useSpatialFeed(scope, layersArray);
-    const aidState = useMutualAid(scope, nearby);
-    const sellerState = useSellerLocations(nearby);
-    const videoState = useCoalitionFeed(scope, { kind: 'video', limit: 20 });
+    const aidState = useMutualAid(scope, nearby, activeLayers.has('aid'));
+    const sellerState = useSellerLocations(nearby, activeLayers.has('vendors'));
+    const videosVisible = activeLayers.has('video');
+    const videoState = useCoalitionFeed(scope, {
+        kind: 'video',
+        limit: 20,
+        enabled: videosVisible,
+    });
 
     // Only geo-tagged videos belong on the map; others stay in the standalone reel.
     const videoItems = useMemo<CoalitionFeedItem[]>(
@@ -375,7 +409,12 @@ export function MapTab({ scope }: MapTabProps) {
             ),
         [videoState.data]
     );
-    const videosVisible = activeLayers.has('video');
+    // Needs, projects and resources are canopy-scoped boards, not spatial-feed
+    // layers, so they are fetched from their own endpoints and merged in — the
+    // same shape aid, sellers and stories already take.
+    const needsState = useCoalitionNeeds(scope, activeLayers.has('needs'));
+    const projectsState = useCoalitionProjects(scope, activeLayers.has('projects'));
+    const resourcesState = useCoalitionResources(scope, activeLayers.has('resources'));
 
     const requestNearby = (km: number) => {
         if (!navigator.geolocation) {
@@ -433,13 +472,25 @@ export function MapTab({ scope }: MapTabProps) {
 
     const allPins = useMemo(
         () =>
-            pinList(
-                spatialState.data?.items ?? [],
-                aidState.data?.posts ?? [],
-                sellerState.data?.locations ?? [],
-                videosVisible ? videoItems : []
-            ),
-        [spatialState.data, aidState.data, sellerState.data, videosVisible, videoItems]
+            pinList({
+                spatial: spatialState.data?.items ?? [],
+                aid: aidState.data?.posts ?? [],
+                sellers: sellerState.data?.locations ?? [],
+                videos: videosVisible ? videoItems : [],
+                needs: needsState.data?.needs ?? [],
+                projects: projectsState.data?.projects ?? [],
+                resources: resourcesState.data?.resources ?? [],
+            }),
+        [
+            spatialState.data,
+            aidState.data,
+            sellerState.data,
+            videosVisible,
+            videoItems,
+            needsState.data,
+            projectsState.data,
+            resourcesState.data,
+        ]
     );
 
     // Apply the temporal window, then (when "Near me" is active) sort by distance.
@@ -448,17 +499,7 @@ export function MapTab({ scope }: MapTabProps) {
         const filtered = allPins.filter((pin) => passesTemporal(pin, temporalMode, nowMs));
         if (!nearby) return filtered;
         const viewer = { latitude: nearby.lat, longitude: nearby.lng };
-        return [...filtered].sort((a, b) => {
-            const da = haversineDistanceMeters(
-                { latitude: a.latitude, longitude: a.longitude },
-                viewer
-            );
-            const db = haversineDistanceMeters(
-                { latitude: b.latitude, longitude: b.longitude },
-                viewer
-            );
-            return da - db;
-        });
+        return [...filtered].sort((a, b) => edgeDistance(a, viewer) - edgeDistance(b, viewer));
     }, [allPins, temporalMode, nearby]);
 
     const nearbyCount = useMemo(() => {
@@ -469,23 +510,36 @@ export function MapTab({ scope }: MapTabProps) {
             (pin) =>
                 Number.isFinite(pin.latitude) &&
                 Number.isFinite(pin.longitude) &&
-                haversineDistanceMeters(
-                    { latitude: pin.latitude, longitude: pin.longitude },
-                    viewer
-                ) <= radiusMeters
+                edgeDistance(pin, viewer) <= radiusMeters
         ).length;
     }, [pins, nearby]);
+
+    /**
+     * Per-layer pin counts for the legend. Derived from the pins actually on
+     * the map, so a hidden layer simply has no entry — the feed is fetched
+     * filtered by layer, which means a hidden layer's real count is unknown
+     * rather than zero, and the legend renders nothing rather than a lie.
+     */
+    const countsByLayer = useMemo(() => {
+        const counts: Partial<Record<SpatialLayerKey, number>> = {};
+        for (const pin of pins) {
+            const key = normalizeSpatialLayerKey(pin.layer);
+            if (!key) continue;
+            counts[key] = (counts[key] ?? 0) + 1;
+        }
+        return counts;
+    }, [pins]);
 
     const myceliumGraph = useMyceliumGraph();
     const myceliumActive = activeLayers.has('mycelium');
 
+    // The persisted atom's setter takes a value, not an updater — derive the
+    // next set from the current one rather than passing a function.
     const toggleLayer = (key: SpatialLayerKey) => {
-        setActiveLayers((prev) => {
-            const next = new Set(prev);
-            if (next.has(key)) next.delete(key);
-            else next.add(key);
-            return next;
-        });
+        const next = new Set(activeLayers);
+        if (next.has(key)) next.delete(key);
+        else next.add(key);
+        setActiveLayers(next);
     };
 
     // A video pin opens the story reel (Snap Map tap-to-play); any other pin
@@ -550,101 +604,49 @@ export function MapTab({ scope }: MapTabProps) {
                     />
                 </Suspense>
 
+                {/*
+                 * The legend, top-left: what is on the map and what you can see.
+                 * It replaces a flex row of thirteen layer chips plus Near-me,
+                 * radius, time and heat that ran off the right edge of a phone
+                 * and overlapped the row beneath it.
+                 */}
+                <MapLegend
+                    activeLayers={activeLayers}
+                    onToggleLayer={toggleLayer}
+                    onSetLayers={(keys: SpatialLayerKey[]) => setActiveLayers(new Set(keys))}
+                    countsByLayer={countsByLayer}
+                    timeMode={temporalMode}
+                    onSetTimeMode={setTemporalMode}
+                    showHeat={showHeat}
+                    onToggleHeat={() => setShowHeat((value) => !value)}
+                    nearby={Boolean(nearby)}
+                    onToggleNearby={toggleNearby}
+                    radiusKm={radiusKm}
+                    radiusOptionsKm={RADIUS_OPTIONS_KM}
+                    onSelectRadius={selectRadius}
+                    nearbyError={nearbyError}
+                    open={legendOpen}
+                    onSetOpen={setLegendOpen}
+                />
+
+                {/*
+                 * Create verbs, top-right. Kept apart from the legend so the
+                 * two clusters can never collide: left is what you see, right
+                 * is what you add, bottom-right is what you carry.
+                 */}
                 <div
                     style={{
                         position: 'absolute',
                         top: 12,
-                        left: 12,
                         right: 12,
-                        zIndex: 2,
+                        zIndex: 3,
                         display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'flex-end',
                         gap: 6,
-                        flexWrap: mobile ? 'nowrap' : 'wrap',
-                        overflowX: mobile ? 'auto' : 'visible',
                     }}
+                    data-testid="coalition-map-actions"
                 >
-                    {SPATIAL_LAYER_DEFINITIONS.map((definition) => {
-                        const active = activeLayers.has(definition.key);
-                        const layerStyle = layerStyleFor(definition.key);
-                        return (
-                            <button
-                                key={definition.key}
-                                type="button"
-                                onClick={() => toggleLayer(definition.key)}
-                                aria-pressed={active}
-                                style={{
-                                    border: `1px solid ${
-                                        active ? layerStyle.color : 'var(--border-default)'
-                                    }`,
-                                    borderRadius: 999,
-                                    padding: '4px 10px',
-                                    fontSize: 12,
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    background: active ? layerStyle.color : 'var(--bg-surface)',
-                                    color: active ? layerStyle.ink : 'var(--text-primary)',
-                                    cursor: 'pointer',
-                                }}
-                            >
-                                <LayerGlyph layer={definition.key} active={active} />
-                                {definition.label}
-                            </button>
-                        );
-                    })}
-                    <button
-                        type="button"
-                        onClick={toggleNearby}
-                        aria-pressed={Boolean(nearby)}
-                        data-testid="coalition-map-nearby"
-                        title={
-                            nearby
-                                ? `Showing activity within ${radiusKm}km`
-                                : 'Filter to nearby activity'
-                        }
-                        style={{
-                            border: '1px solid var(--border-default)',
-                            borderRadius: 999,
-                            padding: '4px 10px',
-                            fontSize: 12,
-                            background: nearby ? SOLARPUNK_CONTROL_ACTIVE.bg : 'var(--bg-surface)',
-                            color: nearby ? SOLARPUNK_CONTROL_ACTIVE.ink : 'var(--text-primary)',
-                            cursor: 'pointer',
-                        }}
-                    >
-                        📍 Near me{nearby ? ' ✓' : ''}
-                    </button>
-                    {RADIUS_OPTIONS_KM.map((km) => (
-                        <button
-                            key={km}
-                            type="button"
-                            onClick={() => selectRadius(km)}
-                            aria-pressed={radiusKm === km}
-                            data-testid={`coalition-map-radius-${km}`}
-                            title={`Search radius ${km}km`}
-                            style={{
-                                border: '1px solid var(--border-default)',
-                                borderRadius: 999,
-                                padding: '4px 8px',
-                                fontSize: 12,
-                                background:
-                                    radiusKm === km
-                                        ? SOLARPUNK_CONTROL_ACTIVE.bg
-                                        : 'var(--bg-surface)',
-                                color:
-                                    radiusKm === km
-                                        ? SOLARPUNK_CONTROL_ACTIVE.ink
-                                        : 'var(--text-primary)',
-                                cursor: 'pointer',
-                            }}
-                        >
-                            {km}km
-                        </button>
-                    ))}
-                    {nearbyError ? (
-                        <span style={{ fontSize: 11, color: 'var(--danger)', alignSelf: 'center' }}>
-                            {nearbyError}
-                        </span>
-                    ) : null}
                     <button
                         type="button"
                         onClick={() => setShowAidForm((v) => !v)}
@@ -736,69 +738,6 @@ export function MapTab({ scope }: MapTabProps) {
                         }}
                     />
                 ) : null}
-
-                <div
-                    style={{
-                        position: 'absolute',
-                        top: 48,
-                        left: 12,
-                        right: 12,
-                        zIndex: 2,
-                        display: 'flex',
-                        gap: 6,
-                        flexWrap: mobile ? 'nowrap' : 'wrap',
-                        overflowX: mobile ? 'auto' : 'visible',
-                    }}
-                    data-testid="coalition-map-temporal"
-                >
-                    {TEMPORAL_FILTERS.map((filter) => {
-                        const active = temporalMode === filter.key;
-                        return (
-                            <button
-                                key={filter.key}
-                                type="button"
-                                onClick={() => setTemporalMode(filter.key)}
-                                aria-pressed={active}
-                                data-testid={`coalition-map-temporal-${filter.key}`}
-                                style={{
-                                    border: '1px solid var(--border-default)',
-                                    borderRadius: 999,
-                                    padding: '4px 10px',
-                                    fontSize: 12,
-                                    background: active
-                                        ? SOLARPUNK_CONTROL_ACTIVE.bg
-                                        : 'var(--bg-surface)',
-                                    color: active
-                                        ? SOLARPUNK_CONTROL_ACTIVE.ink
-                                        : 'var(--text-primary)',
-                                    cursor: 'pointer',
-                                }}
-                            >
-                                {filter.label}
-                            </button>
-                        );
-                    })}
-                    <button
-                        type="button"
-                        onClick={() => setShowHeat((value) => !value)}
-                        aria-pressed={showHeat}
-                        data-testid="coalition-map-heat"
-                        title="Toggle the activity-heat overlay"
-                        style={{
-                            border: '1px solid var(--border-default)',
-                            borderRadius: 999,
-                            padding: '4px 10px',
-                            fontSize: 12,
-                            background: showHeat
-                                ? SOLARPUNK_CONTROL_ACTIVE.bg
-                                : 'var(--bg-surface)',
-                            color: showHeat ? SOLARPUNK_CONTROL_ACTIVE.ink : 'var(--text-primary)',
-                            cursor: 'pointer',
-                        }}
-                    >
-                        🔥 Heat{showHeat ? ' ✓' : ''}
-                    </button>
-                </div>
 
                 {myceliumActive && (
                     <div
@@ -929,66 +868,28 @@ export function MapTab({ scope }: MapTabProps) {
                     ) : null}
                 </div>
 
-                {selectedPin &&
-                !(
-                    Number.isFinite(selectedPin.latitude) && Number.isFinite(selectedPin.longitude)
-                ) ? (
-                    <div
-                        onClick={() => setSelectedPin(null)}
-                        style={{
-                            position: 'absolute',
-                            inset: 0,
-                            zIndex: 5,
-                            background: 'rgba(0,0,0,0.35)',
-                            display: 'grid',
-                            placeItems: 'center',
-                            padding: 16,
+                {/*
+                 * Every selected pin gets its verbs, not just the ones whose
+                 * coordinates failed to parse — the old detail card only
+                 * rendered in that fallback case and offered a single link.
+                 */}
+                {selectedPin ? (
+                    <PinActionSheet
+                        pin={selectedPin}
+                        onClose={() => setSelectedPin(null)}
+                        onWatch={(pinId) => {
+                            setSelectedPin(null);
+                            setReelStartId(pinId);
                         }}
-                    >
-                        <div
-                            onClick={(event) => event.stopPropagation()}
-                            style={{
-                                width: 'min(280px, 100%)',
-                                background: 'var(--bg-surface)',
-                                border: '1px solid var(--border-default)',
-                                borderRadius: 12,
-                                padding: 16,
-                                display: 'grid',
-                                gap: 8,
-                                boxShadow: '0 12px 32px rgba(0,0,0,0.4)',
-                            }}
-                        >
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                <strong style={{ flex: 1 }}>{selectedPin.title}</strong>
-                                <button
-                                    type="button"
-                                    onClick={() => setSelectedPin(null)}
-                                    aria-label="Close details"
-                                    style={{
-                                        border: '1px solid var(--border-default)',
-                                        borderRadius: 8,
-                                        background: 'var(--bg-input)',
-                                        color: 'var(--text-primary)',
-                                        cursor: 'pointer',
-                                        padding: '2px 8px',
-                                    }}
-                                >
-                                    ✕
-                                </button>
-                            </div>
-                            <small style={{ color: 'var(--text-secondary)' }}>
-                                {selectedPin.subtitle}
-                            </small>
-                            {selectedPin.denId ? (
-                                <a
-                                    href={buildCommunitiesPath(null, selectedPin.denId)}
-                                    style={{ color: SOLARPUNK_CONTROL_ACTIVE.bg }}
-                                >
-                                    Open associated den →
-                                </a>
-                            ) : null}
-                        </div>
-                    </div>
+                        onOpenBoard={
+                            onOpenTool
+                                ? (tool) => {
+                                      setSelectedPin(null);
+                                      onOpenTool(tool);
+                                  }
+                                : undefined
+                        }
+                    />
                 ) : null}
 
                 {(reelStartId || allReelOpen) && reelItems.length > 0 ? (
@@ -1049,12 +950,41 @@ export function MapTab({ scope }: MapTabProps) {
     );
 }
 
-function pinList(
-    spatial: SpatialFeedItem[],
-    aid: AidPost[],
-    sellers: SellerLocation[],
-    videos: CoalitionFeedItem[]
-): PinDetails[] {
+/**
+ * Turn a place into the coordinate fields a pin carries. Returns null for a
+ * record with no place — plenty of needs are genuinely placeless, and a pin at
+ * `0,0` in the Gulf of Guinea is worse than no pin at all.
+ */
+function placePinFields(
+    place: CoalitionPlace | undefined
+): Pick<PinDetails, 'latitude' | 'longitude' | 'radiusMeters'> | null {
+    if (!place) return null;
+    return {
+        latitude: place.latitude,
+        longitude: place.longitude,
+        radiusMeters: place.kind === 'area' ? place.radiusMeters : undefined,
+    };
+}
+
+interface PinSources {
+    spatial: SpatialFeedItem[];
+    aid: AidPost[];
+    sellers: SellerLocation[];
+    videos: CoalitionFeedItem[];
+    needs: CoalitionNeed[];
+    projects: CoalitionProject[];
+    resources: CoalitionResource[];
+}
+
+function pinList({
+    spatial,
+    aid,
+    sellers,
+    videos,
+    needs,
+    projects,
+    resources,
+}: PinSources): PinDetails[] {
     const nowMs = Date.now();
     const pins: PinDetails[] = [];
     for (const item of videos) {
@@ -1107,6 +1037,43 @@ function pinList(
             layer: 'vendors',
             latitude: seller.coordinates.latitude,
             longitude: seller.coordinates.longitude,
+        });
+    }
+    // Needs, projects and resources: real-world things that had no coordinates
+    // until `CoalitionPlace`, so the map could not show them and they were
+    // reachable only from the tool bag. Records without a place stay off it.
+    for (const need of needs) {
+        const fields = placePinFields(need.place);
+        if (!fields) continue;
+        pins.push({
+            id: need.id,
+            title: need.title,
+            subtitle: `Need · ${need.kind} · ${need.status}`,
+            layer: 'needs',
+            denId: undefined,
+            ...fields,
+        });
+    }
+    for (const project of projects) {
+        const fields = placePinFields(project.place);
+        if (!fields) continue;
+        pins.push({
+            id: project.id,
+            title: project.title,
+            subtitle: `Project · ${project.category} · ${project.status}`,
+            layer: 'projects',
+            ...fields,
+        });
+    }
+    for (const resource of resources) {
+        const fields = placePinFields(resource.place);
+        if (!fields) continue;
+        pins.push({
+            id: resource.id,
+            title: resource.name,
+            subtitle: `Resource · ${resource.kind} · ${resource.availability}`,
+            layer: 'resources',
+            ...fields,
         });
     }
     return pins;

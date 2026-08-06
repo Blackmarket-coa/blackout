@@ -27,6 +27,7 @@ import {
     scoreCoalitionItem,
     seatsRemaining,
     slotRemaining,
+    MAX_AREA_RADIUS_METERS,
     NEED_STATUSES,
     PROJECT_STATUSES,
     RESOURCE_AVAILABILITY,
@@ -96,7 +97,7 @@ import {
     getResource,
     listResources,
     newResourceId,
-    updateResourceAvailability,
+    updateResource,
 } from '../services/coalitionStore';
 import { createTask, getTask, listTasks, newTaskId, updateTaskStatus } from '../services/taskStore';
 import {
@@ -519,6 +520,38 @@ coalition.patch('/tasks/:id', async (c) => {
     return c.json({ task });
 });
 
+/**
+ * Where a need, project or resource is. Mirrors `CoalitionPlace` in
+ * `@blackout/core` — a tagged union, because a pin is an address and an area is
+ * an area of operations, and collapsing the two loses the distinction.
+ *
+ * Coordinates are range-checked rather than merely numeric: a latitude of 91
+ * is a bug or an attack, and it would put a pin somewhere no map can draw.
+ * `null` is accepted on update as "take this off the map".
+ */
+const placeSchema = z.discriminatedUnion('kind', [
+    z.object({
+        kind: z.literal('pin'),
+        latitude: z.number().min(-90).max(90),
+        longitude: z.number().min(-180).max(180),
+        label: z.string().max(256).optional(),
+    }),
+    z.object({
+        kind: z.literal('area'),
+        latitude: z.number().min(-90).max(90),
+        longitude: z.number().min(-180).max(180),
+        radiusMeters: z.number().positive().max(MAX_AREA_RADIUS_METERS),
+        label: z.string().max(256).optional(),
+    }),
+]);
+
+/** `undefined` leaves the place alone; `null` clears it. */
+const placePatchSchema = placeSchema.nullable().optional();
+
+/** `null` from the wire means "clear it", which the record models as absent. */
+const applyPlacePatch = (place: z.infer<typeof placePatchSchema>) =>
+    place === undefined ? {} : { place: place ?? undefined };
+
 // --- Coalition Needs Board ---
 
 coalition.get('/needs', (c) => {
@@ -531,6 +564,7 @@ const createNeedSchema = z.object({
     kind: z.string().min(1).max(64),
     title: z.string().min(1).max(200),
     description: z.string().max(2000).optional(),
+    place: placeSchema.optional(),
 });
 
 coalition.post('/needs', async (c) => {
@@ -545,6 +579,7 @@ coalition.post('/needs', async (c) => {
         title: parsed.title,
         description: parsed.description,
         authorId: user.sub,
+        place: parsed.place,
     });
     return c.json({ need }, 201);
 });
@@ -552,6 +587,7 @@ coalition.post('/needs', async (c) => {
 const updateNeedSchema = z.object({
     status: z.enum(NEED_STATUSES).optional(),
     fulfilledByListingId: z.string().max(256).optional(),
+    place: placePatchSchema,
 });
 
 coalition.patch('/needs/:id', async (c) => {
@@ -567,7 +603,8 @@ coalition.patch('/needs/:id', async (c) => {
     if (existing.authorId !== user.sub) {
         return c.json({ code: 'forbidden', message: 'Only the need author can update it' }, 403);
     }
-    const need = updateNeed(c.req.param('id'), parsed);
+    const { place, ...rest } = parsed;
+    const need = updateNeed(c.req.param('id'), { ...rest, ...applyPlacePatch(place) });
     if (!need) {
         return c.json({ code: 'not_found', message: 'Need not found' }, 404);
     }
@@ -608,6 +645,7 @@ const createProjectSchema = z.object({
     category: z.string().min(1).max(64),
     description: z.string().max(2000).optional(),
     proposalEventId: z.string().optional(),
+    place: placeSchema.optional(),
     ...fundingFields,
 });
 
@@ -640,6 +678,7 @@ coalition.post('/projects', async (c) => {
         useOfFunds: parsed.useOfFunds,
         deadlineAt: parsed.deadlineAt,
         milestones: withMilestoneIds(parsed.milestones),
+        place: parsed.place,
     });
     return c.json({ project }, 201);
 });
@@ -667,6 +706,7 @@ const updateProjectSchema = z
         title: z.string().min(1).max(200).optional(),
         description: z.string().max(2000).optional(),
         category: z.string().min(1).max(64).optional(),
+        place: placePatchSchema,
         ...fundingFields,
     })
     .refine((v) => Object.keys(v).length > 0, { message: 'No fields to update' });
@@ -686,11 +726,12 @@ coalition.patch('/projects/:id', async (c) => {
         return c.json({ code: 'forbidden', message: 'Only the project lead can edit it' }, 403);
     }
 
-    const { status, milestones, ...rest } = parsed;
+    const { status, milestones, place, ...rest } = parsed;
     let project = existing;
     const fundingPatch = {
         ...rest,
         ...(milestones ? { milestones: withMilestoneIds(milestones) } : {}),
+        ...applyPlacePatch(place),
     };
     if (Object.keys(fundingPatch).length > 0) {
         project = updateProject(existing.id, fundingPatch) ?? project;
@@ -784,6 +825,7 @@ const createResourceSchema = z.object({
     description: z.string().max(2000).optional(),
     availability: z.enum(RESOURCE_AVAILABILITY).optional(),
     location: z.string().max(256).optional(),
+    place: placeSchema.optional(),
 });
 
 coalition.post('/resources', async (c) => {
@@ -800,13 +842,18 @@ coalition.post('/resources', async (c) => {
         availability: parsed.availability,
         stewardId: user.sub,
         location: parsed.location,
+        place: parsed.place,
     });
     return c.json({ resource }, 201);
 });
 
-const updateResourceSchema = z.object({
-    availability: z.enum(RESOURCE_AVAILABILITY),
-});
+const updateResourceSchema = z
+    .object({
+        availability: z.enum(RESOURCE_AVAILABILITY).optional(),
+        location: z.string().max(256).optional(),
+        place: placePatchSchema,
+    })
+    .refine((v) => Object.keys(v).length > 0, { message: 'No fields to update' });
 
 coalition.patch('/resources/:id', async (c) => {
     const user = requireUser(c, 'Sign in to update a resource');
@@ -824,7 +871,8 @@ coalition.patch('/resources/:id', async (c) => {
             403
         );
     }
-    const resource = updateResourceAvailability(c.req.param('id'), parsed.availability);
+    const { place, ...rest } = parsed;
+    const resource = updateResource(c.req.param('id'), { ...rest, ...applyPlacePatch(place) });
     if (!resource) {
         return c.json({ code: 'not_found', message: 'Resource not found' }, 404);
     }

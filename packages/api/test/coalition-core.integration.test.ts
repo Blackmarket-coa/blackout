@@ -86,7 +86,10 @@ test('spatialHeatWeight takes the strongest of severity, activity, and liveness'
 });
 
 test('SPATIAL_LAYER_KEYS covers the canonical layers including the living-map additions', () => {
-    assert.equal(SPATIAL_LAYER_KEYS.length, 13);
+    // The exact count is asserted so an accidental layer cannot slip in
+    // unnoticed; `needs` and `resources` joined when those boards gained
+    // coordinates and became pinnable.
+    assert.equal(SPATIAL_LAYER_KEYS.length, 15);
     for (const key of [
         'video',
         'vendors',
@@ -97,6 +100,8 @@ test('SPATIAL_LAYER_KEYS covers the canonical layers including the living-map ad
         'dens',
         'streams',
         'projects',
+        'needs',
+        'resources',
         'communities',
         'mycelium',
     ]) {

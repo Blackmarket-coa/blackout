@@ -13,6 +13,7 @@ import {
 } from '../challengesClient';
 import { EmptyState } from '@blackout/ui/primitives';
 import { AuthorLine } from '../components/AuthorLine';
+import { EntryDiscussionSheet } from '../components/EntryDiscussionSheet';
 import * as ui from '../components/coliseumUi.css';
 
 const inputStyle: CSSProperties = {
@@ -47,7 +48,9 @@ function ChallengeCard({ challenge }: { challenge: ColiseumChallenge }) {
     const [open, setOpen] = useState(false);
     const [entries, setEntries] = useState<RankedChallengeEntry[]>([]);
     const [entryTitle, setEntryTitle] = useState('');
+    const [entryBody, setEntryBody] = useState('');
     const [busy, setBusy] = useState(false);
+    const [discussing, setDiscussing] = useState<RankedChallengeEntry | null>(null);
 
     const loadEntries = useCallback(() => {
         fetchChallenge(challenge.id)
@@ -64,13 +67,18 @@ function ChallengeCard({ challenge }: { challenge: ColiseumChallenge }) {
         if (!title || busy) return;
         setBusy(true);
         try {
-            await submitEntry(challenge.id, { title });
+            // `body` has been in the schema and accepted by the API since
+            // entries shipped; the composer just never sent it, so every entry
+            // was a bare title.
+            const body = entryBody.trim();
+            await submitEntry(challenge.id, body ? { title, body } : { title });
             setEntryTitle('');
+            setEntryBody('');
             loadEntries();
         } finally {
             setBusy(false);
         }
-    }, [challenge.id, entryTitle, busy, loadEntries]);
+    }, [challenge.id, entryTitle, entryBody, busy, loadEntries]);
 
     const onVote = useCallback(async (entryId: string) => {
         const res = await voteForEntry(entryId);
@@ -109,22 +117,32 @@ function ChallengeCard({ challenge }: { challenge: ColiseumChallenge }) {
             {open ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                     {challenge.status === 'open' ? (
-                        <div style={{ display: 'flex', gap: 8 }}>
-                            <input
-                                value={entryTitle}
-                                onChange={(event) => setEntryTitle(event.target.value)}
-                                placeholder="Enter your attempt…"
-                                style={inputStyle}
-                                data-testid="coliseum-challenge-entry-input"
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                            <div style={{ display: 'flex', gap: 8 }}>
+                                <input
+                                    value={entryTitle}
+                                    onChange={(event) => setEntryTitle(event.target.value)}
+                                    placeholder="Enter your attempt…"
+                                    style={inputStyle}
+                                    data-testid="coliseum-challenge-entry-input"
+                                />
+                                <button
+                                    type="button"
+                                    style={submitButtonStyle}
+                                    disabled={busy || entryTitle.trim().length === 0}
+                                    onClick={onEnter}
+                                >
+                                    Enter
+                                </button>
+                            </div>
+                            <textarea
+                                value={entryBody}
+                                onChange={(event) => setEntryBody(event.target.value)}
+                                placeholder="Say more about it (optional)"
+                                rows={3}
+                                style={{ ...inputStyle, resize: 'vertical' }}
+                                data-testid="coliseum-challenge-entry-body"
                             />
-                            <button
-                                type="button"
-                                style={submitButtonStyle}
-                                disabled={busy || entryTitle.trim().length === 0}
-                                onClick={onEnter}
-                            >
-                                Enter
-                            </button>
                         </div>
                     ) : null}
                     {entries.length === 0 ? (
@@ -168,6 +186,18 @@ function ChallengeCard({ challenge }: { challenge: ColiseumChallenge }) {
                                     <span style={{ fontSize: 14, fontWeight: 600 }}>
                                         {entry.title}
                                     </span>
+                                    {/* `body` was stored and accepted by the
+                                        API but never rendered, so every entry
+                                        looked like a bare title. */}
+                                    {entry.body ? (
+                                        <p
+                                            className={ui.mutedText}
+                                            style={{ margin: 0, whiteSpace: 'pre-wrap' }}
+                                            data-testid="coliseum-challenge-entry-bodytext"
+                                        >
+                                            {entry.body}
+                                        </p>
+                                    ) : null}
                                     <AuthorLine
                                         userId={entry.entrantId}
                                         timestamp={entry.createdAt}
@@ -181,10 +211,25 @@ function ChallengeCard({ challenge }: { challenge: ColiseumChallenge }) {
                                 >
                                     Vote
                                 </button>
+                                <button
+                                    type="button"
+                                    className={ui.actionButton}
+                                    onClick={() => setDiscussing(entry)}
+                                    data-testid={`coliseum-challenge-entry-discuss-${entry.id}`}
+                                >
+                                    💬 Discuss
+                                </button>
                             </div>
                         ))
                     )}
                 </div>
+            ) : null}
+            {discussing ? (
+                <EntryDiscussionSheet
+                    entry={discussing}
+                    onClose={() => setDiscussing(null)}
+                    onLinked={loadEntries}
+                />
             ) : null}
         </article>
     );

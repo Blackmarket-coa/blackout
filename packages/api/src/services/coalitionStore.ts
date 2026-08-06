@@ -385,11 +385,11 @@ export function createResource(input: Parameters<typeof db.createCoalitionResour
 export function getResource(id: string) {
     return db.getCoalitionResource(id) ?? null;
 }
-export function updateResourceAvailability(
+export function updateResource(
     id: string,
-    availability: Parameters<typeof db.updateCoalitionResourceAvailability>[1]
+    patch: Parameters<typeof db.updateCoalitionResource>[1]
 ) {
-    return db.updateCoalitionResourceAvailability(id, availability) ?? null;
+    return db.updateCoalitionResource(id, patch) ?? null;
 }
 export function newResourceId(): string {
     return `res_${rand()}`;

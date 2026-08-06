@@ -3453,7 +3453,7 @@ class InMemoryDb {
 
     updateCoalitionNeed(
         id: string,
-        patch: Partial<Pick<CoalitionNeedRecord, 'status' | 'fulfilledByListingId'>>
+        patch: Partial<Pick<CoalitionNeedRecord, 'status' | 'fulfilledByListingId' | 'place'>>
     ): CoalitionNeedRecord | undefined {
         const existing = this.coalitionNeeds.get(id);
         if (!existing) return undefined;
@@ -3520,6 +3520,7 @@ class InMemoryDb {
                 | 'useOfFunds'
                 | 'deadlineAt'
                 | 'milestones'
+                | 'place'
             >
         >
     ): CoalitionProjectRecord | undefined {
@@ -3680,13 +3681,18 @@ class InMemoryDb {
         return this.coalitionResources.get(id);
     }
 
-    updateCoalitionResourceAvailability(
+    /**
+     * Patch a resource. Was availability-only; widened when resources gained a
+     * `place`, since a greenhouse that moves — or one whose steward only pins it
+     * later — has to be able to say so without re-registering.
+     */
+    updateCoalitionResource(
         id: string,
-        availability: CoalitionResourceRecord['availability']
+        patch: Partial<Pick<CoalitionResourceRecord, 'availability' | 'location' | 'place'>>
     ): CoalitionResourceRecord | undefined {
         const existing = this.coalitionResources.get(id);
         if (!existing) return undefined;
-        const record: CoalitionResourceRecord = { ...existing, availability, updatedAt: nowIso() };
+        const record: CoalitionResourceRecord = { ...existing, ...patch, updatedAt: nowIso() };
         this.coalitionResources.set(id, record);
         return record;
     }
@@ -4311,8 +4317,19 @@ class InMemoryDb {
         );
     }
 
+    /** Keyed lookup — the map is already indexed by id, so no scan is needed. */
+    getChallengeEntry(entryId: string): ChallengeEntryRecord | undefined {
+        return this.challengeEntries.get(entryId);
+    }
+
     createChallengeEntry(input: Omit<ChallengeEntryRecord, 'createdAt'>): ChallengeEntryRecord {
         const record: ChallengeEntryRecord = { ...input, createdAt: nowIso() };
+        this.challengeEntries.set(record.id, record);
+        return record;
+    }
+
+    /** Replace an entry wholesale (used to attach its discussion den). */
+    upsertChallengeEntry(record: ChallengeEntryRecord): ChallengeEntryRecord {
         this.challengeEntries.set(record.id, record);
         return record;
     }
@@ -6330,7 +6347,7 @@ export class FileBackedDb extends InMemoryDb {
 
     override updateCoalitionNeed(
         id: string,
-        patch: Partial<Pick<CoalitionNeedRecord, 'status' | 'fulfilledByListingId'>>
+        patch: Partial<Pick<CoalitionNeedRecord, 'status' | 'fulfilledByListingId' | 'place'>>
     ): CoalitionNeedRecord | undefined {
         const updated = super.updateCoalitionNeed(id, patch);
         if (updated) this.persist();
@@ -6364,11 +6381,11 @@ export class FileBackedDb extends InMemoryDb {
         return created;
     }
 
-    override updateCoalitionResourceAvailability(
+    override updateCoalitionResource(
         id: string,
-        availability: CoalitionResourceRecord['availability']
+        patch: Partial<Pick<CoalitionResourceRecord, 'availability' | 'location' | 'place'>>
     ): CoalitionResourceRecord | undefined {
-        const updated = super.updateCoalitionResourceAvailability(id, availability);
+        const updated = super.updateCoalitionResource(id, patch);
         if (updated) this.persist();
         return updated;
     }

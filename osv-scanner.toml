@@ -24,14 +24,9 @@ id = "GHSA-qwww-vcr4-c8h2"
 ignoreUntil = 2026-10-31
 reason = "RSC-mode-only advisory; client uses react-router in library mode. Fix requires React 19 migration (tracked separately)."
 
-# brace-expansion ReDoS. The tree resolves to 1.1.18, 2.1.4, and 5.0.9 (pinned
-# via pnpm.overrides) — at or above both the original per-line security patches
-# (1.1.12 / 2.0.2 / 5.0.8) and the GHSA-rgw5-rvv9-x895 follow-up fixes
-# (1.1.18 / 2.1.4 / 5.0.9) for the mitigation bypass. OSV (and npm audit)
-# over-report because their normalized affected-range spans majors. The 1.x/2.x
-# instances are react-native dev-toolchain transitives under the blackout-gov
-# app; they cannot move to 5.x without breaking glob@7/minimatch@3.
-[[IgnoredVulns]]
-id = "GHSA-mh99-v99m-4gvg"
-ignoreUntil = 2026-10-31
-reason = "Resolved to 1.1.18/2.1.4/5.0.9, all >= the per-line fixes (1.1.12/2.0.2/5.0.8 and the GHSA-rgw5-rvv9-x895 bypass fixes 1.1.18/2.1.4/5.0.9). OSV over-reports across majors; packages are patched."
+# The brace-expansion ReDoS ignore (GHSA-mh99-v99m-4gvg) used to sit here. The
+# `pnpm.overrides` pins that resolved it — 1.1.18 / 2.1.4 / 5.0.9, all at or
+# above the per-line fixes and the GHSA-rgw5-rvv9-x895 bypass follow-ups — mean
+# the scanner no longer reports it, so the entry became an unused ignore it
+# warned about on every run. Removed rather than left dead: if the tree ever
+# regresses below those pins the scan should fail loudly, not stay silenced.

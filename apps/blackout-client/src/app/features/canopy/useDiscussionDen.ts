@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 import { useMatrixClientOrNull } from '../../hooks/useMatrixClient';
 import { joinDenWithCanopy } from '../room/joinDenWithCanopy';
-import { createDenInCanopy, DEN_KIND_STATE_EVENT_TYPE } from './denKind';
+import { createDenInCanopy, DEN_KIND_STATE_EVENT_TYPE, findOrCreateCategory } from './denKind';
 
 export interface UseDiscussionDenOptions {
     /** The den already linked to this thing, if one has been created. */
@@ -79,7 +79,19 @@ export const useDiscussionDen = ({
             // owner. Either way it is marked `forum` so it renders the same.
             let created: string;
             if (canopyId) {
-                created = await createDenInCanopy(mx, { canopyId, name, kind: 'forum' });
+                // Dens are placed by whichever space id `createDenInCanopy`
+                // receives, so pass the canopy's Topics category rather than the
+                // canopy itself. Otherwise every auto-created den lands loose in
+                // General alongside the hand-made channels and buries them.
+                const categoryId = await findOrCreateCategory(mx, {
+                    canopyId,
+                    purpose: 'topics',
+                });
+                created = await createDenInCanopy(mx, {
+                    canopyId: categoryId,
+                    name,
+                    kind: 'forum',
+                });
             } else {
                 created = (await mx.createRoom({ name })).room_id;
                 // Custom state-event types aren't in matrix-js-sdk's typed

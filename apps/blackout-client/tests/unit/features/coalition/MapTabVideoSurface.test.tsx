@@ -26,6 +26,10 @@ vi.mock('../../../../src/app/features/coalition/hooks/useCoalitionFeed', () => (
     useSpatialFeed: () => emptyState,
     useMutualAid: () => emptyState,
     useSellerLocations: () => emptyState,
+    // The three boards that gained coordinates and now feed the map too.
+    useCoalitionNeeds: () => emptyState,
+    useCoalitionProjects: () => emptyState,
+    useCoalitionResources: () => emptyState,
     useCoalitionVideoEngagement: () => ({
         likes: { data: null, loading: false, error: null, refetch: vi.fn() },
         comments: { data: null, loading: false, error: null, refetch: vi.fn() },

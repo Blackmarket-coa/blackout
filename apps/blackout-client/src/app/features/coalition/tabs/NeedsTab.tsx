@@ -1,7 +1,14 @@
 import React, { useCallback, useState, type CSSProperties } from 'react';
-import { NEED_STATUSES, SUGGESTED_NEED_KINDS, type NeedStatus } from '@blackout/core';
+import {
+    NEED_STATUSES,
+    SUGGESTED_NEED_KINDS,
+    describePlace,
+    type CoalitionPlace,
+    type NeedStatus,
+} from '@blackout/core';
 import { useCoalitionNeeds, type CoalitionScopeQuery } from '../hooks/useCoalitionFeed';
 import { createCoalitionNeed, updateCoalitionNeed } from '../coalitionClient';
+import { PlacePicker } from '../map/PlacePicker';
 
 export interface NeedsTabProps {
     scope: CoalitionScopeQuery;
@@ -66,6 +73,7 @@ export function NeedsTab({ scope }: NeedsTabProps) {
     const { data, loading, error, refetch } = useCoalitionNeeds(scope);
     const [title, setTitle] = useState('');
     const [kind, setKind] = useState<string>(SUGGESTED_NEED_KINDS[0]);
+    const [place, setPlace] = useState<CoalitionPlace | null>(null);
     const [pending, setPending] = useState(false);
 
     const onAdd = useCallback(
@@ -75,14 +83,20 @@ export function NeedsTab({ scope }: NeedsTabProps) {
             if (!trimmed || !scope.canopyId || pending) return;
             setPending(true);
             try {
-                await createCoalitionNeed({ canopyId: scope.canopyId, kind, title: trimmed });
+                await createCoalitionNeed({
+                    canopyId: scope.canopyId,
+                    kind,
+                    title: trimmed,
+                    place: place ?? undefined,
+                });
                 setTitle('');
+                setPlace(null);
                 refetch();
             } finally {
                 setPending(false);
             }
         },
-        [title, kind, scope.canopyId, pending, refetch],
+        [title, kind, place, scope.canopyId, pending, refetch]
     );
 
     const onStatus = useCallback(
@@ -90,7 +104,7 @@ export function NeedsTab({ scope }: NeedsTabProps) {
             await updateCoalitionNeed(id, { status });
             refetch();
         },
-        [refetch],
+        [refetch]
     );
 
     if (!scope.canopyId) {
@@ -105,46 +119,66 @@ export function NeedsTab({ scope }: NeedsTabProps) {
 
     return (
         <div style={containerStyle} data-testid="coalition-needs">
-            <form onSubmit={onAdd} style={{ display: 'flex', gap: 8 }} data-testid="coalition-need-composer">
-                <select
-                    value={kind}
-                    onChange={(event) => setKind(event.target.value)}
-                    style={selectStyle}
-                    aria-label="Need kind"
-                >
-                    {SUGGESTED_NEED_KINDS.map((k) => (
-                        <option key={k} value={k}>
-                            {k}
-                        </option>
-                    ))}
-                </select>
-                <input
-                    value={title}
-                    onChange={(event) => setTitle(event.target.value)}
-                    placeholder="What does this coalition need?"
-                    data-testid="coalition-need-input"
-                    style={inputStyle}
+            <form
+                onSubmit={onAdd}
+                style={{ display: 'flex', flexDirection: 'column', gap: 8 }}
+                data-testid="coalition-need-composer"
+            >
+                <div style={{ display: 'flex', gap: 8 }}>
+                    <select
+                        value={kind}
+                        onChange={(event) => setKind(event.target.value)}
+                        style={selectStyle}
+                        aria-label="Need kind"
+                    >
+                        {SUGGESTED_NEED_KINDS.map((k) => (
+                            <option key={k} value={k}>
+                                {k}
+                            </option>
+                        ))}
+                    </select>
+                    <input
+                        value={title}
+                        onChange={(event) => setTitle(event.target.value)}
+                        placeholder="What does this coalition need?"
+                        data-testid="coalition-need-input"
+                        style={inputStyle}
+                    />
+                    <button
+                        type="submit"
+                        disabled={pending || title.trim().length === 0}
+                        style={{
+                            padding: '8px 14px',
+                            borderRadius: 8,
+                            border: '1px solid var(--accent-primary, #1ABC9C)',
+                            background: 'var(--accent-primary, #1ABC9C)',
+                            color: '#fff',
+                            cursor: pending ? 'progress' : 'pointer',
+                        }}
+                    >
+                        Post
+                    </button>
+                </div>
+                {/*
+                 * Optional by design: "we need a developer" has no location, and
+                 * a required picker would scatter fictional pins on the map.
+                 */}
+                <PlacePicker
+                    value={place}
+                    onChange={setPlace}
+                    label="Where?"
+                    testId="coalition-need-place"
                 />
-                <button
-                    type="submit"
-                    disabled={pending || title.trim().length === 0}
-                    style={{
-                        padding: '8px 14px',
-                        borderRadius: 8,
-                        border: '1px solid var(--accent-primary, #1ABC9C)',
-                        background: 'var(--accent-primary, #1ABC9C)',
-                        color: '#fff',
-                        cursor: pending ? 'progress' : 'pointer',
-                    }}
-                >
-                    Post
-                </button>
             </form>
 
             {error ? (
-                <div style={{ color: 'var(--danger)', fontSize: 13 }}>Couldn't load needs: {error}</div>
+                <div style={{ color: 'var(--danger)', fontSize: 13 }}>
+                    Couldn't load needs: {error}
+                </div>
             ) : null}
-            {loading && !data ? <div style={{ color: 'var(--text-secondary)' }}>Loading…</div> : null}
+            {loading && !data ? (
+                <div style={{ color: 'var(--text-secondary)' }}>Loading…</div>
+            ) : null}
             {!loading && needs.length === 0 ? (
                 <div style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
                     No needs posted yet. Be the first to ask for what the coalition needs.
@@ -152,7 +186,12 @@ export function NeedsTab({ scope }: NeedsTabProps) {
             ) : null}
 
             {needs.map((need) => (
-                <article key={need.id} style={cardStyle} data-testid="coalition-need-card" data-need-id={need.id}>
+                <article
+                    key={need.id}
+                    style={cardStyle}
+                    data-testid="coalition-need-card"
+                    data-need-id={need.id}
+                >
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <span style={badgeStyle}>{need.kind}</span>
                         <span style={{ fontSize: 14, fontWeight: 600, flex: 1 }}>{need.title}</span>
@@ -162,6 +201,14 @@ export function NeedsTab({ scope }: NeedsTabProps) {
                         <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0 }}>
                             {need.description}
                         </p>
+                    ) : null}
+                    {need.place ? (
+                        <span
+                            style={{ fontSize: 12, color: 'var(--text-secondary)' }}
+                            data-testid="coalition-need-place-line"
+                        >
+                            {need.place.kind === 'area' ? '◎' : '📍'} {describePlace(need.place)}
+                        </span>
                     ) : null}
                     <select
                         value={need.status}

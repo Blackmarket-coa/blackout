@@ -644,7 +644,7 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
     addCoalitionNotification: upsert('coalitionNotifications'),
     markCoalitionNotificationRead: upsert('coalitionNotifications'),
     createCoalitionResource: upsert('coalitionResources'),
-    updateCoalitionResourceAvailability: upsert('coalitionResources'),
+    updateCoalitionResource: upsert('coalitionResources'),
     createCreatorContent: upsert('creatorContent'),
     updateCreatorContent: upsert('creatorContent'),
     addContentDistribution: upsert('contentDistributions'),
@@ -672,6 +672,7 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
     createColiseumChallenge: upsert('coliseumChallenges'),
     updateColiseumChallengeStatus: upsert('coliseumChallenges'),
     createChallengeEntry: upsert('challengeEntries'),
+    upsertChallengeEntry: upsert('challengeEntries'),
     addChallengeVote: upsert('challengeVotes'),
     upsertColiseumArgument: upsert('coliseumArguments'),
     // Bulk insert returns void; resync persists every in-memory argument.

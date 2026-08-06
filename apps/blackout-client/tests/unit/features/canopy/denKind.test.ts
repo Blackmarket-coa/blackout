@@ -1,10 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { MatrixClient, Room } from 'matrix-js-sdk';
 import {
+    AUTO_CATEGORY_ORDER,
+    CATEGORY_STATE_EVENT_TYPE,
     DEN_KIND_STATE_EVENT_TYPE,
     createCategoryInCanopy,
     createDenInCanopy,
+    findOrCreateCategory,
     partitionDensByKind,
+    readCategoryPurpose,
     readDenKind,
     resolveDenKind,
 } from '../../../../src/app/features/canopy/denKind';
@@ -196,5 +200,136 @@ describe('createCategoryInCanopy', () => {
             expect.objectContaining({ via: ['server'] }),
             '!cat:server'
         );
+    });
+
+    it('leaves a hand-made category unmarked and unordered', async () => {
+        const { mx, sendStateEvent } = makeMx();
+        await createCategoryInCanopy(mx, { canopyId: '!canopy:server', name: 'Voice' });
+
+        // The purpose marker is for categories the app made on the user's
+        // behalf; one someone typed a name into carries no purpose.
+        expect(sendStateEvent).not.toHaveBeenCalledWith(
+            expect.anything(),
+            CATEGORY_STATE_EVENT_TYPE,
+            expect.anything(),
+            expect.anything()
+        );
+        const childEdge = sendStateEvent.mock.calls.find(
+            (call) => call[1] === 'm.space.child'
+        )?.[2] as Record<string, unknown>;
+        expect(childEdge.order).toBeUndefined();
+    });
+});
+
+/** A category room stub whose `co.bmc.category` state names a purpose. */
+const makeCategory = (purpose?: string, type = 'm.space'): Room =>
+    ({
+        roomId: `!cat-${purpose ?? 'plain'}:server`,
+        getType: () => type,
+        currentState: {
+            getStateEvents: (eventType: string) =>
+                eventType === CATEGORY_STATE_EVENT_TYPE && purpose !== undefined
+                    ? { getContent: () => ({ purpose }) }
+                    : undefined,
+        },
+    } as unknown as Room);
+
+describe('readCategoryPurpose', () => {
+    it('reads the purpose marker off a category space', () => {
+        expect(readCategoryPurpose(makeCategory('topics'))).toBe('topics');
+    });
+
+    it('returns null for an unmarked category, an unknown purpose, or a non-space', () => {
+        expect(readCategoryPurpose(makeCategory())).toBeNull();
+        expect(readCategoryPurpose(makeCategory('bogus'))).toBeNull();
+        // A den is not a category no matter what state it carries.
+        expect(readCategoryPurpose(makeCategory('topics', 'm.room'))).toBeNull();
+        expect(readCategoryPurpose(undefined)).toBeNull();
+    });
+});
+
+describe('findOrCreateCategory', () => {
+    const makeMx = (children: Record<string, Room | undefined>) => {
+        const sendStateEvent = vi.fn().mockResolvedValue(undefined);
+        const createRoom = vi.fn().mockResolvedValue({ room_id: '!new-cat:server' });
+        const canopy = {
+            currentState: {
+                getStateEvents: (type: string) =>
+                    type === 'm.space.child'
+                        ? Object.keys(children).map((id) => ({ getStateKey: () => id }))
+                        : [],
+            },
+        } as unknown as Room;
+        const mx = {
+            getDomain: () => 'server',
+            createRoom,
+            sendStateEvent,
+            getRoom: (id: string) => (id === '!canopy:server' ? canopy : children[id]),
+        } as unknown as MatrixClient;
+        return { mx, sendStateEvent, createRoom };
+    };
+
+    it('reuses an existing category found by its marker', async () => {
+        const existing = makeCategory('topics');
+        const { mx, createRoom } = makeMx({ [existing.roomId]: existing });
+
+        const id = await findOrCreateCategory(mx, {
+            canopyId: '!canopy:server',
+            purpose: 'topics',
+        });
+
+        expect(id).toBe(existing.roomId);
+        expect(createRoom).not.toHaveBeenCalled();
+    });
+
+    /**
+     * Matching by display name would break the moment someone renamed the
+     * category, and would hijack any hand-made category called "Topics".
+     */
+    it('ignores a same-named category that carries no marker', async () => {
+        const lookalike = { ...makeCategory(), name: 'Topics' } as Room;
+        const { mx, createRoom } = makeMx({ '!lookalike:server': lookalike });
+
+        const id = await findOrCreateCategory(mx, {
+            canopyId: '!canopy:server',
+            purpose: 'topics',
+        });
+
+        expect(id).toBe('!new-cat:server');
+        expect(createRoom).toHaveBeenCalled();
+    });
+
+    it('stamps the marker and a tail order on a category it creates', async () => {
+        const { mx, sendStateEvent } = makeMx({});
+
+        await findOrCreateCategory(mx, { canopyId: '!canopy:server', purpose: 'topics' });
+
+        expect(sendStateEvent).toHaveBeenCalledWith(
+            '!new-cat:server',
+            CATEGORY_STATE_EVENT_TYPE,
+            { purpose: 'topics' },
+            ''
+        );
+        // `getOrderedChildIds` gives unordered children 'zzz', so this sorts
+        // after every hand-made channel — deliberately, not by accident.
+        expect(AUTO_CATEGORY_ORDER > 'zzz').toBe(true);
+        expect(sendStateEvent).toHaveBeenCalledWith(
+            '!canopy:server',
+            'm.space.child',
+            expect.objectContaining({ order: AUTO_CATEGORY_ORDER }),
+            '!new-cat:server'
+        );
+    });
+
+    it('survives a canopy whose child rooms are not loaded', async () => {
+        const { mx, createRoom } = makeMx({ '!unloaded:server': undefined });
+
+        const id = await findOrCreateCategory(mx, {
+            canopyId: '!canopy:server',
+            purpose: 'topics',
+        });
+
+        expect(id).toBe('!new-cat:server');
+        expect(createRoom).toHaveBeenCalled();
     });
 });
