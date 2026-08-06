@@ -121,8 +121,50 @@ requiresSeededColiseum('coliseum coalition: the legend fits and filters', async 
 
     await toggle.click();
     await expect(page.getByTestId('coalition-legend')).toBeVisible();
-    await page.getByTestId('coalition-legend-layer-aid').click();
+
+    const aid = page.getByTestId('coalition-legend-layer-aid');
+    await expect(aid).toHaveAttribute('aria-pressed', 'true');
+    await aid.click();
+    await expect(aid).toHaveAttribute('aria-pressed', 'false');
     await expect(page.getByTestId('coalition-view')).toBeVisible();
+});
+
+/**
+ * A layer you switch off stays off.
+ *
+ * The legend's switches used to be component state, so hiding a layer lasted
+ * until you navigated away — and they only stopped pins being *drawn*, not
+ * fetched. Persistence is the half of that only a real browser can prove, since
+ * it rides on localStorage surviving a reload.
+ */
+requiresSeededColiseum('coliseum coalition: a hidden layer stays hidden', async ({ page }) => {
+    await loginAs(
+        page,
+        process.env.LS_MEMBER_A_USERNAME ?? 'smoke_member_a',
+        process.env.LS_MEMBER_A_PASSWORD ?? 'change-me'
+    );
+    await openColiseumCoalition(page);
+
+    await page.getByTestId('coalition-legend-toggle').click();
+    await page.getByTestId('coalition-legend-layer-aid').click();
+    await expect(page.getByTestId('coalition-legend-layer-aid')).toHaveAttribute(
+        'aria-pressed',
+        'false'
+    );
+
+    await page.reload();
+    await expect(page.getByTestId('coalition-view')).toBeVisible({ timeout: 20_000 });
+    await page.getByTestId('coalition-legend-toggle').click();
+    await expect(page.getByTestId('coalition-legend-layer-aid')).toHaveAttribute(
+        'aria-pressed',
+        'false'
+    );
+
+    // Everything else is untouched — hiding one layer must not blank the map.
+    await expect(page.getByTestId('coalition-legend-layer-events')).toHaveAttribute(
+        'aria-pressed',
+        'true'
+    );
 });
 
 requiresSeededColiseum(
@@ -135,8 +177,9 @@ requiresSeededColiseum(
         );
         await openColiseumCoalition(page);
 
-        // Needs is a tool, not a tab: it has no coordinates to be pinned by, so it
-        // lives in the bag rather than on the map.
+        // Needs is reachable both ways now: placed needs are map pins, and the
+        // board itself is a tool in the bag — which is where a need with no
+        // location, and the composer, still live.
         await page.getByTestId('coalition-toolbag-button').click();
         await page.getByTestId('coalition-toolbag-tile-needs').click();
         const cards = page.getByTestId('coalition-need-card');
