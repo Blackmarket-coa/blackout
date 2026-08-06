@@ -85,6 +85,7 @@ export function ResourcesTab({ scope }: ResourcesTabProps) {
     const [location, setLocation] = useState('');
     const [place, setPlace] = useState<CoalitionPlace | null>(null);
     const [pending, setPending] = useState(false);
+    const [submitError, setSubmitError] = useState<string | null>(null);
 
     const onAdd = useCallback(
         async (event: React.FormEvent<HTMLFormElement>) => {
@@ -92,6 +93,7 @@ export function ResourcesTab({ scope }: ResourcesTabProps) {
             const trimmed = name.trim();
             if (!trimmed || !scope.canopyId || pending) return;
             setPending(true);
+            setSubmitError(null);
             try {
                 await createCoalitionResource({
                     canopyId: scope.canopyId,
@@ -104,6 +106,13 @@ export function ResourcesTab({ scope }: ResourcesTabProps) {
                 setLocation('');
                 setPlace(null);
                 refetch();
+            } catch (err: unknown) {
+                // A rejected request used to be an unhandled rejection: the
+                // button re-enabled and nothing else happened, so a mistyped
+                // coordinate looked like the form was simply broken.
+                setSubmitError(
+                    err instanceof Error ? err.message : 'Could not register that resource.'
+                );
             } finally {
                 setPending(false);
             }
@@ -188,6 +197,15 @@ export function ResourcesTab({ scope }: ResourcesTabProps) {
                     label="On the map"
                     testId="coalition-resource-place"
                 />
+                {submitError ? (
+                    <span
+                        style={{ fontSize: 12, color: 'var(--danger, #E74C3C)' }}
+                        role="alert"
+                        data-testid="coalition-resource-submit-error"
+                    >
+                        {submitError}
+                    </span>
+                ) : null}
             </form>
 
             {error ? (

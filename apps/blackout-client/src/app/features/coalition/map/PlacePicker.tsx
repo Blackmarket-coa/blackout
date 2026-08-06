@@ -1,4 +1,4 @@
-import React, { useCallback, useState, type CSSProperties } from 'react';
+import React, { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import {
     AREA_RADIUS_OPTIONS_KM,
     formatRadius,
@@ -35,6 +35,88 @@ const chipStyle = (active: boolean): CSSProperties => ({
 type Mode = 'none' | PlaceKind;
 
 const modeOf = (place: CoalitionPlace | null): Mode => place?.kind ?? 'none';
+
+/**
+ * One coordinate, typed.
+ *
+ * The field owns its text and only publishes a number once the text is one:
+ * finite and inside the world. Binding a controlled input straight to the
+ * number and parsing every keystroke with a zero fallback meant a cleared field
+ * snapped the pin to 0,0 and a leading "-" became 0 before its digits arrived —
+ * so no negative longitude could be typed, which is most of the Americas.
+ *
+ * Text rather than `type="number"` on purpose. A number input's value
+ * sanitization discards partial input ("-", "47.") as the empty string, so the
+ * half-typed state cannot be held or tested; its scroll-wheel and arrow-key
+ * stepping also change a coordinate by accident. `inputMode="decimal"` still
+ * gets the numeric keypad on a phone.
+ *
+ * Out-of-range input stays on screen and is flagged rather than silently
+ * dropped — otherwise the field and the pin disagree and someone saves a
+ * position they cannot see.
+ */
+function CoordinateField({
+    value,
+    onChange,
+    limit,
+    label,
+    testId,
+}: {
+    value: number;
+    onChange: (next: number) => void;
+    /** Absolute bound: 90 for latitude, 180 for longitude. */
+    limit: number;
+    label: string;
+    testId: string;
+}) {
+    const [text, setText] = useState(() => String(value));
+    const committed = useRef(value);
+
+    // Follow the value when it changes from somewhere else — "Use my location",
+    // a mode switch — but never while it merely echoes what was just typed, or
+    // the caret jumps mid-edit.
+    useEffect(() => {
+        if (value !== committed.current) {
+            committed.current = value;
+            setText(String(value));
+        }
+    }, [value]);
+
+    const parsed = Number.parseFloat(text);
+    const invalid = text.trim() !== '' && (!Number.isFinite(parsed) || Math.abs(parsed) > limit);
+
+    return (
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <input
+                type="text"
+                inputMode="decimal"
+                value={text}
+                onChange={(event) => {
+                    const next = event.target.value;
+                    setText(next);
+                    const candidate = Number.parseFloat(next);
+                    if (Number.isFinite(candidate) && Math.abs(candidate) <= limit) {
+                        committed.current = candidate;
+                        onChange(candidate);
+                    }
+                }}
+                placeholder={label}
+                aria-label={label}
+                aria-invalid={invalid || undefined}
+                style={fieldStyle}
+                data-testid={testId}
+            />
+            {invalid ? (
+                <span
+                    style={{ fontSize: 11, color: 'var(--danger, #E74C3C)' }}
+                    data-testid={`${testId}-error`}
+                >
+                    {label} must be between -{limit} and {limit}.
+                </span>
+            ) : null}
+        </div>
+    );
+}
 
 export interface PlacePickerProps {
     value: CoalitionPlace | null;
@@ -194,29 +276,19 @@ export function PlacePicker({ value, onChange, label, testId = 'place' }: PlaceP
             {value ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                        <input
-                            type="number"
-                            step="any"
+                        <CoordinateField
                             value={value.latitude}
-                            onChange={(event) =>
-                                patch({ latitude: Number.parseFloat(event.target.value) || 0 })
-                            }
-                            placeholder="Latitude"
-                            aria-label="Latitude"
-                            style={fieldStyle}
-                            data-testid={`${testId}-latitude`}
+                            onChange={(latitude) => patch({ latitude })}
+                            limit={90}
+                            label="Latitude"
+                            testId={`${testId}-latitude`}
                         />
-                        <input
-                            type="number"
-                            step="any"
+                        <CoordinateField
                             value={value.longitude}
-                            onChange={(event) =>
-                                patch({ longitude: Number.parseFloat(event.target.value) || 0 })
-                            }
-                            placeholder="Longitude"
-                            aria-label="Longitude"
-                            style={fieldStyle}
-                            data-testid={`${testId}-longitude`}
+                            onChange={(longitude) => patch({ longitude })}
+                            limit={180}
+                            label="Longitude"
+                            testId={`${testId}-longitude`}
                         />
                         <button
                             type="button"

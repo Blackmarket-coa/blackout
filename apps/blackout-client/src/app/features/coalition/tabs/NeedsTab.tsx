@@ -75,6 +75,7 @@ export function NeedsTab({ scope }: NeedsTabProps) {
     const [kind, setKind] = useState<string>(SUGGESTED_NEED_KINDS[0]);
     const [place, setPlace] = useState<CoalitionPlace | null>(null);
     const [pending, setPending] = useState(false);
+    const [submitError, setSubmitError] = useState<string | null>(null);
 
     const onAdd = useCallback(
         async (event: React.FormEvent<HTMLFormElement>) => {
@@ -82,6 +83,7 @@ export function NeedsTab({ scope }: NeedsTabProps) {
             const trimmed = title.trim();
             if (!trimmed || !scope.canopyId || pending) return;
             setPending(true);
+            setSubmitError(null);
             try {
                 await createCoalitionNeed({
                     canopyId: scope.canopyId,
@@ -92,6 +94,11 @@ export function NeedsTab({ scope }: NeedsTabProps) {
                 setTitle('');
                 setPlace(null);
                 refetch();
+            } catch (err: unknown) {
+                // A rejected request used to be an unhandled rejection: the
+                // button re-enabled and nothing else happened, so a mistyped
+                // coordinate looked like the form was simply broken.
+                setSubmitError(err instanceof Error ? err.message : 'Could not post that need.');
             } finally {
                 setPending(false);
             }
@@ -169,6 +176,15 @@ export function NeedsTab({ scope }: NeedsTabProps) {
                     label="Where?"
                     testId="coalition-need-place"
                 />
+                {submitError ? (
+                    <span
+                        style={{ fontSize: 12, color: 'var(--danger, #E74C3C)' }}
+                        role="alert"
+                        data-testid="coalition-need-submit-error"
+                    >
+                        {submitError}
+                    </span>
+                ) : null}
             </form>
 
             {error ? (

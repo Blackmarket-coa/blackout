@@ -83,6 +83,7 @@ export function ProjectsTab({ scope }: ProjectsTabProps) {
     const [category, setCategory] = useState<string>(SUGGESTED_PROJECT_CATEGORIES[0]);
     const [place, setPlace] = useState<CoalitionPlace | null>(null);
     const [pending, setPending] = useState(false);
+    const [submitError, setSubmitError] = useState<string | null>(null);
 
     const onAdd = useCallback(
         async (event: React.FormEvent<HTMLFormElement>) => {
@@ -90,6 +91,7 @@ export function ProjectsTab({ scope }: ProjectsTabProps) {
             const trimmed = title.trim();
             if (!trimmed || !scope.canopyId || pending) return;
             setPending(true);
+            setSubmitError(null);
             try {
                 await createCoalitionProject({
                     canopyId: scope.canopyId,
@@ -100,6 +102,13 @@ export function ProjectsTab({ scope }: ProjectsTabProps) {
                 setTitle('');
                 setPlace(null);
                 refetch();
+            } catch (err: unknown) {
+                // A rejected request used to be an unhandled rejection: the
+                // button re-enabled and nothing else happened, so a mistyped
+                // coordinate looked like the form was simply broken.
+                setSubmitError(
+                    err instanceof Error ? err.message : 'Could not launch that project.'
+                );
             } finally {
                 setPending(false);
             }
@@ -177,6 +186,15 @@ export function ProjectsTab({ scope }: ProjectsTabProps) {
                     label="Where?"
                     testId="coalition-project-place"
                 />
+                {submitError ? (
+                    <span
+                        style={{ fontSize: 12, color: 'var(--danger, #E74C3C)' }}
+                        role="alert"
+                        data-testid="coalition-project-submit-error"
+                    >
+                        {submitError}
+                    </span>
+                ) : null}
             </form>
 
             {error ? (
