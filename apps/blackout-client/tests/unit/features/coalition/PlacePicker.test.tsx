@@ -154,6 +154,85 @@ describe('PlacePicker — a pin, an area, or nowhere', () => {
     });
 });
 
+describe('PlacePicker — typing a coordinate', () => {
+    const typeInto = async (container: HTMLElement, testId: string, text: string) => {
+        const field = container.querySelector(`[data-testid="${testId}"]`) as HTMLInputElement;
+        await act(async () => setNativeValue(field, text));
+        return field;
+    };
+
+    /**
+     * Most of the Americas has a negative longitude. A field that cannot hold
+     * the "-" while you type the rest of the number cannot express Seattle.
+     */
+    it('accepts a negative longitude typed a character at a time', async () => {
+        const { container, state } = render();
+        await click(container, 'p-mode-pin');
+
+        // A number input reports partial input like "-" as an empty string, so
+        // this is the sequence the component actually sees.
+        await typeInto(container, 'p-longitude', '');
+        await typeInto(container, 'p-longitude', '-122');
+        await typeInto(container, 'p-longitude', '-122.3321');
+
+        expect(state.place).toMatchObject({ longitude: -122.3321 });
+    });
+
+    it('lets a field be cleared without snapping the pin to the equator', async () => {
+        const { container, state } = render();
+        await click(container, 'p-mode-pin');
+        await typeInto(container, 'p-latitude', '47.6062');
+        expect(state.place).toMatchObject({ latitude: 47.6062 });
+
+        const field = await typeInto(container, 'p-latitude', '');
+        // The field empties so the next digits can be typed, and the pin holds
+        // its last real position rather than jumping to 0,0.
+        expect(field.value).toBe('');
+        expect(state.place).toMatchObject({ latitude: 47.6062 });
+    });
+
+    it('keeps what was typed on screen rather than overwriting it mid-edit', async () => {
+        const { container } = render();
+        await click(container, 'p-mode-pin');
+        const field = await typeInto(container, 'p-latitude', '47.');
+        expect(field.value).toBe('47.');
+    });
+
+    it('refuses a coordinate outside the world, and says so', async () => {
+        const { container, state } = render();
+        await click(container, 'p-mode-pin');
+        await typeInto(container, 'p-latitude', '47.6062');
+        await typeInto(container, 'p-latitude', '999');
+
+        // Not committed — a latitude of 999 is nowhere a map can draw.
+        expect(state.place).toMatchObject({ latitude: 47.6062 });
+        // And the mismatch between field and pin has to be visible, or the user
+        // saves a position they cannot see.
+        expect(container.querySelector('[data-testid="p-latitude-error"]')).toBeTruthy();
+    });
+
+    it('clears the warning once the value is back in range', async () => {
+        const { container } = render();
+        await click(container, 'p-mode-pin');
+        await typeInto(container, 'p-longitude', '999');
+        expect(container.querySelector('[data-testid="p-longitude-error"]')).toBeTruthy();
+
+        await typeInto(container, 'p-longitude', '-122.3321');
+        expect(container.querySelector('[data-testid="p-longitude-error"]')).toBeNull();
+    });
+
+    it('shows a coordinate that arrived from outside the field', async () => {
+        const { container } = render();
+        await click(container, 'p-mode-pin');
+        await typeInto(container, 'p-latitude', '10');
+
+        // Switching to area rebuilds the value; the field must follow it.
+        await click(container, 'p-mode-area');
+        const field = container.querySelector('[data-testid="p-latitude"]') as HTMLInputElement;
+        expect(field.value).toBe('10');
+    });
+});
+
 describe('PlacePicker — using the device location', () => {
     const withGeolocation = (coords: { latitude: number; longitude: number }) => {
         const getCurrentPosition = vi.fn(

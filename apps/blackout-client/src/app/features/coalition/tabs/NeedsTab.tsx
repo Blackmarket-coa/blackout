@@ -2,13 +2,13 @@ import React, { useCallback, useState, type CSSProperties } from 'react';
 import {
     NEED_STATUSES,
     SUGGESTED_NEED_KINDS,
-    describePlace,
     type CoalitionPlace,
     type NeedStatus,
 } from '@blackout/core';
 import { useCoalitionNeeds, type CoalitionScopeQuery } from '../hooks/useCoalitionFeed';
 import { createCoalitionNeed, updateCoalitionNeed } from '../coalitionClient';
 import { PlacePicker } from '../map/PlacePicker';
+import { PlaceEditor } from '../map/PlaceEditor';
 
 export interface NeedsTabProps {
     scope: CoalitionScopeQuery;
@@ -75,6 +75,7 @@ export function NeedsTab({ scope }: NeedsTabProps) {
     const [kind, setKind] = useState<string>(SUGGESTED_NEED_KINDS[0]);
     const [place, setPlace] = useState<CoalitionPlace | null>(null);
     const [pending, setPending] = useState(false);
+    const [submitError, setSubmitError] = useState<string | null>(null);
 
     const onAdd = useCallback(
         async (event: React.FormEvent<HTMLFormElement>) => {
@@ -82,6 +83,7 @@ export function NeedsTab({ scope }: NeedsTabProps) {
             const trimmed = title.trim();
             if (!trimmed || !scope.canopyId || pending) return;
             setPending(true);
+            setSubmitError(null);
             try {
                 await createCoalitionNeed({
                     canopyId: scope.canopyId,
@@ -92,6 +94,11 @@ export function NeedsTab({ scope }: NeedsTabProps) {
                 setTitle('');
                 setPlace(null);
                 refetch();
+            } catch (err: unknown) {
+                // A rejected request used to be an unhandled rejection: the
+                // button re-enabled and nothing else happened, so a mistyped
+                // coordinate looked like the form was simply broken.
+                setSubmitError(err instanceof Error ? err.message : 'Could not post that need.');
             } finally {
                 setPending(false);
             }
@@ -99,9 +106,30 @@ export function NeedsTab({ scope }: NeedsTabProps) {
         [title, kind, place, scope.canopyId, pending, refetch]
     );
 
+    // Card mutations report where they failed. Without this a 403 from the
+    // author-only rule was an unhandled rejection: the select snapped back on
+    // the next render with nothing said.
+    const [cardError, setCardError] = useState<{ id: string; message: string } | null>(null);
+
     const onStatus = useCallback(
         async (id: string, status: NeedStatus) => {
-            await updateCoalitionNeed(id, { status });
+            setCardError(null);
+            try {
+                await updateCoalitionNeed(id, { status });
+                refetch();
+            } catch (err: unknown) {
+                setCardError({
+                    id,
+                    message: err instanceof Error ? err.message : 'Could not update that need.',
+                });
+            }
+        },
+        [refetch]
+    );
+
+    const onPlace = useCallback(
+        async (id: string, next: CoalitionPlace | null) => {
+            await updateCoalitionNeed(id, { place: next });
             refetch();
         },
         [refetch]
@@ -169,6 +197,15 @@ export function NeedsTab({ scope }: NeedsTabProps) {
                     label="Where?"
                     testId="coalition-need-place"
                 />
+                {submitError ? (
+                    <span
+                        style={{ fontSize: 12, color: 'var(--danger, #E74C3C)' }}
+                        role="alert"
+                        data-testid="coalition-need-submit-error"
+                    >
+                        {submitError}
+                    </span>
+                ) : null}
             </form>
 
             {error ? (
@@ -202,14 +239,11 @@ export function NeedsTab({ scope }: NeedsTabProps) {
                             {need.description}
                         </p>
                     ) : null}
-                    {need.place ? (
-                        <span
-                            style={{ fontSize: 12, color: 'var(--text-secondary)' }}
-                            data-testid="coalition-need-place-line"
-                        >
-                            {need.place.kind === 'area' ? '◎' : '📍'} {describePlace(need.place)}
-                        </span>
-                    ) : null}
+                    <PlaceEditor
+                        place={need.place}
+                        onSave={(next) => onPlace(need.id, next)}
+                        testId="coalition-need-place-line"
+                    />
                     <select
                         value={need.status}
                         onChange={(event) => onStatus(need.id, event.target.value as NeedStatus)}
@@ -222,6 +256,15 @@ export function NeedsTab({ scope }: NeedsTabProps) {
                             </option>
                         ))}
                     </select>
+                    {cardError?.id === need.id ? (
+                        <span
+                            style={{ fontSize: 12, color: 'var(--danger, #E74C3C)' }}
+                            role="alert"
+                            data-testid="coalition-need-card-error"
+                        >
+                            {cardError.message}
+                        </span>
+                    ) : null}
                 </article>
             ))}
         </div>

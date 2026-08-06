@@ -2,13 +2,17 @@ import React, { useCallback, useState, type CSSProperties } from 'react';
 import {
     PROJECT_STATUSES,
     SUGGESTED_PROJECT_CATEGORIES,
-    describePlace,
     type CoalitionPlace,
     type ProjectStatus,
 } from '@blackout/core';
 import { useCoalitionProjects, type CoalitionScopeQuery } from '../hooks/useCoalitionFeed';
-import { createCoalitionProject, updateCoalitionProjectStatus } from '../coalitionClient';
+import {
+    createCoalitionProject,
+    updateCoalitionProject,
+    updateCoalitionProjectStatus,
+} from '../coalitionClient';
 import { PlacePicker } from '../map/PlacePicker';
+import { PlaceEditor } from '../map/PlaceEditor';
 
 export interface ProjectsTabProps {
     scope: CoalitionScopeQuery;
@@ -83,6 +87,7 @@ export function ProjectsTab({ scope }: ProjectsTabProps) {
     const [category, setCategory] = useState<string>(SUGGESTED_PROJECT_CATEGORIES[0]);
     const [place, setPlace] = useState<CoalitionPlace | null>(null);
     const [pending, setPending] = useState(false);
+    const [submitError, setSubmitError] = useState<string | null>(null);
 
     const onAdd = useCallback(
         async (event: React.FormEvent<HTMLFormElement>) => {
@@ -90,6 +95,7 @@ export function ProjectsTab({ scope }: ProjectsTabProps) {
             const trimmed = title.trim();
             if (!trimmed || !scope.canopyId || pending) return;
             setPending(true);
+            setSubmitError(null);
             try {
                 await createCoalitionProject({
                     canopyId: scope.canopyId,
@@ -100,6 +106,13 @@ export function ProjectsTab({ scope }: ProjectsTabProps) {
                 setTitle('');
                 setPlace(null);
                 refetch();
+            } catch (err: unknown) {
+                // A rejected request used to be an unhandled rejection: the
+                // button re-enabled and nothing else happened, so a mistyped
+                // coordinate looked like the form was simply broken.
+                setSubmitError(
+                    err instanceof Error ? err.message : 'Could not launch that project.'
+                );
             } finally {
                 setPending(false);
             }
@@ -107,9 +120,30 @@ export function ProjectsTab({ scope }: ProjectsTabProps) {
         [title, category, place, scope.canopyId, pending, refetch]
     );
 
+    // Card mutations report where they failed. Without this a 403 from the
+    // lead-only rule was an unhandled rejection: the select snapped back on the
+    // next render with nothing said.
+    const [cardError, setCardError] = useState<{ id: string; message: string } | null>(null);
+
     const onStatus = useCallback(
         async (id: string, status: ProjectStatus) => {
-            await updateCoalitionProjectStatus(id, status);
+            setCardError(null);
+            try {
+                await updateCoalitionProjectStatus(id, status);
+                refetch();
+            } catch (err: unknown) {
+                setCardError({
+                    id,
+                    message: err instanceof Error ? err.message : 'Could not update that project.',
+                });
+            }
+        },
+        [refetch]
+    );
+
+    const onPlace = useCallback(
+        async (id: string, next: CoalitionPlace | null) => {
+            await updateCoalitionProject(id, { place: next });
             refetch();
         },
         [refetch]
@@ -177,6 +211,15 @@ export function ProjectsTab({ scope }: ProjectsTabProps) {
                     label="Where?"
                     testId="coalition-project-place"
                 />
+                {submitError ? (
+                    <span
+                        style={{ fontSize: 12, color: 'var(--danger, #E74C3C)' }}
+                        role="alert"
+                        data-testid="coalition-project-submit-error"
+                    >
+                        {submitError}
+                    </span>
+                ) : null}
             </form>
 
             {error ? (
@@ -209,15 +252,11 @@ export function ProjectsTab({ scope }: ProjectsTabProps) {
                         </span>
                         <span style={badgeStyle}>{STATUS_LABEL[project.status]}</span>
                     </div>
-                    {project.place ? (
-                        <span
-                            style={{ fontSize: 12, color: 'var(--text-secondary)' }}
-                            data-testid="coalition-project-place-line"
-                        >
-                            {project.place.kind === 'area' ? '◎' : '📍'}{' '}
-                            {describePlace(project.place)}
-                        </span>
-                    ) : null}
+                    <PlaceEditor
+                        place={project.place}
+                        onSave={(next) => onPlace(project.id, next)}
+                        testId="coalition-project-place-line"
+                    />
                     {project.description ? (
                         <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0 }}>
                             {project.description}
@@ -237,6 +276,15 @@ export function ProjectsTab({ scope }: ProjectsTabProps) {
                             </option>
                         ))}
                     </select>
+                    {cardError?.id === project.id ? (
+                        <span
+                            style={{ fontSize: 12, color: 'var(--danger, #E74C3C)' }}
+                            role="alert"
+                            data-testid="coalition-project-card-error"
+                        >
+                            {cardError.message}
+                        </span>
+                    ) : null}
                 </article>
             ))}
         </div>

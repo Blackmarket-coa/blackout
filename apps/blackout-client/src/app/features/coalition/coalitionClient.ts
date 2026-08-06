@@ -366,6 +366,22 @@ export function updateCoalitionProjectStatus(
     );
 }
 
+/**
+ * Patch a project. `place: null` takes it off the map; omitting `place`
+ * leaves whatever it already had.
+ */
+export function updateCoalitionProject(
+    id: string,
+    patch: { title?: string; description?: string; place?: CoalitionPlace | null },
+    token: string | null = readBlackoutApiToken()
+): Promise<{ project: CoalitionProject }> {
+    return patchJson<{ project: CoalitionProject }>(
+        `${COALITION_BASE}/projects/${encodeURIComponent(id)}`,
+        patch,
+        token
+    );
+}
+
 export interface ProjectSupporter {
     supporterUserId: string;
     amountCents: number;
