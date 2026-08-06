@@ -2,13 +2,13 @@ import React, { useCallback, useState, type CSSProperties } from 'react';
 import {
     RESOURCE_AVAILABILITY,
     SUGGESTED_RESOURCE_KINDS,
-    describePlace,
     type CoalitionPlace,
     type ResourceAvailability,
 } from '@blackout/core';
 import { useCoalitionResources, type CoalitionScopeQuery } from '../hooks/useCoalitionFeed';
 import { createCoalitionResource, updateCoalitionResource } from '../coalitionClient';
 import { PlacePicker } from '../map/PlacePicker';
+import { PlaceEditor } from '../map/PlaceEditor';
 
 export interface ResourcesTabProps {
     scope: CoalitionScopeQuery;
@@ -120,9 +120,30 @@ export function ResourcesTab({ scope }: ResourcesTabProps) {
         [name, kind, location, place, scope.canopyId, pending, refetch]
     );
 
+    // Card mutations report where they failed. Without this a 403 from the
+    // steward-only rule was an unhandled rejection: the select snapped back on
+    // the next render with nothing said.
+    const [cardError, setCardError] = useState<{ id: string; message: string } | null>(null);
+
     const onAvailability = useCallback(
         async (id: string, availability: ResourceAvailability) => {
-            await updateCoalitionResource(id, { availability });
+            setCardError(null);
+            try {
+                await updateCoalitionResource(id, { availability });
+                refetch();
+            } catch (err: unknown) {
+                setCardError({
+                    id,
+                    message: err instanceof Error ? err.message : 'Could not update that resource.',
+                });
+            }
+        },
+        [refetch]
+    );
+
+    const onPlace = useCallback(
+        async (id: string, next: CoalitionPlace | null) => {
+            await updateCoalitionResource(id, { place: next });
             refetch();
         },
         [refetch]
@@ -241,15 +262,11 @@ export function ResourcesTab({ scope }: ResourcesTabProps) {
                             🚪 {resource.location}
                         </span>
                     ) : null}
-                    {resource.place ? (
-                        <span
-                            style={{ fontSize: 12, color: 'var(--text-secondary)' }}
-                            data-testid="coalition-resource-place-line"
-                        >
-                            {resource.place.kind === 'area' ? '◎' : '📍'}{' '}
-                            {describePlace(resource.place)}
-                        </span>
-                    ) : null}
+                    <PlaceEditor
+                        place={resource.place}
+                        onSave={(next) => onPlace(resource.id, next)}
+                        testId="coalition-resource-place-line"
+                    />
                     {resource.description ? (
                         <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0 }}>
                             {resource.description}
@@ -269,6 +286,15 @@ export function ResourcesTab({ scope }: ResourcesTabProps) {
                             </option>
                         ))}
                     </select>
+                    {cardError?.id === resource.id ? (
+                        <span
+                            style={{ fontSize: 12, color: 'var(--danger, #E74C3C)' }}
+                            role="alert"
+                            data-testid="coalition-resource-card-error"
+                        >
+                            {cardError.message}
+                        </span>
+                    ) : null}
                 </article>
             ))}
         </div>
