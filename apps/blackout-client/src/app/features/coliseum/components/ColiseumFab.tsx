@@ -1,5 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import * as css from './coliseumUi.css';
+import { usePageFabSlot } from '../../../hooks/useFabStack';
+
+/** Keep in sync with the `fab` style's width/height in coliseumUi.css.ts. */
+const FAB_SIZE = 56;
 
 /**
  * Detect an on-screen keyboard on mobile: when it opens, visualViewport height
@@ -34,6 +38,9 @@ export function ColiseumFab({
     children?: React.ReactNode;
 }) {
     const keyboardOpen = useKeyboardOpen();
+    // Claim the base FAB slot so the global bug-report FAB stacks above us
+    // instead of landing on top of this button.
+    usePageFabSlot(FAB_SIZE, !keyboardOpen);
     if (keyboardOpen) return null;
     return (
         <button

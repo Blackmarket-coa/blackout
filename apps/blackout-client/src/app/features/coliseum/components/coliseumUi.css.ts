@@ -116,7 +116,11 @@ export const tagRow = style({
     gap: 6,
 });
 
-/** Floating action button (compose), offset above the mobile bottom tab bar. */
+/**
+ * Floating action button (compose), offset above the mobile bottom tab bar.
+ * The 84px base offset is the shared FAB base slot — keep it in sync with
+ * `BASE_BOTTOM_PX` in `src/app/hooks/useFabStack.ts`.
+ */
 export const fab = style({
     position: 'fixed',
     bottom: 'calc(env(safe-area-inset-bottom, 0px) + 84px)',
