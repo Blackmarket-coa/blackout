@@ -2,11 +2,14 @@ import React, { useCallback, useEffect, useRef, useState, type CSSProperties } f
 import {
     AREA_RADIUS_OPTIONS_KM,
     formatRadius,
+    geocodeResultToPlace,
     type CoalitionPlace,
+    type GeocodeResult,
     type PlaceKind,
 } from '@blackout/core';
 import { coarsenCoordinate, useLocationConsentFlow } from '../../location/locationConsent';
 import { LocationConsentDialog } from '../../location/LocationConsentDialog';
+import { geocodeAddress } from '../coalitionClient';
 
 const DEFAULT_AREA_RADIUS_METERS = 5_000;
 
@@ -162,6 +165,53 @@ export function PlacePicker({ value, onChange, label, testId = 'place' }: PlaceP
         value?.kind === 'area' ? value.radiusMeters : DEFAULT_AREA_RADIUS_METERS
     );
 
+    // Address search, proxied by the API against whatever geocoder the operator
+    // configured. Unconfigured servers answer 503 and the reason is shown here
+    // rather than swallowed, so it is obvious the feature needs setting up
+    // rather than looking broken.
+    const [addressQuery, setAddressQuery] = useState('');
+    const [searching, setSearching] = useState(false);
+    const [searchError, setSearchError] = useState<string | null>(null);
+    const [matches, setMatches] = useState<GeocodeResult[] | null>(null);
+
+    const searchAddress = useCallback(async () => {
+        const query = addressQuery.trim();
+        if (query.length < 3 || searching) return;
+        setSearching(true);
+        setSearchError(null);
+        setMatches(null);
+        try {
+            const response = await geocodeAddress(query);
+            setMatches(response.results);
+        } catch (err: unknown) {
+            setSearchError(err instanceof Error ? err.message : 'Address search failed.');
+        } finally {
+            setSearching(false);
+        }
+    }, [addressQuery, searching]);
+
+    const chooseMatch = useCallback(
+        (match: GeocodeResult) => {
+            // A geocoder answers "where is this address", which is a point. If
+            // the current place is an area, keep that shape and just move its
+            // centre — the radius is a claim only the author can make.
+            const pin = geocodeResultToPlace(match);
+            onChange(
+                value?.kind === 'area'
+                    ? {
+                          ...value,
+                          latitude: pin.latitude,
+                          longitude: pin.longitude,
+                          label: pin.label,
+                      }
+                    : pin
+            );
+            setMatches(null);
+            setAddressQuery('');
+        },
+        [onChange, value]
+    );
+
     const setMode = useCallback(
         (next: Mode) => {
             if (next === 'none') {
@@ -275,6 +325,89 @@ export function PlacePicker({ value, onChange, label, testId = 'place' }: PlaceP
 
             {value ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {/*
+                     * Address first, coordinates second. Typing a latitude is
+                     * the fallback, not the expectation — but it stays, since
+                     * a server with no geocoder configured has nothing else.
+                     */}
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        <input
+                            value={addressQuery}
+                            onChange={(event) => setAddressQuery(event.target.value)}
+                            onKeyDown={(event) => {
+                                if (event.key !== 'Enter') return;
+                                // The picker lives inside a composer form;
+                                // Enter here must search, not submit the form.
+                                event.preventDefault();
+                                void searchAddress();
+                            }}
+                            placeholder="Search an address…"
+                            aria-label="Search an address"
+                            style={fieldStyle}
+                            data-testid={`${testId}-address`}
+                        />
+                        <button
+                            type="button"
+                            onClick={() => void searchAddress()}
+                            disabled={searching || addressQuery.trim().length < 3}
+                            style={chipStyle(false)}
+                            data-testid={`${testId}-address-search`}
+                        >
+                            {searching ? 'Searching…' : '🔎 Search'}
+                        </button>
+                    </div>
+
+                    {searchError ? (
+                        <span
+                            style={{ fontSize: 12, color: 'var(--danger, #E74C3C)' }}
+                            role="alert"
+                            data-testid={`${testId}-address-error`}
+                        >
+                            {searchError}
+                        </span>
+                    ) : null}
+
+                    {matches?.length === 0 ? (
+                        <span
+                            style={{ fontSize: 12, color: 'var(--text-muted)' }}
+                            data-testid={`${testId}-address-empty`}
+                        >
+                            No matches. Try a broader search, or enter coordinates below.
+                        </span>
+                    ) : null}
+
+                    {matches && matches.length > 0 ? (
+                        <ul
+                            style={{
+                                listStyle: 'none',
+                                margin: 0,
+                                padding: 0,
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: 4,
+                            }}
+                            data-testid={`${testId}-address-results`}
+                        >
+                            {matches.map((match) => (
+                                <li key={`${match.latitude},${match.longitude},${match.label}`}>
+                                    <button
+                                        type="button"
+                                        onClick={() => chooseMatch(match)}
+                                        style={{
+                                            ...fieldStyle,
+                                            width: '100%',
+                                            textAlign: 'left',
+                                            cursor: 'pointer',
+                                        }}
+                                        data-testid={`${testId}-address-result`}
+                                    >
+                                        {match.label}
+                                    </button>
+                                </li>
+                            ))}
+                        </ul>
+                    ) : null}
+
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                         <CoordinateField
                             value={value.latitude}
