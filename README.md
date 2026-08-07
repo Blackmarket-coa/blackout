@@ -1,5 +1,5 @@
-[![Chat (devs)](https://img.shields.io/matrix/blackout-dev:theblackout.app?label=chat%20(devs)&logo=matrix)](https://matrix.to/#/#blackout-dev:theblackout.app)
-[![Chat (testers)](https://img.shields.io/matrix/welcome:theblackout.app?label=chat%20(testers)&logo=matrix)](https://matrix.to/#/#welcome:theblackout.app)
+[![Chat (devs)](<https://img.shields.io/matrix/blackout-dev:theblackout.app?label=chat%20(devs)&logo=matrix>)](https://matrix.to/#/#blackout-dev:theblackout.app)
+[![Chat (testers)](<https://img.shields.io/matrix/welcome:theblackout.app?label=chat%20(testers)&logo=matrix>)](https://matrix.to/#/#welcome:theblackout.app)
 
 # Blackout
 
@@ -16,28 +16,29 @@ Capacitor mobile, a Synapse-derived homeserver, and a Node/Hono API server.
 
 ## For testers (no setup required)
 
-- Hosted instance: **[`https://matrix.theblackout.app`](https://matrix.theblackout.app)**.
-- **Join the beta — no CLI needed:** registration is invite-gated. A standing
-  community invite link is not yet published here; request one via the
-  [invite-request issue template](https://github.com/Blackmarket-coa/blackout/issues/new/choose)
-  and you'll get a link that pre-fills the registration token so you never
-  have to touch the CLI.
+-   Hosted instance: **[`https://matrix.theblackout.app`](https://matrix.theblackout.app)**.
+-   **Join the beta — no CLI needed:** registration is invite-gated. A standing
+    community invite link is not yet published here; request one via the
+    [invite-request issue template](https://github.com/Blackmarket-coa/blackout/issues/new/choose)
+    and you'll get a link that pre-fills the registration token so you never
+    have to touch the CLI.
 
-  > _Maintainers: once a multi-use community invitation is minted via the
-  > invitations flow (`POST /v1/invitations`, or the in-app Invitations panel),
-  > publish it here as `https://matrix.theblackout.app/invite/<TOKEN>` and
-  > remove this note._
-- Browse public rooms before signing up at
-  [`https://matrix.theblackout.app/explore`](https://matrix.theblackout.app/explore).
-- See [`TESTERS.md`](TESTERS.md) for the 5-minute orientation and what to try first.
-- **Sell a digital product:** the black market is open to sellers — see
-  [`docs/guides/selling-on-the-black-market.md`](docs/guides/selling-on-the-black-market.md)
-  for the full path (blackout products and plain digital goods).
-- During the **96-hour V1 Test Flight**, open the Coliseum Coalition once
-  you're signed in — eight challenges, each a real area we want stress-tested.
-  Briefs: [`docs/coliseum/`](docs/coliseum/README.md).
-- Report what you find via [Issues](https://github.com/Blackmarket-coa/blackout/issues/new/choose) or [Discussions](https://github.com/Blackmarket-coa/blackout/discussions).
-- Pick a role (Scout / Operator / Builder / Signal / Federation Team) in [`CONTRIBUTOR_ROLES.md`](CONTRIBUTOR_ROLES.md).
+    > _Maintainers: once a multi-use community invitation is minted via the
+    > invitations flow (`POST /v1/invitations`, or the in-app Invitations panel),
+    > publish it here as `https://matrix.theblackout.app/invite/<TOKEN>` and
+    > remove this note._
+
+-   Browse public rooms before signing up at
+    [`https://matrix.theblackout.app/explore`](https://matrix.theblackout.app/explore).
+-   See [`TESTERS.md`](TESTERS.md) for the 5-minute orientation and what to try first.
+-   **Sell a digital product:** the black market is open to sellers — see
+    [`docs/guides/selling-on-the-black-market.md`](docs/guides/selling-on-the-black-market.md)
+    for the full path (blackout products and plain digital goods).
+-   During the **96-hour V1 Test Flight**, open the Coliseum Coalition once
+    you're signed in — eight challenges, each a real area we want stress-tested.
+    Briefs: [`docs/coliseum/`](docs/coliseum/README.md).
+-   Report what you find via [Issues](https://github.com/Blackmarket-coa/blackout/issues/new/choose) or [Discussions](https://github.com/Blackmarket-coa/blackout/discussions).
+-   Pick a role (Scout / Operator / Builder / Signal / Federation Team) in [`CONTRIBUTOR_ROLES.md`](CONTRIBUTOR_ROLES.md).
 
 ## What this repo contains
 
@@ -48,44 +49,44 @@ subscriptions, marketplace), Twitch/YouTube/Kick/Discord bridges, and the
 plugin ecosystem — see
 [`docs/features/OVERVIEW.md`](docs/features/OVERVIEW.md).
 
-- Web client (`apps/blackout-client`) — Matrix-protocol web app with Blackout's feature plugins.
-- Desktop wrapper: `blackout-desktop` (Tauri)
-- Mobile wrapper: `blackout-mobile` (Capacitor)
-- Mobile native workspace: `mobile/` (shared auth/session, native bridge contracts, and core surface controllers)
-- API server (`packages/api`) — Hono-based runtime delegated to by `apps/blackout-server`.
-- Homeserver (`apps/blackout-server`) — Synapse-derived; see deployment assets under `deploy/` and `infra/`.
-- Coalition + governance primitives (`packages/core/src/coalition/`, `packages/core/src/governance/`).
-- Blackout governance-focused features and rollout documentation.
-- A steganography subsystem with test coverage and developer tooling.
+-   Web client (`apps/blackout-client`) — Matrix-protocol web app with Blackout's feature plugins.
+-   Desktop wrapper: `blackout-desktop` (Tauri)
+-   Mobile wrapper: `blackout-mobile` (Capacitor)
+-   Mobile native workspace: `mobile/` (shared auth/session, native bridge contracts, and core surface controllers)
+-   API server (`packages/api`) — Hono-based runtime delegated to by `apps/blackout-server`.
+-   Homeserver (`apps/blackout-server`) — Synapse-derived; see deployment assets under `deploy/` and `infra/`.
+-   Coalition + governance primitives (`packages/core/src/coalition/`, `packages/core/src/governance/`).
+-   Blackout governance-focused features and rollout documentation.
+-   A steganography subsystem with test coverage and developer tooling.
 
 Key areas:
 
-- Monorepo apps: `apps/*`
-- Shared packages: `packages/*`
-- App bootstrap/runtime: `src/vector/*`
-- Main client features and UI: `src/components/*`, `src/models/*`, `src/settings/*`
-- Steganography code: `src/steganography/*`
-- Feature and rollout documentation: `docs/*`
+-   Monorepo apps: `apps/*`
+-   Shared packages: `packages/*`
+-   App bootstrap/runtime: `src/vector/*`
+-   Main client features and UI: `src/components/*`, `src/models/*`, `src/settings/*`
+-   Steganography code: `src/steganography/*`
+-   Feature and rollout documentation: `docs/*`
 
 For beta testers:
 
-- [`KNOWN_LIMITATIONS.md`](KNOWN_LIMITATIONS.md) — features deferred for beta, deduped against testing reports
+-   [`KNOWN_LIMITATIONS.md`](KNOWN_LIMITATIONS.md) — features deferred for beta, deduped against testing reports
 
 For security context, start with:
 
-- [`THREAT_MODEL.md`](THREAT_MODEL.md) — top-level adversary model, trust boundaries, accepted residual risks
-- [`SECURITY.md`](SECURITY.md) — vulnerability disclosure process
+-   [`THREAT_MODEL.md`](THREAT_MODEL.md) — top-level adversary model, trust boundaries, accepted residual risks
+-   [`SECURITY.md`](SECURITY.md) — vulnerability disclosure process
 
 For deeper architecture context:
 
-- `docs/repository_functionality_analysis.md`
-- `docs/features/governance_features_analysis.md`
-- `docs/blackout-reuse-completion-tracker.md`
-- [`docs/matrix-upstreams.md`](docs/matrix-upstreams.md) (upstream Matrix dependency registry with adoption decisions)
-- `docs/distributed_self_healing_blueprint.md`
-- `docs/deploying-blackout-fedora-tauri.md`
-- `docs/blackout-monorepo-work-required.md` (active migration work plan)
-- `docs/blackout-monorepo-qa-writeup.md` (QA baseline + migration changelog)
+-   `docs/repository_functionality_analysis.md`
+-   `docs/features/governance_features_analysis.md`
+-   `docs/blackout-reuse-completion-tracker.md`
+-   [`docs/matrix-upstreams.md`](docs/matrix-upstreams.md) (upstream Matrix dependency registry with adoption decisions)
+-   `docs/distributed_self_healing_blueprint.md`
+-   `docs/deploying-blackout-fedora-tauri.md`
+-   `docs/blackout-monorepo-work-required.md` (active migration work plan)
+-   `docs/blackout-monorepo-qa-writeup.md` (QA baseline + migration changelog)
 
 ---
 
@@ -95,21 +96,21 @@ This project now defines a target architecture for a decentralized, encrypted, s
 
 Primary blueprint:
 
-- `docs/distributed_self_healing_blueprint.md`
-- `docs/deploying-blackout-fedora-tauri.md`
+-   `docs/distributed_self_healing_blueprint.md`
+-   `docs/deploying-blackout-fedora-tauri.md`
 
 What the blueprint includes:
 
-- Event-sourced, append-only, hash-linked data model
-- CRDT-based deterministic state rebuild
-- Peer replication + gossip discovery + snapshot/replay recovery
-- End-to-end encryption model (X25519, AES-GCM, ratchet flows)
-- Governance features (voting, tasks, bounty ledger, streaming)
-- Migration strategy that preserves compatibility during rollout
+-   Event-sourced, append-only, hash-linked data model
+-   CRDT-based deterministic state rebuild
+-   Peer replication + gossip discovery + snapshot/replay recovery
+-   End-to-end encryption model (X25519, AES-GCM, ratchet flows)
+-   Governance features (voting, tasks, bounty ledger, streaming)
+-   Migration strategy that preserves compatibility during rollout
 
 Implementation status should be tracked in:
 
-- `docs/project_completion_tracker.md`
+-   `docs/project_completion_tracker.md`
 
 ---
 
@@ -141,23 +142,28 @@ blackout/  (monorepo root)
 │  │       ├─ deaddrop
 │  │       └─ moderation
 │  │
-│  └─ blackout-gov           # optional separate surface
+│  ├─ blackout-gov           # optional separate surface
+│  └─ deaddrop-appservice    # Matrix appservice for deaddrop
 │
 ├─ packages/
+│  ├─ api                    # Blackout API runtime (Hono)
 │  ├─ blackout-protocol      # shared event types + schemas
 │  ├─ blackout-sdk           # shared API/network helpers
-│  ├─ core                   # shared runtime logic
-│  ├─ contracts              # API contracts
+│  ├─ companion-blackout     # Bitfocus Companion module
 │  ├─ config                 # config/env helpers
+│  ├─ contracts              # API contracts
+│  ├─ core                   # shared runtime logic
 │  ├─ design                 # tokens/themes
-│  ├─ ui                     # shared UI
-│  └─ web                    # web-specific helpers
+│  ├─ mobile                 # shared native logic + release tooling
+│  ├─ plugins-sdk            # plugin authoring SDK
+│  └─ ui                     # shared UI
 │
 ├─ blackout-desktop
-├─ blackout-mobile
+├─ blackout-mobile           # Capacitor shell (current runnable mobile app)
+├─ mobile/                   # newer shared-native workspace
 │
 ├─ legacy/
-│  └─ element                # preserved Element-era code not in active path
+│  └─ blackout-web           # preserved Element/Cinny-era code not in active path
 │
 ├─ tools/
 ├─ test/
@@ -215,29 +221,28 @@ Feature Plugin in Client
 
 System ownership rules:
 
-- `blackout-client` owns the user-facing experience.
-- `blackout-server` owns backend behavior.
-- `blackout-protocol` owns shared meaning.
-- `blackout-sdk` owns client/server wiring.
+-   `blackout-client` owns the user-facing experience.
+-   `blackout-server` owns backend behavior.
+-   `blackout-protocol` owns shared meaning.
+-   `blackout-sdk` owns client/server wiring.
 
 In shorthand: **Cinny UI shell + modular features + shared SDK + shared protocol + modular backend**.
 
 ---
 
-
 ## Minimum viable bridges
 
 For a practical initial integration footprint, start with:
 
-- **Hookshot (webhooks):** good default for inbound webhooks, feed mirroring, and lightweight workflow automation.
-- **`matrix-appservice-bridge` family path:** add IRC/Discord/Slack bridges by deploying the relevant appservice bridge sidecar and registering each appservice in Synapse (`app_service_config_files`).
-- **When to prefer Mautrix bridges:** choose Mautrix when you need protocol-specific maturity (e.g., richer media/thread parity or stronger community-maintained bridge semantics) and can accept the extra operational surface.
+-   **Hookshot (webhooks):** good default for inbound webhooks, feed mirroring, and lightweight workflow automation.
+-   **`matrix-appservice-bridge` family path:** add IRC/Discord/Slack bridges by deploying the relevant appservice bridge sidecar and registering each appservice in Synapse (`app_service_config_files`).
+-   **When to prefer Mautrix bridges:** choose Mautrix when you need protocol-specific maturity (e.g., richer media/thread parity or stronger community-maintained bridge semantics) and can accept the extra operational surface.
 
 Operational readiness checklist for bridge deployments:
 
-- Define ingress and Synapse-side rate limits before exposing webhook or federation-facing bridge endpoints.
-- Run bridge bots with least privilege (room-scoped moderator roles rather than server-wide admin whenever possible).
-- Store bridge tokens/registration secrets in a secret manager (not plaintext `.env` in production), and rotate regularly.
+-   Define ingress and Synapse-side rate limits before exposing webhook or federation-facing bridge endpoints.
+-   Run bridge bots with least privilege (room-scoped moderator roles rather than server-wide admin whenever possible).
+-   Store bridge tokens/registration secrets in a secret manager (not plaintext `.env` in production), and rotate regularly.
 
 ---
 
@@ -245,8 +250,8 @@ Operational readiness checklist for bridge deployments:
 
 ### Prerequisites
 
-- Node.js `>=22.18`
-- pnpm `9.15.4` (or compatible 9.x)
+-   Node.js `>=22.11` (matches `engines.node`; `.node-version` and CI both pin major 22)
+-   pnpm `9.15.4` (or compatible 9.x)
 
 ### Local setup
 
@@ -259,8 +264,8 @@ cp apps/blackout-server/.env.example apps/blackout-server/.env
 cp apps/blackout-client/.env.example apps/blackout-client/.env
 ```
 
-- `config.json` is the client's runtime Matrix/homeserver config (Element/Cinny-style). Edit as needed — see `docs/config.md`.
-- Each `.env` file holds workspace-local secrets and build settings for that app.
+-   `config.json` is the client's runtime Matrix/homeserver config (Element/Cinny-style). Edit as needed — see `docs/config.md`.
+-   Each `.env` file holds workspace-local secrets and build settings for that app.
 
 ### Build
 
@@ -319,18 +324,18 @@ pnpm --filter @blackout/client dev
 
 Default local URL:
 
-- Frontend app: `http://localhost:5173/`
+-   Frontend app: `http://localhost:5173/`
 
 ### Deploy to Railway
 
 1. Create a new Railway project and connect this GitHub repo.
 2. Use Node.js 22+ and pnpm 9.x.
 3. Set commands:
-   - Build: `pnpm install --frozen-lockfile && pnpm --filter @blackout/client build`
-   - Start: `pnpm --filter @blackout/client dev -- --host 0.0.0.0 --port $PORT`
+    - Build: `pnpm install --frozen-lockfile && pnpm --filter @blackout/client build`
+    - Start: `pnpm --filter @blackout/client dev -- --host 0.0.0.0 --port $PORT`
 4. Expose `PORT` (Railway sets this automatically).
 5. Verify:
-   - `/` returns the frontend app.
+    - `/` returns the frontend app.
 
 ### Legacy frontend quality checks (`legacy/blackout-web`)
 
@@ -349,7 +354,19 @@ Recommended baseline checks before opening a PR:
 ```bash
 pnpm lint
 pnpm test
+pnpm --filter @blackout/client run typecheck
 ```
+
+`pnpm test` runs `turbo run test` across every workspace, including the main
+frontend. To iterate on just the client:
+
+```bash
+pnpm web:test                                  # client unit tests
+pnpm --filter @blackout/client run test        # client unit + smoke
+pnpm --filter @blackout/client run test:e2e    # Playwright (needs pnpm web:build first)
+```
+
+There is no root `typecheck` script — run it per workspace as above.
 
 For steganography-specific changes in the legacy web surface, run targeted suites too:
 
@@ -375,11 +392,11 @@ Use this section when working with coding agents or AI copilots.
 
 ### 1) Scope the change before editing
 
-- Ask the AI to name exact files it plans to modify.
-- Keep changes small and subsystem-focused.
-- Prefer incremental PRs over large mixed refactors.
-- Require an explicit pre-edit file plan (exact relative paths) and reject edits outside that list unless the AI updates the plan first.
-- Require justification whenever the AI proposes creating a new design token or UI component (why reuse was insufficient, where it will be consumed, and why it belongs at that layer).
+-   Ask the AI to name exact files it plans to modify.
+-   Keep changes small and subsystem-focused.
+-   Prefer incremental PRs over large mixed refactors.
+-   Require an explicit pre-edit file plan (exact relative paths) and reject edits outside that list unless the AI updates the plan first.
+-   Require justification whenever the AI proposes creating a new design token or UI component (why reuse was insufficient, where it will be consumed, and why it belongs at that layer).
 
 ### 2) Require explicit validation commands
 
@@ -397,9 +414,9 @@ If a command is skipped, require a reason (missing dependency, environment const
 
 When prompting AI, state clearly:
 
-- “No behavioral changes unless explicitly requested.”
-- “Do not silently rename exported APIs.”
-- “Do not remove tests without replacement.”
+-   “No behavioral changes unless explicitly requested.”
+-   “Do not silently rename exported APIs.”
+-   “Do not remove tests without replacement.”
 
 ### 4) Prefer targeted tests over blanket runs while iterating
 
@@ -409,10 +426,10 @@ During development, ask AI to run narrow tests first (closest unit/integration t
 
 Ask AI to include in each update:
 
-- What changed
-- Why it changed
-- Risk areas
-- Follow-up checks
+-   What changed
+-   Why it changed
+-   Risk areas
+-   Follow-up checks
 
 This keeps reviews fast and avoids hidden side effects.
 
@@ -420,28 +437,28 @@ This keeps reviews fast and avoids hidden side effects.
 
 Direct AI to prefer repository docs over assumptions:
 
-- `docs/config.md`
-- `developer_guide.md`
-- `docs/playwright.md`
-- `docs/features/*`
+-   `docs/config.md`
+-   `developer_guide.md`
+-   `docs/playwright.md`
+-   `docs/features/*`
 
 ### 7) Safety checklist for PR-ready AI changes
 
 Before merge, confirm the AI has:
 
-- Kept secrets and credentials out of code/logs
-- Avoided broad formatting-only churn
-- Updated docs for behavior/config changes
-- Added or updated tests for new logic
-- Included rollback notes for risky changes
+-   Kept secrets and credentials out of code/logs
+-   Avoided broad formatting-only churn
+-   Updated docs for behavior/config changes
+-   Added or updated tests for new logic
+-   Included rollback notes for risky changes
 
 ### 8) Reuse shared packages before app-local additions
 
 Before accepting app-local styling or logic in `apps/*`, require AI to explicitly check and document whether reuse is possible from:
 
-- `packages/design` (tokens, themes, primitives)
-- `packages/ui` (shared UI building blocks)
-- `packages/core` (shared business/runtime logic)
+-   `packages/design` (tokens, themes, primitives)
+-   `packages/ui` (shared UI building blocks)
+-   `packages/core` (shared business/runtime logic)
 
 Only allow new app-local implementations when those packages cannot satisfy requirements without causing coupling or regressions, and require that rationale in the PR summary.
 
@@ -453,10 +470,10 @@ Do **not** host the Blackout web client on the same domain as your homeserver.
 
 Recommended response headers:
 
-- `X-Frame-Options: SAMEORIGIN`
-- `Content-Security-Policy: frame-ancestors 'self'`
-- `X-Content-Type-Options: nosniff`
-- `X-XSS-Protection: 1; mode=block`
+-   `X-Frame-Options: SAMEORIGIN`
+-   `Content-Security-Policy: frame-ancestors 'self'`
+-   `X-Content-Type-Options: nosniff`
+-   `X-XSS-Protection: 1; mode=block`
 
 See [`SECURITY.md`](SECURITY.md) for the full disclosure process and
 [`THREAT_MODEL.md`](THREAT_MODEL.md) for trust boundaries.
@@ -467,11 +484,11 @@ See [`SECURITY.md`](SECURITY.md) for the full disclosure process and
 
 When self-hosting, ensure these are not cached:
 
-- `/config.*.json`
-- `/i18n`
-- `/home`
-- `/sites`
-- `/index.html`
+-   `/config.*.json`
+-   `/i18n`
+-   `/home`
+-   `/sites`
+-   `/index.html`
 
 Also set `Cache-Control: no-cache` for `/` so clients revalidate on reload after deployment.
 
@@ -481,18 +498,18 @@ Also set `Cache-Control: no-cache` for `/` so clients revalidate on reload after
 
 Blackout ships a Tauri desktop wrapper in `blackout-desktop/`.
 
-- Prebuilt releases: <https://github.com/Blackmarket-coa/blackout/releases>
-- Local dev: `pnpm desktop:dev`
-- Production build: `pnpm desktop:build`
-- Signing-chain verification (per-OS): see `blackout-desktop/docs/signing-verification.md` (under construction; tracked in launch-prep seeded issues)
-- Desktop config overrides: `docs/config.md#desktop-app-configuration`
+-   Prebuilt releases: <https://github.com/Blackmarket-coa/blackout/releases>
+-   Local dev: `pnpm desktop:dev`
+-   Production build: `pnpm desktop:build`
+-   Signing-chain verification (per-OS): see `blackout-desktop/docs/signing-verification.md` (under construction; tracked in launch-prep seeded issues)
+-   Desktop config overrides: `docs/config.md#desktop-app-configuration`
 
 ---
 
 ## Translations
 
-- Translator guide: `docs/translating.md`
-- Developer localization guide: `docs/translating-dev.md`
+-   Translator guide: `docs/translating.md`
+-   Developer localization guide: `docs/translating-dev.md`
 
 ---
 
@@ -503,9 +520,9 @@ is a self-contained module loaded by the client runtime; the chat,
 governance, forum, deaddrop, moderation, and steganography surfaces are
 themselves plugins built on this registry.
 
-- Plugin authoring: see the in-tree plugins under `apps/blackout-client/src/app/features/` for working examples.
-- Configuration: `docs/config.md#modules`
-- Discussions for new plugin ideas live in the [Plugin Ideas Discussion category](https://github.com/Blackmarket-coa/blackout/discussions/new?category=plugin-ideas).
+-   Plugin authoring: see the in-tree plugins under `apps/blackout-client/src/app/features/` for working examples.
+-   Configuration: `docs/config.md#modules`
+-   Discussions for new plugin ideas live in the [Plugin Ideas Discussion category](https://github.com/Blackmarket-coa/blackout/discussions/new?category=plugin-ideas).
 
 ---
 
@@ -515,12 +532,12 @@ Issues are triaged by maintainers and `role:operator` contributors during
 the V1 Test Flight. The full label scheme lives in
 [`.github/labels.yml`](.github/labels.yml). Key dimensions:
 
-- `T-*` — type of work (Defect, Enhancement, Task, etc.)
-- `severity:*` — defect severity (critical → papercut)
-- `surface:*` — web / desktop / mobile / server
-- `area:*` — subsystem (coalition, governance, mutual-aid, steganography, deaddrop, livekit, federation, voice-video, performance, onboarding, e2ee)
-- `challenge:*` — Coliseum challenge linkage (during the test flight)
-- `H{N}-{N}` — test-flight cohort timestamp
+-   `T-*` — type of work (Defect, Enhancement, Task, etc.)
+-   `severity:*` — defect severity (critical → papercut)
+-   `surface:*` — web / desktop / mobile / server
+-   `area:*` — subsystem (coalition, governance, mutual-aid, steganography, deaddrop, livekit, federation, voice-video, performance, onboarding, e2ee)
+-   `challenge:*` — Coliseum challenge linkage (during the test flight)
+-   `H{N}-{N}` — test-flight cohort timestamp
 
 Contributor workflow expectations are in [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
@@ -548,25 +565,30 @@ inheritance.
 
 Canonical deployable applications:
 
-- Frontend: `apps/blackout-client`
-- Backend: `apps/blackout-server` (runtime delegates to `@blackout/api`)
+-   Frontend: `apps/blackout-client`
+-   Backend: `apps/blackout-server` (runtime delegates to `@blackout/api`)
 
 Canonical shared runtime packages:
 
-- `packages/blackout-protocol`
-- `packages/blackout-sdk`
+-   `packages/blackout-protocol`
+-   `packages/blackout-sdk`
 
 For local bootstrap steps, see [Quick start](#quick-start) above.
 
 ### Deployment config locations
 
-- Infrastructure configs and docs: `infra/`
-- Existing production compose and container assets: `deploy/docker/`
-- Kubernetes manifests: `deploy/kubernetes/`
+-   Infrastructure configs and docs: `infra/`
+-   Existing production compose and container assets: `deploy/docker/`
+-   Kubernetes manifests: `deploy/kubernetes/`
 
-### Health checks expected in CI
+### Health checks in CI
 
-At minimum CI should validate install, lint, build, and tests from the monorepo root:
+`.github/workflows/ci.yml` runs per-workspace jobs rather than the root
+aggregate scripts — chiefly `@blackout/client` eslint, `typecheck` for the
+client and API, `test:coverage` and `test:integration` for the client, mobile
+preflight, per-project builds, plus the `qa:monorepo` and `guard:*` gates.
+
+Locally, the closest equivalent from the monorepo root is:
 
 ```bash
 pnpm install
@@ -577,4 +599,4 @@ pnpm test
 
 Deployment readiness checklist and current status:
 
-- `docs/deployment/readiness-checklist.md`
+-   `docs/deployment/readiness-checklist.md`
