@@ -1,4 +1,5 @@
 import { expect, type Page, type Locator } from '@playwright/test';
+import { dialogLocator, isBootstrapGated } from '../_shared';
 
 /**
  * Helpers for the state-explosion suite. The suite stresses interactions
@@ -6,37 +7,20 @@ import { expect, type Page, type Locator } from '@playwright/test';
  * modal + sync reconnect, transition + viewport resize, etc.) so each
  * helper is designed to be composable and side-effect-light: the spec
  * decides the timing, the helper just exposes the lever.
+ *
+ * Viewport, bootstrap-gate and modal helpers are shared with the
+ * navigation-audit suite and live in `../_shared`; they are re-exported here
+ * so specs can keep importing everything from `./helpers`.
  */
 
-export type ViewportName = 'mobile' | 'tablet' | 'desktop';
-
-export const VIEWPORTS: Record<ViewportName, { width: number; height: number }> = {
-    mobile: { width: 375, height: 812 },
-    tablet: { width: 900, height: 1280 },
-    desktop: { width: 1280, height: 800 },
-};
-
-export const setViewport = async (page: Page, name: ViewportName): Promise<void> => {
-    await page.setViewportSize(VIEWPORTS[name]);
-};
-
-export const isBootstrapGated = async (page: Page): Promise<boolean> =>
-    (await page.locator('[data-shell="bootstrap"]').count()) > 0;
-
-export const openModal = async (page: Page, name: string): Promise<boolean> => {
-    const exposed = await page.evaluate(
-        () => typeof (window as unknown as { __openModal?: unknown }).__openModal === 'function',
-    );
-    if (!exposed) return false;
-    return page.evaluate((modalName) => {
-        try {
-            (window as unknown as { __openModal: (n: string) => void }).__openModal(modalName);
-            return true;
-        } catch {
-            return false;
-        }
-    }, name);
-};
+export {
+    assertModalClosed,
+    isBootstrapGated,
+    openModal,
+    setViewport,
+    VIEWPORTS,
+    type ViewportName,
+} from '../_shared';
 
 export const closeModal = async (page: Page, name: string): Promise<void> => {
     await page.evaluate((modalName) => {
@@ -45,15 +29,8 @@ export const closeModal = async (page: Page, name: string): Promise<void> => {
     }, name);
 };
 
-const dialogLocator = (page: Page, name: string): Locator =>
-    page.locator(`[data-testid="modal-${name}"], [role="dialog"]`).first();
-
 export const assertModalOpen = async (page: Page, name: string): Promise<void> => {
     await expect(dialogLocator(page, name)).toBeVisible({ timeout: 2_000 });
-};
-
-export const assertModalClosed = async (page: Page, name: string): Promise<void> => {
-    await expect(dialogLocator(page, name)).toBeHidden({ timeout: 2_000 });
 };
 
 /**
@@ -74,7 +51,7 @@ export const bootAppShell = async (page: Page): Promise<boolean> => {
             () =>
                 typeof (window as unknown as { __openModal?: unknown }).__openModal === 'function',
             null,
-            { timeout: 5_000 },
+            { timeout: 5_000 }
         )
         .then(() => true)
         .catch(() => false);
@@ -93,14 +70,15 @@ export const bootAppShell = async (page: Page): Promise<boolean> => {
  */
 export const simulateMobileKeyboard = async (
     page: Page,
-    args: { open: boolean; keyboardHeightPx?: number } = { open: true },
+    args: { open: boolean; keyboardHeightPx?: number } = { open: true }
 ): Promise<void> => {
     await page.evaluate(
         ({ open, keyboardHeightPx }) => {
             const vv = window.visualViewport;
             if (!vv) return;
-            const offsetHeight = open ? (keyboardHeightPx ?? 320) : 0;
-            const baseHeight = (vv as unknown as { __baseHeight?: number }).__baseHeight ?? vv.height;
+            const offsetHeight = open ? keyboardHeightPx ?? 320 : 0;
+            const baseHeight =
+                (vv as unknown as { __baseHeight?: number }).__baseHeight ?? vv.height;
             (vv as unknown as { __baseHeight?: number }).__baseHeight = baseHeight;
             try {
                 Object.defineProperty(vv, 'height', {
@@ -114,7 +92,7 @@ export const simulateMobileKeyboard = async (
             vv.dispatchEvent(new Event('resize'));
             window.dispatchEvent(new Event('resize'));
         },
-        { open: args.open, keyboardHeightPx: args.keyboardHeightPx },
+        { open: args.open, keyboardHeightPx: args.keyboardHeightPx }
     );
 };
 
@@ -127,7 +105,7 @@ export const simulateMobileKeyboard = async (
 export const withLatency = async (
     page: Page,
     ms: number,
-    urlGlob: string,
+    urlGlob: string
 ): Promise<() => Promise<void>> => {
     const handler = async (route: import('@playwright/test').Route) => {
         await new Promise((r) => setTimeout(r, ms));
