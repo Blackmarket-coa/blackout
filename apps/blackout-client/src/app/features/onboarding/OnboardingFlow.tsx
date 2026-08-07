@@ -67,10 +67,10 @@ const DEVELOPER_STEP_DOC_LINKS: { label: string; href: string }[] = [
     { label: 'README.md', href: '/README.md' },
     { label: 'developer_guide.md', href: '/developer_guide.md' },
     { label: 'TESTERS.md', href: '/TESTERS.md' },
-    { label: 'DISCORD_PARITY_BUILD_PLAN.md', href: '/DISCORD_PARITY_BUILD_PLAN.md' },
+    { label: 'CONTRIBUTING.md', href: '/CONTRIBUTING.md' },
     {
-        label: 'docs/discord_like_onboarding_execution_plan.md',
-        href: '/docs/discord_like_onboarding_execution_plan.md',
+        label: 'docs/coliseum/challenges/01-onboarding.md',
+        href: '/docs/coliseum/challenges/01-onboarding.md',
     },
 ];
 

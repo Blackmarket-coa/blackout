@@ -14,10 +14,13 @@ const pageStyle: React.CSSProperties = {
 
 /**
  * Full-page host for the onboarding wizard, mounted at
- * `/onboarding/:spaceIdOrAlias/`. Invite acceptance routes brand-new users here
- * (with the invited room as `?room=`) before dropping them into the room. The
- * wizard is otherwise an in-`ClientLayout` modal; here it stands alone so a
- * first-time recipient sees a dedicated welcome before the app chrome.
+ * `/onboarding/:spaceIdOrAlias/`. Takes the room to open afterwards as
+ * `?room=`. The wizard is otherwise an in-`ClientLayout` modal; here it stands
+ * alone so a first-time visitor sees a dedicated welcome before the app chrome.
+ *
+ * Reached by direct link only. Invite acceptance used to route here but no
+ * longer does — `resolvePostAcceptancePath` now sends brand-new users to `/`
+ * so `HomeFeed` can run the Home tour and then open the invited den.
  */
 export const OnboardingPage: React.FC = () => {
     const params = useParams();

@@ -62,7 +62,13 @@ export const OnboardingWizard = ({
     if (!open || !active || completed) return null;
 
     const finish = async () => {
-        await completion.markCompleted();
+        // Carry the picks from the `roles` / `channels` steps through to
+        // account data — before this they were collected and dropped on the
+        // floor, so the member answered questions that went nowhere.
+        await completion.markCompleted({
+            roles: selectedRoles,
+            channels: selectedChannels,
+        });
         setCompleted(true);
         onComplete?.();
         onClose();
@@ -164,7 +170,7 @@ export const OnboardingWizard = ({
                                                     setSelectedRoles((prev) =>
                                                         selected
                                                             ? prev.filter((item) => item !== role)
-                                                            : [...prev, role],
+                                                            : [...prev, role]
                                                     );
                                                 }}
                                                 style={{
@@ -211,8 +217,8 @@ export const OnboardingWizard = ({
                                                             event.target.checked
                                                                 ? [...prev, channel]
                                                                 : prev.filter(
-                                                                      (item) => item !== channel,
-                                                                  ),
+                                                                      (item) => item !== channel
+                                                                  )
                                                         );
                                                     }}
                                                 />

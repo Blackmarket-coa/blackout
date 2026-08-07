@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
 import { act } from 'react-dom/test-utils';
 import ReactDOM from 'react-dom/client';
+import { createMemoryRouter, RouterProvider } from 'react-router';
 
 const fetchCreatorProvidersMock = vi.fn();
 const fetchMyCreatorListingsMock = vi.fn();
@@ -40,12 +41,23 @@ describe('CreatorHubListings', () => {
         const container = document.createElement('div');
         document.body.appendChild(container);
         const root = ReactDOM.createRoot(container);
+        // The section renders react-router `Link`s, so it needs router context
+        // — same harness as the sibling CreatorHubOverview test.
+        const router = createMemoryRouter(
+            [
+                {
+                    path: '/streaming',
+                    element: (
+                        <ConfirmProvider>
+                            <CreatorHubListings />
+                        </ConfirmProvider>
+                    ),
+                },
+            ],
+            { initialEntries: ['/streaming'] }
+        );
         await act(async () => {
-            root.render(
-                <ConfirmProvider>
-                    <CreatorHubListings />
-                </ConfirmProvider>
-            );
+            root.render(<RouterProvider router={router} />);
             await flush();
         });
 
