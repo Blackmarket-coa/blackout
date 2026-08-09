@@ -9,22 +9,12 @@ import { useRegistryFetcher } from '../../core/features/RegistryFetcherProvider'
 // @blackout/ui v1 primitives (Workstream B production adoption). Consumed from
 // source so the client's vanilla-extract plugin compiles their `.css.ts`,
 // matching MessageComposer's dogfood import.
-import {
-    Button,
-    Card,
-    Checkbox,
-    Input,
-    Stack,
-    TextArea,
-} from '@blackout/ui/primitives';
+import { Button, Card, Checkbox, Input, Stack, TextArea } from '@blackout/ui/primitives';
 
 export type MutualAidFetcher = {
     listThreads: () => Promise<{ threads: MutualAidThreadPayload[] }>;
     openThread: (input: OpenMutualAidThreadInput) => Promise<unknown>;
-    updateThreadStatus: (
-        threadId: string,
-        status: MutualAidThreadStatus
-    ) => Promise<unknown>;
+    updateThreadStatus: (threadId: string, status: MutualAidThreadStatus) => Promise<unknown>;
 };
 
 type Props = {
@@ -85,9 +75,7 @@ export function MutualAidPage({ fetcher: explicitFetcher, showInactive = false }
                 setBody('');
                 await refresh();
             } catch (error) {
-                setActionError(
-                    error instanceof Error ? error.message : 'Failed to open thread.'
-                );
+                setActionError(error instanceof Error ? error.message : 'Failed to open thread.');
             } finally {
                 setPending(null);
             }
@@ -119,15 +107,18 @@ export function MutualAidPage({ fetcher: explicitFetcher, showInactive = false }
     );
 
     return (
-        <main
-            data-testid="mutual-aid-page"
-            style={{ padding: 16, display: 'grid', gap: 16 }}
-        >
+        <main data-testid="mutual-aid-page" style={{ padding: 16, display: 'grid', gap: 16 }}>
             <header>
                 <h1 style={{ margin: 0 }}>Mutual aid</h1>
+                {/* Was: "Open requests + helper threads. Mirrors `_port`'s
+                    `/blackout/mutual-aid` route, on top of the deaddrop
+                    infrastructure." Two problems for a string rendered to
+                    users: it named a "helper" role the protocol cannot
+                    represent, and it leaked an internal port reference to a
+                    directory that does not exist in this repo. */}
                 <p style={{ margin: 0, color: 'var(--text-secondary)' }}>
-                    Open requests + helper threads. Mirrors `_port`'s `/blackout/mutual-aid`
-                    route, on top of the deaddrop infrastructure.
+                    Open requests from people who need something, and the threads where they get
+                    sorted out. Runs on the dead-drop infrastructure.
                 </p>
             </header>
 
@@ -182,10 +173,7 @@ export function MutualAidPage({ fetcher: explicitFetcher, showInactive = false }
             />
 
             {visible.length === 0 ? (
-                <p
-                    data-testid="mutual-aid-empty"
-                    style={{ color: 'var(--text-secondary)' }}
-                >
+                <p data-testid="mutual-aid-empty" style={{ color: 'var(--text-secondary)' }}>
                     No mutual-aid threads to show.
                 </p>
             ) : (
@@ -205,7 +193,9 @@ export function MutualAidPage({ fetcher: explicitFetcher, showInactive = false }
                                     <small style={{ color: 'var(--text-secondary)' }}>
                                         requester: {thread.requester} · opened {thread.openedAt}
                                     </small>
-                                    {thread.body ? <p style={{ margin: 0 }}>{thread.body}</p> : null}
+                                    {thread.body ? (
+                                        <p style={{ margin: 0 }}>{thread.body}</p>
+                                    ) : null}
                                     <Stack direction="row" gap={6} wrap>
                                         {STATUSES.filter((status) => status !== thread.status).map(
                                             (status) => (
