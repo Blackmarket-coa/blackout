@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useOnboardingCompletion, useOnboardingContent, type OnboardingStep } from './useWelcome';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
+import { useViewportWidth } from '../../hooks/useViewportWidth';
+import { isMobileViewport } from '../../pages/client/layoutMetrics';
 
 export const OnboardingWizard = ({
     spaceId,
@@ -20,6 +22,9 @@ export const OnboardingWizard = ({
 }) => {
     const onboarding = useOnboardingContent(spaceId);
     const completion = useOnboardingCompletion(spaceId);
+    // `useViewportWidth` reads `visualViewport` where available, so an open
+    // soft keyboard shrinks the panel instead of pushing its footer off-screen.
+    const mobile = isMobileViewport(useViewportWidth());
 
     const [stepIndex, setStepIndex] = useState(0);
     const [rulesAccepted, setRulesAccepted] = useState(false);
@@ -81,15 +86,28 @@ export const OnboardingWizard = ({
         >
             <div
                 style={{
-                    width: 720,
-                    maxWidth: '95vw',
-                    margin: '8vh auto',
+                    width: mobile ? 'auto' : 720,
+                    maxWidth: mobile ? 'none' : '95vw',
+                    // On a phone this is a near-full-screen sheet inset from the
+                    // safe area (notch, home indicator) rather than a centred
+                    // card; 8vh of dead margin is a lot of a small screen.
+                    margin: mobile
+                        ? 'calc(env(safe-area-inset-top, 0px) + 12px) 12px calc(env(safe-area-inset-bottom, 0px) + 12px)'
+                        : '8vh auto',
+                    // Without a height cap the panel simply ran off the bottom:
+                    // it has no scroll of its own, so a long rules step was
+                    // unreachable on a short viewport.
+                    maxHeight: mobile
+                        ? 'calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 24px)'
+                        : '84vh',
+                    overflowY: 'auto',
                     border: '1px solid var(--border-default)',
                     borderRadius: 14,
                     background: 'var(--bg-surface)',
                     padding: 14,
                     display: 'grid',
                     gap: 10,
+                    alignContent: 'start',
                 }}
                 onClick={(event) => event.stopPropagation()}
             >
