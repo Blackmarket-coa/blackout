@@ -5,6 +5,10 @@ import {
     useLegacyRoomAdapter as useRoom,
     useLegacyRoomMembersAdapter as useRoomMembers,
 } from '../../plugins/matrix-adapters/hooks/useLegacyRoomAdapter';
+import {
+    CANOPY_ONBOARDING_COMPLETED_KEY,
+    MEMBER_ONBOARDING_PROGRESS_KEY,
+} from '../onboarding/accountDataKeys';
 
 export interface FeaturedChannel {
     roomId: string;
@@ -38,7 +42,7 @@ export interface OnboardingContent {
 
 export const WELCOME_EVENT_TYPE = 'co.bmc.welcome';
 export const ONBOARDING_EVENT_TYPE = 'co.bmc.onboarding';
-export const ONBOARDING_ACCOUNT_DATA_KEY = 'co.bmc.onboarding.completed';
+export const ONBOARDING_ACCOUNT_DATA_KEY = CANOPY_ONBOARDING_COMPLETED_KEY;
 
 const defaultWelcome = (spaceName: string): WelcomeContent => ({
     title: `Welcome to ${spaceName}!`,
@@ -221,6 +225,25 @@ export const useSetOnboardingContent = (spaceId: string) => {
     );
 };
 
+/**
+ * What the member picked in the wizard's `roles` / `channels` steps.
+ *
+ * Both are the free-text labels an admin typed into `WelcomeEditor` — not room
+ * ids and not Matrix power levels — so there is nothing to resolve them
+ * against yet. We record the choice rather than discard it; acting on it (auto
+ * -joining a den, granting a role) needs the editor to author real references
+ * first.
+ */
+export interface OnboardingSelections {
+    roles: string[];
+    channels: string[];
+}
+
+type OnboardingCompletionPayload = {
+    spaces?: Record<string, boolean>;
+    selections?: Record<string, OnboardingSelections>;
+};
+
 export const useOnboardingCompletion = (spaceId: string) => {
     const client = useMatrixClient();
     const accountDataClient = client as unknown as {
@@ -228,26 +251,63 @@ export const useOnboardingCompletion = (spaceId: string) => {
         setAccountData: (type: string, content: Record<string, unknown>) => Promise<unknown>;
     };
 
+    /**
+     * True when this space has been onboarded by *either* first-run system.
+     *
+     * The member flow (`features/onboarding`) is a richer, separate wizard
+     * writing its own progress key. Without this check a user who completed it
+     * would still be interrupted by the canopy wizard, which auto-opens in
+     * `ClientLayout` whenever no den is selected.
+     *
+     * Not mirrored in the other direction on purpose: the member flow only
+     * opens from an explicit button, so there is no interruption to suppress.
+     */
     const readCompletion = useCallback(async (): Promise<boolean> => {
         const accountData = accountDataClient
             .getAccountData(ONBOARDING_ACCOUNT_DATA_KEY)
-            ?.getContent() as { spaces?: Record<string, boolean> } | undefined;
-        return accountData?.spaces?.[spaceId] === true;
+            ?.getContent() as OnboardingCompletionPayload | undefined;
+        if (accountData?.spaces?.[spaceId] === true) return true;
+
+        const memberProgress = accountDataClient
+            .getAccountData(MEMBER_ONBOARDING_PROGRESS_KEY)
+            ?.getContent() as
+            | { spaces?: Record<string, { completed?: boolean } | undefined> }
+            | undefined;
+        return memberProgress?.spaces?.[spaceId]?.completed === true;
     }, [accountDataClient, spaceId]);
 
-    const markCompleted = useCallback(async () => {
-        const event = accountDataClient.getAccountData(ONBOARDING_ACCOUNT_DATA_KEY);
-        const content =
-            (event?.getContent() as { spaces?: Record<string, boolean> } | undefined) ?? {};
+    const markCompleted = useCallback(
+        async (selections?: OnboardingSelections) => {
+            const event = accountDataClient.getAccountData(ONBOARDING_ACCOUNT_DATA_KEY);
+            const content = (event?.getContent() as OnboardingCompletionPayload | undefined) ?? {};
 
-        await accountDataClient.setAccountData(ONBOARDING_ACCOUNT_DATA_KEY, {
-            ...content,
-            spaces: {
-                ...(content.spaces ?? {}),
-                [spaceId]: true,
-            },
-        });
-    }, [accountDataClient, spaceId]);
+            // `selections` is additive — readers that only know about `spaces`
+            // (including every already-onboarded user's stored payload) keep
+            // working unchanged.
+            const hasSelections =
+                (selections?.roles.length ?? 0) > 0 || (selections?.channels.length ?? 0) > 0;
+
+            await accountDataClient.setAccountData(ONBOARDING_ACCOUNT_DATA_KEY, {
+                ...content,
+                spaces: {
+                    ...(content.spaces ?? {}),
+                    [spaceId]: true,
+                },
+                ...(hasSelections
+                    ? {
+                          selections: {
+                              ...(content.selections ?? {}),
+                              [spaceId]: {
+                                  roles: selections?.roles ?? [],
+                                  channels: selections?.channels ?? [],
+                              },
+                          },
+                      }
+                    : {}),
+            });
+        },
+        [accountDataClient, spaceId]
+    );
 
     return {
         readCompletion,

@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { MEMBER_ONBOARDING_PROGRESS_KEY } from './accountDataKeys';
 
 export type OnboardingStepId =
     | 'choose_role'
@@ -54,7 +55,7 @@ type PersistedProgressPayload = {
 // Bumped to v3 alongside the new `choose_role` step. Pre-launch
 // surface, so we accept partial reset rather than carrying a v2 →
 // v3 migrator.
-const ACCOUNT_DATA_KEY = 'co.bmc.onboarding.progress.v3';
+const ACCOUNT_DATA_KEY = MEMBER_ONBOARDING_PROGRESS_KEY;
 const LOCAL_STORAGE_KEY = 'co.bmc.onboarding.progress.local.v3';
 
 const buildDefaultProgress = (): OnboardingProgress => {

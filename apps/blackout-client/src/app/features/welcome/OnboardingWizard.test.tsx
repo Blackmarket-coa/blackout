@@ -34,14 +34,7 @@ const mount = async (props: Partial<React.ComponentProps<typeof OnboardingWizard
     document.body.appendChild(container);
     const root = ReactDOM.createRoot(container);
     await act(async () => {
-        root.render(
-            <OnboardingWizard
-                spaceId="!canopy:srv"
-                open
-                onClose={() => {}}
-                {...props}
-            />,
-        );
+        root.render(<OnboardingWizard spaceId="!canopy:srv" open onClose={() => {}} {...props} />);
         await flush();
     });
     return { container };
@@ -78,5 +71,71 @@ describe('OnboardingWizard fallback steps', () => {
         const { container } = await mount({ fallbackSteps: DEFAULT_ONBOARDING_STEPS });
         expect(container.textContent).toContain('House Rules');
         expect(container.textContent).not.toContain('Welcome to Blackout');
+    });
+});
+
+describe('OnboardingWizard selections', () => {
+    beforeEach(() => {
+        document.body.innerHTML = '';
+        contentData = { enabled: false, steps: [] };
+        readCompletion.mockReset();
+        readCompletion.mockResolvedValue(false);
+        markCompleted.mockReset();
+        markCompleted.mockResolvedValue(undefined);
+    });
+
+    const clickButton = async (container: HTMLElement, label: string) => {
+        const button = Array.from(container.querySelectorAll('button')).find(
+            (candidate) => candidate.textContent?.trim() === label
+        );
+        if (!button) throw new Error(`No button labelled "${label}"`);
+        await act(async () => {
+            button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+            await flush();
+        });
+    };
+
+    it('carries the role and channel picks into markCompleted', async () => {
+        contentData = {
+            enabled: true,
+            steps: [
+                { type: 'roles', title: 'Pick a role', roles: ['Gardener', 'Scout'] },
+                { type: 'channels', title: 'Pick dens', channels: ['#general', '#intros'] },
+            ],
+        };
+        const { container } = await mount();
+
+        await clickButton(container, 'Gardener');
+        await clickButton(container, 'Next');
+
+        const firstChannel = container.querySelector<HTMLInputElement>('input[type="checkbox"]');
+        if (!firstChannel) throw new Error('No channel checkbox rendered');
+        // React derives a checkbox's onChange from the click, so let the click
+        // do the toggling — presetting `checked` would just be undone by it.
+        await act(async () => {
+            firstChannel.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+            await flush();
+        });
+
+        await clickButton(container, 'Next');
+        await clickButton(container, 'Complete');
+
+        expect(markCompleted).toHaveBeenCalledWith({
+            roles: ['Gardener'],
+            channels: ['#general'],
+        });
+    });
+
+    it('still completes when the canopy configured no pickers', async () => {
+        contentData = {
+            enabled: true,
+            steps: [{ type: 'rules', title: 'House Rules', content: 'Be excellent.' }],
+        };
+        const { container } = await mount();
+
+        await clickButton(container, 'Next');
+        await clickButton(container, 'Complete');
+
+        expect(markCompleted).toHaveBeenCalledWith({ roles: [], channels: [] });
     });
 });

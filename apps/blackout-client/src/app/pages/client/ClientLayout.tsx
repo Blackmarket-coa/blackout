@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
+import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import type { Room } from 'matrix-js-sdk';
 import { Link, useInRouterContext, useLocation, useNavigate, useParams } from 'react-router';
@@ -53,6 +53,7 @@ import { formatMatrixError } from '../../utils/matrixError';
 import { buildCommunitiesPath } from '../paths';
 import { isMobileViewport, isTabletViewport } from './layoutMetrics';
 import { useViewportWidth } from '../../hooks/useViewportWidth';
+import { useBackIntent } from '../../hooks/useBackIntent';
 import { settingsPageAtom } from '../../features/settings/settingsAtoms';
 import { hasModeratorAccess } from '../../features/moderation/draupnir';
 import {
@@ -186,6 +187,12 @@ export const ClientLayout = () => {
     const [inboxOpen, setInboxOpen] = useState(false);
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [onboardingOpen, setOnboardingOpen] = useState(false);
+    // Android hardware back closes the onboarding sheet instead of navigating
+    // the page out from under it (or minimising the app with a dialog open).
+    useBackIntent(
+        onboardingOpen,
+        useCallback(() => setOnboardingOpen(false), [])
+    );
     const [messageSearchOpen, setMessageSearchOpen] = useState(false);
     const messageSearchScrollRef = useRef<HTMLDivElement>(null);
     const [lobbyOpen, setLobbyOpen] = useState(false);
@@ -1819,14 +1826,23 @@ export const ClientLayout = () => {
                     aria-label="Community onboarding"
                     style={{
                         position: 'fixed',
-                        inset: 24,
+                        // A flat 24px inset costs a phone most of its width and
+                        // tucks the panel under the notch and home indicator.
+                        // On mobile it becomes a safe-area-aware near-full-screen
+                        // sheet; desktop keeps the inset card.
+                        top: mobile ? 'calc(env(safe-area-inset-top, 0px) + 8px)' : 24,
+                        right: mobile ? 8 : 24,
+                        bottom: mobile ? 'calc(env(safe-area-inset-bottom, 0px) + 8px)' : 24,
+                        left: mobile ? 8 : 24,
                         background: 'var(--bg-surface)',
                         border: '1px solid var(--border-default)',
                         borderRadius: 12,
                         zIndex: 20,
                         overflow: 'auto',
+                        // Momentum scrolling inside the sheet on iOS.
+                        WebkitOverflowScrolling: 'touch',
                         boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
-                        padding: 16,
+                        padding: mobile ? 12 : 16,
                     }}
                 >
                     <header

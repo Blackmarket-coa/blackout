@@ -1,9 +1,26 @@
 export type HomeTourTargetKind = 'testid' | 'shellRegion' | 'center';
 
+/**
+ * Which shell a step applies to. The AppShell renders materially different
+ * chrome per viewport — `AppShell.tsx` mounts `CanopyRail` and
+ * `WorkspaceTabBar` on desktop only, and `BottomTabBar` / `MobileTopBar` on
+ * mobile — so a step written for one can describe UI the other never shows.
+ *
+ * Steps carrying `allowCenterFallback` still *render* when their target is
+ * absent; they just narrate something that isn't on screen. Filtering is what
+ * stops that.
+ */
+export type HomeTourSurface = 'mobile' | 'desktop';
+
 export interface HomeTourStep {
     id: string;
     title: string;
     body: string;
+    /**
+     * Shells this step applies to. Omitted means both — most steps target
+     * HomeFeed content, which renders identically either way.
+     */
+    surfaces?: HomeTourSurface[];
     /** Primary DOM target — usually a `data-testid`. */
     targetTestId?: string;
     /** Fallback target — `data-shell-region` attribute. */
@@ -51,22 +68,91 @@ export const HOME_TOUR_STEPS: HomeTourStep[] = [
         docLinks: [{ label: 'TESTERS.md', href: '/TESTERS.md' }],
     },
     {
+        id: 'canopy-rail',
+        title: 'Canopy rail',
+        body: 'The left rail lists every canopy (community) you have joined, plus Home at the top. Drag to reorder, drop one canopy on another to make a folder — the order and folders persist to your account.',
+        // Desktop only: AppShell renders `{mobile ? null : <CanopyRail />}`.
+        surfaces: ['desktop'],
+        fallbackRegion: 'canopy-sidebar',
+        allowCenterFallback: true,
+        filePaths: ['apps/blackout-client/src/app/pages/shell/CanopyRail.tsx'],
+        docLinks: [{ label: 'TESTERS.md', href: '/TESTERS.md' }],
+    },
+    {
+        id: 'bottom-tabs',
+        title: 'Getting around',
+        body: 'The bar along the bottom is how you move between the big destinations — Town Square, Coalition, Coliseum, Streams, and your profile. Whichever one you are in stays highlighted.',
+        surfaces: ['mobile'],
+        targetTestId: 'app-shell-bottom-tab-bar',
+        fallbackRegion: 'bottom-tab-bar',
+        allowCenterFallback: true,
+        filePaths: ['apps/blackout-client/src/app/pages/shell/BottomTabBar.tsx'],
+        docLinks: [{ label: 'TESTERS.md', href: '/TESTERS.md' }],
+    },
+    {
+        id: 'mobile-canopies',
+        title: 'Your canopies',
+        body: 'Tap the canopies button in the top bar to see the communities you have joined and drop into their dens. On a phone this replaces the drag-to-reorder rail you get on a wide screen.',
+        surfaces: ['mobile'],
+        targetTestId: 'mobile-top-bar-canopies',
+        fallbackRegion: 'mobile-top-bar',
+        allowCenterFallback: true,
+        filePaths: ['apps/blackout-client/src/app/pages/shell/MobileTopBar.tsx'],
+        docLinks: [{ label: 'TESTERS.md', href: '/TESTERS.md' }],
+    },
+    {
+        id: 'canopies-hub',
+        title: 'Canopies and dens',
+        body: 'Open a canopy from the rail — or the Canopies hub — to see its dens: the channels you post in, grouped by category. Auto-created dens land under a Topics category. A canopy is the community; a den is a room inside it.',
+        allowCenterFallback: true,
+        filePaths: [
+            'apps/blackout-client/src/app/features/canopy/CanopyHubView.tsx',
+            'apps/blackout-client/src/app/features/canopy/CanopyChannelSidebar.tsx',
+        ],
+        docLinks: [{ label: 'TESTERS.md', href: '/TESTERS.md' }],
+    },
+    {
         id: 'topic-chips',
         title: 'Topic chip bar',
-        body: 'Browse by topic. Chips are pulled from the discovery service and link out to topic pages so users can find communities matching their interests.',
+        body: 'Browse by topic. Chips come from the discovery service and open topic pages listing the canopies that talk about them, so you can find communities by interest rather than by name.',
         targetTestId: 'topic-chip-bar',
         allowCenterFallback: true,
-        filePaths: ['apps/blackout-client/src/app/features/topics/TopicChipBar.tsx'],
-        docLinks: [{ label: 'component-roadmap-v1.md', href: '/component-roadmap-v1.md' }],
+        filePaths: [
+            'apps/blackout-client/src/app/features/topics/TopicChipBar.tsx',
+            'apps/blackout-client/src/app/features/topics/TopicView.tsx',
+        ],
+        docLinks: [{ label: 'TESTERS.md', href: '/TESTERS.md' }],
     },
     {
         id: 'quick-actions',
         title: 'Quick actions',
-        body: 'Shortcut cards jump straight to the major destinations — Streaming, Coalition, and Coliseum (plus Events, Live, and Market when those are enabled). Each card is feature-flag gated, so you only ever see links that go somewhere.',
+        body: 'Shortcut cards jump to Canopies, Events, Live, and Market. Each card is feature-flag gated, so you only ever see links that go somewhere — Creator Hub, Coalition, and Coliseum live in the global top nav instead.',
         targetTestId: 'home-quick-actions',
         fallbackRegion: 'home-quick-actions',
         allowCenterFallback: true,
         filePaths: ['apps/blackout-client/src/app/features/home/HomeFeed.tsx'],
+        docLinks: [{ label: 'TESTERS.md', href: '/TESTERS.md' }],
+    },
+    {
+        id: 'create-hub',
+        title: 'Create something',
+        body: 'The Create hub at /create is the one place to start a canopy, add a den, import an existing Discord server, or list something for sale. Importing a Discord export rebuilds its categories and channels as dens.',
+        allowCenterFallback: true,
+        filePaths: [
+            'apps/blackout-client/src/app/features/create/CreateHub.tsx',
+            'apps/blackout-client/src/app/features/create/DiscordImportWizard.tsx',
+        ],
+        docLinks: [{ label: 'TESTERS.md', href: '/TESTERS.md' }],
+    },
+    {
+        id: 'coalition-map',
+        title: 'Coalition map',
+        body: 'Coalition puts needs, projects, and resources on a shared map. Toggle layers from the legend, use the tool bag to drop a place or post a need, and switch to the nearby and heat views to see what is around you.',
+        allowCenterFallback: true,
+        filePaths: [
+            'apps/blackout-client/src/app/features/coalition/tabs/MapTab.tsx',
+            'apps/blackout-client/src/app/features/coalition/map/MapLegend.tsx',
+        ],
         docLinks: [{ label: 'TESTERS.md', href: '/TESTERS.md' }],
     },
     {
@@ -127,8 +213,8 @@ export const HOME_TOUR_STEPS: HomeTourStep[] = [
         filePaths: ['apps/blackout-client/src/app/features/home/HomeFeed.tsx'],
         docLinks: [
             {
-                label: 'docs/discord_like_onboarding_execution_plan.md',
-                href: '/docs/discord_like_onboarding_execution_plan.md',
+                label: 'docs/coliseum/challenges/01-onboarding.md',
+                href: '/docs/coliseum/challenges/01-onboarding.md',
             },
         ],
     },
@@ -136,6 +222,8 @@ export const HOME_TOUR_STEPS: HomeTourStep[] = [
         id: 'quick-switcher',
         title: 'Quick switcher (Cmd+K / Ctrl+K)',
         body: 'Press Cmd+K (⌘K) on macOS or Ctrl+K on Windows/Linux anywhere in the app to jump to any room, command, or developer tool surface.',
+        // Keyboard-only affordance — nothing to press on a phone.
+        surfaces: ['desktop'],
         allowCenterFallback: true,
         filePaths: ['apps/blackout-client/src/app/features/settings/DeveloperSettings.tsx'],
         docLinks: [{ label: 'developer_guide.md', href: '/developer_guide.md' }],
@@ -165,8 +253,19 @@ export const HOME_TOUR_STEPS: HomeTourStep[] = [
         docLinks: [
             { label: 'README.md', href: '/README.md' },
             { label: 'TESTERS.md', href: '/TESTERS.md' },
-            { label: 'DISCORD_PARITY_BUILD_PLAN.md', href: '/DISCORD_PARITY_BUILD_PLAN.md' },
+            { label: 'developer_guide.md', href: '/developer_guide.md' },
         ],
         showDebugBundle: true,
     },
 ];
+
+/**
+ * The steps that apply to a given shell, in order.
+ *
+ * Derived rather than mutated, mirroring how `OnboardingFlow` builds its
+ * `visibleSteps` from `ONBOARDING_STEP_SEQUENCE`: the canonical array stays
+ * stable so a persisted index keeps pointing at a real step, and callers
+ * clamp against the derived length.
+ */
+export const visibleHomeTourSteps = (surface: HomeTourSurface): HomeTourStep[] =>
+    HOME_TOUR_STEPS.filter((step) => !step.surfaces || step.surfaces.includes(surface));

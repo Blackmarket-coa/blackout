@@ -4,146 +4,156 @@ import { PushNotifications } from '@capacitor/push-notifications';
 import { SplashScreen } from '@capacitor/splash-screen';
 import { dispatchNativeBridgeEvent } from '../../apps/blackout-client/src/platform/native-bridge-contract';
 import { notificationDataToInteractedEvent } from '../../apps/blackout-client/src/platform/notification-routing';
+import {
+    dispatchBackIntent,
+    resolveBackAction,
+} from '../../apps/blackout-client/src/platform/back-intent';
 
 /**
  * Initialize all Capacitor native bridges.
  * Called from main.ts when running inside the native shell.
  */
 export async function initBlackoutMobileBridge() {
-  // ── Deep linking (matrix:// URIs) ──
-  App.addListener('appUrlOpen', ({ url }) => {
-    if (url?.startsWith('matrix://') || url?.startsWith('blackout://')) {
-      dispatchNativeBridgeEvent({
-        type: 'deep_link_opened',
-        source: 'mobile',
-        url,
-      });
-      window.dispatchEvent(
-        new CustomEvent('blackout:deep-link', { detail: { url } })
-      );
-    }
-  });
-
-  // ── App state (background/foreground) ──
-  App.addListener('appStateChange', ({ isActive }) => {
-    window.dispatchEvent(
-      new CustomEvent('blackout:app-state', { detail: { isActive } })
-    );
-
-    // When returning to foreground, trigger a Matrix sync
-    if (isActive) {
-      dispatchNativeBridgeEvent({
-        type: 'resume_sync',
-        source: 'mobile',
-      });
-      window.dispatchEvent(new CustomEvent('blackout:resume-sync'));
-    }
-  });
-
-  // ── Back button (Android) ──
-  App.addListener('backButton', ({ canGoBack }) => {
-    if (canGoBack) {
-      window.history.back();
-    } else {
-      // Minimize app instead of closing
-      App.minimizeApp();
-    }
-  });
-
-  // ── Push notifications ──
-  try {
-    const permResult = await PushNotifications.requestPermissions();
-
-    if (permResult.receive === 'granted') {
-      await PushNotifications.register();
-
-      PushNotifications.addListener('registration', ({ value }) => {
-        // Send token to the Matrix homeserver via Sygnal push gateway
-        dispatchNativeBridgeEvent({
-          type: 'notification_token',
-          source: 'mobile',
-          token: value,
-        });
-        window.dispatchEvent(
-          new CustomEvent('blackout:push-token', { detail: { token: value } })
-        );
-        console.log('[Blackout] Push token registered');
-      });
-
-      PushNotifications.addListener('registrationError', (error) => {
-        console.warn('[Blackout] Push registration failed:', error);
-      });
-
-      // Notification received while app is open
-      PushNotifications.addListener('pushNotificationReceived', (notification) => {
-        window.dispatchEvent(
-          new CustomEvent('blackout:push-received', { detail: notification })
-        );
-      });
-
-      // User tapped a notification
-      PushNotifications.addListener('pushNotificationActionPerformed', (notification) => {
-        window.dispatchEvent(
-          new CustomEvent('blackout:push-action', { detail: notification })
-        );
-
-        // Navigate to the room if the notification contains a room_id. When
-        // the push payload also identifies a thread root, forward it so the
-        // listener can open that thread (Sygnal must emit thread_root_event_id).
-        // The payload → bridge-event mapping is shared with the routing harness
-        // (notification-routing.ts) so tests exercise the same contract.
-        const bridgeEvent = notificationDataToInteractedEvent(
-          notification.notification?.data,
-          'mobile'
-        );
-        if (bridgeEvent) {
-          dispatchNativeBridgeEvent(bridgeEvent);
-          window.dispatchEvent(
-            new CustomEvent('blackout:navigate-room', {
-              detail: { roomId: bridgeEvent.roomId },
-            })
-          );
+    // ── Deep linking (matrix:// URIs) ──
+    App.addListener('appUrlOpen', ({ url }) => {
+        if (url?.startsWith('matrix://') || url?.startsWith('blackout://')) {
+            dispatchNativeBridgeEvent({
+                type: 'deep_link_opened',
+                source: 'mobile',
+                url,
+            });
+            window.dispatchEvent(new CustomEvent('blackout:deep-link', { detail: { url } }));
         }
-      });
-    }
-  } catch (err) {
-    console.warn('[Blackout] Push notifications not available:', err);
-  }
+    });
 
-  // ── Hide splash screen once app is ready ──
-  await SplashScreen.hide();
+    // ── App state (background/foreground) ──
+    App.addListener('appStateChange', ({ isActive }) => {
+        window.dispatchEvent(new CustomEvent('blackout:app-state', { detail: { isActive } }));
+
+        // When returning to foreground, trigger a Matrix sync
+        if (isActive) {
+            dispatchNativeBridgeEvent({
+                type: 'resume_sync',
+                source: 'mobile',
+            });
+            window.dispatchEvent(new CustomEvent('blackout:resume-sync'));
+        }
+    });
+
+    // ── Back button (Android) ──
+    // Offer the press to any open overlay first. The Home tour and the
+    // onboarding sheet claim it and dismiss themselves — without that, back
+    // navigated the page out from under a modal, or minimised the app while a
+    // dialog was still on screen. Nothing claims it on the ordinary path, so
+    // history/minimize behaviour is unchanged. Decision logic is shared with the
+    // client and unit-tested in test/back-intent.test.ts.
+    App.addListener('backButton', ({ canGoBack }) => {
+        const action = resolveBackAction({
+            consumed: dispatchBackIntent(),
+            canGoBack,
+        });
+
+        if (action === 'dismissed') return;
+        if (action === 'history') {
+            window.history.back();
+            return;
+        }
+        // Minimize app instead of closing
+        App.minimizeApp();
+    });
+
+    // ── Push notifications ──
+    try {
+        const permResult = await PushNotifications.requestPermissions();
+
+        if (permResult.receive === 'granted') {
+            await PushNotifications.register();
+
+            PushNotifications.addListener('registration', ({ value }) => {
+                // Send token to the Matrix homeserver via Sygnal push gateway
+                dispatchNativeBridgeEvent({
+                    type: 'notification_token',
+                    source: 'mobile',
+                    token: value,
+                });
+                window.dispatchEvent(
+                    new CustomEvent('blackout:push-token', { detail: { token: value } })
+                );
+                console.log('[Blackout] Push token registered');
+            });
+
+            PushNotifications.addListener('registrationError', (error) => {
+                console.warn('[Blackout] Push registration failed:', error);
+            });
+
+            // Notification received while app is open
+            PushNotifications.addListener('pushNotificationReceived', (notification) => {
+                window.dispatchEvent(
+                    new CustomEvent('blackout:push-received', { detail: notification })
+                );
+            });
+
+            // User tapped a notification
+            PushNotifications.addListener('pushNotificationActionPerformed', (notification) => {
+                window.dispatchEvent(
+                    new CustomEvent('blackout:push-action', { detail: notification })
+                );
+
+                // Navigate to the room if the notification contains a room_id. When
+                // the push payload also identifies a thread root, forward it so the
+                // listener can open that thread (Sygnal must emit thread_root_event_id).
+                // The payload → bridge-event mapping is shared with the routing harness
+                // (notification-routing.ts) so tests exercise the same contract.
+                const bridgeEvent = notificationDataToInteractedEvent(
+                    notification.notification?.data,
+                    'mobile'
+                );
+                if (bridgeEvent) {
+                    dispatchNativeBridgeEvent(bridgeEvent);
+                    window.dispatchEvent(
+                        new CustomEvent('blackout:navigate-room', {
+                            detail: { roomId: bridgeEvent.roomId },
+                        })
+                    );
+                }
+            });
+        }
+    } catch (err) {
+        console.warn('[Blackout] Push notifications not available:', err);
+    }
+
+    // ── Hide splash screen once app is ready ──
+    await SplashScreen.hide();
 }
 
 /**
  * Trigger haptic feedback for UI interactions.
  */
-export async function mobileTapFeedback(
-  style: 'light' | 'medium' | 'heavy' = 'light'
-) {
-  const map = {
-    light: ImpactStyle.Light,
-    medium: ImpactStyle.Medium,
-    heavy: ImpactStyle.Heavy,
-  };
+export async function mobileTapFeedback(style: 'light' | 'medium' | 'heavy' = 'light') {
+    const map = {
+        light: ImpactStyle.Light,
+        medium: ImpactStyle.Medium,
+        heavy: ImpactStyle.Heavy,
+    };
 
-  try {
-    await Haptics.impact({ style: map[style] });
-  } catch {
-    // Haptics not available (e.g., some Android devices)
-  }
+    try {
+        await Haptics.impact({ style: map[style] });
+    } catch {
+        // Haptics not available (e.g., some Android devices)
+    }
 }
 
 /**
  * Share content using the native share sheet.
  */
 export async function mobileShare(title: string, text: string, url?: string) {
-  try {
-    const { Share } = await import('@capacitor/share');
-    await Share.share({ title, text, url, dialogTitle: 'Share from Blackout' });
-  } catch {
-    // Fallback: copy to clipboard
-    if (url) {
-      await navigator.clipboard.writeText(url);
+    try {
+        const { Share } = await import('@capacitor/share');
+        await Share.share({ title, text, url, dialogTitle: 'Share from Blackout' });
+    } catch {
+        // Fallback: copy to clipboard
+        if (url) {
+            await navigator.clipboard.writeText(url);
+        }
     }
-  }
 }

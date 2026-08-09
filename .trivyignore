@@ -14,3 +14,15 @@ GHSA-qwww-vcr4-c8h2
 # CVE alias of GHSA-mh99-v99m-4gvg (Trivy matches by CVE); both are listed.
 GHSA-mh99-v99m-4gvg
 CVE-2026-14257
+
+# image-size infinite-loop DoS (crafted JXL/HEIF box-types, and a zero-length
+# ICNS entry). No fixed version exists — OSV lists every version through 2.0.2
+# as affected, including the whole 2.x line — so there is nothing to bump to.
+# Reached only via metro -> @react-native/community-cli-plugin, React Native's
+# build-time bundler; the images parsed are this repo's committed assets, not
+# remote input. Mirrored in osv-scanner.toml with an ignoreUntil of 2026-11-30.
+# CVE aliases listed alongside the GHSAs because Trivy matches by CVE.
+GHSA-5p2g-fcmc-qvqq
+CVE-2025-71329
+GHSA-w3rx-r6r6-pgpr
+CVE-2025-71330

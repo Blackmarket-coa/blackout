@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
 import { act } from 'react-dom/test-utils';
 import ReactDOM from 'react-dom/client';
+import { createMemoryRouter, RouterProvider } from 'react-router';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -16,7 +17,12 @@ const listeners = new Set<(room: { roomId: string; getMyMembership: () => string
 const mx = {
     getRoom: (roomId: string) => ({
         getMyMembership: () => (roomId === '!den:srv' ? membership : null),
+        // The gate checks `isDirectInvite` before joining so a DM invite can be
+        // registered in m.direct; these keep it on the non-DM path.
+        getMember: () => undefined,
+        getDMInviter: () => undefined,
     }),
+    getUserId: () => '@me:srv',
     joinRoom: (roomId: string) => joinRoom(roomId),
     on: (_event: unknown, handler: never) => listeners.add(handler as never),
     off: (_event: unknown, handler: never) => listeners.delete(handler as never),
@@ -36,12 +42,23 @@ const mount = async () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = ReactDOM.createRoot(container);
+    // The gate's failure state renders a react-router `Link`, so the tree
+    // needs router context even on the happy paths.
+    const router = createMemoryRouter(
+        [
+            {
+                path: '/',
+                element: (
+                    <RoomInviteAcceptGate roomId="!den:srv">
+                        <div data-testid="room-content">timeline</div>
+                    </RoomInviteAcceptGate>
+                ),
+            },
+        ],
+        { initialEntries: ['/'] }
+    );
     await act(async () => {
-        root.render(
-            <RoomInviteAcceptGate roomId="!den:srv">
-                <div data-testid="room-content">timeline</div>
-            </RoomInviteAcceptGate>,
-        );
+        root.render(<RouterProvider router={router} />);
         await flush();
     });
     return { container, root };
@@ -96,7 +113,7 @@ describe('RoomInviteAcceptGate', () => {
             root.render(
                 <RoomInviteAcceptGate roomId="!den:srv" canopyId="!canopy:srv">
                     <div data-testid="room-content">timeline</div>
-                </RoomInviteAcceptGate>,
+                </RoomInviteAcceptGate>
             );
             await flush();
         });
@@ -117,7 +134,7 @@ describe('RoomInviteAcceptGate', () => {
         expect(joinRoom).not.toHaveBeenCalled();
         expect(container.querySelector('[data-testid="room-content"]')).toBeNull();
         const button = Array.from(container.querySelectorAll('button')).find((b) =>
-            /join den/i.test(b.textContent ?? ''),
+            /join den/i.test(b.textContent ?? '')
         );
         expect(button).toBeTruthy();
     });
@@ -132,7 +149,7 @@ describe('RoomInviteAcceptGate', () => {
             root.render(
                 <RoomInviteAcceptGate roomId="!den:srv">
                     <div data-testid="room-content">timeline</div>
-                </RoomInviteAcceptGate>,
+                </RoomInviteAcceptGate>
             );
         });
         // Advance through all five attempts and their backoff sleeps
@@ -143,7 +160,7 @@ describe('RoomInviteAcceptGate', () => {
         expect(joinRoom).toHaveBeenCalledTimes(5);
         expect(container.querySelector('[data-testid="room-content"]')).toBeNull();
         const button = Array.from(container.querySelectorAll('button')).find((b) =>
-            /join den/i.test(b.textContent ?? ''),
+            /join den/i.test(b.textContent ?? '')
         );
         expect(button).toBeTruthy();
     });

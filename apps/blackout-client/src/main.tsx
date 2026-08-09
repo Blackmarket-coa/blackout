@@ -48,13 +48,19 @@ import { AppShell } from './app/pages/shell/AppShell';
 import { OAuthCallback } from './app/features/settings/linked-accounts/OAuthCallback';
 import { InviteLandingPage, PendingInviteRedeemer } from './app/components/invite-landing';
 import { OnboardingPage } from './app/features/welcome/OnboardingPage';
+import { OnboardingAnalyticsPage } from './app/features/onboarding/OnboardingAnalyticsPage';
 import { PublicDirectory } from './app/features/discovery/PublicDirectory';
 import { ExplorePage } from './app/features/discovery/ExplorePage';
 import {
     CreatorStorefront as PublicProfileRoute,
     PublicProfileStandalone,
 } from './app/features/creators/CreatorStorefront';
-import { EXPLORE_PATH, ONBOARDING_PATH, SWIPE_FEED_PATH } from './app/pages/paths';
+import {
+    EXPLORE_PATH,
+    ONBOARDING_ANALYTICS_PATH,
+    ONBOARDING_PATH,
+    SWIPE_FEED_PATH,
+} from './app/pages/paths';
 import { NotFoundPage, RouteErrorFallback } from './app/pages/RouteErrorPage';
 import { trimTrailingSlash } from './app/utils/common';
 
@@ -257,10 +263,15 @@ const buildAppRouter = (capabilityContext: {
         // BootstrapStatus before the router mounts (see below). Placed ahead of
         // the dynamic registry/catch-all routes so `@handle` wins.
         { path: '/@:handle', element: <PublicProfileRoute /> },
-        // Full-page onboarding host. Invite acceptance routes brand-new users
-        // here (with the invited room as `?room=`) before dropping them into
-        // the room; otherwise the wizard only ever shows as a ClientLayout modal.
+        // Full-page onboarding host, reachable by direct link (optionally with
+        // the room to open afterwards as `?room=`). Note invite acceptance no
+        // longer lands here — `resolvePostAcceptancePath` sends brand-new users
+        // to `/` for the Home tour instead — so this is the canopy wizard's
+        // standalone entry; it otherwise shows as a ClientLayout modal.
         { path: ONBOARDING_PATH, element: <OnboardingPage /> },
+        // Onboarding funnel summary for product review, reading the telemetry
+        // `onboardingTelemetry` already records.
+        { path: ONBOARDING_ANALYTICS_PATH, element: <OnboardingAnalyticsPage /> },
         // Logged-in discovery destination. The logged-out case is intercepted
         // in BootstrapStatus (session-less PublicDirectory) before this router
         // ever mounts; this route keeps the same URL working once signed in.

@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 import { downloadDebugBundle } from '../settings/debugBundle';
-import { HOME_TOUR_STEPS, type HomeTourStep } from './homeTourSteps';
+import { visibleHomeTourSteps, type HomeTourStep } from './homeTourSteps';
 import { useHomeTour } from './homeTourState';
+import { isMobileViewport } from '../../pages/client/layoutMetrics';
+import { useBackIntent } from '../../hooks/useBackIntent';
 import {
     trackOnboardingDebugBundleDownloaded,
     trackOnboardingTourCompleted,
@@ -18,9 +20,7 @@ const PADDING = 8;
 const resolveTarget = (step: HomeTourStep): HTMLElement | null => {
     if (typeof document === 'undefined') return null;
     if (step.targetTestId) {
-        const el = document.querySelector<HTMLElement>(
-            `[data-testid="${step.targetTestId}"]`
-        );
+        const el = document.querySelector<HTMLElement>(`[data-testid="${step.targetTestId}"]`);
         if (el) return el;
     }
     if (step.fallbackRegion) {
@@ -98,20 +98,32 @@ const docLinkStyle: CSSProperties = {
     textDecoration: 'underline',
 };
 
+/**
+ * The tooltip is 360px on a roomy screen, but that is wider than a 320px
+ * phone and only 15px narrower than a 375px one — so the fixed width used to
+ * overhang the right edge, and the clamp below could not rescue it because it
+ * was clamping against the same fixed number. Deriving the width from the
+ * viewport keeps it on screen and keeps the placement maths honest.
+ */
+export const tooltipWidthFor = (viewportWidth: number): number =>
+    Math.min(360, Math.max(240, viewportWidth - 32));
+
 const positionTooltip = (
     rect: TargetRect,
     viewport: { width: number; height: number }
 ): CSSProperties => {
+    const tooltipWidth = tooltipWidthFor(viewport.width);
+
     if (!rect) {
         return {
             ...tooltipStyle,
+            maxWidth: tooltipWidth,
             top: '50%',
             left: '50%',
             transform: 'translate(-50%, -50%)',
         };
     }
 
-    const tooltipWidth = 360;
     const estimatedHeight = 260;
     const scrollY = typeof window !== 'undefined' ? window.scrollY : 0;
     const scrollX = typeof window !== 'undefined' ? window.scrollX : 0;
@@ -119,14 +131,20 @@ const positionTooltip = (
     const spaceBelow = viewport.height - (rect.top - scrollY + rect.height);
     const placeBelow = spaceBelow >= estimatedHeight + 16;
 
-    const top = placeBelow ? rect.top + rect.height + 12 : Math.max(scrollY + 16, rect.top - estimatedHeight - 12);
+    const top = placeBelow
+        ? rect.top + rect.height + 12
+        : Math.max(scrollY + 16, rect.top - estimatedHeight - 12);
     const left = Math.max(
         scrollX + 16,
-        Math.min(rect.left + rect.width / 2 - tooltipWidth / 2, scrollX + viewport.width - tooltipWidth - 16)
+        Math.min(
+            rect.left + rect.width / 2 - tooltipWidth / 2,
+            scrollX + viewport.width - tooltipWidth - 16
+        )
     );
 
     return {
         ...tooltipStyle,
+        maxWidth: tooltipWidth,
         top,
         left,
     };
@@ -159,8 +177,20 @@ export const HomeTourOverlay = (): JSX.Element | null => {
     const stepViewedAtRef = useRef<number>(Date.now());
     const stepViewLoggedRef = useRef<string | null>(null);
 
-    const stepIndex = tour.state.stepIndex;
-    const step = HOME_TOUR_STEPS[stepIndex];
+    // The mobile and desktop shells render different chrome, so the tour walks
+    // a different set of steps on each. Derived from the viewport width this
+    // component already tracks for tooltip placement, so rotating or resizing
+    // mid-tour swaps the step list without a second resize listener.
+    const steps = useMemo(
+        () => visibleHomeTourSteps(isMobileViewport(viewport.width) ? 'mobile' : 'desktop'),
+        [viewport.width]
+    );
+
+    // A persisted index can outrun a shorter list — finish the desktop tour's
+    // last step, rotate to mobile, and the index now points past the end.
+    // Clamping keeps the tour on screen instead of silently unmounting.
+    const stepIndex = Math.min(tour.state.stepIndex, Math.max(0, steps.length - 1));
+    const step = steps[stepIndex];
     const isRunning = tour.state.status === 'running' && Boolean(step);
 
     const recomputeRect = useCallback(() => {
@@ -204,13 +234,13 @@ export const HomeTourOverlay = (): JSX.Element | null => {
         if (!step) return;
         const elapsed = Date.now() - stepViewedAtRef.current;
         trackOnboardingTourStepCompleted(step.id, stepIndex, elapsed);
-        const totalSteps = HOME_TOUR_STEPS.length;
+        const totalSteps = steps.length;
         const isLast = stepIndex >= totalSteps - 1;
         await tour.advance(totalSteps);
         if (isLast) {
             trackOnboardingTourCompleted(Date.now() - tour.state.startedAt);
         }
-    }, [step, stepIndex, tour]);
+    }, [step, stepIndex, steps.length, tour]);
 
     const handleBack = useCallback(async () => {
         if (stepIndex === 0) return;
@@ -241,15 +271,21 @@ export const HomeTourOverlay = (): JSX.Element | null => {
         return () => window.removeEventListener('keydown', onKey);
     }, [handleSkip, isRunning]);
 
-    const tooltipPositionStyle = useMemo(
-        () => positionTooltip(rect, viewport),
-        [rect, viewport]
+    // Android hardware back is the phone's Escape: dismiss the tour rather than
+    // navigating Home out from under the overlay.
+    useBackIntent(
+        isRunning,
+        useCallback(() => {
+            void handleSkip();
+        }, [handleSkip])
     );
+
+    const tooltipPositionStyle = useMemo(() => positionTooltip(rect, viewport), [rect, viewport]);
 
     if (!isRunning || !step) return null;
     if (typeof document === 'undefined') return null;
 
-    const totalSteps = HOME_TOUR_STEPS.length;
+    const totalSteps = steps.length;
     const isLast = stepIndex >= totalSteps - 1;
 
     return createPortal(

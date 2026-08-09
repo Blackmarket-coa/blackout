@@ -1,133 +1,144 @@
-# Installing Element Web
+# Installing Blackout
 
-**Familiarise yourself with the [Important Security Notes](../README.md#important-security-notes) before starting, they apply to all installation methods.**
+**Familiarise yourself with [SECURITY.md](../SECURITY.md) and
+[THREAT_MODEL.md](../THREAT_MODEL.md) before starting — they apply to every
+installation method.**
 
-_Note: that for the security of your chats will need to serve Element over HTTPS.
-Major browsers also do not allow you to use VoIP/video chats over HTTP, as WebRTC is only usable over HTTPS.
-There are some exceptions like when using localhost, which is considered a [secure context](https://developer.mozilla.org/docs/Web/Security/Secure_Contexts) and thus allowed._
+_Serve Blackout over HTTPS. Browsers refuse VoIP and video over plain HTTP,
+since WebRTC requires a [secure context](https://developer.mozilla.org/docs/Web/Security/Secure_Contexts).
+`localhost` counts as secure, so local development over HTTP is fine._
 
-## Release tarball
+There are no release tarballs or distribution packages, but container images
+**are** published to GHCR on pushes to `main` and on `v*` tags
+([`.github/workflows/docker.yml`](../.github/workflows/docker.yml)):
 
-1. Download the latest version from <https://github.com/element-hq/element-web/releases>
-1. Untar the tarball on your web server
-1. Move (or symlink) the `element-x.x.x` directory to an appropriate name
-1. Configure the correct caching headers in your webserver (see [README.md](../README.md#caching-requirements))
-1. Configure the app by copying `config.sample.json` to `config.json` and
-   modifying it. See the [configuration docs](config.md) for details.
-1. Enter the URL into your browser and log into Element!
+-   `ghcr.io/blackmarket-coa/blackout-web` — the static web client (nginx)
+-   `ghcr.io/blackmarket-coa/blackout` — the homeserver
 
-Releases are signed using gpg and the OpenPGP standard,
-and can be checked against the public key located at <https://packages.element.io/element-release-key.asc>.
+So the supported paths are: pull those images, build them yourself with Docker,
+or build the client from source and serve it behind your own web server. Pin a
+version tag rather than `latest` for anything you care about.
 
-## Debian package
+## Docker Compose (quickest self-host)
 
-Element Web is now also available as a Debian package for Debian and Ubuntu based systems.
-
-```shell
-sudo apt install -y wget apt-transport-https
-sudo wget -O /usr/share/keyrings/element-io-archive-keyring.gpg https://packages.element.io/debian/element-io-archive-keyring.gpg
-echo "deb [signed-by=/usr/share/keyrings/element-io-archive-keyring.gpg] https://packages.element.io/debian/ default main" | sudo tee /etc/apt/sources.list.d/element-io.list
-sudo apt update
-sudo apt install element-web
-```
-
-Configure the app by modifying `/etc/element-web/config.json`. See the [configuration docs](config.md) for details.
-
-Then point your chosen web server (e.g. Caddy, Nginx, Apache, etc) at the `/usr/share/element-web` webroot.
-
-## Docker
-
-The Docker image can be used to serve element-web as a web server. The easiest way to use
-it is to use the prebuilt image:
+`docker-compose.yml` builds the client image from `Dockerfile.blackout` and
+serves it on port 8080:
 
 ```bash
-docker run --rm -p 127.0.0.1:80:80 vectorim/element-web
+git clone https://github.com/Blackmarket-coa/blackout.git
+cd blackout
+docker network create blackout-backend   # compose expects this to already exist
+docker compose up -d --build
 ```
 
-A server can also be made available to clients outside the local host by omitting the
-explicit local address as described in
-[docker run documentation](https://docs.docker.com/engine/reference/commandline/run/#publish-or-expose-port--p---expose):
+The app is then on <http://localhost:8080>. The compose file joins an external
+`blackout-backend` network so the client can sit alongside a homeserver and the
+API; put those on the same network.
+
+To supply your own client config, mount it over `/app/config.json`:
 
 ```bash
-docker run --rm -p 80:80 vectorim/element-web
+docker run --rm -p 127.0.0.1:8080:80 \
+  -v "$PWD/config.json:/app/config.json" \
+  blackout-app
 ```
 
-To supply your own custom `config.json`, map a volume to `/app/config.json`. For example,
-if your custom config was located at `/etc/element-web/config.json` then your Docker command
-would be:
+Copy `config.sample.json` as a starting point — see [Config](config.md) for the
+available keys. The image ships `config.sample.json` as its default config, so
+an unconfigured container points at the sample homeserver, not yours.
+
+### Image behaviour
+
+Built on `nginxinc/nginx-unprivileged`, running as a non-root user. Binding to
+port 80 on the host may therefore need elevated privileges — prefer publishing a
+high port (as the compose file does) or change the in-container port:
+
+-   `ELEMENT_WEB_PORT` — port nginx listens on inside the container. Defaults to
+    `80`. (The name is inherited from the Element-era entrypoint scripts in
+    `deploy/docker/`.)
+
+A healthcheck polls `/health/ready`.
+
+### Building the image directly
 
 ```bash
-docker run --rm -p 127.0.0.1:80:80 -v /etc/element-web/config.json:/app/config.json vectorim/element-web
+docker build -f Dockerfile.blackout -t blackout-app .
 ```
 
-The Docker image is configured to run as an unprivileged (non-root) user by
-default. This should be fine on modern Docker runtimes, but binding to port 80
-on other runtimes may require root privileges. To resolve this, either run the
-image as root (`docker run --user 0`) or, better, change the port that nginx
-listens on via the `ELEMENT_WEB_PORT` environment variable.
+The build runs `pnpm install --frozen-lockfile` and `pnpm client:build` inside
+`node:22-bullseye`, then copies `apps/blackout-client/dist` into the nginx
+image.
 
-[Element Web Modules](https://github.com/element-hq/element-modules/tree/main/packages/element-web-module-api) can be dynamically loaded
-by being made available (e.g. via bind mount) in a directory within `/modules/`.
-The default entrypoint will be index.js in that directory but can be overridden if a package.json file is found with a `main` directive.
-These modules will be presented in a `/modules` subdirectory within the webroot, and automatically added to the config.json `modules` field.
-
-If you wish to use docker in read-only mode,
-you should follow the [upstream instructions](https://hub.docker.com/_/nginx#:~:text=Running%20nginx%20in%20read%2Donly%20mode)
-but additionally include the following directories:
-
-- /tmp/
-- /etc/nginx/conf.d/
-
-The behaviour of the docker image can be customised via the following
-environment variables:
-
-- `ELEMENT_WEB_PORT`
-
-    The port to listen on (within the docker container) for HTTP
-    traffic. Defaults to `80`.
-
-### Building the docker image
-
-To build the image yourself:
+Note there are two equivalent client Dockerfiles: `Dockerfile.blackout` at the
+repo root (what `docker-compose.yml` builds) and `deploy/docker/Dockerfile`
+(what CI publishes as `ghcr.io/blackmarket-coa/blackout-web`). Both take the
+repository root as build context. If you just want to run it, pull the published
+image instead of building either:
 
 ```bash
-git clone https://github.com/element-hq/element-web.git element-web
-cd element-web
-git checkout master
-docker build .
+docker run --rm -p 127.0.0.1:8080:80 \
+  -v "$PWD/config.json:/app/config.json" \
+  ghcr.io/blackmarket-coa/blackout-web:latest
 ```
 
-If you're building a custom branch, or want to use the develop branch, check out the appropriate
-element-web branch and then run:
+## Kubernetes
+
+A Helm chart lives at `deploy/helm/blackout/` covering the **API**, Redis,
+external secrets, and the canary rollout. It does **not** package the web
+client — that has no chart, and its manifests are in
+[Kubernetes](kubernetes.md). Configure the chart through `values.yaml`:
 
 ```bash
-docker build -t \
-    --build-arg USE_CUSTOM_SDKS=true \
-    --build-arg JS_SDK_REPO="https://github.com/matrix-org/matrix-js-sdk.git" \
-    --build-arg JS_SDK_BRANCH="develop" \
-    .
+helm install blackout deploy/helm/blackout/ \
+  --set global.domain=blackout.example.com \
+  --values my-overrides.yaml
 ```
+
+See [Kubernetes](kubernetes.md) for a worked ingress example, and
+`deploy/helm/blackout/values.yaml` for the full set of knobs (API replica count,
+Postgres-backed store, pgNotify cache invalidation, resource limits).
+
+## Building from source behind your own web server
+
+```bash
+git clone https://github.com/Blackmarket-coa/blackout.git
+cd blackout
+pnpm install
+cp config.sample.json config.json    # then edit for your homeserver
+pnpm web:build
+```
+
+That writes a static bundle to `apps/blackout-client/dist/`. Point Caddy, nginx,
+Apache, or any static host at it. Two things to get right:
+
+-   Set caching headers so `index.html` and `config.json` are **not** cached while
+    the hashed asset files are cached aggressively.
+-   Serve `index.html` for unmatched routes — the client uses history-mode routing,
+    so a hard refresh on `/canopies` must not 404.
+
+See [README.md](../README.md#quick-start) for the full local-development setup,
+including the server and mobile workspaces.
 
 ## Blackout feature presets (enterprise/self-hosted)
 
-Blackout runtime preset selection can be configured at startup with environment variables:
+Blackout runtime preset selection can be configured at startup with environment
+variables:
 
-- `VITE_RELEASE_COHORT` (`internal|beta|general`)
-- `VITE_FEATURE_DEPLOYMENT_DEFAULTS`
-- `VITE_FEATURE_TENANT_POLICY`
-- `VITE_FEATURE_USER_OVERRIDES`
+-   `VITE_RELEASE_COHORT` (`internal|beta|general`)
+-   `VITE_FEATURE_DEPLOYMENT_DEFAULTS`
+-   `VITE_FEATURE_TENANT_POLICY`
+-   `VITE_FEATURE_USER_OVERRIDES`
 
-Use `deploy/docker/feature-presets.env.template` as a starting point for enterprise/self-hosted environments. The template includes:
+Use `deploy/docker/feature-presets.env.template` as a starting point for
+enterprise/self-hosted environments. The template includes:
 
 1. deployment default preset selection,
 2. cohort-based staged release,
 3. tenant/org policy overrides,
 4. user override payloads (honored only when tenant policy allows them).
 
-When configured, the app's **Feature Presets** admin/settings UX supports choosing a preset, previewing included capabilities ("What this preset enables"), applying with confirmation, and rolling back to deployment defaults with confirmation.
-For operations guidance, see `docs/operations/runbooks/feature-preset-rollout-and-rollback.md`.
-
-## Kubernetes
-
-The provided element-web docker image can also be run from within a Kubernetes cluster.
-See the [Kubernetes example](kubernetes.md) for more details.
+When configured, the app's **Feature Presets** admin/settings UX supports
+choosing a preset, previewing included capabilities ("What this preset
+enables"), applying with confirmation, and rolling back to deployment defaults
+with confirmation. For operations guidance, see
+[feature-preset-rollout-and-rollback.md](operations/runbooks/feature-preset-rollout-and-rollback.md).

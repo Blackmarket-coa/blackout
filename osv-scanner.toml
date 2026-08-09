@@ -24,6 +24,33 @@ id = "GHSA-qwww-vcr4-c8h2"
 ignoreUntil = 2026-10-31
 reason = "RSC-mode-only advisory; client uses react-router in library mode. Fix requires React 19 migration (tracked separately)."
 
+# image-size infinite-loop DoS, two advisories of the same class: crafted
+# JXL/HEIF box-types (GHSA-5p2g-fcmc-qvqq) and a zero-length ICNS entry
+# (GHSA-w3rx-r6r6-pgpr) each hang the parser and block the event loop.
+#
+# There is nothing to bump to: OSV lists EVERY version through 2.0.2 as
+# affected, including the whole 2.x line, and neither advisory names a fixed
+# version. This is the one case the "bump it instead" rule cannot cover.
+#
+# Does not apply to our usage. image-size is reached only through
+# metro -> @react-native/community-cli-plugin, i.e. React Native's build-time
+# bundler; it never ships in a runtime bundle, on device or on the web. The
+# images it parses are the asset files committed in this repo at bundle time,
+# not remote or user-supplied input, so the "remote attacker supplies a crafted
+# buffer" precondition has no path here.
+#
+# ignoreUntil forces a re-check for an upstream fix (or a metro release that
+# drops the dependency) rather than silencing this indefinitely.
+[[IgnoredVulns]]
+id = "GHSA-5p2g-fcmc-qvqq"
+ignoreUntil = 2026-11-30
+reason = "No fixed version exists (all versions <=2.0.2 affected). Build-time only: metro's asset pipeline parses repo-committed images, never remote input."
+
+[[IgnoredVulns]]
+id = "GHSA-w3rx-r6r6-pgpr"
+ignoreUntil = 2026-11-30
+reason = "No fixed version exists (all versions <=2.0.2 affected). Build-time only: metro's asset pipeline parses repo-committed images, never remote input."
+
 # The brace-expansion ReDoS ignore (GHSA-mh99-v99m-4gvg) used to sit here. The
 # `pnpm.overrides` pins that resolved it — 1.1.18 / 2.1.4 / 5.0.9, all at or
 # above the per-line fixes and the GHSA-rgw5-rvv9-x895 bypass follow-ups — mean
