@@ -8,9 +8,16 @@ _Serve Blackout over HTTPS. Browsers refuse VoIP and video over plain HTTP,
 since WebRTC requires a [secure context](https://developer.mozilla.org/docs/Web/Security/Secure_Contexts).
 `localhost` counts as secure, so local development over HTTP is fine._
 
-There are no prebuilt release tarballs or distribution packages. Blackout is
-built from source in this monorepo; the supported paths are Docker, Kubernetes,
-and a direct build behind your own web server.
+There are no release tarballs or distribution packages, but container images
+**are** published to GHCR on pushes to `main` and on `v*` tags
+([`.github/workflows/docker.yml`](../.github/workflows/docker.yml)):
+
+-   `ghcr.io/blackmarket-coa/blackout-web` — the static web client (nginx)
+-   `ghcr.io/blackmarket-coa/blackout` — the homeserver
+
+So the supported paths are: pull those images, build them yourself with Docker,
+or build the client from source and serve it behind your own web server. Pin a
+version tag rather than `latest` for anything you care about.
 
 ## Docker Compose (quickest self-host)
 
@@ -62,10 +69,24 @@ The build runs `pnpm install --frozen-lockfile` and `pnpm client:build` inside
 `node:22-bullseye`, then copies `apps/blackout-client/dist` into the nginx
 image.
 
+Note there are two equivalent client Dockerfiles: `Dockerfile.blackout` at the
+repo root (what `docker-compose.yml` builds) and `deploy/docker/Dockerfile`
+(what CI publishes as `ghcr.io/blackmarket-coa/blackout-web`). Both take the
+repository root as build context. If you just want to run it, pull the published
+image instead of building either:
+
+```bash
+docker run --rm -p 127.0.0.1:8080:80 \
+  -v "$PWD/config.json:/app/config.json" \
+  ghcr.io/blackmarket-coa/blackout-web:latest
+```
+
 ## Kubernetes
 
-A Helm chart lives at `deploy/helm/blackout/` covering the API, client, and
-supporting services. Configure it through `values.yaml`:
+A Helm chart lives at `deploy/helm/blackout/` covering the **API**, Redis,
+external secrets, and the canary rollout. It does **not** package the web
+client — that has no chart, and its manifests are in
+[Kubernetes](kubernetes.md). Configure the chart through `values.yaml`:
 
 ```bash
 helm install blackout deploy/helm/blackout/ \

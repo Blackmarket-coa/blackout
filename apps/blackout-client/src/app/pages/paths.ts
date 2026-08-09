@@ -200,6 +200,22 @@ export const ONBOARDING_ANALYTICS_PATH = '/onboarding/:spaceIdOrAlias/analytics/
  * PR 7 — Creator-onboarding fork. Lives outside the space-driven
  * `/onboarding/:spaceIdOrAlias/` machine because the creator path
  * isn't anchored to a single canopy; the wizard owns its own state.
+ *
+ * CAUTION — this overlaps `ONBOARDING_PATH`: `/onboarding/creator` also
+ * matches `/onboarding/:spaceIdOrAlias`. Both end up as siblings in
+ * `destinationRoutes` in `main.tsx` — `ONBOARDING_PATH` listed directly, this
+ * one spread in later via `registryRoutes` — and it resolves correctly because
+ * React Router 7 ranks static segments above dynamic ones, so the literal
+ * `creator` wins regardless of that ordering. `paths.overlap.test.ts` pins the
+ * behaviour. Two things keep it fragile:
+ *
+ *   - It relies on ranking, not on the paths being disjoint. A router change,
+ *     or moving either route to a nested/splat form, could flip it.
+ *   - The trailing slashes disagree — `ONBOARDING_PATH` has one, this does
+ *     not — so a canopy literally named `creator` is unreachable here.
+ *
+ * If a third `/onboarding/*` route is ever added, give the creator fork its
+ * own prefix (e.g. `/creator/onboarding`) rather than adding to the pile.
  */
 export const ONBOARDING_CREATOR_PATH = '/onboarding/creator';
 /**
