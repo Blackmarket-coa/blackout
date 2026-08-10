@@ -19,6 +19,19 @@
   to = "/pdf.worker.min.js"
   status = 200
 
+# Public trust page (generated from TRUST.md into public/trust.html). Needs its
+# own rules ahead of the catch-all below, which force-rewrites everything else
+# to the SPA's index.html — otherwise /trust boots the chat app instead.
+[[redirects]]
+  from = "/trust"
+  to = "/trust.html"
+  status = 200
+
+[[redirects]]
+  from = "/trust.html"
+  to = "/trust.html"
+  status = 200
+
 [[redirects]]
   from = "/public/*"
   to = "/public/:splat"
