@@ -62,3 +62,14 @@
 # Updated by Synapse / MAS image automation
 /playwright/testcontainers/synapse.ts
 /playwright/testcontainers/mas.ts
+
+# Public commitments. These are promises to users, not implementation detail:
+# the policy changelog is the audit trail for every privacy/monetization
+# commitment, and TRUST.md is the user-facing statement of them. Enforcement is
+# review, not CI — nothing automated can tell that a diff weakens a promise.
+# See docs/legal/policy-change-process.md.
+/docs/legal/**                                                          @Blackmarket-coa/blackout-maintainers
+/TRUST.md                                                               @Blackmarket-coa/blackout-maintainers
+/SECURITY.md                                                            @Blackmarket-coa/blackout-maintainers
+/THREAT_MODEL.md                                                        @Blackmarket-coa/blackout-maintainers
+/tools/ci/check-room-encryption.mjs                                     @Blackmarket-coa/blackout-maintainers
