@@ -52,9 +52,43 @@ const isDecryptUtdNoise = (args: unknown[]): boolean =>
     typeof args[0] === 'string' && DECRYPT_UTD_NOISE.test(args[0]);
 
 /**
+ * Tally of lines this wrapper dropped, by reason.
+ *
+ * Suppressing the decrypt-UTD warning is reasonable on its own — it is a
+ * duplicate of the js-sdk's own `DecryptionError` line — but suppressing it
+ * *and* the key-backup probe together meant the one signal that tells you how
+ * often users cannot read their own history stopped being observable anywhere.
+ * The 2026-08-10 encryption audit could not answer "how bad is the key-backup
+ * DecryptionError problem?" for exactly this reason.
+ *
+ * Counting instead of re-logging keeps the console quiet while making the rate
+ * measurable: read it from the bug-report payload or a diagnostics panel. A
+ * non-zero and growing `decryptUtd` means devices are missing room keys, which
+ * usually means key backup is not set up or not restoring.
+ */
+export interface SuppressedLogCounts {
+    pushRule: number;
+    keyBackupProbe: number;
+    decryptUtd: number;
+}
+
+const suppressed: SuppressedLogCounts = { pushRule: 0, keyBackupProbe: 0, decryptUtd: 0 };
+
+/** Snapshot of suppressed-line counts since page load (or the last reset). */
+export const getSuppressedLogCounts = (): SuppressedLogCounts => ({ ...suppressed });
+
+/** Reset the tally. Exposed for tests. */
+export const resetSuppressedLogCounts = (): void => {
+    suppressed.pushRule = 0;
+    suppressed.keyBackupProbe = 0;
+    suppressed.decryptUtd = 0;
+};
+
+/**
  * Wrap a matrix-js-sdk `Logger` so the benign push-rule (`warn`), key-backup
  * probe (`info`), and missing-room-key decrypt (`warn`) lines are dropped while
- * every other method delegates unchanged.
+ * every other method delegates unchanged. Dropped lines are counted in
+ * {@link getSuppressedLogCounts} so the rate stays visible.
  * `getChild` wraps recursively so namespaced child loggers (e.g. crypto) keep
  * the same filtering.
  */
@@ -62,12 +96,21 @@ export const wrapMatrixLogger = (base: Logger): Logger => ({
     trace: (...args: unknown[]) => base.trace(...args),
     debug: (...args: unknown[]) => base.debug(...args),
     info: (...args: unknown[]) => {
-        if (isKeyBackupProbeNoise(args)) return;
+        if (isKeyBackupProbeNoise(args)) {
+            suppressed.keyBackupProbe += 1;
+            return;
+        }
         base.info(...args);
     },
     warn: (...args: unknown[]) => {
-        if (isPushRuleNoise(args)) return;
-        if (isDecryptUtdNoise(args)) return;
+        if (isPushRuleNoise(args)) {
+            suppressed.pushRule += 1;
+            return;
+        }
+        if (isDecryptUtdNoise(args)) {
+            suppressed.decryptUtd += 1;
+            return;
+        }
         base.warn(...args);
     },
     error: (...args: unknown[]) => base.error(...args),

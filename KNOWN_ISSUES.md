@@ -29,7 +29,13 @@ ToS, the production-like E2E + load run) are tracked in that report's Appendix B
 [`KNOWN_LIMITATIONS.md`](KNOWN_LIMITATIONS.md), since they are planned deferrals
 rather than newly discovered defects.
 
-1. _(none curated yet — see the audit Appendix B for pre-launch open items)_
+1. **BO-1 — Key-backup `DecryptionError` / unable-to-decrypt history.** Users on
+   a new device see "unable to decrypt" for historical messages when no
+   server-side key backup exists or it fails to restore. Severity: high — it
+   directly undercuts the encryption claim on the trust page. Workaround: set up
+   recovery (Settings → Encryption); `MessageBadEncryptedContent` surfaces a
+   "Set up backup" action on the affected events. **Not yet fixed**; see the note
+   below.
 2.
 3.
 4.
@@ -37,9 +43,28 @@ rather than newly discovered defects.
 
 ## Full list
 
-|         ID | First seen | Surface | Severity | Status | Workaround | ETA |
-| ---------: | ---------- | ------- | -------- | ------ | ---------- | --- |
-| _none yet_ |            |         |          |        |            |     |
+|   ID | First seen | Surface | Severity | Status        | Workaround                               | ETA |
+| ---: | ---------- | ------- | -------- | ------------- | ---------------------------------------- | --- |
+| BO-1 | 2026-08-10 | Client  | high     | Instrumenting | Set up recovery in Settings → Encryption | TBD |
+
+### BO-1 notes
+
+Filed by the 2026-08-10 encryption audit
+([`docs/audits/2026-08-10-encryption-audit.md`](docs/audits/2026-08-10-encryption-audit.md)).
+
+The audit could not size this defect, and that was itself the finding:
+`apps/blackout-client/src/client/matrixLogger.ts` deliberately drops both the
+rust layer's `Failed to decrypt a room event: Can't find the room key` warning
+and the `PerSessionKeyBackupDownloader` "no backup" probe. Each suppression is
+defensible alone, but together they meant the rate of users who cannot read
+their own history was not observable anywhere.
+
+That wrapper now counts what it drops (`getSuppressedLogCounts()`), so the rate
+can be read from a diagnostics surface or attached to a bug report. **Fixing the
+underlying decryption failure is still open** — the next step is to collect real
+`decryptUtd` numbers and determine whether the cause is backup setup never
+completing, restore failing, or cross-signing state. Do not close this from the
+instrumentation alone.
 
 ## How this list is maintained
 

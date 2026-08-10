@@ -61,7 +61,7 @@ const buildClientConfig = (apiKey: string): GiphyClientConfig => ({
 
 const handleGiphyError = (err: unknown): Response => {
     if (err instanceof GiphyUpstreamError) {
-        log.warn('giphy: upstream error', { status: err.status, body: err.bodyExcerpt });
+        log.warn('giphy: upstream error', { status: err.status, bodyExcerpt: err.bodyExcerpt });
         return new Response(
             JSON.stringify({ code: 'upstream_error', message: 'Giphy upstream error' }),
             { status: 502, headers: { 'content-type': 'application/json' } }
