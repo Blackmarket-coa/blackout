@@ -2,13 +2,17 @@ import React, { useState } from 'react';
 import {
     confirmAccountDeletion,
     confirmEmailVerification,
-    downloadAccountExport,
+    downloadDataExport,
     requestAccountDeletion,
     requestEmailVerification,
 } from './accountLifecycleClient';
 import { trackSettingsInteraction } from './settingsTelemetry';
 
-type Status = { kind: 'idle' } | { kind: 'busy' } | { kind: 'ok'; message: string } | { kind: 'error'; message: string };
+type Status =
+    | { kind: 'idle' }
+    | { kind: 'busy' }
+    | { kind: 'ok'; message: string }
+    | { kind: 'error'; message: string };
 
 const buttonStyle: React.CSSProperties = {
     border: '1px solid var(--border-default)',
@@ -48,10 +52,15 @@ export const DataRetentionSection: React.FC = () => {
         setExportStatus({ kind: 'busy' });
         trackSettingsInteraction('privacy', 'export_data', 'start');
         try {
-            const data = await downloadAccountExport();
+            const data = await downloadDataExport();
+            // Summarise from the account slice, which is where the old
+            // top-level fields now live under the /v1/data-export envelope.
             setExportStatus({
                 kind: 'ok',
-                message: `Export downloaded — ${data.messages.length} messages, ${data.linkedAccounts.length} linked accounts.`,
+                message:
+                    `Export downloaded — ${data.account.messages.length} messages, ` +
+                    `${data.account.linkedAccounts.length} linked accounts. ` +
+                    'Encrypted message content is not included; the file explains where to get it.',
             });
             trackSettingsInteraction('privacy', 'export_data', 'success');
         } catch (err) {
@@ -72,7 +81,10 @@ export const DataRetentionSection: React.FC = () => {
                     : 'Verification email sent. Check your inbox for the token.',
             });
         } catch (err) {
-            setVerifyStatus({ kind: 'error', message: `Could not send: ${(err as Error).message}` });
+            setVerifyStatus({
+                kind: 'error',
+                message: `Could not send: ${(err as Error).message}`,
+            });
         }
     };
 
@@ -86,7 +98,10 @@ export const DataRetentionSection: React.FC = () => {
             setVerifyToken('');
             trackSettingsInteraction('privacy', 'email_verification_confirm', 'success');
         } catch (err) {
-            setVerifyStatus({ kind: 'error', message: `Verification failed: ${(err as Error).message}` });
+            setVerifyStatus({
+                kind: 'error',
+                message: `Verification failed: ${(err as Error).message}`,
+            });
             trackSettingsInteraction('privacy', 'email_verification_confirm', 'error');
         }
     };
@@ -105,10 +120,15 @@ export const DataRetentionSection: React.FC = () => {
             setDeleteStage('token');
             setDeleteStatus({
                 kind: 'ok',
-                message: `Confirmation email sent. Token expires at ${new Date(res.expiresAt).toLocaleString()}.`,
+                message: `Confirmation email sent. Token expires at ${new Date(
+                    res.expiresAt
+                ).toLocaleString()}.`,
             });
         } catch (err) {
-            setDeleteStatus({ kind: 'error', message: `Could not request: ${(err as Error).message}` });
+            setDeleteStatus({
+                kind: 'error',
+                message: `Could not request: ${(err as Error).message}`,
+            });
         }
     };
 
@@ -124,13 +144,24 @@ export const DataRetentionSection: React.FC = () => {
             });
             trackSettingsInteraction('privacy', 'delete_account', 'success');
         } catch (err) {
-            setDeleteStatus({ kind: 'error', message: `Deletion failed: ${(err as Error).message}` });
+            setDeleteStatus({
+                kind: 'error',
+                message: `Deletion failed: ${(err as Error).message}`,
+            });
             trackSettingsInteraction('privacy', 'delete_account', 'error');
         }
     };
 
     return (
-        <section style={{ display: 'grid', gap: 16, marginTop: 24, paddingTop: 20, borderTop: '1px solid var(--border-default)' }}>
+        <section
+            style={{
+                display: 'grid',
+                gap: 16,
+                marginTop: 24,
+                paddingTop: 20,
+                borderTop: '1px solid var(--border-default)',
+            }}
+        >
             <h3>Data &amp; retention</h3>
 
             <div style={{ display: 'grid', gap: 8 }}>
@@ -139,7 +170,12 @@ export const DataRetentionSection: React.FC = () => {
                     Confirm the email on your account so you can recover it after a lost password.
                 </small>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    <button type="button" style={buttonStyle} onClick={handleSendVerify} disabled={verifyStatus.kind === 'busy'}>
+                    <button
+                        type="button"
+                        style={buttonStyle}
+                        onClick={handleSendVerify}
+                        disabled={verifyStatus.kind === 'busy'}
+                    >
                         Send verification email
                     </button>
                     <input
@@ -159,28 +195,48 @@ export const DataRetentionSection: React.FC = () => {
                         Confirm
                     </button>
                 </div>
-                {verifyStatus.kind === 'error' && <small style={{ color: 'var(--accent-danger, #b00020)' }}>{verifyStatus.message}</small>}
+                {verifyStatus.kind === 'error' && (
+                    <small style={{ color: 'var(--accent-danger, #b00020)' }}>
+                        {verifyStatus.message}
+                    </small>
+                )}
                 {verifyStatus.kind === 'ok' && <small>{verifyStatus.message}</small>}
             </div>
 
             <div style={{ display: 'grid', gap: 8 }}>
                 <h4 style={{ margin: 0 }}>Download your data</h4>
                 <small>
-                    Exports a JSON file containing your profile, linked accounts, votes, posts, messages, and moderation actions.
+                    Exports a JSON file with everything the server holds about you: your profile and
+                    linked accounts, your social graph, and your ledger records. Free on every tier.
+                    The contents of your encrypted rooms are not included — the server cannot read
+                    them — and the file tells you how to export those from this client instead.
                 </small>
                 <div>
-                    <button type="button" style={buttonStyle} onClick={handleExport} disabled={exportStatus.kind === 'busy'}>
-                        {exportStatus.kind === 'busy' ? 'Preparing export…' : 'Download my data (JSON)'}
+                    <button
+                        type="button"
+                        style={buttonStyle}
+                        onClick={handleExport}
+                        disabled={exportStatus.kind === 'busy'}
+                        data-testid="feature-toggle-data-export"
+                    >
+                        {exportStatus.kind === 'busy'
+                            ? 'Preparing export…'
+                            : 'Download my data (JSON)'}
                     </button>
                 </div>
-                {exportStatus.kind === 'error' && <small style={{ color: 'var(--accent-danger, #b00020)' }}>{exportStatus.message}</small>}
+                {exportStatus.kind === 'error' && (
+                    <small style={{ color: 'var(--accent-danger, #b00020)' }}>
+                        {exportStatus.message}
+                    </small>
+                )}
                 {exportStatus.kind === 'ok' && <small>{exportStatus.message}</small>}
             </div>
 
             <div style={{ display: 'grid', gap: 8 }}>
                 <h4 style={{ margin: 0 }}>Delete your account</h4>
                 <small>
-                    Permanently removes your account, sessions, and linked services. Posts and messages remain visible to communities you participated in.
+                    Permanently removes your account, sessions, and linked services. Posts and
+                    messages remain visible to communities you participated in.
                 </small>
                 {deleteStage === 'idle' && (
                     <div>
@@ -199,7 +255,11 @@ export const DataRetentionSection: React.FC = () => {
                         >
                             Send confirmation email
                         </button>
-                        <button type="button" style={buttonStyle} onClick={() => setDeleteStage('idle')}>
+                        <button
+                            type="button"
+                            style={buttonStyle}
+                            onClick={() => setDeleteStage('idle')}
+                        >
                             Cancel
                         </button>
                     </div>
@@ -234,7 +294,11 @@ export const DataRetentionSection: React.FC = () => {
                         </button>
                     </div>
                 )}
-                {deleteStatus.kind === 'error' && <small style={{ color: 'var(--accent-danger, #b00020)' }}>{deleteStatus.message}</small>}
+                {deleteStatus.kind === 'error' && (
+                    <small style={{ color: 'var(--accent-danger, #b00020)' }}>
+                        {deleteStatus.message}
+                    </small>
+                )}
                 {deleteStatus.kind === 'ok' && <small>{deleteStatus.message}</small>}
             </div>
         </section>

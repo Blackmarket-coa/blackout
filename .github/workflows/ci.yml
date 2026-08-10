@@ -79,6 +79,37 @@ jobs:
                   node-version: 22
             - run: node tools/ci/check-feature-registry.mjs
 
+    room-encryption-guard:
+        # Trust-claim guard: TRUST.md states every private room and DM is
+        # end-to-end encrypted. The 2026-08-10 audit found that claim was false
+        # in thirteen server paths and five client paths. This job is what keeps
+        # it true — it fails the build when a room-creating call makes no
+        # encryption decision, or when the server-side `encrypted` flag is
+        # downgraded from required to optional.
+        name: Room encryption guard
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+            - run: node tools/ci/check-room-encryption.mjs
+            - run: node --test tools/ci/check-room-encryption.test.mjs
+
+    trust-page-sync:
+        # The public trust page at /trust is generated from TRUST.md. If the two
+        # ever disagree, the wrong one is the public one — so this fails the build
+        # when TRUST.md changes and the generated page was not regenerated.
+        name: Trust page in sync with TRUST.md
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+            - run: node tools/ci/build-trust-page.mjs --check
+            - run: node --test tools/ci/build-trust-page.test.mjs
+
     deaddrop-envelope-parity:
         # Audit M18: execute BOTH envelope validators (protocol source of truth +
         # appservice runtime guard) against a shared adversarial corpus and fail

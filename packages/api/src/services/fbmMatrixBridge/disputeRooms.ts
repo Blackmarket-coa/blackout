@@ -39,11 +39,23 @@ export async function openDisputeRoom(
 ): Promise<void> {
     if (db.getFbmDisputeRoom(event.disputeId)) return; // idempotent
 
+    // Encryption and history visibility go in `initial_state`, not follow-up
+    // state events. Sending them afterwards left the room briefly unencrypted
+    // and — because the results were never checked — a rejected state event
+    // left it permanently plaintext while the invites below still went out.
     const room = await matrix.createRoom({
         name: `Dispute ${event.disputeId}`,
         topic: `FBM dispute ${event.disputeId}`,
         visibility: 'private',
         preset: 'private_chat',
+        encrypted: true,
+        initialState: [
+            {
+                type: 'm.room.history_visibility',
+                state_key: '',
+                content: { history_visibility: 'joined' },
+            },
+        ],
     });
     if (!room.ok || !('roomId' in room) || !room.roomId) {
         failed('create_room', 'reason' in room ? room.reason : room.status);
@@ -51,16 +63,18 @@ export async function openDisputeRoom(
     }
     const roomId = room.roomId;
 
-    await matrix.sendStateEvent(roomId, 'm.room.encryption', {
-        algorithm: 'm.megolm.v1.aes-sha2',
-    });
-    await matrix.sendStateEvent(roomId, 'm.room.history_visibility', {
-        history_visibility: 'joined',
-    });
     await matrix.sendStateEvent(
         roomId,
         FBM_DISPUTE_EVENT_TYPE,
-        { ...disputeStateContent(event.disputeId, event.vendorId, 'open', event.occurredAt, event.orderId) },
+        {
+            ...disputeStateContent(
+                event.disputeId,
+                event.vendorId,
+                'open',
+                event.occurredAt,
+                event.orderId
+            ),
+        },
         event.disputeId
     );
 

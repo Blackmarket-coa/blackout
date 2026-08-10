@@ -47,3 +47,8 @@ res/jitsi_external_api.min.js
 /playwright/html-report/
 /playwright/logs/
 /playwright/snapshots/
+
+# Generated from TRUST.md by tools/ci/build-trust-page.mjs. Prettier reformatting
+# it makes the file diverge from the generator's output, which is exactly what
+# `pnpm guard:trust-page` fails on — the hook and the guard would fight forever.
+/apps/blackout-client/public/trust.html

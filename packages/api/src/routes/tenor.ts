@@ -65,7 +65,7 @@ const buildClientConfig = (apiKey: string, sub: string): TenorClientConfig => ({
 
 const handleTenorError = (err: unknown): Response => {
     if (err instanceof TenorUpstreamError) {
-        log.warn('tenor: upstream error', { status: err.status, body: err.bodyExcerpt });
+        log.warn('tenor: upstream error', { status: err.status, bodyExcerpt: err.bodyExcerpt });
         return new Response(
             JSON.stringify({ code: 'upstream_error', message: 'Tenor upstream error' }),
             { status: 502, headers: { 'content-type': 'application/json' } }

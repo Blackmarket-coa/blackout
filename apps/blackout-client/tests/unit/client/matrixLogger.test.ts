@@ -1,6 +1,10 @@
-import { describe, it, expect, vi } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
 import type { Logger } from 'matrix-js-sdk/lib/logger';
-import { wrapMatrixLogger } from '../../../src/client/matrixLogger';
+import {
+    getSuppressedLogCounts,
+    resetSuppressedLogCounts,
+    wrapMatrixLogger,
+} from '../../../src/client/matrixLogger';
 
 const makeBase = () =>
     ({
@@ -112,5 +116,44 @@ describe('wrapMatrixLogger', () => {
 
         expect(child.info).toHaveBeenCalledTimes(1);
         expect(child.info).toHaveBeenCalledWith('real child info');
+    });
+});
+
+describe('suppressed-line counters', () => {
+    // Dropping these lines is fine; dropping them without a trace is not. The
+    // decrypt-UTD rate is the only signal for "users cannot read their own
+    // history", and it was previously unobservable anywhere in the client.
+    beforeEach(() => resetSuppressedLogCounts());
+
+    it('counts dropped decrypt-UTD warnings instead of losing them', () => {
+        const base = makeBase();
+        const logger = wrapMatrixLogger(base);
+
+        logger.warn("Failed to decrypt a room event: Can't find the room key to decrypt the event");
+        logger.warn("Failed to decrypt a room event: Can't find the room key to decrypt the event");
+
+        expect(base.warn).not.toHaveBeenCalled();
+        expect(getSuppressedLogCounts().decryptUtd).toBe(2);
+    });
+
+    it('counts the key-backup probe separately from real info lines', () => {
+        const base = makeBase();
+        const logger = wrapMatrixLogger(base);
+
+        logger.info('Unsupported algorithm undefined');
+        logger.info('something worth keeping');
+
+        expect(base.info).toHaveBeenCalledTimes(1);
+        expect(getSuppressedLogCounts().keyBackupProbe).toBe(1);
+    });
+
+    it('leaves every counter at zero when nothing is suppressed', () => {
+        const logger = wrapMatrixLogger(makeBase());
+        logger.warn('a real warning');
+        expect(getSuppressedLogCounts()).toEqual({
+            pushRule: 0,
+            keyBackupProbe: 0,
+            decryptUtd: 0,
+        });
     });
 });

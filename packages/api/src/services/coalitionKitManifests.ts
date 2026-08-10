@@ -31,9 +31,7 @@ export function coalitionKitManifestsEnabled(): boolean {
     return process.env.BLACKOUT_COALITION_KIT_MANIFESTS !== 'false';
 }
 
-export type KitDenProvisionResult =
-    | { ok: true; denId: string }
-    | { ok: false; reason: string };
+export type KitDenProvisionResult = { ok: true; denId: string } | { ok: false; reason: string };
 export type KitDenProvisioner = (spec: CoalitionKitDenSpec) => Promise<KitDenProvisionResult>;
 
 export interface CoalitionKitManifestApplication {
@@ -71,6 +69,10 @@ export const defaultKitDenProvisioner: KitDenProvisioner = async (spec) => {
         topic: spec.topic,
         visibility: gated ? 'private' : 'public',
         preset: gated ? 'private_chat' : 'public_chat',
+        // Gated dens are private conversations, so they get Megolm. Open dens
+        // are publicly joinable, where encryption would hide history from later
+        // joiners and break search without protecting anything.
+        encrypted: gated,
     });
     if (!created.ok || !created.roomId) {
         return { ok: false, reason: created.reason ?? 'create_failed' };
@@ -79,7 +81,7 @@ export const defaultKitDenProvisioner: KitDenProvisioner = async (spec) => {
         created.roomId,
         DEN_CLASSIFICATION_STATE_EVENT_TYPE,
         { denType: spec.denType },
-        '',
+        ''
     );
     // Record the room's shape + tier gate as a `co.bmc.room_type` marker when it
     // is anything other than a plain open chat. This drives the bounty-board view
@@ -94,13 +96,15 @@ export const defaultKitDenProvisioner: KitDenProvisioner = async (spec) => {
             created.roomId,
             ROOM_TYPE_EVENT_TYPE,
             content as unknown as Record<string, unknown>,
-            '',
+            ''
         );
     }
     return { ok: true, denId: created.roomId };
 };
 
-export function listCoalitionKitManifestApplications(coalitionId: string): CoalitionKitManifestApplication[] {
+export function listCoalitionKitManifestApplications(
+    coalitionId: string
+): CoalitionKitManifestApplication[] {
     return db.listCoalitionKitManifestApplications(coalitionId).map(toModel);
 }
 
@@ -110,7 +114,7 @@ export async function applyCoalitionKitManifest(
         manifest: CoalitionKitManifest;
         appliedByUserId: string;
     },
-    provisioner: KitDenProvisioner = defaultKitDenProvisioner,
+    provisioner: KitDenProvisioner = defaultKitDenProvisioner
 ): Promise<ApplyCoalitionKitResult> {
     const { coalitionId, manifest, appliedByUserId } = params;
 

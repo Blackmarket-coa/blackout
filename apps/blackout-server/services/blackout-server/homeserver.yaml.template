@@ -39,6 +39,15 @@ enable_registration: ${ENABLE_REGISTRATION}
 enable_registration_without_verification: ${ENABLE_REGISTRATION_WITHOUT_VERIFICATION}
 report_stats: false
 
+# Room defaults: turn E2EE on for every locally-created private room.
+# "invite" covers the private_chat and trusted_private_chat presets (DMs and
+# invite-only rooms). Public rooms are excluded on purpose — encrypting them
+# breaks server-side search and hides history from later joiners while adding no
+# confidentiality for content anyone can read. Backstop only: the clients and API
+# set m.room.encryption in initial_state, enforced by `pnpm guard:room-encryption`.
+# Unset means upstream default `off`. See docs/audits/2026-08-10-encryption-audit.md.
+encryption_enabled_by_default_for_room_type: invite
+
 jwt_config:
   enabled: ${JWT_ENABLED:-false}
   secret: "${JWT_SECRET:-}"

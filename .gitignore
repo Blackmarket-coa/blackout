@@ -91,6 +91,13 @@ deploy/docker/production/.cloudflared/
 # SOPS-encrypted env files are committed; see .sops.yaml + deploy/secrets/README.md
 !*.sops.env
 
+# Compose overrides carry live tokens and DB passwords. The documented workflow
+# is to copy docker-compose.override.yml.example into place and fill it in, so
+# without this an operator following the instructions inside a checkout can
+# commit MATRIX_BOT_TOKEN and Postgres credentials. The `.example` stays tracked.
+docker-compose.override.yml
+!docker-compose.override.yml.example
+
 # age PRIVATE keys / key-ceremony output — must never be committed
 /.sops-ceremony-out/
 *.agekey

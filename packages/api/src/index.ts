@@ -14,6 +14,7 @@ import scheduledMessageRoutes from './routes/scheduledMessages';
 import federationRoutes from './routes/federation';
 import entitlementRoutes from './routes/entitlements';
 import transparencyRoutes from './routes/transparency';
+import dataExportRoutes from './routes/dataExport';
 import activeDefenseRoutes from './routes/activedefense';
 import canaryTripwireRoutes from './routes/canaryTripwire';
 import meshRoutes from './routes/mesh';
@@ -204,6 +205,9 @@ for (const root of legacyAliasEnabled ? [API_ROOTS.v1, API_ROOTS.legacyApiAlias]
     app.route(`${root}/federation`, federationRoutes);
     app.route(`${root}/entitlements`, entitlementRoutes);
     app.route(`${root}/transparency`, transparencyRoutes);
+    // Self-service data export. Free at every tier, unlike `/transparency/audit-export`
+    // which is Coalition+ — see routes/dataExport.ts.
+    app.route(`${root}/data-export`, dataExportRoutes);
     app.route(`${root}/activedefense`, activeDefenseRoutes);
     app.route(`${root}/mesh`, meshRoutes);
     app.route(`${root}/marketplace`, marketplaceRoutes);

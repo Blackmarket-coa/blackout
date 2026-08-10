@@ -56,11 +56,23 @@ export async function maybeDeliverDigitalDeadDrop(
         // DB-level replay idempotency: a re-delivered webhook never re-provisions.
         if (db.getFbmDeaddropDeliveryBySourceEvent(event.eventId)) return;
 
+        // Encryption + restricted history are set in `initial_state`. They used
+        // to be follow-up state events, which left a plaintext window and, since
+        // the results were unchecked, could leave the room permanently
+        // unencrypted while the delivery pointer was still posted into it.
         const room = await matrix.createRoom({
             name: 'Your delivery',
             topic: `FBM dead-drop ${event.providerListingId}`,
             visibility: 'private',
             preset: 'private_chat',
+            encrypted: true,
+            initialState: [
+                {
+                    type: 'm.room.history_visibility',
+                    state_key: '',
+                    content: { history_visibility: 'joined' },
+                },
+            ],
         });
         if (!room.ok || !('roomId' in room) || !room.roomId) {
             incrementCounter('fbm_matrix_bridge_action_failed_total', {
@@ -70,14 +82,6 @@ export async function maybeDeliverDigitalDeadDrop(
             return;
         }
         const roomId = room.roomId;
-
-        // Force encryption + restrict history to joined members.
-        await matrix.sendStateEvent(roomId, 'm.room.encryption', {
-            algorithm: 'm.megolm.v1.aes-sha2',
-        });
-        await matrix.sendStateEvent(roomId, 'm.room.history_visibility', {
-            history_visibility: 'joined',
-        });
 
         const expiresAt = new Date(Date.now() + ttlHours() * 60 * 60 * 1000).toISOString();
 

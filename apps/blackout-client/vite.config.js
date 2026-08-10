@@ -49,6 +49,18 @@ const copyFiles = {
             src: 'public/locales',
             dest: '',
         },
+        {
+            // -> dist/trust.html, served at /trust (see docker-nginx.conf and
+            // netlify.toml). Generated from TRUST.md by `pnpm build:trust-page`.
+            //
+            // This entry is required, not incidental: `publicDir` is false below,
+            // so nothing under public/ ships unless it is listed here. Without it
+            // the page generates, CI passes, the rewrite rules are correct, and
+            // the file simply is not in the build output.
+            src: 'public/trust.html',
+            dest: '',
+            rename: { stripBase: 1 },
+        },
     ],
 };
 

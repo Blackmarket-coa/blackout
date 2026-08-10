@@ -19,9 +19,7 @@ export function pluginDensEnabled(): boolean {
     return process.env.BLACKOUT_PLUGIN_DENS === 'true';
 }
 
-export type RoomProvisionResult =
-    | { ok: true; denId: string }
-    | { ok: false; reason: string };
+export type RoomProvisionResult = { ok: true; denId: string } | { ok: false; reason: string };
 
 /** Creates the Matrix room for one planned den and returns its room id. */
 export type RoomProvisioner = (plan: PlannedPluginDen) => Promise<RoomProvisionResult>;
@@ -66,6 +64,9 @@ export const defaultRoomProvisioner: RoomProvisioner = async (plan) => {
         name: plan.name,
         visibility: plan.denType === 'private' ? 'private' : 'public',
         preset: plan.denType === 'private' ? 'private_chat' : 'public_chat',
+        // Private plugin dens are member-only conversations and get Megolm;
+        // public ones stay readable so history survives for later joiners.
+        encrypted: plan.denType === 'private',
     });
     if (!created.ok || !created.roomId) {
         return { ok: false, reason: created.reason ?? 'create_failed' };
@@ -74,7 +75,7 @@ export const defaultRoomProvisioner: RoomProvisioner = async (plan) => {
         created.roomId,
         plan.classificationStateEventType,
         { ...plan.classification },
-        '',
+        ''
     );
     return { ok: true, denId: created.roomId };
 };
@@ -98,7 +99,7 @@ export async function provisionPluginDens(
         pluginName: string;
         specs: readonly PluginDenSpecInput[] | undefined;
     },
-    provisioner: RoomProvisioner = defaultRoomProvisioner,
+    provisioner: RoomProvisioner = defaultRoomProvisioner
 ): Promise<ProvisionPluginDensResult> {
     const plans = planPluginDens(params.specs, params.pluginName);
     const provisioned: PluginDen[] = [];

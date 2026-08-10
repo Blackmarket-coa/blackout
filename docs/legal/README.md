@@ -12,10 +12,18 @@ This directory holds first-party draft legal documents for the Blackout
 platform, created to close the pre-launch gap where no Privacy Policy or Terms
 of Service existed in the repository (audit finding **H11**).
 
-| File                  | Purpose                                               | Status                              |
-| --------------------- | ----------------------------------------------------- | ----------------------------------- |
-| `privacy-policy.md`   | How Blackout collects, uses, retains, and shares data | **DRAFT — counsel review required** |
-| `terms-of-service.md` | The agreement between Blackout and its users          | **DRAFT — counsel review required** |
+| File                       | Purpose                                               | Status                              |
+| -------------------------- | ----------------------------------------------------- | ----------------------------------- |
+| `privacy-policy.md`        | How Blackout collects, uses, retains, and shares data | **DRAFT — counsel review required** |
+| `terms-of-service.md`      | The agreement between Blackout and its users          | **DRAFT — counsel review required** |
+| `CHANGELOG.md`             | Dated record of every privacy/monetization commitment | **In effect**                       |
+| `policy-change-process.md` | How those commitments are allowed to change           | **In effect**                       |
+
+The two documents marked _in effect_ are engineering and product commitments
+backed by verifiable code, and are live now. They are **not** a substitute for
+the counsel-reviewed Privacy Policy and Terms above, and neither they nor
+[`TRUST.md`](../../TRUST.md) should be described as a published privacy policy
+until that review lands.
 
 ## Before launch (checklist)
 

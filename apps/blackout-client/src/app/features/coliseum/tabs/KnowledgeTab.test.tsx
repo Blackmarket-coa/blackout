@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
 import { act } from 'react-dom/test-utils';
 import ReactDOM from 'react-dom/client';
@@ -20,6 +20,15 @@ const flush = async () => {
     for (let i = 0; i < 8; i++) await Promise.resolve();
 };
 
+// Roots are tracked so `afterEach` can unmount them. Without that, KnowledgeTab
+// stays mounted past the end of the test file and its search-debounce
+// `window.setTimeout` (KnowledgeTab.tsx:115) fires after vitest tears down this
+// file's jsdom environment — react-dom then touches `window` and the whole run
+// fails with an unhandled `ReferenceError: window is not defined`, with every
+// test still reported as passing. Unmounting runs the effect's own
+// `clearTimeout`, so the timer never outlives the environment.
+const mountedRoots: ReactDOM.Root[] = [];
+
 const render = async (node: React.ReactElement) => {
     const container = document.createElement('div');
     document.body.appendChild(container);
@@ -28,8 +37,16 @@ const render = async (node: React.ReactElement) => {
         root.render(node);
         await flush();
     });
+    mountedRoots.push(root);
     return container;
 };
+
+afterEach(() => {
+    act(() => {
+        mountedRoots.splice(0).forEach((root) => root.unmount());
+    });
+    document.body.innerHTML = '';
+});
 
 const entry = (over: Partial<ColiseumKnowledgeEntry> = {}): ColiseumKnowledgeEntry => ({
     id: 'brief:b1',

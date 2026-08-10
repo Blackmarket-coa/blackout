@@ -2,7 +2,7 @@ import React, { type KeyboardEvent, useCallback, useEffect, useMemo, useState } 
 import { useAtom, useSetAtom } from 'jotai';
 import type { Room, RoomMember } from 'matrix-js-sdk';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
-import { addRoomIdToMDirect } from '../../utils/matrix';
+import { ensureDmRoom } from '../friends/friendActions';
 import { useMentionNavigation } from './useMentionNavigation';
 import { selectedRoomIdAtom, selectedSpaceIdAtom } from '../../state/navigation';
 import { settingsPageAtom, type SettingsSectionId } from '../settings/settingsAtoms';
@@ -554,17 +554,14 @@ export const QuickSwitcher = ({
             }
 
             if (result.category === 'Users') {
-                const room = await client.createRoom({
-                    is_direct: true,
-                    invite: [result.id],
-                    preset: 'private_chat' as never,
-                });
-                // Register the new DM in m.direct (mirrors friendActions'
-                // ensureDmRoom) — the home feed treats m.direct as the
-                // authoritative DM registry, so an unregistered DM would leak
-                // into the Town Square as a den card.
-                await addRoomIdToMDirect(client, room.room_id, result.id);
-                setSelectedRoomId(room.room_id);
+                // Delegate to `ensureDmRoom` rather than opening a DM by hand.
+                // This path used to inline its own `createRoom`, and the copy
+                // had drifted from the original in two ways: it created the room
+                // unencrypted (while the friends list, profile and /dm paths all
+                // encrypted), and it skipped the existing-DM lookup, so picking
+                // the same person twice produced a second duplicate DM.
+                const roomId = await ensureDmRoom(client, result.id);
+                setSelectedRoomId(roomId);
                 onClose();
                 return;
             }

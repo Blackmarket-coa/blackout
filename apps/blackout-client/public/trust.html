@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Trust — Blackout</title>
+    <meta name="description" content="Blackout&#39;s public trust commitments: end-to-end encryption that is never paywalled, free self-service data export, and a versioned record of every policy change — each linked to the code that backs it." />
+    <link rel="canonical" href="https://theblackout.app/trust" />
+    <meta property="og:title" content="Trust — Blackout" />
+    <meta property="og:description" content="Blackout&#39;s public trust commitments: end-to-end encryption that is never paywalled, free self-service data export, and a versioned record of every policy change — each linked to the code that backs it." />
+    <meta property="og:url" content="https://theblackout.app/trust" />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="icon" href="/favicon.ico" />
+    <style>
+      :root {
+        --bg: #ffffff;
+        --fg: #1a1a1a;
+        --muted: #5a5a5a;
+        --rule: #e2e2e2;
+        --accent: #7b3fe4;
+        --code-bg: #f5f4f8;
+        --quote-bg: #f8f7fb;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #131316;
+          --fg: #ececf0;
+          --muted: #a0a0ab;
+          --rule: #2c2c33;
+          --accent: #b18cf5;
+          --code-bg: #1d1d22;
+          --quote-bg: #1a1a20;
+        }
+      }
+      * { box-sizing: border-box; }
+      html { -webkit-text-size-adjust: 100%; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        font-size: 17px;
+        line-height: 1.65;
+      }
+      main {
+        max-width: 46rem;
+        margin: 0 auto;
+        padding: 3rem 1.25rem 5rem;
+      }
+      h1 { font-size: 2.4rem; line-height: 1.15; margin: 0 0 1.5rem; letter-spacing: -0.02em; }
+      h2 { font-size: 1.6rem; line-height: 1.25; margin: 3rem 0 1rem; letter-spacing: -0.01em; }
+      h3 { font-size: 1.15rem; margin: 2rem 0 0.75rem; }
+      p { margin: 0 0 1.1rem; }
+      a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+      a:hover { text-decoration-thickness: 2px; }
+      strong { font-weight: 650; }
+      ul, ol { margin: 0 0 1.1rem; padding-left: 1.4rem; }
+      li { margin-bottom: 0.5rem; }
+      hr { border: 0; border-top: 1px solid var(--rule); margin: 2.5rem 0; }
+      code {
+        background: var(--code-bg);
+        border-radius: 4px;
+        padding: 0.12em 0.35em;
+        font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+        font-size: 0.88em;
+        word-break: break-word;
+      }
+      pre {
+        background: var(--code-bg);
+        border: 1px solid var(--rule);
+        border-radius: 8px;
+        padding: 0.9rem 1rem;
+        overflow-x: auto;
+        margin: 0 0 1.1rem;
+      }
+      pre code { background: none; padding: 0; font-size: 0.85em; }
+      blockquote {
+        margin: 0 0 1.1rem;
+        padding: 0.75rem 1rem;
+        background: var(--quote-bg);
+        border-left: 3px solid var(--accent);
+        border-radius: 0 6px 6px 0;
+      }
+      /* Wide tables scroll inside their own box so the page never scrolls sideways. */
+      .table-wrap { overflow-x: auto; margin: 0 0 1.4rem; }
+      table { border-collapse: collapse; width: 100%; font-size: 0.94rem; }
+      th, td { text-align: left; padding: 0.55rem 0.7rem; border-bottom: 1px solid var(--rule); vertical-align: top; }
+      th { font-weight: 620; white-space: nowrap; }
+      footer {
+        max-width: 46rem;
+        margin: 0 auto;
+        padding: 0 1.25rem 4rem;
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+      footer a { color: var(--muted); }
+    </style>
+  </head>
+  <body>
+    <main>
+    <h1 id="trust">Trust</h1>
+    <p>What Blackout promises, and how to check each promise yourself without taking our word for it.</p>
+    <p>Every claim below links to the code that makes it true. If a link ever stops supporting the claim next to it, the claim is wrong and we want to know — see <a href="https://github.com/Blackmarket-coa/blackout/blob/develop/SECURITY.md" rel="noopener noreferrer">SECURITY.md</a>.</p>
+    <p>Last reviewed: <strong>2026-08-10</strong>. Changes to anything here are recorded in the <a href="https://github.com/Blackmarket-coa/blackout/blob/develop/docs/legal/CHANGELOG.md" rel="noopener noreferrer">policy changelog</a>.</p>
+    <hr />
+    <h2 id="1-encryption-never-behind-a-paywall">1. Encryption, never behind a paywall</h2>
+    <p><strong>End-to-end encryption is free, on every tier, and there is no mechanism by which it could be sold.</strong></p>
+    <p>That last part is the one worth checking. Paid features in Blackout are gated by <code>features.*</code> entitlement keys, and the complete catalogue of them is the seven tier tables unioned in <a href="https://github.com/Blackmarket-coa/blackout/blob/develop/packages/blackout-protocol/src/entitlements/bundles.ts" rel="noopener noreferrer"><code>entitlements/bundles.ts</code></a>. <strong>None of them contains an encryption key.</strong> Not &quot;encryption is set to free&quot; — there is no switch. Turning encryption into a paid feature would require adding one, in a diff, in public.</p>
+    <p><strong>Every private room and direct message is end-to-end encrypted by default.</strong></p>
+    <ul>
+      <li>The API cannot create a room without deciding: <code>createRoom</code> takes a <strong>required</strong> <code>encrypted</code> flag (<a href="https://github.com/Blackmarket-coa/blackout/blob/develop/packages/api/src/integrations/matrix-client.ts" rel="noopener noreferrer"><code>matrix-client.ts</code></a>), so the compiler rejects a new call site that stays silent.</li>
+      <li>The clients set encryption at room creation, not afterwards (<a href="https://github.com/Blackmarket-coa/blackout/blob/develop/apps/blackout-client/src/app/utils/matrix-crypto.ts" rel="noopener noreferrer"><code>matrix-crypto.ts</code></a>).</li>
+      <li>The homeserver backstops it with <code>encryption_enabled_by_default_for_room_type: invite</code>.</li>
+      <li>CI fails the build if any of that regresses: <a href="https://github.com/Blackmarket-coa/blackout/blob/develop/tools/ci/check-room-encryption.mjs" rel="noopener noreferrer"><code>check-room-encryption.mjs</code></a>.</li>
+    </ul>
+    <p>This was <strong>not</strong> true before 2026-08-10. Thirteen server paths and five client paths created plaintext rooms, and the homeserver was not compensating. We found it by auditing our own claim before publishing it, and the full write-up — including what was broken and for how long — is public: <a href="https://github.com/Blackmarket-coa/blackout/blob/develop/docs/audits/2026-08-10-encryption-audit.md" rel="noopener noreferrer">2026-08-10 encryption audit</a>.</p>
+    <p><strong>No bot or moderation tool can read your encrypted messages.</strong> The server bot has no timeline-read capability at all — not restricted, absent. It can create rooms, invite, and moderate membership; it has no code path that fetches message events.</p>
+    <p><strong>Nothing logs your messages.</strong> No log line, error report, or analytics event carries message content. There is no PostHog, no Segment, no session replay in the product. The redactor treats content-shaped fields as secrets (<a href="https://github.com/Blackmarket-coa/blackout/blob/develop/packages/core/src/redaction/patterns.ts" rel="noopener noreferrer"><code>patterns.ts</code></a>) so this holds even if someone later adds a well-meaning debug line.</p>
+    <h3 id="what-is-not-encrypted-named-plainly">What is <em>not</em> encrypted, named plainly</h3>
+    <p>Encryption claims are only worth something with the exceptions attached.</p>
+    <ul>
+      <li><strong>Publicly joinable rooms.</strong> Encrypting a room anyone can join hides history from everyone who joins later and breaks search, without making public content private.</li>
+      <li><strong>Service rooms the Blackout bot posts into</strong> — marketplace vendor, order, inventory and ledger rooms, <code>#bugs</code>, and the standing public rooms. The bot is a plain HTTP client with no Megolm implementation: it <em>cannot</em> post into an encrypted room. Encrypting these would not make them private, it would break them. Giving the bot real crypto is on the roadmap; until it lands, this list stands and stays here.</li>
+      <li><strong>Spaces</strong>, which hold hierarchy state and never messages.</li>
+      <li><strong>Calls and townhall media</strong> use a <em>different</em> mechanism from messages: per-call media encryption is negotiated by default (<a href="https://github.com/Blackmarket-coa/blackout/blob/develop/apps/blackout-client/src/app/features/call/CallProvider.tsx" rel="noopener noreferrer"><code>CallProvider.tsx</code></a>), on top of DTLS-SRTP, and the live status is shown in-call. It depends on the operator running a matrixRTC-capable SDK, so treat the in-call indicator as authoritative rather than assuming parity with message encryption. Background in <a href="https://github.com/Blackmarket-coa/blackout/blob/develop/THREAT_MODEL.md" rel="noopener noreferrer">THREAT_MODEL.md</a> §7.</li>
+    </ul>
+    <h3 id="the-distinction-we-will-not-blur">The distinction we will not blur</h3>
+    <p><strong>&quot;E2EE is never paywalled&quot; is true. &quot;Privacy is never paywalled&quot; is not, and we do not say it.</strong></p>
+    <p>Privacy-enhancing features beyond encryption <em>are</em> tiered: Tor transport, decoy traffic, image perturbation, persona compartments and rotation, dead-drop anonymity padding and decoys, mesh transport, active defense. Free dead-drops are capped at 64 KB, 24 hours, one recipient, no decoys. The confidentiality of your messages is free; some of the tools for hiding <em>that you are communicating at all</em> are not.</p>
+    <h3 id="open-not-hidden">Open, not hidden</h3>
+    <p>Some users see &quot;unable to decrypt&quot; on older messages when signing in on a new device without key backup set up. This is tracked as <strong>BO-1</strong> in <a href="https://github.com/Blackmarket-coa/blackout/blob/develop/KNOWN_ISSUES.md" rel="noopener noreferrer">KNOWN_ISSUES.md</a> and is <strong>not fixed</strong>. We list it here rather than waiting until it is, because a trust page that only mentions solved problems is advertising.</p>
+    <hr />
+    <h2 id="2-your-data-portable-free">2. Your data, portable, free</h2>
+    <p><strong>Every user can download everything the server holds about them, on any tier, in one click.</strong></p>
+    <p>In the app: <strong>Settings → Privacy &amp; data → Download your data</strong>. Or over HTTP:</p>
+    <pre><code class="language-bash">curl -H &quot;Authorization: Bearer $TOKEN&quot; https://api.theblackout.app/v1/data-export</code></pre>
+    <p>No support ticket, no queue, no tier check. Code: <a href="https://github.com/Blackmarket-coa/blackout/blob/develop/packages/api/src/routes/dataExport.ts" rel="noopener noreferrer"><code>routes/dataExport.ts</code></a> · <a href="https://github.com/Blackmarket-coa/blackout/blob/develop/docs/features/data-export.md" rel="noopener noreferrer">usage doc</a>.</p>
+    <p>This did not exist before 2026-08-10 either. The only export we had returned <strong>HTTP 402</strong> below the Coalition tier, which means most users had no way to get their own data. We are not going to describe having fixed that as though it were always true.</p>
+    <p><strong>Your encrypted messages are not in that file — and that is the encryption guarantee working.</strong> The server holds ciphertext and no keys, so it cannot put your messages in a file it generates. If a server-side export <em>did</em> contain your message history, section 1 of this page would be false. Export encrypted history from a signed-in client, which has your keys.</p>
+    <p><strong>What we deliberately leave out:</strong> credentials (password hash, integration OAuth tokens, vault keys — a portability feature must not become a credential dump), and other people&#39;s data. Connections <em>you</em> made are exported in full; inbound ones — your followers, who redeemed your invites — are counted, not listed. Handing you a list of everyone who follows you would export their associations under the banner of your portability.</p>
+    <p><strong>A gap we disclose in the file itself:</strong> follows and profiles are held in server process memory today and reset when the API restarts, so an empty result there may mean the server forgot rather than that you have no connections. Every section of the export carries a <code>durability</code> marker saying which it is.</p>
+    <hr />
+    <h2 id="3-governance-you-can-audit">3. Governance you can audit</h2>
+    <p><strong>Every change to what we promise is recorded, dated, and visible as a diff.</strong></p>
+    <ul>
+      <li><a href="https://github.com/Blackmarket-coa/blackout/blob/develop/docs/legal/CHANGELOG.md" rel="noopener noreferrer">Policy changelog</a> — every privacy and monetization commitment, with effective dates. <code>git log -p docs/legal/CHANGELOG.md</code> is the audit trail.</li>
+      <li><a href="https://github.com/Blackmarket-coa/blackout/blob/develop/docs/legal/policy-change-process.md" rel="noopener noreferrer">How commitments change</a> — the rule is that a policy change and its changelog entry land in the same pull request.</li>
+    </ul>
+    <p><strong>Enforcement is social, and we would rather say so than imply otherwise.</strong> Nothing in CI can tell that a diff weakens a promise. What exists is real but narrow: <code>docs/legal/**</code>, this file, and the encryption guard are owned in <a href="https://github.com/Blackmarket-coa/blackout/blob/develop/.github/CODEOWNERS" rel="noopener noreferrer">CODEOWNERS</a> so changes need maintainer review, and <code>guard:room-encryption</code> mechanically protects the one commitment most likely to erode. A determined maintainer could still change a promise without touching the changelog. The protection is that the discrepancy would be <em>discoverable</em>, because every claim on this page points at the code behind it.</p>
+    <p><strong>Not yet built, and not dated:</strong> a cooperative charter — member governance, formal decision rights over policy changes, legal structure. At current scale it would be documentation of a process nobody follows. It is on the roadmap and listed here so the roadmap is part of what you are judging, not a surprise later.</p>
+    <p><strong>Also honest about status:</strong> the <a href="https://github.com/Blackmarket-coa/blackout/blob/develop/docs/legal/privacy-policy.md" rel="noopener noreferrer">Privacy Policy</a> and <a href="https://github.com/Blackmarket-coa/blackout/blob/develop/docs/legal/terms-of-service.md" rel="noopener noreferrer">Terms of Service</a> in this repository are <strong>drafts pending counsel review</strong>, with unfilled placeholders. They are not in effect, and neither this page nor the policy changelog is a substitute for them. The commitments above are engineering and product commitments backed by code you can read.</p>
+    <hr />
+    <h2 id="verify-it-yourself">Verify it yourself</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Claim</th><th>Check</th></tr></thead>
+        <tbody>
+        <tr><td>E2EE is not paywalled</td><td><a href="https://github.com/Blackmarket-coa/blackout/blob/develop/packages/blackout-protocol/src/entitlements/bundles.ts" rel="noopener noreferrer"><code>bundles.ts</code></a> — grep it for an encryption key</td></tr>
+        <tr><td>Private rooms encrypt by default</td><td><a href="https://github.com/Blackmarket-coa/blackout/blob/develop/tools/ci/check-room-encryption.mjs" rel="noopener noreferrer"><code>check-room-encryption.mjs</code></a>, run <code>pnpm guard:room-encryption</code></td></tr>
+        <tr><td>The bot cannot read messages</td><td>Search <code>packages/api/src</code> for <code>/messages</code>, <code>/context/</code>, <code>/sync</code> — there are no hits</td></tr>
+        <tr><td>Nothing logs message content</td><td><a href="https://github.com/Blackmarket-coa/blackout/blob/develop/packages/core/src/redaction/patterns.ts" rel="noopener noreferrer"><code>patterns.ts</code></a></td></tr>
+        <tr><td>Export is free</td><td><code>curl</code> the endpoint on a free account, or read <a href="https://github.com/Blackmarket-coa/blackout/blob/develop/packages/api/src/routes/dataExport.ts" rel="noopener noreferrer"><code>dataExport.ts</code></a></td></tr>
+        <tr><td>Warrant canary is live and signed</td><td><code>GET /v1/transparency/canary</code> — Ed25519, public key travels with the response</td></tr>
+        <tr><td>Commitments are versioned</td><td><a href="https://github.com/Blackmarket-coa/blackout/blob/develop/docs/legal/CHANGELOG.md" rel="noopener noreferrer"><code>docs/legal/CHANGELOG.md</code></a></td></tr>
+        <tr><td>We publish our own failures</td><td><a href="https://github.com/Blackmarket-coa/blackout/blob/develop/docs/audits/2026-08-10-encryption-audit.md" rel="noopener noreferrer">2026-08-10 encryption audit</a>, <a href="https://github.com/Blackmarket-coa/blackout/blob/develop/KNOWN_ISSUES.md" rel="noopener noreferrer">KNOWN_ISSUES.md</a></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Source: &lt;https://github.com/Blackmarket-coa/blackout&gt;. Everything linked here is in the repository — no claim on this page depends on a document only we can see.</p>
+    <p>To report something that contradicts this page, see <a href="https://github.com/Blackmarket-coa/blackout/blob/develop/SECURITY.md" rel="noopener noreferrer">SECURITY.md</a>.</p>
+    </main>
+    <footer>
+      <p>
+        This page is generated from
+        <a href="https://github.com/Blackmarket-coa/blackout/blob/develop/TRUST.md" rel="noopener noreferrer">TRUST.md</a>
+        in the Blackout repository, and CI fails if the two disagree. Every claim
+        above links to the code behind it.
+      </p>
+    </footer>
+  </body>
+</html>

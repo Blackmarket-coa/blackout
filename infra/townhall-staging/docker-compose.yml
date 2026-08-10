@@ -1,42 +1,47 @@
-version: "3.9"
+version: '3.9'
 services:
-  livekit:
-    image: livekit/livekit-server:latest
-    command: --config /etc/livekit.yaml
-    ports:
-      - "7880:7880"
-      - "7881:7881/udp"
-    volumes:
-      - ./livekit.yaml:/etc/livekit.yaml:ro
-  # Element Call token bridge: without it Matrix users have no way to mint
-  # LiveKit access tokens, so calls never leave degraded mode even with the
-  # SFU up. Key pair must match livekit.yaml.
-  lk-jwt:
-    image: ghcr.io/element-hq/lk-jwt-service:0.2.3
-    read_only: true
-    security_opt:
-      - no-new-privileges:true
-    environment:
-      LIVEKIT_URL: ${LIVEKIT_PUBLIC_WS_URL:-ws://localhost:7880}
-      LIVEKIT_KEY: ${LIVEKIT_API_KEY:-LK_DEV_API_KEY}
-      LIVEKIT_SECRET: ${LIVEKIT_API_SECRET:-LK_DEV_SECRET}
-      LK_JWT_PORT: "8080"
-    ports:
-      - "8085:8080"
-    depends_on:
-      - livekit
-  coturn:
-    image: coturn/coturn:latest
-    command:
-      - -n
-      - --listening-port=3478
-      - --fingerprint
-      - --use-auth-secret
-      - --realm=townhall.blackout.local
-    ports:
-      - "3478:3478"
-      - "5349:5349"
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
+    livekit:
+        image: livekit/livekit-server:latest
+        command: --config /etc/livekit.yaml
+        ports:
+            - '7880:7880'
+            - '7881:7881/udp'
+        volumes:
+            - ./livekit.yaml:/etc/livekit.yaml:ro
+    # Element Call token bridge: without it Matrix users have no way to mint
+    # LiveKit access tokens, so calls never leave degraded mode even with the
+    # SFU up. Key pair must match livekit.yaml.
+    lk-jwt:
+        image: ghcr.io/element-hq/lk-jwt-service:0.2.3
+        read_only: true
+        security_opt:
+            - no-new-privileges:true
+        environment:
+            LIVEKIT_URL: ${LIVEKIT_PUBLIC_WS_URL:-ws://localhost:7880}
+            # No `:-` fallbacks. These previously defaulted to LK_DEV_API_KEY /
+            # LK_DEV_SECRET, so an unset environment started the stack on a key pair
+            # published in this repo instead of failing. Compose leaves these empty
+            # when unset, and lk-jwt-service refuses to mint tokens without them —
+            # loud and closed rather than quiet and open.
+            LIVEKIT_KEY: ${LIVEKIT_API_KEY:?LIVEKIT_API_KEY must be set}
+            LIVEKIT_SECRET: ${LIVEKIT_API_SECRET:?LIVEKIT_API_SECRET must be set}
+            LK_JWT_PORT: '8080'
+        ports:
+            - '8085:8080'
+        depends_on:
+            - livekit
+    coturn:
+        image: coturn/coturn:latest
+        command:
+            - -n
+            - --listening-port=3478
+            - --fingerprint
+            - --use-auth-secret
+            - --realm=townhall.blackout.local
+        ports:
+            - '3478:3478'
+            - '5349:5349'
+    redis:
+        image: redis:7-alpine
+        ports:
+            - '6379:6379'
