@@ -1,807 +1,797 @@
 {
-  "schemaVersion": 3,
-  "canonicalSource": "docs/features/feature_registry.json",
-  "scopes": [
-    {
-      "id": "primary",
-      "name": "Primary feature registry scope",
-      "sections": [
+    "schemaVersion": 3,
+    "canonicalSource": "docs/features/feature_registry.json",
+    "scopes": [
         {
-          "id": "novel",
-          "name": "Novel features (Blackout-specific)",
-          "featureIds": [
-            "stego_toolkit",
-            "ephemeral_stego_lifecycle",
-            "governance_entitlements",
-            "federation_boost_policy",
-            "townhall_sfu"
-          ],
-          "total": 5
-        },
-        {
-          "id": "discord_like",
-          "name": "Discord-like features",
-          "featureIds": [
-            "rich_composer",
-            "typing_indicators",
-            "widget_shell_layouts"
-          ],
-          "total": 3
-        },
-        {
-          "id": "matrix_like",
-          "name": "Matrix-like features",
-          "featureIds": [
-            "matrix_client_arch",
-            "homeserver_discovery",
-            "e2ee_defaults",
-            "oidc_delegated_auth",
-            "matrix_widget_compat",
-            "multiplatform_bootstrap",
-            "ci_cd_pipeline_github_actions",
-            "epic_delivery_blueprint"
-          ],
-          "total": 8
-        },
-        {
-          "id": "privacy_suite",
-          "name": "Privacy suite (OSS-manifest packaging)",
-          "featureIds": [
-            "shield_visibility",
-            "privacy_hardening",
-            "persona_engine",
-            "active_defense",
-            "mesh_transport",
-            "transparency_reports"
-          ],
-          "total": 6
+            "id": "primary",
+            "name": "Primary feature registry scope",
+            "sections": [
+                {
+                    "id": "novel",
+                    "name": "Novel features (Blackout-specific)",
+                    "featureIds": [
+                        "stego_toolkit",
+                        "ephemeral_stego_lifecycle",
+                        "governance_entitlements",
+                        "federation_boost_policy",
+                        "townhall_sfu"
+                    ],
+                    "total": 5
+                },
+                {
+                    "id": "discord_like",
+                    "name": "Discord-like features",
+                    "featureIds": ["rich_composer", "typing_indicators", "widget_shell_layouts"],
+                    "total": 3
+                },
+                {
+                    "id": "matrix_like",
+                    "name": "Matrix-like features",
+                    "featureIds": [
+                        "matrix_client_arch",
+                        "homeserver_discovery",
+                        "e2ee_defaults",
+                        "oidc_delegated_auth",
+                        "matrix_widget_compat",
+                        "multiplatform_bootstrap",
+                        "ci_cd_pipeline_github_actions",
+                        "epic_delivery_blueprint"
+                    ],
+                    "total": 8
+                },
+                {
+                    "id": "privacy_suite",
+                    "name": "Privacy suite (OSS-manifest packaging)",
+                    "featureIds": [
+                        "shield_visibility",
+                        "privacy_hardening",
+                        "persona_engine",
+                        "active_defense",
+                        "mesh_transport",
+                        "transparency_reports"
+                    ],
+                    "total": 6
+                }
+            ],
+            "globalTotal": 22
         }
-      ],
-      "globalTotal": 22
-    }
-  ],
-  "features": [
-    {
-      "id": "stego_toolkit",
-      "name": "Steganographic messaging toolkit",
-      "category": "novel",
-      "status": "partial",
-      "presetKey": "features.stego.enabled",
-      "uiEntry": "settings_toggle:feature-toggle-stego-toolkit",
-      "owner": "privacy-eng",
-      "testCoverage": "integration",
-      "notes": "Full stego composer panel (encode/decrypt/password tabs, channel management) is implemented in MessageInput.ts with integration test coverage. Full migration of remaining codec and backend lifecycle work is still in progress.",
-      "sourcePointers": [
-        "docs/features/privacy_first_stego_roadmap.md",
-        "docs/features/privacy_first_stego_completion_tracker.md",
-        "docs/features/repo_feature_inventory.md",
-        "apps/blackout-web/src/components/MessageInput.ts",
-        "legacy/blackout-web/tests/integration/app.test.ts"
-      ],
-      "presetPolicy": {
-        "baseline_matrix": false,
-        "community_plus": false,
-        "blackout_full": true
-      },
-      "uiTestRefs": [
-        "legacy/blackout-web/tests/integration/app.test.ts::feature-toggle-stego-toolkit"
-      ],
-      "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\".",
-      "evidenceType": "code",
-      "evidencePaths": [
-        "docs/features/privacy_first_stego_roadmap.md",
-        "docs/features/privacy_first_stego_completion_tracker.md",
-        "docs/features/repo_feature_inventory.md",
-        "apps/blackout-web/src/components/MessageInput.ts",
-        "legacy/blackout-web/tests/integration/app.test.ts"
-      ],
-      "lastVerifiedAt": "2026-04-09",
-      "verifiedBy": "blackout-ci"
-    },
-    {
-      "id": "ephemeral_stego_lifecycle",
-      "name": "Ephemeral stego lifecycle management",
-      "category": "novel",
-      "status": "partial",
-      "presetKey": "features.stego.ephemeral",
-      "uiEntry": "room_action:feature-room-ephemeral-stego",
-      "owner": "privacy-eng",
-      "testCoverage": "partial-integration",
-      "notes": "Ephemeral checkbox and TTL field are implemented in the stego composer panel (MessageInput.ts). Self-destruct lifecycle enforcement in app flows and backend remains pending.",
-      "sourcePointers": [
-        "docs/features/privacy_first_stego_roadmap.md",
-        "docs/features/privacy_first_stego_completion_tracker.md",
-        "apps/blackout-web/src/components/MessageInput.ts"
-      ],
-      "presetPolicy": {
-        "baseline_matrix": false,
-        "community_plus": false,
-        "blackout_full": true
-      },
-      "uiTestRefs": [
-        "legacy/blackout-web/tests/integration/app.test.ts::feature-room-ephemeral-stego"
-      ],
-      "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\".",
-      "evidenceType": "code",
-      "evidencePaths": [
-        "docs/features/privacy_first_stego_roadmap.md",
-        "docs/features/privacy_first_stego_completion_tracker.md",
-        "apps/blackout-web/src/components/MessageInput.ts"
-      ],
-      "lastVerifiedAt": "2026-04-09",
-      "verifiedBy": "blackout-ci"
-    },
-    {
-      "id": "governance_entitlements",
-      "name": "Governance and entitlement policy layer",
-      "category": "novel",
-      "status": "partial",
-      "presetKey": "features.governance.entitlements",
-      "uiEntry": "admin_console:feature-admin-governance-entitlements",
-      "owner": "governance-platform",
-      "testCoverage": "integration",
-      "notes": "Governance composer panel (proposal creation, voting, templates) is implemented in MessageInput.ts with integration test coverage. Backend policy enforcement and audit controls remain in migration/build plans.",
-      "sourcePointers": [
-        "docs/blackout-governance-build-plan.md",
-        "docs/blackout-governance-migration.md",
-        "docs/features/governance_features_analysis.md",
-        "apps/blackout-web/src/components/MessageInput.ts",
-        "legacy/blackout-web/tests/integration/app.test.ts"
-      ],
-      "presetPolicy": {
-        "baseline_matrix": false,
-        "community_plus": false,
-        "blackout_full": true
-      },
-      "uiTestRefs": [
-        "legacy/blackout-web/tests/integration/app.test.ts::feature-admin-governance-entitlements"
-      ],
-      "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\".",
-      "evidenceType": "code",
-      "evidencePaths": [
-        "docs/blackout-governance-build-plan.md",
-        "docs/blackout-governance-migration.md",
-        "docs/features/governance_features_analysis.md",
-        "apps/blackout-web/src/components/MessageInput.ts",
-        "legacy/blackout-web/tests/integration/app.test.ts"
-      ],
-      "lastVerifiedAt": "2026-04-09",
-      "verifiedBy": "blackout-ci"
-    },
-    {
-      "id": "federation_boost_policy",
-      "name": "Federation boost policy engine",
-      "category": "novel",
-      "status": "planned",
-      "presetKey": "features.federationBoost.enabled",
-      "uiEntry": "admin_console:feature-admin-federation-boost",
-      "owner": "federation-eng",
-      "testCoverage": "none",
-      "notes": "Revenue-share and abuse-throttle policy remains roadmap work.",
-      "sourcePointers": [
-        "docs/14-stream-revenue-implementation-plan.md",
-        "docs/features/repo_feature_inventory.md"
-      ],
-      "presetPolicy": {
-        "baseline_matrix": false,
-        "community_plus": false,
-        "blackout_full": true
-      },
-      "uiTestRefs": [
-        "legacy/blackout-web/tests/integration/app.test.ts::feature-admin-federation-boost"
-      ],
-      "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\".",
-      "evidenceType": "docs",
-      "evidencePaths": [
-        "docs/14-stream-revenue-implementation-plan.md",
-        "docs/features/repo_feature_inventory.md"
-      ],
-      "lastVerifiedAt": "2026-04-09",
-      "verifiedBy": "blackout-ci"
-    },
-    {
-      "id": "townhall_sfu",
-      "name": "Townhall SFU sessions and moderation",
-      "category": "novel",
-      "status": "partial",
-      "presetKey": "features.townhall.enabled",
-      "uiEntry": "widget_panel:feature-widget-townhall-sfu",
-      "owner": "rtc-platform",
-      "testCoverage": "runbook-and-manifest",
-      "notes": "Infrastructure and runbooks are present, with blackout-web UI still converging.",
-      "sourcePointers": [
-        "docs/blackout-sfu-townhall-build-plan.md",
-        "docs/operations/runbooks/townhall-observability-runbook.md",
-        "deploy/kubernetes/phase4/element-ha.yaml"
-      ],
-      "presetPolicy": {
-        "baseline_matrix": false,
-        "community_plus": false,
-        "blackout_full": true
-      },
-      "uiTestRefs": [
-        "legacy/blackout-web/tests/integration/app.test.ts::feature-widget-townhall-sfu"
-      ],
-      "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\".",
-      "evidenceType": "external-infra",
-      "evidencePaths": [
-        "docs/blackout-sfu-townhall-build-plan.md",
-        "docs/operations/runbooks/townhall-observability-runbook.md",
-        "deploy/kubernetes/phase4/element-ha.yaml"
-      ],
-      "lastVerifiedAt": "2026-04-09",
-      "verifiedBy": "blackout-ci"
-    },
-    {
-      "id": "rich_composer",
-      "name": "Rich composer ergonomics",
-      "category": "discord_like",
-      "status": "implemented",
-      "presetKey": "features.composer.richEditing",
-      "uiEntry": "composer_action:feature-composer-rich-editing",
-      "owner": "blackout-web",
-      "testCoverage": "integration",
-      "notes": "Composer component and feature docs are established in the web app.",
-      "sourcePointers": [
-        "docs/features/composer.md",
-        "apps/blackout-web/src/components/MessageInput.ts",
-        "legacy/blackout-web/tests/integration/app.test.ts"
-      ],
-      "presetPolicy": {
-        "baseline_matrix": false,
-        "community_plus": true,
-        "blackout_full": true
-      },
-      "uiTestRefs": [
-        "legacy/blackout-web/tests/integration/app.test.ts::feature-composer-rich-editing"
-      ],
-      "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\".",
-      "evidenceType": "code",
-      "evidencePaths": [
-        "docs/features/composer.md",
-        "apps/blackout-web/src/components/MessageInput.ts",
-        "legacy/blackout-web/tests/integration/app.test.ts"
-      ],
-      "lastVerifiedAt": "2026-04-09",
-      "verifiedBy": "blackout-ci"
-    },
-    {
-      "id": "typing_indicators",
-      "name": "Typing indicators",
-      "category": "discord_like",
-      "status": "partial",
-      "presetKey": "features.composer.typingIndicators",
-      "uiEntry": "composer_action:feature-composer-typing-indicators",
-      "owner": "blackout-web",
-      "testCoverage": "partial-integration",
-      "notes": "Behavior is inventoried, but dedicated UI test IDs are still being standardized.",
-      "sourcePointers": [
-        "docs/features/repo_feature_inventory.md",
-        "apps/blackout-web/src/components/ChatWindow.ts"
-      ],
-      "presetPolicy": {
-        "baseline_matrix": false,
-        "community_plus": true,
-        "blackout_full": true
-      },
-      "uiTestRefs": [
-        "legacy/blackout-web/tests/integration/app.test.ts::feature-composer-typing-indicators"
-      ],
-      "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\".",
-      "evidenceType": "code",
-      "evidencePaths": [
-        "docs/features/repo_feature_inventory.md",
-        "apps/blackout-web/src/components/ChatWindow.ts"
-      ],
-      "lastVerifiedAt": "2026-04-09",
-      "verifiedBy": "blackout-ci"
-    },
-    {
-      "id": "widget_shell_layouts",
-      "name": "Widget shell layouts",
-      "category": "discord_like",
-      "status": "partial",
-      "presetKey": "features.widgets.layouts",
-      "uiEntry": "widget_panel:feature-widget-shell-layouts",
-      "owner": "matrix-ui",
-      "testCoverage": "doc-only",
-      "notes": "Widget placement and layout conventions are documented; app-level test wiring is pending.",
-      "sourcePointers": [
-        "docs/widget-layouts.md",
-        "docs/features/frontend-backend-contract.md"
-      ],
-      "presetPolicy": {
-        "baseline_matrix": false,
-        "community_plus": true,
-        "blackout_full": true
-      },
-      "uiTestRefs": [
-        "legacy/blackout-web/tests/integration/app.test.ts::feature-widget-shell-layouts"
-      ],
-      "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\".",
-      "evidenceType": "docs",
-      "evidencePaths": [
-        "docs/widget-layouts.md",
-        "docs/features/frontend-backend-contract.md"
-      ],
-      "lastVerifiedAt": "2026-04-09",
-      "verifiedBy": "blackout-ci"
-    },
-    {
-      "id": "matrix_client_arch",
-      "name": "Matrix-native client architecture",
-      "category": "matrix_like",
-      "status": "implemented",
-      "presetKey": "features.matrix.client",
-      "uiEntry": "settings_toggle:feature-toggle-matrix-client",
-      "owner": "matrix-platform",
-      "testCoverage": "unit",
-      "notes": "Matrix client service is in blackout-web and covered by unit tests.",
-      "sourcePointers": [
-        "apps/blackout-web/src/services/matrix-client.ts",
-        "apps/blackout-web/src/app.ts",
-        "legacy/blackout-web/tests/unit/api-client.test.ts"
-      ],
-      "presetPolicy": {
-        "baseline_matrix": true,
-        "community_plus": true,
-        "blackout_full": true
-      },
-      "uiTestRefs": [
-        "legacy/blackout-web/tests/integration/app.test.ts::feature-toggle-matrix-client"
-      ],
-      "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\".",
-      "evidenceType": "code",
-      "evidencePaths": [
-        "apps/blackout-web/src/services/matrix-client.ts",
-        "apps/blackout-web/src/app.ts",
-        "legacy/blackout-web/tests/unit/api-client.test.ts"
-      ],
-      "lastVerifiedAt": "2026-04-09",
-      "verifiedBy": "blackout-ci"
-    },
-    {
-      "id": "homeserver_discovery",
-      "name": "Homeserver discovery and validation",
-      "category": "matrix_like",
-      "status": "partial",
-      "presetKey": "features.matrix.homeserverDiscovery",
-      "uiEntry": "settings_toggle:feature-toggle-homeserver-discovery",
-      "owner": "matrix-platform",
-      "testCoverage": "doc-and-config",
-      "notes": "Discovery and custom homeserver behavior is captured in docs and config wiring.",
-      "sourcePointers": [
-        "docs/custom-home.md",
-        "apps/blackout-web/src/config.ts",
-        "docs/features/repo_feature_inventory.md"
-      ],
-      "presetPolicy": {
-        "baseline_matrix": true,
-        "community_plus": true,
-        "blackout_full": true
-      },
-      "uiTestRefs": [
-        "legacy/blackout-web/tests/integration/app.test.ts::feature-toggle-homeserver-discovery"
-      ],
-      "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\".",
-      "evidenceType": "code",
-      "evidencePaths": [
-        "docs/custom-home.md",
-        "apps/blackout-web/src/config.ts",
-        "docs/features/repo_feature_inventory.md"
-      ],
-      "lastVerifiedAt": "2026-04-09",
-      "verifiedBy": "blackout-ci"
-    },
-    {
-      "id": "e2ee_defaults",
-      "name": "E2EE defaults and policy controls",
-      "category": "matrix_like",
-      "status": "partial",
-      "presetKey": "features.security.e2eeDefaults",
-      "uiEntry": "settings_toggle:feature-toggle-e2ee-defaults",
-      "owner": "security-platform",
-      "testCoverage": "doc-only",
-      "notes": "Encrypted room expectations are documented; automated UI checks are still planned.",
-      "sourcePointers": [
-        "docs/e2ee.md",
-        "docs/security-phase2-app-hardening.md"
-      ],
-      "presetPolicy": {
-        "baseline_matrix": true,
-        "community_plus": true,
-        "blackout_full": true
-      },
-      "uiTestRefs": [
-        "legacy/blackout-web/tests/integration/app.test.ts::feature-toggle-e2ee-defaults"
-      ],
-      "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\".",
-      "evidenceType": "docs",
-      "evidencePaths": [
-        "docs/e2ee.md",
-        "docs/security-phase2-app-hardening.md"
-      ],
-      "lastVerifiedAt": "2026-04-09",
-      "verifiedBy": "blackout-ci"
-    },
-    {
-      "id": "oidc_delegated_auth",
-      "name": "OIDC delegated authentication",
-      "category": "matrix_like",
-      "status": "partial",
-      "presetKey": "features.auth.oidc",
-      "uiEntry": "settings_toggle:feature-toggle-oidc-auth",
-      "owner": "identity-platform",
-      "testCoverage": "unit",
-      "notes": "OIDC flow is documented with auth feature scaffold in app source.",
-      "sourcePointers": [
-        "docs/oidc.md",
-        "apps/blackout-web/src/features/auth/auth-view.ts",
-        "docs/security-phase3-auth-modernization.md"
-      ],
-      "presetPolicy": {
-        "baseline_matrix": true,
-        "community_plus": true,
-        "blackout_full": true
-      },
-      "uiTestRefs": [
-        "legacy/blackout-web/tests/integration/app.test.ts::feature-toggle-oidc-auth"
-      ],
-      "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\".",
-      "evidenceType": "code",
-      "evidencePaths": [
-        "docs/oidc.md",
-        "apps/blackout-web/src/features/auth/auth-view.ts",
-        "docs/security-phase3-auth-modernization.md"
-      ],
-      "lastVerifiedAt": "2026-04-09",
-      "verifiedBy": "blackout-ci"
-    },
-    {
-      "id": "matrix_widget_compat",
-      "name": "Matrix widget state-event compatibility",
-      "category": "matrix_like",
-      "status": "partial",
-      "presetKey": "features.matrix.widgetCompat",
-      "uiEntry": "widget_panel:feature-widget-matrix-compat",
-      "owner": "matrix-ui",
-      "testCoverage": "doc-only",
-      "notes": "Compatibility expectations are tracked in feature inventory and widget docs.",
-      "sourcePointers": [
-        "docs/features/repo_feature_inventory.md",
-        "docs/widget-layouts.md"
-      ],
-      "presetPolicy": {
-        "baseline_matrix": true,
-        "community_plus": true,
-        "blackout_full": true
-      },
-      "uiTestRefs": [
-        "legacy/blackout-web/tests/integration/app.test.ts::feature-widget-matrix-compat"
-      ],
-      "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\".",
-      "evidenceType": "docs",
-      "evidencePaths": [
-        "docs/features/repo_feature_inventory.md",
-        "docs/widget-layouts.md"
-      ],
-      "lastVerifiedAt": "2026-04-09",
-      "verifiedBy": "blackout-ci"
-    },
-    {
-      "id": "multiplatform_bootstrap",
-      "name": "Multi-platform Matrix bootstrap",
-      "category": "matrix_like",
-      "status": "planned",
-      "presetKey": "features.platform.bootstrap",
-      "uiEntry": "room_action:feature-room-multiplatform-bootstrap",
-      "owner": "platform-foundation",
-      "testCoverage": "none",
-      "notes": "Platform selection and module bootstrap model remains largely in planning docs.",
-      "sourcePointers": [
-        "docs/install.md",
-        "docs/features/repo_feature_inventory.md"
-      ],
-      "presetPolicy": {
-        "baseline_matrix": false,
-        "community_plus": false,
-        "blackout_full": true
-      },
-      "uiTestRefs": [
-        "legacy/blackout-web/tests/integration/app.test.ts::feature-room-multiplatform-bootstrap"
-      ],
-      "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\".",
-      "evidenceType": "docs",
-      "evidencePaths": [
-        "docs/install.md",
-        "docs/features/repo_feature_inventory.md"
-      ],
-      "lastVerifiedAt": "2026-04-09",
-      "verifiedBy": "blackout-ci"
-    },
-    {
-      "id": "ci_cd_pipeline_github_actions",
-      "name": "CI/CD Pipeline (GitHub Actions)",
-      "category": "matrix_like",
-      "status": "partial",
-      "presetKey": "features.platform.ciCdPipeline",
-      "uiEntry": "settings_toggle:feature-toggle-matrix-client",
-      "owner": "platform-infra",
-      "testCoverage": "workflow",
-      "notes": "Workflows exist in .github/workflows/ for lint/test/build/deploy coverage (ci.yml, tests.yml, blackout-web-tests.yml, blackout-mobile.yml, deploy-web.yml). Partial = workflows exist for lint/test/build but incomplete deploy matrix. Implemented = required PR and main-branch gates all enforced and green.",
-      "sourcePointers": [
-        ".github/workflows/ci.yml",
-        ".github/workflows/tests.yml",
-        ".github/workflows/blackout-web-tests.yml",
-        ".github/workflows/blackout-mobile.yml",
-        ".github/workflows/deploy-web.yml"
-      ],
-      "presetPolicy": {
-        "baseline_matrix": true,
-        "community_plus": true,
-        "blackout_full": true
-      },
-      "uiTestRefs": [
-        "legacy/blackout-web/tests/integration/app.test.ts::feature-toggle-matrix-client"
-      ],
-      "fallbackBehavior": "Workflow orchestration remains source-controlled in GitHub Actions; status should not be promoted to implemented until branch protection and required checks are enforced for PR and main branch paths.",
-      "evidenceType": "runtime",
-      "evidencePaths": [
-        ".github/workflows/ci.yml",
-        ".github/workflows/tests.yml",
-        ".github/workflows/blackout-web-tests.yml",
-        ".github/workflows/blackout-mobile.yml",
-        ".github/workflows/deploy-web.yml"
-      ],
-      "lastVerifiedAt": "2026-04-09",
-      "verifiedBy": "blackout-ci"
-    },
-    {
-      "id": "epic_delivery_blueprint",
-      "name": "EPIC delivery blueprint panel",
-      "category": "matrix_like",
-      "status": "implemented",
-      "presetKey": "features.epic.deliveryBlueprint",
-      "uiEntry": "settings_toggle:feature-epic-delivery-blueprint",
-      "owner": "blackout-web",
-      "testCoverage": "integration",
-      "notes": "Provides implementation guardrails for E2EE-safe and Matrix-compatible EPIC delivery in settings.",
-      "sourcePointers": [
-        "apps/blackout-web/src/app.ts",
-        "legacy/blackout-web/tests/integration/app.test.ts",
-        "docs/features/epic_name_delivery_blueprint.md"
-      ],
-      "presetPolicy": {
-        "baseline_matrix": false,
-        "community_plus": false,
-        "blackout_full": true
-      },
-      "uiTestRefs": [
-        "legacy/blackout-web/tests/integration/app.test.ts::renders the EPIC delivery blueprint with E2EE and rollout guardrails",
-        "legacy/blackout-web/tests/integration/app.test.ts::hides the EPIC delivery blueprint when feature flag is disabled"
-      ],
-      "fallbackBehavior": "When disabled, the EPIC delivery blueprint panel does not render in settings.",
-      "evidenceType": "code",
-      "evidencePaths": [
-        "apps/blackout-web/src/app.ts",
-        "legacy/blackout-web/tests/integration/app.test.ts",
-        "docs/features/epic_name_delivery_blueprint.md"
-      ],
-      "lastVerifiedAt": "2026-04-09",
-      "verifiedBy": "blackout-ci"
-    },
-    {
-      "id": "shield_visibility",
-      "name": "Shield / Visibility",
-      "category": "novel",
-      "status": "implemented",
-      "presetKey": "features.shield.enabled",
-      "uiEntry": "settings_toggle:feature-toggle-shield-visibility",
-      "owner": "privacy-eng",
-      "testCoverage": "unit",
-      "notes": "Opt-in tracker / session-replay / advertising / fingerprint detection is enforced end-to-end client-side: a first-party (greenfield, MIT-clean) signature list feeds a pure shieldEngine classifier (classifyResource / runShieldScan with subdomain-safe matching, pixel-path heuristics, fingerprinting-API detection, de-dup + severity), plus a webcam/mic permission audit (auditPermission via navigator.permissions) and a cross-origin form-action exfil warning (auditFormAction). Surfaced via the ShieldVisibilitySettings scan UI (feature-toggle-shield-visibility) over the page's performance resource entries, permission states, and forms. Detection only — nothing is blocked or signalled to third parties (ethics §4). Free baseline: features.shield.enabled is true on every tier, wired through the entitlements aggregation + a checkShieldEntitlements SDK gate. We deliberately do not bundle uBlock/EasyList rule sets (GPLv3/list-license).",
-      "sourcePointers": [
-        "apps/blackout-client/src/app/features/privacy-tools/shield/shieldEngine.ts",
-        "apps/blackout-client/src/app/features/privacy-tools/shield/signatures.ts",
-        "apps/blackout-client/src/app/features/privacy-tools/ShieldVisibilitySettings.tsx",
-        "packages/blackout-protocol/src/shield/entitlements.ts",
-        "packages/blackout-sdk/src/shield/entitlementGate.ts"
-      ],
-      "presetPolicy": {
-        "baseline_matrix": false,
-        "community_plus": true,
-        "blackout_full": true
-      },
-      "uiTestRefs": [
-        "apps/blackout-client/src/app/features/privacy-tools/ShieldVisibilitySettings.tsx::feature-toggle-shield-visibility"
-      ],
-      "fallbackBehavior": "When the shieldVisibility flag is off or the baseline entitlement is absent, the customization does not register / the scan control is disabled and the canonical shell renders unchanged.",
-      "evidenceType": "code",
-      "evidencePaths": [
-        "apps/blackout-client/tests/unit/features/privacy-tools/shieldEngine.test.ts",
-        "apps/blackout-client/tests/unit/sdk/shieldGate.test.ts"
-      ],
-      "lastVerifiedAt": "2026-06-13",
-      "verifiedBy": "blackout-coa"
-    },
-    {
-      "id": "privacy_hardening",
-      "name": "Privacy Hardening",
-      "category": "novel",
-      "status": "partial",
-      "presetKey": "features.hardening.enabled",
-      "uiEntry": "settings_toggle:feature-toggle-privacy-hardening",
-      "owner": "privacy-eng",
-      "testCoverage": "unit+integration",
-      "notes": "Image perturbation is enforced end-to-end: the /v1/media/perturb route gates on features.hardening.imagePerturbation for the caller's tier (back-compat OR with the legacy privacy_tool grant) and an improved clean-room perturbation kernel (chroma-weighted, edge-gated, amplitude-clamped) runs client-side. A checkHardeningEntitlements SDK gate and useHardeningFeatures hook surface the tier. torTransport and decoyTraffic remain planned sub-capabilities (keys + gate only), so status is partial.",
-      "sourcePointers": [
-        "packages/api/src/routes/media.ts",
-        "apps/blackout-client/src/app/utils/perturbImage.ts",
-        "packages/blackout-sdk/src/hardening/entitlementGate.ts",
-        "apps/blackout-client/src/app/features/privacy-tools/useHardeningFeatures.ts",
-        "packages/blackout-protocol/src/hardening/entitlements.ts"
-      ],
-      "presetPolicy": {
-        "baseline_matrix": false,
-        "community_plus": false,
-        "blackout_full": true
-      },
-      "uiTestRefs": [
-        "apps/blackout-client/src/app/features/privacy-tools/PrivacyToolsSettings.tsx::feature-toggle-privacy-hardening"
-      ],
-      "fallbackBehavior": "When the privacyHardening flag is off or the pro entitlement is absent, the perturb control is disabled (Pro badge) and the server returns 402 perturbation_not_entitled; the canonical shell renders unchanged.",
-      "evidenceType": "code",
-      "evidencePaths": [
-        "packages/api/test/media-routes.integration.test.ts",
-        "apps/blackout-client/tests/unit/sdk/hardeningGate.test.ts",
-        "apps/blackout-client/tests/unit/features/privacy-tools/perturbPixels.test.ts",
-        "apps/blackout-client/tests/unit/features/privacy-tools/useHardeningFeatures.test.ts"
-      ],
-      "lastVerifiedAt": "2026-06-10",
-      "verifiedBy": "blackout-coa"
-    },
-    {
-      "id": "persona_engine",
-      "name": "Persona Engine",
-      "category": "novel",
-      "status": "partial",
-      "presetKey": "features.persona.enabled",
-      "uiEntry": "settings_toggle:feature-toggle-persona-engine",
-      "owner": "identity-eng",
-      "testCoverage": "unit+integration",
-      "notes": "Active-persona roster cap is enforced server-side from the canonical PERSONA_QUOTAS for the caller's tier, with a client pre-flight gate (checkPersonaEntitlements) and usePersonaQuota hook. Clean-room HKDF per-conversation alias derivation, epoch rotation, and compartments are implemented (aliasDerivation.ts) and exposed via the rotate + roster endpoints with server-side rotation/compartment entitlement enforcement. The full compartment roster UI and cross-device persona-key sync remain pending, so status is partial.",
-      "sourcePointers": [
-        "packages/blackout-protocol/src/persona/aliasDerivation.ts",
-        "packages/api/src/services/burnerIdentities.ts",
-        "packages/api/src/routes/identities.ts",
-        "packages/blackout-protocol/src/persona/entitlements.ts",
-        "packages/blackout-sdk/src/persona/entitlementGate.ts",
-        "apps/blackout-client/src/app/features/burner-identity/usePersonaQuota.ts"
-      ],
-      "presetPolicy": {
-        "baseline_matrix": false,
-        "community_plus": false,
-        "blackout_full": true
-      },
-      "uiTestRefs": [
-        "apps/blackout-client/src/app/features/burner-identity/manifest.ts::feature-toggle-persona-engine"
-      ],
-      "fallbackBehavior": "When the personaEngine flag is off or the capability is ungranted, the customization does not register and the canonical shell renders unchanged.",
-      "evidenceType": "code",
-      "evidencePaths": [
-        "packages/api/test/identities-routes.integration.test.ts",
-        "apps/blackout-client/tests/unit/sdk/personaGate.test.ts",
-        "apps/blackout-client/tests/unit/sdk/personaAlias.test.ts",
-        "apps/blackout-client/tests/unit/features/burner-identity/usePersonaQuota.test.ts"
-      ],
-      "lastVerifiedAt": "2026-06-10",
-      "verifiedBy": "blackout-coa"
-    },
-    {
-      "id": "active_defense",
-      "name": "Active Defense",
-      "category": "novel",
-      "status": "partial",
-      "presetKey": "features.activedefense.enabled",
-      "uiEntry": "admin_console:feature-toggle-active-defense",
-      "owner": "security-eng",
-      "testCoverage": "unit+integration",
-      "notes": "Defensive, local-only deception primitives are enforced end-to-end: POST /v1/activedefense/canary-tokens mints opaque canary tokens, GET lists them with trip status, and POST /canary-tokens/trip records access; POST /v1/activedefense/decoy-data returns clearly-synthetic decoy records. Every mutating route gates on features.activedefense.* for the enterprise tier (402 active_defense_not_entitled otherwise) AND requires explicit admin consent (403 active_defense_consent_required). A checkActiveDefenseEntitlements SDK gate enforces tier + consent, and useActiveDefenseFeatures + the ActiveDefenseSettings surface gate the affordance behind a consent acknowledgement. No offensive, retaliatory, or third-party-directed behavior ships (ethics §4). A public tripwire (GET /ct/:token, mounted outside the /v1 auth gate) records an unauthorized access — timestamp, count, truncated user-agent — and always returns a 1x1 GIF so live tokens can't be enumerated. The canary/decoy store is still in-memory; durable Postgres persistence (store + write-behind) is the remaining tracked follow-up, so status is partial.",
-      "sourcePointers": [
-        "packages/api/src/routes/activedefense.ts",
-        "packages/api/src/routes/canaryTripwire.ts",
-        "packages/api/src/services/activeDefense.ts",
-        "packages/blackout-protocol/src/activedefense/entitlements.ts",
-        "packages/blackout-sdk/src/activedefense/entitlementGate.ts",
-        "apps/blackout-client/src/app/features/panic/ActiveDefenseSettings.tsx"
-      ],
-      "presetPolicy": {
-        "baseline_matrix": false,
-        "community_plus": false,
-        "blackout_full": true
-      },
-      "uiTestRefs": [
-        "apps/blackout-client/src/app/features/panic/ActiveDefenseSettings.tsx::feature-toggle-active-defense"
-      ],
-      "fallbackBehavior": "When the activeDefense flag is off or the enterprise entitlement is absent, the customization does not register and the server returns 402 active_defense_not_entitled; without explicit admin consent the server returns 403 active_defense_consent_required. The canonical shell renders unchanged.",
-      "evidenceType": "code",
-      "evidencePaths": [
-        "packages/api/test/activedefense-routes.integration.test.ts",
-        "apps/blackout-client/tests/unit/sdk/activeDefenseGate.test.ts"
-      ],
-      "lastVerifiedAt": "2026-06-13",
-      "verifiedBy": "blackout-coa"
-    },
-    {
-      "id": "mesh_transport",
-      "name": "Mesh / Offline Transport",
-      "category": "novel",
-      "status": "partial",
-      "presetKey": "features.mesh.enabled",
-      "uiEntry": "settings_toggle:feature-toggle-mesh-transport",
-      "owner": "federation-eng",
-      "testCoverage": "unit+integration",
-      "notes": "Store-and-forward peer sync (Briar-class) is enforced end-to-end with first-party greenfield gossip primitives — no Briar/Bramble code ships (GPLv3, reference-only; ethics §4). A pure mergeMeshEnvelopes implements epidemic store-and-forward (hop-count + TTL bounding, seenBy dedup/routing, expiry pruning) and is shared by the client and the server relay node. The server acts as one always-on mesh node: POST /v1/mesh/enqueue originates opaque end-to-end-encrypted envelopes, POST /v1/mesh/sync gossips with a peer (merge + offer-back), and GET /v1/mesh/inbox delivers. Every route gates on features.mesh.* for the enterprise tier (402 mesh_not_entitled otherwise); the relay never inspects payloads. A checkMeshEntitlements SDK gate + useMeshFeatures hook + the MeshTransportSettings surface (feature-toggle-mesh-transport, registered behind the meshTransport flag) front it. A transport seam (mesh/transport.ts: MeshTransport interface + gossipExchange + a loopback transport) drives node-to-node propagation and is what hardware bridges implement; the loopback is tested end-to-end. Real local-radio/BLE/LoRa bridges (device/hardware bound) and durable Postgres persistence remain tracked follow-ups, so status is partial.",
-      "sourcePointers": [
-        "packages/blackout-protocol/src/mesh/storeAndForward.ts",
-        "packages/blackout-protocol/src/mesh/transport.ts",
-        "packages/api/src/routes/mesh.ts",
-        "packages/api/src/services/meshRelay.ts",
-        "packages/blackout-sdk/src/mesh/entitlementGate.ts",
-        "apps/blackout-client/src/app/features/mesh/MeshTransportSettings.tsx"
-      ],
-      "presetPolicy": {
-        "baseline_matrix": false,
-        "community_plus": false,
-        "blackout_full": true
-      },
-      "uiTestRefs": [
-        "apps/blackout-client/src/app/features/mesh/MeshTransportSettings.tsx::feature-toggle-mesh-transport"
-      ],
-      "fallbackBehavior": "When the meshTransport flag is off or the enterprise entitlement is absent, the mesh module does not register and the server returns 402 mesh_not_entitled; the canonical shell renders unchanged.",
-      "evidenceType": "code",
-      "evidencePaths": [
-        "packages/api/test/mesh-routes.integration.test.ts",
-        "apps/blackout-client/tests/unit/mesh/storeAndForward.test.ts",
-        "apps/blackout-client/tests/unit/sdk/meshGate.test.ts"
-      ],
-      "lastVerifiedAt": "2026-06-13",
-      "verifiedBy": "blackout-coa"
-    },
-    {
-      "id": "transparency_reports",
-      "name": "Transparency Reports",
-      "category": "novel",
-      "status": "implemented",
-      "presetKey": "features.transparency.enabled",
-      "uiEntry": "settings_toggle:feature-toggle-transparency-reports",
-      "owner": "trust-eng",
-      "testCoverage": "unit+integration",
-      "notes": "Self-service transparency is enforced end-to-end: GET /v1/transparency/me returns the server-held self-report (subscription, active burner count, effective entitlements) and GET /v1/transparency/canary returns a dated warrant-canary statement with a sha256 integrity digest AND an Ed25519 signature (operator key via BLACKOUT_CANARY_SIGNING_KEY, ephemeral in dev/test, graceful unsigned in prod-without-key; public key travels with the response) — both free. Org-scoped GET /v1/transparency/audit-export gates on features.transparency.auditExport (team+) and returns 402 audit_export_not_entitled otherwise. A checkTransparencyEntitlements SDK gate and useTransparencyFeatures hook surface the tier in the 'Your data' settings section.",
-      "sourcePointers": [
-        "packages/api/src/routes/transparency.ts",
-        "packages/api/src/services/canarySigning.ts",
-        "packages/blackout-protocol/src/transparency/entitlements.ts",
-        "packages/blackout-sdk/src/transparency/entitlementGate.ts",
-        "apps/blackout-client/src/app/features/data-transparency/useTransparencyFeatures.ts",
-        "apps/blackout-client/src/app/features/data-transparency/DataTransparencySettings.tsx"
-      ],
-      "presetPolicy": {
-        "baseline_matrix": false,
-        "community_plus": true,
-        "blackout_full": true
-      },
-      "uiTestRefs": [
-        "apps/blackout-client/src/app/features/data-transparency/DataTransparencySettings.tsx::feature-toggle-transparency-reports"
-      ],
-      "fallbackBehavior": "When the transparencyReports flag is off, no transparency surface registers and the canonical shell renders unchanged. When the auditExport entitlement is absent the export button is disabled (Team badge) and the server returns 402 audit_export_not_entitled.",
-      "evidenceType": "code",
-      "evidencePaths": [
-        "packages/api/test/transparency-routes.integration.test.ts",
-        "apps/blackout-client/tests/unit/sdk/transparencyGate.test.ts"
-      ],
-      "lastVerifiedAt": "2026-06-13",
-      "verifiedBy": "blackout-coa"
-    }
-  ]
+    ],
+    "features": [
+        {
+            "id": "stego_toolkit",
+            "name": "Steganographic messaging toolkit",
+            "category": "novel",
+            "status": "partial",
+            "presetKey": "features.stego.enabled",
+            "uiEntry": "settings_toggle:feature-toggle-stego-toolkit",
+            "owner": "privacy-eng",
+            "testCoverage": "integration",
+            "notes": "Full stego composer panel (encode/decrypt/password tabs, channel management) is implemented in MessageInput.ts with integration test coverage. Full migration of remaining codec and backend lifecycle work is still in progress.",
+            "sourcePointers": [
+                "docs/features/privacy_first_stego_roadmap.md",
+                "docs/features/privacy_first_stego_completion_tracker.md",
+                "docs/features/repo_feature_inventory.md",
+                "apps/blackout-web/src/components/MessageInput.ts",
+                "legacy/blackout-web/tests/integration/app.test.ts"
+            ],
+            "presetPolicy": {
+                "baseline_matrix": false,
+                "community_plus": false,
+                "blackout_full": true
+            },
+            "uiTestRefs": [
+                "legacy/blackout-web/tests/integration/app.test.ts::feature-toggle-stego-toolkit"
+            ],
+            "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\".",
+            "evidenceType": "code",
+            "evidencePaths": [
+                "docs/features/privacy_first_stego_roadmap.md",
+                "docs/features/privacy_first_stego_completion_tracker.md",
+                "docs/features/repo_feature_inventory.md",
+                "apps/blackout-web/src/components/MessageInput.ts",
+                "legacy/blackout-web/tests/integration/app.test.ts"
+            ],
+            "lastVerifiedAt": "2026-04-09",
+            "verifiedBy": "blackout-ci"
+        },
+        {
+            "id": "ephemeral_stego_lifecycle",
+            "name": "Ephemeral stego lifecycle management",
+            "category": "novel",
+            "status": "partial",
+            "presetKey": "features.stego.ephemeral",
+            "uiEntry": "room_action:feature-room-ephemeral-stego",
+            "owner": "privacy-eng",
+            "testCoverage": "partial-integration",
+            "notes": "Ephemeral checkbox and TTL field are implemented in the stego composer panel (MessageInput.ts). Self-destruct lifecycle enforcement in app flows and backend remains pending.",
+            "sourcePointers": [
+                "docs/features/privacy_first_stego_roadmap.md",
+                "docs/features/privacy_first_stego_completion_tracker.md",
+                "apps/blackout-web/src/components/MessageInput.ts"
+            ],
+            "presetPolicy": {
+                "baseline_matrix": false,
+                "community_plus": false,
+                "blackout_full": true
+            },
+            "uiTestRefs": [
+                "legacy/blackout-web/tests/integration/app.test.ts::feature-room-ephemeral-stego"
+            ],
+            "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\".",
+            "evidenceType": "code",
+            "evidencePaths": [
+                "docs/features/privacy_first_stego_roadmap.md",
+                "docs/features/privacy_first_stego_completion_tracker.md",
+                "apps/blackout-web/src/components/MessageInput.ts"
+            ],
+            "lastVerifiedAt": "2026-04-09",
+            "verifiedBy": "blackout-ci"
+        },
+        {
+            "id": "governance_entitlements",
+            "name": "Governance and entitlement policy layer",
+            "category": "novel",
+            "status": "partial",
+            "presetKey": "features.governance.entitlements",
+            "uiEntry": "admin_console:feature-admin-governance-entitlements",
+            "owner": "governance-platform",
+            "testCoverage": "integration",
+            "notes": "Governance composer panel (proposal creation, voting, templates) is implemented in MessageInput.ts with integration test coverage. Backend policy enforcement and audit controls remain in migration/build plans.",
+            "sourcePointers": [
+                "docs/blackout-governance-build-plan.md",
+                "docs/blackout-governance-migration.md",
+                "docs/features/governance_features_analysis.md",
+                "apps/blackout-web/src/components/MessageInput.ts",
+                "legacy/blackout-web/tests/integration/app.test.ts"
+            ],
+            "presetPolicy": {
+                "baseline_matrix": false,
+                "community_plus": false,
+                "blackout_full": true
+            },
+            "uiTestRefs": [
+                "legacy/blackout-web/tests/integration/app.test.ts::feature-admin-governance-entitlements"
+            ],
+            "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\".",
+            "evidenceType": "code",
+            "evidencePaths": [
+                "docs/blackout-governance-build-plan.md",
+                "docs/blackout-governance-migration.md",
+                "docs/features/governance_features_analysis.md",
+                "apps/blackout-web/src/components/MessageInput.ts",
+                "legacy/blackout-web/tests/integration/app.test.ts"
+            ],
+            "lastVerifiedAt": "2026-04-09",
+            "verifiedBy": "blackout-ci"
+        },
+        {
+            "id": "federation_boost_policy",
+            "name": "Federation boost policy engine",
+            "category": "novel",
+            "status": "planned",
+            "presetKey": "features.federationBoost.enabled",
+            "uiEntry": "admin_console:feature-admin-federation-boost",
+            "owner": "federation-eng",
+            "testCoverage": "none",
+            "notes": "Revenue-share and abuse-throttle policy remains roadmap work.",
+            "sourcePointers": [
+                "docs/14-stream-revenue-implementation-plan.md",
+                "docs/features/repo_feature_inventory.md"
+            ],
+            "presetPolicy": {
+                "baseline_matrix": false,
+                "community_plus": false,
+                "blackout_full": true
+            },
+            "uiTestRefs": [
+                "legacy/blackout-web/tests/integration/app.test.ts::feature-admin-federation-boost"
+            ],
+            "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\".",
+            "evidenceType": "docs",
+            "evidencePaths": [
+                "docs/14-stream-revenue-implementation-plan.md",
+                "docs/features/repo_feature_inventory.md"
+            ],
+            "lastVerifiedAt": "2026-04-09",
+            "verifiedBy": "blackout-ci"
+        },
+        {
+            "id": "townhall_sfu",
+            "name": "Townhall SFU sessions and moderation",
+            "category": "novel",
+            "status": "partial",
+            "presetKey": "features.townhall.enabled",
+            "uiEntry": "widget_panel:feature-widget-townhall-sfu",
+            "owner": "rtc-platform",
+            "testCoverage": "runbook-and-manifest",
+            "notes": "Infrastructure and runbooks are present, with blackout-web UI still converging.",
+            "sourcePointers": [
+                "docs/blackout-sfu-townhall-build-plan.md",
+                "docs/operations/runbooks/townhall-observability-runbook.md",
+                "deploy/kubernetes/phase4/element-ha.yaml"
+            ],
+            "presetPolicy": {
+                "baseline_matrix": false,
+                "community_plus": false,
+                "blackout_full": true
+            },
+            "uiTestRefs": [
+                "legacy/blackout-web/tests/integration/app.test.ts::feature-widget-townhall-sfu"
+            ],
+            "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\".",
+            "evidenceType": "external-infra",
+            "evidencePaths": [
+                "docs/blackout-sfu-townhall-build-plan.md",
+                "docs/operations/runbooks/townhall-observability-runbook.md",
+                "deploy/kubernetes/phase4/element-ha.yaml"
+            ],
+            "lastVerifiedAt": "2026-04-09",
+            "verifiedBy": "blackout-ci"
+        },
+        {
+            "id": "rich_composer",
+            "name": "Rich composer ergonomics",
+            "category": "discord_like",
+            "status": "implemented",
+            "presetKey": "features.composer.richEditing",
+            "uiEntry": "composer_action:feature-composer-rich-editing",
+            "owner": "blackout-web",
+            "testCoverage": "integration",
+            "notes": "Composer component and feature docs are established in the web app.",
+            "sourcePointers": [
+                "docs/features/composer.md",
+                "apps/blackout-web/src/components/MessageInput.ts",
+                "legacy/blackout-web/tests/integration/app.test.ts"
+            ],
+            "presetPolicy": {
+                "baseline_matrix": false,
+                "community_plus": true,
+                "blackout_full": true
+            },
+            "uiTestRefs": [
+                "legacy/blackout-web/tests/integration/app.test.ts::feature-composer-rich-editing"
+            ],
+            "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\".",
+            "evidenceType": "code",
+            "evidencePaths": [
+                "docs/features/composer.md",
+                "apps/blackout-web/src/components/MessageInput.ts",
+                "legacy/blackout-web/tests/integration/app.test.ts"
+            ],
+            "lastVerifiedAt": "2026-04-09",
+            "verifiedBy": "blackout-ci"
+        },
+        {
+            "id": "typing_indicators",
+            "name": "Typing indicators",
+            "category": "discord_like",
+            "status": "partial",
+            "presetKey": "features.composer.typingIndicators",
+            "uiEntry": "composer_action:feature-composer-typing-indicators",
+            "owner": "blackout-web",
+            "testCoverage": "partial-integration",
+            "notes": "Behavior is inventoried, but dedicated UI test IDs are still being standardized.",
+            "sourcePointers": [
+                "docs/features/repo_feature_inventory.md",
+                "apps/blackout-web/src/components/ChatWindow.ts"
+            ],
+            "presetPolicy": {
+                "baseline_matrix": false,
+                "community_plus": true,
+                "blackout_full": true
+            },
+            "uiTestRefs": [
+                "legacy/blackout-web/tests/integration/app.test.ts::feature-composer-typing-indicators"
+            ],
+            "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\".",
+            "evidenceType": "code",
+            "evidencePaths": [
+                "docs/features/repo_feature_inventory.md",
+                "apps/blackout-web/src/components/ChatWindow.ts"
+            ],
+            "lastVerifiedAt": "2026-04-09",
+            "verifiedBy": "blackout-ci"
+        },
+        {
+            "id": "widget_shell_layouts",
+            "name": "Widget shell layouts",
+            "category": "discord_like",
+            "status": "partial",
+            "presetKey": "features.widgets.layouts",
+            "uiEntry": "widget_panel:feature-widget-shell-layouts",
+            "owner": "matrix-ui",
+            "testCoverage": "doc-only",
+            "notes": "Widget placement and layout conventions are documented; app-level test wiring is pending.",
+            "sourcePointers": [
+                "docs/widget-layouts.md",
+                "docs/features/frontend-backend-contract.md"
+            ],
+            "presetPolicy": {
+                "baseline_matrix": false,
+                "community_plus": true,
+                "blackout_full": true
+            },
+            "uiTestRefs": [
+                "legacy/blackout-web/tests/integration/app.test.ts::feature-widget-shell-layouts"
+            ],
+            "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\".",
+            "evidenceType": "docs",
+            "evidencePaths": [
+                "docs/widget-layouts.md",
+                "docs/features/frontend-backend-contract.md"
+            ],
+            "lastVerifiedAt": "2026-04-09",
+            "verifiedBy": "blackout-ci"
+        },
+        {
+            "id": "matrix_client_arch",
+            "name": "Matrix-native client architecture",
+            "category": "matrix_like",
+            "status": "implemented",
+            "presetKey": "features.matrix.client",
+            "uiEntry": "settings_toggle:feature-toggle-matrix-client",
+            "owner": "matrix-platform",
+            "testCoverage": "unit",
+            "notes": "Matrix client service is in blackout-web and covered by unit tests.",
+            "sourcePointers": [
+                "apps/blackout-web/src/services/matrix-client.ts",
+                "apps/blackout-web/src/app.ts",
+                "legacy/blackout-web/tests/unit/api-client.test.ts"
+            ],
+            "presetPolicy": {
+                "baseline_matrix": true,
+                "community_plus": true,
+                "blackout_full": true
+            },
+            "uiTestRefs": [
+                "legacy/blackout-web/tests/integration/app.test.ts::feature-toggle-matrix-client"
+            ],
+            "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\".",
+            "evidenceType": "code",
+            "evidencePaths": [
+                "apps/blackout-web/src/services/matrix-client.ts",
+                "apps/blackout-web/src/app.ts",
+                "legacy/blackout-web/tests/unit/api-client.test.ts"
+            ],
+            "lastVerifiedAt": "2026-04-09",
+            "verifiedBy": "blackout-ci"
+        },
+        {
+            "id": "homeserver_discovery",
+            "name": "Homeserver discovery and validation",
+            "category": "matrix_like",
+            "status": "partial",
+            "presetKey": "features.matrix.homeserverDiscovery",
+            "uiEntry": "settings_toggle:feature-toggle-homeserver-discovery",
+            "owner": "matrix-platform",
+            "testCoverage": "doc-and-config",
+            "notes": "Discovery and custom homeserver behavior is captured in docs and config wiring.",
+            "sourcePointers": [
+                "docs/custom-home.md",
+                "apps/blackout-web/src/config.ts",
+                "docs/features/repo_feature_inventory.md"
+            ],
+            "presetPolicy": {
+                "baseline_matrix": true,
+                "community_plus": true,
+                "blackout_full": true
+            },
+            "uiTestRefs": [
+                "legacy/blackout-web/tests/integration/app.test.ts::feature-toggle-homeserver-discovery"
+            ],
+            "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\".",
+            "evidenceType": "code",
+            "evidencePaths": [
+                "docs/custom-home.md",
+                "apps/blackout-web/src/config.ts",
+                "docs/features/repo_feature_inventory.md"
+            ],
+            "lastVerifiedAt": "2026-04-09",
+            "verifiedBy": "blackout-ci"
+        },
+        {
+            "id": "e2ee_defaults",
+            "name": "E2EE defaults and policy controls",
+            "category": "matrix_like",
+            "status": "implemented",
+            "presetKey": "features.security.e2eeDefaults",
+            "uiEntry": "settings_toggle:feature-toggle-e2ee-defaults",
+            "owner": "security-platform",
+            "testCoverage": "unit+integration",
+            "notes": "Every private room and DM is created encrypted, and the decision is enforced rather than documented. The API's createRoom takes a REQUIRED `encrypted` flag (no default), so the compiler forces each server-side call site to decide; the client sets m.room.encryption in initial_state at creation. `pnpm guard:room-encryption` fails the build on any room-creating call that makes no encryption decision, or if the server flag is downgraded to optional. Synapse backstops with encryption_enabled_by_default_for_room_type: invite. Publicly joinable rooms and the bot-delivered service rooms (FBM vendor/order/ledger, #bugs, standing public rooms) are deliberately unencrypted because the bot has no Olm/Megolm and cannot post into an encrypted room; that exception list is disclosed in TRUST.md. Prior status was partial/doc-only \u2014 see docs/audits/2026-08-10-encryption-audit.md for what was actually broken.",
+            "sourcePointers": [
+                "docs/audits/2026-08-10-encryption-audit.md",
+                "packages/api/src/integrations/matrix-client.ts",
+                "apps/blackout-client/src/app/utils/matrix-crypto.ts",
+                "apps/blackout-client/src/app/features/canopy/denKind.ts",
+                "tools/ci/check-room-encryption.mjs",
+                "infra/single-server-baseline/synapse/homeserver.yaml.template"
+            ],
+            "presetPolicy": {
+                "baseline_matrix": true,
+                "community_plus": true,
+                "blackout_full": true
+            },
+            "uiTestRefs": [
+                "apps/blackout-client/tests/unit/features/canopy/denKind.test.ts::feature-toggle-e2ee-defaults"
+            ],
+            "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\".",
+            "evidenceType": "code",
+            "evidencePaths": [
+                "packages/api/test/room-encryption.integration.test.ts",
+                "tools/ci/check-room-encryption.test.mjs",
+                "apps/blackout-client/tests/unit/features/canopy/denKind.test.ts",
+                "docs/audits/2026-08-10-encryption-audit.md"
+            ],
+            "lastVerifiedAt": "2026-08-10",
+            "verifiedBy": "blackout-coa"
+        },
+        {
+            "id": "oidc_delegated_auth",
+            "name": "OIDC delegated authentication",
+            "category": "matrix_like",
+            "status": "partial",
+            "presetKey": "features.auth.oidc",
+            "uiEntry": "settings_toggle:feature-toggle-oidc-auth",
+            "owner": "identity-platform",
+            "testCoverage": "unit",
+            "notes": "OIDC flow is documented with auth feature scaffold in app source.",
+            "sourcePointers": [
+                "docs/oidc.md",
+                "apps/blackout-web/src/features/auth/auth-view.ts",
+                "docs/security-phase3-auth-modernization.md"
+            ],
+            "presetPolicy": {
+                "baseline_matrix": true,
+                "community_plus": true,
+                "blackout_full": true
+            },
+            "uiTestRefs": [
+                "legacy/blackout-web/tests/integration/app.test.ts::feature-toggle-oidc-auth"
+            ],
+            "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\".",
+            "evidenceType": "code",
+            "evidencePaths": [
+                "docs/oidc.md",
+                "apps/blackout-web/src/features/auth/auth-view.ts",
+                "docs/security-phase3-auth-modernization.md"
+            ],
+            "lastVerifiedAt": "2026-04-09",
+            "verifiedBy": "blackout-ci"
+        },
+        {
+            "id": "matrix_widget_compat",
+            "name": "Matrix widget state-event compatibility",
+            "category": "matrix_like",
+            "status": "partial",
+            "presetKey": "features.matrix.widgetCompat",
+            "uiEntry": "widget_panel:feature-widget-matrix-compat",
+            "owner": "matrix-ui",
+            "testCoverage": "doc-only",
+            "notes": "Compatibility expectations are tracked in feature inventory and widget docs.",
+            "sourcePointers": ["docs/features/repo_feature_inventory.md", "docs/widget-layouts.md"],
+            "presetPolicy": {
+                "baseline_matrix": true,
+                "community_plus": true,
+                "blackout_full": true
+            },
+            "uiTestRefs": [
+                "legacy/blackout-web/tests/integration/app.test.ts::feature-widget-matrix-compat"
+            ],
+            "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\".",
+            "evidenceType": "docs",
+            "evidencePaths": ["docs/features/repo_feature_inventory.md", "docs/widget-layouts.md"],
+            "lastVerifiedAt": "2026-04-09",
+            "verifiedBy": "blackout-ci"
+        },
+        {
+            "id": "multiplatform_bootstrap",
+            "name": "Multi-platform Matrix bootstrap",
+            "category": "matrix_like",
+            "status": "planned",
+            "presetKey": "features.platform.bootstrap",
+            "uiEntry": "room_action:feature-room-multiplatform-bootstrap",
+            "owner": "platform-foundation",
+            "testCoverage": "none",
+            "notes": "Platform selection and module bootstrap model remains largely in planning docs.",
+            "sourcePointers": ["docs/install.md", "docs/features/repo_feature_inventory.md"],
+            "presetPolicy": {
+                "baseline_matrix": false,
+                "community_plus": false,
+                "blackout_full": true
+            },
+            "uiTestRefs": [
+                "legacy/blackout-web/tests/integration/app.test.ts::feature-room-multiplatform-bootstrap"
+            ],
+            "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\".",
+            "evidenceType": "docs",
+            "evidencePaths": ["docs/install.md", "docs/features/repo_feature_inventory.md"],
+            "lastVerifiedAt": "2026-04-09",
+            "verifiedBy": "blackout-ci"
+        },
+        {
+            "id": "ci_cd_pipeline_github_actions",
+            "name": "CI/CD Pipeline (GitHub Actions)",
+            "category": "matrix_like",
+            "status": "partial",
+            "presetKey": "features.platform.ciCdPipeline",
+            "uiEntry": "settings_toggle:feature-toggle-matrix-client",
+            "owner": "platform-infra",
+            "testCoverage": "workflow",
+            "notes": "Workflows exist in .github/workflows/ for lint/test/build/deploy coverage (ci.yml, tests.yml, blackout-web-tests.yml, blackout-mobile.yml, deploy-web.yml). Partial = workflows exist for lint/test/build but incomplete deploy matrix. Implemented = required PR and main-branch gates all enforced and green.",
+            "sourcePointers": [
+                ".github/workflows/ci.yml",
+                ".github/workflows/tests.yml",
+                ".github/workflows/blackout-web-tests.yml",
+                ".github/workflows/blackout-mobile.yml",
+                ".github/workflows/deploy-web.yml"
+            ],
+            "presetPolicy": {
+                "baseline_matrix": true,
+                "community_plus": true,
+                "blackout_full": true
+            },
+            "uiTestRefs": [
+                "legacy/blackout-web/tests/integration/app.test.ts::feature-toggle-matrix-client"
+            ],
+            "fallbackBehavior": "Workflow orchestration remains source-controlled in GitHub Actions; status should not be promoted to implemented until branch protection and required checks are enforced for PR and main branch paths.",
+            "evidenceType": "runtime",
+            "evidencePaths": [
+                ".github/workflows/ci.yml",
+                ".github/workflows/tests.yml",
+                ".github/workflows/blackout-web-tests.yml",
+                ".github/workflows/blackout-mobile.yml",
+                ".github/workflows/deploy-web.yml"
+            ],
+            "lastVerifiedAt": "2026-04-09",
+            "verifiedBy": "blackout-ci"
+        },
+        {
+            "id": "epic_delivery_blueprint",
+            "name": "EPIC delivery blueprint panel",
+            "category": "matrix_like",
+            "status": "implemented",
+            "presetKey": "features.epic.deliveryBlueprint",
+            "uiEntry": "settings_toggle:feature-epic-delivery-blueprint",
+            "owner": "blackout-web",
+            "testCoverage": "integration",
+            "notes": "Provides implementation guardrails for E2EE-safe and Matrix-compatible EPIC delivery in settings.",
+            "sourcePointers": [
+                "apps/blackout-web/src/app.ts",
+                "legacy/blackout-web/tests/integration/app.test.ts",
+                "docs/features/epic_name_delivery_blueprint.md"
+            ],
+            "presetPolicy": {
+                "baseline_matrix": false,
+                "community_plus": false,
+                "blackout_full": true
+            },
+            "uiTestRefs": [
+                "legacy/blackout-web/tests/integration/app.test.ts::renders the EPIC delivery blueprint with E2EE and rollout guardrails",
+                "legacy/blackout-web/tests/integration/app.test.ts::hides the EPIC delivery blueprint when feature flag is disabled"
+            ],
+            "fallbackBehavior": "When disabled, the EPIC delivery blueprint panel does not render in settings.",
+            "evidenceType": "code",
+            "evidencePaths": [
+                "apps/blackout-web/src/app.ts",
+                "legacy/blackout-web/tests/integration/app.test.ts",
+                "docs/features/epic_name_delivery_blueprint.md"
+            ],
+            "lastVerifiedAt": "2026-04-09",
+            "verifiedBy": "blackout-ci"
+        },
+        {
+            "id": "shield_visibility",
+            "name": "Shield / Visibility",
+            "category": "novel",
+            "status": "implemented",
+            "presetKey": "features.shield.enabled",
+            "uiEntry": "settings_toggle:feature-toggle-shield-visibility",
+            "owner": "privacy-eng",
+            "testCoverage": "unit",
+            "notes": "Opt-in tracker / session-replay / advertising / fingerprint detection is enforced end-to-end client-side: a first-party (greenfield, MIT-clean) signature list feeds a pure shieldEngine classifier (classifyResource / runShieldScan with subdomain-safe matching, pixel-path heuristics, fingerprinting-API detection, de-dup + severity), plus a webcam/mic permission audit (auditPermission via navigator.permissions) and a cross-origin form-action exfil warning (auditFormAction). Surfaced via the ShieldVisibilitySettings scan UI (feature-toggle-shield-visibility) over the page's performance resource entries, permission states, and forms. Detection only \u2014 nothing is blocked or signalled to third parties (ethics \u00a74). Free baseline: features.shield.enabled is true on every tier, wired through the entitlements aggregation + a checkShieldEntitlements SDK gate. We deliberately do not bundle uBlock/EasyList rule sets (GPLv3/list-license).",
+            "sourcePointers": [
+                "apps/blackout-client/src/app/features/privacy-tools/shield/shieldEngine.ts",
+                "apps/blackout-client/src/app/features/privacy-tools/shield/signatures.ts",
+                "apps/blackout-client/src/app/features/privacy-tools/ShieldVisibilitySettings.tsx",
+                "packages/blackout-protocol/src/shield/entitlements.ts",
+                "packages/blackout-sdk/src/shield/entitlementGate.ts"
+            ],
+            "presetPolicy": {
+                "baseline_matrix": false,
+                "community_plus": true,
+                "blackout_full": true
+            },
+            "uiTestRefs": [
+                "apps/blackout-client/src/app/features/privacy-tools/ShieldVisibilitySettings.tsx::feature-toggle-shield-visibility"
+            ],
+            "fallbackBehavior": "When the shieldVisibility flag is off or the baseline entitlement is absent, the customization does not register / the scan control is disabled and the canonical shell renders unchanged.",
+            "evidenceType": "code",
+            "evidencePaths": [
+                "apps/blackout-client/tests/unit/features/privacy-tools/shieldEngine.test.ts",
+                "apps/blackout-client/tests/unit/sdk/shieldGate.test.ts"
+            ],
+            "lastVerifiedAt": "2026-06-13",
+            "verifiedBy": "blackout-coa"
+        },
+        {
+            "id": "privacy_hardening",
+            "name": "Privacy Hardening",
+            "category": "novel",
+            "status": "partial",
+            "presetKey": "features.hardening.enabled",
+            "uiEntry": "settings_toggle:feature-toggle-privacy-hardening",
+            "owner": "privacy-eng",
+            "testCoverage": "unit+integration",
+            "notes": "Image perturbation is enforced end-to-end: the /v1/media/perturb route gates on features.hardening.imagePerturbation for the caller's tier (back-compat OR with the legacy privacy_tool grant) and an improved clean-room perturbation kernel (chroma-weighted, edge-gated, amplitude-clamped) runs client-side. A checkHardeningEntitlements SDK gate and useHardeningFeatures hook surface the tier. torTransport and decoyTraffic remain planned sub-capabilities (keys + gate only), so status is partial.",
+            "sourcePointers": [
+                "packages/api/src/routes/media.ts",
+                "apps/blackout-client/src/app/utils/perturbImage.ts",
+                "packages/blackout-sdk/src/hardening/entitlementGate.ts",
+                "apps/blackout-client/src/app/features/privacy-tools/useHardeningFeatures.ts",
+                "packages/blackout-protocol/src/hardening/entitlements.ts"
+            ],
+            "presetPolicy": {
+                "baseline_matrix": false,
+                "community_plus": false,
+                "blackout_full": true
+            },
+            "uiTestRefs": [
+                "apps/blackout-client/src/app/features/privacy-tools/PrivacyToolsSettings.tsx::feature-toggle-privacy-hardening"
+            ],
+            "fallbackBehavior": "When the privacyHardening flag is off or the pro entitlement is absent, the perturb control is disabled (Pro badge) and the server returns 402 perturbation_not_entitled; the canonical shell renders unchanged.",
+            "evidenceType": "code",
+            "evidencePaths": [
+                "packages/api/test/media-routes.integration.test.ts",
+                "apps/blackout-client/tests/unit/sdk/hardeningGate.test.ts",
+                "apps/blackout-client/tests/unit/features/privacy-tools/perturbPixels.test.ts",
+                "apps/blackout-client/tests/unit/features/privacy-tools/useHardeningFeatures.test.ts"
+            ],
+            "lastVerifiedAt": "2026-06-10",
+            "verifiedBy": "blackout-coa"
+        },
+        {
+            "id": "persona_engine",
+            "name": "Persona Engine",
+            "category": "novel",
+            "status": "partial",
+            "presetKey": "features.persona.enabled",
+            "uiEntry": "settings_toggle:feature-toggle-persona-engine",
+            "owner": "identity-eng",
+            "testCoverage": "unit+integration",
+            "notes": "Active-persona roster cap is enforced server-side from the canonical PERSONA_QUOTAS for the caller's tier, with a client pre-flight gate (checkPersonaEntitlements) and usePersonaQuota hook. Clean-room HKDF per-conversation alias derivation, epoch rotation, and compartments are implemented (aliasDerivation.ts) and exposed via the rotate + roster endpoints with server-side rotation/compartment entitlement enforcement. The full compartment roster UI and cross-device persona-key sync remain pending, so status is partial.",
+            "sourcePointers": [
+                "packages/blackout-protocol/src/persona/aliasDerivation.ts",
+                "packages/api/src/services/burnerIdentities.ts",
+                "packages/api/src/routes/identities.ts",
+                "packages/blackout-protocol/src/persona/entitlements.ts",
+                "packages/blackout-sdk/src/persona/entitlementGate.ts",
+                "apps/blackout-client/src/app/features/burner-identity/usePersonaQuota.ts"
+            ],
+            "presetPolicy": {
+                "baseline_matrix": false,
+                "community_plus": false,
+                "blackout_full": true
+            },
+            "uiTestRefs": [
+                "apps/blackout-client/src/app/features/burner-identity/manifest.ts::feature-toggle-persona-engine"
+            ],
+            "fallbackBehavior": "When the personaEngine flag is off or the capability is ungranted, the customization does not register and the canonical shell renders unchanged.",
+            "evidenceType": "code",
+            "evidencePaths": [
+                "packages/api/test/identities-routes.integration.test.ts",
+                "apps/blackout-client/tests/unit/sdk/personaGate.test.ts",
+                "apps/blackout-client/tests/unit/sdk/personaAlias.test.ts",
+                "apps/blackout-client/tests/unit/features/burner-identity/usePersonaQuota.test.ts"
+            ],
+            "lastVerifiedAt": "2026-06-10",
+            "verifiedBy": "blackout-coa"
+        },
+        {
+            "id": "active_defense",
+            "name": "Active Defense",
+            "category": "novel",
+            "status": "partial",
+            "presetKey": "features.activedefense.enabled",
+            "uiEntry": "admin_console:feature-toggle-active-defense",
+            "owner": "security-eng",
+            "testCoverage": "unit+integration",
+            "notes": "Defensive, local-only deception primitives are enforced end-to-end: POST /v1/activedefense/canary-tokens mints opaque canary tokens, GET lists them with trip status, and POST /canary-tokens/trip records access; POST /v1/activedefense/decoy-data returns clearly-synthetic decoy records. Every mutating route gates on features.activedefense.* for the enterprise tier (402 active_defense_not_entitled otherwise) AND requires explicit admin consent (403 active_defense_consent_required). A checkActiveDefenseEntitlements SDK gate enforces tier + consent, and useActiveDefenseFeatures + the ActiveDefenseSettings surface gate the affordance behind a consent acknowledgement. No offensive, retaliatory, or third-party-directed behavior ships (ethics \u00a74). A public tripwire (GET /ct/:token, mounted outside the /v1 auth gate) records an unauthorized access \u2014 timestamp, count, truncated user-agent \u2014 and always returns a 1x1 GIF so live tokens can't be enumerated. The canary/decoy store is still in-memory; durable Postgres persistence (store + write-behind) is the remaining tracked follow-up, so status is partial.",
+            "sourcePointers": [
+                "packages/api/src/routes/activedefense.ts",
+                "packages/api/src/routes/canaryTripwire.ts",
+                "packages/api/src/services/activeDefense.ts",
+                "packages/blackout-protocol/src/activedefense/entitlements.ts",
+                "packages/blackout-sdk/src/activedefense/entitlementGate.ts",
+                "apps/blackout-client/src/app/features/panic/ActiveDefenseSettings.tsx"
+            ],
+            "presetPolicy": {
+                "baseline_matrix": false,
+                "community_plus": false,
+                "blackout_full": true
+            },
+            "uiTestRefs": [
+                "apps/blackout-client/src/app/features/panic/ActiveDefenseSettings.tsx::feature-toggle-active-defense"
+            ],
+            "fallbackBehavior": "When the activeDefense flag is off or the enterprise entitlement is absent, the customization does not register and the server returns 402 active_defense_not_entitled; without explicit admin consent the server returns 403 active_defense_consent_required. The canonical shell renders unchanged.",
+            "evidenceType": "code",
+            "evidencePaths": [
+                "packages/api/test/activedefense-routes.integration.test.ts",
+                "apps/blackout-client/tests/unit/sdk/activeDefenseGate.test.ts"
+            ],
+            "lastVerifiedAt": "2026-06-13",
+            "verifiedBy": "blackout-coa"
+        },
+        {
+            "id": "mesh_transport",
+            "name": "Mesh / Offline Transport",
+            "category": "novel",
+            "status": "partial",
+            "presetKey": "features.mesh.enabled",
+            "uiEntry": "settings_toggle:feature-toggle-mesh-transport",
+            "owner": "federation-eng",
+            "testCoverage": "unit+integration",
+            "notes": "Store-and-forward peer sync (Briar-class) is enforced end-to-end with first-party greenfield gossip primitives \u2014 no Briar/Bramble code ships (GPLv3, reference-only; ethics \u00a74). A pure mergeMeshEnvelopes implements epidemic store-and-forward (hop-count + TTL bounding, seenBy dedup/routing, expiry pruning) and is shared by the client and the server relay node. The server acts as one always-on mesh node: POST /v1/mesh/enqueue originates opaque end-to-end-encrypted envelopes, POST /v1/mesh/sync gossips with a peer (merge + offer-back), and GET /v1/mesh/inbox delivers. Every route gates on features.mesh.* for the enterprise tier (402 mesh_not_entitled otherwise); the relay never inspects payloads. A checkMeshEntitlements SDK gate + useMeshFeatures hook + the MeshTransportSettings surface (feature-toggle-mesh-transport, registered behind the meshTransport flag) front it. A transport seam (mesh/transport.ts: MeshTransport interface + gossipExchange + a loopback transport) drives node-to-node propagation and is what hardware bridges implement; the loopback is tested end-to-end. Real local-radio/BLE/LoRa bridges (device/hardware bound) and durable Postgres persistence remain tracked follow-ups, so status is partial.",
+            "sourcePointers": [
+                "packages/blackout-protocol/src/mesh/storeAndForward.ts",
+                "packages/blackout-protocol/src/mesh/transport.ts",
+                "packages/api/src/routes/mesh.ts",
+                "packages/api/src/services/meshRelay.ts",
+                "packages/blackout-sdk/src/mesh/entitlementGate.ts",
+                "apps/blackout-client/src/app/features/mesh/MeshTransportSettings.tsx"
+            ],
+            "presetPolicy": {
+                "baseline_matrix": false,
+                "community_plus": false,
+                "blackout_full": true
+            },
+            "uiTestRefs": [
+                "apps/blackout-client/src/app/features/mesh/MeshTransportSettings.tsx::feature-toggle-mesh-transport"
+            ],
+            "fallbackBehavior": "When the meshTransport flag is off or the enterprise entitlement is absent, the mesh module does not register and the server returns 402 mesh_not_entitled; the canonical shell renders unchanged.",
+            "evidenceType": "code",
+            "evidencePaths": [
+                "packages/api/test/mesh-routes.integration.test.ts",
+                "apps/blackout-client/tests/unit/mesh/storeAndForward.test.ts",
+                "apps/blackout-client/tests/unit/sdk/meshGate.test.ts"
+            ],
+            "lastVerifiedAt": "2026-06-13",
+            "verifiedBy": "blackout-coa"
+        },
+        {
+            "id": "transparency_reports",
+            "name": "Transparency Reports",
+            "category": "novel",
+            "status": "implemented",
+            "presetKey": "features.transparency.enabled",
+            "uiEntry": "settings_toggle:feature-toggle-transparency-reports",
+            "owner": "trust-eng",
+            "testCoverage": "unit+integration",
+            "notes": "Self-service transparency is enforced end-to-end: GET /v1/transparency/me returns the server-held self-report (subscription, active burner count, effective entitlements) and GET /v1/transparency/canary returns a dated warrant-canary statement with a sha256 integrity digest AND an Ed25519 signature (operator key via BLACKOUT_CANARY_SIGNING_KEY, ephemeral in dev/test, graceful unsigned in prod-without-key; public key travels with the response) \u2014 both free. Org-scoped GET /v1/transparency/audit-export gates on features.transparency.auditExport (team+) and returns 402 audit_export_not_entitled otherwise. A checkTransparencyEntitlements SDK gate and useTransparencyFeatures hook surface the tier in the 'Your data' settings section.",
+            "sourcePointers": [
+                "packages/api/src/routes/transparency.ts",
+                "packages/api/src/services/canarySigning.ts",
+                "packages/blackout-protocol/src/transparency/entitlements.ts",
+                "packages/blackout-sdk/src/transparency/entitlementGate.ts",
+                "apps/blackout-client/src/app/features/data-transparency/useTransparencyFeatures.ts",
+                "apps/blackout-client/src/app/features/data-transparency/DataTransparencySettings.tsx"
+            ],
+            "presetPolicy": {
+                "baseline_matrix": false,
+                "community_plus": true,
+                "blackout_full": true
+            },
+            "uiTestRefs": [
+                "apps/blackout-client/src/app/features/data-transparency/DataTransparencySettings.tsx::feature-toggle-transparency-reports"
+            ],
+            "fallbackBehavior": "When the transparencyReports flag is off, no transparency surface registers and the canonical shell renders unchanged. When the auditExport entitlement is absent the export button is disabled (Team badge) and the server returns 402 audit_export_not_entitled.",
+            "evidenceType": "code",
+            "evidencePaths": [
+                "packages/api/test/transparency-routes.integration.test.ts",
+                "apps/blackout-client/tests/unit/sdk/transparencyGate.test.ts"
+            ],
+            "lastVerifiedAt": "2026-06-13",
+            "verifiedBy": "blackout-coa"
+        }
+    ]
 }

@@ -63,6 +63,8 @@
         "guard:sops-recipients": "node tools/ci/check-sops-recipients.mjs",
         "test:guard:deaddrop-parity": "node --import tsx --test tools/ci/deaddrop-envelope-parity.test.ts",
         "guard:cors-allowlist": "node tools/ci/check-cors-allowlist.mjs",
+        "guard:room-encryption": "node tools/ci/check-room-encryption.mjs",
+        "test:guard:room-encryption": "node --test tools/ci/check-room-encryption.test.mjs",
         "guard:runtime-targets": "node tools/ci/check-canonical-runtime-targets.mjs",
         "test:guard:runtime-targets": "node --test tools/ci/check-canonical-runtime-targets.test.mjs",
         "build:runtime": "pnpm --filter @blackout/contracts --filter @blackout/core --filter @blackout/server --filter @blackout/client --filter blackout-mobile run build",
