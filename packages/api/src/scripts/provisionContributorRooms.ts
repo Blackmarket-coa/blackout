@@ -28,51 +28,88 @@ import { log } from '../telemetry/logger';
  * orchestration is unit-testable against a fake without a homeserver.
  */
 export interface ProvisioningClient {
-  botUserId(): Promise<string | undefined>;
-  resolveRoomAlias(alias: string): Promise<{ ok: boolean; roomId?: string; reason?: string }>;
-  createRoom(input: {
-    aliasLocalpart?: string;
-    name?: string;
-    topic?: string;
-    visibility?: 'public' | 'private';
-    preset?: 'public_chat' | 'private_chat' | 'trusted_private_chat';
-    creationContent?: Record<string, unknown>;
-    powerLevelOverride?: Record<string, unknown>;
-  }): Promise<{ ok: boolean; roomId?: string; reason?: string; status?: number }>;
-  getStateEvent(
-    roomId: string,
-    eventType: string,
-    stateKey?: string,
-  ): Promise<{ ok: boolean; content?: Record<string, unknown>; status?: number; reason?: string }>;
-  sendStateEvent(
-    roomId: string,
-    eventType: string,
-    content: Record<string, unknown>,
-    stateKey?: string,
-  ): Promise<{ ok: boolean; status?: number; eventId?: string; reason?: string }>;
+    botUserId(): Promise<string | undefined>;
+    resolveRoomAlias(alias: string): Promise<{ ok: boolean; roomId?: string; reason?: string }>;
+    createRoom(input: {
+        aliasLocalpart?: string;
+        name?: string;
+        topic?: string;
+        visibility?: 'public' | 'private';
+        preset?: 'public_chat' | 'private_chat' | 'trusted_private_chat';
+        /** Required, no default — see `matrixClient.createRoom`. */
+        encrypted: boolean;
+        creationContent?: Record<string, unknown>;
+        powerLevelOverride?: Record<string, unknown>;
+    }): Promise<{ ok: boolean; roomId?: string; reason?: string; status?: number }>;
+    getStateEvent(
+        roomId: string,
+        eventType: string,
+        stateKey?: string
+    ): Promise<{
+        ok: boolean;
+        content?: Record<string, unknown>;
+        status?: number;
+        reason?: string;
+    }>;
+    sendStateEvent(
+        roomId: string,
+        eventType: string,
+        content: Record<string, unknown>,
+        stateKey?: string
+    ): Promise<{ ok: boolean; status?: number; eventId?: string; reason?: string }>;
 }
 
 interface ContributorRoom {
-  localpart: string;
-  name: string;
-  topic: string;
-  denType: DenType;
+    localpart: string;
+    name: string;
+    topic: string;
+    denType: DenType;
 }
 
 /** The canopy (Matrix space) every standing contributor room is parented under. */
 const CANOPY = {
-  localpart: 'contributors',
-  name: 'Contributors',
-  topic: 'Standing rooms for Blackout contributors and operators.',
+    localpart: 'contributors',
+    name: 'Contributors',
+    topic: 'Standing rooms for Blackout contributors and operators.',
 } as const;
 
 const DEFAULT_ROOMS: ContributorRoom[] = [
-  { localpart: 'welcome', name: 'Welcome', topic: 'Start here — orientation and introductions for new contributors.', denType: 'public' },
-  { localpart: 'blackout-dev', name: 'Blackout Dev', topic: 'Core client and platform development.', denType: 'public' },
-  { localpart: 'bugs', name: 'Bugs', topic: 'Bug reports from the in-app reporter land here.', denType: 'public' },
-  { localpart: 'governance', name: 'Governance', topic: 'Proposals, voting, and coalition governance.', denType: 'public' },
-  { localpart: 'design', name: 'Design', topic: 'Product design, UX, and branding discussion.', denType: 'public' },
-  { localpart: 'coalition-dev', name: 'Coalition Dev', topic: 'Coalition features and integrations.', denType: 'public' },
+    {
+        localpart: 'welcome',
+        name: 'Welcome',
+        topic: 'Start here — orientation and introductions for new contributors.',
+        denType: 'public',
+    },
+    {
+        localpart: 'blackout-dev',
+        name: 'Blackout Dev',
+        topic: 'Core client and platform development.',
+        denType: 'public',
+    },
+    {
+        localpart: 'bugs',
+        name: 'Bugs',
+        topic: 'Bug reports from the in-app reporter land here.',
+        denType: 'public',
+    },
+    {
+        localpart: 'governance',
+        name: 'Governance',
+        topic: 'Proposals, voting, and coalition governance.',
+        denType: 'public',
+    },
+    {
+        localpart: 'design',
+        name: 'Design',
+        topic: 'Product design, UX, and branding discussion.',
+        denType: 'public',
+    },
+    {
+        localpart: 'coalition-dev',
+        name: 'Coalition Dev',
+        topic: 'Coalition features and integrations.',
+        denType: 'public',
+    },
 ];
 
 const SPACE_PARENT_EVENT = 'm.space.parent';
@@ -85,29 +122,37 @@ const POWER_LEVELS_EVENT = 'm.room.power_levels';
  * (`blackout.local`) silently producing aliases that never resolve.
  */
 const deriveDomain = async (client: ProvisioningClient): Promise<string | null> => {
-  const botId = await client.botUserId();
-  const domain = botId?.split(':')[1];
-  if (domain) return domain;
-  const envDomain = process.env.MATRIX_HOMESERVER_DOMAIN?.replace(/^@+/, '').trim();
-  return envDomain || null;
+    const botId = await client.botUserId();
+    const domain = botId?.split(':')[1];
+    if (domain) return domain;
+    const envDomain = process.env.MATRIX_HOMESERVER_DOMAIN?.replace(/^@+/, '').trim();
+    return envDomain || null;
 };
 
 const resolveRoomSet = (): ContributorRoom[] => {
-  const override = process.env.CONTRIBUTOR_ROOMS?.trim();
-  if (!override) return DEFAULT_ROOMS;
-  const wanted = override.split(',').map((s) => s.trim()).filter(Boolean);
-  const byLocalpart = new Map(DEFAULT_ROOMS.map((room) => [room.localpart, room]));
-  return wanted.map(
-    (localpart) =>
-      byLocalpart.get(localpart) ?? { localpart, name: localpart, topic: '', denType: 'public' as DenType },
-  );
+    const override = process.env.CONTRIBUTOR_ROOMS?.trim();
+    if (!override) return DEFAULT_ROOMS;
+    const wanted = override
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+    const byLocalpart = new Map(DEFAULT_ROOMS.map((room) => [room.localpart, room]));
+    return wanted.map(
+        (localpart) =>
+            byLocalpart.get(localpart) ?? {
+                localpart,
+                name: localpart,
+                topic: '',
+                denType: 'public' as DenType,
+            }
+    );
 };
 
 export interface ProvisioningOptions {
-  /** Injected for tests; defaults to a real timer-backed sleep. */
-  sleep?: (ms: number) => Promise<void>;
-  /** Total attempts (incl. the first) for a rate-limited call. */
-  maxAttempts?: number;
+    /** Injected for tests; defaults to a real timer-backed sleep. */
+    sleep?: (ms: number) => Promise<void>;
+    /** Total attempts (incl. the first) for a rate-limited call. */
+    maxAttempts?: number;
 }
 
 const realSleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
@@ -118,16 +163,20 @@ const realSleep = (ms: number): Promise<void> => new Promise((resolve) => setTim
  * leaving rooms half-provisioned. Non-429 failures return immediately.
  */
 const withRetry = async <T extends { ok: boolean; status?: number }>(
-  op: () => Promise<T>,
-  sleep: (ms: number) => Promise<void>,
-  maxAttempts: number,
+    op: () => Promise<T>,
+    sleep: (ms: number) => Promise<void>,
+    maxAttempts: number
 ): Promise<T> => {
-  let result = await op();
-  for (let attempt = 1; attempt < maxAttempts && !result.ok && result.status === 429; attempt += 1) {
-    await sleep(Math.min(500 * 2 ** (attempt - 1), 8000));
-    result = await op();
-  }
-  return result;
+    let result = await op();
+    for (
+        let attempt = 1;
+        attempt < maxAttempts && !result.ok && result.status === 429;
+        attempt += 1
+    ) {
+        await sleep(Math.min(500 * 2 ** (attempt - 1), 8000));
+        result = await op();
+    }
+    return result;
 };
 
 /**
@@ -137,178 +186,223 @@ const withRetry = async <T extends { ok: boolean; status?: number }>(
  * Matrix call is retried on 429.
  */
 const ensureDenStructure = async (
-  client: ProvisioningClient,
-  roomId: string,
-  canopyId: string | null,
-  denType: DenType,
-  via: string[],
-  sleep: (ms: number) => Promise<void>,
-  maxAttempts: number,
+    client: ProvisioningClient,
+    roomId: string,
+    canopyId: string | null,
+    denType: DenType,
+    via: string[],
+    sleep: (ms: number) => Promise<void>,
+    maxAttempts: number
 ): Promise<boolean> => {
-  let ok = true;
+    let ok = true;
 
-  const classified = await withRetry(
-    () => client.sendStateEvent(roomId, DEN_CLASSIFICATION_STATE_EVENT_TYPE, { denType }, ''),
-    sleep,
-    maxAttempts,
-  );
-  if (!classified.ok) {
-    ok = false;
-    log.warn('provision_rooms.classify_failed', { roomId, status: classified.status });
-  }
-
-  if (canopyId) {
-    const parent = await withRetry(
-      () => client.sendStateEvent(roomId, SPACE_PARENT_EVENT, { canonical: true, via }, canopyId),
-      sleep,
-      maxAttempts,
-    );
-    const child = await withRetry(
-      () => client.sendStateEvent(canopyId, SPACE_CHILD_EVENT, { suggested: false, via }, roomId),
-      sleep,
-      maxAttempts,
-    );
-    if (!parent.ok || !child.ok) {
-      ok = false;
-      log.warn('provision_rooms.link_failed', { roomId, canopyId, parent: parent.status, child: child.status });
-    }
-  }
-
-  // Open invites to all members. We must read the existing power-levels event
-  // and merge — writing a partial event would drop the creator's PL100 and
-  // strand the room. If it can't be read, skip rather than clobber.
-  const power = await withRetry(() => client.getStateEvent(roomId, POWER_LEVELS_EVENT, ''), sleep, maxAttempts);
-  if (power.ok && power.content) {
-    if (power.content.invite !== 0) {
-      const put = await withRetry(
-        () => client.sendStateEvent(roomId, POWER_LEVELS_EVENT, { ...power.content, invite: 0 }, ''),
+    const classified = await withRetry(
+        () => client.sendStateEvent(roomId, DEN_CLASSIFICATION_STATE_EVENT_TYPE, { denType }, ''),
         sleep,
-        maxAttempts,
-      );
-      if (put.ok) {
-        log.info('provision_rooms.invite_opened', { roomId });
-      } else {
+        maxAttempts
+    );
+    if (!classified.ok) {
         ok = false;
-        log.warn('provision_rooms.invite_power_failed', { roomId, status: put.status });
-      }
+        log.warn('provision_rooms.classify_failed', { roomId, status: classified.status });
     }
-  } else {
-    ok = false;
-    log.warn('provision_rooms.power_levels_unavailable', { roomId, status: power.status });
-  }
 
-  return ok;
+    if (canopyId) {
+        const parent = await withRetry(
+            () =>
+                client.sendStateEvent(
+                    roomId,
+                    SPACE_PARENT_EVENT,
+                    { canonical: true, via },
+                    canopyId
+                ),
+            sleep,
+            maxAttempts
+        );
+        const child = await withRetry(
+            () =>
+                client.sendStateEvent(
+                    canopyId,
+                    SPACE_CHILD_EVENT,
+                    { suggested: false, via },
+                    roomId
+                ),
+            sleep,
+            maxAttempts
+        );
+        if (!parent.ok || !child.ok) {
+            ok = false;
+            log.warn('provision_rooms.link_failed', {
+                roomId,
+                canopyId,
+                parent: parent.status,
+                child: child.status,
+            });
+        }
+    }
+
+    // Open invites to all members. We must read the existing power-levels event
+    // and merge — writing a partial event would drop the creator's PL100 and
+    // strand the room. If it can't be read, skip rather than clobber.
+    const power = await withRetry(
+        () => client.getStateEvent(roomId, POWER_LEVELS_EVENT, ''),
+        sleep,
+        maxAttempts
+    );
+    if (power.ok && power.content) {
+        if (power.content.invite !== 0) {
+            const put = await withRetry(
+                () =>
+                    client.sendStateEvent(
+                        roomId,
+                        POWER_LEVELS_EVENT,
+                        { ...power.content, invite: 0 },
+                        ''
+                    ),
+                sleep,
+                maxAttempts
+            );
+            if (put.ok) {
+                log.info('provision_rooms.invite_opened', { roomId });
+            } else {
+                ok = false;
+                log.warn('provision_rooms.invite_power_failed', { roomId, status: put.status });
+            }
+        }
+    } else {
+        ok = false;
+        log.warn('provision_rooms.power_levels_unavailable', { roomId, status: power.status });
+    }
+
+    return ok;
 };
 
 export const provisionContributorRooms = async (
-  client: ProvisioningClient = matrixClient,
-  opts: ProvisioningOptions = {},
+    client: ProvisioningClient = matrixClient,
+    opts: ProvisioningOptions = {}
 ): Promise<number> => {
-  const sleep = opts.sleep ?? realSleep;
-  const maxAttempts = opts.maxAttempts ?? 5;
-  const domain = await deriveDomain(client);
-  if (!domain) {
-    log.warn('provision_rooms.not_configured', { reason: 'no_homeserver_domain' });
-    return 1;
-  }
-  const via = [domain];
-  let failures = 0;
-
-  // 1) Ensure the Contributors canopy (a Matrix space) exists.
-  const canopyAlias = `#${CANOPY.localpart}:${domain}`;
-  const canopyResolved = await client.resolveRoomAlias(canopyAlias);
-  if (!canopyResolved.ok && canopyResolved.reason === 'matrix_not_configured') {
-    log.warn('provision_rooms.not_configured', { alias: canopyAlias });
-    return 1;
-  }
-  let canopyId = canopyResolved.ok ? canopyResolved.roomId ?? null : null;
-  if (canopyId) {
-    log.info('provision_rooms.canopy_exists', { alias: canopyAlias, roomId: canopyId });
-  } else {
-    const created = await withRetry(
-      () =>
-        client.createRoom({
-          aliasLocalpart: CANOPY.localpart,
-          name: CANOPY.name,
-          topic: CANOPY.topic,
-          visibility: 'public',
-          preset: 'public_chat',
-          creationContent: { type: 'm.space' },
-          powerLevelOverride: { events_default: 50 },
-        }),
-      sleep,
-      maxAttempts,
-    );
-    if (created.ok && created.roomId) {
-      canopyId = created.roomId;
-      log.info('provision_rooms.canopy_created', { alias: canopyAlias, roomId: canopyId });
-    } else {
-      // Non-fatal: dens are still classified + opened, just not parented.
-      failures += 1;
-      log.warn('provision_rooms.canopy_failed', {
-        alias: canopyAlias,
-        reason: created.reason,
-        status: created.status,
-      });
+    const sleep = opts.sleep ?? realSleep;
+    const maxAttempts = opts.maxAttempts ?? 5;
+    const domain = await deriveDomain(client);
+    if (!domain) {
+        log.warn('provision_rooms.not_configured', { reason: 'no_homeserver_domain' });
+        return 1;
     }
-  }
+    const via = [domain];
+    let failures = 0;
 
-  // 2) Ensure each standing room exists, then (re)stamp its den structure.
-  for (const room of resolveRoomSet()) {
-    const alias = `#${room.localpart}:${domain}`;
-    const resolved = await client.resolveRoomAlias(alias);
-    let roomId = resolved.ok ? resolved.roomId ?? null : null;
-    if (roomId) {
-      log.info('provision_rooms.exists', { alias, roomId });
+    // 1) Ensure the Contributors canopy (a Matrix space) exists.
+    const canopyAlias = `#${CANOPY.localpart}:${domain}`;
+    const canopyResolved = await client.resolveRoomAlias(canopyAlias);
+    if (!canopyResolved.ok && canopyResolved.reason === 'matrix_not_configured') {
+        log.warn('provision_rooms.not_configured', { alias: canopyAlias });
+        return 1;
+    }
+    let canopyId = canopyResolved.ok ? canopyResolved.roomId ?? null : null;
+    if (canopyId) {
+        log.info('provision_rooms.canopy_exists', { alias: canopyAlias, roomId: canopyId });
     } else {
-      const created = await withRetry(
-        () =>
-          client.createRoom({
-            aliasLocalpart: room.localpart,
-            name: room.name,
-            topic: room.topic,
-            visibility: 'public',
-            preset: 'public_chat',
-          }),
-        sleep,
-        maxAttempts,
-      );
-      if (created.ok && created.roomId) {
-        roomId = created.roomId;
-        log.info('provision_rooms.created', { alias, roomId });
-      } else {
-        failures += 1;
-        log.warn('provision_rooms.create_failed', { alias, reason: created.reason, status: created.status });
-        continue;
-      }
+        const created = await withRetry(
+            () =>
+                client.createRoom({
+                    aliasLocalpart: CANOPY.localpart,
+                    name: CANOPY.name,
+                    topic: CANOPY.topic,
+                    visibility: 'public',
+                    preset: 'public_chat',
+                    creationContent: { type: 'm.space' },
+                    powerLevelOverride: { events_default: 50 },
+                    // Public canopy space: hierarchy state only, no messages.
+                    encrypted: false,
+                }),
+            sleep,
+            maxAttempts
+        );
+        if (created.ok && created.roomId) {
+            canopyId = created.roomId;
+            log.info('provision_rooms.canopy_created', { alias: canopyAlias, roomId: canopyId });
+        } else {
+            // Non-fatal: dens are still classified + opened, just not parented.
+            failures += 1;
+            log.warn('provision_rooms.canopy_failed', {
+                alias: canopyAlias,
+                reason: created.reason,
+                status: created.status,
+            });
+        }
     }
 
-    const structured = await ensureDenStructure(client, roomId, canopyId, room.denType, via, sleep, maxAttempts);
-    if (!structured) failures += 1;
-  }
+    // 2) Ensure each standing room exists, then (re)stamp its den structure.
+    for (const room of resolveRoomSet()) {
+        const alias = `#${room.localpart}:${domain}`;
+        const resolved = await client.resolveRoomAlias(alias);
+        let roomId = resolved.ok ? resolved.roomId ?? null : null;
+        if (roomId) {
+            log.info('provision_rooms.exists', { alias, roomId });
+        } else {
+            const created = await withRetry(
+                () =>
+                    client.createRoom({
+                        aliasLocalpart: room.localpart,
+                        name: room.name,
+                        topic: room.topic,
+                        visibility: 'public',
+                        preset: 'public_chat',
+                        // Standing public rooms (#welcome, #bugs, #governance, …). Publicly
+                        // joinable by design, and the bot posts into them — encrypting them
+                        // would hide history from every later joiner and break the bot.
+                        encrypted: false,
+                    }),
+                sleep,
+                maxAttempts
+            );
+            if (created.ok && created.roomId) {
+                roomId = created.roomId;
+                log.info('provision_rooms.created', { alias, roomId });
+            } else {
+                failures += 1;
+                log.warn('provision_rooms.create_failed', {
+                    alias,
+                    reason: created.reason,
+                    status: created.status,
+                });
+                continue;
+            }
+        }
 
-  return failures;
+        const structured = await ensureDenStructure(
+            client,
+            roomId,
+            canopyId,
+            room.denType,
+            via,
+            sleep,
+            maxAttempts
+        );
+        if (!structured) failures += 1;
+    }
+
+    return failures;
 };
 
 const isMain = (() => {
-  try {
-    return (
-      import.meta.url === `file://${process.argv[1]}` ||
-      Boolean(process.argv[1]?.endsWith('provisionContributorRooms.ts'))
-    );
-  } catch {
-    return false;
-  }
+    try {
+        return (
+            import.meta.url === `file://${process.argv[1]}` ||
+            Boolean(process.argv[1]?.endsWith('provisionContributorRooms.ts'))
+        );
+    } catch {
+        return false;
+    }
 })();
 
 // Run directly (tsx). Exit non-zero if any room failed so CI/deploy surfaces it.
 if (isMain) {
-  provisionContributorRooms()
-    .then((failures) => {
-      if (failures > 0) process.exitCode = 1;
-    })
-    .catch((err) => {
-      log.warn('provision_rooms.fatal', { error: String(err) });
-      process.exitCode = 1;
-    });
+    provisionContributorRooms()
+        .then((failures) => {
+            if (failures > 0) process.exitCode = 1;
+        })
+        .catch((err) => {
+            log.warn('provision_rooms.fatal', { error: String(err) });
+            process.exitCode = 1;
+        });
 }

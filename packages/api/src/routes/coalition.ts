@@ -1093,11 +1093,16 @@ coalition.post('/events/:id/den', async (c) => {
     if (event.denId) {
         return c.json({ denId: event.denId, created: false });
     }
+    // The preset tracks the event's own visibility. It was previously hardcoded
+    // to `public_chat`, so a den attached to a private event was world-joinable
+    // — the room was more open than the event that created it.
+    const isPublicEvent = event.visibility === 'public';
     const result = await matrixClient.createRoom({
         name: event.title,
         topic: `Coalition event den: ${event.title}`,
-        preset: 'public_chat',
-        visibility: event.visibility === 'public' ? 'public' : 'private',
+        preset: isPublicEvent ? 'public_chat' : 'private_chat',
+        visibility: isPublicEvent ? 'public' : 'private',
+        encrypted: !isPublicEvent,
     });
     if (!result.ok) {
         return c.json(

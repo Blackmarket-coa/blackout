@@ -78,6 +78,25 @@ signing_key_path: /data/theblackout.app.signing.key
 trusted_key_servers:
   - server_name: "matrix.org"
 
+# Room defaults: turn E2EE on for every locally-created private room.
+#
+# "invite" covers the private_chat and trusted_private_chat presets — i.e. DMs
+# and invite-only rooms. Public rooms are deliberately excluded: encrypting them
+# breaks server-side search and hides history from anyone who joins later, while
+# adding no confidentiality for content that anyone can join and read.
+#
+# This is a BACKSTOP, not the primary control. Synapse only applies it to rooms
+# created through this homeserver, and only at creation time. The clients and the
+# API set m.room.encryption explicitly in initial_state; `pnpm
+# guard:room-encryption` is what actually keeps those call sites honest. Leaving
+# this unset means the upstream default (`off`) applies and nothing compensates
+# if a caller forgets — which is exactly the gap the 2026-08-10 encryption audit
+# found. See docs/audits/2026-08-10-encryption-audit.md.
+#
+# Changing this to "off" is a policy change, not a config tweak: it must go
+# through docs/legal/CHANGELOG.md.
+encryption_enabled_by_default_for_room_type: invite
+
 # Delegated auth (OIDC): configure one issuer (Keycloak or Authentik) via env.
 # Example issuers:
 # - Keycloak: https://keycloak.theblackout.app/realms/blackout

@@ -2,6 +2,21 @@
 // rooms, and buyer-facing per-order rooms. All Matrix operations are best-effort:
 // a Synapse failure logs + counts but never throws, so the webhook still acks
 // (graceful degradation, AOG §8.2).
+//
+// ENCRYPTION: every room here is deliberately created UNENCRYPTED, and that is
+// disclosed publicly in TRUST.md rather than hidden. These rooms exist so the
+// bridge bot can post order status, inventory, ledger and customer-message
+// updates into them, and the bot is a plain HTTP client with no Olm/Megolm — it
+// cannot send into an encrypted room. Setting `encrypted: true` here would not
+// make them private; it would make the bridge silently stop working and show
+// members "unable to decrypt" forever.
+//
+// Removing this exception means giving the bot real crypto (a Megolm-capable
+// SDK), which is tracked as a roadmap item in TRUST.md. Until then, do not flip
+// these to `true` without also changing how the bot sends.
+//
+// Note this is not a downgrade: these rooms were already plaintext before the
+// 2026-08-10 audit. See docs/audits/2026-08-10-encryption-audit.md.
 
 import { randomUUID } from 'node:crypto';
 import { db } from '../../db/store';
@@ -63,6 +78,8 @@ export async function ensureVendorSpace(
         visibility: 'private',
         preset: 'private_chat',
         creationContent: { type: 'm.space' },
+        // A space holds hierarchy state only — no messages to protect.
+        encrypted: false,
     });
     if (!space.ok || !('roomId' in space) || !space.roomId) {
         failed('vendor_rooms', 'create_space', 'reason' in space ? space.reason : space.status);
@@ -80,9 +97,15 @@ export async function ensureVendorSpace(
             name: `${vendorId} — ${child}`,
             visibility: 'private',
             preset: 'private_chat',
+            // Bot-posted order/inventory/ledger feed — see the header note.
+            encrypted: false,
         });
         if (!room.ok || !('roomId' in room) || !room.roomId) {
-            failed('vendor_rooms', `create_${child}_room`, 'reason' in room ? room.reason : room.status);
+            failed(
+                'vendor_rooms',
+                `create_${child}_room`,
+                'reason' in room ? room.reason : room.status
+            );
             return null;
         }
         childRoomIds[child] = room.roomId;
@@ -134,9 +157,15 @@ export async function ensureBuyerOrderRoom(
         topic: `FBM order ${orderId}`,
         visibility: 'private',
         preset: 'private_chat',
+        // Bot posts buyer-facing order status here — see the header note.
+        encrypted: false,
     });
     if (!room.ok || !('roomId' in room) || !room.roomId) {
-        failed('vendor_rooms', 'create_buyer_order_room', 'reason' in room ? room.reason : room.status);
+        failed(
+            'vendor_rooms',
+            'create_buyer_order_room',
+            'reason' in room ? room.reason : room.status
+        );
         return null;
     }
     const record: FbmBuyerOrderRoomRecord = {
@@ -166,7 +195,8 @@ async function postToOrdersRoom(
     const rooms = await ensureVendorSpace(vendorId, matrix, { vendorMxid });
     if (!rooms) return;
     const sent = await matrix.sendEvent(rooms.ordersRoomId, content);
-    if (!sent.ok) failed('vendor_rooms', 'post_order', 'reason' in sent ? sent.reason : sent.status);
+    if (!sent.ok)
+        failed('vendor_rooms', 'post_order', 'reason' in sent ? sent.reason : sent.status);
 }
 
 export async function postOrderCreated(
@@ -202,9 +232,16 @@ export async function postOrderUpdated(
         matrix
     );
     if (buyerRoom) {
-        const sent = await matrix.sendEvent(buyerRoom.roomId, formatBuyerOrderStatus(event).content);
+        const sent = await matrix.sendEvent(
+            buyerRoom.roomId,
+            formatBuyerOrderStatus(event).content
+        );
         if (!sent.ok) {
-            failed('vendor_rooms', 'post_buyer_status', 'reason' in sent ? sent.reason : sent.status);
+            failed(
+                'vendor_rooms',
+                'post_buyer_status',
+                'reason' in sent ? sent.reason : sent.status
+            );
         }
     }
 }
@@ -229,7 +266,8 @@ export async function postInventoryLow(
     const rooms = await ensureVendorSpace(event.vendorId, matrix, { vendorMxid: event.vendorMxid });
     if (!rooms) return;
     const sent = await matrix.sendEvent(rooms.inventoryRoomId, formatInventoryLow(event).content);
-    if (!sent.ok) failed('vendor_rooms', 'post_inventory', 'reason' in sent ? sent.reason : sent.status);
+    if (!sent.ok)
+        failed('vendor_rooms', 'post_inventory', 'reason' in sent ? sent.reason : sent.status);
 }
 
 export async function postLedger(
@@ -239,7 +277,8 @@ export async function postLedger(
     const rooms = await ensureVendorSpace(event.vendorId, matrix, { vendorMxid: event.vendorMxid });
     if (!rooms) return;
     const sent = await matrix.sendEvent(rooms.ledgerRoomId, formatLedger(event).content);
-    if (!sent.ok) failed('vendor_rooms', 'post_ledger', 'reason' in sent ? sent.reason : sent.status);
+    if (!sent.ok)
+        failed('vendor_rooms', 'post_ledger', 'reason' in sent ? sent.reason : sent.status);
 }
 
 // --- Phase 2: lazily-provisioned extra rooms -------------------------------
@@ -295,12 +334,15 @@ export async function postCycle(
             // Public so customers can self-join for real-time cycle notifications.
             visibility: 'public',
             preset: 'public_chat',
+            // Public announcement feed, posted by the bot — see the header note.
+            encrypted: false,
         }),
         event.vendorMxid
     );
     if (!provisioned) return;
     const sent = await matrix.sendEvent(provisioned.roomId, formatCycle(event).content);
-    if (!sent.ok) failed('vendor_rooms', 'post_cycle', 'reason' in sent ? sent.reason : sent.status);
+    if (!sent.ok)
+        failed('vendor_rooms', 'post_cycle', 'reason' in sent ? sent.reason : sent.status);
 }
 
 /** §6 — broadcast an already-formatted flash-sale notice to the public announce room. */
@@ -319,6 +361,8 @@ export async function postFlashSaleAnnouncement(
             topic: `FBM announcements for ${vendorId}`,
             visibility: 'public',
             preset: 'public_chat',
+            // Public announcement feed, posted by the bot — see the header note.
+            encrypted: false,
         }),
         vendorMxid
     );
@@ -345,6 +389,8 @@ export async function postCustomerMessage(
             topic: `FBM storefront inquiries for ${event.vendorId}`,
             visibility: 'private',
             preset: 'private_chat',
+            // Bot relays storefront inquiries here — see the header note.
+            encrypted: false,
         }),
         event.vendorMxid
     );
@@ -355,7 +401,11 @@ export async function postCustomerMessage(
         formatCustomerMessage(event, alias).content
     );
     if (!sent.ok) {
-        failed('vendor_rooms', 'post_customer_message', 'reason' in sent ? sent.reason : sent.status);
+        failed(
+            'vendor_rooms',
+            'post_customer_message',
+            'reason' in sent ? sent.reason : sent.status
+        );
     }
 }
 
@@ -386,11 +436,24 @@ export async function applyVendorTrust(
             event.vendorId
         );
         if (!written.ok) {
-            failed('vendor_rooms', 'apply_vendor_trust', 'reason' in written ? written.reason : written.status);
+            failed(
+                'vendor_rooms',
+                'apply_vendor_trust',
+                'reason' in written ? written.reason : written.status
+            );
         }
-        const meta = await matrix.sendStateEvent(roomId, FBM_VENDOR_METADATA_EVENT_TYPE, metadata, '');
+        const meta = await matrix.sendStateEvent(
+            roomId,
+            FBM_VENDOR_METADATA_EVENT_TYPE,
+            metadata,
+            ''
+        );
         if (!meta.ok) {
-            failed('vendor_rooms', 'apply_vendor_metadata', 'reason' in meta ? meta.reason : meta.status);
+            failed(
+                'vendor_rooms',
+                'apply_vendor_metadata',
+                'reason' in meta ? meta.reason : meta.status
+            );
         }
     }
     incrementCounter('fbm_matrix_vendor_trust_applied_total', { tier: event.tier });

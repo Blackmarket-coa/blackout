@@ -24,11 +24,8 @@ delete process.env.MATRIX_BOT_TOKEN;
 const { default: app } = await import('../src/index');
 const { signJwt } = await import('../src/services/auth');
 const { db } = await import('../src/db/store');
-const {
-    resetMarketplaceEntitlementsForTest,
-    listEntitlementsForUser,
-    recordWebhookReceipt,
-} = await import('../src/services/marketplaceEntitlements');
+const { resetMarketplaceEntitlementsForTest, listEntitlementsForUser, recordWebhookReceipt } =
+    await import('../src/services/marketplaceEntitlements');
 const { resetMarketplaceRegistry, getMarketplaceProvider } = await import(
     '../src/integrations/marketplace'
 );
@@ -179,13 +176,45 @@ test('messageFormat: ledger escrow body', () => {
 test('parseFbmMatrixEvent: accepts every bridge family', () => {
     const families = [
         { eventId: 'e', type: 'order.created', vendorId: 'v', userId: 'u', orderId: 'o' },
-        { eventId: 'e', type: 'order.updated', vendorId: 'v', userId: 'u', orderId: 'o', status: 'dispatched' },
+        {
+            eventId: 'e',
+            type: 'order.updated',
+            vendorId: 'v',
+            userId: 'u',
+            orderId: 'o',
+            status: 'dispatched',
+        },
         { eventId: 'e', type: 'order.cancelled', vendorId: 'v', userId: 'u', orderId: 'o' },
         { eventId: 'e', type: 'inventory.low', vendorId: 'v', sku: 's', title: 't', remaining: 1 },
-        { eventId: 'e', type: 'ledger.refund', vendorId: 'v', amountMinorUnits: 100, ledgerTxId: 'tx' },
-        { eventId: 'e', type: 'subscription.activated', userId: 'u', tier: 'signal', subscriptionId: 'sub' },
-        { eventId: 'e', type: 'subscription.lapsed', userId: 'u', tier: 'community', subscriptionId: 'sub' },
-        { eventId: 'e', type: 'dispute.opened', disputeId: 'd', vendorId: 'v', userId: 'u', orderId: 'o' },
+        {
+            eventId: 'e',
+            type: 'ledger.refund',
+            vendorId: 'v',
+            amountMinorUnits: 100,
+            ledgerTxId: 'tx',
+        },
+        {
+            eventId: 'e',
+            type: 'subscription.activated',
+            userId: 'u',
+            tier: 'signal',
+            subscriptionId: 'sub',
+        },
+        {
+            eventId: 'e',
+            type: 'subscription.lapsed',
+            userId: 'u',
+            tier: 'community',
+            subscriptionId: 'sub',
+        },
+        {
+            eventId: 'e',
+            type: 'dispute.opened',
+            disputeId: 'd',
+            vendorId: 'v',
+            userId: 'u',
+            orderId: 'o',
+        },
         { eventId: 'e', type: 'dispute.resolved', disputeId: 'd' },
     ];
     for (const raw of families) {
@@ -196,7 +225,17 @@ test('parseFbmMatrixEvent: accepts every bridge family', () => {
 test('parseFbmMatrixEvent: returns null for purchase.* and garbage (fall-through)', () => {
     assert.equal(parseFbmMatrixEvent({ eventId: 'e', type: 'purchase.succeeded' }), null);
     assert.equal(parseFbmMatrixEvent({ type: 'order.created' }), null); // missing eventId/fields
-    assert.equal(parseFbmMatrixEvent({ eventId: 'e', type: 'order.updated', vendorId: 'v', userId: 'u', orderId: 'o', status: 'bogus' }), null);
+    assert.equal(
+        parseFbmMatrixEvent({
+            eventId: 'e',
+            type: 'order.updated',
+            vendorId: 'v',
+            userId: 'u',
+            orderId: 'o',
+            status: 'bogus',
+        }),
+        null
+    );
     assert.equal(parseFbmMatrixEvent(null), null);
     assert.equal(parseFbmMatrixEvent('nope'), null);
 });
@@ -256,11 +295,15 @@ test('order.created: replay is idempotent (no duplicate provisioning/post)', asy
         currency: 'USD',
     };
     const event = makeEvent(raw);
-    const first = await dispatchFbmMatrixEvent(provider(), event, { matrixClient: matrix as never });
+    const first = await dispatchFbmMatrixEvent(provider(), event, {
+        matrixClient: matrix as never,
+    });
     assert.equal(first.applied.alreadyProcessed, false);
     const postsAfterFirst = calls.sendEvent.length;
 
-    const second = await dispatchFbmMatrixEvent(provider(), event, { matrixClient: matrix as never });
+    const second = await dispatchFbmMatrixEvent(provider(), event, {
+        matrixClient: matrix as never,
+    });
     assert.equal(second.applied.alreadyProcessed, true, 'replay acks as already processed');
     assert.equal(calls.sendEvent.length, postsAfterFirst, 'no second post on replay');
 });
@@ -324,8 +367,15 @@ test('dispute.opened then resolved: creates encrypted room, invites three partie
     assert.ok(record, 'dispute room persisted');
     assert.equal(record!.status, 'open');
     assert.ok(record!.mediatorUserId, 'a mediator was auto-assigned');
-    // encryption forced on
-    assert.ok(calls.sendStateEvent.some((s) => s.type === 'm.room.encryption'));
+    // Encryption is requested at creation, not bolted on afterwards: a
+    // follow-up state event would leave a window where the room exists in
+    // plaintext, and a rejected one would leave it plaintext for good.
+    assert.equal(calls.createRoom.length, 1);
+    assert.equal(calls.createRoom[0].encrypted, true, 'dispute room created encrypted');
+    assert.ok(
+        !calls.sendStateEvent.some((s) => s.type === 'm.room.encryption'),
+        'encryption must not be a post-creation state event'
+    );
     // buyer, vendor, mediator invited
     assert.equal(calls.invite.length, 3);
 
@@ -357,12 +407,23 @@ test('digital dead-drop: provisions encrypted room + persists delivery; sweeper 
         occurredAt: new Date().toISOString(),
         metadata: { digitalDelivery: true },
     };
-    const applied = { entitlement: { id: 'ent-1' } as never, licenseKey: null, alreadyProcessed: false };
+    const applied = {
+        entitlement: { id: 'ent-1' } as never,
+        licenseKey: null,
+        alreadyProcessed: false,
+    };
     await maybeDeliverDigitalDeadDrop(event, applied, { matrixClient: matrix as never });
 
     const delivery = db.getFbmDeaddropDeliveryBySourceEvent('dd-evt-1');
     assert.ok(delivery, 'delivery persisted');
-    assert.ok(calls.sendStateEvent.some((s) => s.type === 'm.room.encryption'), 'room encrypted');
+    // Encrypted at creation rather than via a follow-up state event — see the
+    // dispute-room test above for why that distinction matters.
+    assert.equal(calls.createRoom.length, 1);
+    assert.equal(calls.createRoom[0].encrypted, true, 'delivery room created encrypted');
+    assert.ok(
+        !calls.sendStateEvent.some((s) => s.type === 'm.room.encryption'),
+        'encryption must not be a post-creation state event'
+    );
     assert.equal(delivery!.tombstonedAt, null);
 
     // Force the TTL into the past and sweep.
