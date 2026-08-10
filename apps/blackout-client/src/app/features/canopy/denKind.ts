@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useAtomValue } from 'jotai';
 import type { MatrixClient, Room } from 'matrix-js-sdk';
 import { joinedRoomsAtom } from '../../state/rooms';
+import { createRoomEncryptionState } from '../../utils/matrix-crypto';
 
 /**
  * Channel-kind marker for a den. Kept deliberately separate from the den
@@ -120,6 +121,13 @@ export const createDenInCanopy = async (
         // Announcement dens are read-only for non-moderators: posting any
         // message event requires power 50, enforced by the homeserver.
         power_level_content_override: kind === 'announcement' ? { events_default: 50 } : undefined,
+        // Dens are invite-only rooms inside a canopy (no directory visibility),
+        // so they are private conversations and get Megolm. This is the main
+        // channel-creation path in the app and it previously created every den
+        // in plaintext, which is the single largest gap the 2026-08-10
+        // encryption audit found. The trade-off is deliberate: members who join
+        // later cannot read earlier messages, which is inherent to E2EE.
+        initial_state: [createRoomEncryptionState()],
     });
 
     // Custom + space state-event types aren't in matrix-js-sdk's typed

@@ -107,6 +107,38 @@ describe('createDenInCanopy', () => {
     const eventTypes = (sendStateEvent: ReturnType<typeof vi.fn>) =>
         sendStateEvent.mock.calls.map((call) => call[1]);
 
+    it('creates the den encrypted', async () => {
+        // Regression: this path created every den in plaintext, which was the
+        // largest gap in the 2026-08-10 encryption audit. Encryption must be in
+        // `initial_state` — a follow-up state event would leave a window where
+        // the den exists unencrypted.
+        const { mx, createRoom } = makeMx();
+        await createDenInCanopy(mx, { canopyId: '!canopy:server', name: 'Help' });
+
+        const [opts] = createRoom.mock.calls[0];
+        expect(opts.initial_state).toContainEqual(
+            expect.objectContaining({
+                type: 'm.room.encryption',
+                content: { algorithm: 'm.megolm.v1.aes-sha2' },
+            })
+        );
+    });
+
+    it('encrypts announcement dens too', async () => {
+        const { mx, createRoom } = makeMx();
+        await createDenInCanopy(mx, {
+            canopyId: '!canopy:server',
+            name: 'News',
+            kind: 'announcement',
+        });
+
+        const [opts] = createRoom.mock.calls[0];
+        expect(opts.power_level_content_override).toEqual({ events_default: 50 });
+        expect(opts.initial_state).toContainEqual(
+            expect.objectContaining({ type: 'm.room.encryption' })
+        );
+    });
+
     it('stamps a forum kind and a default enabled co.bmc.forum settings event', async () => {
         const { mx, sendStateEvent } = makeMx();
         await createDenInCanopy(mx, { canopyId: '!canopy:server', name: 'Help', kind: 'forum' });

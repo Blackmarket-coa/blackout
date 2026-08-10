@@ -36,11 +36,7 @@ const is403 = (err: unknown): boolean => (err as { status?: number } | null)?.st
 const errText = (err: unknown): string | undefined =>
     err instanceof Error ? err.message : undefined;
 
-const stepFor = (
-    area: ApplyStepResult['area'],
-    label: string,
-    err: unknown
-): ApplyStepResult => ({
+const stepFor = (area: ApplyStepResult['area'], label: string, err: unknown): ApplyStepResult => ({
     area,
     label,
     status: is403(err) ? 'skipped' : 'error',
@@ -88,14 +84,19 @@ export async function applyCreatorKit(
         const version = await resolveRoomVersion(ctx.mx);
         for (const den of spec.dens) {
             try {
+                const denKind = KIND_MAP[den.kind ?? 'private'];
                 // eslint-disable-next-line no-await-in-loop
                 await createRoom(ctx.mx, {
                     version,
-                    kind: KIND_MAP[den.kind ?? 'private'],
+                    kind: denKind,
                     name: den.name,
                     topic: den.topic,
                     knock: false,
                     allowFederation: true,
+                    // Omitting this left `encryption` undefined, so every
+                    // kit-provisioned den — including the private ones — was
+                    // created in plaintext.
+                    encryption: denKind !== CreateRoomKind.Public,
                 });
                 results.push({ area: 'den', label: den.name, status: 'ok' });
             } catch (err) {
@@ -132,5 +133,4 @@ export async function applyCreatorKit(
 }
 
 /** localStorage key marking that a kit was applied (warns on re-apply). */
-export const kitAppliedStorageKey = (kitId: string): string =>
-    `bmc-creator-kit-applied:${kitId}`;
+export const kitAppliedStorageKey = (kitId: string): string => `bmc-creator-kit-applied:${kitId}`;

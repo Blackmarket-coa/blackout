@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { useMatrixClientOrNull } from '../../hooks/useMatrixClient';
 import { joinDenWithCanopy } from '../room/joinDenWithCanopy';
 import { createDenInCanopy, DEN_KIND_STATE_EVENT_TYPE, findOrCreateCategory } from './denKind';
+import { createRoomEncryptionState } from '../../utils/matrix-crypto';
 
 export interface UseDiscussionDenOptions {
     /** The den already linked to this thing, if one has been created. */
@@ -93,7 +94,15 @@ export const useDiscussionDen = ({
                     kind: 'forum',
                 });
             } else {
-                created = (await mx.createRoom({ name })).room_id;
+                // Encrypted like every other den. This fallback path creates a
+                // loose discussion den when there is no canopy to place it in;
+                // it is no less private for being unparented.
+                created = (
+                    await mx.createRoom({
+                        name,
+                        initial_state: [createRoomEncryptionState()],
+                    })
+                ).room_id;
                 // Custom state-event types aren't in matrix-js-sdk's typed
                 // `StateEvents` map; cast as `createDenInCanopy` does.
                 await mx.sendStateEvent(
