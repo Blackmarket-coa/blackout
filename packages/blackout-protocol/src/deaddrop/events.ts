@@ -72,17 +72,21 @@ export type DeadDropAuditEntry = EventEnvelope<
 /**
  * Mutual-aid thread contracts (BKL-013).
  *
- * Mirrors `_port`'s `/blackout/mutual-aid` route: requesters open a
- * thread describing a need, helpers reply, and a thread can be marked
- * resolved when the need is met.
+ * A requester opens a thread describing a need; the thread carries a status
+ * that can be moved to resolved once the need is met.
+ *
+ * Note what the payload deliberately does NOT model: there is no helper,
+ * responder or `claimedBy` field, and `MutualAidThreadStatus` records only
+ * that a thread progressed — not who moved it. An earlier version of this
+ * comment described "helpers reply", which read as a shipped role and is not
+ * one. Adding that role is a schema change, not a copy change.
  */
 export const MUTUAL_AID_EVENT_NAMES = {
     threadOpened: 'co.bmc.deaddrop.mutual-aid.thread.opened',
     threadUpdated: 'co.bmc.deaddrop.mutual-aid.thread.updated',
 } as const;
 
-export type MutualAidEventName =
-    (typeof MUTUAL_AID_EVENT_NAMES)[keyof typeof MUTUAL_AID_EVENT_NAMES];
+export type MutualAidEventName = typeof MUTUAL_AID_EVENT_NAMES[keyof typeof MUTUAL_AID_EVENT_NAMES];
 
 export type MutualAidThreadStatus = 'open' | 'in_progress' | 'resolved' | 'cancelled';
 
@@ -115,7 +119,13 @@ export type MutualAidThreadUpdatedEvent = EventEnvelope<
 
 const isMutualAidEnvelope = (
     value: unknown
-): value is { roomId: string; senderId: string; occurredAt: string; event: string; payload: unknown } => {
+): value is {
+    roomId: string;
+    senderId: string;
+    occurredAt: string;
+    event: string;
+    payload: unknown;
+} => {
     if (!value || typeof value !== 'object') return false;
     const candidate = value as Partial<{
         roomId: string;
@@ -142,23 +152,17 @@ const isMutualAidPayload = (payload: unknown): payload is MutualAidThreadPayload
         typeof candidate.headline === 'string' &&
         typeof candidate.openedAt === 'string' &&
         typeof candidate.updatedAt === 'string' &&
-        MUTUAL_AID_STATUSES.includes(
-            candidate.status as (typeof MUTUAL_AID_STATUSES)[number]
-        )
+        MUTUAL_AID_STATUSES.includes(candidate.status as typeof MUTUAL_AID_STATUSES[number])
     );
 };
 
-export const isMutualAidThreadOpened = (
-    value: unknown
-): value is MutualAidThreadOpenedEvent => {
+export const isMutualAidThreadOpened = (value: unknown): value is MutualAidThreadOpenedEvent => {
     if (!isMutualAidEnvelope(value)) return false;
     if (value.event !== 'blackout.deaddrop.mutual-aid.thread.opened') return false;
     return isMutualAidPayload((value as MutualAidThreadOpenedEvent).payload);
 };
 
-export const isMutualAidThreadUpdated = (
-    value: unknown
-): value is MutualAidThreadUpdatedEvent => {
+export const isMutualAidThreadUpdated = (value: unknown): value is MutualAidThreadUpdatedEvent => {
     if (!isMutualAidEnvelope(value)) return false;
     if (value.event !== 'blackout.deaddrop.mutual-aid.thread.updated') return false;
     return isMutualAidPayload((value as MutualAidThreadUpdatedEvent).payload);
