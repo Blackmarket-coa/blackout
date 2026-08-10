@@ -102,13 +102,36 @@ can check today.
     `GET /v1/transparency/me` and `GET /v1/transparency/canary`, the latter
     Ed25519-signed.
 
-### Known gap recorded at this date
+### Data portability
 
--   **Personal data export is currently gated.**
-    `GET /v1/transparency/audit-export` returns HTTP 402 below the Coalition tier,
-    and no free export path exists. This is inconsistent with a data-portability
-    commitment, so no such commitment is claimed as of this entry. When a
-    free self-service export ships, it lands here as a new entry.
+-   **Every user can export everything the server holds about them, free, on any
+    tier.** `GET /v1/data-export` returns portable JSON in a single request. It
+    has no entitlement check, and adding one would be a policy change requiring
+    an entry here.
+
+    This closes a gap that existed earlier the same day: the only export was
+    `GET /v1/transparency/audit-export`, which returns HTTP 402 below the
+    Coalition tier, so most users had no way to retrieve their own data. That
+    endpoint remains a tiered org-scoped capability; the personal export is
+    separate and free. See
+    [`docs/features/data-export.md`](../features/data-export.md).
+
+-   **The export does not contain your encrypted messages, and it says so.** The
+    server holds ciphertext and no keys, so it cannot include them — a
+    server-generated export that did would contradict the encryption commitment
+    above. The payload states this and points at the client-side export, which
+    has the keys.
+
+-   **Credentials and other people's data are withheld.** Password hashes,
+    integration OAuth tokens, and vault keys are excluded — they are credentials,
+    not user data. Inbound social edges (your followers, who redeemed your
+    invites) are exported as counts rather than lists, because naming them would
+    export other people's associations under the banner of your portability.
+
+-   **Known gap, disclosed in the export itself:** follows and profiles are held
+    in server process memory and reset on restart, so an empty result there may
+    mean the server has no current record rather than that you have no
+    connections. Each section carries a `durability` marker saying which it is.
 
 ---
 

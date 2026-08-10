@@ -792,6 +792,41 @@
             ],
             "lastVerifiedAt": "2026-06-13",
             "verifiedBy": "blackout-coa"
+        },
+        {
+            "id": "self_service_data_export",
+            "name": "Self-service data export",
+            "category": "novel",
+            "status": "implemented",
+            "presetKey": "features.transparency.enabled",
+            "uiEntry": "settings_toggle:feature-toggle-data-export",
+            "owner": "trust-eng",
+            "testCoverage": "unit+integration",
+            "notes": "GET /v1/data-export returns everything the server holds for the calling user as portable JSON, free at every tier and with no entitlement check. Exists because the pre-existing /v1/transparency/audit-export returns 402 below the Coalition tier, so most users had no export path at all and no data-portability claim was supportable. Split by system of record: `account` (reuses exportUserData), `socialGraph`, and `ledger` (read-through to the external FBM service, kept in its own module). Encrypted message content is deliberately absent \u2014 the server holds ciphertext and no keys \u2014 and manifest.matrixHistory says so in the payload with client-side instructions. Credentials and other users' PII are excluded; inbound social edges are counted, not listed. Rate-limited per authenticated user (exportRateLimit, default 5/min, not fail-closed). Synchronous by design: the store is mirrored in process memory, so a job table and background runner would add migration risk without solving a real cost. Known gap, disclosed in the payload: follows and profiles are process-memory only and carry a `durability` marker.",
+            "sourcePointers": [
+                "docs/features/data-export.md",
+                "packages/api/src/routes/dataExport.ts",
+                "packages/api/src/services/dataExport/index.ts",
+                "packages/api/src/services/dataExport/socialGraphExport.ts",
+                "packages/api/src/services/dataExport/ledgerExport.ts"
+            ],
+            "presetPolicy": {
+                "baseline_matrix": true,
+                "community_plus": true,
+                "blackout_full": true
+            },
+            "uiTestRefs": [
+                "packages/api/test/data-export.integration.test.ts::feature-toggle-data-export"
+            ],
+            "fallbackBehavior": "Never gated by tier \u2014 the endpoint has no entitlement check by design. When the external FBM ledger service is unconfigured or unreachable the `ledger.external` section reports {available:false} with a reason instead of a zero balance, and the rest of the export still succeeds. An unauthenticated caller gets 401; a token outliving its account gets 404.",
+            "evidenceType": "code",
+            "evidencePaths": [
+                "packages/api/test/data-export.integration.test.ts",
+                "packages/api/test/data-export-rate-limit.integration.test.ts",
+                "docs/features/data-export.md"
+            ],
+            "lastVerifiedAt": "2026-08-10",
+            "verifiedBy": "blackout-coa"
         }
     ]
 }

@@ -223,3 +223,18 @@ export const integrationsRateLimit = createRateLimit({
     maxRequests: Number.isFinite(integrationsMax) && integrationsMax > 0 ? integrationsMax : 60,
     identify: (c) => getAuthUser(c)?.sub ?? null,
 });
+
+// Self-service data export. Each call scans every user-scoped table and builds
+// the whole payload in memory, so it is by far the most expensive read a signed-in
+// user can trigger — and unlike the other heavy surfaces, one call is enough to be
+// useful, so a tight budget costs nothing legitimate. Keyed per authenticated user
+// rather than per IP: the cost is per-account, and users behind one NAT must not
+// exhaust each other's exports. Deliberately NOT fail-closed — a Redis blip should
+// not deny someone their own data. Override with EXPORT_RATE_LIMIT_MAX.
+const exportMax = Number.parseInt(process.env.EXPORT_RATE_LIMIT_MAX ?? '', 10);
+export const exportRateLimit = createRateLimit({
+    bucket: 'export',
+    windowMs: 60_000,
+    maxRequests: Number.isFinite(exportMax) && exportMax > 0 ? exportMax : 5,
+    identify: (c) => getAuthUser(c)?.sub ?? null,
+});
