@@ -11,6 +11,9 @@ import { describe, it } from 'vitest';
  *                          packages/api/test/identities-routes.integration.test.ts
  *   - privacy_hardening  → packages/api/test/media-routes.integration.test.ts,
  *                          tests/unit/features/privacy-tools/*
+ *   - self_service_data_export
+ *                        → apps/blackout-client/tests/unit/features/settings/dataExport.test.tsx,
+ *                          packages/api/test/data-export.integration.test.ts
  * The remaining rows are still `status: planned`; each renders a stable
  * `<testid>-unavailable` empty state while its flag/entitlement is absent.
  *
@@ -26,4 +29,5 @@ describe('privacy-suite feature registry coverage anchors', () => {
   it('feature-toggle-active-defense-unavailable', () => {});
   it('feature-toggle-mesh-transport-unavailable', () => {});
   it('feature-toggle-transparency-reports-unavailable', () => {});
+  it('feature-toggle-data-export', () => {});
 });

@@ -56,6 +56,12 @@ test('snake_case inside code is not turned into emphasis', () => {
 
 test('HTML in the source is escaped, not passed through', () => {
     const out = renderInline('a <script>alert(1)</script> b');
+    // Semgrep's unknown-value-with-script-tag rule fires on any variable near a
+    // `<script` literal. Here the assertion is that the value does NOT contain
+    // one — this is the XSS-prevention test, not an XSS sink. Suppressed
+    // narrowly rather than by rewriting the assertion to dodge the pattern,
+    // which would hide the intent from the next reader too.
+    // nosemgrep: javascript.lang.security.audit.unknown-value-with-script-tag.unknown-value-with-script-tag
     assert.ok(!out.includes('<script'), 'markdown content cannot inject markup');
     assert.match(out, /&lt;script&gt;/);
 });

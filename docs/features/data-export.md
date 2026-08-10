@@ -1,7 +1,15 @@
 # Data export
 
 Every Blackout user can download everything the server holds about them, in one
-request, in JSON, on any tier including Free.
+click, in JSON, on any tier including Free.
+
+From the app: **Settings → Privacy & data → Download your data**
+(`DataRetentionSection.tsx`, testid `feature-toggle-data-export`). That button
+previously called the older `/v1/auth/account/export`, which returns roughly ten
+tables — so the UI was serving the weaker of the two exports while this one was
+reachable only by curl. It now calls `/v1/data-export`.
+
+Over HTTP:
 
 ```bash
 curl -H "Authorization: Bearer $BLACKOUT_TOKEN" \

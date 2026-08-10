@@ -102,7 +102,9 @@ is advertising.
 ## 2. Your data, portable, free
 
 **Every user can download everything the server holds about them, on any tier,
-in one request.**
+in one click.**
+
+In the app: **Settings → Privacy & data → Download your data**. Or over HTTP:
 
 ```bash
 curl -H "Authorization: Bearer $TOKEN" https://api.theblackout.app/v1/data-export

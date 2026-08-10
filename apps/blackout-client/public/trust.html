@@ -131,7 +131,8 @@
     <p>Some users see &quot;unable to decrypt&quot; on older messages when signing in on a new device without key backup set up. This is tracked as <strong>BO-1</strong> in <a href="https://github.com/Blackmarket-coa/blackout/blob/develop/KNOWN_ISSUES.md" rel="noopener noreferrer">KNOWN_ISSUES.md</a> and is <strong>not fixed</strong>. We list it here rather than waiting until it is, because a trust page that only mentions solved problems is advertising.</p>
     <hr />
     <h2 id="2-your-data-portable-free">2. Your data, portable, free</h2>
-    <p><strong>Every user can download everything the server holds about them, on any tier, in one request.</strong></p>
+    <p><strong>Every user can download everything the server holds about them, on any tier, in one click.</strong></p>
+    <p>In the app: <strong>Settings → Privacy &amp; data → Download your data</strong>. Or over HTTP:</p>
     <pre><code class="language-bash">curl -H &quot;Authorization: Bearer $TOKEN&quot; https://api.theblackout.app/v1/data-export</code></pre>
     <p>No support ticket, no queue, no tier check. Code: <a href="https://github.com/Blackmarket-coa/blackout/blob/develop/packages/api/src/routes/dataExport.ts" rel="noopener noreferrer"><code>routes/dataExport.ts</code></a> · <a href="https://github.com/Blackmarket-coa/blackout/blob/develop/docs/features/data-export.md" rel="noopener noreferrer">usage doc</a>.</p>
     <p>This did not exist before 2026-08-10 either. The only export we had returned <strong>HTTP 402</strong> below the Coalition tier, which means most users had no way to get their own data. We are not going to describe having fixed that as though it were always true.</p>

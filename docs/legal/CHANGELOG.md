@@ -105,9 +105,10 @@ can check today.
 ### Data portability
 
 -   **Every user can export everything the server holds about them, free, on any
-    tier.** `GET /v1/data-export` returns portable JSON in a single request. It
-    has no entitlement check, and adding one would be a policy change requiring
-    an entry here.
+    tier.** Available from **Settings → Privacy & data → Download your data**, and
+    over HTTP as `GET /v1/data-export`. It returns portable JSON in a single
+    request, has no entitlement check, and adding one would be a policy change
+    requiring an entry here.
 
     This closes a gap that existed earlier the same day: the only export was
     `GET /v1/transparency/audit-export`, which returns HTTP 402 below the
