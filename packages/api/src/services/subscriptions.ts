@@ -10,12 +10,7 @@ import type {
     SubscriptionGiftRecord,
     SubscriptionGiftStatus,
 } from '../db/types';
-import {
-    createStripeCheckoutSession,
-    createStripePortalSession,
-    stripeLiveEnabled,
-    stripePriceIdForPlan,
-} from './stripeCheckout';
+import { getMarketplaceProvider } from '../integrations/marketplace';
 
 // Subscription state is DURABLE: records live in the runtime store (persisted
 // in file/postgres modes, hydrated on boot) instead of the former module-level
@@ -26,8 +21,6 @@ import {
 export type SubscriptionStatus = CanopySubscriptionStatus;
 export type BillingInterval = CanopyBillingInterval;
 export type CanopyTier = CanopySubscriptionTier;
-
-type CheckoutProvider = 'stripe' | 'lago';
 
 type SubscriptionRecord = CanopySubscriptionRecord;
 type SubscriptionAuditEvent = SubscriptionAuditEventRecord;
@@ -141,108 +134,122 @@ export function getSubscription(userId: string): SubscriptionSnapshot {
     return { ...free, entitlementActive: false };
 }
 
+export class CanopyBillingError extends Error {
+    constructor(public readonly code: 'unknown_plan' | 'billing_unavailable', message: string) {
+        super(message);
+        this.name = 'CanopyBillingError';
+    }
+}
+
+/**
+ * FBM listing ids for the Canopy plans, mapped by planCode. The listings are
+ * seeded on FBM as unpriced drafts carrying `metadata.canopy_plan_code`
+ * (free-black-market `scripts/seed-blackout-catalog.ts`); an operator prices
+ * and publishes them at go-live and copies the ids here.
+ *
+ * `CANOPY_FBM_LISTING_IDS` is a JSON object, e.g.
+ * `{"canopy_sprout_monthly":"clist_…","canopy_pro_monthly":"clist_…"}`.
+ * Unset/unmapped plans make checkout throw `billing_unavailable` — Canopy
+ * billing simply is not sellable until the listings exist.
+ */
+export function fbmListingIdForPlan(
+    planCode: string,
+    env: NodeJS.ProcessEnv = process.env
+): string | null {
+    const raw = env.CANOPY_FBM_LISTING_IDS;
+    if (!raw) return null;
+    try {
+        const parsed = JSON.parse(raw) as Record<string, unknown>;
+        const id = parsed[planCode];
+        return typeof id === 'string' && id.length > 0 ? id : null;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * W1b: Canopy checkout delegates money movement to FBM — the same pattern as
+ * tips and creator subscriptions. No Stripe objects, no local rail: the FBM
+ * checkout session carries `metadata.canopyPlanCode`, and the settled
+ * `purchase.succeeded` webhook loops back through
+ * `applySubscriptionWebhookEvent` (invoice.paid) via the marketplace webhook
+ * dispatcher. The idempotency key is deterministic per (user, plan, day) so a
+ * double-click reuses one session while a later resubscribe mints a new one.
+ */
 export async function createCheckoutSession(input: {
     userId: string;
     planCode: string;
     successUrl?: string;
     cancelUrl?: string;
-    provider?: CheckoutProvider;
+    embed?: boolean;
+    embedOrigin?: string;
 }) {
     const product = productsByPlan.get(input.planCode);
-    if (!product) throw new Error('unknown plan');
+    if (!product) throw new CanopyBillingError('unknown_plan', 'unknown plan');
 
-    const lago = {
-        customerExternalId: input.userId,
-        planCode: product.planCode,
-        interval: product.interval,
-        trialDays: product.trialDays,
-        graceDays: product.graceDays,
-    };
-
-    // Live Stripe path: create a real hosted Checkout Session when a secret key
-    // and a per-plan price id are configured. We pass client_reference_id (the
-    // user id) instead of a fabricated customer id so Stripe collects/creates the
-    // real customer; the checkout.session.completed webhook syncs cus_… back.
-    if ((input.provider ?? 'stripe') === 'stripe' && stripeLiveEnabled()) {
-        const priceId = stripePriceIdForPlan(product.planCode);
-        if (!priceId) {
-            throw new Error(`no Stripe price configured for plan ${product.planCode}`);
-        }
-        const successUrl = input.successUrl ?? process.env.STRIPE_CHECKOUT_SUCCESS_URL;
-        const cancelUrl = input.cancelUrl ?? process.env.STRIPE_CHECKOUT_CANCEL_URL;
-        if (!successUrl || !cancelUrl) {
-            throw new Error(
-                'live Stripe checkout requires successUrl/cancelUrl (or STRIPE_CHECKOUT_SUCCESS_URL/STRIPE_CHECKOUT_CANCEL_URL)'
-            );
-        }
-        const session = await createStripeCheckoutSession({
-            priceId,
-            clientReferenceId: input.userId,
-            successUrl,
-            cancelUrl,
-            trialDays: product.trialDays,
-        });
-        addAudit(input.userId, 'checkout.session_created', 'system', {
-            planCode: product.planCode,
-            provider: 'stripe',
-            sessionId: session.id,
-            live: true,
-        });
-        return { sessionId: session.id, redirectUrl: session.url, live: true, lago };
+    const fbmListingId = fbmListingIdForPlan(product.planCode);
+    const provider = getMarketplaceProvider('freeblackmarket');
+    if (!fbmListingId || !provider?.enabled) {
+        throw new CanopyBillingError(
+            'billing_unavailable',
+            'Canopy billing is not configured (no FBM listing mapped for this plan)'
+        );
     }
 
-    // Mock path (dev/test): deterministic URL, no external call.
-    const base = process.env.STRIPE_CHECKOUT_URL ?? 'https://checkout.stripe.com/pay/mock-session';
-    const sessionId = `cs_test_${crypto.randomUUID().replace(/-/g, '')}`;
-    const redirect = new URL(base);
-    redirect.searchParams.set('session_id', sessionId);
-    redirect.searchParams.set('plan', product.planCode);
-    redirect.searchParams.set('interval', product.interval);
-    if (input.successUrl) redirect.searchParams.set('success_url', input.successUrl);
-    if (input.cancelUrl) redirect.searchParams.set('cancel_url', input.cancelUrl);
+    const embed = input.embed === true && provider.capabilities.includes('embedded-checkout');
+    const idempotencyKey = `canopy:${input.userId}:${product.planCode}:${nowIso().slice(0, 10)}`;
+    const session = await provider.createCheckoutSession({
+        userId: input.userId,
+        listingId: fbmListingId,
+        idempotencyKey,
+        returnUrl: input.successUrl,
+        embed,
+        embedOrigin: embed ? input.embedOrigin : undefined,
+        metadata: {
+            canopyPlanCode: product.planCode,
+            canopyTier: product.tier,
+            canopyInterval: product.interval,
+        },
+    });
 
     addAudit(input.userId, 'checkout.session_created', 'system', {
         planCode: product.planCode,
-        provider: input.provider ?? 'stripe',
-        sessionId,
-        live: false,
+        provider: 'freeblackmarket',
+        sessionId: session.sessionId,
+        embed,
     });
 
-    return { sessionId, redirectUrl: redirect.toString(), live: false, lago };
+    return {
+        sessionId: session.sessionId,
+        redirectUrl: session.redirectUrl,
+        provider: 'freeblackmarket' as const,
+        embed,
+    };
 }
 
-export async function createCustomerPortalSession(userId: string, returnUrl?: string) {
-    const customerId = getSubscription(userId).stripeCustomerId;
-
-    // Live path: a real Billing Portal session. Requires a real cus_… id, which
-    // is populated by the checkout.session.completed webhook after first payment;
-    // until then the mock path serves.
-    if (
-        stripeLiveEnabled() &&
-        customerId.startsWith('cus_') &&
-        !customerId.startsWith(`cus_${userId}`)
-    ) {
-        const session = await createStripePortalSession({ customerId, returnUrl });
-        addAudit(userId, 'customer_portal.session_created', 'system', {
-            returnUrl: returnUrl ?? null,
-            live: true,
-        });
-        return { redirectUrl: session.url, live: true };
+/**
+ * W1b advisory: a renewal charge failed upstream on FBM (dunning). Recorded on
+ * the member's audit timeline; access itself only lapses via the
+ * `subscription.lapsed` / local grace machinery.
+ */
+export function recordPaymentFailureAdvisory(
+    userId: string,
+    detail: {
+        subscriptionId?: string | null;
+        tier?: string | null;
+        attempt?: number | null;
+        willRetry?: boolean | null;
+        nextRetryAt?: string | null;
     }
-
-    const base =
-        process.env.STRIPE_CUSTOMER_PORTAL_URL ??
-        'https://billing.stripe.com/p/session/mock-portal';
-    const url = new URL(base);
-    url.searchParams.set('customer', customerId);
-    if (returnUrl) url.searchParams.set('return_url', returnUrl);
-
-    addAudit(userId, 'customer_portal.session_created', 'system', {
-        returnUrl: returnUrl ?? null,
-        live: false,
+): void {
+    addAudit(userId, 'billing.payment_failed', 'webhook', {
+        provider: 'freeblackmarket',
+        subscriptionId: detail.subscriptionId ?? null,
+        tier: detail.tier ?? null,
+        attempt: detail.attempt ?? null,
+        willRetry: detail.willRetry ?? null,
+        nextRetryAt: detail.nextRetryAt ?? null,
     });
-
-    return { redirectUrl: url.toString(), live: false };
 }
 
 function ensureUserRecord(userId: string): SubscriptionRecord {
@@ -266,60 +273,6 @@ function ensureUserRecord(userId: string): SubscriptionRecord {
         updatedAt: nowIso(),
     };
     return db.upsertCanopySubscription(seed);
-}
-
-/**
- * Sync the real Stripe customer id (`cus_…`) onto a user's subscription record.
- * Checkout passes `client_reference_id` (the Blackout user id), not a customer
- * id, so the real `cus_…` only becomes known via the checkout.session.completed
- * webhook. Until this runs, `getSubscription` keeps the mock `cus_<userId>` and
- * the Billing Portal falls back to its mock path. Idempotent — re-syncing the
- * same id only bumps `updatedAt`.
- */
-export function syncStripeCustomerId(
-    userId: string,
-    stripeCustomerId: string
-): { updated: boolean; stripeCustomerId: string } {
-    const record = ensureUserRecord(userId);
-    const updated = record.stripeCustomerId !== stripeCustomerId;
-    db.upsertCanopySubscription({ ...record, stripeCustomerId, updatedAt: nowIso() });
-    if (updated) addAudit(userId, 'stripe.customer_synced', 'system', { stripeCustomerId });
-    return { updated, stripeCustomerId };
-}
-
-export type StripeCheckoutCompletedEvent = {
-    id: string;
-    type: string;
-    data: { object: { client_reference_id?: string | null; customer?: string | null } };
-};
-
-/**
- * Handle a Stripe `checkout.session.completed` event by syncing the real
- * `cus_…` onto the subscription record identified by `client_reference_id`.
- * This is the step the go-live runbook calls out as required before advertising
- * the Billing Portal. Idempotent by Stripe event id (shared durable de-dupe
- * ledger, so a restart between deliveries cannot double-process).
- */
-export function applyStripeCheckoutCompleted(event: StripeCheckoutCompletedEvent): {
-    processed: boolean;
-    reason?: string;
-    userId?: string;
-} {
-    if (event.type !== 'checkout.session.completed') {
-        return { processed: false, reason: 'ignored_event_type' };
-    }
-    if (db.hasProcessedBillingWebhookEvent(event.id)) {
-        return { processed: false, reason: 'already_processed' };
-    }
-    const session = event.data?.object ?? {};
-    const userId = session.client_reference_id ?? undefined;
-    const customer = typeof session.customer === 'string' ? session.customer : undefined;
-    if (!userId || !customer) {
-        return { processed: false, reason: 'missing_reference_or_customer' };
-    }
-    syncStripeCustomerId(userId, customer);
-    db.markBillingWebhookEventProcessed(event.id);
-    return { processed: true, userId };
 }
 
 export type SubscriptionWebhookEvent = {

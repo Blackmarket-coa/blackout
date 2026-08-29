@@ -5,24 +5,27 @@ import { requireUser } from '../middleware/require-user';
 import { readJsonBody } from '../middleware/validate';
 import {
     applyManualComp,
-    applySubscriptionWebhookEvent,
+    CanopyBillingError,
     claimGift,
     createCheckoutSession,
-    createCustomerPortalSession,
     donateForward,
     forwardGift,
     getMyGifts,
     getSubscription,
-    applyStripeCheckoutCompleted,
     getSubscriptionAuditTimeline,
     listAvailableGifts,
     listCanopyProducts,
     syncRefund,
-    type StripeCheckoutCompletedEvent,
-    type SubscriptionWebhookEvent,
 } from '../services/subscriptions';
-import { verifyBillingWebhook, verifyStripeWebhook } from '../services/billingWebhookSignature';
 import { log } from '../telemetry/logger';
+
+// W1b: the direct Stripe/Lago rail is retired. Money moves on FBM — checkout
+// below delegates to the marketplace provider, and the settled purchase loops
+// back through the FBM marketplace webhook (`metadata.canopyPlanCode` →
+// `applySubscriptionWebhookEvent`). The former `/portal`, `/webhooks/lago`
+// and `/webhooks/stripe` endpoints are gone with it; plan/state changes are
+// managed locally + via FBM, and `getSubscriptionAuditTimeline` keeps the
+// ops-facing trail. See docs/contracts/fbm-billing-consumer.md.
 
 const subscriptions = new Hono();
 
@@ -30,46 +33,8 @@ const checkoutSchema = z.object({
     planCode: z.string().min(1),
     successUrl: z.string().optional(),
     cancelUrl: z.string().optional(),
+    embed: z.boolean().optional(),
 });
-
-const portalSchema = z.object({ returnUrl: z.string().optional() });
-
-const webhookEventTypes = [
-    'invoice.paid',
-    'invoice.payment_failed',
-    'subscription.renewed',
-    'subscription.canceled',
-    'charge.refunded',
-    'charge.dispute.created',
-] as const;
-
-const webhookSchema = z
-    .object({
-        eventId: z.string().min(1),
-        type: z.enum(webhookEventTypes),
-        userId: z.string().min(1),
-    })
-    .loose();
-
-// Stripe event envelope for the checkout webhook. We only act on
-// `checkout.session.completed`, reading `client_reference_id` (the Blackout user
-// id set at checkout) and `customer` (the real `cus_…`).
-const stripeWebhookSchema = z
-    .object({
-        id: z.string().min(1),
-        type: z.string().min(1),
-        data: z
-            .object({
-                object: z
-                    .object({
-                        client_reference_id: z.string().nullish(),
-                        customer: z.string().nullish(),
-                    })
-                    .loose(),
-            })
-            .loose(),
-    })
-    .loose();
 
 const adminUserSchema = z.object({
     userId: z.string().min(1),
@@ -104,125 +69,34 @@ subscriptions.post('/checkout', async (c) => {
     if (parsed instanceof Response) return parsed;
 
     try {
+        const originHeader = c.req.header('origin');
         const session = await createCheckoutSession({
             userId: user.sub,
             planCode: parsed.planCode,
             successUrl: parsed.successUrl,
             cancelUrl: parsed.cancelUrl,
-            provider: 'stripe',
+            embed: parsed.embed,
+            embedOrigin: originHeader?.startsWith('https://') ? originHeader : undefined,
         });
         return c.json(session, 201);
-    } catch {
-        return c.json({ code: 'invalid_plan', message: 'Unknown planCode' }, 400);
-    }
-});
-
-subscriptions.post('/portal', async (c) => {
-    const user = requireUser(c);
-    if (user instanceof Response) return user;
-    const parsed = await readJsonBody(c, portalSchema);
-    const returnUrl = parsed instanceof Response ? undefined : parsed.returnUrl;
-    return c.json(await createCustomerPortalSession(user.sub, returnUrl));
-});
-
-subscriptions.post('/webhooks/lago', async (c) => {
-    // Read the raw body so HMAC verification is byte-exact. Re-parsing JSON
-    // afterwards is safe — we already require valid JSON via the Zod schema.
-    const rawBody = await c.req.text();
-    const headers: Record<string, string | undefined> = {};
-    for (const [key, value] of Object.entries(c.req.header())) {
-        headers[key.toLowerCase()] = value;
-    }
-    const verification = verifyBillingWebhook(rawBody, headers);
-    if (!verification.ok) {
-        log.warn('billing_webhook_rejected', {
-            provider: verification.provider,
-            reason: verification.reason,
+    } catch (error) {
+        if (error instanceof CanopyBillingError) {
+            if (error.code === 'unknown_plan') {
+                return c.json({ code: 'invalid_plan', message: 'Unknown planCode' }, 400);
+            }
+            return c.json(
+                {
+                    code: 'billing_unavailable',
+                    message: 'Canopy billing is not available in this environment yet',
+                },
+                503
+            );
+        }
+        log.warn('canopy_checkout_failed', {
+            error: error instanceof Error ? error.message : String(error),
         });
-        return c.json(
-            {
-                code: 'webhook_unauthorized',
-                message: 'Webhook signature verification failed',
-                reason: verification.reason,
-            },
-            401
-        );
+        return c.json({ code: 'checkout_failed', message: 'Checkout could not be started' }, 502);
     }
-
-    let payload: unknown;
-    try {
-        payload = JSON.parse(rawBody);
-    } catch {
-        return c.json({ code: 'invalid_json', message: 'Webhook payload is not valid JSON' }, 400);
-    }
-    const parsed = webhookSchema.safeParse(payload);
-    if (!parsed.success) {
-        return c.json(
-            {
-                code: 'invalid_payload',
-                message: 'Webhook payload failed validation',
-                issues: parsed.error.issues,
-            },
-            400
-        );
-    }
-
-    const result = applySubscriptionWebhookEvent(parsed.data as SubscriptionWebhookEvent);
-    return c.json({
-        ok: true,
-        processed: result.processed,
-        status: result.status,
-        userId: result.userId,
-    });
-});
-
-// Stripe checkout webhook: on `checkout.session.completed`, sync the real
-// `cus_…` onto the subscription record so the Billing Portal can leave the mock
-// path. Signature is verified byte-exact against STRIPE_WEBHOOK_SECRET.
-subscriptions.post('/webhooks/stripe', async (c) => {
-    const rawBody = await c.req.text();
-    const headers: Record<string, string | undefined> = {};
-    for (const [key, value] of Object.entries(c.req.header())) {
-        headers[key.toLowerCase()] = value;
-    }
-    const verification = verifyStripeWebhook(rawBody, headers);
-    if (!verification.ok) {
-        log.warn('stripe_webhook_rejected', { reason: verification.reason });
-        return c.json(
-            {
-                code: 'webhook_unauthorized',
-                message: 'Stripe signature verification failed',
-                reason: verification.reason,
-            },
-            401
-        );
-    }
-
-    let payload: unknown;
-    try {
-        payload = JSON.parse(rawBody);
-    } catch {
-        return c.json({ code: 'invalid_json', message: 'Webhook payload is not valid JSON' }, 400);
-    }
-    const parsed = stripeWebhookSchema.safeParse(payload);
-    if (!parsed.success) {
-        return c.json(
-            {
-                code: 'invalid_payload',
-                message: 'Webhook payload failed validation',
-                issues: parsed.error.issues,
-            },
-            400
-        );
-    }
-
-    const result = applyStripeCheckoutCompleted(parsed.data as StripeCheckoutCompletedEvent);
-    return c.json({
-        ok: true,
-        processed: result.processed,
-        reason: result.reason,
-        userId: result.userId,
-    });
 });
 
 subscriptions.post('/admin/comp', async (c) => {

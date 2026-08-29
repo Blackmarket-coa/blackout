@@ -15,6 +15,7 @@ import { flushRuntimeStoreWrites } from '../db/store';
 import { creatorDrivenSalesTotal, creatorDrivenGmvCentsTotal } from '../telemetry/metrics';
 import { captureTip, createTip, refundTip, TipValidationError } from './tips';
 import { captureSubscription, refundSubscription } from './creatorSubscriptions';
+import { applySubscriptionWebhookEvent } from './subscriptions';
 import { captureBoostPledge, refundBoostPledge } from './communityBoosts';
 import { ambassadorService, bountyRewardService, questsService, referralService } from './growth';
 import { dispatchFbmMatrixEvent, parseFbmMatrixEvent } from './fbmMatrixBridge';
@@ -228,6 +229,52 @@ function dispatchMonetizationEvent(
             eventType: event.type,
             creatorSubscriptionId,
         });
+    }
+
+    // W1b: Canopy plan purchases (metadata.canopyPlanCode). The former direct
+    // Stripe/Lago rail is retired — a settled FBM purchase IS the invoice.paid
+    // signal, and refund/chargeback maps onto charge.refunded. Canopy gating
+    // stays local (routes/entitlements.ts reads the canopy record), and the
+    // plan listings grant no marketplace entitlement, so short-circuit.
+    const canopyPlanCode =
+        typeof meta['canopyPlanCode'] === 'string' ? (meta['canopyPlanCode'] as string) : null;
+    if (canopyPlanCode && event.userId) {
+        if (event.type === 'purchase.succeeded') {
+            applySubscriptionWebhookEvent({
+                eventId: event.eventId,
+                type: 'invoice.paid',
+                userId: event.userId,
+                planCode: canopyPlanCode,
+                occurredAt: event.occurredAt,
+                metadata: {
+                    provider: provider.id,
+                    fbmOrderId: typeof meta['fbmOrderId'] === 'string' ? meta['fbmOrderId'] : null,
+                },
+            });
+            incrementCounter('marketplace_canopy_captured_total', { providerId: provider.id });
+        } else if (event.type === 'purchase.refunded' || event.type === 'purchase.chargebacked') {
+            applySubscriptionWebhookEvent({
+                eventId: event.eventId,
+                type: 'charge.refunded',
+                userId: event.userId,
+                occurredAt: event.occurredAt,
+                metadata: { provider: provider.id, sourceEventType: event.type },
+            });
+            incrementCounter('marketplace_canopy_refunded_total', { providerId: provider.id });
+        }
+        markWebhookProcessed(event.providerId, event.eventId);
+        logEvent('marketplace.webhook.canopy', {
+            providerId: provider.id,
+            eventId: event.eventId,
+            eventType: event.type,
+            canopyPlanCode,
+        });
+        return {
+            ok: true,
+            status: 200,
+            event,
+            applied: { entitlement: null, licenseKey: null, alreadyProcessed: false },
+        };
     }
 
     const boostPledgeId =
