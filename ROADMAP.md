@@ -14,6 +14,7 @@ operations guide; it points at it.
 | Surface                                                | Path                                                                                              |
 |--------------------------------------------------------|---------------------------------------------------------------------------------------------------|
 | Milestone tiers, exit criteria, master progress tracker | [`docs/AGGRESSIVE_OPERATIONS_GUIDE.md`](docs/AGGRESSIVE_OPERATIONS_GUIDE.md)                       |
+| Cross-repo consolidation decisions and roadmap          | `docs/REPO_CONSOLIDATION_REVIEW.md` in `Blackmarket-coa/free-black-market` (local: [`CONSOLIDATION.md`](CONSOLIDATION.md)) |
 | Single-server production runbook                        | [`infra/single-server-baseline/RUNBOOK.md`](infra/single-server-baseline/RUNBOOK.md)               |
 | SLO dashboards, on-call escalation, secrets break-glass | [`docs/operations/`](docs/operations/)                                                            |
 | Incident playbooks                                      | [`docs/runbooks/`](docs/runbooks/)                                                                |
