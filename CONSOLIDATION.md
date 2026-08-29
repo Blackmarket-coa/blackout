@@ -10,10 +10,18 @@ verdicts, decisions, and the ordered roadmap — is `docs/REPO_CONSOLIDATION_REV
     communication/governance surface; FBM is the economic substrate. Coliseum, Coalition, and
     Creator Hub stay nested here.
 -   **Identity (decision D4, W2)**: the ecosystem IdP is Matrix OIDC/MAS — the surface already
-    inherited in the Synapse fork and wired in the backend compose templates. The bespoke JWT
-    account system in `packages/api` (auth routes, refresh rotation, WebAuthn) retires behind it
-    over W2; the account-number ↔ MXID mapping in `packages/core/src/auth/accountNumber.ts` is the
-    migration seam. "MXID is canonical" stops being aspirational once this lands.
+    inherited in the Synapse fork and wired in the backend compose templates. ~~The bespoke JWT
+    account system retires behind it over W2~~ **W2 landed dark (2026-08-29)**: the deploy
+    templates advertise MSC2965 + register the relying parties (FBM, blackout-api) in the MAS
+    client registry; the API's native OIDC login (`/v1/auth/oidc/begin` + `/continue` +
+    `/v1/auth/sign-out`) is filled in behind `BLACKOUT_OIDC_*` env (503 until set). Canonical
+    contract + migration path: `docs/contracts/mas-identity.md` — the account-number ↔ MXID
+    mapping in `packages/core/src/auth/accountNumber.ts` is the migration seam (syn2mas moves
+    password hashes; the exchange flow survives the flip byte-identically). The local JWT +
+    refresh pair, password login/registration, and WebAuthn retire on the ladder in that doc.
+    **Blackmask verification note**: zero Blackmask references exist in this repo — the IdP role
+    is MAS by construction, closing the charter item that Blackmask must never become an
+    identity provider.
 -   **Money layer (decision D1, W1 — highest-hazard item in the review)**: Coalition Credits and
     tips already delegate movement to FBM correctly (read-only projection; `captureTip` +
     `fbm_order_id`). ~~Two things still move money locally and get absorbed in W1~~ **W1b landed
