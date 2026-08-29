@@ -39,6 +39,20 @@ verdicts, decisions, and the ordered roadmap — is `docs/REPO_CONSOLIDATION_REV
         declaration required zero migration; the derived-balance pattern stays as-is. Any future
         purchasable-points product must be a NEW FBM-listed product, never a conversion of this
         ledger.
+-   **Extension registry (decision D6, W3)**: the registry lives in FBM's catalog; Blackout is a
+    consumer host. **W3 landed dark (2026-08-29)**: the shared extension manifest is Blackout's
+    own `PluginManifest` (adopted as the cross-repo contract —
+    `free-black-market/docs/contracts/extension-manifest.md`), and the real `freeblackmarket`
+    provider now implements `issueSignedBundle` against FBM's registry read side
+    (`GET /store/plugins/:slug` detail + versioned `/manifest`; the stored envelope is minted in
+    this repo's wire format at publish, no translation). Marketplace version writes are
+    SemVer-gated (`400 invalid_version`) with the same rule as FBM's registry. Registry reads
+    need `FREEBLACKMARKET_PUBLISHABLE_KEY` (Medusa gates `/store/*`); the in-process stub keeps
+    dev/CI serving. Deferred: the client's pinned dev-HMAC publishing key flips to FBM's
+    published Ed25519 keys (`/.well-known/freeblackmarket-publishing-keys.json`) at release —
+    operator item; `code_plugin` sandbox runtime remains pre-existing M19, not W3. Blackout's
+    slots/panels model and FBM's author-side webhook hooks are complementary surfaces, not a
+    conflict — no reconciliation needed.
 -   **Geospatial home (decision D5, W5)**: the MapLibre + PostGIS + martin + geocoder-proxy stack
     here is the ecosystem's one spatial service. W5 exposes it as an API for FBM (which retires its
     haversine helpers and ZIP3 lookup) and any future logistics work.
