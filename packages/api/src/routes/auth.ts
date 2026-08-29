@@ -17,7 +17,7 @@ import {
 } from '@blackout/core';
 import { authRateLimit } from '../middleware/rate-limit';
 import { readJsonBody } from '../middleware/validate';
-import { requireUser } from '../middleware/require-user';
+import { getAuthUser, requireUser } from '../middleware/require-user';
 import {
     issueRefreshToken,
     revokeRefreshToken,
@@ -37,6 +37,7 @@ import {
     requestAccountDeletion,
 } from '../services/accountLifecycle';
 import { getMailer } from '../services/mailer';
+import authOidc from './auth-oidc';
 import { log } from '../telemetry/logger';
 import {
     authFailuresTotal,
@@ -59,6 +60,9 @@ auth.use('/email/verify/request', authRateLimit);
 auth.use('/email/verify/confirm', authRateLimit);
 auth.use('/account/delete/request', authRateLimit);
 auth.use('/account/delete/confirm', authRateLimit);
+auth.use('/oidc/begin', authRateLimit);
+auth.use('/oidc/continue', authRateLimit);
+auth.use('/sign-out', authRateLimit);
 
 const buildVerificationLink = (token: string): string => {
     const base = (process.env.PUBLIC_APP_URL ?? 'http://localhost:8080').replace(/\/+$/, '');
@@ -88,7 +92,7 @@ const dispatchVerificationEmail = async (
     }
 };
 
-const matrixHomeserverDomain = (): string =>
+export const matrixHomeserverDomain = (): string =>
     (process.env.MATRIX_HOMESERVER_DOMAIN ?? 'blackout.local').replace(/^@+/, '');
 
 /**
@@ -146,7 +150,7 @@ const loginSchema = z.object({
     password: z.string().min(1),
 });
 
-const issueSession = (userId: string, username: string, userAgent?: string) => {
+export const issueSession = (userId: string, username: string, userAgent?: string) => {
     const access = signJwtWithMeta(userId, username);
     const refresh = issueRefreshToken({ userId, userAgent });
     return { access, refresh };
@@ -476,7 +480,7 @@ auth.post('/login', async (c) => {
 // Matrix localpart per the spec's historical grammar: lowercase alnum plus
 // a small set of separators. We bound the length so a hostile homeserver
 // response can't be used to wedge an oversized username into the store.
-const MATRIX_LOCALPART_RE = /^[a-z0-9._=/+-]{1,255}$/;
+export const MATRIX_LOCALPART_RE = /^[a-z0-9._=/+-]{1,255}$/;
 
 /**
  * Auto-provisioning a Blackout account from a Matrix token is only safe when the
@@ -495,7 +499,7 @@ const MATRIX_LOCALPART_RE = /^[a-z0-9._=/+-]{1,255}$/;
  * because that flow creates the Blackout row lazily on first exchange. Those
  * deployments run a Blackout-exclusive Synapse, so the assertion holds.
  */
-const matrixExchangeProvisioningTrusted = (): boolean => {
+export const matrixExchangeProvisioningTrusted = (): boolean => {
     const flag = process.env.BLACKOUT_MATRIX_EXCHANGE_TRUSTED_HS?.trim().toLowerCase();
     return flag === '1' || flag === 'true' || flag === 'yes' || flag === 'on';
 };
@@ -644,6 +648,30 @@ auth.post('/logout', async (c) => {
     }
     // Always denylist the access token so its remaining TTL cannot be replayed.
     if (user.jti && user.exp) {
+        db.revokeSession({
+            jti: user.jti,
+            userId: user.sub,
+            expiresAt: new Date(user.exp * 1000).toISOString(),
+            reason: 'logout',
+        });
+    }
+    return c.json({ ok: true });
+});
+
+/**
+ * Idempotent sign-out (W2): the SDK's `signOut` action calls this even when
+ * no session is active, so a missing/invalid token is a 200 no-op rather
+ * than a 401. With a valid token it performs the same revocation work as
+ * /logout.
+ */
+auth.post('/sign-out', async (c) => {
+    const user = getAuthUser(c);
+    const parsed = await readJsonBody(c, logoutSchema);
+    const refreshToken = parsed instanceof Response ? undefined : parsed.refreshToken;
+    if (refreshToken) {
+        revokeRefreshToken(refreshToken, 'logout');
+    }
+    if (user?.jti && user.exp) {
         db.revokeSession({
             jti: user.jti,
             userId: user.sub,
@@ -865,4 +893,9 @@ auth.post('/account/delete/confirm', async (c) => {
 
 // Re-export the legacy `signJwt` for callers that imported it from this module.
 export { signJwt };
+// W2: native OIDC login against MAS (dark until BLACKOUT_OIDC_* is set).
+// Mounted as a subrouter of the existing `auth` domain, so the v1
+// route-coverage guard's /auth mount check is untouched.
+auth.route('/oidc', authOidc);
+
 export default auth;
