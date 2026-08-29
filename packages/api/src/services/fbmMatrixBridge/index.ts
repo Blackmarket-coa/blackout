@@ -26,7 +26,11 @@ import {
     postOrderCreated,
     postOrderUpdated,
 } from './vendorRooms';
-import { applySubscriptionActivated, applySubscriptionLapsed } from './subscriptionRooms';
+import {
+    applySubscriptionActivated,
+    applySubscriptionLapsed,
+    applySubscriptionPaymentFailed,
+} from './subscriptionRooms';
 import { openDisputeRoom, resolveDisputeRoom } from './disputeRooms';
 import { postLogistics } from './logisticsRooms';
 import { startFlashSale } from './flashMob';
@@ -69,6 +73,8 @@ async function route(event: FbmMatrixEvent, matrix: FbmBridgeMatrixClient): Prom
             return applySubscriptionActivated(event, matrix);
         case 'subscription.lapsed':
             return applySubscriptionLapsed(event, matrix);
+        case 'subscription.payment_failed':
+            return applySubscriptionPaymentFailed(event);
         case 'dispute.opened':
             return openDisputeRoom(event, matrix);
         case 'dispute.resolved':

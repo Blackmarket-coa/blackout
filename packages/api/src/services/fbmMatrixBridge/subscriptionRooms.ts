@@ -4,11 +4,13 @@
 // missing mapping is a clean no-op rather than an error.
 
 import { incrementCounter, logEvent } from '../marketplaceObservability';
+import { recordPaymentFailureAdvisory } from '../subscriptions';
 import type { FbmBridgeMatrixClient } from './client';
 import { resolveBuyerMxid } from './identity';
 import type {
     FbmSubscriptionActivatedEvent,
     FbmSubscriptionLapsedEvent,
+    FbmSubscriptionPaymentFailedEvent,
     FbmSubscriptionTier,
 } from './events';
 
@@ -56,7 +58,10 @@ export async function applySubscriptionActivated(
             return;
         }
     }
-    incrementCounter('fbm_matrix_subscription_applied_total', { action: 'activate', tier: event.tier });
+    incrementCounter('fbm_matrix_subscription_applied_total', {
+        action: 'activate',
+        tier: event.tier,
+    });
 }
 
 export async function applySubscriptionLapsed(
@@ -82,5 +87,36 @@ export async function applySubscriptionLapsed(
         });
         return;
     }
-    incrementCounter('fbm_matrix_subscription_applied_total', { action: 'lapse', tier: event.tier });
+    incrementCounter('fbm_matrix_subscription_applied_total', {
+        action: 'lapse',
+        tier: event.tier,
+    });
+}
+
+/**
+ * W1b advisory: a renewal charge failed upstream on FBM (per dunning attempt).
+ * NOT a room action — access only changes on `subscription.lapsed` — this
+ * writes the member's billing audit trail so support/settings surfaces can
+ * show why a tier is at risk. Counter keeps ops visibility per tier.
+ */
+export async function applySubscriptionPaymentFailed(
+    event: FbmSubscriptionPaymentFailedEvent
+): Promise<void> {
+    recordPaymentFailureAdvisory(event.userId, {
+        subscriptionId: event.subscriptionId,
+        tier: event.tier,
+        attempt: event.attempt ?? null,
+        willRetry: event.willRetry ?? null,
+        nextRetryAt: event.nextRetryAt ?? null,
+    });
+    incrementCounter('fbm_matrix_subscription_applied_total', {
+        action: 'payment_failed',
+        tier: event.tier,
+    });
+    logEvent('marketplace.fbm_bridge.subscription_payment_failed', {
+        tier: event.tier,
+        subscriptionId: event.subscriptionId,
+        attempt: event.attempt ?? null,
+        willRetry: event.willRetry ?? null,
+    });
 }
