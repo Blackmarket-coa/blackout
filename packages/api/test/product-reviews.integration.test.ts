@@ -131,3 +131,30 @@ test('product version history: same-millisecond releases still return newest-fir
     assert.equal(versions[0]?.version, '1.1.0');
     assert.equal(versions[1]?.version, '1.0.0');
 });
+
+test('product version history: rejects non-SemVer version strings (W3)', async () => {
+    for (const bad of ['not-a-version', '1.0', '1.0.0.0', 'latest', '1.0.0 beta', '1.0.0-']) {
+        const res = await app.request(`/v1/marketplace/listings/${PROVIDER}/${LISTING}/versions`, {
+            method: 'POST',
+            headers: authHeader(),
+            body: JSON.stringify({ version: bad }),
+        });
+        assert.equal(res.status, 400, `expected 400 for '${bad}'`);
+        const body = (await res.json()) as { code: string };
+        assert.equal(body.code, 'invalid_version', `expected invalid_version for '${bad}'`);
+    }
+});
+
+test('product version history: accepts SemVer incl. v-prefix, prerelease, build', async () => {
+    for (const good of ['2.0.0', 'v2.1.0', '2.0.0-beta.1', '2.0.0-rc.1+build.5']) {
+        const res = await app.request(
+            `/v1/marketplace/listings/${PROVIDER}/listing-semver-ok/versions`,
+            {
+                method: 'POST',
+                headers: authHeader(),
+                body: JSON.stringify({ version: good }),
+            }
+        );
+        assert.equal(res.status, 201, `expected 201 for '${good}'`);
+    }
+});

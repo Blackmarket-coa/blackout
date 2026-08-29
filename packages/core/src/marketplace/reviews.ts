@@ -39,6 +39,19 @@ export interface ProductRatingSummary {
     average: number;
 }
 
+/**
+ * Version-string rule for published listing versions (W3): SemVer
+ * `X.Y.Z` with an optional leading `v`, prerelease, and build metadata.
+ * Mirrors the FBM plugin registry's write rule (`SEMVER_WRITE_RE` in
+ * free-black-market `backend/src/modules/plugin-registry/compat.ts`) so a
+ * version accepted here is also recordable on the registry side.
+ */
+export const PRODUCT_VERSION_RE = /^v?\d+\.\d+\.\d+(?:-[a-z0-9.-]+)?(?:\+[a-z0-9.-]+)?$/i;
+
+export function isValidProductVersion(input: string | null | undefined): boolean {
+    return typeof input === 'string' && PRODUCT_VERSION_RE.test(input.trim());
+}
+
 export function isValidProductRating(value: unknown): value is number {
     return (
         typeof value === 'number' &&
@@ -52,7 +65,7 @@ export function isValidProductRating(value: unknown): value is number {
 export function summarizeProductRating(
     providerId: string,
     listingId: string,
-    reviews: readonly ProductReview[],
+    reviews: readonly ProductReview[]
 ): ProductRatingSummary {
     if (reviews.length === 0) {
         return { providerId, listingId, count: 0, average: 0 };

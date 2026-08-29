@@ -7,8 +7,10 @@ import type {
     CreatorListingResult,
     CreatorOnboardingHandle,
     MarketplaceProvider,
+    NormalizedEntitlement,
     NormalizedLifecycleEvent,
     NormalizedListing,
+    SignedPluginBundleEnvelope,
     WebhookVerification,
 } from '@blackout/core';
 import { parseNormalizedLifecycleEvent, parseNormalizedListing } from '@blackout/core';
@@ -94,6 +96,74 @@ function toNormalized(raw: UpstreamListing): NormalizedListing {
     });
 }
 
+/**
+ * Canonical JSON — recursively key-sorted, no whitespace. Byte-identical to
+ * FBM's `marketplace-signing` serializer and the blackout client verifier
+ * (`pluginSignature.ts#canonicalJson`); the signed-bundle hashes only line up
+ * because all three produce the same bytes.
+ */
+function canonicalJson(value: unknown): string {
+    if (value === null || typeof value !== 'object') return JSON.stringify(value);
+    if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+    const obj = value as Record<string, unknown>;
+    const keys = Object.keys(obj).sort();
+    return `{${keys.map((k) => `${JSON.stringify(k)}:${canonicalJson(obj[k])}`).join(',')}}`;
+}
+
+function sha256Hex(bytes: Uint8Array | string): string {
+    return crypto.createHash('sha256').update(bytes).digest('hex');
+}
+
+/** `latest_version` row from FBM's public `GET /store/plugins/:slug` detail. */
+interface PluginVersionView {
+    version: string;
+    code_sha256?: string | null;
+    signed_bundle_url?: string | null;
+    signature_envelope?: Record<string, unknown> | null;
+    manifest_url?: string | null;
+}
+
+/**
+ * Parse FBM's stored distribution envelope. It is minted in the Blackout wire
+ * format (`{keyId, signature, manifestSha256, sha256, issuedAt}`, Ed25519 over
+ * `${manifestSha256}:${sha256}`) by construction — no translation, only shape
+ * validation. See free-black-market/docs/contracts/extension-manifest.md.
+ */
+function parseSignatureEnvelope(
+    raw: Record<string, unknown>
+): SignedPluginBundleEnvelope['signature'] {
+    const fields = ['keyId', 'signature', 'manifestSha256', 'sha256', 'issuedAt'] as const;
+    for (const field of fields) {
+        if (typeof raw[field] !== 'string' || (raw[field] as string).length === 0) {
+            throw new Error(`signature envelope is missing '${field}'`);
+        }
+    }
+    return {
+        keyId: raw.keyId as string,
+        signature: raw.signature as string,
+        manifestSha256: raw.manifestSha256 as string,
+        sha256: raw.sha256 as string,
+        issuedAt: raw.issuedAt as string,
+    };
+}
+
+/**
+ * Candidate byte-materializations for a blob-less bundle, in contract order:
+ * the declarative payload (`{homepageCard?, dataSource?}` — a `manifest_plugin`'s
+ * signed "bundle", per extension-manifest.md) first, then the whole canonical
+ * manifest (the registry's hash fallback for sha256-less manifests).
+ */
+function declarativeBundleCandidates(manifest: Record<string, unknown>): string[] {
+    const payload: Record<string, unknown> = {};
+    if (manifest.homepageCard !== undefined) payload.homepageCard = manifest.homepageCard;
+    const fbm = manifest.fbm;
+    if (fbm && typeof fbm === 'object' && !Array.isArray(fbm)) {
+        const dataSource = (fbm as Record<string, unknown>).dataSource;
+        if (dataSource !== undefined) payload.dataSource = dataSource;
+    }
+    return [canonicalJson(payload), canonicalJson(manifest)];
+}
+
 export function assertFreeblackmarketSecretsForProduction(
     env: NodeJS.ProcessEnv = process.env
 ): void {
@@ -116,6 +186,11 @@ export function createFreeblackmarketProvider(): MarketplaceProvider {
     const apiPrefix = normalizeFreeblackmarketApiPrefix(process.env.FREEBLACKMARKET_API_PREFIX);
     const apiKey = process.env.FREEBLACKMARKET_API_KEY ?? '';
     const webhookSecret = process.env.FREEBLACKMARKET_WEBHOOK_SECRET ?? '';
+    // Medusa gates every /store/* route behind a (public-by-design) storefront
+    // publishable key; FBM's plugin registry read side lives there. Optional —
+    // only the signed-bundle path needs it, and it fails closed with a
+    // config pointer when unset.
+    const publishableKey = process.env.FREEBLACKMARKET_PUBLISHABLE_KEY ?? '';
     const enabled = envBool('FREEBLACKMARKET_ENABLED', true);
     assertFreeblackmarketSecretsForProduction();
 
@@ -138,6 +213,30 @@ export function createFreeblackmarketProvider(): MarketplaceProvider {
                 'content-type': 'application/json',
                 authorization: apiKey ? `Bearer ${apiKey}` : '',
                 ...(init?.headers ?? {}),
+            },
+        });
+        if (!response.ok) {
+            throw new Error(`freeblackmarket ${path} failed: ${response.status}`);
+        }
+        return (await response.json()) as T;
+    }
+
+    /**
+     * GET against FBM's public /store surface (plugin registry reads).
+     * Authenticated by the storefront publishable key, not the commerce
+     * bearer key — Medusa rejects /store requests without one.
+     */
+    async function storeGet<T>(path: string): Promise<T> {
+        if (!enabled || !publishableKey) {
+            throw new Error(
+                `[freeblackmarket] refusing to call ${path}: registry reads need ` +
+                    `FREEBLACKMARKET_PUBLISHABLE_KEY (the FBM storefront publishable key)`
+            );
+        }
+        const response = await fetch(new URL(path, baseUrl), {
+            headers: {
+                'content-type': 'application/json',
+                'x-publishable-api-key': publishableKey,
             },
         });
         if (!response.ok) {
@@ -288,6 +387,85 @@ export function createFreeblackmarketProvider(): MarketplaceProvider {
                 }
             );
             return { onboardingUrl: raw.url, expiresAt: raw.expiresAt };
+        },
+
+        /**
+         * Real signed-bundle delivery (W3): resolve the entitled commerce
+         * listing to its plugin-registry identity, then assemble the
+         * `SignedPluginBundle` the client verifier already checks from FBM's
+         * public detail + manifest routes. The stored envelope is already in
+         * the Blackout wire format (minted at publish under FBM's Ed25519
+         * platform key), and the manifest is passed through verbatim — any
+         * re-serialization here would break `manifestSha256`.
+         */
+        async issueSignedBundle(
+            entitlement: NormalizedEntitlement
+        ): Promise<SignedPluginBundleEnvelope> {
+            // 1. Commerce listing → registry slug. `pluginSlug` is stamped by
+            //    FBM's publish bridge; fall back to the listing slug (they
+            //    coincide unless the author chose a distinct registry slug).
+            const listing = await call<{ slug?: string | null; pluginSlug?: string | null }>(
+                `${apiPrefix}/catalog/listings/${entitlement.providerListingId}`
+            );
+            const slug = listing.pluginSlug ?? listing.slug;
+            if (!slug) {
+                throw new Error(
+                    `listing ${entitlement.providerListingId} has no plugin registry identity`
+                );
+            }
+
+            // 2. Latest resolvable version + its distribution envelope.
+            const detail = await storeGet<{ latest_version?: PluginVersionView | null }>(
+                `/store/plugins/${encodeURIComponent(slug)}`
+            );
+            const latest = detail.latest_version;
+            if (!latest?.signature_envelope) {
+                throw new Error(`plugin '${slug}' has no signed version to deliver`);
+            }
+            const signature = parseSignatureEnvelope(latest.signature_envelope);
+
+            // 3. The canonical distribution manifest for that exact version.
+            const manifest = await storeGet<Record<string, unknown>>(
+                `/store/plugins/${encodeURIComponent(slug)}/manifest?version=${encodeURIComponent(
+                    latest.version
+                )}`
+            );
+
+            // 4. Bundle bytes. A recorded code hash means a real blob: fetch
+            //    it and refuse on hash mismatch. Blob-less plugins
+            //    (manifest_plugin) reconstruct the signed declarative payload.
+            let bundleBytes: Buffer | null = null;
+            if (latest.code_sha256) {
+                if (!latest.signed_bundle_url) {
+                    throw new Error(`plugin '${slug}' has a code hash but no bundle URL`);
+                }
+                const response = await fetch(new URL(latest.signed_bundle_url, baseUrl));
+                if (!response.ok) {
+                    throw new Error(`bundle fetch for '${slug}' failed: ${response.status}`);
+                }
+                bundleBytes = Buffer.from(await response.arrayBuffer());
+                if (sha256Hex(bundleBytes) !== signature.sha256) {
+                    throw new Error(`bundle bytes for '${slug}' do not match the signed hash`);
+                }
+            } else {
+                for (const candidate of declarativeBundleCandidates(manifest)) {
+                    if (sha256Hex(candidate) === signature.sha256) {
+                        bundleBytes = Buffer.from(candidate, 'utf8');
+                        break;
+                    }
+                }
+                if (!bundleBytes) {
+                    throw new Error(
+                        `could not materialize bundle bytes matching the signed hash for '${slug}'`
+                    );
+                }
+            }
+
+            return {
+                manifest,
+                bundleBase64: bundleBytes.toString('base64'),
+                signature,
+            };
         },
 
         verifyWebhook(

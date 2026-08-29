@@ -35,7 +35,7 @@ import {
     ratingSummary,
     upsertReview,
 } from '../services/productReviews';
-import { isValidProductRating } from '@blackout/core';
+import { isValidProductRating, isValidProductVersion } from '@blackout/core';
 import { db } from '../db/store';
 import type { MarketplaceProviderIdString } from '../db/types';
 
@@ -278,6 +278,18 @@ marketplace.post('/listings/:providerId/:listingId/versions', async (c) => {
     }
     const parsed = await readJsonBody(c, versionSchema);
     if (parsed instanceof Response) return parsed;
+    // W3: versions must be SemVer (same write rule as the FBM plugin
+    // registry) so cross-registry version history stays comparable.
+    // Existing stored rows are untouched — this gates writes only.
+    if (!isValidProductVersion(parsed.version)) {
+        return c.json(
+            {
+                code: 'invalid_version',
+                message: 'Version must be SemVer (X.Y.Z, optional prerelease/build)',
+            },
+            400
+        );
+    }
     const version = addVersion({
         providerId,
         listingId,
