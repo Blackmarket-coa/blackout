@@ -540,6 +540,9 @@ importers:
       ioredis:
         specifier: 5.10.1
         version: 5.10.1
+      jose:
+        specifier: 5.10.0
+        version: 5.10.0
       livekit-server-sdk:
         specifier: ^2.15.2
         version: 2.15.2
