@@ -6,6 +6,7 @@ import {
     type CreatorTier,
 } from '../monetizationApi';
 import { readBlackoutApiToken } from '../marketplace/useMarketplaceAuth';
+import { EmbeddedCheckoutOverlay } from '../marketplace/EmbeddedCheckoutOverlay';
 
 interface CreatorSubscribeCtaProps {
     creatorUserId: string;
@@ -53,6 +54,10 @@ export function CreatorSubscribeCta({
     const [submitting, setSubmitting] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [confirmation, setConfirmation] = useState<string | null>(null);
+    const [activeCheckout, setActiveCheckout] = useState<{
+        redirectUrl: string;
+        sessionId: string;
+    } | null>(null);
     const token = useMemo(() => readBlackoutApiToken(), []);
 
     useEffect(() => {
@@ -86,16 +91,43 @@ export function CreatorSubscribeCta({
         setConfirmation(null);
         setSubmitting(tier.id);
         try {
-            const { subscription } = await creatorSubsApi.subscribe(tier.id, token);
-            setConfirmation(
-                `Subscription started for ${tier.name}. Complete payment to activate — FreeBlackMarket handles billing and renewals.`
-            );
-            setActiveSubs((prev) => [...prev, subscription]);
-            onSubscribed?.(subscription);
+            // W1b: the subscribe call now returns the FBM payment leg. Embed
+            // when the provider supports it (checkout overlay, same pattern as
+            // ListingDetailSlice); otherwise open the hosted page in a new tab.
+            const result = await creatorSubsApi.subscribe(tier.id, token, {
+                embed: true,
+                returnUrl: window.location.href,
+            });
+            setActiveSubs((prev) => [...prev, result.subscription]);
+            onSubscribed?.(result.subscription);
+            if (result.redirectUrl && result.embed) {
+                setActiveCheckout({
+                    redirectUrl: result.redirectUrl,
+                    sessionId: result.sessionId ?? '',
+                });
+            } else if (result.redirectUrl) {
+                window.open(result.redirectUrl, '_blank', 'noopener,noreferrer');
+                setConfirmation(
+                    `Complete payment in the FreeBlackMarket tab to activate ${tier.name} — FreeBlackMarket handles billing and renewals.`
+                );
+            } else {
+                setConfirmation(
+                    `Subscription recorded for ${tier.name}, but checkout is not available right now. No payment was taken; try again later.`
+                );
+            }
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Could not subscribe.');
         } finally {
             setSubmitting(null);
+        }
+    }
+
+    async function refreshSubscriptions() {
+        try {
+            const subsResp = await creatorSubsApi.listMySubscriptions(token);
+            setActiveSubs(subsResp.subscriptions);
+        } catch {
+            // keep the optimistic local state; the subscriptions page reloads it
         }
     }
 
@@ -119,7 +151,7 @@ export function CreatorSubscribeCta({
             { style: { ...cardStyle, color: 'var(--text-secondary)', fontSize: 12 } },
             creatorLabel
                 ? `${creatorLabel} hasn't published any subscription tiers yet.`
-                : 'This creator hasn\'t published any subscription tiers yet.'
+                : "This creator hasn't published any subscription tiers yet."
         );
     }
 
@@ -147,9 +179,19 @@ export function CreatorSubscribeCta({
                     { key: tier.id, style: tierCardStyle(false) },
                     createElement(
                         'div',
-                        { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' } },
+                        {
+                            style: {
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'baseline',
+                            },
+                        },
                         createElement('strong', undefined, tier.name),
-                        createElement('span', undefined, `${formatCents(tier.priceCents, tier.currency)}/mo`)
+                        createElement(
+                            'span',
+                            undefined,
+                            `${formatCents(tier.priceCents, tier.currency)}/mo`
+                        )
                     ),
                     tier.description
                         ? createElement(
@@ -161,7 +203,10 @@ export function CreatorSubscribeCta({
                     createElement(
                         'div',
                         { style: { fontSize: 11, opacity: 0.7 } },
-                        `${formatCents(tier.netCents, tier.currency)} to creator · ${formatCents(tier.feeCents, tier.currency)} platform fee`
+                        `${formatCents(tier.netCents, tier.currency)} to creator · ${formatCents(
+                            tier.feeCents,
+                            tier.currency
+                        )} platform fee`
                     ),
                     createElement(
                         'div',
@@ -178,19 +223,15 @@ export function CreatorSubscribeCta({
                             activeForCreator
                                 ? 'Already subscribed'
                                 : submitting === tier.id
-                                  ? 'Starting…'
-                                  : 'Subscribe'
+                                ? 'Starting…'
+                                : 'Subscribe'
                         )
                     )
                 )
             )
         ),
         error
-            ? createElement(
-                  'div',
-                  { style: { fontSize: 11, color: 'var(--text-danger)' } },
-                  error
-              )
+            ? createElement('div', { style: { fontSize: 11, color: 'var(--text-danger)' } }, error)
             : null,
         confirmation
             ? createElement(
@@ -198,6 +239,29 @@ export function CreatorSubscribeCta({
                   { style: { fontSize: 11, color: 'var(--text-success)' } },
                   confirmation
               )
+            : null,
+        activeCheckout
+            ? createElement(EmbeddedCheckoutOverlay, {
+                  redirectUrl: activeCheckout.redirectUrl,
+                  sessionId: activeCheckout.sessionId,
+                  onCompleted: () => {
+                      setActiveCheckout(null);
+                      setConfirmation(
+                          'Payment complete — your subscription activates as soon as FreeBlackMarket confirms it.'
+                      );
+                      void refreshSubscriptions();
+                  },
+                  onCancelled: () => {
+                      setActiveCheckout(null);
+                      setConfirmation(
+                          'Checkout closed. No payment was taken — you can subscribe again anytime.'
+                      );
+                  },
+                  onError: () => {
+                      setActiveCheckout(null);
+                      setError('Checkout failed. No payment was taken — please try again.');
+                  },
+              })
             : null
     );
 }

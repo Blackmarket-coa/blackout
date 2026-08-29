@@ -209,6 +209,13 @@ export function createFreeblackmarketProvider(): MarketplaceProvider {
                     sku: input.sku,
                     returnUrl: input.returnUrl,
                     embed: input.embed === true ? true : undefined,
+                    embedOrigin: input.embed === true ? input.embedOrigin : undefined,
+                    // Bounded echo FBM copies onto the order and returns on
+                    // purchase.succeeded — the return-leg correlation channel.
+                    metadata:
+                        input.metadata && Object.keys(input.metadata).length > 0
+                            ? input.metadata
+                            : undefined,
                 }),
             });
             return { redirectUrl: raw.url, sessionId: raw.id };

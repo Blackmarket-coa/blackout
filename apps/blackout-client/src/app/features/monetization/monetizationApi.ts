@@ -115,12 +115,7 @@ export const giftsApi = {
 // =============================================================================
 
 export type CreatorTierStatus = 'draft' | 'active' | 'archived';
-export type CreatorSubStatus =
-    | 'pending'
-    | 'active'
-    | 'canceled'
-    | 'refunded'
-    | 'expired';
+export type CreatorSubStatus = 'pending' | 'active' | 'canceled' | 'refunded' | 'expired';
 
 export interface CreatorTier {
     id: string;
@@ -170,11 +165,33 @@ export const creatorSubsApi = {
     archiveTier(tierId: string, token: string | null): Promise<{ tier: CreatorTier }> {
         return del(`${CREATOR_SUBS_BASE}/me/tiers/${tierId}`, token);
     },
-    listCreatorTiers(creatorUserId: string, token: string | null): Promise<{ tiers: CreatorTier[] }> {
+    listCreatorTiers(
+        creatorUserId: string,
+        token: string | null
+    ): Promise<{ tiers: CreatorTier[] }> {
         return get(`${CREATOR_SUBS_BASE}/creators/${creatorUserId}/tiers`, token);
     },
-    subscribe(tierId: string, token: string | null): Promise<{ subscription: CreatorSubscription }> {
-        return post(`${CREATOR_SUBS_BASE}/subscribe`, { tierId }, token);
+    subscribe(
+        tierId: string,
+        token: string | null,
+        options?: { embed?: boolean; returnUrl?: string }
+    ): Promise<{
+        subscription: CreatorSubscription;
+        /** FBM checkout URL for the payment leg; null when billing is unavailable (e.g. tier has no FBM listing yet). */
+        redirectUrl: string | null;
+        sessionId: string | null;
+        /** True when redirectUrl is an embeddable session (render in the checkout overlay). */
+        embed: boolean;
+    }> {
+        return post(
+            `${CREATOR_SUBS_BASE}/subscribe`,
+            {
+                tierId,
+                ...(options?.embed ? { embed: true } : {}),
+                ...(options?.returnUrl ? { returnUrl: options.returnUrl } : {}),
+            },
+            token
+        );
     },
     listMySubscriptions(token: string | null): Promise<{ subscriptions: CreatorSubscription[] }> {
         return get(`${CREATOR_SUBS_BASE}/subscriptions/me`, token);
@@ -182,7 +199,10 @@ export const creatorSubsApi = {
     listMySubscribers(token: string | null): Promise<{ subscriptions: CreatorSubscription[] }> {
         return get(`${CREATOR_SUBS_BASE}/me/subscribers`, token);
     },
-    cancel(subscriptionId: string, token: string | null): Promise<{ subscription: CreatorSubscription }> {
+    cancel(
+        subscriptionId: string,
+        token: string | null
+    ): Promise<{ subscription: CreatorSubscription }> {
         return post(`${CREATOR_SUBS_BASE}/subscriptions/${subscriptionId}/cancel`, {}, token);
     },
 };
@@ -228,7 +248,11 @@ export const communityBoostsApi = {
         currency: string,
         token: string | null
     ): Promise<{ pledge: BoostPledge }> {
-        return post(`${COMMUNITY_BOOSTS_BASE}/pledge`, { communityId, monthlyCents, currency }, token);
+        return post(
+            `${COMMUNITY_BOOSTS_BASE}/pledge`,
+            { communityId, monthlyCents, currency },
+            token
+        );
     },
     state(communityId: string, token: string | null): Promise<CommunityBoostState> {
         return get(`${COMMUNITY_BOOSTS_BASE}/communities/${communityId}/state`, token);
@@ -426,7 +450,9 @@ export const streamRevenueApi = {
         token: string | null
     ): Promise<StreamGoalProgress> {
         return get(
-            `${STREAMING_BASE}/streams/${streamId}/goal?targetCents=${targetCents}&currency=${encodeURIComponent(currency)}`,
+            `${STREAMING_BASE}/streams/${streamId}/goal?targetCents=${targetCents}&currency=${encodeURIComponent(
+                currency
+            )}`,
             token
         );
     },
@@ -452,7 +478,9 @@ export const paywallApi = {
     ): Promise<ListingEntitlementGate> {
         const suffix = sku ? `?sku=${encodeURIComponent(sku)}` : '';
         return get(
-            `${ENTITLEMENTS_BASE}/listings/${providerId}/${encodeURIComponent(providerListingId)}${suffix}`,
+            `${ENTITLEMENTS_BASE}/listings/${providerId}/${encodeURIComponent(
+                providerListingId
+            )}${suffix}`,
             token
         );
     },

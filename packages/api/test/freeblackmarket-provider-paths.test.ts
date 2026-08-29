@@ -89,6 +89,28 @@ test('createCheckoutSession hits the commerce checkout path', async () => {
         const u = new URL(captured!.url);
         assert.equal(u.pathname, `${PREFIX}/checkout/sessions`);
         assert.equal(captured!.method, 'POST');
+        // No metadata supplied → the key is omitted from the wire body.
+        const body = JSON.parse(captured!.body!) as Record<string, unknown>;
+        assert.equal('metadata' in body, false);
+    } finally {
+        reset();
+    }
+});
+
+test('createCheckoutSession forwards the metadata echo verbatim (W1b return leg)', async () => {
+    mockFetchReturning({ url: 'https://checkout', id: 'cs_3' });
+    try {
+        await provider.createCheckoutSession({
+            userId: 'u1',
+            listingId: 'l1',
+            idempotencyKey: 'idem-3',
+            metadata: { creatorSubscriptionId: 'csub_42', canopyPlanCode: 'sprout_monthly' },
+        });
+        const body = JSON.parse(captured!.body!) as { metadata?: Record<string, string> };
+        assert.deepEqual(body.metadata, {
+            creatorSubscriptionId: 'csub_42',
+            canopyPlanCode: 'sprout_monthly',
+        });
     } finally {
         reset();
     }

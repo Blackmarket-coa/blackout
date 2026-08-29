@@ -38,6 +38,10 @@ interface StubSession {
     sku: string | null;
     embed: boolean;
     createdAt: string;
+    /** Bounded echo (W1b): mirrored onto the stub's purchase webhook exactly
+     *  like the real FBM copies it onto the order — the return-leg channel
+     *  (creatorSubscriptionId / canopyPlanCode / tipId) works in dev too. */
+    metadata: Record<string, string> | null;
 }
 
 const SEEDED_LISTINGS: StubListing[] = [
@@ -91,8 +95,7 @@ const SEEDED_LISTINGS: StubListing[] = [
             providerListingId: 'stub-plugin-todo',
             category: 'plugin-curated',
             title: 'Todo Manifest Plugin',
-            description:
-                'Demo manifest plugin (no JS). Exercises the plugin_flag → registry path.',
+            description: 'Demo manifest plugin (no JS). Exercises the plugin_flag → registry path.',
             priceCents: 99,
             currency: 'USD',
             sellerId: 'stub-seller',
@@ -419,7 +422,13 @@ const SEEDED_LISTINGS: StubListing[] = [
         artifactKind: 'privacy_tool',
         artifactPayload: {
             tier: 'advanced',
-            features: ['burner_pro', 'ephemeral_pro', 'bulk_deletion', 'perturbation', 'stego_advanced'],
+            features: [
+                'burner_pro',
+                'ephemeral_pro',
+                'bulk_deletion',
+                'perturbation',
+                'stego_advanced',
+            ],
         },
         publicSlug: 'sovereignty-bundle',
         status: 'published',
@@ -518,9 +527,7 @@ function canonicalJson(value: unknown): string {
     if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
     const obj = value as Record<string, unknown>;
     const keys = Object.keys(obj).sort();
-    return `{${keys
-        .map((k) => `${JSON.stringify(k)}:${canonicalJson(obj[k])}`)
-        .join(',')}}`;
+    return `{${keys.map((k) => `${JSON.stringify(k)}:${canonicalJson(obj[k])}`).join(',')}}`;
 }
 
 function sha256Hex(bytes: Uint8Array | string): string {
@@ -543,7 +550,9 @@ export interface FreeblackmarketStubInternals {
      * Synthesize a webhook body + HMAC signature for a given session.
      * Used by the stub embed action to drive the canonical webhook flow.
      */
-    materializeWebhook(sessionId: string): { body: string; signature: string; eventId: string } | null;
+    materializeWebhook(
+        sessionId: string
+    ): { body: string; signature: string; eventId: string } | null;
     /**
      * Synthesize a signed FBM → Matrix bridge event (order.*, inventory.*,
      * ledger.*, subscription.*, dispute.*) so the canonical webhook path can be
@@ -585,19 +594,21 @@ export function createFreeblackmarketStubProvider(): MarketplaceProvider {
 
     function listFor(query: CatalogQuery): NormalizedListing[] {
         const all = [...listings.values()].filter((l) => l.status === 'published');
-        return all
-            .filter((entry) => !query.category || entry.listing.category === query.category)
-            .filter((entry) => !query.artifactKind || entry.artifactKind === query.artifactKind)
-            .filter((entry) => {
-                if (!query.q) return true;
-                const needle = query.q.toLowerCase();
-                return (
-                    entry.listing.title.toLowerCase().includes(needle) ||
-                    entry.listing.description.toLowerCase().includes(needle)
-                );
-            })
-            // Surface the source artifact kind so the client UI can group plugins.
-            .map((entry) => ({ ...entry.listing, artifactKind: entry.artifactKind }));
+        return (
+            all
+                .filter((entry) => !query.category || entry.listing.category === query.category)
+                .filter((entry) => !query.artifactKind || entry.artifactKind === query.artifactKind)
+                .filter((entry) => {
+                    if (!query.q) return true;
+                    const needle = query.q.toLowerCase();
+                    return (
+                        entry.listing.title.toLowerCase().includes(needle) ||
+                        entry.listing.description.toLowerCase().includes(needle)
+                    );
+                })
+                // Surface the source artifact kind so the client UI can group plugins.
+                .map((entry) => ({ ...entry.listing, artifactKind: entry.artifactKind }))
+        );
     }
 
     function buildEmbedUrl(sessionId: string, embed: boolean): string {
@@ -686,6 +697,10 @@ export function createFreeblackmarketStubProvider(): MarketplaceProvider {
                 sku: input.sku ?? null,
                 embed: Boolean(input.embed),
                 createdAt: nowIso(),
+                metadata:
+                    input.metadata && Object.keys(input.metadata).length > 0
+                        ? { ...input.metadata }
+                        : null,
             });
             return {
                 redirectUrl: buildEmbedUrl(sessionId, Boolean(input.embed)),
@@ -693,7 +708,10 @@ export function createFreeblackmarketStubProvider(): MarketplaceProvider {
             };
         },
 
-        verifyWebhook(rawBody: string, headers: Record<string, string | undefined>): WebhookVerification {
+        verifyWebhook(
+            rawBody: string,
+            headers: Record<string, string | undefined>
+        ): WebhookVerification {
             const signature = headers['x-fbm-signature'];
             const eventId = headers['x-fbm-event-id'] ?? null;
             if (!signature) return { ok: false, eventId, reason: 'signature-missing' };
@@ -703,9 +721,7 @@ export function createFreeblackmarketStubProvider(): MarketplaceProvider {
                 .digest('hex');
             const sigBuf = Buffer.from(signature, 'hex');
             const expBuf = Buffer.from(expected, 'hex');
-            const ok =
-                sigBuf.length === expBuf.length &&
-                crypto.timingSafeEqual(sigBuf, expBuf);
+            const ok = sigBuf.length === expBuf.length && crypto.timingSafeEqual(sigBuf, expBuf);
             return { ok, eventId, reason: ok ? undefined : 'signature-mismatch' };
         },
 
@@ -818,16 +834,15 @@ export function createFreeblackmarketStubProvider(): MarketplaceProvider {
                 kind: entry.listing.entitlementKind,
                 occurredAt: nowIso(),
                 metadata: {
+                    // Caller echo first so the stub's own stamps always win.
+                    ...(session.metadata ?? {}),
                     sessionId,
                     artifactKind: entry.artifactKind,
                     digitalDelivery: entry.digitalDelivery === true,
                     ...(features ? { features } : {}),
                 },
             });
-            const signature = crypto
-                .createHmac('sha256', webhookSecret)
-                .update(body)
-                .digest('hex');
+            const signature = crypto.createHmac('sha256', webhookSecret).update(body).digest('hex');
             return { body, signature, eventId };
         },
         materializeEvent(eventBody: Record<string, unknown>) {
@@ -841,10 +856,7 @@ export function createFreeblackmarketStubProvider(): MarketplaceProvider {
                 ...eventBody,
                 eventId,
             });
-            const signature = crypto
-                .createHmac('sha256', webhookSecret)
-                .update(body)
-                .digest('hex');
+            const signature = crypto.createHmac('sha256', webhookSecret).update(body).digest('hex');
             return { body, signature, eventId };
         },
         reset() {

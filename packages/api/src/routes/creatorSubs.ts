@@ -1,7 +1,10 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
+import type { MarketplaceProviderId } from '@blackout/core';
 import { requireUser } from '../middleware/require-user';
 import { readJsonBody } from '../middleware/validate';
+import { getMarketplaceProvider } from '../integrations/marketplace';
+import { logEvent } from '../services/marketplaceObservability';
 import {
     archiveTier,
     cancelSubscription,
@@ -33,6 +36,9 @@ const tierSchema = z.object({
 
 const subscribeSchema = z.object({
     tierId: z.string().min(1),
+    /** Request an embeddable FBM checkout (iframe overlay) instead of a redirect. */
+    embed: z.boolean().optional(),
+    returnUrl: z.string().url().optional(),
 });
 
 const captureSchema = z
@@ -127,7 +133,55 @@ creatorSubs.post('/subscribe', async (c) => {
             subscriberUserId: user.sub,
             tierId: parsed.tierId,
         });
-        return c.json({ subscription }, 201);
+
+        // W1b payment leg: money moves on FBM, never here. Open an FBM
+        // checkout session for the tier's listing, tagging it with
+        // `metadata.creatorSubscriptionId` so the purchase.succeeded webhook
+        // resolves back to this pending row (dispatchMonetizationEvent →
+        // captureSubscription). The idempotency key is DETERMINISTIC per
+        // subscription, so a retried subscribe click can never double-charge.
+        let redirectUrl: string | null = null;
+        let sessionId: string | null = null;
+        let embedActive = false;
+        const tier = getTier(parsed.tierId);
+        if (tier?.fbmListingId) {
+            const provider = getMarketplaceProvider(tier.providerId as MarketplaceProviderId);
+            if (provider?.enabled) {
+                embedActive =
+                    parsed.embed === true && provider.capabilities.includes('embedded-checkout');
+                // Providers pin CSP frame-ancestors to the embedding origin;
+                // only an https origin is accepted upstream (dev stays on the
+                // same-origin stub, where no origin pin is needed).
+                const originHeader = c.req.header('origin');
+                const embedOrigin =
+                    embedActive && originHeader?.startsWith('https://') ? originHeader : undefined;
+                try {
+                    const result = await provider.createCheckoutSession({
+                        userId: user.sub,
+                        listingId: tier.fbmListingId,
+                        idempotencyKey: `creator-sub:${subscription.id}`,
+                        returnUrl: parsed.returnUrl,
+                        embed: embedActive,
+                        embedOrigin,
+                        metadata: { creatorSubscriptionId: subscription.id },
+                    });
+                    redirectUrl = result.redirectUrl;
+                    sessionId = result.sessionId;
+                } catch (checkoutError) {
+                    embedActive = false;
+                    logEvent('creator_sub.checkout.failed', {
+                        subscriptionId: subscription.id,
+                        tierId: parsed.tierId,
+                        error:
+                            checkoutError instanceof Error
+                                ? checkoutError.message
+                                : String(checkoutError),
+                    });
+                }
+            }
+        }
+
+        return c.json({ subscription, redirectUrl, sessionId, embed: embedActive }, 201);
     } catch (error) {
         if (error instanceof CreatorSubscriptionError) {
             return c.json(
@@ -155,7 +209,8 @@ creatorSubs.get('/subscriptions/:id', (c) => {
     const user = requireUser(c);
     if (user instanceof Response) return user;
     const sub = getSubscription(c.req.param('id'));
-    if (!sub) return c.json({ code: 'subscription_not_found', message: 'No such subscription' }, 404);
+    if (!sub)
+        return c.json({ code: 'subscription_not_found', message: 'No such subscription' }, 404);
     if (sub.subscriberUserId !== user.sub && sub.creatorUserId !== user.sub) {
         return c.json({ code: 'subscription_not_found', message: 'No such subscription' }, 404);
     }
@@ -166,7 +221,8 @@ creatorSubs.post('/subscriptions/:id/cancel', (c) => {
     const user = requireUser(c);
     if (user instanceof Response) return user;
     const sub = cancelSubscription(c.req.param('id'), user.sub);
-    if (!sub) return c.json({ code: 'subscription_not_found', message: 'No such subscription' }, 404);
+    if (!sub)
+        return c.json({ code: 'subscription_not_found', message: 'No such subscription' }, 404);
     return c.json({ subscription: sub });
 });
 
@@ -176,9 +232,10 @@ creatorSubs.post('/subscriptions/:id/capture', async (c) => {
     const guard = adminGate(c);
     if (guard !== true) return guard;
     const parsed = await readJsonBody(c, captureSchema);
-    const detail = parsed instanceof Response ? {} : (parsed ?? {});
+    const detail = parsed instanceof Response ? {} : parsed ?? {};
     const sub = captureSubscription(c.req.param('id'), detail);
-    if (!sub) return c.json({ code: 'subscription_not_found', message: 'No such subscription' }, 404);
+    if (!sub)
+        return c.json({ code: 'subscription_not_found', message: 'No such subscription' }, 404);
     return c.json({ subscription: sub });
 });
 
@@ -186,7 +243,8 @@ creatorSubs.post('/subscriptions/:id/refund', (c) => {
     const guard = adminGate(c);
     if (guard !== true) return guard;
     const sub = refundSubscription(c.req.param('id'));
-    if (!sub) return c.json({ code: 'subscription_not_found', message: 'No such subscription' }, 404);
+    if (!sub)
+        return c.json({ code: 'subscription_not_found', message: 'No such subscription' }, 404);
     return c.json({ subscription: sub });
 });
 

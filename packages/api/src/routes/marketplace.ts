@@ -44,7 +44,9 @@ const marketplace = new Hono();
 const LISTING_TTL_MS = 60_000;
 
 function cacheKey(providerId: MarketplaceProviderId, query: CatalogQuery): string {
-    return `${providerId}|${query.category ?? ''}|${query.artifactKind ?? ''}|${query.q ?? ''}|${query.cursor ?? ''}|${query.limit ?? ''}`;
+    return `${providerId}|${query.category ?? ''}|${query.artifactKind ?? ''}|${query.q ?? ''}|${
+        query.cursor ?? ''
+    }|${query.limit ?? ''}`;
 }
 
 function readQuery(c: Context): CatalogQuery {
@@ -70,6 +72,15 @@ const checkoutSchema = z.object({
     sku: z.string().optional(),
     returnUrl: z.string().optional(),
     embed: z.boolean().optional(),
+    // Bounded string→string echo forwarded to the provider and returned on its
+    // purchase webhooks (the return-leg correlation channel). Caps mirror
+    // FBM's: ≤20 keys, ≤64-char keys, ≤500-char values.
+    metadata: z
+        .record(z.string().max(64), z.string().max(500))
+        .refine((m) => Object.keys(m).length <= 20, {
+            message: 'metadata is limited to 20 keys',
+        })
+        .optional(),
 });
 
 marketplace.get('/providers', (c) => {
@@ -149,7 +160,9 @@ marketplace.get('/listings', async (c) => {
                         listings,
                         refreshedAt: new Date().toISOString(),
                     });
-                    incrementCounter('marketplace_catalog_fetch_total', { providerId: provider.id });
+                    incrementCounter('marketplace_catalog_fetch_total', {
+                        providerId: provider.id,
+                    });
                     return listings;
                 } catch (error) {
                     logEvent('marketplace.catalog.fetch_failed', {
@@ -265,7 +278,12 @@ marketplace.post('/listings/:providerId/:listingId/versions', async (c) => {
     }
     const parsed = await readJsonBody(c, versionSchema);
     if (parsed instanceof Response) return parsed;
-    const version = addVersion({ providerId, listingId, version: parsed.version, notes: parsed.notes });
+    const version = addVersion({
+        providerId,
+        listingId,
+        version: parsed.version,
+        notes: parsed.notes,
+    });
     return c.json({ version }, 201);
 });
 
@@ -274,7 +292,7 @@ marketplace.post('/checkout', async (c) => {
     if (user instanceof Response) return user;
     const parsed = await readJsonBody(c, checkoutSchema);
     if (parsed instanceof Response) return parsed;
-    const { providerId, listingId, sku, returnUrl, embed } = parsed;
+    const { providerId, listingId, sku, returnUrl, embed, metadata } = parsed;
     if (!isProviderId(providerId)) {
         return c.json({ code: 'invalid_provider', message: 'Unknown provider id' }, 400);
     }
@@ -285,6 +303,9 @@ marketplace.post('/checkout', async (c) => {
 
     const idempotencyKey = `${providerId}:${user.sub}:${listingId}:${crypto.randomUUID()}`;
     const wantsEmbed = embed === true && provider.capabilities.includes('embedded-checkout');
+    // Providers pin CSP frame-ancestors to the embedding origin; only an
+    // https origin is forwarded (dev uses the same-origin stub).
+    const originHeader = c.req.header('origin');
     const result = await provider.createCheckoutSession({
         userId: user.sub,
         listingId,
@@ -292,6 +313,8 @@ marketplace.post('/checkout', async (c) => {
         idempotencyKey,
         returnUrl,
         embed: wantsEmbed,
+        embedOrigin: wantsEmbed && originHeader?.startsWith('https://') ? originHeader : undefined,
+        metadata,
     });
     incrementCounter('marketplace_checkout_created_total', { providerId });
     logEvent('marketplace.checkout.created', {
@@ -503,7 +526,11 @@ marketplace.post('/stub/fbm-event/:kind', async (c) => {
         'x-fbm-signature': materialized.signature,
     });
     return c.json(
-        { ok: result.ok, eventId: materialized.eventId, alreadyProcessed: result.applied?.alreadyProcessed ?? false },
+        {
+            ok: result.ok,
+            eventId: materialized.eventId,
+            alreadyProcessed: result.applied?.alreadyProcessed ?? false,
+        },
         result.status === 200 ? 200 : (result.status as 400 | 401 | 404 | 502)
     );
 });
