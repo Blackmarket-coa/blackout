@@ -1,0 +1,23 @@
+{
+  "m.homeserver": {
+    "base_url": "${MATRIX_HOMESERVER_URL}"
+  },
+  "org.matrix.msc2965.authentication": {
+    "issuer": "${MAS_ISSUER}",
+    "account": "${MAS_ISSUER}account"
+  },
+  "org.matrix.msc4143.rtc_foci": [
+    {
+      "type": "livekit",
+      "livekit_service_url": "${MATRIX_WELL_KNOWN_CLIENT_URL}/livekit/sfu",
+      "livekit_jwt_url": "${MATRIX_WELL_KNOWN_CLIENT_URL}/livekit/jwt"
+    }
+  ],
+  "rtc_foci": [
+    {
+      "type": "livekit",
+      "livekit_service_url": "${MATRIX_WELL_KNOWN_CLIENT_URL}/livekit/sfu",
+      "livekit_jwt_url": "${MATRIX_WELL_KNOWN_CLIENT_URL}/livekit/jwt"
+    }
+  ]
+}

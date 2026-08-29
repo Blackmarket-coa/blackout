@@ -27,6 +27,19 @@ clients:
   - client_id: "${MAS_CLIENT_ID}"
     client_auth_method: "${MAS_CLIENT_AUTH_METHOD}"
     client_secret: "${MAS_CLIENT_SECRET}"
+  # W2 — ecosystem relying parties (consolidation D4: MAS is the one IdP).
+  # FBM's Medusa `mas` auth provider (authorization-code + PKCE):
+  - client_id: "${MAS_FBM_CLIENT_ID}"
+    client_auth_method: client_secret_post
+    client_secret: "${MAS_FBM_CLIENT_SECRET}"
+    redirect_uris:
+      - "${MAS_FBM_REDIRECT_URI}"
+  # The Blackout API's native OIDC login (/v1/auth/oidc/begin + /continue):
+  - client_id: "${MAS_BLACKOUT_API_CLIENT_ID}"
+    client_auth_method: client_secret_post
+    client_secret: "${MAS_BLACKOUT_API_CLIENT_SECRET}"
+    redirect_uris:
+      - "${MAS_BLACKOUT_API_REDIRECT_URI}"
 
 secrets:
   encryption: "${MAS_ENCRYPTION_KEY}"

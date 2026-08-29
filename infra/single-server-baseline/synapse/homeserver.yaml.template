@@ -98,6 +98,16 @@ trusted_key_servers:
 encryption_enabled_by_default_for_room_type: invite
 
 # Delegated auth (OIDC): configure one issuer (Keycloak or Authentik) via env.
+#
+# DEPRECATED for BMC deployments (consolidation D4 / W2): the supported
+# delegated-auth path for the BMC ecosystem is MAS / MSC3861 via
+# deploy/docker/blackout-backend (SYNAPSE_AUTH_MODE=mas — "Mode B" in that
+# stack's README). Classic `oidc_providers` below is retained only for
+# standalone non-MAS single-server installs and receives no further BMC
+# integration work. Note also that this template uses `${VAR:-default}`
+# syntax, which plain envsubst does NOT expand — it only works with a
+# shell-based renderer.
+#
 # Example issuers:
 # - Keycloak: https://keycloak.theblackout.app/realms/blackout
 # - Authentik: https://auth.theblackout.app/application/o/blackout/
