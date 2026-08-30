@@ -76,6 +76,7 @@ import coalitionCreditsRoutes from './routes/coalitionCredits';
 import bountyRoutes from './routes/bounties';
 import coliseumRoutes from './routes/coliseum';
 import reputationRoutes from './routes/reputation';
+import spatialRoutes from './routes/spatial';
 import webauthnRoutes from './routes/webauthn';
 import keyTransparencyRoutes from './routes/keyTransparency';
 import diagnosticsRoutes from './routes/diagnostics';
@@ -262,6 +263,7 @@ for (const root of legacyAliasEnabled ? [API_ROOTS.v1, API_ROOTS.legacyApiAlias]
     app.route(`${root}/bounties`, bountyRoutes);
     app.route(`${root}/coliseum`, coliseumRoutes);
     app.route(`${root}/reputation`, reputationRoutes);
+    app.route(`${root}/spatial`, spatialRoutes);
     app.route(`${root}/auth/webauthn`, webauthnRoutes);
     app.route(`${root}/key-transparency`, keyTransparencyRoutes);
     app.route(`${root}/diagnostics`, diagnosticsRoutes);
