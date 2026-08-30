@@ -73,8 +73,23 @@ verdicts, decisions, and the ordered roadmap — is `docs/REPO_CONSOLIDATION_REV
     mirrors FBM's W4-2 debt row. Vendor trust keeps flowing FBM→blackout only (`co.bmc.vendor.trust`
     stamped from FBM's math) — this repo never computes vendor trust from its own log.
 -   **Geospatial home (decision D5, W5)**: the MapLibre + PostGIS + martin + geocoder-proxy stack
-    here is the ecosystem's one spatial service. W5 exposes it as an API for FBM (which retires its
-    haversine helpers and ZIP3 lookup) and any future logistics work.
+    here is the ecosystem's one spatial service. **W5 landed dark (2026-08-30)**: `/v1/spatial/*`
+    is the service-to-service surface — token-authed (`x-spatial-token` against
+    `SPATIAL_SERVICE_TOKENS`, comma-separated for rotation; unset ⇒ 503, the default), rate-limited
+    per service token (`SPATIAL_RATE_LIMIT_MAX`, default 120/min — deliberately not the per-user
+    coalition bucket, which would put a whole peer backend in one user-sized bucket), serving
+    `/geocode` (same wire contract as `/v1/coalition/geocode`; both delegate to the hardened
+    `services/geocoder` proxy) and `/health`. FBM consumes it via its `blackout-spatial` client
+    behind `FBM_BLACKOUT_SPATIAL` and retires its ZIP3/haversine duplication on its side.
+    Honesty notes + deferrals: the deployed PostGIS + martin remain UNFED by the product (the
+    `coalition` schema is empty; every product distance is still JS haversine over plain lat/lng —
+    `OSS_GAP_FILL_BUILD_PLAN.md` WS4 owns feeding it, and `docs/runbooks/SPATIAL_LAYER_BASE.md`
+    already specifies the table conventions); nearby-search and zone-containment for FBM need a
+    data-ownership decision (Blackout would have to hold FBM's vendor coordinates) and are NOT
+    exposed; reverse geocoding does not exist; the client's silent OSM-raster fallback is now at
+    least documented (`VITE_MAPLIBRE_STYLE_URL` in the client `.env.example`) so deployments can
+    point tile traffic at their own martin. The standalone `coalition-app` repo absorb/archive
+    remains an operator action.
 -   **Queued hygiene**: collapse the three client shells (`apps/blackout-client` is the live one;
     `apps/blackout-gov` and `legacy/blackout-web` are migration residue), reconcile the four
     governance implementations (core / protocol / sdk / api) onto one, and fix the stale root
