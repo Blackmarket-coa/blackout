@@ -4612,6 +4612,15 @@ class InMemoryDb {
         return [...this.reputationEvents.values()];
     }
 
+    /** One user's events without scanning the whole log at the caller. */
+    listReputationEventsForUser(userId: string): ReputationEventRecord[] {
+        const events: ReputationEventRecord[] = [];
+        for (const event of this.reputationEvents.values()) {
+            if (event.userId === userId) events.push(event);
+        }
+        return events;
+    }
+
     /** True if an award with this dedupe key was already recorded. */
     reputationDedupeKeyExists(dedupeKey: string): boolean {
         for (const event of this.reputationEvents.values()) {
@@ -4621,6 +4630,11 @@ class InMemoryDb {
     }
 
     addReputationEvent(record: ReputationEventRecord): ReputationEventRecord {
+        // Append-only, enforced (W4): the log records history; a correction is
+        // a later compensating event, never an overwrite of an existing row.
+        if (this.reputationEvents.has(record.id)) {
+            throw new Error(`reputation_events is append-only; refusing to overwrite ${record.id}`);
+        }
         this.reputationEvents.set(record.id, record);
         return record;
     }

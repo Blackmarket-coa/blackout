@@ -1746,6 +1746,14 @@ export interface ColiseumExplainerVoteRecord {
  * A subject-scoped reputation award. Persisted so per-subject standing survives
  * a restart; `dedupeKey` (when present) makes an award idempotent and the dedupe
  * survives reloads too.
+ *
+ * W4 (decision D7) — the log's invariants, stated rather than emergent:
+ * append-only (`addReputationEvent` refuses to overwrite an existing id;
+ * corrections are later compensating events, never mutations), and
+ * TRANSFER-PROHIBITED — `userId` is written once and no API reassigns
+ * reputation between users (see `no-governance-trade` in the gamification
+ * banlist). `actor` names who/what caused the award (a user id, or a system
+ * actor like `coliseum:verdict`); `detail` is the free-form audit payload.
  */
 export interface ReputationEventRecord {
     id: UUID;
@@ -1754,5 +1762,7 @@ export interface ReputationEventRecord {
     subject?: ReputationSubject;
     points?: number;
     dedupeKey?: string;
+    actor?: string;
+    detail?: Record<string, unknown>;
     createdAt: string;
 }

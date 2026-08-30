@@ -103,6 +103,7 @@ import {
     voteForEntry,
 } from '../services/coliseumChallenges';
 import { leaderboard } from '../services/leaderboards';
+import { getUserArenaRecord, getUserReputation } from '../services/reputationStore';
 
 const coliseum = new Hono();
 
@@ -677,8 +678,12 @@ coliseum.get('/leaderboards', (c) => {
 // --- per-creator public summary ---
 
 // Public: a creator's Coliseum standing for the public profile page. Aggregates
-// challenges they run, challenges they've entered (with rank/wins) and their
-// creators-leaderboard placement. No auth required — read-only public data.
+// challenges they run, challenges they've entered (with rank/wins), and — W4
+// (decision D7) — their standing DERIVED FROM THE REPUTATION EVENT LOG. The
+// previous version ranked on the discovery `activityScore` (an
+// impression/click counter): exactly the attention metric the knowledge
+// archive refuses to rank on. Standing now means earned per-subject
+// reputation, never reach. No auth required — read-only public data.
 coliseum.get('/creators/:userId', (c) => {
     const userId = decodeURIComponent(c.req.param('userId'));
 
@@ -707,14 +712,17 @@ coliseum.get('/creators/:userId', (c) => {
     }
     const wins = entries.filter((entry) => entry.rank === 1).length;
 
-    const placement = leaderboard('creators', {}).find((entry) => entry.id === userId) ?? null;
-
     return c.json({
         userId,
         challengesRun,
         entries,
         wins,
-        leaderboard: placement,
+        // Derived from reputation_events (the governance-context log), not
+        // from any attention/activity counter.
+        standing: {
+            reputation: getUserReputation(userId),
+            record: getUserArenaRecord(userId),
+        },
     });
 });
 
