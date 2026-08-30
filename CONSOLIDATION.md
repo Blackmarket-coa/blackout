@@ -53,6 +53,25 @@ verdicts, decisions, and the ordered roadmap — is `docs/REPO_CONSOLIDATION_REV
     operator item; `code_plugin` sandbox runtime remains pre-existing M19, not W3. Blackout's
     slots/panels model and FBM's author-side webhook hooks are complementary surfaces, not a
     conflict — no reconciliation needed.
+-   **Reputation (decision D7, W4)**: the canonical economic-reputation log is FBM's
+    `karma_event`; this repo's `reputation_events` is the governance-context log — kept under its
+    own name ON PURPOSE (the data export's "KARMA has no implementation" assertion and the
+    anti-karma-farming posture in the design spec are deliberate, tested claims). **W4 landed
+    (2026-08-30)**: the log is hardened to D7's adjectives — source-attributed (`actor` +
+    `detail` columns; endorsements now record who endorsed instead of burying the voter in a
+    dedupe string), append-only enforced at the one write path (`addReputationEvent` refuses
+    overwrites; corrections are compensating events), and transfer prohibition stated in the
+    type + asserted by test. `GET /v1/coliseum/creators/:userId` "standing" now derives from
+    the reputation log instead of the discovery `activityScore` — the attention metric the
+    knowledge archive explicitly refuses to rank on. Deferred: the constant-`'member'`
+    `UserRecord.reputationTier` still gates plugin scopes (`authorizeScope`) — deriving it
+    live from the log is an AUTHORIZATION change, operator's call, not a refactor to sneak in;
+    `SellerProfileRecord.reputationTier` stays server-write-only with no writer (FBM-derived,
+    future); the three trust-tier vocabularies (marketplace presentation / FBM vendor-trust
+    room state / reputation ladder) remain three vocabularies — reconciliation queued;
+    DB-level append-only enforcement (the pg write path still rides the generic upsert queue)
+    mirrors FBM's W4-2 debt row. Vendor trust keeps flowing FBM→blackout only (`co.bmc.vendor.trust`
+    stamped from FBM's math) — this repo never computes vendor trust from its own log.
 -   **Geospatial home (decision D5, W5)**: the MapLibre + PostGIS + martin + geocoder-proxy stack
     here is the ecosystem's one spatial service. W5 exposes it as an API for FBM (which retires its
     haversine helpers and ZIP3 lookup) and any future logistics work.
