@@ -58,6 +58,7 @@ import type {
     LinkedAccountRecord,
     LinkedAccountProvider,
     PendingOAuthLinkRecord,
+    PendingOidcLoginRecord,
     TwitchChatBridgeRecord,
     TwitchEventSubscriptionRecord,
     WidgetAlertTokenRecord,
@@ -219,6 +220,7 @@ type PersistedState = {
     revokedSessions: RevokedSessionRecord[];
     linkedAccounts: LinkedAccountRecord[];
     pendingOAuthLinks: PendingOAuthLinkRecord[];
+    pendingOidcLogins: PendingOidcLoginRecord[];
     twitchChatBridges: TwitchChatBridgeRecord[];
     twitchEventSubscriptions: TwitchEventSubscriptionRecord[];
     widgetAlertTokens: WidgetAlertTokenRecord[];
@@ -376,6 +378,8 @@ class InMemoryDb {
     linkedAccounts = new Map<string, LinkedAccountRecord>();
     /** Keyed by stateHash. */
     pendingOAuthLinks = new Map<string, PendingOAuthLinkRecord>();
+    /** Keyed by stateHash (native-OIDC login flows — no user id; see types). */
+    pendingOidcLogins = new Map<string, PendingOidcLoginRecord>();
     /** Keyed by bridge id. */
     twitchChatBridges = new Map<string, TwitchChatBridgeRecord>();
     /** Keyed by helixSubscriptionId for O(1) inbound-notification lookup. */
@@ -1113,6 +1117,38 @@ class InMemoryDb {
         for (const [hash, record] of this.pendingOAuthLinks) {
             if (new Date(record.expiresAt).getTime() <= now.getTime()) {
                 this.pendingOAuthLinks.delete(hash);
+                removed += 1;
+            }
+        }
+        return removed;
+    }
+
+    // --- native-OIDC login state (W2, /v1/auth/oidc/*) ---
+
+    createPendingOidcLogin(
+        input: Omit<PendingOidcLoginRecord, 'createdAt'>
+    ): PendingOidcLoginRecord {
+        const record: PendingOidcLoginRecord = { ...input, createdAt: nowIso() };
+        this.pendingOidcLogins.set(record.stateHash, record);
+        return record;
+    }
+
+    /** Single-use: a consumed or expired row is never returned again. */
+    consumePendingOidcLogin(stateHash: string): PendingOidcLoginRecord | undefined {
+        const existing = this.pendingOidcLogins.get(stateHash);
+        if (!existing) return undefined;
+        if (existing.consumedAt) return undefined;
+        if (new Date(existing.expiresAt).getTime() <= Date.now()) return undefined;
+        const updated: PendingOidcLoginRecord = { ...existing, consumedAt: nowIso() };
+        this.pendingOidcLogins.set(stateHash, updated);
+        return updated;
+    }
+
+    prunePendingOidcLogins(now: Date = new Date()): number {
+        let removed = 0;
+        for (const [hash, record] of this.pendingOidcLogins) {
+            if (new Date(record.expiresAt).getTime() <= now.getTime()) {
+                this.pendingOidcLogins.delete(hash);
                 removed += 1;
             }
         }
@@ -4576,6 +4612,15 @@ class InMemoryDb {
         return [...this.reputationEvents.values()];
     }
 
+    /** One user's events without scanning the whole log at the caller. */
+    listReputationEventsForUser(userId: string): ReputationEventRecord[] {
+        const events: ReputationEventRecord[] = [];
+        for (const event of this.reputationEvents.values()) {
+            if (event.userId === userId) events.push(event);
+        }
+        return events;
+    }
+
     /** True if an award with this dedupe key was already recorded. */
     reputationDedupeKeyExists(dedupeKey: string): boolean {
         for (const event of this.reputationEvents.values()) {
@@ -4585,6 +4630,11 @@ class InMemoryDb {
     }
 
     addReputationEvent(record: ReputationEventRecord): ReputationEventRecord {
+        // Append-only, enforced (W4): the log records history; a correction is
+        // a later compensating event, never an overwrite of an existing row.
+        if (this.reputationEvents.has(record.id)) {
+            throw new Error(`reputation_events is append-only; refusing to overwrite ${record.id}`);
+        }
         this.reputationEvents.set(record.id, record);
         return record;
     }
@@ -4736,6 +4786,9 @@ export class FileBackedDb extends InMemoryDb {
                 `${row.blackoutUserId}:${row.provider}`,
                 row,
             ])
+        );
+        this.pendingOidcLogins = new Map(
+            (parsed.pendingOidcLogins ?? []).map((row) => [row.stateHash, row])
         );
         this.pendingOAuthLinks = new Map(
             (parsed.pendingOAuthLinks ?? []).map((row) => [row.stateHash, row])
@@ -5081,6 +5134,7 @@ export class FileBackedDb extends InMemoryDb {
             revokedSessions: [...this.revokedSessions.values()],
             linkedAccounts: [...this.linkedAccounts.values()],
             pendingOAuthLinks: [...this.pendingOAuthLinks.values()],
+            pendingOidcLogins: [...this.pendingOidcLogins.values()],
             twitchChatBridges: [...this.twitchChatBridges.values()],
             twitchEventSubscriptions: [...this.twitchEventSubscriptions.values()],
             widgetAlertTokens: [...this.widgetAlertTokens.values()],

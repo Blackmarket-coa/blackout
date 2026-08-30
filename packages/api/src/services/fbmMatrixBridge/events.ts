@@ -100,6 +100,21 @@ export interface FbmSubscriptionLapsedEvent extends FbmMatrixEventBase {
     subscriptionId: string;
 }
 
+/**
+ * W1b: a renewal charge failed upstream (FBM dunning). Advisory — access only
+ * lapses via `subscription.lapsed`; this feeds the member's billing audit
+ * trail and (future) notifications.
+ */
+export interface FbmSubscriptionPaymentFailedEvent extends FbmMatrixEventBase {
+    type: 'subscription.payment_failed';
+    userId: string;
+    tier: FbmSubscriptionTier;
+    subscriptionId: string;
+    attempt?: number;
+    willRetry?: boolean;
+    nextRetryAt?: string;
+}
+
 export interface FbmDisputeOpenedEvent extends FbmMatrixEventBase {
     type: 'dispute.opened';
     disputeId: string;
@@ -220,6 +235,7 @@ export type FbmMatrixEvent =
     | FbmLedgerEvent
     | FbmSubscriptionActivatedEvent
     | FbmSubscriptionLapsedEvent
+    | FbmSubscriptionPaymentFailedEvent
     | FbmDisputeOpenedEvent
     | FbmDisputeResolvedEvent
     | FbmCycleEvent
@@ -230,17 +246,14 @@ export type FbmMatrixEvent =
     | FbmBarterEvent
     | FbmCreditsEvent;
 
-export const logisticsKindFromType = (
-    type: FbmLogisticsEvent['type']
-): FbmLogisticsEventKind => type.slice('blackstar.'.length) as FbmLogisticsEventKind;
+export const logisticsKindFromType = (type: FbmLogisticsEvent['type']): FbmLogisticsEventKind =>
+    type.slice('blackstar.'.length) as FbmLogisticsEventKind;
 
-export const barterKindFromType = (
-    type: FbmBarterEvent['type']
-): FbmBarterEventKind => type.slice('barter.'.length) as FbmBarterEventKind;
+export const barterKindFromType = (type: FbmBarterEvent['type']): FbmBarterEventKind =>
+    type.slice('barter.'.length) as FbmBarterEventKind;
 
-export const creditsKindFromType = (
-    type: FbmCreditsEvent['type']
-): FbmCreditsEventKind => type.slice('credits.'.length) as FbmCreditsEventKind;
+export const creditsKindFromType = (type: FbmCreditsEvent['type']): FbmCreditsEventKind =>
+    type.slice('credits.'.length) as FbmCreditsEventKind;
 
 export type FbmMatrixEventType = FbmMatrixEvent['type'];
 
@@ -255,6 +268,7 @@ const FBM_MATRIX_EVENT_TYPES: ReadonlySet<string> = new Set<FbmMatrixEventType>(
     'ledger.usdc_converted',
     'subscription.activated',
     'subscription.lapsed',
+    'subscription.payment_failed',
     'dispute.opened',
     'dispute.resolved',
     'cycle.open',
@@ -484,6 +498,23 @@ export function parseFbmMatrixEvent(payload: unknown): FbmMatrixEvent | null {
                 subscriptionId,
             };
         }
+        case 'subscription.payment_failed': {
+            const userId = str(payload, 'userId');
+            const tier = str(payload, 'tier');
+            const subscriptionId = str(payload, 'subscriptionId');
+            if (!userId || !tier || !SUBSCRIPTION_TIERS.has(tier) || !subscriptionId) return null;
+            const willRetry = payload['willRetry'];
+            return {
+                ...base,
+                type,
+                userId,
+                tier: tier as FbmSubscriptionTier,
+                subscriptionId,
+                attempt: num(payload, 'attempt'),
+                willRetry: typeof willRetry === 'boolean' ? willRetry : undefined,
+                nextRetryAt: str(payload, 'nextRetryAt'),
+            };
+        }
         case 'dispute.opened': {
             const disputeId = str(payload, 'disputeId');
             const vendorId = str(payload, 'vendorId');
@@ -668,6 +699,5 @@ export function parseFbmMatrixEvent(payload: unknown): FbmMatrixEvent | null {
 
 // `FbmLedgerEventKind` is re-exported so callers can map an event type to the
 // content-block kind without re-deriving the suffix.
-export const ledgerKindFromType = (
-    type: FbmLedgerEvent['type']
-): FbmLedgerEventKind => type.slice('ledger.'.length) as FbmLedgerEventKind;
+export const ledgerKindFromType = (type: FbmLedgerEvent['type']): FbmLedgerEventKind =>
+    type.slice('ledger.'.length) as FbmLedgerEventKind;

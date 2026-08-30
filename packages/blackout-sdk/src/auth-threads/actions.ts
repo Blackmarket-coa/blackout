@@ -36,13 +36,23 @@ export const createAuthActions = (client: ApiClient) => ({
         }),
     /**
      * Continue/refresh the current OIDC session. Server emits a
-     * `blackout.auth.session.continued` envelope.
+     * `blackout.auth.session.continued` envelope. For `reason: 'login'` /
+     * `'idp_handoff'`, pass the `code` + `state` from the IdP redirect (W2);
+     * the response then also carries an additive `session` with the minted
+     * API token. `idToken` remains reserved (the server rejects bare
+     * id_tokens — no transaction nonce binding).
      */
     continueOidcSession: (input: {
         reason: AuthSessionContinuationReason;
+        code?: string;
+        state?: string;
         idToken?: string;
     }) =>
-        client<AuthSessionContinuedEvent>({
+        client<
+            AuthSessionContinuedEvent & {
+                session?: { token: string; refreshToken: string; userId: string };
+            }
+        >({
             method: 'POST',
             path: '/v1/auth/oidc/continue',
             body: input,
@@ -99,10 +109,7 @@ export const createThreadActivityActions = (client: ApiClient) => ({
 export const aggregateThreadUnread = (
     activities: readonly ThreadActivityUpdatedPayload[]
 ): number =>
-    activities.reduce(
-        (acc, entry) => acc + (entry.unreadCount > 0 ? entry.unreadCount : 0),
-        0
-    );
+    activities.reduce((acc, entry) => acc + (entry.unreadCount > 0 ? entry.unreadCount : 0), 0);
 
 /**
  * Pure helper: merges a thread-activity envelope into a local list,

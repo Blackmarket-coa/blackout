@@ -94,6 +94,21 @@ export interface CheckoutInput {
      * to its parent so the host can refresh entitlements without page reload.
      */
     embed?: boolean;
+    /**
+     * Origin allowed to frame the embedded checkout (required by providers that
+     * pin CSP `frame-ancestors` to it). Ignored unless `embed` is true.
+     */
+    embedOrigin?: string;
+    /**
+     * Bounded string→string echo the provider copies onto the resulting order
+     * and returns verbatim on its purchase webhooks. This is the return-leg
+     * correlation channel: `metadata.creatorSubscriptionId`,
+     * `metadata.canopyPlanCode`, and `metadata.tipId` are how
+     * `dispatchMonetizationEvent` maps a settled purchase back to the local
+     * record that initiated it. Keep it small (providers cap ~20 keys /
+     * 500-char values) and never put PII in it.
+     */
+    metadata?: Record<string, string>;
 }
 
 export interface CheckoutResult {

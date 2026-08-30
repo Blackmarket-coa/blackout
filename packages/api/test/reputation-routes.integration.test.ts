@@ -43,7 +43,9 @@ test('reputation reflects seeded debate endorsements by subject', async () => {
 });
 
 test('an up-vote credits the author by subject, idempotently', async () => {
-    const before = (await (await app.request('/v1/reputation/@scribe:server')).json()) as ReputationResponse;
+    const before = (await (
+        await app.request('/v1/reputation/@scribe:server')
+    ).json()) as ReputationResponse;
     const beforeTech = before.reputation.bySubject.tech?.score ?? 0;
 
     // arg-ai-1 (author @scribe:server) lives on a 'tech' topic.
@@ -54,7 +56,9 @@ test('an up-vote credits the author by subject, idempotently', async () => {
     });
     assert.equal(vote.status, 201);
 
-    const after = (await (await app.request('/v1/reputation/@scribe:server')).json()) as ReputationResponse;
+    const after = (await (
+        await app.request('/v1/reputation/@scribe:server')
+    ).json()) as ReputationResponse;
     assert.equal(after.reputation.bySubject.tech!.score, beforeTech + 2);
 
     // Re-voting up from the same voter must not inflate reputation again.
@@ -63,7 +67,9 @@ test('an up-vote credits the author by subject, idempotently', async () => {
         headers: { ...authHeader('@fresh-voter:server'), 'content-type': 'application/json' },
         body: JSON.stringify({ direction: 'up' }),
     });
-    const again = (await (await app.request('/v1/reputation/@scribe:server')).json()) as ReputationResponse;
+    const again = (await (
+        await app.request('/v1/reputation/@scribe:server')
+    ).json()) as ReputationResponse;
     assert.equal(again.reputation.bySubject.tech!.score, beforeTech + 2);
 });
 
@@ -73,4 +79,50 @@ test('unknown user has empty reputation', async () => {
     const body = (await response.json()) as ReputationResponse;
     assert.equal(body.reputation.overall.score, 0);
     assert.deepEqual(body.reputation.bySubject, {});
+});
+
+// ── W4 (decision D7): source attribution, append-only, transfer prohibition ──
+
+test('W4: an endorsement records WHO endorsed (actor + detail), not just a dedupe string', async () => {
+    const { db } = await import('../src/db/store');
+
+    const vote = await app.request('/v1/coliseum/arguments/arg-ai-1/vote', {
+        method: 'POST',
+        headers: { ...authHeader('@attributed-voter:server'), 'content-type': 'application/json' },
+        body: JSON.stringify({ direction: 'up' }),
+    });
+    assert.equal(vote.status, 201);
+
+    const event = db
+        .listReputationEvents()
+        .find((e) => e.dedupeKey === 'endorse:@attributed-voter:server:arg-ai-1');
+    assert.ok(event, 'endorsement event recorded');
+    assert.equal(event!.actor, '@attributed-voter:server');
+    assert.equal((event!.detail as { argumentId?: string }).argumentId, 'arg-ai-1');
+});
+
+test('W4: the log is append-only — overwriting an existing event id throws', async () => {
+    const { db } = await import('../src/db/store');
+    const existing = db.listReputationEvents()[0];
+    assert.ok(existing, 'seeded events exist');
+    assert.throws(() => db.addReputationEvent({ ...existing, points: 999 }), /append-only/);
+});
+
+test('W4: no transfer path exists on the reputation write surface', async () => {
+    const reputationStore = await import('../src/services/reputationStore');
+    const symbols = Object.keys(reputationStore).join(' ');
+    assert.ok(!/transfer|reassign|move/i.test(symbols), symbols);
+});
+
+test('W4: creator standing derives from the reputation log, not the attention leaderboard', async () => {
+    const response = await app.request('/v1/coliseum/creators/@vine:server');
+    assert.equal(response.status, 200);
+    const body = (await response.json()) as {
+        standing?: { reputation: { overall: { score: number } }; record: object };
+        leaderboard?: unknown;
+    };
+    assert.ok(body.standing, 'standing block present');
+    assert.ok(body.standing!.reputation.overall.score >= 2);
+    assert.ok(body.standing!.record);
+    assert.equal('leaderboard' in body, false, 'activityScore placement removed');
 });

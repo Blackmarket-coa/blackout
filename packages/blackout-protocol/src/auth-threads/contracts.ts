@@ -9,22 +9,24 @@ import type { EventEnvelope } from '../common/types';
 
 export const AUTH_THREADS_PROTOCOL_VERSION = 1 as const;
 
+// KNOWN NAMING SPLIT: these `co.bmc.*` names differ from the envelope
+// literals the event types below pin (`blackout.auth.session.continued`,
+// `blackout.thread.activity.updated`) — the wire uses the `blackout.*`
+// literals. Reconciling the vocabularies is a protocol-version change
+// (AUTH_THREADS_PROTOCOL_VERSION bump), deliberately out of W2 scope.
 export const AUTH_THREADS_EVENT_NAMES = {
     threadActivityUpdated: 'co.bmc.thread.activity.updated',
     authSessionContinued: 'co.bmc.auth.session.continued',
 } as const;
 
 export type AuthThreadsEventName =
-    (typeof AUTH_THREADS_EVENT_NAMES)[keyof typeof AUTH_THREADS_EVENT_NAMES];
+    typeof AUTH_THREADS_EVENT_NAMES[keyof typeof AUTH_THREADS_EVENT_NAMES];
 
 /**
  * Reason a thread-activity envelope was emitted. Receivers route the
  * unread inbox + thread-jump UI off this union.
  */
-export type ThreadActivityKind =
-    | 'thread_started'
-    | 'thread_replied'
-    | 'thread_resolved';
+export type ThreadActivityKind = 'thread_started' | 'thread_replied' | 'thread_resolved';
 
 export interface ThreadActivityUpdatedPayload {
     /** Activity id (server-issued; opaque). */
@@ -45,10 +47,7 @@ export interface ThreadActivityUpdatedPayload {
  * OIDC session-continuation reason. Receivers may use this to drive
  * "you were signed in via your IDP" hints.
  */
-export type AuthSessionContinuationReason =
-    | 'login'
-    | 'refresh'
-    | 'idp_handoff';
+export type AuthSessionContinuationReason = 'login' | 'refresh' | 'idp_handoff';
 
 export interface AuthSessionContinuedPayload {
     /** Subject the session belongs to (typically the Matrix user id). */

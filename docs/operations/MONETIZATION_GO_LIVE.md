@@ -105,28 +105,42 @@ FREEBLACKMARKET_BASE_URL=https://api.freeblackmarket.com
 > marketplace (Blamazon / MayhemMarketplaze / AntinAmazon) is enabled. Do **not**
 > set `FREEBLACKMARKET_STUB=1` in production — that serves demo data.
 
-## Step 3 — Stripe: real checkout
+## Step 3 — Canopy billing on the FBM rail (W1b — Stripe rail retired)
 
-Set the secret key and a Stripe Price id per plan; then subscription checkout
-creates a real hosted Checkout Session instead of the mock URL. Without
-`STRIPE_SECRET_KEY` the deterministic mock is used (dev/test).
+There is **no Blackout-side Stripe anymore**. All money — creator subs, tips,
+one-off purchases, and Canopy platform plans — moves on FreeBlackMarket, and
+settled purchases loop back through the signed FBM marketplace webhook. See
+`docs/contracts/fbm-billing-consumer.md` for the full contract.
+
+Making Canopy plans _sellable_ is a joint, deliberate flip:
+
+1. **FBM side**: the four Canopy plan listings are seeded as **unpriced
+   drafts** (`pnpm medusa exec ./src/scripts/seed-blackout-catalog.ts`,
+   `metadata.canopy_plan_code` = our plan codes). An operator sets real
+   `price_cents` and publishes them, configures Stripe on FBM
+   (`STRIPE_API_KEY` + `STRIPE_PUBLISHABLE_KEY`), and flips
+   `FBM_SUBSCRIPTION_RENEWAL_LIVE=1` — WITHOUT that flag FBM's legacy
+   renewal mode advances dates and grants entitlements **without
+   charging** (free service for paid tiers). During acceptance, verify in
+   the Stripe dashboard that the first checkout attached a reusable
+   payment method (off-session renewals depend on it).
+2. **Blackout side**: map the plan codes to the now-published FBM listing
+   ids:
 
 ```
-STRIPE_SECRET_KEY=sk_live_...
-STRIPE_PRICE_CANOPY_SPROUT_MONTHLY=price_...
-STRIPE_PRICE_CANOPY_SPROUT_ANNUAL=price_...
-STRIPE_PRICE_CANOPY_PRO_MONTHLY=price_...
-STRIPE_PRICE_CANOPY_PRO_ANNUAL=price_...
-STRIPE_CHECKOUT_SUCCESS_URL=https://app.theblackout.app/billing/success
-STRIPE_CHECKOUT_CANCEL_URL=https://app.theblackout.app/billing/cancel
+CANOPY_FBM_LISTING_IDS={"canopy_sprout_monthly":"clist_...","canopy_sprout_annual":"clist_...","canopy_pro_monthly":"clist_...","canopy_pro_annual":"clist_..."}
 ```
 
-Checkout passes `client_reference_id` (the Blackout user id), not a fabricated
-customer id, so Stripe collects the real customer. The Billing Portal stays on
-the mock path until the `checkout.session.completed` webhook syncs a real
-`cus_…` onto the subscription record — wire that sync before advertising the
-portal. Stripe webhook signatures are already verified
-(`billingWebhookSignature.ts`).
+Until both halves are done, `POST /v1/subscriptions/checkout` returns
+`503 billing_unavailable` and never charges anyone — that is the intended
+fail-safe. Acceptance testing MUST run with `BLACKOUT_BETA_UNLOCK_ALL`
+explicitly **off** (the deploy default unlocks everything and masks gating).
+
+The retired variables (`STRIPE_SECRET_KEY`, `STRIPE_PUBLIC_KEY`,
+`STRIPE_PRICE_*`, `STRIPE_CHECKOUT_*`, `STRIPE_CUSTOMER_PORTAL_URL`,
+`STRIPE_WEBHOOK_SECRET`, `LAGO_*`) are read by nothing — remove them from
+deploy environments. The former `/v1/subscriptions/portal` and
+`/v1/subscriptions/webhooks/{lago,stripe}` endpoints are deleted.
 
 ## Step 4 — Reveal the marketplace surface
 

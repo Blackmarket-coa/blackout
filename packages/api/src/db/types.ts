@@ -284,6 +284,27 @@ export interface PendingOAuthLinkRecord {
     createdAt: string;
 }
 
+/**
+ * In-flight native-OIDC LOGIN state (W2, `/v1/auth/oidc/*` against MAS).
+ * Unlike {@link PendingOAuthLinkRecord} there is no user id — no user is
+ * authenticated at `begin`; ownership is proven by presenting the plaintext
+ * state at `continue`. `nonceHash` binds the id_token's nonce claim to this
+ * transaction.
+ */
+export interface PendingOidcLoginRecord {
+    /** SHA-256 hex of the random state token round-tripped via the IdP. */
+    stateHash: string;
+    /** AES-256-GCM envelope of the PKCE code_verifier. */
+    codeVerifierCiphertext: string;
+    /** SHA-256 hex of the id_token nonce minted at `begin`. */
+    nonceHash: string;
+    redirectUri: string;
+    encryptionKeyId: string;
+    expiresAt: string;
+    consumedAt?: string;
+    createdAt: string;
+}
+
 export interface TwitchChatBridgeRecord {
     id: UUID;
     blackoutUserId: UUID;
@@ -1725,6 +1746,14 @@ export interface ColiseumExplainerVoteRecord {
  * A subject-scoped reputation award. Persisted so per-subject standing survives
  * a restart; `dedupeKey` (when present) makes an award idempotent and the dedupe
  * survives reloads too.
+ *
+ * W4 (decision D7) — the log's invariants, stated rather than emergent:
+ * append-only (`addReputationEvent` refuses to overwrite an existing id;
+ * corrections are later compensating events, never mutations), and
+ * TRANSFER-PROHIBITED — `userId` is written once and no API reassigns
+ * reputation between users (see `no-governance-trade` in the gamification
+ * banlist). `actor` names who/what caused the award (a user id, or a system
+ * actor like `coliseum:verdict`); `detail` is the free-form audit payload.
  */
 export interface ReputationEventRecord {
     id: UUID;
@@ -1733,5 +1762,7 @@ export interface ReputationEventRecord {
     subject?: ReputationSubject;
     points?: number;
     dedupeKey?: string;
+    actor?: string;
+    detail?: Record<string, unknown>;
     createdAt: string;
 }

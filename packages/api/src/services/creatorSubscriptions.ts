@@ -76,6 +76,47 @@ function periodEnd(fromIso: string, days = DEFAULT_PERIOD_DAYS): string {
     return new Date(new Date(fromIso).getTime() + days * 24 * 60 * 60 * 1000).toISOString();
 }
 
+/** Grace after `currentPeriodEndsAt` before an active sub lapses to expired —
+ *  covers FBM's renewal-retry window so a slow renewal doesn't bounce access. */
+const LAPSE_GRACE_DAYS = 3;
+
+/**
+ * Read-time lapse repair (W1b): nothing used to transition an active creator
+ * subscription to `expired` when its period passed — read paths only checked
+ * the date, while the unique `(subscriber,creator) WHERE status='active'`
+ * index kept blocking a resubscribe forever. Every read path routes records
+ * through here. A renewal charge that lands AFTER the lapse re-activates the
+ * same row via `captureSubscription` (expired is not terminal — only refunded
+ * is); a member who stays lapsed can start a fresh subscription, which the
+ * repaired index now permits.
+ */
+function lapseIfExpired(record: CreatorSubscriptionRecord): CreatorSubscriptionRecord {
+    if (record.status !== 'active') return record;
+    if (!record.currentPeriodEndsAt) return record;
+    const graceMs = LAPSE_GRACE_DAYS * 24 * 60 * 60 * 1000;
+    if (Date.parse(record.currentPeriodEndsAt) + graceMs > Date.now()) return record;
+    const updated: CreatorSubscriptionRecord = {
+        ...record,
+        status: 'expired',
+        updatedAt: nowIso(),
+    };
+    db.updateCreatorSubscription(updated);
+    incrementCounter('creator_sub_subscription_lapsed_total', {
+        providerId: record.providerId,
+    });
+    emitDomainEvent({
+        module: 'monetization',
+        type: 'creator_sub.expired',
+        payload: {
+            subscriptionId: updated.id,
+            subscriberUserId: updated.subscriberUserId,
+            creatorUserId: updated.creatorUserId,
+            currentPeriodEndsAt: updated.currentPeriodEndsAt,
+        },
+    });
+    return updated;
+}
+
 function toTierView(record: CreatorSubscriptionTierRecord): TierView {
     const split = computePlatformCommission(
         record.priceCents,
@@ -144,7 +185,10 @@ export async function createTier(input: CreateTierInput): Promise<TierView> {
     }
     const currency = input.currency.trim().toUpperCase();
     if (!/^[A-Z]{3,8}$/.test(currency)) {
-        throw new CreatorSubscriptionError('invalid_currency', 'currency must be a 3–8 letter code');
+        throw new CreatorSubscriptionError(
+            'invalid_currency',
+            'currency must be a 3–8 letter code'
+        );
     }
     if (!db.getUserById(input.creatorUserId)) {
         throw new CreatorSubscriptionError('creator_unknown', 'creator user does not exist');
@@ -223,9 +267,7 @@ export function archiveTier(tierId: string, creatorUserId: string): TierView | u
 }
 
 export function listTiersForCreator(creatorUserId: string): TierView[] {
-    return db
-        .listCreatorSubscriptionTiersForCreator(creatorUserId)
-        .map(toTierView);
+    return db.listCreatorSubscriptionTiersForCreator(creatorUserId).map(toTierView);
 }
 
 export function getTier(tierId: string): TierView | undefined {
@@ -248,7 +290,10 @@ export function startSubscription(input: SubscribeInput): SubscriptionView {
         throw new CreatorSubscriptionError('tier_not_found', 'tier does not exist');
     }
     if (tier.status === 'archived') {
-        throw new CreatorSubscriptionError('tier_archived', 'tier is no longer accepting subscribers');
+        throw new CreatorSubscriptionError(
+            'tier_archived',
+            'tier is no longer accepting subscribers'
+        );
     }
     if (tier.creatorUserId === input.subscriberUserId) {
         throw new CreatorSubscriptionError(
@@ -256,7 +301,11 @@ export function startSubscription(input: SubscribeInput): SubscriptionView {
             'You cannot subscribe to yourself'
         );
     }
-    if (db.findActiveCreatorSubscription(input.subscriberUserId, tier.creatorUserId)) {
+    const priorActive = db.findActiveCreatorSubscription(
+        input.subscriberUserId,
+        tier.creatorUserId
+    );
+    if (priorActive && lapseIfExpired(priorActive).status === 'active') {
         throw new CreatorSubscriptionError(
             'already_active',
             'You already have an active subscription to this creator'
@@ -299,7 +348,10 @@ export function captureSubscription(
 ): SubscriptionView | undefined {
     const existing = db.getCreatorSubscription(subscriptionId);
     if (!existing) return undefined;
-    if (existing.status === 'refunded' || existing.status === 'expired') {
+    // Refunds are terminal. `expired` is NOT (W1b): the read-time lapse repair
+    // can beat a slow renewal charge landing through FBM's dunning window, and
+    // money that moved must re-activate access rather than be dropped.
+    if (existing.status === 'refunded') {
         logEvent('creator_sub.capture.rejected', { subscriptionId, status: existing.status });
         return toSubscriptionView(existing);
     }
@@ -346,7 +398,11 @@ export function cancelSubscription(
     const existing = db.getCreatorSubscription(subscriptionId);
     if (!existing) return undefined;
     if (existing.subscriberUserId !== actorUserId) return undefined;
-    if (existing.status === 'canceled' || existing.status === 'refunded' || existing.status === 'expired') {
+    if (
+        existing.status === 'canceled' ||
+        existing.status === 'refunded' ||
+        existing.status === 'expired'
+    ) {
         return toSubscriptionView(existing);
     }
     const updated: CreatorSubscriptionRecord = {
@@ -399,8 +455,10 @@ export function hasActiveCreatorSubscription(
     creatorUserId: string,
     nowMillis: number = Date.now()
 ): boolean {
-    const sub = db.findActiveCreatorSubscription(subscriberUserId, creatorUserId);
-    if (!sub) return false;
+    const found = db.findActiveCreatorSubscription(subscriberUserId, creatorUserId);
+    if (!found) return false;
+    const sub = lapseIfExpired(found);
+    if (sub.status !== 'active') return false;
     if (!sub.currentPeriodEndsAt) return false;
     return new Date(sub.currentPeriodEndsAt).getTime() > nowMillis;
 }
@@ -408,18 +466,18 @@ export function hasActiveCreatorSubscription(
 export function listSubscriptionsForSubscriber(subscriberUserId: string): SubscriptionView[] {
     return db
         .listCreatorSubscriptionsForSubscriber(subscriberUserId)
-        .map(toSubscriptionView);
+        .map((record) => toSubscriptionView(lapseIfExpired(record)));
 }
 
 export function listSubscribersForCreator(creatorUserId: string): SubscriptionView[] {
     return db
         .listCreatorSubscriptionsForCreator(creatorUserId)
-        .map(toSubscriptionView);
+        .map((record) => toSubscriptionView(lapseIfExpired(record)));
 }
 
 export function getSubscription(subscriptionId: string): SubscriptionView | undefined {
     const record = db.getCreatorSubscription(subscriptionId);
-    return record ? toSubscriptionView(record) : undefined;
+    return record ? toSubscriptionView(lapseIfExpired(record)) : undefined;
 }
 
 export function resetCreatorSubscriptionsForTest(): void {

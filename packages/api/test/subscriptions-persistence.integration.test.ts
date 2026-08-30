@@ -14,7 +14,6 @@ const { db } = await import('../src/db/store');
 const {
     applyManualComp,
     applySubscriptionWebhookEvent,
-    applyStripeCheckoutCompleted,
     donateForward,
     getGift,
     getSubscriptionAuditTimeline,
@@ -70,30 +69,6 @@ test('a billing webhook is applied once and its event id is deduped via db', () 
         planCode: 'canopy_sprout_monthly',
     });
     assert.equal(second.processed, false, 'a duplicate event id must not re-process');
-});
-
-test('applyStripeCheckoutCompleted marks the event processed in db and dedupes', () => {
-    const userId = 'sub-persist-checkout';
-    const eventId = 'evt-checkout-1';
-    const event = {
-        id: eventId,
-        type: 'checkout.session.completed',
-        data: { object: { client_reference_id: userId, customer: 'cus_realZZZ' } },
-    };
-
-    const first = applyStripeCheckoutCompleted(event);
-    assert.equal(first.processed, true);
-    assert.equal(first.userId, userId);
-    assert.equal(db.hasProcessedBillingWebhookEvent(eventId), true);
-    assert.equal(
-        db.getCanopySubscription(userId)?.stripeCustomerId,
-        'cus_realZZZ',
-        'the real cus_ is synced onto the durable record'
-    );
-
-    const second = applyStripeCheckoutCompleted(event);
-    assert.equal(second.processed, false);
-    assert.equal(second.reason, 'already_processed');
 });
 
 test('donateForward persists a pending gift into db', () => {

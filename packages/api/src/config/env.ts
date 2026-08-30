@@ -134,6 +134,25 @@ export const validateEnv = (env: NodeJS.ProcessEnv = process.env): EnvValidation
             'LIVEKIT_* partially configured; voice tokens fail until URL, API_KEY and API_SECRET are all set.'
         );
     }
+    // OIDC delegated login (W2, docs/contracts/mas-identity.md): all-or-nothing,
+    // advisory only — /v1/auth/oidc/* simply stays 503 while dark.
+    const oidcVars = [
+        'BLACKOUT_OIDC_ISSUER',
+        'BLACKOUT_OIDC_CLIENT_ID',
+        'BLACKOUT_OIDC_CLIENT_SECRET',
+        'BLACKOUT_OIDC_REDIRECT_ALLOWLIST',
+    ];
+    const oidcSet = oidcVars.filter((n) => isSet(n, env)).length;
+    if (oidcSet > 0 && oidcSet < oidcVars.length) {
+        warnings.push(
+            'BLACKOUT_OIDC_* partially configured; /v1/auth/oidc/* stays 503 until ISSUER, CLIENT_ID, CLIENT_SECRET and REDIRECT_ALLOWLIST are all set.'
+        );
+    }
+    if (oidcSet === oidcVars.length && !isSet('LINKED_ACCOUNT_ENCRYPTION_KEYS', env)) {
+        warnings.push(
+            'BLACKOUT_OIDC_* set without LINKED_ACCOUNT_ENCRYPTION_KEYS; /v1/auth/oidc/begin fails at runtime — the PKCE verifier at rest uses the linked-accounts secretBox.'
+        );
+    }
 
     // 5. Redacted summary — booleans/counts/enums only; NEVER secret values.
     const summary: Record<string, unknown> = {
@@ -147,6 +166,7 @@ export const validateEnv = (env: NodeJS.ProcessEnv = process.env): EnvValidation
         logHashSaltConfigured: isSet('LOG_HASH_SALT', env),
         internalMetricsTokenConfigured: isSet('INTERNAL_METRICS_TOKEN', env),
         livekitConfigured: livekitSet === livekitVars.length,
+        oidcConfigured: oidcSet === oidcVars.length,
         linkedAccountKeysConfigured: isSet('LINKED_ACCOUNT_ENCRYPTION_KEYS', env),
         fatalCount: fatal.length,
         warningCount: warnings.length,

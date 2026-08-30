@@ -355,6 +355,8 @@ function awardFighterReputation(match: ColiseumMatch, verdict: CrucibleVerdict):
                 type: 'match_drawn',
                 subject,
                 dedupeKey: `match_drawn:${match.id}:${userId}`,
+                actor: 'coliseum:verdict',
+                detail: { matchId: match.id },
             });
         }
     } else {
@@ -365,6 +367,8 @@ function awardFighterReputation(match: ColiseumMatch, verdict: CrucibleVerdict):
                 type: 'match_won',
                 subject,
                 dedupeKey: `match_won:${match.id}`,
+                actor: 'coliseum:verdict',
+                detail: { matchId: match.id },
             });
         }
     }
@@ -382,6 +386,8 @@ function awardFighterReputation(match: ColiseumMatch, verdict: CrucibleVerdict):
             type: 'round_won',
             subject,
             dedupeKey: `round_won:${match.id}:${round.index}`,
+            actor: 'coliseum:crowd-tally',
+            detail: { matchId: match.id, roundIndex: round.index },
         });
         if (round.kind === 'steelman' && tally.leader === round.side) {
             recordReputationEvent({
@@ -389,6 +395,8 @@ function awardFighterReputation(match: ColiseumMatch, verdict: CrucibleVerdict):
                 type: 'steelman_passed',
                 subject,
                 dedupeKey: `steelman_passed:${match.id}:${round.index}`,
+                actor: 'coliseum:crowd-tally',
+                detail: { matchId: match.id, roundIndex: round.index },
             });
         }
     }
@@ -403,6 +411,8 @@ function awardFighterReputation(match: ColiseumMatch, verdict: CrucibleVerdict):
                 type: 'credibility_strike',
                 subject,
                 dedupeKey: `credibility_strike:${match.id}`,
+                actor: 'coliseum:verdict',
+                detail: { matchId: match.id },
             });
         }
     }

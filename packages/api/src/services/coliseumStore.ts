@@ -52,6 +52,8 @@ function awardEndorsement(argumentId: string, voterId: string): void {
         type: 'argument_endorsed',
         subject: topic?.category,
         dedupeKey: `endorse:${voterId}:${argumentId}`,
+        actor: voterId,
+        detail: { argumentId, topicId: argument.topicId },
     });
 }
 
