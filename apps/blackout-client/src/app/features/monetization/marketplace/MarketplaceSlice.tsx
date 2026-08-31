@@ -25,6 +25,11 @@ import { LibraryView } from './LibraryView';
 import { resolveMarketplaceProvider } from './providerMetadata';
 import { EmbeddedCheckoutOverlay } from './EmbeddedCheckoutOverlay';
 import { useFeatureAccess } from './useFeatureAccess';
+import { useExternalPurchasePolicy } from '../../../hooks/useExternalPurchasePolicy';
+import {
+    openExternalCheckoutUrl,
+    resolveCheckoutReturnUrl,
+} from '../../../../platform/external-purchase';
 
 type View = 'catalog' | 'library';
 
@@ -209,6 +214,7 @@ export function MarketplaceSlice() {
     // caller's plan/tier (or beta-unlock) or a prior marketplace grant, so the
     // CTA can read "Included in your access" instead of prompting a charge.
     const featureAccess = useFeatureAccess(entitlements);
+    const purchasePolicy = useExternalPurchasePolicy();
 
     const handlePurchase = useCallback(
         async (listing: NormalizedListing) => {
@@ -218,13 +224,15 @@ export function MarketplaceSlice() {
             const provider = resolveMarketplaceProvider(listing.providerId, providers);
             setCheckoutNotice(provider.checkoutDisclosure);
             const summary = providers.find((p) => p.id === listing.providerId);
-            const supportsEmbed = summary?.capabilities.includes('embedded-checkout') ?? false;
+            const supportsEmbed =
+                purchasePolicy.mode === 'embedded' &&
+                (summary?.capabilities.includes('embedded-checkout') ?? false);
             try {
                 const result = await startCheckout(
                     {
                         providerId: listing.providerId,
                         listingId: listing.providerListingId,
-                        returnUrl: window.location.href,
+                        returnUrl: resolveCheckoutReturnUrl(window.location.href),
                         embed: supportsEmbed,
                     },
                     token
@@ -236,7 +244,7 @@ export function MarketplaceSlice() {
                         embed: true,
                     });
                 } else {
-                    window.open(result.redirectUrl, '_blank', 'noopener,noreferrer');
+                    await openExternalCheckoutUrl(result.redirectUrl);
                     setTimeout(() => void refreshEntitlements(), 3_000);
                 }
             } catch (err) {
@@ -246,7 +254,7 @@ export function MarketplaceSlice() {
                 setPurchasingId(null);
             }
         },
-        [providers, refreshEntitlements, token]
+        [providers, purchasePolicy.mode, refreshEntitlements, token]
     );
 
     const handleMessageVendor = useCallback(
@@ -396,6 +404,7 @@ export function MarketplaceSlice() {
                           onPurchase: handlePurchase,
                           onMessageVendor: handleMessageVendor,
                           purchasing: purchasingId === listingKey(listing),
+                          purchasable: purchasePolicy.allowed,
                           alreadyOwned: ownedKeys.has(listingKey(listing)),
                           includedInAccess:
                               !ownedKeys.has(listingKey(listing)) &&

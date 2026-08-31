@@ -57,6 +57,13 @@ interface ListingCardProps {
     includedInAccess?: boolean;
     /** When set, the listing title links through to this detail route. */
     detailPath?: string;
+    /**
+     * False when the platform purchase policy forbids showing a charge CTA
+     * (iOS shell outside the US storefront — see
+     * `platform/external-purchase.ts`). Owned/included states still render;
+     * only the purchase button is replaced with an unavailable note.
+     */
+    purchasable?: boolean;
 }
 
 export function ListingCard({
@@ -68,8 +75,13 @@ export function ListingCard({
     alreadyOwned,
     includedInAccess,
     detailPath,
+    purchasable = true,
 }: ListingCardProps): ReactNode {
     const provider = resolveMarketplaceProvider(listing.providerId, providers);
+    const paywallState = resolvePaywallState({
+        owned: Boolean(alreadyOwned),
+        includedInAccess: Boolean(includedInAccess),
+    });
 
     return createElement(
         'article',
@@ -169,18 +181,26 @@ export function ListingCard({
         createElement(
             'div',
             { style: { display: 'flex', gap: 8, flexWrap: 'wrap' } },
-            createElement(PaywallCta, {
-                state: resolvePaywallState({
-                    owned: Boolean(alreadyOwned),
-                    includedInAccess: Boolean(includedInAccess),
-                }),
-                priceLabel: formatPrice(listing.priceCents, listing.currency),
-                onPurchase: () => onPurchase(listing),
-                busy: Boolean(purchasing),
-                actionLabel:
-                    listing.entitlementKind === 'subscription_tier' ? 'Subscribe' : 'Purchase',
-                'data-testid': 'listing-card-cta',
-            }),
+            paywallState === 'purchasable' && !purchasable
+                ? createElement(
+                      'p',
+                      {
+                          style: { margin: 0, fontSize: 12, color: 'var(--text-secondary)' },
+                          'data-testid': 'listing-card-purchase-unavailable',
+                      },
+                      'Purchasing isn’t available in this app.'
+                  )
+                : createElement(PaywallCta, {
+                      state: paywallState,
+                      priceLabel: formatPrice(listing.priceCents, listing.currency),
+                      onPurchase: () => onPurchase(listing),
+                      busy: Boolean(purchasing),
+                      actionLabel:
+                          listing.entitlementKind === 'subscription_tier'
+                              ? 'Subscribe'
+                              : 'Purchase',
+                      'data-testid': 'listing-card-cta',
+                  }),
             // Encrypted-DM entrypoint (§2.1). Only offered when the parent can
             // resolve the seller and the listing carries a vendor id.
             onMessageVendor && listing.sellerId

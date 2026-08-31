@@ -6,6 +6,11 @@ import {
 } from '../../features/monetization/marketplace/marketplaceClient';
 import { readBlackoutApiToken } from '../../features/monetization/marketplace/useMarketplaceAuth';
 import { EmbeddedCheckoutOverlay } from '../../features/monetization/marketplace/EmbeddedCheckoutOverlay';
+import { useExternalPurchasePolicy } from '../../hooks/useExternalPurchasePolicy';
+import {
+    openExternalCheckoutUrl,
+    resolveCheckoutReturnUrl,
+} from '../../../platform/external-purchase';
 import {
     parseProductAttachmentsEvent,
     type ProductAttachmentRef,
@@ -77,6 +82,8 @@ const formatPrice = (priceCents?: number, currency?: string): string | null => {
 
 interface ProductAttachmentCardProps {
     ref_: ProductAttachmentRef;
+    /** False when the platform purchase policy hides the buy CTA (iOS outside the US storefront). */
+    purchaseAllowed: boolean;
     onCheckoutStart: (
         ref: ProductAttachmentRef
     ) => Promise<{ redirectUrl: string; sessionId: string; embed?: boolean } | null>;
@@ -84,6 +91,7 @@ interface ProductAttachmentCardProps {
 
 const ProductAttachmentCard = ({
     ref_,
+    purchaseAllowed,
     onCheckoutStart,
 }: ProductAttachmentCardProps): JSX.Element => {
     const [listing, setListing] = useState<NormalizedListing | null>(null);
@@ -138,15 +146,22 @@ const ProductAttachmentCard = ({
                         ? `${ref_.providerId}${price ? ` · ${price}` : ''}`
                         : 'Loading listing…'}
                 </span>
+                {!purchaseAllowed ? (
+                    <span style={subtitleStyle} data-testid="purchase-unavailable-note">
+                        Purchasing isn’t available in this app.
+                    </span>
+                ) : null}
             </div>
-            <button
-                type="button"
-                style={buttonStyle}
-                onClick={handleClick}
-                disabled={busy || !!error}
-            >
-                {busy ? 'Starting…' : 'Buy'}
-            </button>
+            {purchaseAllowed ? (
+                <button
+                    type="button"
+                    style={buttonStyle}
+                    onClick={handleClick}
+                    disabled={busy || !!error}
+                >
+                    {busy ? 'Starting…' : 'Buy'}
+                </button>
+            ) : null}
         </div>
     );
 };
@@ -163,13 +178,17 @@ export interface ProductAttachmentProps {
  * inline cards. Each card resolves the live listing via the existing
  * `marketplaceClient.fetchListingDetail` so price / title stay
  * up-to-date, and clicking "Buy" hands off to the existing
- * `EmbeddedCheckoutOverlay` — no parallel checkout pipeline.
+ * `EmbeddedCheckoutOverlay` — no parallel checkout pipeline. Inside the
+ * native shells the platform purchase policy takes over: checkout opens
+ * in the external system browser, and on iOS outside the US storefront
+ * the buy CTA is hidden entirely (see `platform/external-purchase.ts`).
  */
 export const ProductAttachment = ({
     eventContent,
     parsed,
 }: ProductAttachmentProps): JSX.Element | null => {
     const payload = parsed ?? parseProductAttachmentsEvent(eventContent);
+    const purchasePolicy = useExternalPurchasePolicy();
     const [activeCheckout, setActiveCheckout] = useState<{
         redirectUrl: string;
         sessionId: string;
@@ -179,21 +198,22 @@ export const ProductAttachment = ({
 
     const onCheckoutStart = async (ref: ProductAttachmentRef) => {
         const token = readBlackoutApiToken();
+        const wantsEmbed = purchasePolicy.mode === 'embedded';
         try {
             const result = await startCheckout(
                 {
                     providerId: ref.providerId as MarketplaceProviderId,
                     listingId: ref.listingId,
                     sku: ref.sku,
-                    returnUrl: window.location.href,
-                    embed: true,
+                    returnUrl: resolveCheckoutReturnUrl(window.location.href),
+                    embed: wantsEmbed,
                 },
                 token
             );
-            if (result.embed) {
+            if (result.embed && wantsEmbed) {
                 setActiveCheckout({ redirectUrl: result.redirectUrl, sessionId: result.sessionId });
             } else {
-                window.open(result.redirectUrl, '_blank', 'noopener,noreferrer');
+                await openExternalCheckoutUrl(result.redirectUrl);
             }
             return result;
         } catch (err) {
@@ -212,6 +232,7 @@ export const ProductAttachment = ({
                 <ProductAttachmentCard
                     key={`${ref.providerId}:${ref.listingId}:${ref.sku ?? ''}`}
                     ref_={ref}
+                    purchaseAllowed={purchasePolicy.allowed}
                     onCheckoutStart={onCheckoutStart}
                 />
             ))}
