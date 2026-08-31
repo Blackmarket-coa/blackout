@@ -60,15 +60,22 @@ Use `pnpm sync:android` or `pnpm sync:ios` explicitly after native platform setu
 
 All wired up in `src/mobile-bootstrap.ts`:
 
-- **Push Notifications** — FCM (Android) + APNs (iOS) via `@capacitor/push-notifications`
-- **Deep Links** — handles `matrix://` and `blackout://` URIs
-- **Haptic Feedback** — tap feedback on UI interactions
-- **Back Button** — Android hardware back, minimizes instead of closing
-- **App State** — triggers Matrix re-sync when returning from background
-- **Native Share** — share rooms/messages via OS share sheet
-- **Camera** — send photos in chat
-- **Keyboard** — adjusts layout when software keyboard appears
-- **Status Bar** — dark themed, matches app background
+-   **Push Notifications** — FCM (Android) + APNs (iOS) via `@capacitor/push-notifications`
+-   **Deep Links** — handles `matrix://` and `blackout://` URIs
+-   **External Checkout** — purchase CTAs open web checkout in the system browser
+    (`@capacitor/browser`), gated by the storefront purchase policy in
+    `apps/blackout-client/src/platform/external-purchase.ts`: on iOS the
+    buy-on-web link only shows on the US storefront (Apple's no-entitlement
+    external purchase rule is US-only); Android always uses the external
+    browser; web/desktop keep the embedded overlay. `@capacitor/device`
+    supplies the device region the policy checks.
+-   **Haptic Feedback** — tap feedback on UI interactions
+-   **Back Button** — Android hardware back, minimizes instead of closing
+-   **App State** — triggers Matrix re-sync when returning from background
+-   **Native Share** — share rooms/messages via OS share sheet
+-   **Camera** — send photos in chat
+-   **Keyboard** — adjusts layout when software keyboard appears
+-   **Status Bar** — dark themed, matches app background
 
 ## App Store Submission
 
@@ -78,4 +85,4 @@ All wired up in `src/mobile-bootstrap.ts`:
 
 For production release controls (signing rotation, version/build governance, store metadata, and rollout channels), use:
 
-- `docs/operations/runbooks/mobile_release_hardening_checklist.md`
+-   `docs/operations/runbooks/mobile_release_hardening_checklist.md`
