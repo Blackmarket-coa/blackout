@@ -2,6 +2,7 @@
 // within a tab session only (cleared on tab close and on successful submit),
 // mirroring the settings-page report form in `../settings/bugReportState.ts`.
 
+import { formatEncryptionHealth } from '../../../client/encryptionHealth';
 import { collectDiagnostics } from '../../lib/diagnostics/collect';
 
 export interface WidgetReportMetadata {
@@ -21,6 +22,14 @@ export interface WidgetReportMetadata {
      */
     undecryptableEvents?: number;
     keyBackupProbes?: number;
+    /**
+     * One-line key-backup / cross-signing posture (see
+     * `client/encryptionHealth.ts`), attached only alongside a non-zero
+     * `undecryptableEvents` — it exists to classify WHY those events happened
+     * (BO-1: backup never set up vs restore failing vs cross-signing state).
+     * Tristates and counts only; safe on a public issue.
+     */
+    encryptionHealth?: string;
 }
 
 export interface WidgetReportAttachment {
@@ -86,6 +95,9 @@ export const collectWidgetMetadata = (): WidgetReportMetadata => {
     // two zeroes that a triager has to read past.
     if (d.suppressedLogCounts.decryptUtd > 0) {
         meta.undecryptableEvents = d.suppressedLogCounts.decryptUtd;
+        // The count says the device cannot read history; the posture line says
+        // which BO-1 cause it is in. Only meaningful next to that count.
+        meta.encryptionHealth = formatEncryptionHealth(d.encryptionHealth);
     }
     if (d.suppressedLogCounts.keyBackupProbe > 0) {
         meta.keyBackupProbes = d.suppressedLogCounts.keyBackupProbe;

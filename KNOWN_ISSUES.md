@@ -66,6 +66,20 @@ underlying decryption failure is still open** — the next step is to collect re
 completing, restore failing, or cross-signing state. Do not close this from the
 instrumentation alone.
 
+Since 2026-08-31 each report also classifies itself among those three causes:
+`src/client/encryptionHealth.ts` tracks a privacy-safe key-backup /
+cross-signing posture snapshot (backup exists on server / trusted / actively
+connected / decryption key cached / cross-signing ready / failure count —
+tristates and counts only, no identifiers). It rides the settings-page
+diagnostics object and, on widget reports that already carry a non-zero
+`undecryptableEvents`, a one-line
+`backup=… trusted=… active=… key_cached=… cross_signing=… failures=…`
+field. Triage rule of thumb: `backup=no` → setup never completed;
+`backup=yes` with `active=no` / `key_cached=no` / `failures>0` → restore
+failing; `trusted=no` or `cross_signing=no` → cross-signing state. The rate
+question still needs live-fleet reports; this only makes each report answer
+the "which cause" question by itself.
+
 ## How this list is maintained
 
 When a maintainer triages an incoming issue and decides it belongs on this

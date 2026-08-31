@@ -18,6 +18,7 @@ import {
 } from './sessionManager';
 import { clearBlackoutApiToken, exchangeMatrixForBlackoutToken } from './blackoutApiSession';
 import { cryptoCallbacks } from './secretStorageKeys';
+import { startEncryptionHealthTracking, stopEncryptionHealthTracking } from './encryptionHealth';
 import { filteredMatrixLogger } from './matrixLogger';
 
 type AtomStore = ReturnType<typeof createStore>;
@@ -238,6 +239,10 @@ const initClientForSession = async (session: StoredSession): Promise<MatrixClien
     await client.initRustCrypto();
     client.setMaxListeners(100);
 
+    // BO-1: keep the key-backup / cross-signing posture readable by the
+    // synchronous diagnostics collector. Fire-and-forget; never blocks boot.
+    startEncryptionHealthTracking(client);
+
     return client;
 };
 
@@ -313,6 +318,9 @@ export const initMatrixFromStoredSession = async (
 };
 
 export const stopMatrixClient = (client: MatrixClient | null): void => {
+    // Reset BO-1 health tracking first so a report filed after logout reads
+    // "unsampled" instead of the dead session's posture.
+    stopEncryptionHealthTracking(client);
     client?.stopClient();
 };
 

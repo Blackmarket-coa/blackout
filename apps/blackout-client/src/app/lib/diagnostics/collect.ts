@@ -1,4 +1,8 @@
 import packageJson from '../../../../package.json';
+import {
+    getEncryptionHealthSnapshot,
+    type EncryptionHealthSnapshot,
+} from '../../../client/encryptionHealth';
 import { getSuppressedLogCounts, type SuppressedLogCounts } from '../../../client/matrixLogger';
 import { runtimeFeatureFlags } from '../../core/features/featureFlags';
 import { getConsoleTail, getLastError } from './consoleCapture';
@@ -27,6 +31,19 @@ export interface CollectedDiagnostics {
      * identifiers — safe to carry in a report that may end up on a public issue.
      */
     readonly suppressedLogCounts: SuppressedLogCounts;
+    /**
+     * Key-backup / cross-signing posture of this device — the BO-1 root-cause
+     * classifier. `suppressedLogCounts.decryptUtd` says how often this device
+     * cannot read history; this says which of the three suspected causes it is
+     * in: backup never set up (`serverBackup: 'no'`), restore failing (backup
+     * exists but not active / key not cached / failures counted), or
+     * cross-signing state (`backupTrusted`/`crossSigningReady: 'no'`).
+     *
+     * Tristates and small integers only — no identifiers, no error strings —
+     * safe for a public issue. `sampled: false` means the matrix client never
+     * booted (itself a state users report from).
+     */
+    readonly encryptionHealth: EncryptionHealthSnapshot;
 }
 
 const safeNavigator = (): Navigator | null => {
@@ -77,6 +94,22 @@ const safeSuppressedLogCounts = (): SuppressedLogCounts => {
     }
 };
 
+const safeEncryptionHealth = (): EncryptionHealthSnapshot => {
+    try {
+        return getEncryptionHealthSnapshot();
+    } catch {
+        return {
+            serverBackup: 'unknown',
+            backupTrusted: 'unknown',
+            activeBackup: 'unknown',
+            decryptionKeyCached: 'unknown',
+            crossSigningReady: 'unknown',
+            backupFailures: 0,
+            sampled: false,
+        };
+    }
+};
+
 const computeFeatureFlagsFingerprint = (): string => {
     try {
         const entries = Object.entries(runtimeFeatureFlags as unknown as Record<string, unknown>)
@@ -100,5 +133,6 @@ export const collectDiagnostics = (): CollectedDiagnostics => {
         lastError: getLastError(),
         featureFlagsFingerprint: computeFeatureFlagsFingerprint(),
         suppressedLogCounts: safeSuppressedLogCounts(),
+        encryptionHealth: safeEncryptionHealth(),
     };
 };
