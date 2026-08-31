@@ -69,15 +69,19 @@ afterEach(async () => {
     act(() => {
         mountedRoots.splice(0).forEach((root) => root.unmount());
     });
-    // Flush pending macrotasks before leaving the test, while jsdom still
-    // exists. @tanstack/virtual-core's `maybeNotify` schedules a setTimeout that
-    // unmounting does not cancel; if it fires after this file's environment is
-    // torn down, react-dom's `getCurrentEventPriority` touches `window` and the
-    // whole run dies with an unhandled `ReferenceError: window is not defined`
-    // — every test passing, and vitest still exiting non-zero. It is
-    // timing-dependent, so the same commit can pass one run and fail the next.
+    // Outwait pending macrotasks before leaving the test, while jsdom still
+    // exists. @tanstack/virtual-core's scroll handler arms a `scrollingDelay`
+    // (150ms) setTimeout that neither the next-scroll clear nor unmounting
+    // cancels; if it fires after this file's environment is torn down,
+    // react-dom's `getCurrentEventPriority` touches `window` and the whole run
+    // dies with an unhandled `ReferenceError: window is not defined` — every
+    // test passing, and vitest still exiting non-zero. A 0ms flush is not
+    // enough to cover that 150ms timer (it bit again under `--coverage`, where
+    // slower teardown widens the race), so wait past the full delay; with the
+    // roots already unmounted the timer then fires into a live window as a
+    // no-op state update.
     await new Promise((resolve) => {
-        setTimeout(resolve, 0);
+        setTimeout(resolve, 200);
     });
     document.body.innerHTML = '';
     vi.clearAllMocks();
