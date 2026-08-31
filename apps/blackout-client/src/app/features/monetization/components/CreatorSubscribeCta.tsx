@@ -7,6 +7,11 @@ import {
 } from '../monetizationApi';
 import { readBlackoutApiToken } from '../marketplace/useMarketplaceAuth';
 import { EmbeddedCheckoutOverlay } from '../marketplace/EmbeddedCheckoutOverlay';
+import { useExternalPurchasePolicy } from '../../../hooks/useExternalPurchasePolicy';
+import {
+    openExternalCheckoutUrl,
+    resolveCheckoutReturnUrl,
+} from '../../../../platform/external-purchase';
 
 interface CreatorSubscribeCtaProps {
     creatorUserId: string;
@@ -58,6 +63,7 @@ export function CreatorSubscribeCta({
         redirectUrl: string;
         sessionId: string;
     } | null>(null);
+    const purchasePolicy = useExternalPurchasePolicy();
     const token = useMemo(() => readBlackoutApiToken(), []);
 
     useEffect(() => {
@@ -90,23 +96,26 @@ export function CreatorSubscribeCta({
         setError(null);
         setConfirmation(null);
         setSubmitting(tier.id);
+        const wantsEmbed = purchasePolicy.mode === 'embedded';
         try {
             // W1b: the subscribe call now returns the FBM payment leg. Embed
             // when the provider supports it (checkout overlay, same pattern as
-            // ListingDetailSlice); otherwise open the hosted page in a new tab.
+            // ListingDetailSlice); otherwise open the hosted page externally —
+            // in the native shells that's the system browser, per the
+            // platform purchase policy.
             const result = await creatorSubsApi.subscribe(tier.id, token, {
-                embed: true,
-                returnUrl: window.location.href,
+                embed: wantsEmbed,
+                returnUrl: resolveCheckoutReturnUrl(window.location.href),
             });
             setActiveSubs((prev) => [...prev, result.subscription]);
             onSubscribed?.(result.subscription);
-            if (result.redirectUrl && result.embed) {
+            if (result.redirectUrl && result.embed && wantsEmbed) {
                 setActiveCheckout({
                     redirectUrl: result.redirectUrl,
                     sessionId: result.sessionId ?? '',
                 });
             } else if (result.redirectUrl) {
-                window.open(result.redirectUrl, '_blank', 'noopener,noreferrer');
+                await openExternalCheckoutUrl(result.redirectUrl);
                 setConfirmation(
                     `Complete payment in the FreeBlackMarket tab to activate ${tier.name} — FreeBlackMarket handles billing and renewals.`
                 );
@@ -211,21 +220,30 @@ export function CreatorSubscribeCta({
                     createElement(
                         'div',
                         { style: { display: 'flex', justifyContent: 'flex-end' } },
-                        createElement(
-                            'button',
-                            {
-                                type: 'button',
-                                style: buttonStyle,
-                                onClick: () => subscribe(tier),
-                                disabled: Boolean(activeForCreator) || submitting === tier.id,
-                                'data-testid': `subscribe-${tier.id}`,
-                            },
-                            activeForCreator
-                                ? 'Already subscribed'
-                                : submitting === tier.id
-                                ? 'Starting…'
-                                : 'Subscribe'
-                        )
+                        purchasePolicy.allowed || activeForCreator
+                            ? createElement(
+                                  'button',
+                                  {
+                                      type: 'button',
+                                      style: buttonStyle,
+                                      onClick: () => subscribe(tier),
+                                      disabled: Boolean(activeForCreator) || submitting === tier.id,
+                                      'data-testid': `subscribe-${tier.id}`,
+                                  },
+                                  activeForCreator
+                                      ? 'Already subscribed'
+                                      : submitting === tier.id
+                                      ? 'Starting…'
+                                      : 'Subscribe'
+                              )
+                            : createElement(
+                                  'span',
+                                  {
+                                      style: { fontSize: 11, color: 'var(--text-secondary)' },
+                                      'data-testid': `subscribe-unavailable-${tier.id}`,
+                                  },
+                                  'Subscriptions aren’t available in this app.'
+                              )
                     )
                 )
             )

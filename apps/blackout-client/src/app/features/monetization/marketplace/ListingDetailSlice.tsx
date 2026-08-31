@@ -15,6 +15,11 @@ import { getDirectCreatePath, withSearchParam } from '../../../pages/pathUtils';
 import { MARKET_PATH, type DirectCreateSearchParams } from '../../../pages/paths';
 import { resolveMarketplaceProvider } from './providerMetadata';
 import { EmbeddedCheckoutOverlay } from './EmbeddedCheckoutOverlay';
+import { useExternalPurchasePolicy } from '../../../hooks/useExternalPurchasePolicy';
+import {
+    openExternalCheckoutUrl,
+    resolveCheckoutReturnUrl,
+} from '../../../../platform/external-purchase';
 
 type LoadState = 'loading' | 'not_found' | 'error' | 'loaded';
 
@@ -46,6 +51,7 @@ export function ListingDetailSlice() {
     } | null>(null);
 
     const token = useMemo(() => readBlackoutApiToken(), []);
+    const purchasePolicy = useExternalPurchasePolicy();
 
     useEffect(() => {
         if (!providerId || !listingId) {
@@ -110,13 +116,15 @@ export function ListingDetailSlice() {
         setActionError(null);
         setCheckoutNotice(provider.checkoutDisclosure);
         const summary = providers.find((p) => p.id === listing.providerId);
-        const supportsEmbed = summary?.capabilities.includes('embedded-checkout') ?? false;
+        const supportsEmbed =
+            purchasePolicy.mode === 'embedded' &&
+            (summary?.capabilities.includes('embedded-checkout') ?? false);
         try {
             const result = await startCheckout(
                 {
                     providerId: listing.providerId,
                     listingId: listing.providerListingId,
-                    returnUrl: window.location.href,
+                    returnUrl: resolveCheckoutReturnUrl(window.location.href),
                     embed: supportsEmbed,
                 },
                 token
@@ -127,7 +135,7 @@ export function ListingDetailSlice() {
                     sessionId: result.sessionId,
                 });
             } else {
-                window.open(result.redirectUrl, '_blank', 'noopener,noreferrer');
+                await openExternalCheckoutUrl(result.redirectUrl);
             }
         } catch (err) {
             setActionError('Checkout could not be started. Please try again.');
@@ -135,7 +143,7 @@ export function ListingDetailSlice() {
         } finally {
             setPurchasing(false);
         }
-    }, [listing, provider, providers, token]);
+    }, [listing, provider, providers, purchasePolicy.mode, token]);
 
     const handleMessageVendor = useCallback(async () => {
         if (!listing?.sellerId) return;
@@ -276,22 +284,31 @@ export function ListingDetailSlice() {
                 </div>
             ) : null}
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <button
-                    type="button"
-                    data-testid="market-listing-purchase"
-                    onClick={() => void handlePurchase()}
-                    disabled={purchasing || owned}
-                    style={{
-                        padding: '10px 16px',
-                        borderRadius: 8,
-                        border: '1px solid var(--border-default)',
-                        background: owned ? 'var(--bg-input)' : 'var(--bg-accent)',
-                        color: owned ? 'var(--text-secondary)' : 'var(--text-on-accent)',
-                        cursor: owned || purchasing ? 'default' : 'pointer',
-                    }}
-                >
-                    {owned ? 'Owned' : purchasing ? 'Opening checkout…' : 'Purchase'}
-                </button>
+                {purchasePolicy.allowed || owned ? (
+                    <button
+                        type="button"
+                        data-testid="market-listing-purchase"
+                        onClick={() => void handlePurchase()}
+                        disabled={purchasing || owned}
+                        style={{
+                            padding: '10px 16px',
+                            borderRadius: 8,
+                            border: '1px solid var(--border-default)',
+                            background: owned ? 'var(--bg-input)' : 'var(--bg-accent)',
+                            color: owned ? 'var(--text-secondary)' : 'var(--text-on-accent)',
+                            cursor: owned || purchasing ? 'default' : 'pointer',
+                        }}
+                    >
+                        {owned ? 'Owned' : purchasing ? 'Opening checkout…' : 'Purchase'}
+                    </button>
+                ) : (
+                    <p
+                        data-testid="market-listing-purchase-unavailable"
+                        style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary)' }}
+                    >
+                        Purchasing isn’t available in this app.
+                    </p>
+                )}
                 {listing.sellerId ? (
                     <button
                         type="button"

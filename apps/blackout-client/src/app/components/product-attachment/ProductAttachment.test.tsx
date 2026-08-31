@@ -55,9 +55,20 @@ const mountAttachment = async (eventContent: unknown) => {
     return container;
 };
 
+type CapacitorStub = {
+    isNativePlatform: () => boolean;
+    getPlatform: () => string;
+    Plugins?: Record<string, unknown>;
+};
+
+const setCapacitorStub = (stub: CapacitorStub | undefined) => {
+    (window as unknown as { Capacitor?: CapacitorStub }).Capacitor = stub;
+};
+
 describe('ProductAttachment', () => {
     beforeEach(() => {
         document.body.innerHTML = '';
+        setCapacitorStub(undefined);
         fetchListingDetailMock.mockReset();
         startCheckoutMock.mockReset();
     });
@@ -138,5 +149,68 @@ describe('ProductAttachment', () => {
         );
 
         expect(container.querySelector('[data-testid="overlay"]')).not.toBeNull();
+    });
+
+    it('hides the buy CTA on iOS outside the US storefront', async () => {
+        setCapacitorStub({
+            isNativePlatform: () => true,
+            getPlatform: () => 'ios',
+            Plugins: {
+                Device: { getLanguageTag: async () => ({ value: 'de-DE' }) },
+            },
+        });
+        fetchListingDetailMock.mockResolvedValue(buildListing());
+
+        const container = await mountAttachment({
+            listings: [{ providerId: 'freeblackmarket', listingId: 'abc' }],
+        });
+
+        expect(container.querySelector('button[type="button"]')).toBeNull();
+        expect(container.querySelector('[data-testid="purchase-unavailable-note"]')).not.toBeNull();
+        expect(startCheckoutMock).not.toHaveBeenCalled();
+    });
+
+    it('opens external checkout via the Browser plugin on the iOS US storefront', async () => {
+        const browserOpen = vi.fn(async () => undefined);
+        setCapacitorStub({
+            isNativePlatform: () => true,
+            getPlatform: () => 'ios',
+            Plugins: {
+                Device: { getLanguageTag: async () => ({ value: 'en-US' }) },
+                Browser: { open: browserOpen },
+            },
+        });
+        fetchListingDetailMock.mockResolvedValue(buildListing());
+        startCheckoutMock.mockResolvedValue({
+            redirectUrl: 'https://checkout.example/session',
+            sessionId: 'sess-native',
+            embed: false,
+        });
+
+        const container = await mountAttachment({
+            listings: [{ providerId: 'freeblackmarket', listingId: 'abc' }],
+        });
+
+        const button = container.querySelector('button[type="button"]');
+        expect(button).not.toBeNull();
+
+        await act(async () => {
+            (button as HTMLButtonElement).click();
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+
+        expect(startCheckoutMock).toHaveBeenCalledWith(
+            expect.objectContaining({
+                embed: false,
+                returnUrl: 'blackout://checkout/return',
+            }),
+            'test-token'
+        );
+        expect(browserOpen).toHaveBeenCalledWith({
+            url: 'https://checkout.example/session',
+            presentationStyle: 'fullscreen',
+        });
+        expect(container.querySelector('[data-testid="overlay"]')).toBeNull();
     });
 });

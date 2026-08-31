@@ -413,12 +413,18 @@ importers:
       '@capacitor/app':
         specifier: ^7.0.0
         version: 7.1.2(@capacitor/core@7.6.0)
+      '@capacitor/browser':
+        specifier: ^7.0.0
+        version: 7.0.5(@capacitor/core@7.6.0)
       '@capacitor/camera':
         specifier: ^7.0.0
         version: 7.0.5(@capacitor/core@7.6.0)
       '@capacitor/core':
         specifier: ^7.0.0
         version: 7.6.0
+      '@capacitor/device':
+        specifier: ^7.0.0
+        version: 7.0.5(@capacitor/core@7.6.0)
       '@capacitor/filesystem':
         specifier: ^7.0.0
         version: 7.1.8(@capacitor/core@7.6.0)
@@ -1345,6 +1351,11 @@ packages:
     peerDependencies:
       '@capacitor/core': '>=7.0.0'
 
+  '@capacitor/browser@7.0.5':
+    resolution: {integrity: sha512-YF/kC1m1e6c81X/agtAnYItVlqiQ/nXLG+Q3QXNDuiMoRynqa3Guu8ZaV9kWvqQcHoE2w18xz7WGpPOuh+R1fA==}
+    peerDependencies:
+      '@capacitor/core': '>=7.0.0'
+
   '@capacitor/camera@7.0.5':
     resolution: {integrity: sha512-+53f1xHq8on7O+ULXbgWp00ooWvn3fUkWxTP3p5zHi1nVriCxLbYnY0zTpZQqn52M96vclFKkoABbTVQ3x755w==}
     peerDependencies:
@@ -1357,6 +1368,11 @@ packages:
 
   '@capacitor/core@7.6.0':
     resolution: {integrity: sha512-K6LEvgxW6Nd6uNWHj3U512hUtB4kln71TvVgdvwJRFMLySpUrWwb/A8Q7c3QGogvPvgOjN1U65onkyRTihPGwA==}
+
+  '@capacitor/device@7.0.5':
+    resolution: {integrity: sha512-tf6BYeQMBARNLKELQq2RGsvG3z03oM/ga+aqVhvE8M4IM8+h/516eeSz07Eqm4+yySGaQFT+2rIkpJrvA7gaAA==}
+    peerDependencies:
+      '@capacitor/core': '>=7.0.0'
 
   '@capacitor/filesystem@7.1.8':
     resolution: {integrity: sha512-Qpw/2SE4/CzqAUvGgSM9hw/uXQ5qoOaF4wxbToXwpAaKPS+tzletS1h5ti3jjLmGcqizTs2sEXMtcsARW/Ceew==}
@@ -3409,6 +3425,7 @@ packages:
   '@xmldom/xmldom@0.8.13':
     resolution: {integrity: sha512-KRYzxepc14G/CEpEGc3Yn+JKaAeT63smlDr+vjB8jRfgTBBI9wRj/nkQEO+ucV8p8I9bfKLWp37uHgFrbntPvw==}
     engines: {node: '>=10.0.0'}
+    deprecated: this version has critical issues, please update to the latest version
 
   abort-controller@3.0.0:
     resolution: {integrity: sha512-h8lQ8tacZYnR3vNQTgibj+tODHI5/+l06Au2Pcriv/Gmet0eaj4TwWH41sO9wnHDiQsEj19q0drzdWdeAHtweg==}
@@ -8114,6 +8131,10 @@ snapshots:
     dependencies:
       '@capacitor/core': 7.6.0
 
+  '@capacitor/browser@7.0.5(@capacitor/core@7.6.0)':
+    dependencies:
+      '@capacitor/core': 7.6.0
+
   '@capacitor/camera@7.0.5(@capacitor/core@7.6.0)':
     dependencies:
       '@capacitor/core': 7.6.0
@@ -8143,6 +8164,10 @@ snapshots:
   '@capacitor/core@7.6.0':
     dependencies:
       tslib: 2.8.1
+
+  '@capacitor/device@7.0.5(@capacitor/core@7.6.0)':
+    dependencies:
+      '@capacitor/core': 7.6.0
 
   '@capacitor/filesystem@7.1.8(@capacitor/core@7.6.0)':
     dependencies:
