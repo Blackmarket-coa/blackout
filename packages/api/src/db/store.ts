@@ -3,6 +3,8 @@ import { dirname, resolve } from 'node:path';
 import { hashPassword } from '../services/auth';
 import type {
     CanaryTokenRecord,
+    CircleEdgeRecord,
+    RelayEdgeRecord,
     DenGreetingRecord,
     CanopyDirectoryEntryRecord,
     CanopySubscriptionRecord,
@@ -267,6 +269,8 @@ type PersistedState = {
     coalitionFeedItems: CoalitionFeedItemRecord[];
     coalitionFeedLikes: CoalitionFeedLikeRecord[];
     coalitionFeedComments: CoalitionFeedCommentRecord[];
+    circleEdges: CircleEdgeRecord[];
+    relayEdges: RelayEdgeRecord[];
     pluginInstallations: PluginInstallationRecord[];
     pluginDens: PluginDenRecord[];
     coalitionKitManifestApplications: CoalitionKitManifestApplicationRecord[];
@@ -480,6 +484,10 @@ class InMemoryDb {
     coalitionFeedLikes = new Map<string, CoalitionFeedLikeRecord>();
     /** Feed comments, keyed by comment id. */
     coalitionFeedComments = new Map<string, CoalitionFeedCommentRecord>();
+    /** Circle edges (follower put followee in their Circle), keyed by `${followerId}::${followeeId}`. */
+    circleEdges = new Map<string, CircleEdgeRecord>();
+    /** Relay edges, keyed by `${relayerUserId}::${subjectSource}::${subjectId}`. */
+    relayEdges = new Map<string, RelayEdgeRecord>();
     /** Plugin installations (activation-at-scope), keyed by installation id. */
     pluginInstallations = new Map<string, PluginInstallationRecord>();
     /** Plugin-provisioned companion dens, keyed by linkage id. */
@@ -4097,6 +4105,110 @@ class InMemoryDb {
         return record;
     }
 
+    // --- circle graph (the two rings' inner edge) ---
+
+    private static circleKey(followerId: string, followeeId: string): string {
+        return `${followerId}::${followeeId}`;
+    }
+
+    /** Idempotent: re-adding an existing edge returns it rather than duplicating. */
+    addCircleEdge(input: Omit<CircleEdgeRecord, 'createdAt'>): CircleEdgeRecord {
+        const key = InMemoryDb.circleKey(input.followerId, input.followeeId);
+        const existing = this.circleEdges.get(key);
+        if (existing) return existing;
+        const record: CircleEdgeRecord = { ...input, createdAt: nowIso() };
+        this.circleEdges.set(key, record);
+        return record;
+    }
+
+    /** True when an edge existed and was removed. Circle edges *are* deleted —
+     * unlike relays, a withdrawn follow leaves no history anyone is owed. */
+    removeCircleEdge(followerId: string, followeeId: string): boolean {
+        return this.circleEdges.delete(InMemoryDb.circleKey(followerId, followeeId));
+    }
+
+    getCircleEdge(followerId: string, followeeId: string): CircleEdgeRecord | undefined {
+        return this.circleEdges.get(InMemoryDb.circleKey(followerId, followeeId));
+    }
+
+    /** Edges where `followerId` is the follower — the people in their Circle. */
+    listCircleFollowing(followerId: string): CircleEdgeRecord[] {
+        return [...this.circleEdges.values()]
+            .filter((e) => e.followerId === followerId)
+            .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    }
+
+    /** Edges where `followeeId` is the followee — people who hold them in theirs. */
+    listCircleFollowers(followeeId: string): CircleEdgeRecord[] {
+        return [...this.circleEdges.values()]
+            .filter((e) => e.followeeId === followeeId)
+            .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    }
+
+    // --- relay edges (the chain the feed renders as [You] -> [X] -> [Y]) ---
+
+    private static relayKey(
+        relayerUserId: string,
+        subjectSource: string,
+        subjectId: string
+    ): string {
+        return `${relayerUserId}::${subjectSource}::${subjectId}`;
+    }
+
+    /**
+     * Idempotent on `(relayerUserId, subjectSource, subjectId)`: re-relaying a
+     * subject you already relayed reactivates your existing edge rather than
+     * minting a second one, so a person appears at most once in any chain.
+     */
+    upsertRelayEdge(input: Omit<RelayEdgeRecord, 'createdAt' | 'updatedAt'>): RelayEdgeRecord {
+        const key = InMemoryDb.relayKey(input.relayerUserId, input.subjectSource, input.subjectId);
+        const existing = this.relayEdges.get(key);
+        const now = nowIso();
+        const record: RelayEdgeRecord = {
+            ...input,
+            id: existing?.id ?? input.id,
+            // A re-relay keeps the chain it was first minted with; re-parenting
+            // an existing edge would rewrite history other people already saw.
+            parentRelayId: existing?.parentRelayId ?? input.parentRelayId,
+            rootRelayId: existing?.rootRelayId ?? input.rootRelayId,
+            chainDepth: existing?.chainDepth ?? input.chainDepth,
+            createdAt: existing?.createdAt ?? now,
+            updatedAt: now,
+        };
+        this.relayEdges.set(key, record);
+        return record;
+    }
+
+    getRelayEdge(id: string): RelayEdgeRecord | undefined {
+        for (const edge of this.relayEdges.values()) {
+            if (edge.id === id) return edge;
+        }
+        return undefined;
+    }
+
+    findRelayEdge(
+        relayerUserId: string,
+        subjectSource: string,
+        subjectId: string
+    ): RelayEdgeRecord | undefined {
+        return this.relayEdges.get(InMemoryDb.relayKey(relayerUserId, subjectSource, subjectId));
+    }
+
+    /** Active edges authored by any of `relayerUserIds`, newest first. The Reach query. */
+    listRelayEdgesByRelayers(relayerUserIds: readonly string[]): RelayEdgeRecord[] {
+        const relayers = new Set(relayerUserIds);
+        return [...this.relayEdges.values()]
+            .filter((e) => e.active && relayers.has(e.relayerUserId))
+            .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    }
+
+    /** Every edge on a subject, active or not — powers "+N others relayed". */
+    listRelayEdgesForSubject(subjectSource: string, subjectId: string): RelayEdgeRecord[] {
+        return [...this.relayEdges.values()]
+            .filter((e) => e.subjectSource === subjectSource && e.subjectId === subjectId)
+            .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    }
+
     // --- plugin installations (activation-at-scope) ---
 
     createPluginInstallation(
@@ -4955,6 +5067,19 @@ export class FileBackedDb extends InMemoryDb {
                 parsed.coalitionFeedComments.map((row) => [row.id, row])
             );
         }
+        if (parsed.circleEdges) {
+            this.circleEdges = new Map(
+                parsed.circleEdges.map((row) => [`${row.followerId}::${row.followeeId}`, row])
+            );
+        }
+        if (parsed.relayEdges) {
+            this.relayEdges = new Map(
+                parsed.relayEdges.map((row) => [
+                    `${row.relayerUserId}::${row.subjectSource}::${row.subjectId}`,
+                    row,
+                ])
+            );
+        }
         if (parsed.coalitionAidPosts) {
             this.coalitionAidPosts = new Map(parsed.coalitionAidPosts.map((row) => [row.id, row]));
         }
@@ -5181,6 +5306,8 @@ export class FileBackedDb extends InMemoryDb {
             coalitionFeedItems: [...this.coalitionFeedItems.values()],
             coalitionFeedLikes: [...this.coalitionFeedLikes.values()],
             coalitionFeedComments: [...this.coalitionFeedComments.values()],
+            circleEdges: [...this.circleEdges.values()],
+            relayEdges: [...this.relayEdges.values()],
             pluginInstallations: [...this.pluginInstallations.values()],
             pluginDens: [...this.pluginDens.values()],
             coalitionKitManifestApplications: [...this.coalitionKitManifestApplications.values()],
