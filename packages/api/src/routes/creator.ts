@@ -284,7 +284,10 @@ creator.post('/listings/:id/publish', async (c) => {
         );
     }
     try {
-        const result = await provider.publishCreatorListing(record.providerListingId);
+        const result = await provider.publishCreatorListing(
+            record.providerListingId,
+            record.sellerUserId
+        );
         const updated = updateCreatorListingStatus(record.id, {
             status: result.status,
             publicSlug: result.publicSlug,
@@ -310,7 +313,10 @@ creator.delete('/listings/:id', async (c) => {
     const provider = pickProvider(record.providerId);
     if (provider?.archiveCreatorListing && record.providerListingId) {
         try {
-            await provider.archiveCreatorListing(record.providerListingId);
+            await provider.archiveCreatorListing(
+                record.providerListingId,
+                record.sellerUserId
+            );
         } catch (error) {
             logEvent('creator.listing.archive_failed', {
                 id: record.id,
