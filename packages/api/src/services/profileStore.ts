@@ -367,6 +367,29 @@ export function listWallPosts(userId: string): WallPost[] {
     );
 }
 
+/**
+ * Find one wall post by id, across every wall. Wall posts are stored per profile
+ * (`profileUserId` -> posts), so a relay — which addresses a subject by id alone
+ * — needs this scan to resolve one. Linear in total wall posts; fine at this
+ * scale, and the natural place to add an index if walls ever get large.
+ */
+export function findWallPost(postId: string): WallPost | null {
+    for (const posts of wallPosts.values()) {
+        const found = posts.find((p) => p.id === postId);
+        if (found) return found;
+    }
+    return null;
+}
+
+/** Every wall post authored by `authorId`, newest first — the Circle-ring query. */
+export function listWallPostsByAuthor(authorId: string): WallPost[] {
+    const out: WallPost[] = [];
+    for (const posts of wallPosts.values()) {
+        for (const post of posts) if (post.authorId === authorId) out.push(post);
+    }
+    return out.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
 export function appendWallPost(input: {
     profileUserId: string;
     authorId: string;

@@ -84,3 +84,92 @@ export function computeIllumination(input: IlluminationInput): {
         networkSize: input.networkSize,
     };
 }
+
+/** A feed entry, after both rings are merged. */
+export interface FeedEntry<TSubject = unknown> {
+    /** Stable across sources: `${source}:${subjectId}`. */
+    key: string;
+    ring: FeedRing;
+    /** The moment this entered *this viewer's* feed — the only sort key. */
+    at: string;
+    subject: TSubject | null;
+    /** The path that delivered it; empty for a Circle-authored post. */
+    path: RelayPathLike | null;
+    /** Other people who also relayed it, beyond the displayed path. */
+    alsoRelayedBy: string[];
+}
+
+/** Structural mirror of `RelayPath`, kept local so this module stays standalone. */
+export interface RelayPathLike {
+    hops: { relayId: string; userId: string; note: string | null; active: boolean; at: string }[];
+    originAuthorId: string | null;
+    length: number;
+}
+
+/**
+ * Merge the two rings into one chronological page.
+ *
+ * The sort key is `at`, descending, and nothing else. No score, no recency
+ * blend, no interest boost, no per-source cap — the ordering carries no
+ * editorial opinion, which is the whole point.
+ *
+ * Deduped by subject: when several people carried the same thing, the
+ * **earliest** arrival is the one whose path is displayed, because that is the
+ * relay that actually put it in front of this viewer. The rest are named in
+ * `alsoRelayedBy` so nothing is hidden.
+ */
+export function mergeFeedEntries<T>(
+    entries: readonly FeedEntry<T>[],
+    limit: number
+): FeedEntry<T>[] {
+    const earliestByKey = new Map<string, FeedEntry<T>>();
+    const extraRelayers = new Map<string, string[]>();
+
+    for (const entry of entries) {
+        const held = earliestByKey.get(entry.key);
+        if (!held) {
+            earliestByKey.set(entry.key, entry);
+            continue;
+        }
+        const [keep, drop] = entry.at < held.at ? [entry, held] : [held, entry];
+        earliestByKey.set(entry.key, keep);
+        const relayer = drop.path?.hops[0]?.userId;
+        if (relayer && relayer !== keep.path?.hops[0]?.userId) {
+            const names = extraRelayers.get(entry.key) ?? [];
+            if (!names.includes(relayer)) names.push(relayer);
+            extraRelayers.set(entry.key, names);
+        }
+    }
+
+    return [...earliestByKey.values()]
+        .map((entry) => ({ ...entry, alsoRelayedBy: extraRelayers.get(entry.key) ?? [] }))
+        .sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : a.key.localeCompare(b.key)))
+        .slice(0, limit);
+}
+
+/** A run of consecutive entries delivered by the same relayer. */
+export interface FeedGroup<T> {
+    /** The relayer whose run this is; null for Circle-authored entries. */
+    relayerUserId: string | null;
+    entries: FeedEntry<T>[];
+}
+
+/**
+ * Fold consecutive entries from the same relayer into one expandable run
+ * ("X relayed 6 things").
+ *
+ * This is the only flood control in the feed, and it is deliberately a
+ * *presentation* change: order is preserved exactly, nothing is dropped,
+ * downweighted or hidden, and expanding a run shows every entry. Reordering or
+ * capping a prolific relayer would be ranking by another name.
+ */
+export function groupConsecutiveRelays<T>(entries: readonly FeedEntry<T>[]): FeedGroup<T>[] {
+    const groups: FeedGroup<T>[] = [];
+    for (const entry of entries) {
+        const relayer = entry.path?.hops[0]?.userId ?? null;
+        const tail = groups[groups.length - 1];
+        if (tail && tail.relayerUserId === relayer && relayer !== null) tail.entries.push(entry);
+        else groups.push({ relayerUserId: relayer, entries: [entry] });
+    }
+    return groups;
+}

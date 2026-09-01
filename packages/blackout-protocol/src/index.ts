@@ -59,5 +59,6 @@ export * from './split-contract';
 export * from './tip';
 
 export * from './boost';
+export * from './relay';
 
 export * from './bounty-board';

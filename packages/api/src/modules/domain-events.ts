@@ -1,38 +1,41 @@
 export interface DomainEvent<TPayload = unknown> {
-  id: string;
-  module:
-    | 'governance'
-    | 'forum'
-    | 'deaddrop'
-    | 'deadman'
-    | 'moderation'
-    | 'streaming'
-    | 'monetization'
-    | 'profile'
-    | 'settings'
-    | 'stego';
-  type: string;
-  payload: TPayload;
-  emittedAt: string;
+    id: string;
+    module:
+        | 'governance'
+        | 'forum'
+        | 'deaddrop'
+        | 'deadman'
+        | 'moderation'
+        | 'streaming'
+        | 'monetization'
+        | 'profile'
+        | 'settings'
+        | 'stego'
+        | 'feed';
+    type: string;
+    payload: TPayload;
+    emittedAt: string;
 }
 
 const events: DomainEvent[] = [];
 
-export function emitDomainEvent<TPayload>(event: Omit<DomainEvent<TPayload>, 'id' | 'emittedAt'>): DomainEvent<TPayload> {
-  const emitted: DomainEvent<TPayload> = {
-    id: crypto.randomUUID(),
-    emittedAt: new Date().toISOString(),
-    ...event,
-  };
+export function emitDomainEvent<TPayload>(
+    event: Omit<DomainEvent<TPayload>, 'id' | 'emittedAt'>
+): DomainEvent<TPayload> {
+    const emitted: DomainEvent<TPayload> = {
+        id: crypto.randomUUID(),
+        emittedAt: new Date().toISOString(),
+        ...event,
+    };
 
-  events.push(emitted);
-  return emitted;
+    events.push(emitted);
+    return emitted;
 }
 
 export function listDomainEvents(moduleId?: DomainEvent['module']): DomainEvent[] {
-  if (!moduleId) {
-    return [...events];
-  }
+    if (!moduleId) {
+        return [...events];
+    }
 
-  return events.filter((event) => event.module === moduleId);
+    return events.filter((event) => event.module === moduleId);
 }
