@@ -37,6 +37,12 @@ export type FeatureFlags = {
     coalition: boolean;
     coliseum: boolean;
     /**
+     * The Circle & Reach feed. Owns the `/circle` destination: a feed built
+     * only from what people chose to relay, with the human chain that
+     * delivered each item shown on the card.
+     */
+    circleFeed: boolean;
+    /**
      * Discord Migration Hub. Owns the `/migration-hub` destination: connect
      * Discord, import a server (channels/roles → dens/governance), activate the
      * mautrix-discord bridge per den, and watch adoption metrics.
@@ -390,6 +396,7 @@ export const defaultFeatureFlags: FeatureFlags = {
     liveInteractionBundle: true,
     coalition: true,
     coliseum: true,
+    circleFeed: true,
     migrationHub: true,
     streaming: true,
     profile: true,

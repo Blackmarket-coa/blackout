@@ -1,6 +1,11 @@
 import type { FeedSort } from './unifiedFeedModel';
 
-export type HomeFeedSegment = 'forYou' | 'following';
+/**
+ * `circle` is the Circle & Reach feed — only what people chose to relay, in
+ * time order. `forYou` and `following` are the ranked aggregator, which now
+ * lives behind Discover.
+ */
+export type HomeFeedSegment = 'circle' | 'forYou' | 'following';
 
 export type HomeFeedTelemetryEvent =
     | { name: 'home_segment_switched'; segment: HomeFeedSegment }

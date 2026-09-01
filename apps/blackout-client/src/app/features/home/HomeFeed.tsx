@@ -23,6 +23,8 @@ import { installedPluginsAtom } from '../monetization/install/installedPluginsAt
 import { grantedFeatureKeySetAtom } from '../monetization/install/grantedFeatureKeysAtom';
 import { betaUnlockAllEnabled } from '../../core/features/betaUnlock';
 import { runtimeFeatureFlags, type FeatureFlags } from '../../core/features/featureFlags';
+import { CircleFeed } from '../circle-feed';
+import { myProfileAtom } from '../profile/profileAtoms';
 import {
     HOME_WIDGET_BY_ID,
     isWidgetEntitled,
@@ -81,8 +83,9 @@ const FEED_SORTS: { id: FeedSort; label: string; hint: string }[] = [
     { id: 'top', label: 'Top', hint: 'Highest-scored first' },
 ];
 
-/** Tooltip copy for the For You / Following feed segments. */
+/** Tooltip copy for the feed segments. */
 const SEGMENT_HINTS = {
+    circle: 'Only what people you follow posted or relayed — in time order, never ranked',
     forYou: 'Everything across Blackout, ranked for you',
     following: 'New activity from the dens and people you follow',
 } as const;
@@ -174,7 +177,10 @@ export const HomeFeed = (): JSX.Element => {
     const installed = useAtomValue(installedPluginsAtom);
     const segmentsEnabled = runtimeFeatureFlags.homeFeedSegments;
     const streakEnabled = runtimeFeatureFlags.homeStreak;
-    const [segment, setSegment] = useState<HomeFeedSegment>('forYou');
+    // Circle & Reach is the default: a feed nobody ranked. The aggregator below
+    // is still one tap away under Discover.
+    const [segment, setSegment] = useState<HomeFeedSegment>('circle');
+    const myProfile = useAtomValue(myProfileAtom);
     const [sort, setSort] = useState<FeedSort>('hot');
     const [query, setQuery] = useState('');
     const [topicFilter, setTopicFilter] = useState<string | null>(null);
@@ -395,6 +401,21 @@ export const HomeFeed = (): JSX.Element => {
                         <button
                             type="button"
                             role="tab"
+                            data-testid="home-feed-segment-circle"
+                            title={SEGMENT_HINTS.circle}
+                            aria-pressed={segment === 'circle'}
+                            aria-selected={segment === 'circle'}
+                            className={classNames(css.pill, segment === 'circle' && css.pillActive)}
+                            onClick={() => {
+                                setSegment('circle');
+                                trackHomeSegmentSwitched('circle');
+                            }}
+                        >
+                            Your feed
+                        </button>
+                        <button
+                            type="button"
+                            role="tab"
                             data-testid="home-feed-segment-foryou"
                             title={SEGMENT_HINTS.forYou}
                             aria-pressed={segment === 'forYou'}
@@ -426,7 +447,10 @@ export const HomeFeed = (): JSX.Element => {
                             Following
                         </button>
                     </div>
-                    <div className={css.pillGroup} aria-label="Sort">
+                    {/* Sort is meaningless on Circle & Reach: the order is the order
+                        people relayed things, and offering a ranking control would
+                        imply the feed has one. */}
+                    <div className={css.pillGroup} aria-label="Sort" hidden={segment === 'circle'}>
                         {FEED_SORTS.map((option) => (
                             <button
                                 key={option.id}
@@ -450,44 +474,58 @@ export const HomeFeed = (): JSX.Element => {
                     </div>
                 </div>
             ) : null}
-            {segmentsEnabled ? (
+            {segmentsEnabled && segment === 'circle' ? (
                 <section
                     className={css.section}
-                    data-shell-region="home-feed-segment"
-                    data-testid="home-feed-segment-section"
+                    data-shell-region="home-circle-feed"
+                    data-testid="home-circle-feed-section"
                 >
-                    {segmentItems.length === 0 ? (
-                        <div className={css.emptyState} data-testid="home-feed-empty">
-                            <strong>
-                                {feed.loading
-                                    ? 'Loading your feed…'
-                                    : segment === 'following'
-                                    ? 'No activity yet.'
-                                    : 'Nothing to show right now.'}
-                            </strong>
-                            {!feed.loading && segment === 'following' ? (
-                                <>
-                                    <span>
-                                        Join a{' '}
-                                        <GlossaryTerm term="canopy">
-                                            {BLACKOUT_TERMS.canopy.singular}
-                                        </GlossaryTerm>{' '}
-                                        to start seeing posts in your feed.
-                                    </span>
-                                    <Link to={COMMUNITIES_PATH} className={css.ctaLink}>
-                                        Discover {BLACKOUT_TERMS.canopy.plural}
-                                    </Link>
-                                </>
-                            ) : null}
-                        </div>
-                    ) : (
-                        <div className={css.feedList} data-testid="home-feed-list">
-                            {segment === 'following'
-                                ? renderFollowingCards(segmentItems)
-                                : renderCards(segmentItems)}
-                        </div>
-                    )}
+                    {/* Server-assembled and already ordered; the aggregator's
+                        ranking, search and topic filters deliberately do not
+                        apply here. */}
+                    <CircleFeed viewerId={myProfile.userId ?? null} />
                 </section>
+            ) : null}
+            {segmentsEnabled ? (
+                segment !== 'circle' ? (
+                    <section
+                        className={css.section}
+                        data-shell-region="home-feed-segment"
+                        data-testid="home-feed-segment-section"
+                    >
+                        {segmentItems.length === 0 ? (
+                            <div className={css.emptyState} data-testid="home-feed-empty">
+                                <strong>
+                                    {feed.loading
+                                        ? 'Loading your feed…'
+                                        : segment === 'following'
+                                        ? 'No activity yet.'
+                                        : 'Nothing to show right now.'}
+                                </strong>
+                                {!feed.loading && segment === 'following' ? (
+                                    <>
+                                        <span>
+                                            Join a{' '}
+                                            <GlossaryTerm term="canopy">
+                                                {BLACKOUT_TERMS.canopy.singular}
+                                            </GlossaryTerm>{' '}
+                                            to start seeing posts in your feed.
+                                        </span>
+                                        <Link to={COMMUNITIES_PATH} className={css.ctaLink}>
+                                            Discover {BLACKOUT_TERMS.canopy.plural}
+                                        </Link>
+                                    </>
+                                ) : null}
+                            </div>
+                        ) : (
+                            <div className={css.feedList} data-testid="home-feed-list">
+                                {segment === 'following'
+                                    ? renderFollowingCards(segmentItems)
+                                    : renderCards(segmentItems)}
+                            </div>
+                        )}
+                    </section>
+                ) : null
             ) : (
                 <>
                     <section
