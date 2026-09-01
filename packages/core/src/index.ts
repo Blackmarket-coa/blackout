@@ -20,6 +20,7 @@ export * from './creator';
 export * from './search';
 export * from './coliseum';
 export * from './feed';
+export * from './profile';
 export * from './den';
 export * from './reputation';
 export * from './objectives';

@@ -12,6 +12,13 @@ import {
     upsertProfile,
 } from '../services/profileStore';
 import type { FeatureModule } from './types';
+import {
+    DEFAULT_PROFILE_LAYOUT,
+    normalizeProfileLayout,
+    paletteAvailability,
+    type ProfileMilestoneStats,
+} from '@blackout/core';
+import { listFollowing, mutualsOf } from '../services/follows';
 
 /** MXID localpart extractor (`@localpart:domain` → `localpart`). */
 const MXID_LOCALPART_RE = /^@([^:]+):[^:]+$/;
@@ -172,6 +179,77 @@ function createProfileRouter() {
         } catch (error) {
             return c.json({ code: 'invalid_request', message: (error as Error).message }, 400);
         }
+    });
+
+    /**
+     * The owner's Circle map: which of their connections they have agreed to
+     * show.
+     *
+     * Only *overlapping* circles are eligible. Displaying a one-way follow would
+     * expose a relationship the other person never chose — an overlap means both
+     * people picked the edge, which is the closest thing to consent the graph
+     * records. The owner then opts in per relationship on top of that, so
+     * following someone never publishes it as a side effect.
+     */
+    profile.get('/:userId/circle-map', (c) => {
+        const gate = requireDomainCapability(c, 'profile', 'read');
+        if (gate) return gate;
+        const userId = c.req.param('userId');
+        const stored = getProfileOrDefault(userId);
+        const optedIn = new Set(stored.profile.circleMapVisible ?? []);
+        const owner = subjectOwnsProfile(c, userId);
+
+        const overlaps = mutualsOf(userId);
+        return c.json({
+            // Viewers see only opted-in edges; the owner also sees the rest so
+            // they have something to opt in *from*.
+            connections: overlaps
+                .filter((id) => owner || optedIn.has(id))
+                .map((id) => ({ userId: id, visible: optedIn.has(id) })),
+            eligibleCount: overlaps.length,
+            visibleCount: overlaps.filter((id) => optedIn.has(id)).length,
+        });
+    });
+
+    /**
+     * Palettes, with the locked ones included and their progress stated.
+     *
+     * Locked palettes are shown as locked rather than hidden, for the same
+     * reason the Illumination meter reports unlit areas: a person should be able
+     * to see what exists and what it takes.
+     */
+    profile.get('/:userId/palettes', (c) => {
+        const gate = requireDomainCapability(c, 'profile', 'read');
+        if (gate) return gate;
+        const userId = c.req.param('userId');
+
+        const relays = [...db.relayEdges.values()].filter((e) => e.relayerUserId === userId);
+        const relayIds = new Set(relays.map((e) => e.id));
+        // How far anything they carried actually travelled.
+        const downstream = [...db.relayEdges.values()].filter(
+            (e) => e.parentRelayId !== null && relayIds.has(e.parentRelayId)
+        );
+        const stats: ProfileMilestoneStats = {
+            relaysMade: relays.length,
+            circleSize: listFollowing(userId).length,
+            circleOverlaps: mutualsOf(userId).length,
+            chainDepthReached: relays.reduce((max, e) => Math.max(max, e.chainDepth), 0),
+            peopleReached: new Set(downstream.map((e) => e.relayerUserId)).size,
+        };
+
+        return c.json({ stats, palettes: paletteAvailability(stats) });
+    });
+
+    /** The layout this profile renders, normalized against the current block set. */
+    profile.get('/:userId/layout', (c) => {
+        const gate = requireDomainCapability(c, 'profile', 'read');
+        if (gate) return gate;
+        const stored = getProfileOrDefault(c.req.param('userId'));
+        return c.json(
+            stored.profile.layout
+                ? normalizeProfileLayout(stored.profile.layout)
+                : DEFAULT_PROFILE_LAYOUT
+        );
     });
 
     return profile;

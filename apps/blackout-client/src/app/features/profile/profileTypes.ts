@@ -1,3 +1,5 @@
+import { normalizeProfileLayout, PROFILE_PALETTE_IDS, type ProfileLayout } from '@blackout/core';
+
 export const BMC_PROFILE_EVENT_TYPE = 'co.bmc.profile';
 
 export type ConnectionType = 'github' | 'website' | 'x' | 'linkedin' | 'matrix' | 'fbm' | 'other';
@@ -87,6 +89,17 @@ export interface BmcProfileEvent {
     sponsors?: string[];
     /** Curated canopy ids surfaced as affiliations on the public profile. */
     featuredCanopies?: string[];
+    /** Which blocks this profile shows, and in what order. */
+    layout?: ProfileLayout;
+    /** Chosen palette id from the bounded set in `@blackout/core`. */
+    paletteId?: string;
+    /**
+     * Connections the owner has agreed to show on their Circle map. Opt-in per
+     * relationship, so following someone never publishes it as a side effect.
+     */
+    circleMapVisible?: string[];
+    /** Relay ids the owner has pinned — chains they started or carried onward. */
+    pinnedRelayIds?: string[];
 }
 
 export interface MemberProfile {
@@ -359,6 +372,24 @@ export const sanitizeProfileEvent = (input: unknown): BmcProfileEvent => {
                   .filter(isString)
                   .map((id) => id.trim().slice(0, 128))
                   .filter((id) => id.length > 0)
+                  .slice(0, 12)
+            : undefined,
+        layout: data.layout === undefined ? undefined : normalizeProfileLayout(data.layout),
+        paletteId:
+            isString(data.paletteId) && PROFILE_PALETTE_IDS.includes(data.paletteId)
+                ? data.paletteId
+                : undefined,
+        circleMapVisible: Array.isArray(data.circleMapVisible)
+            ? data.circleMapVisible
+                  .filter(isString)
+                  .map((id) => id.trim().slice(0, 255))
+                  .filter((id) => id.length > 0)
+                  .slice(0, 200)
+            : undefined,
+        pinnedRelayIds: Array.isArray(data.pinnedRelayIds)
+            ? data.pinnedRelayIds
+                  .filter(isString)
+                  .map((id) => id.slice(0, 64))
                   .slice(0, 12)
             : undefined,
     };
