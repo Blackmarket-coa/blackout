@@ -48,7 +48,7 @@ test('every descriptor maps to a real table with columns', async () => {
         const columns = await introspectColumns(client as never, d.tableName);
         assert.ok(columns.length > 0, `table ${d.tableName} (map ${d.mapName}) should exist`);
     }
-    assert.equal(TABLE_DESCRIPTORS.length, 132);
+    assert.equal(TABLE_DESCRIPTORS.length, 136);
     await pg.query('SELECT 1');
 });
 
@@ -233,6 +233,43 @@ test('write-through persists across a simulated restart', async () => {
     // Accept creator-a: bounty → claimed, creator-a accepted, creator-b declined.
     store1.acceptBountyApplication('bounty-eco-1', 'creator-a');
 
+    // Circle graph + relay chain. This is the regression that motivated
+    // migration 085: both lived in module-level Maps and vanished on restart,
+    // taking every Circle/Reach feed with them.
+    store1.addCircleEdge({ id: randomUUID(), followerId: userId, followeeId: 'friend-1' });
+    store1.addCircleEdge({ id: randomUUID(), followerId: 'friend-1', followeeId: userId });
+    store1.addCircleEdge({ id: randomUUID(), followerId: userId, followeeId: 'friend-2' });
+    // Withdrawn follow — the resync path must delete exactly this row.
+    store1.addCircleEdge({ id: randomUUID(), followerId: userId, followeeId: 'friend-3' });
+    store1.removeCircleEdge(userId, 'friend-3');
+
+    // A two-hop chain: friend-1 relayed from the origin, userId relayed via them.
+    const originRelayId = randomUUID();
+    store1.upsertRelayEdge({
+        id: originRelayId,
+        relayerUserId: 'friend-1',
+        subjectSource: 'coalition_feed',
+        subjectId: 'feed-item-1',
+        parentRelayId: null,
+        rootRelayId: originRelayId,
+        chainDepth: 0,
+        originAuthorId: 'author-1',
+        note: 'relaying because the share is this weekend',
+        active: true,
+    });
+    store1.upsertRelayEdge({
+        id: randomUUID(),
+        relayerUserId: userId,
+        subjectSource: 'coalition_feed',
+        subjectId: 'feed-item-1',
+        parentRelayId: originRelayId,
+        rootRelayId: originRelayId,
+        chainDepth: 1,
+        originAuthorId: 'author-1',
+        note: null,
+        active: true,
+    });
+
     await store1.drain();
 
     // Simulate a restart: a brand-new store hydrating from the same database.
@@ -296,6 +333,40 @@ test('write-through persists across a simulated restart', async () => {
     assert.equal(reward?.beneficiaryId, 'creator-9');
     assert.equal(reward?.rewardCents, 500);
     assert.equal(reward?.status, 'earned');
+
+    // The Circle survives the restart, including the asymmetry: friend-2 is in
+    // the user's Circle without holding them in theirs.
+    const following = store2
+        .listCircleFollowing(userId)
+        .map((e) => e.followeeId)
+        .sort();
+    assert.deepEqual(following, ['friend-1', 'friend-2'], 'circle should hydrate');
+    assert.deepEqual(
+        store2.listCircleFollowers(userId).map((e) => e.followerId),
+        ['friend-1'],
+        'only friend-1 holds the user in their Circle'
+    );
+    assert.equal(
+        store2.getCircleEdge(userId, 'friend-3'),
+        undefined,
+        'withdrawn follow should not hydrate'
+    );
+
+    // The relay chain hydrates with its parent pointers intact — without these
+    // the feed cannot render [You] -> [X] -> [Y] after a deploy.
+    const hydratedRelay = store2.findRelayEdge(userId, 'coalition_feed', 'feed-item-1');
+    assert.ok(hydratedRelay, 'relay edge should hydrate');
+    assert.equal(hydratedRelay?.parentRelayId, originRelayId, 'parent pointer survives');
+    assert.equal(hydratedRelay?.rootRelayId, originRelayId);
+    assert.equal(hydratedRelay?.chainDepth, 1);
+    assert.equal(hydratedRelay?.active, true);
+    const originRelay = store2.getRelayEdge(originRelayId);
+    assert.equal(originRelay?.note, 'relaying because the share is this weekend');
+    assert.equal(
+        store2.listRelayEdgesForSubject('coalition_feed', 'feed-item-1').length,
+        2,
+        'both hops survive as separate edges'
+    );
 
     // Ecosystem bounty survives restart with its JSONB array columns intact, and
     // the accept resync (claim + decline siblings) is durable.

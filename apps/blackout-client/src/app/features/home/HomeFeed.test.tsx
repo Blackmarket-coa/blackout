@@ -220,6 +220,26 @@ describe('HomeFeed', () => {
         expect(following?.contains(denCards[0])).toBe(true);
     });
 
+    it('defaults to the Circle & Reach feed, with no sort control, when homeFeedSegments is on', async () => {
+        runtimeFeatureFlags.homeFeedSegments = true;
+        const { container } = await mountWithRooms([
+            fakeRoom({ roomId: '!d:s', name: 'A Den', getUnreadNotificationCount: () => 2 }),
+        ]);
+
+        // Circle & Reach is the landing surface; the ranked aggregator is one
+        // tap away under For You / Following.
+        expect(container.querySelector('[data-testid="home-circle-feed-section"]')).not.toBeNull();
+        expect(container.querySelector('[data-testid="home-feed-segment-section"]')).toBeNull();
+
+        // Sort is meaningless on a feed ordered purely by when people relayed.
+        const sortGroup = container.querySelector(
+            '[data-testid="home-feed-sort-hot"]'
+        )?.parentElement;
+        expect(sortGroup?.hasAttribute('hidden')).toBe(true);
+
+        runtimeFeatureFlags.homeFeedSegments = false;
+    });
+
     it('renders For You / Following + sort controls and switches segments when homeFeedSegments is on', async () => {
         runtimeFeatureFlags.homeFeedSegments = true;
         vi.mocked(fetchCoalitionFeed).mockResolvedValueOnce({
@@ -249,7 +269,16 @@ describe('HomeFeed', () => {
         expect(container.querySelector('[data-testid="home-following-section"]')).toBeNull();
         expect(container.querySelector('[data-testid="home-discover-section"]')).toBeNull();
 
-        // For You (default) surfaces the Discover-only coalition bulletin.
+        // Leave the Circle segment to reach the ranked aggregator.
+        const forYouBtn = container.querySelector(
+            '[data-testid="home-feed-segment-foryou"]'
+        ) as HTMLButtonElement;
+        await act(async () => {
+            forYouBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+            await Promise.resolve();
+        });
+
+        // For You surfaces the Discover-only coalition bulletin.
         const section = container.querySelector('[data-testid="home-feed-segment-section"]');
         expect(section?.textContent).toContain('Coalition Bulletin');
 

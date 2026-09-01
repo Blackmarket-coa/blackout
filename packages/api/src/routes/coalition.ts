@@ -10,6 +10,7 @@ import {
     INSTALL_SCOPE_TYPES,
     KIT_DEFINITIONS,
     RECURRENCE_FREQUENCIES,
+    crewSizeStatus,
     RING_KINDS,
     RING_ROLES,
     RING_VISIBILITY,
@@ -113,6 +114,7 @@ import {
 import { createTip, TipValidationError, TIP_LIMITS } from '../services/tips';
 import { authorizeScope, installPluginAtScope } from '../services/pluginInstallations';
 import { db } from '../db/store';
+import { relaySubject } from '../services/relayStore';
 import { matrixClient } from '../integrations/matrix-client';
 import { readJsonBody } from '../middleware/validate';
 import { getAuthUser, requireUser } from '../middleware/require-user';
@@ -1417,6 +1419,79 @@ coalition.patch('/rings/:id/members/:userId', async (c) => {
         active: true,
     });
     return c.json({ membership });
+});
+
+/**
+ * Carry something out of a crew into the wider network.
+ *
+ * A crew is a small private pod, and nothing said inside one leaks by default.
+ * Relaying out is therefore a deliberate *publish*, not a forward: it takes the
+ * requester's own words, posts them as a coalition feed item authored by them,
+ * and mints their origin relay so it reaches their Circle.
+ *
+ * The consent rule is structural rather than a checkbox — you can only carry out
+ * what you yourself wrote. There is no route by which one member can publish
+ * another member's words, so a crew stays safe to think out loud in.
+ */
+const relayOutSchema = z.object({
+    title: z.string().min(1).max(200),
+    body: z.string().max(2000).optional(),
+    tags: z.array(z.string().max(64)).max(20).optional(),
+    /** Optional commentary attached to the relay itself. */
+    note: z.string().max(280).optional(),
+});
+
+coalition.post('/rings/:id/relay-out', async (c) => {
+    const user = requireUser(c, 'Sign in to relay out of a crew');
+    if (user instanceof Response) return user;
+
+    const ring = getRing(c.req.param('id'));
+    if (!ring) return c.json({ code: 'not_found', message: 'Ring not found' }, 404);
+
+    const membership = listRingMemberships(ring.id).find((m) => m.userId === user.sub && m.active);
+    if (!membership) {
+        return c.json(
+            { code: 'forbidden', message: 'Only members can relay out of this crew' },
+            403
+        );
+    }
+
+    const parsed = await readJsonBody(c, relayOutSchema);
+    if (parsed instanceof Response) return parsed;
+
+    const base = {
+        id: newFeedItemId(),
+        kind: 'aid' as const,
+        title: parsed.title,
+        body: parsed.body,
+        denId: ring.denId,
+        authorId: user.sub,
+        importance: 0.5,
+        impact: 0.5,
+        socialImpact: 0.5,
+        tags: parsed.tags,
+        createdAt: new Date().toISOString(),
+    };
+    const feedItem = saveFeedItem({ ...base, score: scoreCoalitionItem(base, {}) });
+
+    // The publisher's own origin relay, so it travels to their Circle the same
+    // way anything else does — through a person choosing to carry it.
+    const relay = relaySubject({
+        relayerUserId: user.sub,
+        subjectSource: 'coalition_feed',
+        subjectId: feedItem.id,
+        viaRelayId: null,
+        note: parsed.note ?? null,
+    });
+
+    return c.json(
+        {
+            feedItem,
+            relay: relay.ok ? relay.value : null,
+            crewSize: crewSizeStatus(memberCountFor(ring.id)),
+        },
+        201
+    );
 });
 
 // --- ring invitations (the path into private rings) ---

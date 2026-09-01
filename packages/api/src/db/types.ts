@@ -1766,3 +1766,125 @@ export interface ReputationEventRecord {
     detail?: Record<string, unknown>;
     createdAt: string;
 }
+
+/**
+ * A Circle edge: `followerId` has put `followeeId` in their Circle. Directional
+ * — following someone builds *your* Circle and needs no approval from them. Two
+ * users whose edges point both ways have *overlapping* Circles, which is the
+ * only meaning "mutual" carries here; there is no separate mutual table and no
+ * handshake record.
+ *
+ * Ids are Blackout user ids (the JWT `sub` / `UserRecord.id`), matching the
+ * space `follows.ts` and `invitations.createdBy` already use.
+ */
+export interface CircleEdgeRecord {
+    id: UUID;
+    followerId: string;
+    followeeId: string;
+    createdAt: string;
+}
+
+/**
+ * What a relay can point at. Deliberately narrower than the Discover feed's
+ * eight sources: every member here is resolvable *server-side*, so the feed can
+ * render a relayed item for a viewer who has no other route to it.
+ *
+ * Matrix-native den content is absent on purpose — the server cannot resolve a
+ * room event for someone outside the room, and will not try against E2EE. The
+ * relay affordance is hidden on den content rather than failing at the API.
+ */
+export const RELAY_SUBJECT_SOURCES = [
+    'coalition_feed',
+    'coliseum_topic',
+    'wall_post',
+    'status',
+    'marketplace',
+    'stream',
+    'community_asset',
+] as const;
+export type RelaySubjectSource = typeof RELAY_SUBJECT_SOURCES[number];
+
+/**
+ * One person's decision to relay one subject to their own Circle — the spine of
+ * the Circle/Reach feed.
+ *
+ * `parentRelayId` is the edge this relayer *saw it through*, which is what makes
+ * provenance cheap: a chain is a parent-pointer walk, not a graph search. A
+ * parent must already exist when the child is written, so the structure is a DAG
+ * by construction and cycles are impossible.
+ *
+ * `active` toggles off on un-relay and rows are never deleted, matching
+ * `CoalitionFeedLikeRecord`. Visibility asks only whether *some* active edge
+ * whose relayer is in the viewer's Circle exists, so withdrawing your relay
+ * drops the item for people who reached it only through you, while a downstream
+ * relayer's own (still active) edge keeps it alive for theirs.
+ */
+export interface RelayEdgeRecord {
+    id: UUID;
+    relayerUserId: string;
+    subjectSource: RelaySubjectSource;
+    subjectId: string;
+    /** The edge this relayer saw it through; null when relayed from the origin. */
+    parentRelayId: string | null;
+    /** Chain root — this edge's own id when it is the origin relay. */
+    rootRelayId: string;
+    /** 0 at the origin relay; capped at write time by MAX_RELAY_CHAIN_DEPTH. */
+    chainDepth: number;
+    /** The subject's author, when known, so a chain can name its origin. */
+    originAuthorId: string | null;
+    /** Optional relay commentary ("relaying because—"). */
+    note: string | null;
+    active: boolean;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export const COMMUNITY_ASSET_KINDS = ['sticker', 'meme', 'coin'] as const;
+export type CommunityAssetKind = typeof COMMUNITY_ASSET_KINDS[number];
+
+export const COMMUNITY_ASSET_STATUSES = ['pending', 'approved', 'rejected', 'retired'] as const;
+export type CommunityAssetStatus = typeof COMMUNITY_ASSET_STATUSES[number];
+
+/**
+ * A user-made sticker, meme or coin.
+ *
+ * Assets start `pending` and only become shareable on approval — creation is
+ * open to everyone, so the gate is what stops an open pipe from becoming a
+ * distribution channel for whatever anyone uploads.
+ *
+ * `creatorId` is written once and never reassigned: it is the attribution that
+ * Founding Contributor credentials and any future credit split are computed
+ * from, so transferring it would rewrite authorship of someone else's work.
+ */
+export interface CommunityAssetRecord {
+    id: UUID;
+    creatorId: string;
+    kind: CommunityAssetKind;
+    name: string;
+    description: string | null;
+    mediaUrl: string;
+    status: CommunityAssetStatus;
+    reviewedBy: string | null;
+    /** Why it was approved or rejected, so a decision is answerable. */
+    reviewNote: string | null;
+    reviewedAt: string | null;
+    /**
+     * Ordinal among approved assets of this kind, stamped at approval. Stored
+     * rather than recomputed so retiring an early asset cannot renumber everyone
+     * who came after it.
+     */
+    foundingOrdinal: number | null;
+    createdAt: string;
+    updatedAt: string;
+}
+
+/** A viewer's report on an approved asset. Resolved, never deleted. */
+export interface CommunityAssetReportRecord {
+    id: UUID;
+    assetId: string;
+    reporterId: string;
+    reason: string;
+    resolved: boolean;
+    createdAt: string;
+    updatedAt: string;
+}

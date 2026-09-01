@@ -1,3 +1,5 @@
+import { normalizeProfileLayout, PROFILE_PALETTE_IDS, type ProfileLayout } from '@blackout/core';
+
 /**
  * In-memory profile store for the MySpace-style member profile feature.
  * Mirrors the `MemberProfile` shape consumed by
@@ -71,6 +73,18 @@ export interface BmcProfileEvent {
     featuredCanopies?: string[];
     /** Equipped collectible badge cosmetic ids (capped). */
     badgeIds?: string[];
+    /** Which blocks this profile shows, and in what order. */
+    layout?: ProfileLayout;
+    /** Chosen palette id from the bounded set in `@blackout/core`. */
+    paletteId?: string;
+    /**
+     * Relationships the owner has agreed to show on their Circle map. Opt-in
+     * per relationship: an edge appears only if it is listed here, so building
+     * a Circle never publishes it as a side effect.
+     */
+    circleMapVisible?: string[];
+    /** Relay ids the owner has pinned — chains they started or carried onward. */
+    pinnedRelayIds?: string[];
 }
 
 export interface MemberProfile {
@@ -303,6 +317,28 @@ export function sanitizeProfileEvent(input: unknown): BmcProfileEvent {
                   .map((id) => id.slice(0, 64))
                   .slice(0, 6)
             : undefined,
+        // Normalizing here means a release that adds or removes a block kind
+        // never silently rearranges someone's profile.
+        layout: data.layout === undefined ? undefined : normalizeProfileLayout(data.layout),
+        // Only ids from the bounded set; an unknown palette falls back to the
+        // default rather than injecting arbitrary colours into the ecosystem.
+        paletteId:
+            isString(data.paletteId) && PROFILE_PALETTE_IDS.includes(data.paletteId)
+                ? data.paletteId
+                : undefined,
+        circleMapVisible: Array.isArray(data.circleMapVisible)
+            ? data.circleMapVisible
+                  .filter(isString)
+                  .map((id) => id.trim().slice(0, 255))
+                  .filter((id) => id.length > 0)
+                  .slice(0, 200)
+            : undefined,
+        pinnedRelayIds: Array.isArray(data.pinnedRelayIds)
+            ? data.pinnedRelayIds
+                  .filter(isString)
+                  .map((id) => id.slice(0, 64))
+                  .slice(0, 12)
+            : undefined,
     };
 }
 
@@ -365,6 +401,29 @@ export function listWallPosts(userId: string): WallPost[] {
     return [...(wallPosts.get(userId) ?? [])].sort((a, b) =>
         b.createdAt.localeCompare(a.createdAt)
     );
+}
+
+/**
+ * Find one wall post by id, across every wall. Wall posts are stored per profile
+ * (`profileUserId` -> posts), so a relay — which addresses a subject by id alone
+ * — needs this scan to resolve one. Linear in total wall posts; fine at this
+ * scale, and the natural place to add an index if walls ever get large.
+ */
+export function findWallPost(postId: string): WallPost | null {
+    for (const posts of wallPosts.values()) {
+        const found = posts.find((p) => p.id === postId);
+        if (found) return found;
+    }
+    return null;
+}
+
+/** Every wall post authored by `authorId`, newest first — the Circle-ring query. */
+export function listWallPostsByAuthor(authorId: string): WallPost[] {
+    const out: WallPost[] = [];
+    for (const posts of wallPosts.values()) {
+        for (const post of posts) if (post.authorId === authorId) out.push(post);
+    }
+    return out.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
 export function appendWallPost(input: {

@@ -109,6 +109,18 @@ const OVERRIDES: Record<string, DescriptorOverride> = {
         keyOf: (r) => `${r.feedItemId}::${r.userId}`,
         conflictColumns: ['feed_item_id', 'user_id'],
     },
+    circleEdges: {
+        keyOf: (r) => `${r.followerId}::${r.followeeId}`,
+        conflictColumns: ['follower_id', 'followee_id'],
+    },
+    relayEdges: {
+        keyOf: (r) => `${r.relayerUserId}::${r.subjectSource}::${r.subjectId}`,
+        conflictColumns: ['relayer_user_id', 'subject_source', 'subject_id'],
+    },
+    communityAssetReports: {
+        keyOf: (r) => `${r.assetId}::${r.reporterId}`,
+        conflictColumns: ['asset_id', 'reporter_id'],
+    },
     eventRideClaims: {
         keyOf: (r) => `${r.offerId}::${r.riderId}`,
         conflictColumns: ['offer_id', 'rider_id'],
@@ -413,6 +425,10 @@ const ALL_MAP_NAMES = [
     'coalitionFeedItems',
     'coalitionFeedLikes',
     'coalitionFeedComments',
+    'circleEdges',
+    'relayEdges',
+    'communityAssets',
+    'communityAssetReports',
     'canopyDirectoryEntries',
     'canaryTokens',
     'denGreetings',
@@ -663,6 +679,13 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
     upsertCoalitionFeedItem: upsert('coalitionFeedItems'),
     upsertCoalitionFeedLike: upsert('coalitionFeedLikes'),
     createCoalitionFeedComment: upsert('coalitionFeedComments'),
+    addCircleEdge: upsert('circleEdges'),
+    // A withdrawn follow is deleted outright (unlike a relay, which keeps its
+    // row and flips `active`), so the map has to be reconciled, not upserted.
+    removeCircleEdge: resync('circleEdges'),
+    upsertRelayEdge: upsert('relayEdges'),
+    upsertCommunityAsset: upsert('communityAssets'),
+    upsertCommunityAssetReport: upsert('communityAssetReports'),
     upsertCanopyDirectoryEntry: upsert('canopyDirectoryEntries'),
     upsertCanaryToken: upsert('canaryTokens'),
     markGreeted: upsert('denGreetings'),
