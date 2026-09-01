@@ -353,14 +353,17 @@ export function createFreeblackmarketProvider(): MarketplaceProvider {
             };
         },
 
-        async publishCreatorListing(providerListingId: string): Promise<CreatorListingResult> {
+        async publishCreatorListing(
+            providerListingId: string,
+            sellerUserId: string
+        ): Promise<CreatorListingResult> {
             const raw = await call<{
                 id: string;
                 slug?: string | null;
                 status?: CreatorListingResult['status'];
             }>(`${apiPrefix}/seller/listings/${providerListingId}/publish`, {
                 method: 'POST',
-                body: JSON.stringify({}),
+                body: JSON.stringify({ sellerUserId }),
             });
             return {
                 providerListingId: raw.id,
@@ -369,10 +372,17 @@ export function createFreeblackmarketProvider(): MarketplaceProvider {
             };
         },
 
-        async archiveCreatorListing(providerListingId: string): Promise<void> {
-            await call<{ ok: boolean }>(`${apiPrefix}/seller/listings/${providerListingId}`, {
-                method: 'DELETE',
-            });
+        async archiveCreatorListing(
+            providerListingId: string,
+            sellerUserId: string
+        ): Promise<void> {
+            // Query string rather than a body: DELETE bodies are not reliably
+            // forwarded by proxies, and FBM reads either.
+            const owner = `sellerUserId=${encodeURIComponent(sellerUserId)}`;
+            await call<{ ok: boolean }>(
+                `${apiPrefix}/seller/listings/${providerListingId}?${owner}`,
+                { method: 'DELETE' }
+            );
         },
 
         async startCreatorOnboarding(

@@ -181,8 +181,17 @@ export interface MarketplaceProvider extends MarketplaceProviderInfo {
 
     /** Optional creator-side surface — present when `creator-write` capability is advertised. */
     createCreatorListing?(input: CreatorListingDraftInput): Promise<CreatorListingResult>;
-    publishCreatorListing?(providerListingId: string): Promise<CreatorListingResult>;
-    archiveCreatorListing?(providerListingId: string): Promise<void>;
+    /**
+     * `sellerUserId` is a required owner assertion, not a convenience: the
+     * provider API key is one shared secret standing in for every creator, so
+     * the provider cannot otherwise tell which seller is acting and must be
+     * told. Providers reject a mismatch.
+     */
+    publishCreatorListing?(
+        providerListingId: string,
+        sellerUserId: string
+    ): Promise<CreatorListingResult>;
+    archiveCreatorListing?(providerListingId: string, sellerUserId: string): Promise<void>;
     startCreatorOnboarding?(
         sellerUserId: string,
         returnUrl?: string

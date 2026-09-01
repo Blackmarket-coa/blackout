@@ -771,9 +771,16 @@ export function createFreeblackmarketStubProvider(): MarketplaceProvider {
             };
         },
 
-        async publishCreatorListing(providerListingId: string): Promise<CreatorListingResult> {
+        async publishCreatorListing(
+            providerListingId: string,
+            sellerUserId: string
+        ): Promise<CreatorListingResult> {
             const entry = listings.get(providerListingId);
             if (!entry) throw new Error(`stub: unknown listing ${providerListingId}`);
+            // Mirror live FBM's 403 so the ownership contract is exercised in CI.
+            if (entry.sellerUserId !== sellerUserId) {
+                throw new Error(`stub: listing ${providerListingId} belongs to another seller`);
+            }
             entry.status = 'published';
             return {
                 providerListingId,
@@ -782,7 +789,14 @@ export function createFreeblackmarketStubProvider(): MarketplaceProvider {
             };
         },
 
-        async archiveCreatorListing(providerListingId: string): Promise<void> {
+        async archiveCreatorListing(
+            providerListingId: string,
+            sellerUserId: string
+        ): Promise<void> {
+            const entry = listings.get(providerListingId);
+            if (entry && entry.sellerUserId !== sellerUserId) {
+                throw new Error(`stub: listing ${providerListingId} belongs to another seller`);
+            }
             listings.delete(providerListingId);
         },
 
