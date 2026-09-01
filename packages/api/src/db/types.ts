@@ -1800,6 +1800,7 @@ export const RELAY_SUBJECT_SOURCES = [
     'status',
     'marketplace',
     'stream',
+    'community_asset',
 ] as const;
 export type RelaySubjectSource = typeof RELAY_SUBJECT_SOURCES[number];
 
@@ -1834,6 +1835,56 @@ export interface RelayEdgeRecord {
     /** Optional relay commentary ("relaying because—"). */
     note: string | null;
     active: boolean;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export const COMMUNITY_ASSET_KINDS = ['sticker', 'meme', 'coin'] as const;
+export type CommunityAssetKind = typeof COMMUNITY_ASSET_KINDS[number];
+
+export const COMMUNITY_ASSET_STATUSES = ['pending', 'approved', 'rejected', 'retired'] as const;
+export type CommunityAssetStatus = typeof COMMUNITY_ASSET_STATUSES[number];
+
+/**
+ * A user-made sticker, meme or coin.
+ *
+ * Assets start `pending` and only become shareable on approval — creation is
+ * open to everyone, so the gate is what stops an open pipe from becoming a
+ * distribution channel for whatever anyone uploads.
+ *
+ * `creatorId` is written once and never reassigned: it is the attribution that
+ * Founding Contributor credentials and any future credit split are computed
+ * from, so transferring it would rewrite authorship of someone else's work.
+ */
+export interface CommunityAssetRecord {
+    id: UUID;
+    creatorId: string;
+    kind: CommunityAssetKind;
+    name: string;
+    description: string | null;
+    mediaUrl: string;
+    status: CommunityAssetStatus;
+    reviewedBy: string | null;
+    /** Why it was approved or rejected, so a decision is answerable. */
+    reviewNote: string | null;
+    reviewedAt: string | null;
+    /**
+     * Ordinal among approved assets of this kind, stamped at approval. Stored
+     * rather than recomputed so retiring an early asset cannot renumber everyone
+     * who came after it.
+     */
+    foundingOrdinal: number | null;
+    createdAt: string;
+    updatedAt: string;
+}
+
+/** A viewer's report on an approved asset. Resolved, never deleted. */
+export interface CommunityAssetReportRecord {
+    id: UUID;
+    assetId: string;
+    reporterId: string;
+    reason: string;
+    resolved: boolean;
     createdAt: string;
     updatedAt: string;
 }

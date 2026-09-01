@@ -117,6 +117,10 @@ const OVERRIDES: Record<string, DescriptorOverride> = {
         keyOf: (r) => `${r.relayerUserId}::${r.subjectSource}::${r.subjectId}`,
         conflictColumns: ['relayer_user_id', 'subject_source', 'subject_id'],
     },
+    communityAssetReports: {
+        keyOf: (r) => `${r.assetId}::${r.reporterId}`,
+        conflictColumns: ['asset_id', 'reporter_id'],
+    },
     eventRideClaims: {
         keyOf: (r) => `${r.offerId}::${r.riderId}`,
         conflictColumns: ['offer_id', 'rider_id'],
@@ -423,6 +427,8 @@ const ALL_MAP_NAMES = [
     'coalitionFeedComments',
     'circleEdges',
     'relayEdges',
+    'communityAssets',
+    'communityAssetReports',
     'canopyDirectoryEntries',
     'canaryTokens',
     'denGreetings',
@@ -678,6 +684,8 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
     // row and flips `active`), so the map has to be reconciled, not upserted.
     removeCircleEdge: resync('circleEdges'),
     upsertRelayEdge: upsert('relayEdges'),
+    upsertCommunityAsset: upsert('communityAssets'),
+    upsertCommunityAssetReport: upsert('communityAssetReports'),
     upsertCanopyDirectoryEntry: upsert('canopyDirectoryEntries'),
     upsertCanaryToken: upsert('canaryTokens'),
     markGreeted: upsert('denGreetings'),

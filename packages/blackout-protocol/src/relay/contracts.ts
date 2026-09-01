@@ -32,6 +32,7 @@ export const RELAY_SUBJECT_SOURCES = [
     'status',
     'marketplace',
     'stream',
+    'community_asset',
 ] as const;
 export type RelaySubjectSource = typeof RELAY_SUBJECT_SOURCES[number];
 

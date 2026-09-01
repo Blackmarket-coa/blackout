@@ -4,6 +4,8 @@ import { hashPassword } from '../services/auth';
 import type {
     CanaryTokenRecord,
     CircleEdgeRecord,
+    CommunityAssetRecord,
+    CommunityAssetReportRecord,
     RelayEdgeRecord,
     DenGreetingRecord,
     CanopyDirectoryEntryRecord,
@@ -271,6 +273,8 @@ type PersistedState = {
     coalitionFeedComments: CoalitionFeedCommentRecord[];
     circleEdges: CircleEdgeRecord[];
     relayEdges: RelayEdgeRecord[];
+    communityAssets: CommunityAssetRecord[];
+    communityAssetReports: CommunityAssetReportRecord[];
     pluginInstallations: PluginInstallationRecord[];
     pluginDens: PluginDenRecord[];
     coalitionKitManifestApplications: CoalitionKitManifestApplicationRecord[];
@@ -488,6 +492,10 @@ class InMemoryDb {
     circleEdges = new Map<string, CircleEdgeRecord>();
     /** Relay edges, keyed by `${relayerUserId}::${subjectSource}::${subjectId}`. */
     relayEdges = new Map<string, RelayEdgeRecord>();
+    /** User-made stickers/memes/coins, keyed by asset id. */
+    communityAssets = new Map<string, CommunityAssetRecord>();
+    /** Reports on approved assets, keyed by `${assetId}::${reporterId}`. */
+    communityAssetReports = new Map<string, CommunityAssetReportRecord>();
     /** Plugin installations (activation-at-scope), keyed by installation id. */
     pluginInstallations = new Map<string, PluginInstallationRecord>();
     /** Plugin-provisioned companion dens, keyed by linkage id. */
@@ -4209,6 +4217,71 @@ class InMemoryDb {
             .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     }
 
+    // --- community assets (user-made stickers, memes and coins) ---
+
+    getCommunityAsset(id: string): CommunityAssetRecord | undefined {
+        return this.communityAssets.get(id);
+    }
+
+    listCommunityAssets(filter: { status?: string; kind?: string; creatorId?: string } = {}) {
+        return [...this.communityAssets.values()]
+            .filter((a) => (filter.status ? a.status === filter.status : true))
+            .filter((a) => (filter.kind ? a.kind === filter.kind : true))
+            .filter((a) => (filter.creatorId ? a.creatorId === filter.creatorId : true))
+            .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    }
+
+    /** Upsert by id. `creatorId` is never rewritten once set — it is authorship. */
+    upsertCommunityAsset(
+        input: Omit<CommunityAssetRecord, 'createdAt' | 'updatedAt'>
+    ): CommunityAssetRecord {
+        const existing = this.communityAssets.get(input.id);
+        const now = nowIso();
+        const record: CommunityAssetRecord = {
+            ...input,
+            creatorId: existing?.creatorId ?? input.creatorId,
+            createdAt: existing?.createdAt ?? now,
+            updatedAt: now,
+        };
+        this.communityAssets.set(record.id, record);
+        return record;
+    }
+
+    /** Highest founding ordinal handed out for a kind, so the next is +1. */
+    highestFoundingOrdinal(kind: string): number {
+        let highest = 0;
+        for (const asset of this.communityAssets.values()) {
+            if (asset.kind !== kind) continue;
+            if (asset.foundingOrdinal !== null && asset.foundingOrdinal > highest) {
+                highest = asset.foundingOrdinal;
+            }
+        }
+        return highest;
+    }
+
+    listCommunityAssetReports(assetId?: string): CommunityAssetReportRecord[] {
+        return [...this.communityAssetReports.values()]
+            .filter((r) => (assetId ? r.assetId === assetId : true))
+            .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    }
+
+    /** Idempotent per (asset, reporter): re-reporting updates rather than piles up. */
+    upsertCommunityAssetReport(
+        input: Omit<CommunityAssetReportRecord, 'createdAt' | 'updatedAt'>
+    ): CommunityAssetReportRecord {
+        const key = `${input.assetId}::${input.reporterId}`;
+        const existing = this.communityAssetReports.get(key);
+        const now = nowIso();
+        const record: CommunityAssetReportRecord = {
+            ...input,
+            id: existing?.id ?? input.id,
+            createdAt: existing?.createdAt ?? now,
+            updatedAt: now,
+        };
+        this.communityAssetReports.set(key, record);
+        return record;
+    }
+
     // --- plugin installations (activation-at-scope) ---
 
     createPluginInstallation(
@@ -5080,6 +5153,17 @@ export class FileBackedDb extends InMemoryDb {
                 ])
             );
         }
+        if (parsed.communityAssets) {
+            this.communityAssets = new Map(parsed.communityAssets.map((row) => [row.id, row]));
+        }
+        if (parsed.communityAssetReports) {
+            this.communityAssetReports = new Map(
+                parsed.communityAssetReports.map((row) => [
+                    `${row.assetId}::${row.reporterId}`,
+                    row,
+                ])
+            );
+        }
         if (parsed.coalitionAidPosts) {
             this.coalitionAidPosts = new Map(parsed.coalitionAidPosts.map((row) => [row.id, row]));
         }
@@ -5308,6 +5392,8 @@ export class FileBackedDb extends InMemoryDb {
             coalitionFeedComments: [...this.coalitionFeedComments.values()],
             circleEdges: [...this.circleEdges.values()],
             relayEdges: [...this.relayEdges.values()],
+            communityAssets: [...this.communityAssets.values()],
+            communityAssetReports: [...this.communityAssetReports.values()],
             pluginInstallations: [...this.pluginInstallations.values()],
             pluginDens: [...this.pluginDens.values()],
             coalitionKitManifestApplications: [...this.coalitionKitManifestApplications.values()],

@@ -128,6 +128,22 @@ export function resolveSubject(
                 tags: stream.tags ?? [],
             };
         }
+        case 'community_asset': {
+            const asset = db.getCommunityAsset(subjectId);
+            // Only approved assets resolve: a pending or rejected one must not
+            // travel, and a retired one stops travelling from that point on.
+            if (!asset || asset.status !== 'approved') return null;
+            return {
+                source,
+                id: asset.id,
+                title: asset.name,
+                body: asset.description,
+                authorId: asset.creatorId,
+                createdAt: asset.createdAt,
+                mediaUrl: asset.mediaUrl,
+                tags: [asset.kind],
+            };
+        }
         case 'marketplace': {
             // Listings live in a per-query cache rather than a per-listing table,
             // so a relayed listing resolves only while some cached page still

@@ -9,6 +9,7 @@ import identityRoutes from './routes/identities';
 import mediaRoutes from './routes/media';
 import followRoutes from './routes/follows';
 import circleRoutes from './routes/circle';
+import communityAssetRoutes from './routes/communityAssets';
 import shareRoutes from './routes/sharePreview';
 import messageRoutes from './routes/messages';
 import scheduledMessageRoutes from './routes/scheduledMessages';
@@ -198,6 +199,7 @@ for (const root of legacyAliasEnabled ? [API_ROOTS.v1, API_ROOTS.legacyApiAlias]
     app.route(`${root}/media`, mediaRoutes);
     app.route(`${root}/follows`, followRoutes);
     app.route(`${root}/circle`, circleRoutes);
+    app.route(`${root}/assets`, communityAssetRoutes);
     // Share-link OG preview, also under /v1 so it's reachable on hosts whose
     // nginx only proxies /v1/* to the API (the top-level /i mount below needs a
     // dedicated nginx rule). Public via the pass-through auth middleware.
