@@ -48,7 +48,7 @@ test('every descriptor maps to a real table with columns', async () => {
         const columns = await introspectColumns(client as never, d.tableName);
         assert.ok(columns.length > 0, `table ${d.tableName} (map ${d.mapName}) should exist`);
     }
-    assert.equal(TABLE_DESCRIPTORS.length, 136);
+    assert.equal(TABLE_DESCRIPTORS.length, 138);
     await pg.query('SELECT 1');
 });
 
@@ -233,6 +233,36 @@ test('write-through persists across a simulated restart', async () => {
     // Accept creator-a: bounty → claimed, creator-a accepted, creator-b declined.
     store1.acceptBountyApplication('bounty-eco-1', 'creator-a');
 
+    // A profile someone arranged by hand, plus a wall post. Migration 087: a
+    // dropped Circle-map opt-in would silently re-hide or re-expose a
+    // relationship the owner made a deliberate decision about.
+    store1.upsertMemberProfile({
+        userId: 'profile-owner',
+        displayName: 'Profile Owner',
+        roleBadges: ['organizer'],
+        mutualSpaces: ['!space:server'],
+        profile: {
+            bio: 'Runs the Saturday share.',
+            paletteId: 'clay_and_brass',
+            circleMapVisible: ['friend-1'],
+            pinnedRelayIds: ['relay-pinned-1'],
+            layout: {
+                blocks: [
+                    { kind: 'mutual_aid_ledger', visible: true },
+                    { kind: 'bio', visible: false },
+                ],
+            },
+        },
+        memberSince: '2026-01-01T00:00:00.000Z',
+    });
+    store1.createProfileWallPost({
+        id: 'wall-post-1',
+        profileUserId: 'profile-owner',
+        authorId: 'friend-1',
+        body: 'See you Saturday.',
+        createdAt: new Date().toISOString(),
+    });
+
     // Circle graph + relay chain. This is the regression that motivated
     // migration 085: both lived in module-level Maps and vanished on restart,
     // taking every Circle/Reach feed with them.
@@ -333,6 +363,24 @@ test('write-through persists across a simulated restart', async () => {
     assert.equal(reward?.beneficiaryId, 'creator-9');
     assert.equal(reward?.rewardCents, 500);
     assert.equal(reward?.status, 'earned');
+
+    // The hand-arranged profile survives, JSONB blob and all.
+    const profile = store2.getMemberProfile('profile-owner');
+    assert.ok(profile, 'profile should hydrate');
+    assert.equal(profile?.displayName, 'Profile Owner');
+    assert.deepEqual(profile?.roleBadges, ['organizer']);
+    assert.equal(profile?.profile.paletteId, 'clay_and_brass');
+    // The consent decision is the one that must not be lost.
+    assert.deepEqual(profile?.profile.circleMapVisible, ['friend-1']);
+    assert.deepEqual(profile?.profile.pinnedRelayIds, ['relay-pinned-1']);
+    assert.equal(profile?.profile.layout?.blocks[0]?.kind, 'mutual_aid_ledger');
+    assert.equal(profile?.profile.layout?.blocks[1]?.visible, false);
+    assert.equal(profile?.memberSince, '2026-01-01T00:00:00.000Z');
+
+    const wall = store2.listProfileWallPosts('profile-owner');
+    assert.equal(wall.length, 1);
+    assert.equal(wall[0]?.body, 'See you Saturday.');
+    assert.equal(store2.listProfileWallPostsByAuthor('friend-1').length, 1);
 
     // The Circle survives the restart, including the asymmetry: friend-2 is in
     // the user's Circle without holding them in theirs.

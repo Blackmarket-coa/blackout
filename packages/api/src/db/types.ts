@@ -1888,3 +1888,19 @@ export interface CommunityAssetReportRecord {
     createdAt: string;
     updatedAt: string;
 }
+
+/**
+ * A member profile row.
+ *
+ * The shapes live in `services/profileStore.ts` alongside the sanitizers that
+ * enforce them; this is a **type-only** reference, erased at runtime, so it
+ * creates no import cycle with the store.
+ *
+ * `profile` is persisted whole as JSONB rather than flattened into columns: it
+ * is a sanitized, versioned blob the client round-trips, and giving each field
+ * a column would mean a migration every time a profile gains one.
+ */
+export type MemberProfileRecord = import('../services/profileStore').MemberProfile;
+
+/** A post on someone's wall. `profileUserId` is the wall; `authorId` wrote it. */
+export type ProfileWallPostRecord = import('../services/profileStore').WallPost;
