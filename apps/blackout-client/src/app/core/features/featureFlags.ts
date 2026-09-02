@@ -43,6 +43,11 @@ export type FeatureFlags = {
      */
     circleFeed: boolean;
     /**
+     * User-made stickers, memes and coins. Owns the `/made` destination:
+     * submissions are reviewed before they can be shared.
+     */
+    communityAssets: boolean;
+    /**
      * Discord Migration Hub. Owns the `/migration-hub` destination: connect
      * Discord, import a server (channels/roles → dens/governance), activate the
      * mautrix-discord bridge per den, and watch adoption metrics.
@@ -397,6 +402,7 @@ export const defaultFeatureFlags: FeatureFlags = {
     coalition: true,
     coliseum: true,
     circleFeed: true,
+    communityAssets: true,
     migrationHub: true,
     streaming: true,
     profile: true,

@@ -122,6 +122,30 @@ export function fetchCoalitionFeed(
     return getJson<CoalitionFeedResponse>(path, token);
 }
 
+/**
+ * Carry your own words out of a ring into the wider network.
+ *
+ * Publishes them as a feed item authored by you and mints your origin relay, so
+ * they reach your Circle the same way anything else does. Authorship is stamped
+ * server-side from your token — there is no way to publish another member's
+ * message.
+ */
+export function relayOutOfRing(
+    ringId: string,
+    input: { title: string; body?: string; tags?: string[]; note?: string },
+    token: string | null = readBlackoutApiToken()
+): Promise<{
+    feedItem: CoalitionFeedItem;
+    relay: { id: string; chainDepth: number } | null;
+    crewSize: { state: string; memberCount: number; advice: string };
+}> {
+    return postJson(
+        `${COALITION_BASE}/rings/${encodeURIComponent(ringId)}/relay-out`,
+        input,
+        token
+    );
+}
+
 // --- feed engagement (likes + comments, surfaced on video) ---
 
 export interface FeedLikeState {

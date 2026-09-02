@@ -1,4 +1,9 @@
-import type { ArenaRecord, ReputationProfile } from '@blackout/core';
+import type {
+    ArenaRecord,
+    PaletteAvailability,
+    ProfileMilestoneStats,
+    ReputationProfile,
+} from '@blackout/core';
 import { createAuthorizedApiClient } from '../../sdk/client';
 import { readBlackoutApiToken } from '../monetization/marketplace/useMarketplaceAuth';
 import type { BmcProfileEvent, MemberProfile } from './profileTypes';
@@ -94,6 +99,37 @@ export function saveProfile(
     token: string | null = readBlackoutApiToken()
 ): Promise<MemberProfile> {
     return putJson<MemberProfile>(`${PROFILE_BASE}/${encodeURIComponent(userId)}`, input, token);
+}
+
+/**
+ * Palettes with their unlock state, plus the milestone counts behind them.
+ * Locked palettes come back too, with progress — the UI shows them as locked
+ * rather than hiding them.
+ */
+export function fetchProfilePalettes(
+    userId: string,
+    token: string | null = readBlackoutApiToken()
+): Promise<{ stats: ProfileMilestoneStats; palettes: PaletteAvailability[] }> {
+    return getJson<{ stats: ProfileMilestoneStats; palettes: PaletteAvailability[] }>(
+        `${PROFILE_BASE}/${encodeURIComponent(userId)}/palettes`,
+        token
+    );
+}
+
+/**
+ * The owner's Circle map. Only overlapping circles are eligible — an overlap
+ * means both people chose the edge — and `visible` is the owner's per-relationship
+ * opt-in on top of that.
+ */
+export function fetchCircleMap(
+    userId: string,
+    token: string | null = readBlackoutApiToken()
+): Promise<{
+    connections: { userId: string; visible: boolean }[];
+    eligibleCount: number;
+    visibleCount: number;
+}> {
+    return getJson(`${PROFILE_BASE}/${encodeURIComponent(userId)}/circle-map`, token);
 }
 
 export function fetchWall(

@@ -11,6 +11,10 @@ import {
     profileEffectCatalogAtom,
 } from './cosmeticsAtoms';
 import { saveProfile as saveProfileDefault, type SaveProfileInput } from './profileClient';
+import { DEFAULT_PROFILE_LAYOUT, type PaletteAvailability } from '@blackout/core';
+import ProfileLayoutEditor from './ProfileLayoutEditor';
+import CircleMapBlock from './CircleMapBlock';
+import { fetchProfilePalettes } from './profileClient';
 import { syncStatusToPresence } from './customStatus';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
@@ -102,6 +106,9 @@ export const ProfileEditor = ({ saveProfile = saveProfileDefault }: ProfileEdito
     const [avatarCrop, setAvatarCrop] = useState(50);
     const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
     const [saveError, setSaveError] = useState<string | null>(null);
+    // Which palettes this person has unlocked. Locked ones come back too, with
+    // their progress, so the editor can show them as locked rather than hide them.
+    const [palettes, setPalettes] = useState<PaletteAvailability[]>([]);
     const hardenImage = useHardenAvatarImage();
     const useAuthentication = useMediaAuthentication();
 
@@ -120,6 +127,23 @@ export const ProfileEditor = ({ saveProfile = saveProfileDefault }: ProfileEdito
             prev.userId === authenticatedUserId ? prev : { ...prev, userId: authenticatedUserId }
         );
     }, [authenticatedUserId, profile.userId, setProfile]);
+
+    // Fetch once the authenticated id is known; a failure just leaves the
+    // palette grid absent rather than blocking the rest of the editor.
+    useEffect(() => {
+        if (!authenticatedUserId) return;
+        let cancelled = false;
+        fetchProfilePalettes(authenticatedUserId)
+            .then((result) => {
+                if (!cancelled) setPalettes(result.palettes);
+            })
+            .catch(() => {
+                if (!cancelled) setPalettes([]);
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [authenticatedUserId]);
 
     const onSave = useCallback(async () => {
         setSaveState('saving');
@@ -837,6 +861,50 @@ export const ProfileEditor = ({ saveProfile = saveProfileDefault }: ProfileEdito
                     ) : null}
                 </div>
             </section>
+
+            <section style={{ display: 'grid', gap: 8 }}>
+                {/* Arrangement + palette. Both write into `profile.profile`, which
+                    onSave already spreads, so no extra save wiring is needed. */}
+                <ProfileLayoutEditor
+                    layout={profile.profile.layout ?? DEFAULT_PROFILE_LAYOUT}
+                    onChange={(layout) =>
+                        setProfile((prev) => ({
+                            ...prev,
+                            profile: { ...prev.profile, layout },
+                        }))
+                    }
+                    palettes={palettes}
+                    selectedPaletteId={profile.profile.paletteId}
+                    onSelectPalette={(paletteId) =>
+                        setProfile((prev) => ({
+                            ...prev,
+                            profile: { ...prev.profile, paletteId },
+                        }))
+                    }
+                />
+            </section>
+
+            {authenticatedUserId ? (
+                <section style={{ display: 'grid', gap: 8 }}>
+                    <CircleMapBlock
+                        userId={authenticatedUserId}
+                        isOwner
+                        visibleUserIds={profile.profile.circleMapVisible ?? []}
+                        onChangeVisible={(circleMapVisible) =>
+                            setProfile((prev) => ({
+                                ...prev,
+                                profile: {
+                                    ...prev.profile,
+                                    // Empty means "show nobody", which is a real
+                                    // choice — keep the array rather than dropping
+                                    // the field back to its default.
+                                    circleMapVisible,
+                                },
+                            }))
+                        }
+                    />
+                </section>
+            ) : null}
         </div>
     );
 };

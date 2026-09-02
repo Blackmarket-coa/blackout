@@ -6,6 +6,8 @@ import type {
     CircleEdgeRecord,
     CommunityAssetRecord,
     CommunityAssetReportRecord,
+    MemberProfileRecord,
+    ProfileWallPostRecord,
     RelayEdgeRecord,
     DenGreetingRecord,
     CanopyDirectoryEntryRecord,
@@ -275,6 +277,8 @@ type PersistedState = {
     relayEdges: RelayEdgeRecord[];
     communityAssets: CommunityAssetRecord[];
     communityAssetReports: CommunityAssetReportRecord[];
+    memberProfiles: MemberProfileRecord[];
+    profileWallPosts: ProfileWallPostRecord[];
     pluginInstallations: PluginInstallationRecord[];
     pluginDens: PluginDenRecord[];
     coalitionKitManifestApplications: CoalitionKitManifestApplicationRecord[];
@@ -496,6 +500,10 @@ class InMemoryDb {
     communityAssets = new Map<string, CommunityAssetRecord>();
     /** Reports on approved assets, keyed by `${assetId}::${reporterId}`. */
     communityAssetReports = new Map<string, CommunityAssetReportRecord>();
+    /** Member profiles, keyed by user id. */
+    memberProfiles = new Map<string, MemberProfileRecord>();
+    /** Wall posts, keyed by post id. */
+    profileWallPosts = new Map<string, ProfileWallPostRecord>();
     /** Plugin installations (activation-at-scope), keyed by installation id. */
     pluginInstallations = new Map<string, PluginInstallationRecord>();
     /** Plugin-provisioned companion dens, keyed by linkage id. */
@@ -4282,6 +4290,46 @@ class InMemoryDb {
         return record;
     }
 
+    // --- member profiles and walls ---
+
+    getMemberProfile(userId: string): MemberProfileRecord | undefined {
+        return this.memberProfiles.get(userId);
+    }
+
+    /** Upsert by user id. `memberSince` is stamped once and never rewritten. */
+    upsertMemberProfile(input: MemberProfileRecord): MemberProfileRecord {
+        const existing = this.memberProfiles.get(input.userId);
+        const record: MemberProfileRecord = {
+            ...input,
+            memberSince: existing?.memberSince ?? input.memberSince,
+        };
+        this.memberProfiles.set(record.userId, record);
+        return record;
+    }
+
+    /** Posts on one person's wall, newest first. */
+    listProfileWallPosts(profileUserId: string): ProfileWallPostRecord[] {
+        return [...this.profileWallPosts.values()]
+            .filter((p) => p.profileUserId === profileUserId)
+            .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    }
+
+    getProfileWallPost(id: string): ProfileWallPostRecord | undefined {
+        return this.profileWallPosts.get(id);
+    }
+
+    /** Everything one person wrote, on any wall, newest first. */
+    listProfileWallPostsByAuthor(authorId: string): ProfileWallPostRecord[] {
+        return [...this.profileWallPosts.values()]
+            .filter((p) => p.authorId === authorId)
+            .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    }
+
+    createProfileWallPost(input: ProfileWallPostRecord): ProfileWallPostRecord {
+        this.profileWallPosts.set(input.id, input);
+        return input;
+    }
+
     // --- plugin installations (activation-at-scope) ---
 
     createPluginInstallation(
@@ -5164,6 +5212,12 @@ export class FileBackedDb extends InMemoryDb {
                 ])
             );
         }
+        if (parsed.memberProfiles) {
+            this.memberProfiles = new Map(parsed.memberProfiles.map((row) => [row.userId, row]));
+        }
+        if (parsed.profileWallPosts) {
+            this.profileWallPosts = new Map(parsed.profileWallPosts.map((row) => [row.id, row]));
+        }
         if (parsed.coalitionAidPosts) {
             this.coalitionAidPosts = new Map(parsed.coalitionAidPosts.map((row) => [row.id, row]));
         }
@@ -5394,6 +5448,8 @@ export class FileBackedDb extends InMemoryDb {
             relayEdges: [...this.relayEdges.values()],
             communityAssets: [...this.communityAssets.values()],
             communityAssetReports: [...this.communityAssetReports.values()],
+            memberProfiles: [...this.memberProfiles.values()],
+            profileWallPosts: [...this.profileWallPosts.values()],
             pluginInstallations: [...this.pluginInstallations.values()],
             pluginDens: [...this.pluginDens.values()],
             coalitionKitManifestApplications: [...this.coalitionKitManifestApplications.values()],

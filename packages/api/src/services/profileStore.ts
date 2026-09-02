@@ -1,9 +1,17 @@
 import { normalizeProfileLayout, PROFILE_PALETTE_IDS, type ProfileLayout } from '@blackout/core';
 
+import { db } from '../db/store';
+
 /**
- * In-memory profile store for the MySpace-style member profile feature.
- * Mirrors the `MemberProfile` shape consumed by
+ * Profile store for the MySpace-style member profile feature. Mirrors the
+ * `MemberProfile` shape consumed by
  * `apps/blackout-client/src/app/features/profile/profileTypes.ts`.
+ *
+ * Backed by `member_profiles` / `profile_wall_posts` (migration 087). These were
+ * two module-level Maps that reset on every restart; once profiles carried a
+ * hand-arranged block layout, a chosen palette and per-relationship Circle-map
+ * consent, losing them on deploy stopped being a convenience issue — a dropped
+ * opt-in silently re-hides or re-exposes a relationship someone decided about.
  */
 
 export type ConnectionType = 'github' | 'website' | 'x' | 'linkedin' | 'matrix' | 'fbm' | 'other';
@@ -342,11 +350,8 @@ export function sanitizeProfileEvent(input: unknown): BmcProfileEvent {
     };
 }
 
-const profiles = new Map<string, MemberProfile>();
-const wallPosts = new Map<string, WallPost[]>();
-
 export function getProfile(userId: string): MemberProfile | null {
-    return profiles.get(userId) ?? null;
+    return db.getMemberProfile(userId) ?? null;
 }
 
 /**
@@ -357,7 +362,7 @@ export function getProfile(userId: string): MemberProfile | null {
  */
 export function getProfileOrDefault(userId: string): MemberProfile {
     return (
-        profiles.get(userId) ?? {
+        db.getMemberProfile(userId) ?? {
             userId,
             displayName: userId,
             roleBadges: [],
@@ -378,7 +383,7 @@ export interface UpsertProfileInput {
 }
 
 export function upsertProfile(userId: string, input: UpsertProfileInput): MemberProfile {
-    const existing = profiles.get(userId);
+    const existing = db.getMemberProfile(userId);
     const next: MemberProfile = {
         userId,
         displayName: input.displayName ?? existing?.displayName ?? userId,
@@ -393,37 +398,21 @@ export function upsertProfile(userId: string, input: UpsertProfileInput): Member
                 : existing?.profile ?? {},
         memberSince: existing?.memberSince ?? new Date().toISOString(),
     };
-    profiles.set(userId, next);
-    return next;
+    return db.upsertMemberProfile(next);
 }
 
 export function listWallPosts(userId: string): WallPost[] {
-    return [...(wallPosts.get(userId) ?? [])].sort((a, b) =>
-        b.createdAt.localeCompare(a.createdAt)
-    );
+    return db.listProfileWallPosts(userId);
 }
 
-/**
- * Find one wall post by id, across every wall. Wall posts are stored per profile
- * (`profileUserId` -> posts), so a relay — which addresses a subject by id alone
- * — needs this scan to resolve one. Linear in total wall posts; fine at this
- * scale, and the natural place to add an index if walls ever get large.
- */
+/** Find one wall post by id — a relay addresses its subject by id alone. */
 export function findWallPost(postId: string): WallPost | null {
-    for (const posts of wallPosts.values()) {
-        const found = posts.find((p) => p.id === postId);
-        if (found) return found;
-    }
-    return null;
+    return db.getProfileWallPost(postId) ?? null;
 }
 
 /** Every wall post authored by `authorId`, newest first — the Circle-ring query. */
 export function listWallPostsByAuthor(authorId: string): WallPost[] {
-    const out: WallPost[] = [];
-    for (const posts of wallPosts.values()) {
-        for (const post of posts) if (post.authorId === authorId) out.push(post);
-    }
-    return out.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    return db.listProfileWallPostsByAuthor(authorId);
 }
 
 export function appendWallPost(input: {
@@ -442,14 +431,11 @@ export function appendWallPost(input: {
         body,
         createdAt: new Date().toISOString(),
     };
-    const list = wallPosts.get(input.profileUserId) ?? [];
-    list.push(post);
-    wallPosts.set(input.profileUserId, list);
-    return post;
+    return db.createProfileWallPost(post);
 }
 
 /** Test-only helper used to reset state between integration tests. */
 export function __resetProfileStoreForTests(): void {
-    profiles.clear();
-    wallPosts.clear();
+    db.memberProfiles.clear();
+    db.profileWallPosts.clear();
 }

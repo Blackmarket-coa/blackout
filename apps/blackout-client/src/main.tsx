@@ -20,6 +20,7 @@ import { ThemeProvider } from './app/components/ThemeProvider';
 import { MatrixBootstrapper } from './app/components/bmc/MatrixBootstrapper';
 import { PluginEntitlementHydrator } from './app/features/monetization/install/PluginEntitlementHydrator';
 import { SelfProfileHydrator } from './app/features/profile/SelfProfileHydrator';
+import { CircleMigrationHydrator } from './app/features/circle-feed/CircleMigrationHydrator';
 import { useMatrixClient } from './app/hooks/useMatrixClient';
 import { useBindAllRoomsAtom } from './app/state/rooms';
 import { roomToParentsAtom, useBindRoomToParentsAtom } from './app/state/room/roomToParents';
@@ -360,6 +361,7 @@ const BootstrapStatus = () => {
                 <FeatureFlagOverrideHydrator />
                 <PluginEntitlementHydrator />
                 <SelfProfileHydrator />
+                <CircleMigrationHydrator />
                 <PendingInviteRedeemer />
                 <RouterProvider router={router} />
             </SpecVersionsBootstrap>

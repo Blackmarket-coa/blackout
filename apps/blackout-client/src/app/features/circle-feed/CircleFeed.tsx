@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import * as css from './CircleFeed.css';
 import CircleFeedCard from './CircleFeedCard';
 import RelayChainDialog from './RelayChainDialog';
+import OpenVoiceRooms from './OpenVoiceRooms';
 import { emptyFeedReason, groupConsecutive, shouldCollapse } from './circleFeedModel';
 import {
     fetchCircleFeed,
@@ -137,6 +138,8 @@ export const CircleFeed = ({ viewerId, displayNameFor }: CircleFeedProps) => {
                     </div>
                 </section>
             ) : null}
+
+            <OpenVoiceRooms />
 
             {error ? <p className={css.empty}>{error}</p> : null}
             {loading ? <p className={css.empty}>Loading…</p> : null}
