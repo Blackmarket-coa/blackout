@@ -5,6 +5,7 @@ export { default as CircleFeed } from './CircleFeed';
 export { default as CircleMigrationHydrator } from './CircleMigrationHydrator';
 export { default as CircleFeedCard } from './CircleFeedCard';
 export { default as RelayPath } from './RelayPath';
+export { default as OpenVoiceRooms } from './OpenVoiceRooms';
 export { default as RelayChainDialog } from './RelayChainDialog';
 export * from './circleFeedModel';
 export * from './circleFeedClient';

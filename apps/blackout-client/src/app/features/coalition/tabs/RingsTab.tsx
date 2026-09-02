@@ -9,6 +9,7 @@ import {
     type RingVisibility,
 } from '@blackout/core';
 import { useCoalitionRings, useMyRingInvites } from '../hooks/useCoalitionFeed';
+import CrewRelayOut from '../CrewRelayOut';
 import {
     createRing,
     fetchRing,
@@ -189,6 +190,7 @@ function RingManage({ ringId }: { ringId: string }): React.ReactElement {
                     </select>
                 </div>
             ))}
+            <CrewRelayOut ringId={ringId} />
             {pending.length > 0 ? (
                 <>
                     <span style={labelStyle}>Pending invites ({pending.length})</span>
