@@ -1,6 +1,7 @@
 import { canopyFeature } from '../../features/canopy';
 import { coalitionFeature } from '../../features/coalition';
 import { circleFeedFeature } from '../../features/circle-feed';
+import { communityAssetsFeature } from '../../features/community-assets';
 import { coliseumFeature } from '../../features/coliseum';
 import { communitiesFeature } from '../../features/communities';
 import {
@@ -122,6 +123,10 @@ export const coreFeatureModules: FeatureModule[] = [
     {
         feature: circleFeedFeature,
         flag: 'circleFeed',
+    },
+    {
+        feature: communityAssetsFeature,
+        flag: 'communityAssets',
     },
     {
         feature: migrationHubFeature,

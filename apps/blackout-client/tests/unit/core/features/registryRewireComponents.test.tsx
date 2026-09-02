@@ -53,6 +53,7 @@ describe('RegistrySidebarList', () => {
             coalition: false,
             coliseum: false,
             circleFeed: false,
+            communityAssets: false,
             streaming: false,
             messaging: false,
         });
@@ -191,6 +192,7 @@ describe('RegistryRouteList + buildRegistryRouteObjects', () => {
                 coalition: false,
                 coliseum: false,
                 circleFeed: false,
+                communityAssets: false,
                 streaming: false,
                 marketTab: false,
                 createHub: false,

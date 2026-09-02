@@ -28,6 +28,7 @@ describe('feature allowlist manifest', () => {
             'coalition',
             'coliseum',
             'circle-feed',
+            'community-assets',
             'migration-hub',
             'profile',
             'home',

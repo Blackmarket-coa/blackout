@@ -24,6 +24,7 @@ export const featureModuleManifest = [
     'coalition',
     'coliseum',
     'circle-feed',
+    'community-assets',
     'migration-hub',
     'profile',
     'home',
