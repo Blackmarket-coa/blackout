@@ -68,6 +68,10 @@ jobs:
                   pnpm --filter @blackout/design run build
             - run: pnpm --filter @blackout/client run test:coverage
             - run: pnpm --filter @blackout/client run test:integration
+            # blackout-mobile's node:test suite had no CI job at all — the
+            # shell was only preflighted and built, so its tests never ran
+            # anywhere but a developer's machine.
+            - run: pnpm --filter blackout-mobile run test
 
     feature-registry-validation:
         name: Feature registry validation
