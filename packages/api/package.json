@@ -27,7 +27,7 @@
         "@blackout/core": "workspace:*",
         "@blackout/protocol": "workspace:*",
         "@hono/node-server": "2.0.10",
-        "@simplewebauthn/server": "13.3.0",
+        "@simplewebauthn/server": "13.3.3",
         "hono": "4.12.34",
         "ioredis": "5.10.1",
         "jose": "5.10.0",

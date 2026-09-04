@@ -5,6 +5,7 @@
     "description": "Blackout mobile app - Capacitor wrapper around @blackout/client",
     "scripts": {
         "preflight": "node -e \"const [major]=process.versions.node.split('.').map(Number); if(major<22){console.error('Node.js 22+ is required for blackout-mobile'); process.exit(1)}; console.log('Node', process.versions.node, 'ok')\"",
+        "typecheck": "tsc --noEmit",
         "test": "pnpm test:unit",
         "version:set": "node scripts/set-version.mjs",
         "test:unit": "node --import tsx --test test/**/*.test.ts",
