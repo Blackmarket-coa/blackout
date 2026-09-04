@@ -13,6 +13,7 @@ import { computeIllumination, type RelayLink } from '@blackout/core';
 import { db } from '../db/store';
 import { readJsonBody } from '../middleware/validate';
 import { requireUser } from '../middleware/require-user';
+import { matrixUserIdFor, resolveBlackoutUserId } from '../services/userIdentity';
 import {
     circlesOverlap,
     followCounts,
@@ -31,25 +32,6 @@ const followSchema = z.object({
     followeeId: z.string().min(1).max(255),
 });
 
-const matrixUserIdFor = (username: string): string => {
-    const domain = (process.env.MATRIX_HOMESERVER_DOMAIN ?? 'blackout.local').replace(/^@+/, '');
-    return `@${username}:${domain}`;
-};
-
-const MXID_LOCALPART_RE = /^@([^:\s]+):[^:\s]+$/;
-
-/**
- * Accept a Blackout user id or a Matrix id. Clients on the profile surface
- * only know the target's Matrix id; resolve it by localpart = username, the
- * same identity bridge `subjectOwnsProfile` uses on the profile module.
- */
-const resolveFolloweeId = (followeeId: string): string | null => {
-    if (db.getUserById(followeeId)) return followeeId;
-    const localpart = MXID_LOCALPART_RE.exec(followeeId)?.[1];
-    if (!localpart) return null;
-    return db.findUserByUsername(localpart)?.id ?? null;
-};
-
 /** Resolve the *other* user in an edge into a client-friendly shape. */
 const resolveUser = (userId: string) => {
     const user = db.getUserById(userId);
@@ -58,7 +40,7 @@ const resolveUser = (userId: string) => {
         username: user?.username ?? userId,
         // Matrix id lets the client fetch the user's profile/status/wall, which
         // are keyed in the Matrix-id space on the profile surface.
-        matrixUserId: user ? matrixUserIdFor(user.username) : null,
+        matrixUserId: matrixUserIdFor(userId),
     };
 };
 
@@ -69,7 +51,7 @@ circle.post('/', async (c) => {
     const parsed = await readJsonBody(c, followSchema);
     if (parsed instanceof Response) return parsed;
 
-    const followeeId = resolveFolloweeId(parsed.followeeId);
+    const followeeId = resolveBlackoutUserId(parsed.followeeId);
     if (!followeeId) {
         return c.json({ code: 'not_found', message: 'User not found' }, 404);
     }

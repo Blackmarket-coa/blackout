@@ -1,4 +1,13 @@
-import { normalizeProfileLayout, PROFILE_PALETTE_IDS, type ProfileLayout } from '@blackout/core';
+import {
+    collectDownstreamRelays,
+    isPaletteUnlocked,
+    normalizeProfileLayout,
+    PROFILE_PALETTE_IDS,
+    type ProfileLayout,
+    type ProfileMilestoneStats,
+    type RelayLink,
+} from '@blackout/core';
+import { resolveBlackoutUserId } from './userIdentity';
 
 import { db } from '../db/store';
 
@@ -328,8 +337,9 @@ export function sanitizeProfileEvent(input: unknown): BmcProfileEvent {
         // Normalizing here means a release that adds or removes a block kind
         // never silently rearranges someone's profile.
         layout: data.layout === undefined ? undefined : normalizeProfileLayout(data.layout),
-        // Only ids from the bounded set; an unknown palette falls back to the
-        // default rather than injecting arbitrary colours into the ecosystem.
+        // Membership only — the *unlock* check needs the owner's milestone
+        // counts, which this pure sanitizer has no access to, so it happens in
+        // `upsertProfile` where the user id is known.
         paletteId:
             isString(data.paletteId) && PROFILE_PALETTE_IDS.includes(data.paletteId)
                 ? data.paletteId
@@ -382,6 +392,46 @@ export interface UpsertProfileInput {
     profile?: unknown;
 }
 
+/**
+ * Milestone counts for the profile's owner, in the Blackout-id space the graph
+ * is keyed by. Returns zeroes for an unresolvable id, which simply means no
+ * unlockable palette is available — the safe direction.
+ */
+function milestoneStatsFor(userId: string): ProfileMilestoneStats {
+    const graphId = resolveBlackoutUserId(userId);
+    if (!graphId) {
+        return {
+            relaysMade: 0,
+            circleSize: 0,
+            circleOverlaps: 0,
+            chainDepthReached: 0,
+            peopleReached: 0,
+        };
+    }
+    const allRelays = [...db.relayEdges.values()] as RelayLink[];
+    const ownRelays = allRelays.filter((e) => e.relayerUserId === graphId);
+    const downstream = collectDownstreamRelays(
+        ownRelays.map((e) => e.id),
+        allRelays
+    );
+    const following = [...db.circleEdges.values()].filter((e) => e.followerId === graphId);
+    const followers = new Set(
+        [...db.circleEdges.values()]
+            .filter((e) => e.followeeId === graphId)
+            .map((e) => e.followerId)
+    );
+    return {
+        relaysMade: ownRelays.length,
+        circleSize: following.length,
+        circleOverlaps: following.filter((e) => followers.has(e.followeeId)).length,
+        chainDepthReached: downstream.reduce(
+            (max, e) => Math.max(max, e.chainDepth),
+            ownRelays.reduce((max, e) => Math.max(max, e.chainDepth), 0)
+        ),
+        peopleReached: new Set(downstream.map((e) => e.relayerUserId)).size,
+    };
+}
+
 export function upsertProfile(userId: string, input: UpsertProfileInput): MemberProfile {
     const existing = db.getMemberProfile(userId);
     const next: MemberProfile = {
@@ -398,6 +448,16 @@ export function upsertProfile(userId: string, input: UpsertProfileInput): Member
                 : existing?.profile ?? {},
         memberSince: existing?.memberSince ?? new Date().toISOString(),
     };
+
+    // A palette is a claim about something the owner did, so the server has to
+    // check it: the sanitizer only verifies the id is one we know, and
+    // `isPaletteUnlocked` was exported but never actually called. A locked pick
+    // falls back to whatever they had rather than failing the whole save.
+    const requested = next.profile.paletteId;
+    if (requested && !isPaletteUnlocked(requested, milestoneStatsFor(userId))) {
+        next.profile = { ...next.profile, paletteId: existing?.profile.paletteId };
+    }
+
     return db.upsertMemberProfile(next);
 }
 

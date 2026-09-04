@@ -13,11 +13,14 @@ import {
 } from '../services/profileStore';
 import type { FeatureModule } from './types';
 import {
+    collectDownstreamRelays,
     DEFAULT_PROFILE_LAYOUT,
     normalizeProfileLayout,
     paletteAvailability,
     type ProfileMilestoneStats,
+    type RelayLink,
 } from '@blackout/core';
+import { matrixUserIdFor, resolveBlackoutUserId } from '../services/userIdentity';
 import { listFollowing, mutualsOf } from '../services/follows';
 
 /** MXID localpart extractor (`@localpart:domain` → `localpart`). */
@@ -199,7 +202,14 @@ function createProfileRouter() {
         const optedIn = new Set(stored.profile.circleMapVisible ?? []);
         const owner = subjectOwnsProfile(c, userId);
 
-        const overlaps = mutualsOf(userId);
+        // The path param is a Matrix id on this surface, but the Circle graph is
+        // keyed by Blackout user id. Without this hop every overlap silently
+        // resolved to none and the map was permanently empty.
+        const graphId = resolveBlackoutUserId(userId);
+        // Report ids back in the space the caller asked in, so the opt-in list
+        // the owner saves matches what they were shown.
+        const overlaps = (graphId ? mutualsOf(graphId) : []).map((id) => matrixUserIdFor(id) ?? id);
+
         return c.json({
             // Viewers see only opted-in edges; the owner also sees the rest so
             // they have something to opt in *from*.
@@ -221,19 +231,31 @@ function createProfileRouter() {
     profile.get('/:userId/palettes', (c) => {
         const gate = requireDomainCapability(c, 'profile', 'read');
         if (gate) return gate;
-        const userId = c.req.param('userId');
+        // Same id-space hop as /circle-map: milestones are counted off the
+        // Blackout-id-keyed graph, so an unresolved MXID left every stat at 0
+        // and no palette could ever unlock.
+        const graphId = resolveBlackoutUserId(c.req.param('userId'));
+        if (!graphId) {
+            return c.json({ code: 'not_found', message: 'User not found' }, 404);
+        }
 
-        const relays = [...db.relayEdges.values()].filter((e) => e.relayerUserId === userId);
-        const relayIds = new Set(relays.map((e) => e.id));
-        // How far anything they carried actually travelled.
-        const downstream = [...db.relayEdges.values()].filter(
-            (e) => e.parentRelayId !== null && relayIds.has(e.parentRelayId)
+        const allRelays = [...db.relayEdges.values()] as RelayLink[];
+        const ownRelays = allRelays.filter((e) => e.relayerUserId === graphId);
+        // Walk the whole chain rather than only direct children: "people
+        // reached" must mean the same thing here as on the Illumination meter,
+        // which the profile shows on the same screen.
+        const downstream = collectDownstreamRelays(
+            ownRelays.map((e) => e.id),
+            allRelays
         );
         const stats: ProfileMilestoneStats = {
-            relaysMade: relays.length,
-            circleSize: listFollowing(userId).length,
-            circleOverlaps: mutualsOf(userId).length,
-            chainDepthReached: relays.reduce((max, e) => Math.max(max, e.chainDepth), 0),
+            relaysMade: ownRelays.length,
+            circleSize: listFollowing(graphId).length,
+            circleOverlaps: mutualsOf(graphId).length,
+            chainDepthReached: downstream.reduce(
+                (max, e) => Math.max(max, e.chainDepth),
+                ownRelays.reduce((max, e) => Math.max(max, e.chainDepth), 0)
+            ),
             peopleReached: new Set(downstream.map((e) => e.relayerUserId)).size,
         };
 
