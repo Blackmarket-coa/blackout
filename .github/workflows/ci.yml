@@ -302,7 +302,16 @@ jobs:
         # (410 responses), so this gate scans the lockfile with osv-scanner
         # instead — same pinned action and allowlist (osv-scanner.toml) as the
         # scheduled security workflow.
-        name: Dependency audit (no advisories at moderate+)
+        #
+        # osv-scanner has no severity threshold: it exits non-zero on ANY
+        # finding that osv-scanner.toml has not explicitly triaged, LOW
+        # included. That is the intended posture — every entry in that file
+        # carries a reason and an `ignoreUntil` deadline, so nothing is
+        # silently tolerated by severity. The name said "moderate+" for a
+        # while after the swap, describing the retired `pnpm audit
+        # --audit-level moderate` rather than what now runs; a local check at
+        # that threshold passed while this job failed on a CVSS 2.0 finding.
+        name: Dependency audit (no un-triaged advisories, any severity)
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
