@@ -48,6 +48,11 @@ jobs:
             - run: pnpm --filter @blackout/client run typecheck
             - run: pnpm --filter @blackout/api run typecheck
             - run: pnpm --filter blackout-mobile run preflight
+            # capacitor.config.ts and src/ were never typechecked anywhere:
+            # the shell was preflighted, built and (since #888) tested, but a
+            # type error here passed CI while failing tsc on a developer's
+            # machine. That is how an invalid @capacitor/app option survived.
+            - run: pnpm --filter blackout-mobile run typecheck
 
     unit-tests:
         name: Unit tests (Vitest)
