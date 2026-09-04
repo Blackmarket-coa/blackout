@@ -1,3 +1,4 @@
+import { mxIdToDisplayName } from '../../utils/matrix';
 import classNames from 'classnames';
 import * as css from './RelayPath.css';
 import { relayPathLabels } from './circleFeedModel';
@@ -13,11 +14,6 @@ interface RelayPathProps {
     onOpenChain?: () => void;
 }
 
-const defaultDisplayName = (userId: string): string => {
-    const localpart = /^@([^:\s]+):/.exec(userId)?.[1];
-    return localpart ?? userId;
-};
-
 /**
  * The visible provenance line: `You → alice → bob`.
  *
@@ -29,7 +25,7 @@ export const RelayPath = ({
     hops,
     viewerId,
     alsoRelayedByCount = 0,
-    displayNameFor = defaultDisplayName,
+    displayNameFor = mxIdToDisplayName,
     onOpenChain,
 }: RelayPathProps) => {
     const labels = relayPathLabels(hops, viewerId);

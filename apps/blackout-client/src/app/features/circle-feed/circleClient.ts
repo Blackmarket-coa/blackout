@@ -2,7 +2,7 @@
  * API client for the Circle graph. Kept separate from `circleFeedClient.ts` so
  * the graph and the feed that reads it stay independently testable.
  */
-import { createAuthorizedApiClient } from '../../sdk/client';
+import { deleteJson, getJson, postJson } from '../../sdk/json';
 import { readBlackoutApiToken } from '../monetization/marketplace/useMarketplaceAuth';
 
 const CIRCLE_BASE = '/v1/circle';
@@ -17,12 +17,9 @@ export interface CircleMember {
 export function fetchCircleFollowing(
     token: string | null = readBlackoutApiToken()
 ): Promise<CircleMember[]> {
-    return (
-        createAuthorizedApiClient(token)({
-            method: 'GET',
-            path: `${CIRCLE_BASE}/following`,
-        }) as Promise<{ following: CircleMember[] }>
-    ).then((result) => result.following);
+    return getJson<{ following: CircleMember[] }>(`${CIRCLE_BASE}/following`, token).then(
+        (result) => result.following
+    );
 }
 
 /**
@@ -33,19 +30,19 @@ export function followInCircle(
     followeeId: string,
     token: string | null = readBlackoutApiToken()
 ): Promise<{ ok: boolean; created: boolean; overlaps: boolean }> {
-    return createAuthorizedApiClient(token)({
-        method: 'POST',
-        path: CIRCLE_BASE,
-        body: { followeeId },
-    }) as Promise<{ ok: boolean; created: boolean; overlaps: boolean }>;
+    return postJson<{ ok: boolean; created: boolean; overlaps: boolean }>(
+        CIRCLE_BASE,
+        { followeeId },
+        token
+    );
 }
 
 export function unfollowInCircle(
     followeeId: string,
     token: string | null = readBlackoutApiToken()
 ): Promise<{ ok: boolean; removed: boolean }> {
-    return createAuthorizedApiClient(token)({
-        method: 'DELETE',
-        path: `${CIRCLE_BASE}/${encodeURIComponent(followeeId)}`,
-    }) as Promise<{ ok: boolean; removed: boolean }>;
+    return deleteJson<{ ok: boolean; removed: boolean }>(
+        `${CIRCLE_BASE}/${encodeURIComponent(followeeId)}`,
+        token
+    );
 }

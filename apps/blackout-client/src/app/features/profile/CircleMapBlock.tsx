@@ -1,3 +1,4 @@
+import { mxIdToDisplayName } from '../../utils/matrix';
 import { useEffect, useState } from 'react';
 import { fetchCircleMap } from './profileClient';
 
@@ -10,8 +11,6 @@ interface CircleMapBlockProps {
     onChangeVisible?: (next: string[]) => void;
     displayNameFor?: (userId: string) => string;
 }
-
-const defaultDisplayName = (userId: string): string => /^@([^:\s]+):/.exec(userId)?.[1] ?? userId;
 
 /**
  * A visible representation of someone's connections.
@@ -29,7 +28,7 @@ export const CircleMapBlock = ({
     isOwner,
     visibleUserIds,
     onChangeVisible,
-    displayNameFor = defaultDisplayName,
+    displayNameFor = mxIdToDisplayName,
 }: CircleMapBlockProps) => {
     const [connections, setConnections] = useState<{ userId: string; visible: boolean }[]>([]);
     const [eligibleCount, setEligibleCount] = useState(0);

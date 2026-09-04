@@ -1,3 +1,4 @@
+import { mxIdToDisplayName } from '../../utils/matrix';
 import classNames from 'classnames';
 import { useState } from 'react';
 import * as css from './CircleFeedCard.css';
@@ -15,8 +16,6 @@ interface CircleFeedCardProps {
     displayNameFor?: (userId: string) => string;
 }
 
-const defaultDisplayName = (userId: string): string => /^@([^:\s]+):/.exec(userId)?.[1] ?? userId;
-
 /**
  * One item in the Circle/Reach feed, with the human chain that delivered it.
  *
@@ -31,7 +30,7 @@ export const CircleFeedCard = ({
     myRelayId = null,
     onOpenChain,
     onRelayChanged,
-    displayNameFor = defaultDisplayName,
+    displayNameFor = mxIdToDisplayName,
 }: CircleFeedCardProps) => {
     const [note, setNote] = useState('');
     const [busy, setBusy] = useState(false);
