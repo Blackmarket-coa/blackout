@@ -8,13 +8,13 @@ name: Upstream advisories aggregation
 
 on:
     schedule:
-        - cron: "30 3 * * *" # 03:30 UTC daily
+        - cron: '30 3 * * *' # 03:30 UTC daily
     workflow_dispatch:
         inputs:
             dry-run:
-                description: "Print proposed rows without committing"
+                description: 'Print proposed rows without committing'
                 required: false
-                default: "false"
+                default: 'false'
 
 permissions:
     contents: write
@@ -86,13 +86,22 @@ jobs:
                   git commit -m "chore(security): update upstream advisories ${STAMP}"
                   git push -u origin "$BRANCH"
 
+                  # The PR body goes through a heredoc rather than an inline multi-line
+                  # string. A bare "..." spanning lines has to dedent to column 0 to keep
+                  # the markdown intact, and that column-0 line terminates the YAML block
+                  # scalar — which is what made this whole workflow unparseable.
+                  BODY=$(cat <<'MD'
+                  Automated aggregation of upstream security advisories per [AGGRESSIVE_OPERATIONS_GUIDE.md §8.3](../blob/develop/docs/AGGRESSIVE_OPERATIONS_GUIDE.md). New rows are added with `Classification = needs-review`; the AI_SECURITY_WORKFLOW.md classification step (or the maintainer) reclassifies them.
+
+                  See [docs/operations/AI_SECURITY_WORKFLOW.md](../blob/develop/docs/operations/AI_SECURITY_WORKFLOW.md).
+                  MD
+                  )
+
                   # Open a PR if one isn't already open for this branch.
                   if ! gh pr view "$BRANCH" >/dev/null 2>&1; then
                       gh pr create \
                           --base "${GITHUB_REF_NAME:-develop}" \
                           --head "$BRANCH" \
                           --title "chore(security): upstream advisories ${STAMP}" \
-                          --body "Automated aggregation of upstream security advisories per [AGGRESSIVE_OPERATIONS_GUIDE.md §8.3](../blob/develop/docs/AGGRESSIVE_OPERATIONS_GUIDE.md). New rows are added with \`Classification = needs-review\`; the AI_SECURITY_WORKFLOW.md classification step (or the maintainer) reclassifies them.
-
-See [docs/operations/AI_SECURITY_WORKFLOW.md](../blob/develop/docs/operations/AI_SECURITY_WORKFLOW.md)."
+                          --body "$BODY"
                   fi
