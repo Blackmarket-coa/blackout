@@ -5,7 +5,7 @@
  * pending one — so the shelf here only ever shows approved work, and a creator's
  * own view is where they see what is still in review.
  */
-import { createAuthorizedApiClient } from '../../sdk/client';
+import { getJson, postJson } from '../../sdk/json';
 import { readBlackoutApiToken } from '../monetization/marketplace/useMarketplaceAuth';
 
 const ASSETS_BASE = '/v1/assets';
@@ -25,14 +25,6 @@ export interface CommunityAsset {
     reviewNote: string | null;
     foundingOrdinal: number | null;
     createdAt: string;
-}
-
-function getJson<T>(path: string, token: string | null): Promise<T> {
-    return createAuthorizedApiClient(token)({ method: 'GET', path }) as Promise<T>;
-}
-
-function postJson<T>(path: string, body: unknown, token: string | null): Promise<T> {
-    return createAuthorizedApiClient(token)({ method: 'POST', path, body }) as Promise<T>;
 }
 
 /** The public shelf: approved assets only. */

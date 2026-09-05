@@ -13,6 +13,7 @@ process.env.BLACKOUT_DB_MODE = 'memory';
 const { default: app } = await import('../src/index');
 const { signJwt, hashPassword } = await import('../src/services/auth');
 const { db } = await import('../src/db/store');
+const { upsertProfile, appendWallPost } = await import('../src/services/profileStore');
 
 const seedUser = () => {
     const id = randomUUID();
@@ -346,4 +347,154 @@ test('feed: ordering is chronological, with no ranking of any kind', async () =>
         keys.indexOf(`coalition_feed:${newer}`) < keys.indexOf(`coalition_feed:${older}`),
         'newest first, by time alone'
     );
+});
+
+/** Put a wall post by `author` on `owner`'s wall, with the owner's setting. */
+const seedWallPost = (
+    owner: string,
+    author: string,
+    visibility: 'public' | 'friends' | 'private',
+    body = 'Wall note'
+) => {
+    upsertProfile(owner, {
+        profile: { wall: { visibility, whoCanPost: 'anyone', moderation: 'open' } },
+    });
+    return appendWallPost({ profileUserId: owner, authorId: author, body });
+};
+
+test('feed: a private wall’s posts never reach the author’s followers', async () => {
+    const viewer = seedUser();
+    const author = seedUser();
+    const wallOwner = seedUser();
+    await follow(viewer, author.id);
+
+    // The author wrote it, and the viewer follows the author — but it lives on
+    // someone else's private wall, and that owner's setting governs it.
+    seedWallPost(wallOwner.id, author.id, 'private', 'Private wall note');
+
+    const items = (await feedOf(viewer)).items;
+    assert.ok(
+        !items.some((i) => i.subject?.body === 'Private wall note'),
+        'following the author must not unlock a private wall'
+    );
+});
+
+test('feed: a friends-only wall reaches only viewers whose circle overlaps the owner', async () => {
+    const outsider = seedUser();
+    const insider = seedUser();
+    const author = seedUser();
+    const wallOwner = seedUser();
+
+    await follow(outsider, author.id);
+    await follow(insider, author.id);
+    // Only `insider` and the wall owner hold each other — the two-sided consent
+    // the Circle map also requires.
+    await follow(insider, wallOwner.id);
+    await follow(wallOwner, insider.id);
+
+    seedWallPost(wallOwner.id, author.id, 'friends', 'Friends-only note');
+
+    assert.ok(
+        !(await feedOf(outsider)).items.some((i) => i.subject?.body === 'Friends-only note'),
+        'a one-way follow of the author grants nothing'
+    );
+    assert.ok(
+        (await feedOf(insider)).items.some((i) => i.subject?.body === 'Friends-only note'),
+        'an overlapping circle with the wall owner does'
+    );
+});
+
+test('feed: a public wall still flows, so the gate is not just blocking everything', async () => {
+    const viewer = seedUser();
+    const author = seedUser();
+    const wallOwner = seedUser();
+    await follow(viewer, author.id);
+    seedWallPost(wallOwner.id, author.id, 'public', 'Public wall note');
+
+    assert.ok((await feedOf(viewer)).items.some((i) => i.subject?.body === 'Public wall note'));
+});
+
+test('feed: a non-public stream cannot be relayed at all', async () => {
+    const relayer = seedUser();
+    for (const visibility of ['private', 'member_only'] as const) {
+        const streamId = `stream-${visibility}-${randomUUID()}`;
+        db.upsertStream({
+            id: streamId,
+            creatorId: relayer.id,
+            state: 'live',
+            title: `A ${visibility} stream`,
+            tags: [],
+            visibility,
+            allowedSubscriberIds: [],
+            latencyProfile: 'normal',
+        });
+
+        const res = await relay(relayer, { subjectSource: 'stream', subjectId: streamId });
+        // Refused at resolution, so the title and creator never reach a Circle.
+        assert.equal(res.status, 404, `${visibility} stream must not be relayable`);
+    }
+});
+
+test('feed: a public stream is still relayable', async () => {
+    const relayer = seedUser();
+    const streamId = `stream-public-${randomUUID()}`;
+    db.upsertStream({
+        id: streamId,
+        creatorId: relayer.id,
+        state: 'live',
+        title: 'A public stream',
+        tags: [],
+        visibility: 'public',
+        allowedSubscriberIds: [],
+        latencyProfile: 'normal',
+    });
+    const res = await relay(relayer, { subjectSource: 'stream', subjectId: streamId });
+    assert.equal(res.status, 201);
+});
+
+test('feed: ?ring=circle filters before the limit, so Circle items are not lost to a Reach-heavy page', async () => {
+    const viewer = seedUser();
+    const author = seedUser();
+    const relayer = seedUser();
+    const stranger = seedUser();
+    await follow(viewer, author.id);
+    await follow(viewer, relayer.id);
+
+    // One old Circle post, then a wave of newer relayed items.
+    const circlePost = seedPost(author.id, 'The Circle post');
+    db.upsertCoalitionFeedItem({
+        ...db.getCoalitionFeedItem(circlePost)!,
+        createdAt: '2026-01-01T00:00:00.000Z',
+    });
+    for (let i = 0; i < 5; i += 1) {
+        const id = seedPost(stranger.id, `Relayed ${i}`);
+        await relay(relayer, { subjectSource: 'coalition_feed', subjectId: id });
+    }
+
+    // A small page whose newest entries are all Reach. Filtering after the
+    // slice returned nothing here, and the client said the Circle was silent.
+    const res = await app.request('/v1/feed?ring=circle&limit=3', {
+        headers: bearer(viewer),
+    });
+    const items = ((await res.json()) as { items: { subject: { title: string } | null }[] }).items;
+    assert.ok(
+        items.some((i) => i.subject?.title === 'The Circle post'),
+        'the Circle post survives a Reach-heavy page'
+    );
+    assert.ok(items.length > 0);
+});
+
+test('profile: a locked palette cannot be set directly', async () => {
+    const user = seedUser();
+    // `long_relay` needs a 10-hop chain; this account has relayed nothing.
+    const attempted = upsertProfile(user.id, { profile: { paletteId: 'long_relay' } });
+    assert.equal(
+        attempted.profile.paletteId,
+        undefined,
+        'an unearned palette is refused rather than trusted from the client'
+    );
+
+    // A palette that needs nothing still works, so the gate is not blanket-denying.
+    const free = upsertProfile(user.id, { profile: { paletteId: 'canopy_floor' } });
+    assert.equal(free.profile.paletteId, 'canopy_floor');
 });

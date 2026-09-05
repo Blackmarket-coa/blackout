@@ -117,6 +117,12 @@ export function resolveSubject(
         case 'stream': {
             const stream = db.getStream(subjectId);
             if (!stream) return null;
+            // Only public streams travel. `private` and `member_only` are gated
+            // everywhere in modules/streaming.ts, and a relay must not be the
+            // one path that broadcasts a gated stream's title and creator to a
+            // relayer's whole Circle. Refusing here also refuses the relay
+            // itself, since relaySubject resolves before it writes.
+            if (stream.visibility !== 'public') return null;
             return {
                 source,
                 id: stream.id,

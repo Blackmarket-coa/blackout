@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+    CIRCLE_MIGRATION_ACCOUNT_DATA_KEY,
     hasMigrated,
+    migrationMarker,
+    parseMigrationMarker,
     pendingCircleFollows,
     reconcileFriendsToCircle,
-    withMigrationMarker,
 } from '../../../../src/app/features/circle-feed/friendsToCircle';
 
 describe('pendingCircleFollows', () => {
@@ -45,14 +47,30 @@ describe('hasMigrated', () => {
     });
 });
 
-describe('withMigrationMarker', () => {
-    it('adds the marker and carries the legacy data through untouched', () => {
-        const data = { friends: ['@a:s'], outgoing: ['@b:s'] };
-        const next = withMigrationMarker(data, '2026-09-01T00:00:00.000Z');
-        // The account data is a legacy read source, never deleted.
-        expect(next.friends).toEqual(['@a:s']);
-        expect(next.outgoing).toEqual(['@b:s']);
-        expect(next.circleMigratedAt).toBe('2026-09-01T00:00:00.000Z');
+describe('the migration marker', () => {
+    it('lives in its own account-data key, not inside the friend list', () => {
+        // Storing it alongside {friends, outgoing} meant any friend action
+        // overwrote it, so the migration re-ran and re-followed people the user
+        // had since removed from their Circle.
+        expect(CIRCLE_MIGRATION_ACCOUNT_DATA_KEY).toBe('co.bmc.circle_migration');
+        expect(migrationMarker('2026-09-01T00:00:00.000Z')).toEqual({
+            circleMigratedAt: '2026-09-01T00:00:00.000Z',
+        });
+    });
+
+    it('parses defensively and treats junk as not-yet-migrated', () => {
+        expect(parseMigrationMarker({ circleMigratedAt: '2026-09-01T00:00:00.000Z' })).toEqual({
+            circleMigratedAt: '2026-09-01T00:00:00.000Z',
+        });
+        for (const junk of [
+            undefined,
+            null,
+            {},
+            { circleMigratedAt: '' },
+            { circleMigratedAt: 7 },
+        ]) {
+            expect(hasMigrated(parseMigrationMarker(junk))).toBe(false);
+        }
     });
 });
 

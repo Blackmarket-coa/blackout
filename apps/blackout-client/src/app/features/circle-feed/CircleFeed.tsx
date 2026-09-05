@@ -42,7 +42,10 @@ export const CircleFeed = ({ viewerId, displayNameFor }: CircleFeedProps) => {
     const [myRelayBySubject, setMyRelayBySubject] = useState<Map<string, string>>(new Map());
     const [ring, setRing] = useState<RingFilter>('all');
     const [openChainId, setOpenChainId] = useState<string | null>(null);
-    const [expandedRuns, setExpandedRuns] = useState<Set<number>>(new Set());
+    // Keyed by the run's own identity (relayer + first item), not its array
+    // index: a Boost triggers a refetch that reorders groups, and an
+    // index-keyed set then expands whichever run happens to land in that slot.
+    const [expandedRuns, setExpandedRuns] = useState<Set<string>>(new Set());
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -152,10 +155,13 @@ export const CircleFeed = ({ viewerId, displayNameFor }: CircleFeedProps) => {
 
             <div className={css.list}>
                 {groups.map((group, index) => {
-                    const collapsed = shouldCollapse(group) && !expandedRuns.has(index);
+                    const runKey = `${group.relayerUserId ?? 'circle'}:${
+                        group.items[0]?.key ?? index
+                    }`;
+                    const collapsed = shouldCollapse(group) && !expandedRuns.has(runKey);
                     const visible = collapsed ? group.items.slice(0, 1) : group.items;
                     return (
-                        <div key={`${group.relayerUserId ?? 'circle'}-${index}`}>
+                        <div key={runKey}>
                             <div className={css.list}>
                                 {visible.map((item) => (
                                     <CircleFeedCard
@@ -177,8 +183,8 @@ export const CircleFeed = ({ viewerId, displayNameFor }: CircleFeedProps) => {
                                     onClick={() =>
                                         setExpandedRuns((previous) => {
                                             const next = new Set(previous);
-                                            if (next.has(index)) next.delete(index);
-                                            else next.add(index);
+                                            if (next.has(runKey)) next.delete(runKey);
+                                            else next.add(runKey);
                                             return next;
                                         })
                                     }

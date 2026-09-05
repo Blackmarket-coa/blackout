@@ -7,18 +7,23 @@
  * they sign in to an empty feed and are told to go find people they already
  * know, which reads as the product losing their relationships.
  *
- * The account data is **never deleted** — it stays as a legacy read source, and
- * a `circleMigratedAt` marker written alongside it is what stops this running
- * twice. Server-side follows are idempotent, so a re-run after a partial failure
- * is safe rather than duplicating edges.
+ * The friend list is **never deleted** — it stays as a legacy read source.
+ *
+ * The "already ran" marker lives in its **own** account-data key rather than
+ * inside `co.bmc.friends`. It was originally stored alongside the friend list,
+ * where `friendActions.writeFriends` and `useFriends.setContent` both replace
+ * the content with exactly `{friends, outgoing}` — so any friend action wiped
+ * the marker, the migration re-ran on the next sign-in, and it silently
+ * re-followed people the user had since removed from their Circle. A marker
+ * about migration state is not friends data, and keeping it separate means no
+ * unrelated writer can clobber it.
  */
 
-export const CIRCLE_MIGRATED_AT_KEY = 'circleMigratedAt';
+/** Account-data key holding the reconciliation marker. */
+export const CIRCLE_MIGRATION_ACCOUNT_DATA_KEY = 'co.bmc.circle_migration';
 
-export interface FriendsAccountData {
-    friends: string[];
-    outgoing: string[];
-    /** ISO timestamp; present once reconciliation has completed. */
+export interface CircleMigrationMarker {
+    /** ISO timestamp; present once reconciliation has completed cleanly. */
     circleMigratedAt?: string;
 }
 
@@ -46,20 +51,20 @@ export function pendingCircleFollows(input: {
 }
 
 /** True when reconciliation has already run for this account. */
-export const hasMigrated = (data: Pick<FriendsAccountData, 'circleMigratedAt'>): boolean =>
-    typeof data.circleMigratedAt === 'string' && data.circleMigratedAt.length > 0;
+export const hasMigrated = (marker: CircleMigrationMarker): boolean =>
+    typeof marker.circleMigratedAt === 'string' && marker.circleMigratedAt.length > 0;
 
-/**
- * The account data to write back after a run.
- *
- * Friends and outgoing requests are carried through untouched — this adds the
- * marker, it does not migrate data out of the old shape.
- */
-export function withMigrationMarker(
-    data: FriendsAccountData,
+/** Parse the marker key's content defensively. */
+export function parseMigrationMarker(content: unknown): CircleMigrationMarker {
+    const at = (content as CircleMigrationMarker | undefined)?.circleMigratedAt;
+    return typeof at === 'string' && at.length > 0 ? { circleMigratedAt: at } : {};
+}
+
+/** The marker content to write once a run completes cleanly. */
+export function migrationMarker(
     at: string = new Date().toISOString()
-): FriendsAccountData {
-    return { friends: data.friends, outgoing: data.outgoing, [CIRCLE_MIGRATED_AT_KEY]: at };
+): Required<CircleMigrationMarker> {
+    return { circleMigratedAt: at };
 }
 
 export interface ReconcileOutcome {

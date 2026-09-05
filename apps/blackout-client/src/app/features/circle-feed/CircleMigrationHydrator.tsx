@@ -4,36 +4,38 @@ import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { FRIENDS_ACCOUNT_DATA_KEY, parseFriends } from '../friends/friendsModel';
 import { fetchCircleFollowing, followInCircle } from './circleClient';
 import {
+    CIRCLE_MIGRATION_ACCOUNT_DATA_KEY,
     hasMigrated,
+    migrationMarker,
+    parseMigrationMarker,
     pendingCircleFollows,
     reconcileFriendsToCircle,
-    withMigrationMarker,
-    type FriendsAccountData,
+    type CircleMigrationMarker,
 } from './friendsToCircle';
 
-const readFriendsData = (mx: MatrixClient): FriendsAccountData => {
-    const client = mx as unknown as {
-        getAccountData: (type: string) => { getContent: () => unknown } | undefined;
-    };
-    const raw = client.getAccountData(FRIENDS_ACCOUNT_DATA_KEY)?.getContent() as
-        | Record<string, unknown>
-        | undefined;
-    const parsed = parseFriends(raw);
-    return {
-        friends: parsed.friends,
-        outgoing: parsed.outgoing,
-        circleMigratedAt:
-            typeof raw?.circleMigratedAt === 'string' ? raw.circleMigratedAt : undefined,
-    };
+type AccountDataClient = {
+    getAccountData: (type: string) => { getContent: () => unknown } | undefined;
+    setAccountData: (type: string, content: Record<string, unknown>) => Promise<unknown>;
 };
 
-const writeFriendsData = async (mx: MatrixClient, data: FriendsAccountData): Promise<void> => {
-    const client = mx as unknown as {
-        setAccountData: (type: string, content: Record<string, unknown>) => Promise<unknown>;
-    };
-    await client.setAccountData(FRIENDS_ACCOUNT_DATA_KEY, {
-        ...data,
-    } as unknown as Record<string, unknown>);
+/** The legacy friend list. Read-only here — this never writes it back. */
+const readFriends = (mx: MatrixClient): string[] =>
+    parseFriends(
+        (mx as unknown as AccountDataClient).getAccountData(FRIENDS_ACCOUNT_DATA_KEY)?.getContent()
+    ).friends;
+
+const readMarker = (mx: MatrixClient): CircleMigrationMarker =>
+    parseMigrationMarker(
+        (mx as unknown as AccountDataClient)
+            .getAccountData(CIRCLE_MIGRATION_ACCOUNT_DATA_KEY)
+            ?.getContent()
+    );
+
+const writeMarker = async (mx: MatrixClient): Promise<void> => {
+    await (mx as unknown as AccountDataClient).setAccountData(
+        CIRCLE_MIGRATION_ACCOUNT_DATA_KEY,
+        migrationMarker()
+    );
 };
 
 /**
@@ -57,14 +59,15 @@ export const CircleMigrationHydrator = (): null => {
 
         void (async () => {
             try {
-                const data = readFriendsData(mx);
-                if (hasMigrated(data) || data.friends.length === 0) return;
+                if (hasMigrated(readMarker(mx))) return;
+                const friends = readFriends(mx);
+                if (friends.length === 0) return;
 
                 const following = await fetchCircleFollowing();
                 if (cancelled) return;
 
                 const pending = pendingCircleFollows({
-                    friends: data.friends,
+                    friends,
                     alreadyFollowing: new Set(
                         following.map((entry) => entry.matrixUserId ?? entry.userId)
                     ),
@@ -73,7 +76,7 @@ export const CircleMigrationHydrator = (): null => {
 
                 // Nothing left to do, but still mark it so this stops running.
                 if (pending.length === 0) {
-                    await writeFriendsData(mx, withMigrationMarker(data));
+                    await writeMarker(mx);
                     return;
                 }
 
@@ -85,7 +88,7 @@ export const CircleMigrationHydrator = (): null => {
                 // Only a clean run is marked done; a partial one retries next time
                 // rather than silently costing someone a relationship.
                 if (outcome.complete) {
-                    await writeFriendsData(mx, withMigrationMarker(data));
+                    await writeMarker(mx);
                 }
             } catch {
                 // Non-fatal by design: the marker is not written, so this simply

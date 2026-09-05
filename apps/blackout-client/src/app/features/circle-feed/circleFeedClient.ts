@@ -5,24 +5,12 @@
  * so this is a thin transport: it does not sort, rank, filter or merge. What
  * comes back is what the viewer sees, in the order the server sent it.
  */
+import { deleteJson, getJson, postJson } from '../../sdk/json';
 import type { RelaySubjectSource } from '@blackout/protocol';
-import { createAuthorizedApiClient } from '../../sdk/client';
 import { readBlackoutApiToken } from '../monetization/marketplace/useMarketplaceAuth';
 
 const FEED_BASE = '/v1/feed';
 const CIRCLE_BASE = '/v1/circle';
-
-function getJson<T>(path: string, token: string | null): Promise<T> {
-    return createAuthorizedApiClient(token)({ method: 'GET', path }) as Promise<T>;
-}
-
-function postJson<T>(path: string, body: unknown, token: string | null): Promise<T> {
-    return createAuthorizedApiClient(token)({ method: 'POST', path, body }) as Promise<T>;
-}
-
-function deleteJson<T>(path: string, token: string | null): Promise<T> {
-    return createAuthorizedApiClient(token)({ method: 'DELETE', path }) as Promise<T>;
-}
 
 /** One hop in a visible `[You] → [X] → [Y]` path. */
 export interface RelayHopView {

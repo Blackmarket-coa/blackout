@@ -1,3 +1,4 @@
+import { mxIdToDisplayName } from '../../utils/matrix';
 import classNames from 'classnames';
 import { useEffect, useState } from 'react';
 import * as css from './RelayChainDialog.css';
@@ -9,8 +10,6 @@ interface RelayChainDialogProps {
     onClose: () => void;
     displayNameFor?: (userId: string) => string;
 }
-
-const defaultDisplayName = (userId: string): string => /^@([^:\s]+):/.exec(userId)?.[1] ?? userId;
 
 const formatWhen = (iso: string): string => {
     const parsed = Date.parse(iso);
@@ -28,7 +27,7 @@ export const RelayChainDialog = ({
     relayId,
     viewerId,
     onClose,
-    displayNameFor = defaultDisplayName,
+    displayNameFor = mxIdToDisplayName,
 }: RelayChainDialogProps) => {
     const [chain, setChain] = useState<RelayChainResponse | null>(null);
     const [error, setError] = useState<string | null>(null);

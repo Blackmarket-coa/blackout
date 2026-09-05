@@ -14,6 +14,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import {
     buildRelayPath,
+    canViewWall,
     mergeFeedEntries,
     ringForItem,
     type FeedEntry,
@@ -26,8 +27,8 @@ import { readJsonBody } from '../middleware/validate';
 import { requireUser } from '../middleware/require-user';
 import { emitDomainEvent } from './domain-events';
 import type { FeatureModule } from './types';
-import { listFollowing } from '../services/follows';
-import { listWallPostsByAuthor } from '../services/profileStore';
+import { circlesOverlap, listFollowing } from '../services/follows';
+import { getProfileOrDefault, listWallPostsByAuthor } from '../services/profileStore';
 import {
     reinstateRelay,
     relaySubject,
@@ -89,7 +90,25 @@ const relayErrorResponse = (
 };
 
 /** Everything a Circle member authored, as feed entries. */
-function circleRingEntries(circle: readonly string[]): FeedEntry<RelaySubjectCard>[] {
+/**
+ * Whether `viewerId` may read the wall owned by `ownerId`, by the same rule the
+ * profile surface uses. `friends` resolves to overlapping circles — the
+ * two-sided consent the Circle map also requires.
+ */
+function viewerCanReadWall(viewerId: string, ownerId: string): boolean {
+    if (viewerId === ownerId) return true;
+    return canViewWall({
+        settings: getProfileOrDefault(ownerId).profile.wall,
+        ownerId,
+        viewerId,
+        viewerConnected: circlesOverlap(viewerId, ownerId),
+    });
+}
+
+function circleRingEntries(
+    viewerId: string,
+    circle: readonly string[]
+): FeedEntry<RelaySubjectCard>[] {
     const circleSet = new Set(circle);
     const entries: FeedEntry<RelaySubjectCard>[] = [];
 
@@ -109,6 +128,10 @@ function circleRingEntries(circle: readonly string[]): FeedEntry<RelaySubjectCar
 
     for (const authorId of circleSet) {
         for (const post of listWallPostsByAuthor(authorId)) {
+            // A wall post lives on someone else's wall, and that owner's
+            // visibility setting governs it — not the author's. Following the
+            // author must not hand the viewer a `private` wall's contents.
+            if (!viewerCanReadWall(viewerId, post.profileUserId)) continue;
             const subject = resolveSubject('wall_post', post.id);
             if (!subject) continue;
             entries.push({
@@ -177,11 +200,17 @@ function createFeedRouter() {
         const circle = listFollowing(user.sub).map((e) => e.followeeId);
         const circleSet = new Set(circle);
 
-        const entries = [...circleRingEntries(circle), ...reachRingEntries(circle, circleSet)];
-        const merged = mergeFeedEntries(entries, limit);
-        const items = parsed.data.ring
-            ? merged.filter((entry) => entry.ring === parsed.data.ring)
-            : merged;
+        const entries = [
+            ...circleRingEntries(user.sub, circle),
+            ...reachRingEntries(circle, circleSet),
+        ];
+        // Filter *before* the limit slice. Filtering after it meant a page whose
+        // newest `limit` entries happened to be all Reach returned nothing for
+        // ?ring=circle, and the client then said nobody in your Circle had
+        // posted — which was simply false.
+        const ring = parsed.data.ring;
+        const scoped = ring ? entries.filter((entry) => entry.ring === ring) : entries;
+        const items = mergeFeedEntries(scoped, limit);
 
         return c.json({
             generatedAt: new Date().toISOString(),
