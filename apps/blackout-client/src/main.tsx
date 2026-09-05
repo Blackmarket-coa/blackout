@@ -519,18 +519,31 @@ const BootstrapStatus = () => {
 // module is loaded via dynamic import so the static bundle never pays
 // the cost up front.
 const HARNESS_PATH = '/__dev__/portal-modal';
-const harnessActive = typeof window !== 'undefined' && window.location.pathname === HARNESS_PATH;
+// Second harness, same contract: the Circle & Reach feed rendered without a
+// Matrix session so a browser test can drive its relay surfaces. See
+// app/dev/CircleFeedHarness.tsx.
+const CIRCLE_FEED_HARNESS_PATH = '/__dev__/circle-feed';
+const currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
+const harnessActive = currentPath === HARNESS_PATH;
+const circleFeedHarnessActive = currentPath === CIRCLE_FEED_HARNESS_PATH;
+
+const renderHarness = (node: React.ReactNode): void => {
+    ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
+        <React.StrictMode>
+            <ThemeProvider>{node}</ThemeProvider>
+        </React.StrictMode>
+    );
+};
 
 if (harnessActive) {
     // eslint-disable-next-line @typescript-eslint/no-floating-promises
     import('./app/dev/PortalModalHarness').then(({ PortalModalHarness }) => {
-        ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
-            <React.StrictMode>
-                <ThemeProvider>
-                    <PortalModalHarness />
-                </ThemeProvider>
-            </React.StrictMode>
-        );
+        renderHarness(<PortalModalHarness />);
+    });
+} else if (circleFeedHarnessActive) {
+    // eslint-disable-next-line @typescript-eslint/no-floating-promises
+    import('./app/dev/CircleFeedHarness').then(({ CircleFeedHarness }) => {
+        renderHarness(<CircleFeedHarness />);
     });
 } else {
     ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
