@@ -13,6 +13,10 @@ jobs:
     backport:
         name: Backport
         runs-on: ubuntu-24.04
+        # `secrets` is not an allowed context in a step-level `if:`; `env` is.
+        # Reading it here is what makes the guards below valid.
+        env:
+            ELEMENT_BOT_TOKEN: ${{ secrets.ELEMENT_BOT_TOKEN }}
         # Only react to merged PRs for security reasons.
         # See https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#pull_request_target.
         if: >
@@ -27,12 +31,12 @@ jobs:
             )
         steps:
             - name: Skip if backport token missing
-              if: ${{ secrets.ELEMENT_BOT_TOKEN == '' }}
+              if: ${{ env.ELEMENT_BOT_TOKEN == '' }}
               run: |
                   echo "ELEMENT_BOT_TOKEN unset — skipping backport."
                   exit 0
             - uses: tibdex/backport@9565281eda0731b1d20c4025c43339fb0a23812e # v2
-              if: ${{ secrets.ELEMENT_BOT_TOKEN != '' }}
+              if: ${{ env.ELEMENT_BOT_TOKEN != '' }}
               with:
                   labels_template: "<%= JSON.stringify([...labels, 'X-Release-Blocker']) %>"
                   # We can't use GITHUB_TOKEN here or CI won't run on the new PR
