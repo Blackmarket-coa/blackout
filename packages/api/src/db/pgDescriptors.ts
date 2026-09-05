@@ -207,6 +207,7 @@ const OVERRIDES: Record<string, DescriptorOverride> = {
                 den_id: r.denId ?? null,
                 capacity: r.capacity ?? null,
                 recurrence: r.recurrence ?? null,
+                stream_id: r.streamId ?? null,
                 created_at: r.createdAt,
                 updated_at: r.updatedAt,
             };
@@ -233,6 +234,7 @@ const OVERRIDES: Record<string, DescriptorOverride> = {
             if (row.den_id != null) rec.denId = row.den_id;
             if (row.capacity != null) rec.capacity = row.capacity;
             if (row.recurrence != null) rec.recurrence = row.recurrence;
+            if (row.stream_id != null) rec.streamId = row.stream_id;
             return rec;
         },
     },

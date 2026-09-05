@@ -24,6 +24,7 @@ import {
     getKit,
     isWithinRadiusMeters,
     nextOccurrence,
+    showSchedule,
     rankCoalitionFeed,
     scoreCoalitionItem,
     seatsRemaining,
@@ -955,6 +956,35 @@ coalition.get('/events', (c) => {
     return c.json({ events });
 });
 
+/**
+ * The show schedule — "what's on this week".
+ *
+ * Registered before `/events/:id` on purpose: Hono matches in registration
+ * order, so the param route would otherwise swallow `/events/shows` and look
+ * up an event whose id is literally "shows".
+ *
+ * Shows are ordinary events with `category: 'show'`, so this is a view over the
+ * same table rather than a second calendar. Chronological only.
+ */
+coalition.get('/events/shows', (c) => {
+    const now = Date.now();
+    const days = Math.min(Math.max(Number.parseInt(c.req.query('days') ?? '7', 10) || 7, 1), 90);
+    const slots = showSchedule(listEvents(), now, now + DAY_MS * days, now).map((slot) => ({
+        eventId: slot.event.id,
+        title: slot.event.title,
+        organizerId: slot.event.organizerId,
+        // Null rather than absent: a show that has not wired up its stream yet
+        // is a normal state, and the client says so instead of hiding the row.
+        streamId: slot.event.streamId ?? null,
+        denId: slot.event.denId ?? null,
+        startsAt: slot.occurrence.startsAt,
+        endsAt: slot.occurrence.endsAt ?? null,
+        status: slot.occurrence.status,
+        rsvpSummary: rsvpSummaryFor(slot.event.id),
+    }));
+    return c.json({ windowDays: days, slots });
+});
+
 coalition.get('/events/:id', (c) => {
     const event = getEvent(c.req.param('id'));
     if (!event) {
@@ -997,6 +1027,7 @@ const createEventSchema = z.object({
     denId: z.string().optional(),
     capacity: z.number().int().min(1).max(1_000_000).optional(),
     recurrence: recurrenceSchema.optional(),
+    streamId: z.string().min(1).max(200).optional(),
 });
 
 coalition.post('/events', async (c) => {
@@ -1018,6 +1049,7 @@ coalition.post('/events', async (c) => {
         denId: parsed.denId,
         capacity: parsed.capacity,
         recurrence: parsed.recurrence,
+        streamId: parsed.streamId,
     });
     return c.json({ event }, 201);
 });
@@ -1032,6 +1064,7 @@ const updateEventSchema = z.object({
     denId: z.string().nullable().optional(),
     capacity: z.number().int().min(1).max(1_000_000).nullable().optional(),
     recurrence: recurrenceSchema.nullable().optional(),
+    streamId: z.string().min(1).max(200).nullable().optional(),
 });
 
 coalition.patch('/events/:id', async (c) => {

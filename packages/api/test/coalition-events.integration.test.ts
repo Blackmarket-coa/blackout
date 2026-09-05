@@ -27,7 +27,7 @@ test('expandOccurrences yields one occurrence for a non-recurring event', () => 
         { startsAt: '2026-06-01T18:00:00.000Z', endsAt: '2026-06-01T20:00:00.000Z' },
         Date.parse('2026-05-01T00:00:00Z'),
         Date.parse('2026-07-01T00:00:00Z'),
-        Date.parse('2026-05-15T00:00:00Z'),
+        Date.parse('2026-05-15T00:00:00Z')
     );
     assert.equal(occ.length, 1);
     assert.equal(occ[0]?.status, 'upcoming');
@@ -42,7 +42,7 @@ test('expandOccurrences honours weekly recurrence with a count bound', () => {
         },
         Date.parse('2026-06-01T00:00:00Z'),
         Date.parse('2026-12-01T00:00:00Z'),
-        Date.parse('2026-06-01T00:00:00Z'),
+        Date.parse('2026-06-01T00:00:00Z')
     );
     assert.equal(occ.length, 3);
     assert.equal(occ[1]?.startsAt, '2026-06-08T18:00:00.000Z');
@@ -116,7 +116,9 @@ test('event lifecycle: create, list, detail, rsvp, map surfacing', async () => {
     assert.equal(rsvpBody.rsvpSummary.going, 1);
 
     // detail reflects the rsvp + has occurrences
-    const detailRes = await app.request(`/v1/coalition/events/${event.id}`, { headers: authHeader() });
+    const detailRes = await app.request(`/v1/coalition/events/${event.id}`, {
+        headers: authHeader(),
+    });
     const detail = (await detailRes.json()) as {
         rsvpSummary: { going: number };
         occurrences: unknown[];
@@ -131,7 +133,7 @@ test('event lifecycle: create, list, detail, rsvp, map surfacing', async () => {
     const map = (await mapRes.json()) as { items: Array<{ id: string; layer: string }> };
     assert.ok(
         map.items.some((i) => i.id === `event:${event.id}` && i.layer === 'events'),
-        'event should appear as an events-layer map pin',
+        'event should appear as an events-layer map pin'
     );
 });
 
@@ -161,7 +163,7 @@ test('only the organizer can edit; cancel hides the event from the map', async (
     const map = (await mapRes.json()) as { items: Array<{ id: string }> };
     assert.ok(
         !map.items.some((i) => i.id === `event:${event.id}`),
-        'cancelled events drop off the map',
+        'cancelled events drop off the map'
     );
 });
 
@@ -174,7 +176,9 @@ test('recurring event exposes multiple occurrences in its detail', async () => {
     });
     const { event } = (await created.json()) as { event: { id: string; recurrence: unknown } };
     assert.ok(event.recurrence, 'recurrence persisted');
-    const detailRes = await app.request(`/v1/coalition/events/${event.id}`, { headers: authHeader() });
+    const detailRes = await app.request(`/v1/coalition/events/${event.id}`, {
+        headers: authHeader(),
+    });
     const detail = (await detailRes.json()) as { occurrences: unknown[] };
     assert.ok(detail.occurrences.length >= 2, 'recurring event expands to multiple occurrences');
 });
@@ -182,7 +186,7 @@ test('recurring event exposes multiple occurrences in its detail', async () => {
 test('nextOccurrence skips fully-past occurrences', () => {
     const occ = nextOccurrence(
         { startsAt: '2020-01-01T00:00:00.000Z', endsAt: '2020-01-01T01:00:00.000Z' },
-        Date.parse('2026-01-01T00:00:00Z'),
+        Date.parse('2026-01-01T00:00:00Z')
     );
     assert.equal(occ?.status, 'past');
 });
@@ -211,14 +215,14 @@ test('volunteer slots: organizer creates, attendees fill to capacity, then withd
 
     const signup = await app.request(
         `/v1/coalition/events/${event.id}/volunteer-slots/${slot.id}/signup`,
-        { method: 'POST', headers: authHeader('vol-1') },
+        { method: 'POST', headers: authHeader('vol-1') }
     );
     assert.equal(signup.status, 200);
 
     // capacity is 1 — a second distinct volunteer is rejected
     const full = await app.request(
         `/v1/coalition/events/${event.id}/volunteer-slots/${slot.id}/signup`,
-        { method: 'POST', headers: authHeader('vol-2') },
+        { method: 'POST', headers: authHeader('vol-2') }
     );
     assert.equal(full.status, 409);
 
@@ -240,7 +244,7 @@ test('volunteer slots: organizer creates, attendees fill to capacity, then withd
     });
     const retry = await app.request(
         `/v1/coalition/events/${event.id}/volunteer-slots/${slot.id}/signup`,
-        { method: 'POST', headers: authHeader('vol-2') },
+        { method: 'POST', headers: authHeader('vol-2') }
     );
     assert.equal(retry.status, 200);
 });
@@ -254,7 +258,11 @@ test('ride coordination: offer seats, claim to capacity, release frees a seat', 
     const offerRes = await app.request(`/v1/coalition/events/${event.id}/rides`, {
         method: 'POST',
         headers: authHeader('driver-1'),
-        body: JSON.stringify({ originLabel: 'North lot', seatsTotal: 1, departAt: '2030-06-01T13:00:00.000Z' }),
+        body: JSON.stringify({
+            originLabel: 'North lot',
+            seatsTotal: 1,
+            departAt: '2030-06-01T13:00:00.000Z',
+        }),
     });
     assert.equal(offerRes.status, 201);
     const { offer } = (await offerRes.json()) as { offer: { id: string } };
@@ -290,4 +298,112 @@ test('ride coordination: offer seats, claim to capacity, release frees a seat', 
         headers: authHeader('rider-2'),
     });
     assert.equal(retry.status, 200);
+});
+
+// --- the weekly show slot ---
+
+test('showSchedule expands a weekly show and orders airings chronologically', async () => {
+    const { showSchedule } = await import('@blackout/core');
+    const base = {
+        organizerId: 'o',
+        description: 'd',
+        location: { latitude: 0, longitude: 0 },
+        visibility: 'public' as const,
+        status: 'scheduled' as const,
+    };
+    const slots = showSchedule(
+        [
+            {
+                ...base,
+                id: 'later',
+                title: 'Late show',
+                startsAt: '2030-06-03T22:00:00.000Z',
+                category: 'show',
+            },
+            {
+                ...base,
+                id: 'weekly',
+                title: 'Weekly show',
+                startsAt: '2030-06-01T18:00:00.000Z',
+                category: 'show',
+                recurrence: { frequency: 'weekly', interval: 1, count: 2 },
+            },
+            // Not a show: must not appear, however well it fits the window.
+            {
+                ...base,
+                id: 'cleanup',
+                title: 'Cleanup',
+                startsAt: '2030-06-02T10:00:00.000Z',
+                category: 'cleanup',
+            },
+            // A cancelled show is dropped — there is nothing to tune into.
+            {
+                ...base,
+                id: 'cancelled',
+                title: 'Cancelled show',
+                startsAt: '2030-06-04T10:00:00.000Z',
+                category: 'show',
+                status: 'cancelled' as const,
+            },
+        ],
+        Date.parse('2030-06-01T00:00:00Z'),
+        Date.parse('2030-06-30T00:00:00Z'),
+        Date.parse('2030-05-31T00:00:00Z')
+    );
+
+    assert.deepEqual(
+        slots.map((s) => `${s.event.id}@${s.occurrence.startsAt}`),
+        [
+            'weekly@2030-06-01T18:00:00.000Z',
+            'later@2030-06-03T22:00:00.000Z',
+            'weekly@2030-06-08T18:00:00.000Z',
+        ],
+        'both airings of the recurring show, interleaved by time, with non-shows excluded'
+    );
+});
+
+test('GET /events/shows lists the airings in the window and is not swallowed by /events/:id', async () => {
+    const startsAt = new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString();
+    const created = await createEvent({
+        title: 'Thursday Night Blackout',
+        category: 'show',
+        startsAt,
+        endsAt: new Date(Date.parse(startsAt) + 1000 * 60 * 60).toISOString(),
+        recurrence: { frequency: 'weekly', interval: 1, count: 4 },
+        streamId: 'stream-abc',
+    });
+    assert.equal(created.status, 201);
+    const { event } = (await created.json()) as { event: { id: string; streamId?: string } };
+    // The link survives the round-trip rather than being dropped on write.
+    assert.equal(event.streamId, 'stream-abc');
+
+    const res = await app.request('/v1/coalition/events/shows?days=14', {
+        headers: authHeader(),
+    });
+    assert.equal(res.status, 200, 'the literal path resolves, not the :id route');
+    const body = (await res.json()) as {
+        windowDays: number;
+        slots: { eventId: string; streamId: string | null; startsAt: string; title: string }[];
+    };
+    assert.equal(body.windowDays, 14);
+
+    const mine = body.slots.filter((slot) => slot.eventId === event.id);
+    assert.equal(mine.length, 2, 'two airings fall inside a 14-day window');
+    assert.equal(mine[0]?.streamId, 'stream-abc');
+    assert.equal(mine[0]?.title, 'Thursday Night Blackout');
+    assert.ok(mine[0]!.startsAt < mine[1]!.startsAt, 'airings are returned in chronological order');
+});
+
+test('a show announced without a stream is still listed, with streamId null', async () => {
+    const startsAt = new Date(Date.now() + 1000 * 60 * 60 * 2).toISOString();
+    const created = await createEvent({ title: 'Not wired up yet', category: 'show', startsAt });
+    const { event } = (await created.json()) as { event: { id: string } };
+
+    const res = await app.request('/v1/coalition/events/shows', { headers: authHeader() });
+    const { slots } = (await res.json()) as {
+        slots: { eventId: string; streamId: string | null }[];
+    };
+    const slot = slots.find((s) => s.eventId === event.id);
+    assert.ok(slot, 'an unwired show is announced, not hidden');
+    assert.equal(slot?.streamId, null);
 });

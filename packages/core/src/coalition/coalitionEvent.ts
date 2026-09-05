@@ -20,22 +20,27 @@ export const EVENT_CATEGORIES = [
     'social',
     'cleanup',
     'food',
+    // A recurring broadcast — the weekly show. It is an event rather than a
+    // separate subsystem because a show is a gathering that happens to be
+    // watched: it wants the same RSVPs, the same attached den, and the same
+    // recurrence rules everything else here already has.
+    'show',
     'other',
 ] as const;
-export type EventCategory = (typeof EVENT_CATEGORIES)[number];
+export type EventCategory = typeof EVENT_CATEGORIES[number];
 
 export const EVENT_VISIBILITY = ['public', 'community', 'private'] as const;
-export type EventVisibility = (typeof EVENT_VISIBILITY)[number];
+export type EventVisibility = typeof EVENT_VISIBILITY[number];
 
 /** Lifecycle flag. Temporal upcoming/live/past is derived, not stored. */
 export const EVENT_LIFECYCLE_STATUSES = ['scheduled', 'cancelled'] as const;
-export type EventLifecycleStatus = (typeof EVENT_LIFECYCLE_STATUSES)[number];
+export type EventLifecycleStatus = typeof EVENT_LIFECYCLE_STATUSES[number];
 
 export const RSVP_STATUSES = ['going', 'maybe', 'declined'] as const;
-export type RsvpStatus = (typeof RSVP_STATUSES)[number];
+export type RsvpStatus = typeof RSVP_STATUSES[number];
 
 export const RECURRENCE_FREQUENCIES = ['daily', 'weekly', 'monthly'] as const;
-export type RecurrenceFrequency = (typeof RECURRENCE_FREQUENCIES)[number];
+export type RecurrenceFrequency = typeof RECURRENCE_FREQUENCIES[number];
 
 export interface EventRecurrence {
     frequency: RecurrenceFrequency;
@@ -70,6 +75,12 @@ export interface CoalitionEvent {
     denId?: string;
     capacity?: number;
     recurrence?: EventRecurrence;
+    /**
+     * Stream this event is broadcast on, for a `show`. Optional everywhere: a
+     * show can be announced before anyone has set the stream up, and an
+     * in-person event never has one.
+     */
+    streamId?: string;
 }
 
 export interface EventRsvp {
@@ -133,7 +144,7 @@ export function expandOccurrences(
     event: Pick<CoalitionEvent, 'startsAt' | 'endsAt' | 'recurrence'>,
     windowStartMs: number,
     windowEndMs: number,
-    nowMs: number = Date.now(),
+    nowMs: number = Date.now()
 ): EventOccurrence[] {
     const baseStart = Date.parse(event.startsAt);
     if (Number.isNaN(baseStart)) return [];
@@ -149,7 +160,11 @@ export function expandOccurrences(
     const occurrences: EventOccurrence[] = [];
     for (let index = 0; index < hardCap; index += 1) {
         const occStart = recurrence
-            ? addRecurrenceStep(new Date(baseStart), recurrence.frequency, interval * index).getTime()
+            ? addRecurrenceStep(
+                  new Date(baseStart),
+                  recurrence.frequency,
+                  interval * index
+              ).getTime()
             : baseStart;
         if (occStart > untilMs) break;
         if (occStart > windowEndMs) break;
@@ -162,7 +177,10 @@ export function expandOccurrences(
                 startsAt: startsAtIso,
                 endsAt: endsAtIso,
                 index,
-                status: deriveSpatialEventStatus({ startsAt: startsAtIso, endsAt: endsAtIso }, nowMs),
+                status: deriveSpatialEventStatus(
+                    { startsAt: startsAtIso, endsAt: endsAtIso },
+                    nowMs
+                ),
             });
         }
     }
@@ -176,7 +194,7 @@ export function expandOccurrences(
  */
 export function nextOccurrence(
     event: Pick<CoalitionEvent, 'startsAt' | 'endsAt' | 'recurrence'>,
-    nowMs: number = Date.now(),
+    nowMs: number = Date.now()
 ): EventOccurrence | undefined {
     const baseStartMs = Date.parse(event.startsAt);
     if (Number.isNaN(baseStartMs)) return undefined;
@@ -188,6 +206,39 @@ export function nextOccurrence(
     const occurrences = expandOccurrences(event, windowStart, windowEnd, nowMs);
     if (occurrences.length === 0) return undefined;
     return occurrences.find((o) => o.status !== 'past') ?? occurrences[occurrences.length - 1];
+}
+
+/** One airing of a show, with the event it belongs to. */
+export interface ShowSlot {
+    event: CoalitionEvent;
+    occurrence: EventOccurrence;
+}
+
+/**
+ * The show schedule for a window — "what's on this week".
+ *
+ * Shows are ordinary events with `category: 'show'`, so this adds no storage
+ * and no second calendar: it expands the recurrence rules already on them and
+ * orders the airings by start time. Cancelled shows are dropped (there is
+ * nothing to tune into) but a show with no `streamId` is kept, because an
+ * announced-but-not-yet-wired show is a real thing an organizer wants listed.
+ *
+ * Chronological, and only chronological — this is a schedule, not a feed.
+ */
+export function showSchedule(
+    events: readonly CoalitionEvent[],
+    windowStartMs: number,
+    windowEndMs: number,
+    nowMs: number = Date.now()
+): ShowSlot[] {
+    const slots: ShowSlot[] = [];
+    for (const event of events) {
+        if (event.category !== 'show' || event.status === 'cancelled') continue;
+        for (const occurrence of expandOccurrences(event, windowStartMs, windowEndMs, nowMs)) {
+            slots.push({ event, occurrence });
+        }
+    }
+    return slots.sort((a, b) => a.occurrence.startsAt.localeCompare(b.occurrence.startsAt));
 }
 
 // --- volunteer + ride coordination (attached to an event) ---
@@ -233,7 +284,7 @@ export interface RideClaim {
 
 export function slotRemaining(
     slot: Pick<VolunteerSlot, 'capacity'>,
-    activeSignups: number,
+    activeSignups: number
 ): number {
     return Math.max(0, slot.capacity - activeSignups);
 }

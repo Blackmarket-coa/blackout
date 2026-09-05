@@ -18,8 +18,16 @@ import {
 } from '../services/governanceStore';
 import type { FeatureModule } from './types';
 
+const PROPOSAL_SCOPES = ['community', 'platform'] as const;
+
 const proposalSchema = z.object({
     communityId: z.string().min(1),
+    /**
+     * What is being decided. Defaults to `community` so every existing caller
+     * keeps its current meaning; `platform` marks a proposed change to Blackout
+     * itself so those can be found across communities.
+     */
+    scope: z.enum(PROPOSAL_SCOPES).default('community'),
     // `proposerId` is derived from the authenticated session, never trusted from
     // the body. Accepted-but-ignored for backwards compatibility with callers
     // that still send it.
@@ -108,7 +116,7 @@ function createGovernanceRouter() {
 
         const parsed = await readJsonBody(c, proposalSchema);
         if (parsed instanceof Response) return parsed;
-        const { communityId, title, description } = parsed;
+        const { communityId, scope, title, description } = parsed;
         const options = parsed.options ?? [
             { id: 'yes', label: 'Yes' },
             { id: 'no', label: 'No' },
@@ -129,12 +137,13 @@ function createGovernanceRouter() {
             requiresQuorum: 50,
             durationHours,
             status: 'active',
+            scope,
         });
 
         const event = emitDomainEvent({
             module: 'governance',
             type: 'governance.proposal.created',
-            payload: { proposalId: proposal.id, communityId },
+            payload: { proposalId: proposal.id, communityId, scope },
         });
 
         return c.json({ ...proposal, event }, 201);
@@ -192,6 +201,50 @@ function createGovernanceRouter() {
             payload: { voteId, userId, choice: normalizedChoice },
         });
         return c.json({ success: true, tally, event });
+    });
+
+    /**
+     * List proposals, newest first.
+     *
+     * There was no list endpoint at all before this — only fetch-by-id — so a
+     * platform proposal could be raised and then found by nobody. Filterable by
+     * `scope` (the point: platform changes are cross-community by nature and
+     * cannot be found by walking communities) and by `communityId`.
+     *
+     * Registered before `/proposals/:proposalId` so the literal path is not
+     * captured by the param route.
+     */
+    governance.get('/proposals', (c) => {
+        const denied = requireDomainCapability(c, 'governance', 'read');
+        if (denied) return denied;
+
+        const scope = c.req.query('scope');
+        if (scope && !(PROPOSAL_SCOPES as readonly string[]).includes(scope)) {
+            return c.json(
+                {
+                    code: 'invalid_request',
+                    message: `scope must be one of ${PROPOSAL_SCOPES.join(', ')}`,
+                },
+                400
+            );
+        }
+        const communityId = c.req.query('communityId');
+        const status = c.req.query('status');
+
+        const proposals = [...db.votes.values()]
+            .filter((vote) => {
+                // Rows written before the scope column default to community —
+                // treat a missing value as such rather than dropping them.
+                const voteScope = vote.scope ?? 'community';
+                if (scope && voteScope !== scope) return false;
+                if (communityId && vote.communityId !== communityId) return false;
+                if (status && vote.status !== status) return false;
+                return true;
+            })
+            .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+            .map((vote) => ({ ...vote, scope: vote.scope ?? 'community' }));
+
+        return c.json({ proposals });
     });
 
     governance.get('/proposals/:proposalId', (c) => {

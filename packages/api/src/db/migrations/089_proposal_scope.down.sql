@@ -1,0 +1,2 @@
+DROP INDEX IF EXISTS idx_votes_scope;
+ALTER TABLE votes DROP COLUMN IF EXISTS scope;

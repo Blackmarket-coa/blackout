@@ -762,6 +762,16 @@ export interface VoteRecord {
     requiresQuorum: number;
     durationHours: number;
     status: 'active' | 'closed' | 'passed' | 'failed';
+    /**
+     * What the proposal decides. `community` (the default, and every proposal
+     * that predates this field) changes something about the proposing
+     * community; `platform` proposes a change to Blackout itself.
+     *
+     * A platform proposal is still raised inside a community — `communityId`
+     * stays a real, FK-valid community — because someone has to convene it.
+     * The scope says what is being decided, not who is deciding.
+     */
+    scope?: 'community' | 'platform';
     startsAt: string;
     endsAt: string;
     createdAt: string;

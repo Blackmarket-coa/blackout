@@ -59,9 +59,16 @@ export const CircleFeed = ({ viewerId, displayNameFor }: CircleFeedProps) => {
             ]);
             setItems(feed.items);
             setCircleSize(feed.circleSize);
+            // Which items you have already Boosted is an enrichment: it only
+            // decides whether a card's button reads Boost or Un-boost. The
+            // `.catch` above covers a failed request, but a 200 whose body is
+            // not the expected shape used to throw here — inside the try — and
+            // surface a raw `reading 'filter'` TypeError as the feed's error
+            // message, over a feed that had in fact loaded fine.
+            const myRelays = Array.isArray(mine?.relays) ? mine.relays : [];
             setMyRelayBySubject(
                 new Map(
-                    mine.relays
+                    myRelays
                         .filter((relay) => relay.active)
                         .map((relay) => [`${relay.subjectSource}:${relay.subjectId}`, relay.id])
                 )
