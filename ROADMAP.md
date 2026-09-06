@@ -34,3 +34,14 @@ The cooperative-economic substrate lives in the FBM repository at
 tracked in `FEATURE_BUILD_PLAN.md` and `docs/VENDOR_PORTAL_PROJECT_TRACKER.md`
 in that repository. The unified operations guide above sequences and frames
 those tracker artifacts; it does not replace them.
+
+Three items in FBM's `docs/CDFI_COOP_ROADMAP.md` name Blackout-side work and
+are recorded there rather than duplicated here: exporting a den founding
+document (the SELC/USFWC/CFL seeds in
+`apps/blackout-client/src/app/features/documents/templates/`) as a file a
+vendor can upload to FBM's document vault (§3.4); the Grove playbook's
+`FBM-HOUR` onboarding grant, which has no FBM counterpart until the time-bank
+rail is lit (§3.10); and a mutual-aid event pair on the FBM→Blackout webhook
+contract so aid boards can mirror FBM asks (§3.8). The legal review of the
+four seed templates, already noted in `templates/index.ts` as a parallel
+content task, needs an owner.
