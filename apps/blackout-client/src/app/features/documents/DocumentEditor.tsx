@@ -1,10 +1,9 @@
 import { useCallback, useState } from 'react';
 import { useAtomValue } from 'jotai';
 import { userIdAtom } from '../../state/auth';
-import {
-    type DenDocumentModel,
-    useUpsertDocument,
-} from './useDenDocuments';
+import { type DenDocumentModel, useUpsertDocument } from './useDenDocuments';
+import { documentProvenance, noncommercialNotice } from './documentProvenance';
+import { downloadDocument } from './documentExport';
 
 /**
  * Lightweight markdown editor for a single founding document.
@@ -54,6 +53,20 @@ const styles = {
         padding: '6px 10px',
     } as const,
     meta: { fontSize: 12, color: 'var(--text-secondary)' } as const,
+    attribution: {
+        fontSize: 12,
+        color: 'var(--text-secondary)',
+        margin: 0,
+    } as const,
+    licenseWarning: {
+        fontSize: 12,
+        color: 'var(--text-primary)',
+        background: 'var(--bg-input)',
+        border: '1px solid var(--border-default)',
+        borderRadius: 8,
+        padding: '8px 10px',
+        margin: 0,
+    } as const,
 };
 
 export function DocumentEditor({ roomId, doc, onSaved }: DocumentEditorProps) {
@@ -65,6 +78,11 @@ export function DocumentEditor({ roomId, doc, onSaved }: DocumentEditorProps) {
     const [err, setErr] = useState<string | null>(null);
 
     const dirty = title !== doc.title || body !== doc.body;
+
+    // Resolved from `derivedFromTemplateId`, not stored on the document — see
+    // `documentProvenance`. Null for a document authored from scratch.
+    const provenance = documentProvenance(doc);
+    const licenseWarning = noncommercialNotice(provenance);
 
     const save = useCallback(async () => {
         if (!myUserId) {
@@ -121,12 +139,36 @@ export function DocumentEditor({ roomId, doc, onSaved }: DocumentEditorProps) {
                 style={styles.textarea}
                 aria-label="Document body (markdown)"
             />
+            {provenance && (
+                <p style={styles.attribution} data-testid={`document-attribution-${doc.docId}`}>
+                    {provenance.attribution}
+                </p>
+            )}
+            {licenseWarning && (
+                <p
+                    style={styles.licenseWarning}
+                    data-testid={`document-license-warning-${doc.docId}`}
+                >
+                    {licenseWarning}
+                </p>
+            )}
             {err && (
                 <p role="alert" style={{ color: 'var(--danger, #EF5350)', fontSize: 12 }}>
                     {err}
                 </p>
             )}
             <div style={styles.btnRow}>
+                <button
+                    type="button"
+                    style={{ ...styles.btn, marginRight: 'auto' }}
+                    // Current editor state, not the saved document: what you
+                    // see is what you get, including unsaved edits.
+                    onClick={() => downloadDocument({ ...doc, title, body })}
+                    data-testid={`document-export-${doc.docId}`}
+                    title="Download this document as a Markdown file"
+                >
+                    Export .md
+                </button>
                 <button
                     type="button"
                     style={styles.btn}
