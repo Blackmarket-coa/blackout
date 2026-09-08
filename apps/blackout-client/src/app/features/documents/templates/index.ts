@@ -17,6 +17,26 @@
 
 import type { PlaybookId } from '@blackout/protocol';
 
+/**
+ * The upstream licence a seed was adapted under.
+ *
+ * Structured rather than left inside the attribution sentence because one of
+ * these matters operationally: `mutual-aid-agreement-cfl` is CC BY-NC, and a
+ * co-op that trades is a commercial entity. Whether adopting an NC-licensed
+ * seed as your own internal agreement counts as commercial use is exactly the
+ * kind of question the legal review recorded below has to answer — so the flag
+ * is surfaced to the reader rather than buried in prose, and the UI says to
+ * check it rather than pretending to resolve it.
+ */
+export interface DocumentTemplateLicense {
+    /** Short code as published by the upstream library. */
+    code: 'CC BY-SA' | 'CC BY-NC';
+    /** True when the licence restricts commercial use. */
+    noncommercial: boolean;
+    /** The library the seed was adapted from. */
+    source: string;
+}
+
 export interface DocumentTemplate {
     /** Stable id used as `derivedFromTemplateId` on the seeded doc. */
     id: string;
@@ -24,7 +44,24 @@ export interface DocumentTemplate {
     body: string;
     /** Source attribution + license note for the reveal screen. */
     attribution: string;
+    license: DocumentTemplateLicense;
 }
+
+const LICENSE_SELC: DocumentTemplateLicense = {
+    code: 'CC BY-SA',
+    noncommercial: false,
+    source: 'SELC Legal Resource Library',
+};
+const LICENSE_USFWC: DocumentTemplateLicense = {
+    code: 'CC BY-SA',
+    noncommercial: false,
+    source: 'USFWC worker-co-op bylaws templates',
+};
+const LICENSE_CFL: DocumentTemplateLicense = {
+    code: 'CC BY-NC',
+    noncommercial: true,
+    source: 'Center for Family Life parent-coop documents',
+};
 
 const ATTRIB_SELC = 'Seed adapted from the SELC Legal Resource Library (CC BY-SA).';
 const ATTRIB_USFWC = 'Seed adapted from USFWC worker-co-op bylaws templates (CC BY-SA).';
@@ -62,6 +99,7 @@ const BYLAWS_SELC: DocumentTemplate = {
         '*Adapted from the SELC Legal Resource Library. Replace this paragraph with your own.*',
     ].join('\n'),
     attribution: ATTRIB_SELC,
+    license: LICENSE_SELC,
 };
 
 const MISSION_USFWC: DocumentTemplate = {
@@ -85,6 +123,7 @@ const MISSION_USFWC: DocumentTemplate = {
         '*Adapted from USFWC worker-co-op bylaws templates.*',
     ].join('\n'),
     attribution: ATTRIB_USFWC,
+    license: LICENSE_USFWC,
 };
 
 const DECISION_RULES_USFWC: DocumentTemplate = {
@@ -111,6 +150,7 @@ const DECISION_RULES_USFWC: DocumentTemplate = {
         '*Adapted from USFWC worker-co-op bylaws templates.*',
     ].join('\n'),
     attribution: ATTRIB_USFWC,
+    license: LICENSE_USFWC,
 };
 
 const MUTUAL_AID_AGREEMENT_CFL: DocumentTemplate = {
@@ -139,6 +179,7 @@ const MUTUAL_AID_AGREEMENT_CFL: DocumentTemplate = {
         '*Adapted from the Center for Family Life parent-coop documents.*',
     ].join('\n'),
     attribution: ATTRIB_CFL,
+    license: LICENSE_CFL,
 };
 
 export const DOCUMENT_TEMPLATES = {
@@ -168,9 +209,7 @@ const SEEDS: Record<PlaybookId, ReadonlyArray<DocumentTemplateId>> = {
     stream: ['mission-usfwc', 'decision-rules-usfwc'],
 };
 
-export function seedDocumentsForPlaybook(
-    playbookId: PlaybookId,
-): ReadonlyArray<DocumentTemplate> {
+export function seedDocumentsForPlaybook(playbookId: PlaybookId): ReadonlyArray<DocumentTemplate> {
     const ids = SEEDS[playbookId] ?? [];
     return ids.map((id) => DOCUMENT_TEMPLATES[id]);
 }

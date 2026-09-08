@@ -36,10 +36,22 @@ in that repository. The unified operations guide above sequences and frames
 those tracker artifacts; it does not replace them.
 
 Three items in FBM's `docs/CDFI_COOP_ROADMAP.md` name Blackout-side work and
-are recorded there rather than duplicated here: exporting a den founding
-document (the SELC/USFWC/CFL seeds in
-`apps/blackout-client/src/app/features/documents/templates/`) as a file a
-vendor can upload to FBM's document vault (§3.4); the Grove playbook's
+are recorded there rather than duplicated here. **The first shipped on
+2026-09-08**: a den founding document now exports as a Markdown file a vendor
+can upload to FBM's document vault as a `governing_document` (§3.4), the seed
+`attribution` and its licence are rendered in the editor rather than only
+living in the template data, and the Documents tab gained a way to add a
+document — which a Circle or Grove needed, because `SEEDS` gives bylaws to
+Workshop, Commons, Local, Confluence and Order but not to those two, so a
+circle that later decided to incorporate had no route to bylaws inside the
+tool built for it. Markdown rather than PDF: the bodies are already Markdown,
+it needs no rendering dependency, and a document whose purpose is to be
+amended should arrive editable. Two things surfaced while doing it — the
+reveal copy already claimed users "can author documents from scratch in the
+Documents tab", which was untrue until now; and the mutual-aid seed is
+CC BY-NC, so the editor now says so and tells a trading co-op to raise it with
+the legal review rather than pretending to resolve whether that counts as
+commercial use. Still open: the Grove playbook's
 `FBM-HOUR` onboarding grant, which has no FBM counterpart until the time-bank
 rail is lit (§3.10 — the reveal copy was softened on 2026-09-07 to say the
 grant is planned rather than credited; the grant amount, the `FBM-HOUR` name
