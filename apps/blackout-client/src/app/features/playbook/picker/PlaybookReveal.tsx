@@ -14,10 +14,7 @@ import {
     color,
     config,
 } from 'folds';
-import {
-    PLAYBOOK_CATALOG,
-    type PlaybookId,
-} from '@blackout/protocol';
+import { PLAYBOOK_CATALOG, type PlaybookId } from '@blackout/protocol';
 import { createPlaybookPayload } from '../../../../lib/bmc-core';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { useAlive } from '../../../hooks/useAlive';
@@ -116,8 +113,8 @@ export function PlaybookReveal({
                         derivedFromTemplateId: template.id,
                         lastEditorId: me,
                         editedAt: seededAt,
-                    }),
-                ),
+                    })
+                )
             );
         }
 
@@ -156,10 +153,19 @@ export function PlaybookReveal({
     const onDomainChange = (evt: React.ChangeEvent<HTMLTextAreaElement>) =>
         setEditedDomain(evt.currentTarget.value);
 
+    /**
+     * The onboarding grant is a plan, not a balance. It lives in client den
+     * state with no server route and no ledger behind it: FBM's hours rail
+     * (`HRS`, closed-loop, member-to-member) has no provisioning path and no
+     * opening-balance writer, so nothing can credit a den today. The sentence
+     * says so rather than promising a kitty that is not there. See FBM's
+     * `docs/CDFI_COOP_ROADMAP.md` §3.10 — the unit name is settled there too,
+     * when the rail is lit.
+     */
     const grantSentence = useMemo(() => {
         const grant = entry.onboardingCreditGrant;
         if (!grant) return null;
-        return `Your new ${BLACKOUT_TERMS.den.singular} starts with ${grant.amount} ${grant.currency} in its kitty.`;
+        return `Once the shared hours ledger is switched on, this ${BLACKOUT_TERMS.den.singular} is set to open with ${grant.amount} ${grant.currency} in its kitty. Nothing is credited yet.`;
     }, [entry.onboardingCreditGrant]);
 
     return (
@@ -188,8 +194,8 @@ export function PlaybookReveal({
                     </Text>
                 )}
                 <Text size="T200" priority="300">
-                    Every {BLACKOUT_TERMS.den.singular} starts as a 14-day try — you can commit, switch
-                    {' '}playbook, or revert anytime in that window.
+                    Every {BLACKOUT_TERMS.den.singular} starts as a 14-day try — you can commit,
+                    switch playbook, or revert anytime in that window.
                 </Text>
             </Box>
 

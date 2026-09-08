@@ -11,13 +11,13 @@ operations guide; it points at it.
 
 ## What lives where
 
-| Surface                                                | Path                                                                                              |
-|--------------------------------------------------------|---------------------------------------------------------------------------------------------------|
-| Milestone tiers, exit criteria, master progress tracker | [`docs/AGGRESSIVE_OPERATIONS_GUIDE.md`](docs/AGGRESSIVE_OPERATIONS_GUIDE.md)                       |
+| Surface                                                 | Path                                                                                                                       |
+| ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Milestone tiers, exit criteria, master progress tracker | [`docs/AGGRESSIVE_OPERATIONS_GUIDE.md`](docs/AGGRESSIVE_OPERATIONS_GUIDE.md)                                               |
 | Cross-repo consolidation decisions and roadmap          | `docs/REPO_CONSOLIDATION_REVIEW.md` in `Blackmarket-coa/free-black-market` (local: [`CONSOLIDATION.md`](CONSOLIDATION.md)) |
-| Single-server production runbook                        | [`infra/single-server-baseline/RUNBOOK.md`](infra/single-server-baseline/RUNBOOK.md)               |
-| SLO dashboards, on-call escalation, secrets break-glass | [`docs/operations/`](docs/operations/)                                                            |
-| Incident playbooks                                      | [`docs/runbooks/`](docs/runbooks/)                                                                |
+| Single-server production runbook                        | [`infra/single-server-baseline/RUNBOOK.md`](infra/single-server-baseline/RUNBOOK.md)                                       |
+| SLO dashboards, on-call escalation, secrets break-glass | [`docs/operations/`](docs/operations/)                                                                                     |
+| Incident playbooks                                      | [`docs/runbooks/`](docs/runbooks/)                                                                                         |
 
 ## Current focus
 
@@ -41,7 +41,10 @@ document (the SELC/USFWC/CFL seeds in
 `apps/blackout-client/src/app/features/documents/templates/`) as a file a
 vendor can upload to FBM's document vault (§3.4); the Grove playbook's
 `FBM-HOUR` onboarding grant, which has no FBM counterpart until the time-bank
-rail is lit (§3.10); and a mutual-aid event pair on the FBM→Blackout webhook
-contract so aid boards can mirror FBM asks (§3.8). The legal review of the
+rail is lit (§3.10 — the reveal copy was softened on 2026-09-07 to say the
+grant is planned rather than credited; the grant amount, the `FBM-HOUR` name
+and any ledger behind it still wait on FBM lighting the rail); and a
+mutual-aid event pair on the FBM→Blackout webhook contract so aid boards can
+mirror FBM asks (§3.8). The legal review of the
 four seed templates, already noted in `templates/index.ts` as a parallel
 content task, needs an owner.

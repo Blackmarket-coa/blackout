@@ -33,15 +33,10 @@ export const PLAYBOOK_IDS = [
     'order',
     'stream',
 ] as const;
-export type PlaybookId = (typeof PLAYBOOK_IDS)[number];
+export type PlaybookId = typeof PLAYBOOK_IDS[number];
 
-export const PLAYBOOK_STRUCTURES = [
-    'flat',
-    'hierarchical',
-    'federated',
-    'nested',
-] as const;
-export type PlaybookStructure = (typeof PLAYBOOK_STRUCTURES)[number];
+export const PLAYBOOK_STRUCTURES = ['flat', 'hierarchical', 'federated', 'nested'] as const;
+export type PlaybookStructure = typeof PLAYBOOK_STRUCTURES[number];
 
 export const PLAYBOOK_LEADERSHIPS = [
     'appointed',
@@ -53,19 +48,13 @@ export const PLAYBOOK_LEADERSHIPS = [
     'majority',
     'liquid',
 ] as const;
-export type PlaybookLeadership = (typeof PLAYBOOK_LEADERSHIPS)[number];
+export type PlaybookLeadership = typeof PLAYBOOK_LEADERSHIPS[number];
 
-export const PLAYBOOK_PHASES = [
-    'spring',
-    'summer',
-    'autumn',
-    'winter',
-    'compost',
-] as const;
-export type PlaybookPhase = (typeof PLAYBOOK_PHASES)[number];
+export const PLAYBOOK_PHASES = ['spring', 'summer', 'autumn', 'winter', 'compost'] as const;
+export type PlaybookPhase = typeof PLAYBOOK_PHASES[number];
 
 export const PLAYBOOK_MODES = ['trial', 'committed'] as const;
-export type PlaybookMode = (typeof PLAYBOOK_MODES)[number];
+export type PlaybookMode = typeof PLAYBOOK_MODES[number];
 
 /**
  * Feature flags derived from the playbook. The picker resolves these once at
@@ -152,7 +141,7 @@ export const PLAYBOOK_ACCENT_PALETTE = [
     'slate',
     'dusk',
 ] as const;
-export type PlaybookAccentToken = (typeof PLAYBOOK_ACCENT_PALETTE)[number];
+export type PlaybookAccentToken = typeof PLAYBOOK_ACCENT_PALETTE[number];
 
 /**
  * Default values for each playbook. The picker resolves answers to a playbook
@@ -221,7 +210,7 @@ export const PLAYBOOK_CATALOG: Readonly<Record<PlaybookId, PlaybookCatalogEntry>
         id: 'grove',
         name: 'Grove',
         description:
-            'A mutual-aid co-op exchanging time and care rather than cash. Decisions are by consent, with a steward circle rotating through. Your time-bank seeds the den with an onboarding grant.',
+            'A mutual-aid co-op exchanging time and care rather than cash. Decisions are by consent, with a steward circle rotating through. A time bank is planned to seed the den with an onboarding grant.',
         structure: 'nested',
         leadership: 'consent',
         accent: 'moss',
@@ -356,7 +345,4 @@ export const PLAYBOOK_PROTOCOL_SURFACE: PlaybookProtocolSurface = {
     policy: 'additive-only-minor',
 };
 
-export type DenPlaybookSet = EventEnvelope<
-    'blackout.den.playbook.set',
-    DenPlaybookPayload
->;
+export type DenPlaybookSet = EventEnvelope<'blackout.den.playbook.set', DenPlaybookPayload>;
