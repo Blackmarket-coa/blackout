@@ -524,8 +524,8 @@ per-user "wallet/rewards" room + persistence, which is a separate slice.
 
 ### §3.4 Mutual-aid mirror — the Coalition board, not a room
 
-Event types: `aid.request.opened | aid.request.fulfilled`. The one family in
-this set that does **not** post to a Matrix room: an ask from FBM's mutual-aid
+Event types: `aid.request.opened | aid.request.fulfilled | aid.request.closed`.
+The one family in this set that does **not** post to a Matrix room: an ask from FBM's mutual-aid
 board lands on `coalition_aid_posts`, which is the surface a member browses on
 the Coalition map.
 
@@ -555,9 +555,18 @@ own, so whatever crosses this seam is what the world sees.
 ```
 
 `requestId` is FBM's id for the request and the key the mirror upserts on:
-delivery is at-least-once, and `aid.request.fulfilled` for a request whose
-`opened` already arrived closes the row already on the board rather than posting
-a second copy of the same person's need.
+delivery is at-least-once, and a later event for a request whose `opened`
+already arrived updates the row already on the board rather than posting a
+second copy of the same person's need.
+
+An ask leaves the board three ways, so there are three types. `opened` is its
+arrival, `fulfilled` is help having actually landed, and `closed` covers the
+asker withdrawing it or its `needed_by` passing — `closed` carries FBM's own
+`status` (`WITHDRAWN` or `EXPIRED`) so the mirror can say which. Send `closed`
+whenever a request reaches either of those states; without it a withdrawn ask
+sits open here indefinitely and sends someone to help with something already
+handled. `fulfilled` pins the status rather than reading it off the wire, since
+that type means exactly one thing.
 
 Three mappings happen on arrival, all lossy in the safe direction:
 
@@ -606,7 +615,8 @@ placed cannot answer "within N km".
    4b. `aid.request.opened` carrying a `locality` and no coordinates appears on
    `GET /v1/coalition/mutual-aid`, is absent from the same call with
    `?lat&lng&radiusKm`, and a redelivery of the same `requestId` leaves exactly
-   one row on the board.
+   one row on the board. A following `aid.request.closed` with
+   `status: "WITHDRAWN"` marks that same row `cancelled` rather than adding one.
 5. All six entitlements endpoints (§4) return the OpenAPI shapes for a known MXID and `401`
    without a valid service token; `getGovernanceRoles` returns real `matrixAcls`.
 6. The §5 commerce endpoints return the documented shapes (Blackout's contract tests pass).

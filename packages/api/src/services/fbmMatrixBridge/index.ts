@@ -56,7 +56,9 @@ const ack = (alreadyProcessed: boolean): BridgeDispatchResult => ({
 });
 
 const isAidEvent = (event: FbmMatrixEvent): boolean =>
-    event.type === 'aid.request.opened' || event.type === 'aid.request.fulfilled';
+    event.type === 'aid.request.opened' ||
+    event.type === 'aid.request.fulfilled' ||
+    event.type === 'aid.request.closed';
 
 async function route(event: FbmMatrixEvent, matrix: FbmBridgeMatrixClient): Promise<void> {
     switch (event.type) {
@@ -110,6 +112,7 @@ async function route(event: FbmMatrixEvent, matrix: FbmBridgeMatrixClient): Prom
             return postCredits(event, matrix);
         case 'aid.request.opened':
         case 'aid.request.fulfilled':
+        case 'aid.request.closed':
             // The one family that writes to the Coalition board rather than a
             // Matrix room — the board is where a member reads a neighbour's ask.
             applyAidRequestEvent(event);

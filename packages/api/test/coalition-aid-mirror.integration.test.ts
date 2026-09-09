@@ -47,7 +47,7 @@ const openEvent = (over: Record<string, unknown> = {}) => ({
     ...over,
 });
 
-test('parseFbmMatrixEvent accepts the two aid types', () => {
+test('parseFbmMatrixEvent accepts all three aid types', () => {
     const parsed = parseFbmMatrixEvent(openEvent());
     assert.ok(parsed);
     assert.equal(parsed.type, 'aid.request.opened');
@@ -56,6 +56,11 @@ test('parseFbmMatrixEvent accepts the two aid types', () => {
         openEvent({ type: 'aid.request.fulfilled', status: 'FULFILLED' })
     );
     assert.equal(fulfilled?.type, 'aid.request.fulfilled');
+
+    const closed = parseFbmMatrixEvent(
+        openEvent({ type: 'aid.request.closed', status: 'WITHDRAWN' })
+    );
+    assert.equal(closed?.type, 'aid.request.closed');
 });
 
 test('parseFbmMatrixEvent rejects an aid event with nothing to key or read', () => {
@@ -114,6 +119,55 @@ test('the coordinate-less post round-trips through the store', () => {
     assert.equal(read.location, undefined);
     assert.equal(read.locality, 'Southwest Detroit');
     assert.equal(read.externalId, event.requestId);
+});
+
+test('aid.request.closed carries the reason the ask left the board', () => {
+    // Without this type an ask withdrawn on FBM sits open here indefinitely and
+    // sends someone to help with something already handled — the same harm the
+    // withdraw path exists to prevent.
+    const withdrawn = parseFbmMatrixEvent(
+        openEvent({ type: 'aid.request.closed', status: 'WITHDRAWN' })
+    );
+    assert.ok(withdrawn && 'requestId' in withdrawn);
+    assert.equal(buildMirroredAidPost(withdrawn, 'aidp_w').status, 'cancelled');
+
+    const lapsed = parseFbmMatrixEvent(
+        openEvent({ type: 'aid.request.closed', status: 'EXPIRED' })
+    );
+    assert.ok(lapsed && 'requestId' in lapsed);
+    assert.equal(buildMirroredAidPost(lapsed, 'aidp_e').status, 'expired');
+});
+
+test('a withdrawal closes the row already on the board', () => {
+    const payload = openEvent({ title: 'Withdrawn ask' });
+    const opened = parseFbmMatrixEvent(payload);
+    assert.ok(opened && 'requestId' in opened);
+    const first = applyAidRequestEvent(opened);
+    assert.equal(first.status, 'open');
+
+    const closed = parseFbmMatrixEvent({
+        ...payload,
+        eventId: 'evt_closed',
+        type: 'aid.request.closed',
+        status: 'WITHDRAWN',
+    });
+    assert.ok(closed && 'requestId' in closed);
+    const after = applyAidRequestEvent(closed);
+
+    assert.equal(after.id, first.id);
+    assert.equal(after.status, 'cancelled');
+    assert.equal(
+        db.listCoalitionAidPosts().filter((post) => post.externalId === opened.requestId).length,
+        1
+    );
+});
+
+test('a fulfilled event pins the status rather than trusting the wire', () => {
+    // `aid.request.fulfilled` means exactly one thing; a stale or wrong
+    // `status` field on it must not reopen an ask that was met.
+    const event = parseFbmMatrixEvent(openEvent({ type: 'aid.request.fulfilled', status: 'OPEN' }));
+    assert.ok(event && 'requestId' in event);
+    assert.equal(buildMirroredAidPost(event, 'aidp_f').status, 'fulfilled');
 });
 
 test('a redelivered event updates the same row instead of stacking a copy', () => {

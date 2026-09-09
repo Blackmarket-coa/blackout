@@ -239,9 +239,16 @@ export interface FbmCreditsEvent extends FbmMatrixEventBase {
  *
  * That projection also does not carry `urgency`, so a mirrored post takes the
  * schema's `medium` rather than a guess.
+ *
+ * Three types, because an ask leaves the board three ways. `opened` is its
+ * arrival, `fulfilled` is help having actually landed, and `closed` covers the
+ * asker taking it down or its date passing — carrying FBM's own status so the
+ * mirror can say which. Without the third, an ask withdrawn on FBM would sit
+ * open here indefinitely and send someone to help with something already
+ * handled, which is the same harm the withdraw path exists to prevent.
  */
 export interface FbmAidRequestEvent extends FbmMatrixEventBase {
-    type: 'aid.request.opened' | 'aid.request.fulfilled';
+    type: 'aid.request.opened' | 'aid.request.fulfilled' | 'aid.request.closed';
     /** FBM's id for the request. Stable, and the key the mirror upserts on. */
     requestId: string;
     title: string;
@@ -322,6 +329,7 @@ const FBM_MATRIX_EVENT_TYPES: ReadonlySet<string> = new Set<FbmMatrixEventType>(
     'credits.adjusted',
     'aid.request.opened',
     'aid.request.fulfilled',
+    'aid.request.closed',
 ]);
 
 const ORDER_STATUSES: ReadonlySet<string> = new Set<FbmOrderStatus>([
@@ -726,7 +734,8 @@ export function parseFbmMatrixEvent(payload: unknown): FbmMatrixEvent | null {
             };
         }
         case 'aid.request.opened':
-        case 'aid.request.fulfilled': {
+        case 'aid.request.fulfilled':
+        case 'aid.request.closed': {
             const requestId = str(payload, 'requestId');
             const title = str(payload, 'title');
             const description = str(payload, 'description');

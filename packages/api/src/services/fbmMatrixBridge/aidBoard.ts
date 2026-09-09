@@ -72,6 +72,12 @@ export function mapAidStatus(raw: string | undefined): AidPostStatus {
 /**
  * Build the board row for a mirrored ask.
  *
+ * `aid.request.fulfilled` pins the status rather than trusting the wire, since
+ * that type means exactly one thing. `opened` and `closed` both carry FBM's own
+ * status and are mapped — `closed` is how a withdrawal or a lapsed date reaches
+ * the board, and mapping it is what stops a mirrored ask sitting open here after
+ * the person took it down.
+ *
  * `location` is absent, not a zeroed pin: the projection carried no
  * coordinates, and a `{0, 0}` would put every mirrored need in the Gulf of
  * Guinea. `displayRadiusMeters` is 0 for the same reason — there is no centre
