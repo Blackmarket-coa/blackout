@@ -1,26 +1,26 @@
 {
-  "name": "@blackout/blackout-gov",
-  "version": "0.0.1",
-  "private": true,
-  "description": "Blackout governance client (Element fork migration shell)",
-  "type": "module",
-  "scripts": {
-    "build": "tsc --build",
-    "build:web": "vite build",
-    "dev": "vite",
-    "lint": "tsc --noEmit",
-    "test": "vitest run",
-    "clean": "rimraf dist",
-    "preview": "vite preview --host 0.0.0.0 --port 4174"
-  },
-  "dependencies": {
-    "@blackout/core": "workspace:*",
-    "@blackout/design": "workspace:*",
-    "@blackout/ui": "workspace:*"
-  },
-  "devDependencies": {
-    "typescript": "5.9.3",
-    "vite": "7.3.2",
-    "vitest": "^3.2.4"
-  }
+    "name": "@blackout/blackout-gov",
+    "version": "0.0.1",
+    "private": true,
+    "description": "Blackout governance client (Element fork migration shell)",
+    "type": "module",
+    "scripts": {
+        "build": "tsc --build",
+        "build:web": "vite build",
+        "dev": "vite",
+        "lint": "tsc --noEmit",
+        "test": "vitest run",
+        "clean": "rimraf dist",
+        "preview": "vite preview --host 0.0.0.0 --port 4174"
+    },
+    "dependencies": {
+        "@blackout/core": "workspace:*",
+        "@blackout/design": "workspace:*",
+        "@blackout/ui": "workspace:*"
+    },
+    "devDependencies": {
+        "typescript": "5.9.3",
+        "vite": "7.3.2",
+        "vitest": "^4.1.11"
+    }
 }

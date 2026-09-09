@@ -1,5 +1,10 @@
 import React, { useEffect, useRef } from 'react';
-import maplibregl, { type LngLatLike, type StyleSpecification } from 'maplibre-gl';
+// maplibre-gl 6 dropped the default export (the CRITICAL XSS bypass
+// CVE-2026-85061 is only fixed in 6.x). Every use here is namespace-style —
+// `maplibregl.Map`, `.Marker`, `.Popup`, `.LngLatBounds`, `.NavigationControl`
+// — so a namespace import is the whole migration.
+import * as maplibregl from 'maplibre-gl';
+import type { LngLatLike, StyleSpecification } from 'maplibre-gl';
 import { circleRingCoordinates } from '@blackout/core';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { buildCommunitiesPath } from '../../../pages/paths';
