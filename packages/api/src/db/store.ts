@@ -3223,6 +3223,42 @@ class InMemoryDb {
         return record;
     }
 
+    /** The row a given origin system's id already maps to, if any. */
+    findCoalitionAidPostByOrigin(
+        source: string,
+        externalId: string
+    ): CoalitionAidPostRecord | undefined {
+        return [...this.coalitionAidPosts.values()].find(
+            (post) => post.source === source && post.externalId === externalId
+        );
+    }
+
+    /**
+     * Write a post mirrored from another system, keyed by where it came from.
+     *
+     * Webhook delivery is at-least-once and the origin's own id is the only
+     * stable handle on the row, so a redelivery — or a later status change for
+     * the same request — has to land on the row already there rather than
+     * stacking a second copy of somebody's need onto the board. The local id
+     * and `createdAt` are preserved so anything already pointing at the post
+     * keeps working.
+     */
+    upsertCoalitionAidPostByOrigin(
+        input: Omit<CoalitionAidPostRecord, 'createdAt'> & {
+            source: string;
+            externalId: string;
+        }
+    ): CoalitionAidPostRecord {
+        const existing = this.findCoalitionAidPostByOrigin(input.source, input.externalId);
+        const record: CoalitionAidPostRecord = {
+            ...input,
+            id: existing?.id ?? input.id,
+            createdAt: existing?.createdAt ?? nowIso(),
+        };
+        this.coalitionAidPosts.set(record.id, record);
+        return record;
+    }
+
     // --- coalition events + RSVPs ---
 
     private static eventRsvpKey(eventId: string, userId: string): string {
@@ -6561,6 +6597,17 @@ export class FileBackedDb extends InMemoryDb {
         const created = super.createCoalitionAidPost(input);
         this.persist();
         return created;
+    }
+
+    override upsertCoalitionAidPostByOrigin(
+        input: Omit<CoalitionAidPostRecord, 'createdAt'> & {
+            source: string;
+            externalId: string;
+        }
+    ): CoalitionAidPostRecord {
+        const written = super.upsertCoalitionAidPostByOrigin(input);
+        this.persist();
+        return written;
     }
 
     override upsertCoalitionEvent(

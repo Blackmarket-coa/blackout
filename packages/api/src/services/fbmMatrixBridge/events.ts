@@ -227,6 +227,36 @@ export interface FbmCreditsEvent extends FbmMatrixEventBase {
     balance?: number;
 }
 
+/**
+ * A mutual-aid ask mirrored from FreeBlackMarket onto the Coalition board.
+ *
+ * The payload is exactly FBM's public projection of the row (`toPublicAid`),
+ * which is whitelist-only and emits a coarse `locality` and NEVER coordinates:
+ * a precise pair describes where a person in need actually lives, and Blackout's
+ * own `GET /v1/coalition/mutual-aid` publishes rows verbatim with no projection
+ * of its own. So whatever arrives here is what the world sees, and nothing that
+ * FBM withheld may be reconstructed on this side.
+ *
+ * That projection also does not carry `urgency`, so a mirrored post takes the
+ * schema's `medium` rather than a guess.
+ */
+export interface FbmAidRequestEvent extends FbmMatrixEventBase {
+    type: 'aid.request.opened' | 'aid.request.fulfilled';
+    /** FBM's id for the request. Stable, and the key the mirror upserts on. */
+    requestId: string;
+    title: string;
+    description: string;
+    /** FBM's own free-text category; mapped onto Blackout's closed set. */
+    category?: string;
+    /** FBM's AidRequestStatus, mapped onto Blackout's AidPostStatus. */
+    status?: string;
+    quantity?: number;
+    unitOfMeasure?: string;
+    /** Coarse place name — the only location that crosses this seam. */
+    locality?: string;
+    createdAt?: string;
+}
+
 export type FbmMatrixEvent =
     | FbmOrderCreatedEvent
     | FbmOrderUpdatedEvent
@@ -244,7 +274,8 @@ export type FbmMatrixEvent =
     | FbmLogisticsEvent
     | FbmFlashSaleEvent
     | FbmBarterEvent
-    | FbmCreditsEvent;
+    | FbmCreditsEvent
+    | FbmAidRequestEvent;
 
 export const logisticsKindFromType = (type: FbmLogisticsEvent['type']): FbmLogisticsEventKind =>
     type.slice('blackstar.'.length) as FbmLogisticsEventKind;
@@ -289,6 +320,8 @@ const FBM_MATRIX_EVENT_TYPES: ReadonlySet<string> = new Set<FbmMatrixEventType>(
     'credits.earned',
     'credits.spent',
     'credits.adjusted',
+    'aid.request.opened',
+    'aid.request.fulfilled',
 ]);
 
 const ORDER_STATUSES: ReadonlySet<string> = new Set<FbmOrderStatus>([
@@ -690,6 +723,28 @@ export function parseFbmMatrixEvent(payload: unknown): FbmMatrixEvent | null {
                 amount,
                 reason,
                 balance: num(payload, 'balance'),
+            };
+        }
+        case 'aid.request.opened':
+        case 'aid.request.fulfilled': {
+            const requestId = str(payload, 'requestId');
+            const title = str(payload, 'title');
+            const description = str(payload, 'description');
+            // A board entry with no id to key on, or nothing to read, is not a
+            // post — it is a row that would sit there saying nothing.
+            if (!requestId || !title || !description) return null;
+            return {
+                ...base,
+                type,
+                requestId,
+                title,
+                description,
+                category: str(payload, 'category'),
+                status: str(payload, 'status'),
+                quantity: num(payload, 'quantity'),
+                unitOfMeasure: str(payload, 'unitOfMeasure'),
+                locality: str(payload, 'locality'),
+                createdAt: str(payload, 'createdAt'),
             };
         }
         default:

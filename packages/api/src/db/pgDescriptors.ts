@@ -275,7 +275,9 @@ const OVERRIDES: Record<string, DescriptorOverride> = {
             updatedAt: row.updated_at,
         }),
     },
-    // coalition_aid_posts flattens the nested AidPost.location into lat/lng/address columns.
+    // coalition_aid_posts flattens the nested AidPost.location into lat/lng/address
+    // columns. Both coordinates are nullable since migration 090: a post mirrored
+    // from FreeBlackMarket carries a coarse `locality` and no pin at all.
     coalitionAidPosts: {
         toRow: (r) => {
             const loc = (r.location ?? {}) as {
@@ -290,9 +292,13 @@ const OVERRIDES: Record<string, DescriptorOverride> = {
                 category: r.category,
                 title: r.title,
                 description: r.description,
-                latitude: loc.latitude,
-                longitude: loc.longitude,
+                // Null, not undefined: a mirrored post has no coordinates at
+                // all, and the columns dropped their NOT NULL in migration 090
+                // precisely so it can be stored as it arrived.
+                latitude: loc.latitude ?? null,
+                longitude: loc.longitude ?? null,
                 address: loc.address ?? null,
+                locality: r.locality ?? null,
                 display_radius_meters: r.displayRadiusMeters,
                 urgency: r.urgency,
                 status: r.status,
@@ -300,6 +306,8 @@ const OVERRIDES: Record<string, DescriptorOverride> = {
                 fulfiller_id: r.fulfillerId ?? null,
                 fulfilled_at: r.fulfilledAt ?? null,
                 den_id: r.denId ?? null,
+                source: r.source ?? null,
+                external_id: r.externalId ?? null,
                 metadata: r.metadata ?? null,
                 created_at: r.createdAt,
             };
@@ -312,20 +320,28 @@ const OVERRIDES: Record<string, DescriptorOverride> = {
                 category: row.category,
                 title: row.title,
                 description: row.description,
-                location: {
-                    latitude: row.latitude,
-                    longitude: row.longitude,
-                    ...(row.address != null ? { address: row.address } : {}),
-                },
                 displayRadiusMeters: row.display_radius_meters,
                 urgency: row.urgency,
                 status: row.status,
                 createdAt: row.created_at,
             };
+            // `location` is present only when the row actually has a pin.
+            // Rebuilding it unconditionally would hand every consumer a
+            // {latitude: null, longitude: null} object that reads as located.
+            if (row.latitude != null && row.longitude != null) {
+                rec.location = {
+                    latitude: row.latitude,
+                    longitude: row.longitude,
+                    ...(row.address != null ? { address: row.address } : {}),
+                };
+            }
+            if (row.locality != null) rec.locality = row.locality;
             if (row.expires_at != null) rec.expiresAt = row.expires_at;
             if (row.fulfiller_id != null) rec.fulfillerId = row.fulfiller_id;
             if (row.fulfilled_at != null) rec.fulfilledAt = row.fulfilled_at;
             if (row.den_id != null) rec.denId = row.den_id;
+            if (row.source != null) rec.source = row.source;
+            if (row.external_id != null) rec.externalId = row.external_id;
             if (row.metadata != null) rec.metadata = row.metadata;
             return rec;
         },
