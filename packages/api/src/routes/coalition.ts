@@ -22,6 +22,7 @@ import {
     countActiveMembers,
     expandOccurrences,
     getKit,
+    hasCoordinates,
     isWithinRadiusMeters,
     nextOccurrence,
     showSchedule,
@@ -379,8 +380,15 @@ coalition.get('/mutual-aid', (c) => {
     let posts = listAidPosts({ denId });
     const nearby = parseNearby(c);
     if (nearby) {
-        posts = posts.filter((post) =>
-            isWithinRadiusMeters(post.location, nearby.viewer, nearby.radiusMeters)
+        // A post with no coordinates is *unknown*, not *outside* — a mirrored
+        // FreeBlackMarket ask carries a coarse locality and no pin. A radius
+        // query asks what is within N km, and an unplaceable post cannot
+        // answer it, so it is left out rather than guessed into the result.
+        // It is still on the unfiltered board with its locality.
+        posts = posts.filter(
+            (post) =>
+                hasCoordinates(post) &&
+                isWithinRadiusMeters(post.location, nearby.viewer, nearby.radiusMeters)
         );
     }
     return c.json({ posts });
@@ -458,7 +466,9 @@ coalition.get('/nearby', (c) => {
     // one pass over it covers those layers without double-counting listEvents.
     const signals = [
         ...listAidPosts({})
-            .filter((post) => post.status === 'open' && within(post.location))
+            .filter(
+                (post) => post.status === 'open' && hasCoordinates(post) && within(post.location)
+            )
             .map((post) => ({ kind: 'aid' as const, id: post.id, title: post.title })),
         ...listSellerLocations({ onlyVisible: true })
             .filter((location) => within(location.coordinates))

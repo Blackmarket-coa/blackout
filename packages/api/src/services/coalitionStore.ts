@@ -165,6 +165,24 @@ export function createAidPost(post: AidPost): AidPost {
     return db.createCoalitionAidPost(post);
 }
 
+/**
+ * Write a post mirrored from another system, keyed by (source, externalId).
+ *
+ * Separate from `createAidPost` on purpose: a mirror is not a local post and
+ * must never take the local path, which would mint a new row on every
+ * redelivery of an at-least-once webhook.
+ */
+export function upsertMirroredAidPost(
+    post: AidPost & { source: string; externalId: string }
+): AidPost {
+    return db.upsertCoalitionAidPostByOrigin(post);
+}
+
+/** The row an origin system's id already maps to, if any. */
+export function findMirroredAidPost(source: string, externalId: string): AidPost | undefined {
+    return db.findCoalitionAidPostByOrigin(source, externalId);
+}
+
 export function listSellerLocations(filter: { onlyVisible?: boolean } = {}): SellerLocation[] {
     return db.listSellerLocations(filter);
 }

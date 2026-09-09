@@ -13,7 +13,7 @@ import {
     type ApplyEventResult,
 } from '../marketplaceEntitlements';
 import { incrementCounter, logEvent } from '../marketplaceObservability';
-import { bridgeEnabled } from './config';
+import { aidMirrorEnabled, bridgeEnabled } from './config';
 import { defaultMatrixClient, type FbmBridgeMatrixClient } from './client';
 import type { FbmMatrixEvent } from './events';
 import {
@@ -35,6 +35,7 @@ import { openDisputeRoom, resolveDisputeRoom } from './disputeRooms';
 import { postLogistics } from './logisticsRooms';
 import { startFlashSale } from './flashMob';
 import { postBarter, postCredits } from './rewardRooms';
+import { applyAidRequestEvent } from './aidBoard';
 
 export interface FbmBridgeDeps {
     matrixClient?: FbmBridgeMatrixClient;
@@ -53,6 +54,11 @@ const ack = (alreadyProcessed: boolean): BridgeDispatchResult => ({
     status: 200,
     applied: { entitlement: null, licenseKey: null, alreadyProcessed },
 });
+
+const isAidEvent = (event: FbmMatrixEvent): boolean =>
+    event.type === 'aid.request.opened' ||
+    event.type === 'aid.request.fulfilled' ||
+    event.type === 'aid.request.closed';
 
 async function route(event: FbmMatrixEvent, matrix: FbmBridgeMatrixClient): Promise<void> {
     switch (event.type) {
@@ -104,6 +110,13 @@ async function route(event: FbmMatrixEvent, matrix: FbmBridgeMatrixClient): Prom
         case 'credits.spent':
         case 'credits.adjusted':
             return postCredits(event, matrix);
+        case 'aid.request.opened':
+        case 'aid.request.fulfilled':
+        case 'aid.request.closed':
+            // The one family that writes to the Coalition board rather than a
+            // Matrix room — the board is where a member reads a neighbour's ask.
+            applyAidRequestEvent(event);
+            return;
     }
 }
 
@@ -121,7 +134,12 @@ export async function dispatchFbmMatrixEvent(
         return ack(true);
     }
 
-    if (!bridgeEnabled()) {
+    // Per-family gate. `aid.request.*` writes to the Coalition board, not to a
+    // Matrix room, so it is neither held back by a Matrix rollout nor switched
+    // on by one — turning the bridge on must not silently start publishing
+    // other people's asks on the map.
+    const gateOpen = isAidEvent(event) ? aidMirrorEnabled() : bridgeEnabled();
+    if (!gateOpen) {
         markWebhookProcessed(provider.id, event.eventId);
         incrementCounter('fbm_matrix_bridge_skipped_total', { type: event.type });
         return ack(false);

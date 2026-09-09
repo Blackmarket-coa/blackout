@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+    aidPlaceLabel,
     deriveDisplayStatus,
+    hasCoordinates,
     isPostExpired,
     URGENCY_RANK,
     AID_POST_URGENCY,
@@ -139,5 +141,63 @@ describe('URGENCY_RANK', () => {
             expect(URGENCY_RANK[urgency]).toBeGreaterThan(0);
             expect(URGENCY_RANK[urgency]).toBeLessThanOrEqual(1);
         }
+    });
+});
+
+/**
+ * Posts mirrored from FreeBlackMarket arrive with a coarse place name and no
+ * coordinates: its board publishes a `locality` and never a pin, because a
+ * precise pair describes where a person in need actually lives. `location` is
+ * therefore optional, and these two helpers are what every reader uses instead
+ * of dereferencing it.
+ */
+describe('hasCoordinates', () => {
+    it('accepts a post with a real pair', () => {
+        expect(hasCoordinates(makePost())).toBe(true);
+    });
+
+    it('rejects a post with no location at all', () => {
+        const { location: _absent, ...rest } = makePost();
+        expect(hasCoordinates(rest as AidPost)).toBe(false);
+    });
+
+    it('rejects a non-finite pair rather than passing NaN downstream', () => {
+        // The map sorts by distance; a NaN comparator puts a pin in an
+        // arbitrary position rather than last.
+        expect(hasCoordinates(makePost({ location: { latitude: NaN, longitude: 0 } }))).toBe(false);
+        expect(
+            hasCoordinates(
+                makePost({
+                    location: {
+                        latitude: 0,
+                        longitude: Number.POSITIVE_INFINITY,
+                    },
+                })
+            )
+        ).toBe(false);
+    });
+
+    it('accepts a genuine zero, which is a real place', () => {
+        expect(hasCoordinates(makePost({ location: { latitude: 0, longitude: 0 } }))).toBe(true);
+    });
+});
+
+describe('aidPlaceLabel', () => {
+    it('prefers the coarse locality a mirrored post came with', () => {
+        expect(aidPlaceLabel(makePost({ locality: 'Southwest Detroit' }))).toBe(
+            'Southwest Detroit'
+        );
+    });
+
+    it('falls back to a local post’s address', () => {
+        expect(
+            aidPlaceLabel(
+                makePost({ location: { latitude: 0, longitude: 0, address: '5th & Vine' } })
+            )
+        ).toBe('5th & Vine');
+    });
+
+    it('returns null rather than inventing a placeholder', () => {
+        expect(aidPlaceLabel(makePost())).toBeNull();
     });
 });

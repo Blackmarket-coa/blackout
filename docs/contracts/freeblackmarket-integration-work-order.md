@@ -522,6 +522,69 @@ occurredAt }`.
 **Follow-up:** non-order participation XP (rewards not tied to an order) needs a
 per-user "wallet/rewards" room + persistence, which is a separate slice.
 
+### §3.4 Mutual-aid mirror — the Coalition board, not a room
+
+Event types: `aid.request.opened | aid.request.fulfilled | aid.request.closed`.
+The one family in this set that does **not** post to a Matrix room: an ask from FBM's mutual-aid
+board lands on `coalition_aid_posts`, which is the surface a member browses on
+the Coalition map.
+
+The payload is exactly FBM's public projection of the row (`toPublicAid`) — a
+whitelist that emits a coarse `locality` and **never** coordinates, because a
+precise pair describes where a person in need actually lives. Do not add
+latitude/longitude to this family. Blackout's own
+`GET /v1/coalition/mutual-aid` publishes rows verbatim with no projection of its
+own, so whatever crosses this seam is what the world sees.
+
+```jsonc
+// POST /v1/marketplace/stub/fbm-event/aid.request.opened
+{
+    "eventId": "aid-evt-1",
+    "type": "aid.request.opened",
+    "occurredAt": "2026-09-08T12:00:00Z",
+    "requestId": "mar_1",
+    "title": "Ride to a dialysis appointment",
+    "description": "Tuesdays and Thursdays, 8am",
+    "category": "transport",
+    "status": "OPEN",
+    "quantity": null,
+    "unitOfMeasure": null,
+    "locality": "Southwest Detroit",
+    "createdAt": "2026-09-08T11:00:00Z"
+}
+```
+
+`requestId` is FBM's id for the request and the key the mirror upserts on:
+delivery is at-least-once, and a later event for a request whose `opened`
+already arrived updates the row already on the board rather than posting a
+second copy of the same person's need.
+
+An ask leaves the board three ways, so there are three types. `opened` is its
+arrival, `fulfilled` is help having actually landed, and `closed` covers the
+asker withdrawing it or its `needed_by` passing — `closed` carries FBM's own
+`status` (`WITHDRAWN` or `EXPIRED`) so the mirror can say which. Send `closed`
+whenever a request reaches either of those states; without it a withdrawn ask
+sits open here indefinitely and sends someone to help with something already
+handled. `fulfilled` pins the status rather than reading it off the wire, since
+that type means exactly one thing.
+
+Three mappings happen on arrival, all lossy in the safe direction:
+
+-   `category` is free text on the FBM side and a closed set of ten here.
+    Anything unrecognised becomes `other` — a wrong category is recoverable
+    where a missing post is not.
+-   `status` maps `OPEN → open`, `MATCHED → in_progress`, `FULFILLED →
+fulfilled`, `EXPIRED → expired`, `WITHDRAWN → cancelled` (Blackout has no
+    separate withdrawn state).
+-   `urgency` is **not** in FBM's projection, so a mirrored post takes `medium`
+    rather than a guess. Publishing an invented urgency on a board people read
+    when they need help is the wrong direction to be wrong in.
+
+A mirrored post has no coordinates, so it is not a map pin: the Coalition map
+lists it beneath the map with its locality, and a radius query (`?lat&lng&radiusKm`)
+leaves it out — unknown is not the same as outside, and a post that cannot be
+placed cannot answer "within N km".
+
 ---
 
 ## 7. Secrets & config to coordinate
@@ -534,6 +597,8 @@ per-user "wallet/rewards" room + persistence, which is a separate slice.
 | `FREEBLACKMARKET_API_PREFIX`     | FBM        | commerce API path prefix override (defaults to `/v1/integrations/blackout/commerce`) |
 | Entitlements **service token**   | FBM issues | Blackout → entitlements service bearer (§4)                                          |
 | Entitlements **base URL**        | FBM        | §4 service location                                                                  |
+| `FBM_MATRIX_BRIDGE_ENABLED`      | Blackout   | master gate for the §3/§6 room families; off by default                              |
+| `FBM_AID_MIRROR_ENABLED`         | Blackout   | gate for the §3.4 aid-board mirror, separate from the room gate; off by default      |
 
 ---
 
@@ -547,6 +612,11 @@ per-user "wallet/rewards" room + persistence, which is a separate slice.
    shapes for a real order and appear in the vendor rooms.
 4. `dispute.opened` / `dispute.resolved` and `subscription.activated` / `subscription.lapsed`
    are emitted with the §3 shapes.
+   4b. `aid.request.opened` carrying a `locality` and no coordinates appears on
+   `GET /v1/coalition/mutual-aid`, is absent from the same call with
+   `?lat&lng&radiusKm`, and a redelivery of the same `requestId` leaves exactly
+   one row on the board. A following `aid.request.closed` with
+   `status: "WITHDRAWN"` marks that same row `cancelled` rather than adding one.
 5. All six entitlements endpoints (§4) return the OpenAPI shapes for a known MXID and `401`
    without a valid service token; `getGovernanceRoles` returns real `matrixAcls`.
 6. The §5 commerce endpoints return the documented shapes (Blackout's contract tests pass).
@@ -558,6 +628,8 @@ per-user "wallet/rewards" room + persistence, which is a separate slice.
 
 -   Keep `eventId` stable across retries — it is the idempotency key on both sides.
 -   `userId` is the Blackout user id captured at account-link time; maintain that mapping.
+-   The §3.4 aid family carries no `userId` and no `vendorId` at all: FBM's projection
+    withholds `requester_id`, and mirrored rows are owned by `system:freeblackmarket`.
 -   Sign the raw body bytes you transmit (not a re-serialized copy) so the HMAC matches.
 -   The Blackout-side consumer contract details (timeouts, retry, cache-control) for §4 live in
     `docs/contracts/fbm-entitlements-consumer.md`; the wire schema in

@@ -6,7 +6,9 @@ import {
     AID_POST_URGENCY,
     SPATIAL_LAYER_DEFINITIONS,
     URGENCY_RANK,
+    aidPlaceLabel,
     deriveSpatialEventStatus,
+    hasCoordinates,
     haversineDistanceMeters,
     normalizeSpatialLayerKey,
     spatialHeatWeight,
@@ -502,6 +504,12 @@ export function MapTab({ scope, onOpenTool }: MapTabProps) {
         return [...filtered].sort((a, b) => edgeDistance(a, viewer) - edgeDistance(b, viewer));
     }, [allPins, temporalMode, nearby]);
 
+    // Mirrored asks have a place name and no pin, so they never reach `pins`.
+    // A "Near me" query cannot place them either — unknown is not the same as
+    // outside — so the server drops them from a radius fetch and the list is
+    // empty exactly then, which is the honest answer.
+    const unplaced = useMemo(() => unplacedAid(aidState.data?.posts ?? []), [aidState.data]);
+
     const nearbyCount = useMemo(() => {
         if (!nearby) return pins.length;
         const viewer = { latitude: nearby.lat, longitude: nearby.lng };
@@ -866,6 +874,55 @@ export function MapTab({ scope, onOpenTool }: MapTabProps) {
                             })}
                         </ul>
                     ) : null}
+                    {listExpanded && unplaced.length > 0 ? (
+                        <div style={{ marginTop: 6 }}>
+                            <span
+                                style={{
+                                    fontSize: 11,
+                                    color: 'var(--text-secondary)',
+                                }}
+                            >
+                                {unplaced.length} ask
+                                {unplaced.length === 1 ? '' : 's'} with a place name but no pin
+                            </span>
+                            <ul
+                                data-testid="coalition-map-unplaced-aid"
+                                style={{
+                                    listStyle: 'none',
+                                    margin: '4px 0 0',
+                                    padding: 0,
+                                    display: 'grid',
+                                    gap: 4,
+                                    maxHeight: mobile ? 100 : 140,
+                                    overflowY: 'auto',
+                                }}
+                            >
+                                {unplaced.map((post) => (
+                                    <li
+                                        key={`unplaced-${post.id}`}
+                                        style={{
+                                            border: '1px solid var(--border-default)',
+                                            borderRadius: 8,
+                                            background: 'var(--bg-surface)',
+                                            color: 'var(--text-primary)',
+                                            padding: '6px 8px',
+                                        }}
+                                    >
+                                        <strong style={{ fontSize: 12 }}>{post.title}</strong>
+                                        <span
+                                            style={{
+                                                marginLeft: 8,
+                                                fontSize: 11,
+                                                color: 'var(--text-secondary)',
+                                            }}
+                                        >
+                                            {post.subtitle}
+                                        </span>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    ) : null}
                 </div>
 
                 {/*
@@ -966,6 +1023,34 @@ function placePinFields(
     };
 }
 
+/**
+ * Asks that cannot go on the map at all.
+ *
+ * A post mirrored from FreeBlackMarket carries a coarse place name and no
+ * coordinates — its board publishes a locality and never a pin, because a
+ * precise pair describes where a person in need actually lives. There is
+ * nowhere honest to draw those, so they are listed under the map with the place
+ * name they did come with, the same way a story posted without a location stays
+ * off the pins and reachable from the reel.
+ */
+function unplacedAid(aid: AidPost[]): Array<{
+    id: string;
+    title: string;
+    subtitle: string;
+}> {
+    return aid
+        .filter((post) => !hasCoordinates(post))
+        .map((post) => {
+            const place = aidPlaceLabel(post);
+            const kind = post.type === 'need' ? 'Need' : 'Offer';
+            return {
+                id: post.id,
+                title: post.title,
+                subtitle: place ? `${kind} · ${place}` : `${kind} · no location given`,
+            };
+        });
+}
+
 interface PinSources {
     spatial: SpatialFeedItem[];
     aid: AidPost[];
@@ -1018,6 +1103,11 @@ function pinList({
         });
     }
     for (const post of aid) {
+        // A post mirrored from FreeBlackMarket carries a coarse locality and no
+        // coordinates at all — its board publishes a place name and never a
+        // pin. Reading `post.location.latitude` off one of those threw before
+        // the map ever rendered; they belong in `unplacedAidList` instead.
+        if (!hasCoordinates(post)) continue;
         pins.push({
             id: post.id,
             title: post.title,
