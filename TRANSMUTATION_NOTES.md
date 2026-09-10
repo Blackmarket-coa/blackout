@@ -75,19 +75,33 @@ already calls it migration residue. **Delete it or finish it** — a governance
 demo with invented participation numbers is the wrong thing to have lying
 around while the brief proposes governance as a recruitment mechanism.
 
-## 4. A live copy promise that is a safety claim
+## 4. ~~A live copy promise that is a safety claim~~ — fixed 2026-09-09
 
-`apps/blackout-client/src/app/features/home/widgets/premiumWidgets.tsx:21-22`
-renders "🟢 Anonymized transport (Tor) — active" under a heading that calls it
-"Live status", to paying users. `features/privacy-tools/useHardeningFeatures.ts:6-7`
-records that Tor transport and decoy traffic "remain planned", and
-`packages/blackout-sdk/src/hardening/entitlementGate.ts:9` says the same. There
-is no SOCKS or onion routing code in the repo.
+**Fixed in `blackout#903`.** Recorded here in full because the finding is the
+most serious one in this document and the fix is the shape future capabilities
+should follow.
 
-This is not a marketing overclaim like the others in the canonical document's
-§5.6a. It is a representation about network anonymity, made to people who may
-make decisions about what they say and to whom on the strength of it. **Change
-the copy before anything else in this file.**
+`premiumWidgets.tsx` rendered "🟢 Anonymized transport (Tor) — active" under a
+heading that called it "Live status", to paying users, while
+`features/privacy-tools/useHardeningFeatures.ts` and
+`packages/blackout-sdk/src/hardening/entitlementGate.ts` both recorded Tor
+transport and decoy traffic as planned, and no SOCKS or onion routing code
+existed anywhere in the repo. That is not a marketing overclaim like the ones
+in the canonical document's §5.6a. It is a representation about network
+anonymity, made to people who may decide what they say and to whom on the
+strength of it.
+
+The fix separates two questions the widget had conflated. **An entitlement
+says a plan grants a capability; it does not say the capability exists.**
+`HARDENING_CAPABILITY_IMPLEMENTED` now records which capabilities are actually
+built (`imagePerturbation: true`, `torTransport: false`, `decoyTraffic:
+false`), and `pulseState()` reads it before entitlement: an entitled but
+unbuilt capability reads "planned" (🔵) and can never read "active". Flipping
+a capability to `true` in that map is the one change that makes it claimable,
+so shipping the code and shipping the claim are the same commit.
+
+Tor and decoy traffic remain **unbuilt** — that has not changed, and the map
+is what now says so on the member's screen.
 
 ## 5. BO-1 is still the gating item for anything trust-critical
 
