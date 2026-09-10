@@ -184,9 +184,20 @@ export const ProposalCreator = ({
                             <option value="consent">Consent (🌱 / 🌾 / 🪨)</option>
                             <option value="binary">Binary</option>
                             <option value="multiple_choice">Multiple choice</option>
-                            <option value="ranked">Ranked</option>
+                            <option value="ranked">Ranked (Borda score)</option>
                         </Select>
                     </label>
+
+                    {draft.type === 'ranked' ? (
+                        <p style={{ margin: 0, fontSize: 12, color: 'var(--text-secondary)' }}>
+                            Ranked proposals are scored by position — a first preference on a ballot
+                            of n options scores n, the next n−1, and so on. That is Borda scoring,{' '}
+                            <strong>not</strong> instant-runoff: there are no elimination rounds, so
+                            a broadly-acceptable second favourite can beat an option that most
+                            people ranked first. Pick Multiple choice if you want the
+                            most-first-preferences option to win.
+                        </p>
+                    ) : null}
 
                     {draft.type === 'consent' ? (
                         <p style={{ margin: 0, fontSize: 12, color: 'var(--text-secondary)' }}>

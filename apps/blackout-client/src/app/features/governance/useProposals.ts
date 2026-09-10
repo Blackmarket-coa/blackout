@@ -16,6 +16,11 @@ import {
     type ConsentReaction,
     type ConsentTally,
 } from '../../../lib/bmc-core/consent';
+import {
+    deriveVoteStatus,
+    tallyProposalVotes,
+    type VoteProposalType,
+} from '../../../lib/bmc-core/proposalTally';
 
 export type ProposalOption = GovernanceProposalOption;
 export type ProposalContent = GovernanceProposalPayload;
@@ -85,8 +90,8 @@ export const useProposals = (roomId: string) => {
         const proposalEvents = Array.isArray(proposalEventsRaw)
             ? proposalEventsRaw
             : proposalEventsRaw
-              ? [proposalEventsRaw]
-              : [];
+            ? [proposalEventsRaw]
+            : [];
 
         let invalidProposalEvents = 0;
         let migratedProposalEvents = 0;
@@ -94,7 +99,7 @@ export const useProposals = (roomId: string) => {
         const proposals = proposalEvents
             .map((event) => {
                 const normalized = normalizeProposalEventContent(
-                    event.getContent<Record<string, unknown>>(),
+                    event.getContent<Record<string, unknown>>()
                 );
                 if (!normalized.data) {
                     invalidProposalEvents += 1;
@@ -203,16 +208,17 @@ export const useCastVote = (roomId: string) => {
     const actions = useMemo(
         () =>
             createGovernanceMatrixActions({
-                sendEvent: (rid, et, content) => client.sendEvent(rid, et as never, content as never),
+                sendEvent: (rid, et, content) =>
+                    client.sendEvent(rid, et as never, content as never),
                 sendStateEvent: (rid, et, content, stateKey) =>
                     client.sendStateEvent(rid, et as never, content as never, stateKey),
             }),
-        [client],
+        [client]
     );
 
     return useCallback(
         async (payload: VoteContent) => actions.castVote(roomId, payload),
-        [actions, roomId],
+        [actions, roomId]
     );
 };
 
@@ -227,7 +233,7 @@ export const useCastVote = (roomId: string) => {
  */
 export const useConsentReactions = (
     proposalId: string | null,
-    roomId: string,
+    roomId: string
 ): { data: ConsentReaction[]; loading: boolean; error: unknown } => {
     const timeline = useRoomTimeline(roomId);
 
@@ -299,7 +305,7 @@ export const useCastConsent = (roomId: string) => {
             // first-consent quest. Idempotent.
             void completeQuest('first-consent', roomId);
         },
-        [client, completeQuest, roomId],
+        [client, completeQuest, roomId]
     );
 };
 
@@ -310,7 +316,10 @@ export interface ProposalResultVote {
     expired: boolean;
     computedStatus: ProposalStatus;
     optionResults: Array<{ optionId: string; count: number }>;
+    /** The winning option, or null when nothing leads — no votes, or a dead heat. */
     leadingOptionId: string | null;
+    /** True when the top two options are level, so the vote selected nothing. */
+    tied: boolean;
     /** Discriminator so renderers can branch without re-checking `proposal.type`. */
     kind: 'vote';
 }
@@ -371,42 +380,38 @@ export const useProposalResult = (proposalId: string, roomId: string) => {
             };
         }
 
-        const byOption = new Map<string, number>();
-        proposal.options.forEach((option) => byOption.set(option.id, 0));
-
-        votes.data.forEach((vote) => {
-            if (typeof vote.choice === 'string') {
-                byOption.set(vote.choice, (byOption.get(vote.choice) ?? 0) + 1);
-                return;
-            }
-
-            vote.choice.forEach((choice, index) => {
-                const weight =
-                    proposal.type === 'ranked' ? Math.max(1, vote.choice.length - index) : 1;
-                byOption.set(choice, (byOption.get(choice) ?? 0) + weight);
-            });
+        // Tally and decision both live in `lib/bmc-core/proposalTally.ts`, next
+        // to the consent equivalents and testable without a Matrix room.
+        const voteType = proposal.type as VoteProposalType;
+        const tally = tallyProposalVotes({
+            type: voteType,
+            options: proposal.options,
+            votes: votes.data,
+            quorum: proposal.quorum,
         });
 
-        const voteCount = votes.data.length;
-        const quorumReached = voteCount >= proposal.quorum;
-
-        const ranked = [...byOption.entries()].sort((a, b) => b[1] - a[1]);
-        const top = ranked[0];
-
         let computedStatus: ProposalStatus = proposal.status;
-        if (proposal.status === 'active' && expired) {
-            computedStatus = quorumReached ? 'passed' : 'failed';
+        if (proposal.status === 'active') {
+            // Quorum is no longer the whole test: an option has to have won,
+            // and for a binary proposal it has to be the affirmative one.
+            computedStatus = deriveVoteStatus({
+                tally,
+                type: voteType,
+                options: proposal.options,
+                expired,
+            });
         }
 
         return {
             data: {
                 proposal,
-                voteCount,
-                quorumReached,
+                voteCount: tally.voteCount,
+                quorumReached: tally.quorumReached,
                 expired,
                 computedStatus,
-                optionResults: ranked.map(([optionId, count]) => ({ optionId, count })),
-                leadingOptionId: top?.[0] ?? null,
+                optionResults: tally.optionResults,
+                leadingOptionId: tally.leadingOptionId,
+                tied: tally.tied,
                 kind: 'vote',
             } satisfies ProposalResultVote,
             loading: proposals.loading || votes.loading,
@@ -431,11 +436,12 @@ export const useCreateProposal = (roomId: string) => {
     const actions = useMemo(
         () =>
             createGovernanceMatrixActions({
-                sendEvent: (rid, et, content) => client.sendEvent(rid, et as never, content as never),
+                sendEvent: (rid, et, content) =>
+                    client.sendEvent(rid, et as never, content as never),
                 sendStateEvent: (rid, et, content, stateKey) =>
                     client.sendStateEvent(rid, et as never, content as never, stateKey),
             }),
-        [client],
+        [client]
     );
 
     return useCallback(
@@ -443,7 +449,7 @@ export const useCreateProposal = (roomId: string) => {
             const stateKey = `proposal-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
             await actions.createProposal(roomId, content, stateKey);
         },
-        [actions, roomId],
+        [actions, roomId]
     );
 };
 
