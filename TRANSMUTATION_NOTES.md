@@ -23,10 +23,10 @@ against a `_port/` tree that is not in the checkout.
 What is real is proposal and vote code in four parallel implementations, which
 `CONSOLIDATION.md` already calls out for reconciliation onto one:
 
-- `packages/core/src/governance/index.ts` — `tallyVotes()`, reputation thresholds
-- `apps/blackout-client/src/app/features/governance/useProposals.ts`
-- `packages/api/src/modules/governance.ts`, mounted at `/governance`
-- `packages/blackout-protocol/src/governance/contracts.ts` — `co.bmc.proposal`, `co.bmc.vote`
+-   `packages/core/src/governance/index.ts` — `tallyVotes()`, reputation thresholds
+-   `apps/blackout-client/src/app/features/governance/useProposals.ts`
+-   `packages/api/src/modules/governance.ts`, mounted at `/governance`
+-   `packages/blackout-protocol/src/governance/contracts.ts` — `co.bmc.proposal`, `co.bmc.vote`
 
 All of it is scoped to a Matrix room. None of it is platform-scoped. FBM's
 `docs/MEMBER_GOVERNANCE.md` already records that coalition-wide member voting
@@ -38,13 +38,30 @@ document §5.4.
 
 ## 2. Two governance defects to fix before any surface says "democratic"
 
-- **No majority test.** `useProposals.ts:390-399` marks a proposal `passed` on
-  expiry if turnout met quorum. `leadingOptionId` is computed and discarded. A
-  binary proposal on which every vote was "against" passes. Consent is the one
-  method implemented correctly (`lib/bmc-core/consent.ts:140-143`).
-- **"Ranked" is Borda scoring, not instant-runoff.** `useProposals.ts:383-387`
-  weights by position with no elimination rounds. Either implement IRV or stop
-  calling it ranked choice.
+-   ~~**No majority test.**~~ **Fixed 2026-09-10.** `useProposals.ts` marked a
+    proposal `passed` on expiry if turnout met quorum; `leadingOptionId` was
+    computed and discarded, so a binary proposal on which every vote was
+    "against" passed. Turning out to vote a proposal down passed it.
+
+    The tally and the decision are now in `lib/bmc-core/proposalTally.ts`, beside
+    the consent equivalents — consent was the one method already implemented
+    correctly (`lib/bmc-core/consent.ts:140-143`) and it is the model. A proposal
+    must now clear two independent bars at its deadline: quorum, _and_ an option
+    actually winning. For a binary proposal the winner must be the affirmative
+    option, read by id (`yes`) rather than by position, since the creator lets a
+    proposer reorder those options but not rename their ids. A dead heat selects
+    nothing and reads as `failed`, the status union having no `tie` member.
+    Sixteen tests, none of which needed a Matrix room — which is the point of
+    extracting it.
+
+-   ~~**"Ranked" is Borda scoring, not instant-runoff.**~~ **Named honestly
+    2026-09-10.** Position weighting with no elimination rounds is Borda. Rather
+    than implement IRV — a bigger change than this pass, and arguably the wrong
+    default for a consent-first product — the vote-type selector now reads
+    "Ranked (Borda score)" and explains the consequence in the creator: a
+    broadly-acceptable second favourite can beat the option most people ranked
+    first. A test demonstrates exactly that outcome, so the copy cannot drift
+    from the arithmetic.
 
 ## 3. `apps/blackout-gov` is an inert shell
 
