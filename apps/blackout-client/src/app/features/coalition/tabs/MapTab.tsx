@@ -1,3 +1,17 @@
+/**
+ * The coalition aid board — the `AidPost` surface, and the only display
+ * consumer of it.
+ *
+ * Not to be confused with `features/deaddrop/MutualAidPage.tsx`, which
+ * renders Matrix dead-drop "mutual aid threads" and shares nothing with
+ * this but the phrase. D8-4 in FBM's `docs/AUDIT_DEBT.md` records the
+ * collision, because a reader looking for where a mirrored ask from FBM
+ * lands finds that file first and it is the wrong one.
+ *
+ * Asks and offers here are `AidPost` records from
+ * `packages/core/src/coalition/mutualAid.ts` — typed `need` or `offer`,
+ * categorised, urgency-ranked, and placed on the map by coordinates.
+ */
 import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAtom } from 'jotai';
 import {

@@ -1,3 +1,15 @@
+/**
+ * The coalition aid board: `AidPost` records — `need` or `offer`,
+ * categorised, urgency-ranked, placed by coordinates.
+ *
+ * This is the board FBM mirrors community asks into. Its one display
+ * consumer in the client is `features/coalition/tabs/MapTab.tsx`.
+ *
+ * It is **not** related to `features/deaddrop/MutualAidPage.tsx`, which
+ * renders Matrix dead-drop threads that happen to share the name. D8-4 in
+ * FBM's `docs/AUDIT_DEBT.md` records the collision; the two have no code,
+ * schema or lifecycle in common.
+ */
 export const AID_POST_TYPES = ['need', 'offer'] as const;
 export const AID_POST_CATEGORIES = [
     'food',
