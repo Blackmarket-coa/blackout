@@ -7,20 +7,49 @@
  */
 
 import type { ReactNode } from 'react';
-import { useHardeningFeatures } from '../../privacy-tools/useHardeningFeatures';
+import {
+    HARDENING_CAPABILITY_IMPLEMENTED,
+    useHardeningFeatures,
+    type HardeningCapability,
+} from '../../privacy-tools/useHardeningFeatures';
 import * as css from '../HomeFeed.css';
 
-function statusDot(on: boolean): string {
-    return on ? '🟢' : '⚪';
+type PulseState = 'active' | 'off' | 'planned';
+
+/**
+ * An entitlement says the plan grants a capability; it does not say the
+ * capability exists. Tor transport and decoy traffic are entitled and unbuilt,
+ * so an entitled-but-unimplemented row reads "planned" and never "active" —
+ * anonymized transport is a claim a member may act on. See
+ * HARDENING_CAPABILITY_IMPLEMENTED and TRANSMUTATION_NOTES.md §4.
+ */
+export function pulseState(entitled: boolean, capability: HardeningCapability): PulseState {
+    if (!HARDENING_CAPABILITY_IMPLEMENTED[capability]) {
+        return 'planned';
+    }
+    return entitled ? 'active' : 'off';
+}
+
+function statusDot(state: PulseState): string {
+    if (state === 'active') {
+        return '🟢';
+    }
+    return state === 'planned' ? '🔵' : '⚪';
 }
 
 /** Signal-tier: live status of the caller's privacy-hardening surface. */
 export function PrivacyPulseWidget(): ReactNode {
     const hardening = useHardeningFeatures();
-    const rows: Array<{ label: string; on: boolean }> = [
-        { label: 'Anonymized transport (Tor)', on: hardening.torTransport },
-        { label: 'Decoy cover traffic', on: hardening.decoyTraffic },
-        { label: 'Image perturbation', on: hardening.imagePerturbation },
+    const rows: Array<{ label: string; state: PulseState }> = [
+        {
+            label: 'Anonymized transport (Tor)',
+            state: pulseState(hardening.torTransport, 'torTransport'),
+        },
+        { label: 'Decoy cover traffic', state: pulseState(hardening.decoyTraffic, 'decoyTraffic') },
+        {
+            label: 'Image perturbation',
+            state: pulseState(hardening.imagePerturbation, 'imagePerturbation'),
+        },
     ];
     return (
         <section
@@ -41,10 +70,10 @@ export function PrivacyPulseWidget(): ReactNode {
                             color: 'var(--text-secondary)',
                         }}
                     >
-                        <span aria-hidden="true">{statusDot(row.on)}</span>
+                        <span aria-hidden="true">{statusDot(row.state)}</span>
                         <span>{row.label}</span>
                         <span style={{ marginLeft: 'auto', fontSize: 11 }}>
-                            {row.on ? 'active' : 'off'}
+                            {row.state}
                         </span>
                     </div>
                 ))}

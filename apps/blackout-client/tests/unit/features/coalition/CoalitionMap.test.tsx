@@ -115,7 +115,12 @@ vi.mock('maplibre-gl', () => {
             return mocks.mapInstance as unknown as Map;
         }
     }
-    return { default: { Map, Marker, LngLatBounds, NavigationControl, Popup } };
+    // maplibre-gl 6 exposes these as named exports and dropped the default
+    // one, so the mock has to match that shape or a namespace import sees an
+    // empty module. `default` is kept alongside for any consumer still
+    // importing it.
+    const api = { Map, Marker, LngLatBounds, NavigationControl, Popup };
+    return { ...api, default: api };
 });
 
 // eslint-disable-next-line import/first
