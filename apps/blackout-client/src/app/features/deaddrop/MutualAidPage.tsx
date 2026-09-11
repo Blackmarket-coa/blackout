@@ -1,3 +1,21 @@
+/**
+ * Dead-drop mutual-aid THREADS — not the coalition aid board.
+ *
+ * Two unrelated surfaces in this repo carry the name "mutual aid", and a
+ * reader looking for one reliably finds the other first (D8-4 in FBM's
+ * `docs/AUDIT_DEBT.md`). They share a phrase and nothing else:
+ *
+ * - **This file** renders Matrix dead-drop threads via the SDK's
+ *   `MutualAidThreadPayload`. It is conversation, scoped to a drop, and it
+ *   never touches `coalition_aid_posts`.
+ * - **`features/coalition/tabs/MapTab.tsx`** renders the coalition aid
+ *   board: `AidPost` records (`need`/`offer`, category, urgency, a location)
+ *   from `packages/core/src/coalition/mutualAid.ts`. That is the board FBM
+ *   mirrors asks into, and MapTab is its only display consumer.
+ *
+ * If you are looking for where a mirrored ask from FBM appears, it is
+ * MapTab, not here.
+ */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     filterActiveMutualAidThreads,

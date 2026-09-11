@@ -6,16 +6,16 @@
 
 ### Product goals
 
-- Extend Blackout (Element/Matrix fork) with governance, education, and mutual-aid workflows.
-- Keep Matrix rooms, accounts, and E2EE as the communication and identity backbone.
-- Preserve upstream compatibility by avoiding deep forks of Element core flows.
+-   Extend Blackout (Element/Matrix fork) with governance, education, and mutual-aid workflows.
+-   Keep Matrix rooms, accounts, and E2EE as the communication and identity backbone.
+-   Preserve upstream compatibility by avoiding deep forks of Element core flows.
 
 ### Engineering constraints
 
-- Client-first architecture (no mandatory custom backend).
-- Local-first shared state (offline edits + conflict-free merge).
-- Incremental rollout behind feature flags.
-- Reuse mature OSS logic where it reduces risk; avoid embedding heavy third-party UIs.
+-   Client-first architecture (no mandatory custom backend).
+-   Local-first shared state (offline edits + conflict-free merge).
+-   Incremental rollout behind feature flags.
+-   Reuse mature OSS logic where it reduces risk; avoid embedding heavy third-party UIs.
 
 ---
 
@@ -23,10 +23,10 @@
 
 This governance plan supports the broader Blackout strategic posture:
 
-- Keep governance participation frictionless to preserve value-first UX.
-- Reinforce privacy/decentralization credibility through self-host and federation-ready architecture choices.
-- Preserve category focus on cooperative governance + secure communication (avoid generalized productivity-suite sprawl).
-- Prioritize moat compounding in sequence: steganography adoption -> governance trust -> federation network effects -> inter-community voting.
+-   Keep governance participation frictionless to preserve value-first UX.
+-   Reinforce privacy/decentralization credibility through self-host and federation-ready architecture choices.
+-   Preserve category focus on cooperative governance + secure communication (avoid generalized productivity-suite sprawl).
+-   Prioritize moat compounding in sequence: steganography adoption -> governance trust -> federation network effects -> inter-community voting.
 
 ---
 
@@ -34,22 +34,22 @@ This governance plan supports the broader Blackout strategic posture:
 
 ### Reuse directly
 
-- **Yjs**: CRDT documents and subdocs.
-- **y-indexeddb**: offline persistence.
-- **libsodium** (or existing crypto wrappers): signatures and ballot encryption primitives.
-- **IPFS/Kubo (optional)**: content-addressed large file distribution.
+-   **Yjs**: CRDT documents and subdocs.
+-   **y-indexeddb**: offline persistence.
+-   **libsodium** (or existing crypto wrappers): signatures and ballot encryption primitives.
+-   **IPFS/Kubo (optional)**: content-addressed large file distribution.
 
 ### Reuse by extracting/porting logic
 
-- **Loomio**: proposal lifecycle and vote state transitions (logic only).
-- **Pol.is**: clustering/grouping algorithm concepts for large deliberations.
-- **DemocracyOS concepts**: delegation and vote-override behavior.
-- **Kanboard concepts**: lightweight task board state transitions.
+-   **Loomio**: proposal lifecycle and vote state transitions (logic only).
+-   **Pol.is**: clustering/grouping algorithm concepts for large deliberations.
+-   **DemocracyOS concepts**: delegation and vote-override behavior.
+-   **Kanboard concepts**: lightweight task board state transitions.
 
 ### Avoid embedding
 
-- Full Decidim/Loomio/Moodle/Snapshot/blockchain DAO stacks.
-- Any heavy external UI that duplicates Matrix client UX.
+-   Full Decidim/Loomio/Moodle/Snapshot/blockchain DAO stacks.
+-   Any heavy external UI that duplicates Matrix client UX.
 
 ---
 
@@ -85,15 +85,15 @@ src/
 
 ## 3.2 Matrix as source of coordination
 
-- Use Matrix room IDs as scope keys for all shared documents.
-- Persist per-room document metadata in Matrix state events (e.g. custom `im.blackout.doc`).
-- Continue using Matrix room membership for authorization boundaries.
+-   Use Matrix room IDs as scope keys for all shared documents.
+-   Persist per-room document metadata in Matrix state events (e.g. custom `im.blackout.doc`).
+-   Continue using Matrix room membership for authorization boundaries.
 
 ## 3.3 CRDT document model
 
-- One Y.Doc per high-level collaboration unit (proposal, study circle, task board).
-- Shared maps/arrays for deterministic object storage and audit metadata.
-- IndexedDB persistence enabled by default; optional network provider toggled by room type.
+-   One Y.Doc per high-level collaboration unit (proposal, study circle, task board).
+-   Shared maps/arrays for deterministic object storage and audit metadata.
+-   IndexedDB persistence enabled by default; optional network provider toggled by room type.
 
 ---
 
@@ -103,10 +103,10 @@ src/
 
 ### Deliverables
 
-- Feature flag set for governance/education/mutual aid.
-- Domain module skeletons under `src/modules/*`.
-- Service skeletons under `src/services/*`.
-- Baseline ADR describing Matrix+Yjs architecture.
+-   Feature flag set for governance/education/mutual aid.
+-   Domain module skeletons under `src/modules/*`.
+-   Service skeletons under `src/services/*`.
+-   Baseline ADR describing Matrix+Yjs architecture.
 
 ### Tasks
 
@@ -117,7 +117,7 @@ src/
 
 ### Exit criteria
 
-- Modules compile with no behavior changes when flags are off.
+-   Modules compile with no behavior changes when flags are off.
 
 ---
 
@@ -125,10 +125,10 @@ src/
 
 ### Deliverables
 
-- `src/services/crdt/documentManager.ts`
-- `src/services/crdt/yjsProvider.ts`
-- `src/services/crdt/types.ts`
-- Matrix state binding for document IDs
+-   `src/services/crdt/documentManager.ts`
+-   `src/services/crdt/yjsProvider.ts`
+-   `src/services/crdt/types.ts`
+-   Matrix state binding for document IDs
 
 ### Tasks
 
@@ -139,8 +139,8 @@ src/
 
 ### Exit criteria
 
-- Two clients in same room converge on document state.
-- Offline edits replay and merge after reconnect.
+-   Two clients in same room converge on document state.
+-   Offline edits replay and merge after reconnect.
 
 ---
 
@@ -148,10 +148,21 @@ src/
 
 ### Deliverables
 
-- `src/services/governance/ProposalEngine.ts`
-- `src/services/governance/VotingEngine.ts`
-- `src/modules/governance/components/*`
-- Proposal room/view integration
+-   `src/services/governance/ProposalEngine.ts`
+-   `src/services/governance/VotingEngine.ts`
+-   `src/modules/governance/components/*`
+-   Proposal room/view integration
+
+> **Never built under these names (verified 2026-09-10).** No `ProposalEngine`
+> or `VotingEngine` exists in any of the three repositories, and there is no
+> top-level `src/` tree here at all — these paths described the `_port/` fork,
+> decommissioned in `204b6bacd` on 2026-05-05. Governance did ship, in a
+> different shape: `apps/blackout-client/src/app/features/governance/`,
+> `packages/api/src/modules/governance.ts`, `packages/core/src/governance/index.ts`
+> and `co.bmc.proposal` / `co.bmc.vote` in
+> `packages/blackout-protocol/src/governance/contracts.ts` — four parallel
+> implementations `CONSOLIDATION.md` flags for reconciliation. Read this
+> section as the plan it was, not as a description of the code.
 
 ### Tasks
 
@@ -164,7 +175,7 @@ src/
 
 ### Exit criteria
 
-- Users can create proposals, discuss in room, vote, and see deterministic tallies.
+-   Users can create proposals, discuss in room, vote, and see deterministic tallies.
 
 ---
 
@@ -172,9 +183,9 @@ src/
 
 ### Deliverables
 
-- `src/services/delegation/DelegationGraph.ts`
-- `src/services/attestations/attestationGraph.ts`
-- Delegation management UI in governance settings/profile area
+-   `src/services/delegation/DelegationGraph.ts`
+-   `src/services/attestations/attestationGraph.ts`
+-   Delegation management UI in governance settings/profile area
 
 ### Tasks
 
@@ -185,7 +196,7 @@ src/
 
 ### Exit criteria
 
-- Delegated voting produces deterministic results and clear audit trails.
+-   Delegated voting produces deterministic results and clear audit trails.
 
 ---
 
@@ -193,9 +204,9 @@ src/
 
 ### Deliverables
 
-- `src/modules/education/components/StudyCircleList.tsx`
-- `src/modules/education/components/StudyCircleRoom.tsx`
-- `src/modules/education/components/CurriculumEditor.tsx`
+-   `src/modules/education/components/StudyCircleList.tsx`
+-   `src/modules/education/components/StudyCircleRoom.tsx`
+-   `src/modules/education/components/CurriculumEditor.tsx`
 
 ### Tasks
 
@@ -205,7 +216,7 @@ src/
 
 ### Exit criteria
 
-- Study circles support real-time shared notes with offline merge.
+-   Study circles support real-time shared notes with offline merge.
 
 ---
 
@@ -213,9 +224,9 @@ src/
 
 ### Deliverables
 
-- `src/modules/mutualAid/components/NeedsBoard.tsx`
-- `src/modules/mutualAid/components/OffersBoard.tsx`
-- `src/modules/mutualAid/models/TaskBoard.ts`
+-   `src/modules/mutualAid/components/NeedsBoard.tsx`
+-   `src/modules/mutualAid/components/OffersBoard.tsx`
+-   `src/modules/mutualAid/models/TaskBoard.ts`
 
 ### Tasks
 
@@ -225,7 +236,7 @@ src/
 
 ### Exit criteria
 
-- Communities can post needs/offers and track progress in shared boards.
+-   Communities can post needs/offers and track progress in shared boards.
 
 ---
 
@@ -233,8 +244,8 @@ src/
 
 ### Deliverables
 
-- `src/services/deliberation/clustering.ts`
-- Governance UI panel for “opinion groups” and consensus pockets
+-   `src/services/deliberation/clustering.ts`
+-   Governance UI panel for “opinion groups” and consensus pockets
 
 ### Tasks
 
@@ -244,7 +255,7 @@ src/
 
 ### Exit criteria
 
-- Large-room proposals expose meaningful opinion clusters without leaking private ballots.
+-   Large-room proposals expose meaningful opinion clusters without leaking private ballots.
 
 ---
 
@@ -252,8 +263,8 @@ src/
 
 ### Deliverables
 
-- `src/services/storage/ipfsService.ts`
-- Attachment pipeline for CID upload/retrieval
+-   `src/services/storage/ipfsService.ts`
+-   Attachment pipeline for CID upload/retrieval
 
 ### Tasks
 
@@ -263,7 +274,7 @@ src/
 
 ### Exit criteria
 
-- Large assets can be distributed by CID while preserving Matrix-native references.
+-   Large assets can be distributed by CID while preserving Matrix-native references.
 
 ---
 
@@ -271,27 +282,27 @@ src/
 
 ### Security
 
-- Reuse Matrix E2EE rooms where possible.
-- Sign proposal updates and vote envelopes with device keys/libsodium.
-- Keep private ballots encrypted at rest in local persistence where applicable.
+-   Reuse Matrix E2EE rooms where possible.
+-   Sign proposal updates and vote envelopes with device keys/libsodium.
+-   Keep private ballots encrypted at rest in local persistence where applicable.
 
 ### Performance
 
-- Lazy-load module bundles and heavy algorithms.
-- Bound CRDT doc sizes with archive/snapshot strategy.
-- Add room-level pagination and debounce for high-frequency updates.
+-   Lazy-load module bundles and heavy algorithms.
+-   Bound CRDT doc sizes with archive/snapshot strategy.
+-   Add room-level pagination and debounce for high-frequency updates.
 
 ### UX
 
-- Add nav entries for Governance, Education, Mutual Aid.
-- Room-type aware rendering: tagged rooms can show domain views with chat context preserved.
-- Keep chat fallback available to avoid dead-end UIs.
+-   Add nav entries for Governance, Education, Mutual Aid.
+-   Room-type aware rendering: tagged rooms can show domain views with chat context preserved.
+-   Keep chat fallback available to avoid dead-end UIs.
 
 ### Upstream compatibility
 
-- Avoid touching Element core primitives unless required.
-- Prefer extension points, wrappers, and feature flags.
-- Keep diff localized to new module/service directories.
+-   Avoid touching Element core primitives unless required.
+-   Prefer extension points, wrappers, and feature flags.
+-   Keep diff localized to new module/service directories.
 
 ---
 
@@ -299,28 +310,28 @@ src/
 
 ### Unit tests
 
-- CRDT adapters, schema migration, and merge invariants.
-- Proposal state machine and vote tallies.
-- Delegation graph cycle handling and override semantics.
-- Task board transition rules.
+-   CRDT adapters, schema migration, and merge invariants.
+-   Proposal state machine and vote tallies.
+-   Delegation graph cycle handling and override semantics.
+-   Task board transition rules.
 
 ### Integration tests
 
-- Multi-client sync across one Matrix room.
-- Offline edit + reconnect reconciliation.
-- Proposal lifecycle end-to-end (create → discuss → vote → close).
+-   Multi-client sync across one Matrix room.
+-   Offline edit + reconnect reconciliation.
+-   Proposal lifecycle end-to-end (create → discuss → vote → close).
 
 ### UI/e2e tests
 
-- Navigation to each module with flags on/off.
-- Governance creation and voting flows.
-- Study circle collaborative editing and mutual aid board updates.
+-   Navigation to each module with flags on/off.
+-   Governance creation and voting flows.
+-   Study circle collaborative editing and mutual aid board updates.
 
 ### Non-functional checks
 
-- Bundle size impact per module.
-- Long-session memory behavior for active Yjs docs.
-- Error and latency telemetry thresholds.
+-   Bundle size impact per module.
+-   Long-session memory behavior for active Yjs docs.
+-   Error and latency telemetry thresholds.
 
 ---
 
@@ -328,11 +339,11 @@ src/
 
 ### Feature flags
 
-- `feature_governance`
-- `feature_education`
-- `feature_mutual_aid`
-- `feature_deliberation_clustering`
-- `feature_ipfs_storage`
+-   `feature_governance`
+-   `feature_education`
+-   `feature_mutual_aid`
+-   `feature_deliberation_clustering`
+-   `feature_ipfs_storage`
 
 ### Suggested rollout
 
@@ -342,11 +353,11 @@ src/
 
 ### Success metrics
 
-- Proposal completion rate.
-- Median time-to-decision.
-- Study-circle weekly active participants.
-- Mutual-aid task completion ratio.
-- Sync conflict/error rate per room.
+-   Proposal completion rate.
+-   Median time-to-decision.
+-   Study-circle weekly active participants.
+-   Mutual-aid task completion ratio.
+-   Sync conflict/error rate per room.
 
 ---
 
@@ -354,30 +365,30 @@ src/
 
 Week 1
 
-- Finalize ADR + schemas.
-- Scaffold module/service directories.
-- Add flags and navigation placeholders.
+-   Finalize ADR + schemas.
+-   Scaffold module/service directories.
+-   Add flags and navigation placeholders.
 
 Week 2
 
-- Ship CRDT document manager + IndexedDB persistence.
-- Wire Matrix room-state metadata for document IDs.
+-   Ship CRDT document manager + IndexedDB persistence.
+-   Wire Matrix room-state metadata for document IDs.
 
 Week 3
 
-- Implement governance proposal lifecycle + approval voting.
-- Add proposal list/detail/create UI.
+-   Implement governance proposal lifecycle + approval voting.
+-   Add proposal list/detail/create UI.
 
 Week 4
 
-- Add delegation basics + tests.
-- Pilot in one room and review telemetry.
+-   Add delegation basics + tests.
+-   Pilot in one room and review telemetry.
 
 ---
 
 ## 9) Definition of done for MVP
 
-- Governance module supports proposal creation, discussion linkage, voting, close, and result display.
-- CRDT shared state works online/offline with deterministic merge.
-- Delegation basics are available with clear override semantics.
-- Feature remains optional, behind flags, with no regressions to baseline Matrix chat UX.
+-   Governance module supports proposal creation, discussion linkage, voting, close, and result display.
+-   CRDT shared state works online/offline with deterministic merge.
+-   Delegation basics are available with clear override semantics.
+-   Feature remains optional, behind flags, with no regressions to baseline Matrix chat UX.

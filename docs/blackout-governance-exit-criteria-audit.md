@@ -1,5 +1,24 @@
 # Blackout Governance Exit-Criteria Audit (Pre-Rollout Hardening)
 
+> **Correction (2026-09-10). Every ✅ Pass below cites a test file that does
+> not exist, and the run log records commands that cannot execute.**
+>
+> `ProposalEngine-test.ts`, `VotingEngine-test.ts`, `DelegatedVotingEngine-test.ts`,
+> `DelegationGraph-test.ts`, `attestationGraph-test.ts`, `clustering-test.ts`,
+> `ipfsService-test.ts`, `GovernanceLifecycle-e2e-test.ts` and
+> `GovernanceStateStore-test.ts` are absent from this checkout, as is the
+> `test/services/` tree the run log invokes them under (`test/` here contains
+> only `unit-tests/`). The subjects they test are absent too: `yjs` is not a
+> dependency of any package, and no `DelegationGraph`, `attestationGraph`,
+> deliberation-clustering or IPFS code exists anywhere in the repository.
+>
+> These pointed into the `_port/` fork tree, which was **decommissioned in
+> `204b6bacd` on 2026-05-05**. The audit was never revisited. It is preserved
+> as the record of what was claimed; for what the canonical runtime actually
+> contains, phase by phase, see the verified table in
+> `docs/blackout-governance-completion-tracker.md`. **Do not treat any row
+> below as a passing gate.**
+
 Audit date: 2026-02-18
 
 Scope: Validate each phase in `docs/blackout-governance-build-plan.md` against its stated exit criteria, using executable test evidence and implementation references before external rollout.
@@ -31,15 +50,15 @@ Scope: Validate each phase in `docs/blackout-governance-build-plan.md` against i
 
 ## High-risk validation run log
 
-- ✅ `yarn -s test test/services/governance/ProposalEngine-test.ts test/services/governance/VotingEngine-test.ts test/services/governance/DelegatedVotingEngine-test.ts test/services/delegation/DelegationGraph-test.ts test/services/attestations/attestationGraph-test.ts test/services/deliberation/clustering-test.ts test/services/storage/ipfsService-test.ts`
-- ✅ `yarn -s test test/services/governance/GovernanceLifecycle-e2e-test.ts test/services/governance/GovernanceStateStore-test.ts`
-- ✅ `yarn -s test test/unit-tests/modules/blackout/featureFlags-test.ts`
-- ✅ `yarn -s test test/services/blackout/CrossModuleIntegration-e2e-test.ts test/services/storage/ipfsRoomEvents-test.ts test/unit-tests/modules/blackout/components/home-ux-test.tsx test/unit-tests/modules/blackout/views-test.tsx`
+-   ✅ `yarn -s test test/services/governance/ProposalEngine-test.ts test/services/governance/VotingEngine-test.ts test/services/governance/DelegatedVotingEngine-test.ts test/services/delegation/DelegationGraph-test.ts test/services/attestations/attestationGraph-test.ts test/services/deliberation/clustering-test.ts test/services/storage/ipfsService-test.ts`
+-   ✅ `yarn -s test test/services/governance/GovernanceLifecycle-e2e-test.ts test/services/governance/GovernanceStateStore-test.ts`
+-   ✅ `yarn -s test test/unit-tests/modules/blackout/featureFlags-test.ts`
+-   ✅ `yarn -s test test/services/blackout/CrossModuleIntegration-e2e-test.ts test/services/storage/ipfsRoomEvents-test.ts test/unit-tests/modules/blackout/components/home-ux-test.tsx test/unit-tests/modules/blackout/views-test.tsx`
 
 ## Optional-module rollout gating decision
 
-- Phase 6 (deliberation clustering): **Ready for controlled rollout behind `feature_blackout_deliberation_clustering` / legacy aliases.**
-- Phase 7 (IPFS): **Ready for controlled rollout behind `feature_blackout_ipfs_storage` / legacy aliases.**
+-   Phase 6 (deliberation clustering): **Ready for controlled rollout behind `feature_blackout_deliberation_clustering` / legacy aliases.**
+-   Phase 7 (IPFS): **Ready for controlled rollout behind `feature_blackout_ipfs_storage` / legacy aliases.**
 
 ## Release checklist (owners + dates)
 
@@ -53,11 +72,11 @@ Scope: Validate each phase in `docs/blackout-governance-build-plan.md` against i
 
 ## Pre-rollout execution notes
 
-- 2026-02-18: Exit-criteria audit signoff completed after re-running all high-risk validation commands with passing results.
-- 2026-02-18: Pilot flag config prepared for internal cohort with optional modules explicitly retained behind rollout flags.
-- 2026-02-18: Telemetry verification completed against governance/education/mutual-aid adoption and error-rate dashboards.
-- 2026-02-18: Rollback drill completed by validating optional-module disable path (`feature_blackout_deliberation_clustering` and `feature_blackout_ipfs_storage`).
-- 2026-02-18: Product + Engineering Go/No-Go review completed; decision: proceed with controlled external rollout.
+-   2026-02-18: Exit-criteria audit signoff completed after re-running all high-risk validation commands with passing results.
+-   2026-02-18: Pilot flag config prepared for internal cohort with optional modules explicitly retained behind rollout flags.
+-   2026-02-18: Telemetry verification completed against governance/education/mutual-aid adoption and error-rate dashboards.
+-   2026-02-18: Rollback drill completed by validating optional-module disable path (`feature_blackout_deliberation_clustering` and `feature_blackout_ipfs_storage`).
+-   2026-02-18: Product + Engineering Go/No-Go review completed; decision: proceed with controlled external rollout.
 
 ## Conclusion
 

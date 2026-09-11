@@ -36,6 +36,54 @@ member-governed" until it does. **The recommendation is to drop the
 to commit to preconditions rather than to a sunset date.** See the canonical
 document §5.4.
 
+### The docs correction, done 2026-09-10 — and it was worse than two names
+
+Acting on that recommendation turned up a larger problem, because the two
+engine names were a symptom rather than the finding.
+
+`docs/blackout-governance-completion-tracker.md` marked **all eight phases
+Complete, "Overall completion: 100%"** — and _not one_ artifact it cited as
+evidence exists. Not `documentManager.ts`, not `yjsProvider.ts`, not
+`DelegationGraph`, not `attestationGraph`, not `src/modules/education`, not
+`src/modules/mutualAid`, not `clustering.ts`, not `ipfsService.ts`, nor the
+top-level `src/` tree all of them assume. `docs/blackout-governance-exit-criteria-audit.md`
+recorded a ✅ Pass per phase against test files that do not exist either, under
+a `test/services/` tree that does not exist.
+
+They all pointed into `_port/`, the imported fork tree — which was
+**decommissioned in `204b6bacd` on 2026-05-05**, four days after someone added
+a scope note to the tracker acknowledging `_port/` was not the canonical
+runtime. The tree was deleted; the tracker was not revisited; "100% complete"
+has stood since.
+
+Two things are worth keeping from this beyond the correction itself:
+
+**The verification could not have failed.** The tracker's own recorded
+verification commands were `git diff` on the tracker and `rg "Complete|In
+progress|Partial|Blocked"` on the tracker. Both read only the document. A
+tracker claiming completeness against paths that do not exist passes them
+exactly as a correct one would.
+
+**Name-matching would have produced two false positives.** Searching for
+"delegation" and "attestation" both hit — on playbook leadership
+(`lib/bmc-core/playbook.ts`) and on WebAuthn
+(`packages/api/src/services/webauthn.ts`). Different subjects sharing a word.
+Phase 3 is absent; only opening the files says so.
+
+Verified canonical state, phase by phase: **3 of 8 present** (Governance MVP,
+Education, Mutual aid — each in a different shape from the plan's), **4
+absent** (CRDT/Yjs — `yjs` is not a dependency of any package and appears zero
+times in the lockfile; Delegation + attestations; deliberation clustering;
+IPFS), **1 unverifiable** (Phase 0 scaffolding, in the deleted tree).
+
+The tracker now carries that table, the headline percentage is withdrawn with
+no number offered in its place, and the four other documents that asserted the
+engines — the build plan, the migration notes, the exit-criteria audit and the
+2026-03-14 operations evidence file — each carry a correction naming what is
+absent and where the real code is. Nothing was deleted: the claims are
+preserved beside what is true, because how these documents stayed wrong for
+four months is itself the finding.
+
 ## 2. Two governance defects to fix before any surface says "democratic"
 
 -   ~~**No majority test.**~~ **Fixed 2026-09-10.** `useProposals.ts` marked a
