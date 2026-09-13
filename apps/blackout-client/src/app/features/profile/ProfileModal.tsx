@@ -318,6 +318,28 @@ export const ProfileModal = ({
                                         lineHeight: 1.5,
                                         marginBottom: 12,
                                     }}
+                                    /*
+                                     * A profile bio is user-controlled and
+                                     * rendered as HTML, so this is the classic
+                                     * stored-XSS shape and the rule is right to
+                                     * ask. It is safe here by two independent
+                                     * steps, either of which would do:
+                                     * `mdToHtml` HTML-escapes the whole string
+                                     * before it generates any markup, so no
+                                     * attacker tag survives into the output at
+                                     * all; `sanitizeMatrixHtml` then parses the
+                                     * result and allow-lists tags, dropping
+                                     * every attribute except `data-mx-*` and an
+                                     * `href` whose scheme is http, https,
+                                     * mailto or mxc.
+                                     *
+                                     * Semgrep still reports this line: a
+                                     * `nosemgrep` comment does not attach in
+                                     * JSX attribute position, in any of the
+                                     * three placements tried. Left visible and
+                                     * explained here rather than silenced by
+                                     * widening the ignore to the whole file.
+                                     */
                                     dangerouslySetInnerHTML={{
                                         __html: toSafeHtml(profile.profile.bio),
                                     }}
