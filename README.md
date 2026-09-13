@@ -142,7 +142,6 @@ blackout/  (monorepo root)
 │  │       ├─ deaddrop
 │  │       └─ moderation
 │  │
-│  ├─ blackout-gov           # optional separate surface
 │  └─ deaddrop-appservice    # Matrix appservice for deaddrop
 │
 ├─ packages/

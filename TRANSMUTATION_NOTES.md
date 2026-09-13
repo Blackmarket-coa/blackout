@@ -111,17 +111,37 @@ four months is itself the finding.
     first. A test demonstrates exactly that outcome, so the copy cannot drift
     from the arithmetic.
 
-## 3. `apps/blackout-gov` is an inert shell
+## 3. ~~`apps/blackout-gov` is an inert shell~~ — deleted 2026-09-13
 
-Five source files; `mount()` writes `innerHTML` and there are no event
+Five source files; `mount()` wrote `innerHTML` and there were no event
 listeners, click handlers or fetch calls anywhere in `src/`. The "Create
-proposal", "Approve" and "Block" buttons are static HTML, and the figures
-shown (a 142,300 treasury, 58 delegations, 81% participation) are hardcoded
-defaults. Its only build reference is a CI test filter; it appears in no
-compose file, Dockerfile, Railway config or deploy workflow. `CONSOLIDATION.md`
-already calls it migration residue. **Delete it or finish it** — a governance
-demo with invented participation numbers is the wrong thing to have lying
-around while the brief proposes governance as a recruitment mechanism.
+proposal", "Approve" and "Block" buttons were static HTML, and the figures
+shown (a 142,300 treasury, 58 delegations, 81% participation) were hardcoded
+defaults. Its only build reference was a CI test filter; it appeared in no
+compose file, Dockerfile, Railway config or deploy workflow.
+
+**Deleted rather than finished, because it was a duplicate and not a
+prototype.** `apps/blackout-client/src/app/features/governance` is the real
+implementation — dashboard, proposal detail, treasury, meetings, routes and a
+protocol-compatibility contract, with a `governanceClient` that calls
+`/v1/governance` — so finishing the shell would have meant building a second
+governance UI to sit beside a working one.
+
+The repository had already decided this: every `apps/blackout-gov` row in
+`docs/architecture/frontend-consolidation-disposition.md` read
+`duplicate_candidate` / `deprecated`, "intentional removal after parity", and
+the two rows marked `ported_candidate` named the client as their destination.
+Both were checked before deleting anything rather than taken on the status
+column's word — treasury as `GovernanceTreasury`, `TreasuryMilestones` and
+`treasuryProgress`, meetings as `GovernanceMeetings` and `listMeetings`. The
+disposition and parity rows stay as the historical record of what the surface
+carried, which is also what `guard:frontend-consolidation` reads; the CI test
+filter is gone with the app.
+
+The reason to act rather than leave it: a governance demo with invented
+participation numbers, kept green by a CI job, is the wrong thing to have
+lying around while the brief proposes governance as a recruitment mechanism.
+It is the same overclaim as the completion tracker in §1, expressed as a UI.
 
 ## 4. ~~A live copy promise that is a safety claim~~ — fixed 2026-09-09
 
