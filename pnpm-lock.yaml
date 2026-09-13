@@ -376,28 +376,6 @@ importers:
         specifier: ^4.1.11
         version: 4.1.11(@types/node@18.11.18)(@vitest/coverage-v8@4.1.8)(jsdom@26.1.0)(vite@8.0.16(@types/node@18.11.18)(esbuild@0.28.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))
 
-  apps/blackout-gov:
-    dependencies:
-      '@blackout/core':
-        specifier: workspace:*
-        version: link:../../packages/core
-      '@blackout/design':
-        specifier: workspace:*
-        version: link:../../packages/design
-      '@blackout/ui':
-        specifier: workspace:*
-        version: link:../../packages/ui
-    devDependencies:
-      typescript:
-        specifier: 5.9.3
-        version: 5.9.3
-      vite:
-        specifier: ^7.3.5
-        version: 7.3.5(@types/node@24.12.0)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
-      vitest:
-        specifier: ^4.1.11
-        version: 4.1.11(@types/node@24.12.0)(jsdom@26.1.0)(vite@7.3.5(@types/node@24.12.0)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))
-
   apps/blackout-server: {}
 
   apps/deaddrop-appservice: {}

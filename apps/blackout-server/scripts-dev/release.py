@@ -579,9 +579,16 @@ def _notify(message: str) -> None:
     # (This is best-effort)
     if sys.platform == "darwin":
         # See https://developer.apple.com/library/archive/documentation/AppleScript/Conceptual/AppleScriptLangGuide/reference/ASLR_cmds.html#//apple_ref/doc/uid/TP40000983-CH216-SW224
+        # No shell: `message` reaches osascript as one argv element rather than
+        # being re-parsed by sh. It is internally generated today, but a release
+        # script that interpolates a string into a shell command is a shape
+        # worth not having — the AppleScript is identical without it.
         subprocess.run(
-            f"""osascript -e 'display notification "{message}" with title "{app_name}"'""",
-            shell=True,
+            [
+                "osascript",
+                "-e",
+                f'display notification "{message}" with title "{app_name}"',
+            ]
         )
     else:
         subprocess.run(

@@ -90,10 +90,13 @@ verdicts, decisions, and the ordered roadmap — is `docs/REPO_CONSOLIDATION_REV
     least documented (`VITE_MAPLIBRE_STYLE_URL` in the client `.env.example`) so deployments can
     point tile traffic at their own martin. The standalone `coalition-app` repo absorb/archive
     remains an operator action.
--   **Queued hygiene**: collapse the three client shells (`apps/blackout-client` is the live one;
-    `apps/blackout-gov` and `legacy/blackout-web` are migration residue), reconcile the four
-    governance implementations (core / protocol / sdk / api) onto one, and fix the stale root
-    README paths + `ELEMENT_WEB_PORT` residue in `Dockerfile.blackout`.
+-   **Queued hygiene**: collapse the remaining client shells. `apps/blackout-client` is the live
+    one and `legacy/blackout-web` is still migration residue; **`apps/blackout-gov` was deleted
+    2026-09-13** — its disposition rows had said "intentional removal after parity" since the
+    matrix was written, the two surfaces marked `ported` (treasury, meetings) were confirmed
+    present in the client first, and the root README tree no longer lists it. Still queued:
+    reconcile the four governance implementations (core / protocol / sdk / api) onto one, and fix
+    the stale root README paths + `ELEMENT_WEB_PORT` residue in `Dockerfile.blackout`.
 
 ## Explicitly outside consolidation scope
 

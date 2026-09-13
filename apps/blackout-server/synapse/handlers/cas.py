@@ -14,6 +14,15 @@
 import logging
 import urllib.parse
 from typing import TYPE_CHECKING, Dict, List, Optional
+# The `use-defused-xml` rule's concern — entity-expansion DoS — is handled at
+# the one parse site instead, by refusing any document type declaration (see
+# `_parse_cas_xml`). Internal entities can only be declared in a DTD, so that
+# removes the vector rather than mitigating it. `defusedxml` would satisfy the
+# rule directly but is only in the lockfile as a transitive of `pysaml2`, an
+# optional extra, and CAS must not depend on SAML being installed. Suppressed
+# here, and only here, because the rule matches the import and so cannot see
+# the mitigation.
+# nosemgrep: python.lang.security.use-defused-xml.use-defused-xml
 from xml.etree import ElementTree as ET
 
 import attr
@@ -29,6 +38,41 @@ if TYPE_CHECKING:
     from synapse.server import HomeServer
 
 logger = logging.getLogger(__name__)
+
+
+
+def _parse_cas_xml(cas_response_body: bytes) -> "ET.Element":
+    """Parse a CAS validation response, refusing any document type declaration.
+
+    `xml.etree.ElementTree` is safe against XXE — CPython's parser does not
+    resolve external entities and raises `undefined entity` instead, verified
+    on 3.11 rather than assumed. It does, however, expand *internal* entities,
+    which is the billion-laughs vector: a few hundred bytes of nested entity
+    declarations expands to gigabytes during parse and takes the process with
+    it. Semgrep's `use-defused-xml` flags this line for exactly that reason,
+    and it is a true positive.
+
+    The response comes from the CAS server the operator configured, so it is
+    semi-trusted at best — a compromised CAS server, or anyone able to
+    interfere with that HTTP exchange, chooses these bytes.
+
+    Rejecting the DOCTYPE rather than adopting `defusedxml`, because internal
+    entities can only be declared in a document type declaration, so refusing
+    one removes the vector outright rather than mitigating it. `defusedxml` is
+    in the lockfile but only as a transitive of `pysaml2`, which is an optional
+    extra: an install without `saml2` would not have it, and CAS is a separate
+    feature that must not silently depend on SAML being installed. A CAS
+    validation response has no legitimate use for a DTD.
+    """
+    # Check before parsing: by the time the parser has seen the declaration it
+    # has already begun expanding.
+    if b"<!DOCTYPE" in cas_response_body:
+        raise CasError(
+            "invalid_response",
+            "CAS response contains a document type declaration",
+        )
+
+    return ET.fromstring(cas_response_body)
 
 
 class CasError(Exception):
@@ -164,7 +208,7 @@ class CasHandler:
         """
 
         # Ensure the response is valid.
-        root = ET.fromstring(cas_response_body)
+        root = _parse_cas_xml(cas_response_body)
         if not root.tag.endswith("serviceResponse"):
             raise CasError(
                 "missing_service_response",
