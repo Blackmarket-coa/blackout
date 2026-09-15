@@ -36,7 +36,7 @@ describe('CanopyTabStrip', () => {
         const tabs = Array.from(container.querySelectorAll('[role="tab"][data-canopy-tab]')).map(
             (el) => el.getAttribute('data-canopy-tab')
         );
-        expect(tabs).toEqual(['yours', 'discover', 'friends', 'create']);
+        expect(tabs).toEqual(['yours', 'discover', 'coalitions', 'create']);
         // The whole point of the consolidation: the strip fits, so there is no
         // "More" escape hatch to build.
         expect(container.querySelector('[data-testid="canopy-more-tab"]')).toBeNull();
@@ -57,10 +57,12 @@ describe('CanopyTabStrip', () => {
         const container = render(<CanopyTabStrip activeTab="yours" onSelectTab={onSelectTab} />);
         act(() => {
             (
-                container.querySelector('[data-testid="canopy-tab-friends"]') as HTMLButtonElement
+                container.querySelector(
+                    '[data-testid="canopy-tab-coalitions"]'
+                ) as HTMLButtonElement
             ).click();
         });
-        expect(onSelectTab).toHaveBeenCalledWith('friends');
+        expect(onSelectTab).toHaveBeenCalledWith('coalitions');
     });
 
     it('badges a tab when it has a pending count, and omits the badge at zero', () => {
@@ -68,12 +70,12 @@ describe('CanopyTabStrip', () => {
             <CanopyTabStrip
                 activeTab="yours"
                 onSelectTab={() => undefined}
-                counts={{ friends: 3 }}
+                counts={{ coalitions: 3 }}
             />
         );
-        const friends = container.querySelector('[data-testid="canopy-tab-friends"]');
+        const coalitions = container.querySelector('[data-testid="canopy-tab-coalitions"]');
         const discover = container.querySelector('[data-testid="canopy-tab-discover"]');
-        expect(friends?.textContent).toContain('3');
+        expect(coalitions?.textContent).toContain('3');
         expect(discover?.textContent).toBe('Discover');
     });
 
@@ -82,11 +84,11 @@ describe('CanopyTabStrip', () => {
             <CanopyTabStrip
                 activeTab="yours"
                 onSelectTab={() => undefined}
-                counts={{ friends: 250 }}
+                counts={{ coalitions: 250 }}
             />
         );
         expect(
-            container.querySelector('[data-testid="canopy-tab-friends"]')?.textContent
+            container.querySelector('[data-testid="canopy-tab-coalitions"]')?.textContent
         ).toContain('99+');
     });
 });

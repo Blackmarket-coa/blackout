@@ -19,10 +19,10 @@ export const CANOPY_HUB_TAB_GUIDES: Record<CanopyHubTabId, ReactNode> = {
             across this server and the wider federation.
         </>
     ),
-    friends: (
+    coalitions: (
         <>
-            Friend requests waiting on you, the people you have added, and requests you have sent
-            that are still pending.
+            The coalitions you belong to, your role in each, and invitations waiting on you.
+            Coalitions run drives, projects and mutual aid together across canopies.
         </>
     ),
     create: (

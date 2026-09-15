@@ -46,7 +46,7 @@ const AccountSettings = () => {
                     trackSettingsInteraction('account', 'preview_profile_card', 'close');
                     setOpenPreview(false);
                 }}
-                onAddFriend={(userId) => void userId}
+                onInviteToCoalition={(userId: string) => void userId}
                 onBlock={(userId) => void userId}
                 onStartDm={(userId) => void userId}
             />

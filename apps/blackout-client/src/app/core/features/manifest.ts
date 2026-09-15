@@ -22,6 +22,7 @@ export const featureModuleManifest = [
     'auth-threads',
     'education',
     'coalition',
+    'coalitions',
     'coliseum',
     'circle-feed',
     'community-assets',

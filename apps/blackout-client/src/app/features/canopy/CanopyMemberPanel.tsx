@@ -6,7 +6,7 @@ import { getPowerLevelTag, usePowerLevelTags } from '../../hooks/usePowerLevelTa
 import { Presence, useUserPresence } from '../../hooks/useUserPresence';
 import { ConnectedProfileModal } from '../profile/ConnectedProfileModal';
 import type { MemberProfile } from '../profile/profileTypes';
-import { FriendsDialog } from '../friends/FriendsDialog';
+import { CoalitionsDialog } from '../coalitions/CoalitionsDialog';
 
 const PANEL_WIDTH = 240;
 
@@ -36,7 +36,7 @@ const HEADER_STYLE: CSSProperties = {
     gap: 8,
 };
 
-const friendsButtonStyle: CSSProperties = {
+const headerButtonStyle: CSSProperties = {
     border: '1px solid var(--border-default)',
     background: 'var(--bg-input)',
     color: 'var(--text-primary)',
@@ -195,7 +195,7 @@ export const CanopyMemberPanel = ({ room }: { room: Room }) => {
     const tags = usePowerLevelTags(room, powerLevels);
     const [profileTarget, setProfileTarget] = useState<MemberProfile | null>(null);
     const closeProfile = useCallback(() => setProfileTarget(null), []);
-    const [friendsOpen, setFriendsOpen] = useState(false);
+    const [coalitionsOpen, setCoalitionsOpen] = useState(false);
 
     const members = useMemo(() => room.getJoinedMembers(), [room]);
     const grouped = useMemo(() => groupMembersByPresence(members), [members]);
@@ -247,11 +247,11 @@ export const CanopyMemberPanel = ({ room }: { room: Room }) => {
                 <span>Members — {members.length}</span>
                 <button
                     type="button"
-                    style={friendsButtonStyle}
-                    data-testid="canopy-friends-open"
-                    onClick={() => setFriendsOpen(true)}
+                    style={headerButtonStyle}
+                    data-testid="canopy-coalitions-open"
+                    onClick={() => setCoalitionsOpen(true)}
                 >
-                    Friends
+                    Coalitions
                 </button>
             </div>
             <div style={LIST_STYLE}>
@@ -261,7 +261,7 @@ export const CanopyMemberPanel = ({ room }: { room: Room }) => {
             {profileTarget ? (
                 <ConnectedProfileModal profile={profileTarget} onClose={closeProfile} />
             ) : null}
-            {friendsOpen ? <FriendsDialog onClose={() => setFriendsOpen(false)} /> : null}
+            {coalitionsOpen ? <CoalitionsDialog onClose={() => setCoalitionsOpen(false)} /> : null}
         </aside>
     );
 };

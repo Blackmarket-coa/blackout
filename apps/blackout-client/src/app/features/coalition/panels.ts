@@ -4,7 +4,7 @@ export const coalitionPanels: ShellPanelEntry[] = [
     {
         id: 'coalition.sidebar',
         kind: 'sidebar',
-        label: 'Coalition',
+        label: 'Commons',
         to: '/coalition',
         order: 30,
     },

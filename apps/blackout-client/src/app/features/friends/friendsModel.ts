@@ -6,6 +6,11 @@
  * derivation) so the handshake logic is unit-testable without a live client.
  */
 
+/*
+ * LEGACY — the friends list was replaced by Coalitions (features/coalitions).
+ * This pure model stays only so CircleMigrationHydrator can read the old
+ * `co.bmc.friends` account data and reconcile it into Circle follows.
+ */
 export const FRIENDS_ACCOUNT_DATA_KEY = 'co.bmc.friends';
 export const FRIEND_REQUEST_EVENT_TYPE = 'co.bmc.friend_request';
 

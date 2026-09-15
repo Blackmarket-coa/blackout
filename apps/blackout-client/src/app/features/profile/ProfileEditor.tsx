@@ -624,7 +624,7 @@ export const ProfileEditor = ({ saveProfile = saveProfileDefault }: ProfileEdito
                             style={{ display: 'block', width: '100%' }}
                         >
                             <option value="public">Public</option>
-                            <option value="friends">Friends</option>
+                            <option value="friends">Coalition members</option>
                             <option value="private">Private</option>
                         </select>
                     </label>
@@ -646,7 +646,7 @@ export const ProfileEditor = ({ saveProfile = saveProfileDefault }: ProfileEdito
                             style={{ display: 'block', width: '100%' }}
                         >
                             <option value="owner">Only me</option>
-                            <option value="friends">Friends</option>
+                            <option value="friends">Coalition members</option>
                             <option value="anyone">Anyone</option>
                         </select>
                     </label>
@@ -675,10 +675,10 @@ export const ProfileEditor = ({ saveProfile = saveProfileDefault }: ProfileEdito
             </section>
 
             <section style={{ display: 'grid', gap: 8 }}>
-                <h4 style={{ margin: 0 }}>Top friends (max 12)</h4>
+                <h4 style={{ margin: 0 }}>Featured people (max 12)</h4>
                 <textarea
                     rows={3}
-                    placeholder="@friend:server, one per line or comma-separated"
+                    placeholder="@member:server, one per line or comma-separated"
                     value={(profile.profile.topFriends?.userIds ?? []).join('\n')}
                     onChange={(event) =>
                         setProfile((prev) => ({

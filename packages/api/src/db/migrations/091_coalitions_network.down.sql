@@ -1,0 +1,11 @@
+DROP TABLE IF EXISTS coalition_campaign_contributions;
+DROP TABLE IF EXISTS coalition_boosts;
+DROP TABLE IF EXISTS coalition_campaign_sync_opt_ins;
+DROP TABLE IF EXISTS coalition_external_activity;
+DROP TABLE IF EXISTS coalition_campaign_posts;
+DROP TABLE IF EXISTS coalition_campaigns;
+DROP TABLE IF EXISTS coalition_member_connections;
+DROP TABLE IF EXISTS coalition_connections;
+DROP TABLE IF EXISTS coalition_join_requests;
+DROP TABLE IF EXISTS coalition_memberships;
+DROP TABLE IF EXISTS coalitions;

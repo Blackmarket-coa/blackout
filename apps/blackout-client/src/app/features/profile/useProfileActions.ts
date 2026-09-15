@@ -1,10 +1,9 @@
 import { useCallback } from 'react';
-import { type MatrixClient, Preset, Visibility } from 'matrix-js-sdk';
+import type { MatrixClient } from 'matrix-js-sdk';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { useRoomNavigate } from '../../hooks/useRoomNavigate';
 import { useIgnoredUsers } from '../../hooks/useIgnoredUsers';
-import { addRoomIdToMDirect, getDMRoomFor } from '../../utils/matrix';
-import { createRoomEncryptionState } from '../../components/create-room';
+import { ensureDmRoom } from '../messaging/dmRooms';
 
 type NavigateRoom = (roomId: string) => void;
 
@@ -20,22 +19,7 @@ export const startDirectMessage = async (
     userId: string
 ): Promise<void> => {
     if (!userId || userId === mx.getSafeUserId()) return;
-
-    const existing = getDMRoomFor(mx, userId);
-    if (existing) {
-        navigateRoom(existing.roomId);
-        return;
-    }
-
-    const result = await mx.createRoom({
-        is_direct: true,
-        invite: [userId],
-        visibility: Visibility.Private,
-        preset: Preset.TrustedPrivateChat,
-        initial_state: [createRoomEncryptionState()],
-    });
-    await addRoomIdToMDirect(mx, result.room_id, userId);
-    navigateRoom(result.room_id);
+    navigateRoom(await ensureDmRoom(mx, userId));
 };
 
 /**
@@ -54,8 +38,8 @@ export const blockUser = async (
 /**
  * Profile-card action handlers for `ProfileModal`. Returns `startDm`/`block`
  * bound to the live client and ignored-user list; `onDone` runs after each
- * action so the opener can close the modal. (Add-friend is intentionally absent
- * — there is no friend system to back it.)
+ * action so the opener can close the modal. (Coalition invites are wired by
+ * `ConnectedProfileModal`, which knows the viewer's coalitions.)
  */
 export const useProfileActions = (onDone?: () => void) => {
     const mx = useMatrixClient();

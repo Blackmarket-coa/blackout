@@ -5,7 +5,7 @@ import { atomWithStorage } from 'jotai/utils';
  * gated per-room by a Matrix state event — the hub is always standalone — so
  * the taxonomy lives here in the client rather than in `@blackout/core`.
  */
-export const CANOPY_HUB_TABS = ['yours', 'discover', 'friends', 'create'] as const;
+export const CANOPY_HUB_TABS = ['yours', 'discover', 'coalitions', 'create'] as const;
 export type CanopyHubTabId = typeof CANOPY_HUB_TABS[number];
 
 export const DEFAULT_CANOPY_HUB_TAB: CanopyHubTabId = 'yours';
@@ -18,7 +18,7 @@ export const canopyHubTabAtom = atomWithStorage<CanopyHubTabId>(
 export const CANOPY_HUB_TAB_LABELS: Record<CanopyHubTabId, string> = {
     yours: 'Yours',
     discover: 'Discover',
-    friends: 'Friends',
+    coalitions: 'Coalitions',
     create: 'Create',
 };
 
@@ -30,7 +30,7 @@ export const CANOPY_HUB_TAB_LABELS: Record<CanopyHubTabId, string> = {
 export const CANOPY_HUB_TAB_HINTS: Record<CanopyHubTabId, string> = {
     yours: 'The canopies you have joined',
     discover: 'Find new canopies and dens to join',
-    friends: 'Your friends, requests, and pending invites',
+    coalitions: 'Your coalitions, your role in each, and invitations waiting on you',
     create: 'Start a new canopy or import one from Discord',
 };
 

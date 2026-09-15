@@ -4,6 +4,7 @@ import { db } from '../db/store';
 import type { TipContextKind, TipRecord, TipStatus } from '../db/types';
 import type { MarketplaceProviderIdString } from '../db/types';
 import { emitDomainEvent } from '../modules/domain-events';
+import { recordContribution } from './coalitionDrives';
 import { recordProjectSupport } from './coalitionProjectSupport';
 import { incrementCounter, logEvent } from './marketplaceObservability';
 import { dispatchEvent as dispatchOutboundEvent } from './outboundEventWebhooks';
@@ -224,6 +225,25 @@ export function captureTip(
     // on capture (money confirmed). `contextRef` is the project id; the project
     // nets `netCents` toward its goal. recordProjectSupport is idempotent on the
     // tip id, so a replayed capture never double-counts.
+    // Coalition drive: a contribution advances its campaign's meter on capture.
+    // `contextRef` is the campaign id and the campaign nets `netCents`.
+    // recordContribution is idempotent on the tip id, so a replayed capture
+    // never double-counts.
+    if (updated.contextKind === 'coalition_drive' && updated.contextRef) {
+        try {
+            recordContribution({
+                campaignId: updated.contextRef,
+                supporterUserId: updated.senderUserId,
+                tipId: updated.id,
+                amountCents: updated.netCents,
+                currency: updated.currency,
+            });
+        } catch (err) {
+            // A campaign-side failure must never block tip capture (money
+            // already moved); surface it for reconciliation instead.
+            logEvent('tip.coalition_drive_threw', { tipId: updated.id, error: String(err) });
+        }
+    }
     if (updated.contextKind === 'coalition_project' && updated.contextRef) {
         try {
             recordProjectSupport({

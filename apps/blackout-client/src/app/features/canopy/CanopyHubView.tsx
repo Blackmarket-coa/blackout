@@ -5,12 +5,12 @@ import { createSpaceModalAtom } from '../../state/createSpaceModal';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 import { GlossaryTerm } from '../../lib/GlossaryTerm';
 import { FeatureGuide } from '../../components/feature-guide/FeatureGuide';
-import { useFriendInbox } from '../friends/useFriendInbox';
+import { useCoalitionInvites } from '../coalitions/useCoalitionInvites';
 import CanopyTabStrip from './CanopyTabStrip';
 import { CANOPY_HUB_TAB_GUIDES } from './canopyTabGuides';
 import YoursTab from './tabs/YoursTab';
 import DiscoverTab from './tabs/DiscoverTab';
-import FriendsTab from './tabs/FriendsTab';
+import CoalitionsTab from './tabs/CoalitionsTab';
 import CreateTab from './tabs/CreateTab';
 
 const PAGE_STYLE: CSSProperties = {
@@ -53,7 +53,7 @@ const newButtonStyle: CSSProperties = {
 export const CanopyHubView = () => {
     const [storedTab, setTab] = useAtom(canopyHubTabAtom);
     const setCreateSpaceModal = useSetAtom(createSpaceModalAtom);
-    const { incoming } = useFriendInbox();
+    const { invites } = useCoalitionInvites();
 
     // A persisted value from an older build (or a hand-edited localStorage
     // entry) must not blank the page.
@@ -64,7 +64,7 @@ export const CanopyHubView = () => {
 
     const handleSelect = useCallback((tab: CanopyHubTabId) => setTab(tab), [setTab]);
 
-    const counts = useMemo(() => ({ friends: incoming.length }), [incoming.length]);
+    const counts = useMemo(() => ({ coalitions: invites.length }), [invites.length]);
 
     return (
         <section data-testid="canopy-hub" data-shell-region="room" style={PAGE_STYLE}>
@@ -94,7 +94,7 @@ export const CanopyHubView = () => {
             <div style={{ minHeight: 0, overflow: 'auto' }}>
                 {activeTab === 'yours' ? <YoursTab /> : null}
                 {activeTab === 'discover' ? <DiscoverTab /> : null}
-                {activeTab === 'friends' ? <FriendsTab /> : null}
+                {activeTab === 'coalitions' ? <CoalitionsTab /> : null}
                 {activeTab === 'create' ? <CreateTab /> : null}
             </div>
         </section>

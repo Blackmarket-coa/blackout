@@ -12,7 +12,7 @@ import ProfileThemeScope from './ProfileThemeScope';
 import ProfileReputation from './ProfileReputation';
 import ProfileRings from './ProfileRings';
 import ProfileWall from './ProfileWall';
-import TopFriendsGrid from './TopFriendsGrid';
+import ProfileCoalitions from './ProfileCoalitions';
 import type { MemberProfile } from './profileTypes';
 
 export interface ProfilePageProps {
@@ -24,7 +24,10 @@ export interface ProfilePageProps {
     profile?: MemberProfile;
     /** Current viewer's Matrix user id; used by the wall to gate posting. */
     viewerId?: string;
-    /** Whether the viewer is in the profile owner's friends graph. */
+    /**
+     * Whether the viewer shares a coalition (or overlapping circle) with the
+     * profile owner; gates the wall's members-only settings.
+     */
     viewerIsFriend?: boolean;
 }
 
@@ -169,8 +172,8 @@ export function ProfilePage({ profile, viewerId, viewerIsFriend = false }: Profi
                         </section>
 
                         <section style={sectionStyle}>
-                            <h2 style={headingStyle}>Top friends</h2>
-                            <TopFriendsGrid topFriends={profileEvent.topFriends} />
+                            <h2 style={headingStyle}>Coalitions</h2>
+                            <ProfileCoalitions userId={target.userId} />
                         </section>
 
                         <section style={sectionStyle}>

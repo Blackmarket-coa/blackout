@@ -74,6 +74,7 @@ import rtmpFanoutRoutes from './routes/rtmpFanout';
 import matrixAppserviceRoutes from './routes/matrixAppservice';
 import matrixRoutes from './routes/matrix';
 import coalitionRoutes from './routes/coalition';
+import coalitionsRoutes from './routes/coalitions';
 import coalitionCreditsRoutes from './routes/coalitionCredits';
 import bountyRoutes from './routes/bounties';
 import coliseumRoutes from './routes/coliseum';
@@ -263,6 +264,8 @@ for (const root of legacyAliasEnabled ? [API_ROOTS.v1, API_ROOTS.legacyApiAlias]
     app.route(`${root}/integrations/obs-ws/passwords`, obsWsPasswordRoutes);
     app.route(`${root}/integrations/simulcast/fanout`, rtmpFanoutRoutes);
     app.route(`${root}/coalition`, coalitionRoutes);
+    // Coalitions network (plural) — multi-member groups replacing the friends list.
+    app.route(`${root}/coalitions`, coalitionsRoutes);
     app.route(`${root}/coalition-credits`, coalitionCreditsRoutes);
     app.route(`${root}/bounties`, bountyRoutes);
     app.route(`${root}/coliseum`, coliseumRoutes);

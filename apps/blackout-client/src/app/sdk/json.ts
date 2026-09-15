@@ -29,3 +29,11 @@ export function deleteJson<T>(
 ): Promise<T> {
     return createAuthorizedApiClient(token)({ method: 'DELETE', path }) as Promise<T>;
 }
+
+export function patchJson<T>(
+    path: string,
+    body: unknown,
+    token: string | null = readBlackoutApiToken()
+): Promise<T> {
+    return createAuthorizedApiClient(token)({ method: 'PATCH', path, body }) as Promise<T>;
+}

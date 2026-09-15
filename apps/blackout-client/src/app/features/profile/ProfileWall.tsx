@@ -88,7 +88,7 @@ export function canPostOnWall(
     settings: ProfileWallSettings | undefined,
     profileOwnerId: string,
     viewerId: string | undefined,
-    viewerIsFriend: boolean,
+    viewerIsFriend: boolean
 ): boolean {
     if (!viewerId) return false;
     const whoCanPost = settings?.whoCanPost ?? 'friends';
@@ -104,7 +104,7 @@ export function canViewWall(
     settings: ProfileWallSettings | undefined,
     profileOwnerId: string,
     viewerId: string | undefined,
-    viewerIsFriend: boolean,
+    viewerIsFriend: boolean
 ): boolean {
     const visibility = settings?.visibility ?? 'public';
     if (visibility === 'public') return true;
@@ -154,7 +154,7 @@ export function ProfileWall({
         return (
             <div style={{ padding: 16, color: 'var(--text-secondary)' }}>
                 This wall is{' '}
-                <strong>{settings?.visibility === 'private' ? 'private' : 'friends-only'}</strong>.
+                <strong>{settings?.visibility === 'private' ? 'private' : 'members-only'}</strong>.
             </div>
         );
     }
@@ -247,8 +247,7 @@ export function ProfileWall({
                 </form>
             ) : (
                 <div style={{ padding: 8, fontSize: 12, color: 'var(--text-secondary)' }}>
-                    Posting is limited to{' '}
-                    <strong>{settings?.whoCanPost ?? 'friends'}</strong>.
+                    Posting is limited to <strong>{settings?.whoCanPost ?? 'friends'}</strong>.
                 </div>
             )}
 
@@ -267,7 +266,9 @@ export function ProfileWall({
                                 color: 'var(--text-secondary)',
                             }}
                         >
-                            <strong style={{ color: 'var(--text-primary)' }}>{post.authorId}</strong>
+                            <strong style={{ color: 'var(--text-primary)' }}>
+                                {post.authorId}
+                            </strong>
                             <time>{new Date(post.createdAt).toLocaleString()}</time>
                         </header>
                         <p style={{ margin: 0, fontSize: 14, whiteSpace: 'pre-wrap' }}>

@@ -2,7 +2,7 @@ import React, { type KeyboardEvent, useCallback, useEffect, useMemo, useState } 
 import { useAtom, useSetAtom } from 'jotai';
 import type { Room, RoomMember } from 'matrix-js-sdk';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
-import { ensureDmRoom } from '../friends/friendActions';
+import { ensureDmRoom } from '../messaging/dmRooms';
 import { useMentionNavigation } from './useMentionNavigation';
 import { selectedRoomIdAtom, selectedSpaceIdAtom } from '../../state/navigation';
 import { settingsPageAtom, type SettingsSectionId } from '../settings/settingsAtoms';

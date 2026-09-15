@@ -138,6 +138,30 @@ const OVERRIDES: Record<string, DescriptorOverride> = {
         keyOf: (r) => `${r.ringId}::${r.inviteeId}`,
         conflictColumns: ['ring_id', 'invitee_id'],
     },
+    coalitionMemberships: {
+        keyOf: (r) => `${r.coalitionId}::${r.userId}`,
+        conflictColumns: ['coalition_id', 'user_id'],
+    },
+    coalitionJoinRequests: {
+        keyOf: (r) => `${r.coalitionId}::${r.userId}`,
+        conflictColumns: ['coalition_id', 'user_id'],
+    },
+    coalitionConnections: {
+        keyOf: (r) => `${r.coalitionId}::${r.platform}`,
+        conflictColumns: ['coalition_id', 'platform'],
+    },
+    coalitionMemberConnections: {
+        keyOf: (r) => `${r.coalitionId}::${r.userId}::${r.platform}`,
+        conflictColumns: ['coalition_id', 'user_id', 'platform'],
+    },
+    coalitionCampaignSyncOptIns: {
+        keyOf: (r) => `${r.campaignId}::${r.userId}::${r.platform}`,
+        conflictColumns: ['campaign_id', 'user_id', 'platform'],
+    },
+    coalitionBoosts: {
+        keyOf: (r) => `${r.campaignId}::${r.userId}::${r.day}`,
+        conflictColumns: ['campaign_id', 'user_id', 'day'],
+    },
     // coalition_rings flattens the optional nested location into lat/lng/address.
     coalitionRings: {
         toRow: (r) => {
@@ -488,6 +512,17 @@ const ALL_MAP_NAMES = [
     'subscriptionAuditEvents',
     'processedBillingWebhookEvents',
     'subscriptionGifts',
+    'coalitions',
+    'coalitionMemberships',
+    'coalitionJoinRequests',
+    'coalitionConnections',
+    'coalitionMemberConnections',
+    'coalitionCampaigns',
+    'coalitionCampaignPosts',
+    'coalitionExternalActivity',
+    'coalitionCampaignSyncOptIns',
+    'coalitionBoosts',
+    'coalitionCampaignContributions',
 ] as const;
 
 export const TABLE_DESCRIPTORS: TableDescriptor[] = ALL_MAP_NAMES.map((mapName) => {
@@ -680,6 +715,17 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
     upsertCoalitionRing: upsert('coalitionRings'),
     upsertRingMembership: upsert('ringMemberships'),
     upsertRingInvitation: upsert('ringInvitations'),
+    upsertCoalition: upsert('coalitions'),
+    upsertCoalitionMembership: upsert('coalitionMemberships'),
+    upsertCoalitionJoinRequest: upsert('coalitionJoinRequests'),
+    upsertCoalitionConnection: upsert('coalitionConnections'),
+    upsertCoalitionMemberConnection: upsert('coalitionMemberConnections'),
+    upsertCoalitionCampaign: upsert('coalitionCampaigns'),
+    upsertCoalitionCampaignPost: upsert('coalitionCampaignPosts'),
+    upsertCoalitionExternalActivity: upsert('coalitionExternalActivity'),
+    upsertCoalitionCampaignSyncOptIn: upsert('coalitionCampaignSyncOptIns'),
+    upsertCoalitionBoost: upsert('coalitionBoosts'),
+    upsertCoalitionCampaignContribution: upsert('coalitionCampaignContributions'),
     recordCoalitionKitApplication: upsert('coalitionKitApplications'),
     createCoalitionTask: upsert('coalitionTasks'),
     updateCoalitionTaskStatus: upsert('coalitionTasks'),
