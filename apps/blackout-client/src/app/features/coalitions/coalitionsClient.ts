@@ -46,7 +46,13 @@ export interface CoalitionMemberView {
     joinedAt: string;
 }
 
-export interface CoalitionCampaignView extends CoalitionCampaign {
+/**
+ * `createdBy` and `approvedBy` are omitted for a viewer outside the coalition —
+ * on a raised mutual-aid campaign `createdBy` is the member who raised a
+ * neighbour's request — so they are optional on the wire.
+ */
+export interface CoalitionCampaignView extends Omit<CoalitionCampaign, 'createdBy'> {
+    createdBy?: string;
     createdAt: string;
     updatedAt: string;
     boost?: BoostMeter;
@@ -54,6 +60,8 @@ export interface CoalitionCampaignView extends CoalitionCampaign {
 
 export interface CoalitionView extends CoalitionSummary {
     members: CoalitionMemberView[];
+    /** Active members withheld from `members` because they opted out of public listing. */
+    hiddenMemberCount: number;
     campaigns: CoalitionCampaignView[];
     stats: CoalitionImpactStats;
     viewer: {

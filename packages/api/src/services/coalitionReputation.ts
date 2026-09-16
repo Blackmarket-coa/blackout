@@ -23,13 +23,16 @@
 import { matrixUserIdFor } from './userIdentity';
 import { incrementCounter, logEvent } from './marketplaceObservability';
 
+/**
+ * Every event here is backed by a captured contribution — money the platform
+ * saw move. Founding a coalition, joining one and raising an aid post were
+ * awarded once and are gone: each was a row insert by one actor with no
+ * counterparty and no cost, so they minted reputation from nothing.
+ */
 export type CoalitionReputationEvent =
-    | 'coalition_founded'
-    | 'member_joined'
     | 'drive_completed'
     | 'drive_contributed'
     | 'mutual_aid_fulfilled'
-    | 'aid_raised'
     | 'project_delivered'
     | 'quest_completed';
 

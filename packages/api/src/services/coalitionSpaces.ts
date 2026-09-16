@@ -54,8 +54,18 @@ export function __setCoalitionMatrixForTests(client: CoalitionMatrix | null): vo
     matrix = client ?? matrixClient;
 }
 
-function joinRuleFor(joinMode: CoalitionJoinMode): 'public' | 'invite' {
-    return joinMode === 'open' ? 'public' : 'invite';
+/**
+ * The Space is always invite-only, for both join modes.
+ *
+ * The coalition itself is public — that is the growth surface, and it is the
+ * HTTP page, not a Matrix room. A `public` join rule buys nothing here because
+ * admission is already mediated entirely by the API (`admit` invites or
+ * force-joins the bot's Space), and it costs the whole roster: any user on any
+ * federated homeserver could join and read `m.room.member`, and their server
+ * keeps that state forever. No API-level privacy filter can reach it.
+ */
+function joinRuleFor(_joinMode: CoalitionJoinMode): 'invite' {
+    return 'invite';
 }
 
 function detailOf(result: Record<string, unknown>): string {
@@ -119,8 +129,14 @@ export async function provisionCoalitionSpace(coalition: CoalitionRecord): Promi
     const created = await matrix.createRoom({
         name: coalition.name,
         topic: coalition.mission,
-        visibility: coalition.joinMode === 'open' ? 'public' : 'private',
-        preset: coalition.joinMode === 'open' ? 'public_chat' : 'private_chat',
+        // Never published to the homeserver's room directory, which federating
+        // servers query: the directory entry alone exposes the name, topic and
+        // member count of every coalition on the server.
+        visibility: 'private',
+        // `private_chat` for the same reason, and because its history and
+        // guest-access defaults are the safe ones if the explicit join_rules
+        // entry below is ever trimmed.
+        preset: 'private_chat',
         // Spaces hold hierarchy state only; nothing conversational lives here.
         encrypted: false,
         creationContent: { type: 'm.space' },

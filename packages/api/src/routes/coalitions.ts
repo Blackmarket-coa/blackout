@@ -5,6 +5,7 @@
 // permission check happens in services/coalitionNetworkStore.ts against the
 // membership rows; nothing here trusts a client-asserted role.
 import { Hono } from 'hono';
+import type { Context } from 'hono';
 import { z } from 'zod';
 import {
     CAMPAIGN_STATUSES,
@@ -22,7 +23,9 @@ import { db } from '../db/store';
 import { readJsonBody } from '../middleware/validate';
 import { getAuthUser, requireUser } from '../middleware/require-user';
 import { matrixUserIdFor, resolveBlackoutUserId } from '../services/userIdentity';
+import { isPubliclyListed } from '../services/profileStore';
 import {
+    activeMembership,
     approveCampaign,
     archiveCoalition,
     boostCampaign,
@@ -30,6 +33,7 @@ import {
     createCampaign,
     createCoalition,
     getCampaign,
+    getCoalition,
     getCoalitionView,
     inviteMember,
     leaveCoalition,
@@ -45,6 +49,7 @@ import {
     transitionCampaign,
     listAmplifiedAid,
     raiseAidPost,
+    redactCampaignIdentities,
     updateCoalition,
     withdrawJoinRequest,
     type CoalitionError,
@@ -221,8 +226,22 @@ coalitions.get('/invites/mine', (c) => {
 coalitions.get('/users/:userId', (c) => {
     const userId = resolveBlackoutUserId(c.req.param('userId'));
     if (!userId) return c.json({ code: 'not_found', message: 'User not found' }, 404);
-    return c.json({ coalitions: listUserCoalitions(userId) });
+    const viewer = getAuthUser(c);
+    return c.json({ coalitions: listUserCoalitions(userId, viewer?.sub) });
 });
+
+/**
+ * Whether the caller is inside this coalition, for the read projections that
+ * carry member identity. `:id` may be a slug, so it resolves through
+ * `getCoalition` rather than being used as an id directly.
+ */
+function viewerIsMember(c: Context): boolean {
+    const viewer = getAuthUser(c);
+    if (!viewer) return false;
+    const idOrSlug = c.req.param('id');
+    const coalition = idOrSlug ? getCoalition(idOrSlug) : undefined;
+    return Boolean(coalition && activeMembership(coalition.id, viewer.sub));
+}
 
 const createSchema = z.object({
     name: z.string().min(2).max(80),
@@ -601,11 +620,19 @@ coalitions.get('/:id/campaigns/:campaignId/contributions', (c) => {
     const viewer = getAuthUser(c);
     const campaign = getCampaign(c.req.param('id'), c.req.param('campaignId'), viewer?.sub);
     if (!campaign.ok) return errorResponse(c, campaign.error);
+    // A public supporter wall carries a name next to an amount. For a viewer
+    // outside the coalition, a supporter who opted out of public listing is
+    // DROPPED rather than shown as an anonymous placeholder: the campaign's
+    // `raisedCents` and `contributorCount` are public too, so a placeholder
+    // beside an amount can be subtracted back out and attributed.
+    const insider = viewerIsMember(c);
     return c.json({
-        contributions: listContributions(campaign.value.id).map((row) => ({
-            ...row,
-            supporter: resolveUser(row.supporterUserId),
-        })),
+        contributions: listContributions(campaign.value.id)
+            .filter((row) => insider || isPubliclyListed(row.supporterUserId))
+            .map((row) => ({
+                ...row,
+                supporter: resolveUser(row.supporterUserId),
+            })),
     });
 });
 
@@ -633,7 +660,18 @@ coalitions.post('/:id/raise-aid', async (c) => {
 coalitions.get('/:id/amplified', (c) => {
     const amplified = listAmplifiedAid(c.req.param('id'));
     if (!amplified.ok) return errorResponse(c, amplified.error);
-    return c.json({ amplified: amplified.value });
+    // `campaign.createdBy` here is the member who raised a neighbour's request
+    // for help. Outside the coalition that is the single most sensitive id in
+    // the feature, and this route answered anonymous callers.
+    const insider = viewerIsMember(c);
+    return c.json({
+        amplified: insider
+            ? amplified.value
+            : amplified.value.map((row) => ({
+                  ...row,
+                  campaign: redactCampaignIdentities(row.campaign),
+              })),
+    });
 });
 
 /**
@@ -855,8 +893,14 @@ coalitions.get('/:id/campaigns/:campaignId/thread', (c) => {
     const viewer = getAuthUser(c);
     const campaign = getCampaign(c.req.param('id'), c.req.param('campaignId'), viewer?.sub);
     if (!campaign.ok) return errorResponse(c, campaign.error);
+    const insider = viewerIsMember(c);
     return c.json({
-        posts: listCampaignPosts(campaign.value.id),
+        // `authorUserId` is the member whose account carried the post out. The
+        // post itself was an explicit opt-in, but the id is a raw handle that
+        // joins back against the roster, so it stays behind the same line.
+        posts: listCampaignPosts(campaign.value.id).map((post) =>
+            insider ? post : { ...post, authorUserId: undefined }
+        ),
         replies: listApprovedActivity(campaign.value.id),
     });
 });

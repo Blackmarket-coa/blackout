@@ -525,7 +525,7 @@ export const CoalitionPage = () => {
         );
     }
 
-    const { coalition, viewer, members, campaigns, stats } = view;
+    const { coalition, viewer, members, campaigns, stats, hiddenMemberCount } = view;
     const membership = viewer.membership;
     const permissions = viewer.permissions;
     const can = (permission: string) => permissions.includes(permission as never);
@@ -779,7 +779,10 @@ export const CoalitionPage = () => {
                 </section>
 
                 <section style={{ display: 'grid', gap: 4 }}>
-                    <h2 style={headingStyle}>Members — {members.length}</h2>
+                    <h2 style={headingStyle}>
+                        Members — {stats.memberCount}
+                        {hiddenMemberCount > 0 ? ` · ${members.length} shown` : ''}
+                    </h2>
                     <div style={sectionLabelStyle}>Roster</div>
                     {members.map((member) => {
                         const assignable = actorRole ? assignableRolesFor(actorRole) : [];

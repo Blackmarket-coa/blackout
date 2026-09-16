@@ -47,7 +47,9 @@ import {
     syncCoalitionSpaceSettings,
 } from './coalitionSpaces';
 import { resolveMemberTier } from './coalitionTierGate';
+import { isPubliclyListed } from './profileStore';
 import { awardCoalitionKarma, type CoalitionReputationEvent } from './coalitionReputation';
+import { campaignHasCapturedContributions } from './coalitionDrives';
 import { openWindowForGoodsDrive, pushCoalitionMilestones } from './coalitionFbmBridge';
 
 const NOW_ISO = () => new Date().toISOString();
@@ -102,6 +104,14 @@ export interface CoalitionMemberView {
 
 export interface CoalitionView extends CoalitionSummary {
     members: CoalitionMemberView[];
+    /**
+     * How many active members are withheld from `members` because they opted
+     * out of public listing. Reported rather than concealed: `memberCount`
+     * stays the true total, so a viewer sees "48 members, 41 shown" instead of
+     * a roster that silently disagrees with its own count. A count is an
+     * aggregate, not an identity — it says someone is private, never who.
+     */
+    hiddenMemberCount: number;
     campaigns: CoalitionCampaignRecord[];
     stats: CoalitionImpactStats;
     viewer: {
@@ -198,6 +208,9 @@ export function listCoalitions(
     let rows = db.listCoalitions();
     if (!filter.includeArchived) rows = rows.filter((row) => !row.archivedAt);
     if (filter.memberId) {
+        // The same lookup as `listUserCoalitions` by another door, so it
+        // answers the same way for a member who opted out.
+        if (filter.memberId !== viewerId && !isPubliclyListed(filter.memberId)) return [];
         const ids = new Set(
             db
                 .listCoalitionMemberships({ userId: filter.memberId })
@@ -221,9 +234,19 @@ export function listCoalitions(
 }
 
 /** The coalitions a user belongs to, with their role — the profile's replacement for "friends". */
+/**
+ * The coalitions a member belongs to, for their profile page.
+ *
+ * Someone who opted out of public listing answers with an EMPTY LIST to
+ * everyone but themselves — indistinguishable from a member of no coalitions,
+ * so the response cannot be used to detect that the flag is set. A 403 or a
+ * distinct code would turn the privacy setting into its own oracle.
+ */
 export function listUserCoalitions(
-    userId: string
+    userId: string,
+    viewerId?: string
 ): Array<CoalitionSummary & { role: CoalitionRole }> {
+    if (viewerId !== userId && !isPubliclyListed(userId)) return [];
     return db
         .listCoalitionMemberships({ userId })
         .filter((m) => m.active)
@@ -235,7 +258,20 @@ export function listUserCoalitions(
         .map(({ membership, coalition }) => ({ ...summarize(coalition), role: membership.role }));
 }
 
-/** Non-members see only public campaign states; members see everything. */
+/**
+ * Non-members see only public campaign states, and never the member ids on a
+ * campaign.
+ *
+ * `createdBy` on a raised mutual-aid campaign is the member who raised a
+ * neighbour's request; `approvedBy` is the steward who launched it. Both are
+ * raw Blackout ids that join straight back against the roster, so redacting
+ * them here — the one function that already draws the member/non-member line —
+ * covers every read projection at once.
+ *
+ * It is deliberately NOT done in `getCampaign`, which the contribute route
+ * uses: `createdBy` is the tip's fallback beneficiary, so redacting it on that
+ * path would misroute money rather than protect anyone.
+ */
 export function visibleCampaigns(
     coalitionId: string,
     viewerIsMember: boolean
@@ -243,8 +279,18 @@ export function visibleCampaigns(
     const rows = db.listCoalitionCampaigns({ coalitionId });
     const visible = viewerIsMember
         ? rows
-        : rows.filter((row) => row.status === 'active' || row.status === 'completed');
+        : rows
+              .filter((row) => row.status === 'active' || row.status === 'completed')
+              .map((row) => redactCampaignIdentities(row));
     return visible.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+/** Strip the member ids a public reader has no business joining on. */
+export function redactCampaignIdentities(
+    campaign: CoalitionCampaignRecord
+): CoalitionCampaignRecord {
+    const { createdBy: _createdBy, approvedBy: _approvedBy, ...rest } = campaign;
+    return rest as CoalitionCampaignRecord;
 }
 
 export function getCoalitionView(
@@ -255,19 +301,29 @@ export function getCoalitionView(
     if (!coalition) return fail({ kind: 'not_found' });
     const membership = viewerId ? activeMembership(coalition.id, viewerId) : undefined;
     const request = viewerId ? db.getCoalitionJoinRequest(coalition.id, viewerId) : undefined;
-    const members = activeMembers(coalition.id)
+    const allMembers = activeMembers(coalition.id)
         .sort(
             (a, b) =>
                 ROLE_RANK[b.role] - ROLE_RANK[a.role] || a.createdAt.localeCompare(b.createdAt)
         )
         .map((m) => ({ userId: m.userId, role: m.role, joinedAt: m.createdAt }));
-    const campaigns = visibleCampaigns(coalition.id, Boolean(membership));
+    // The coalition is public; a member can choose not to be. Fellow members
+    // always see the whole roster — they are already inside the room.
+    const viewerIsMember = Boolean(membership);
+    const members = viewerIsMember
+        ? allMembers
+        : allMembers.filter((m) => isPubliclyListed(m.userId));
+    const campaigns = visibleCampaigns(coalition.id, viewerIsMember);
     const allCampaigns = db.listCoalitionCampaigns({ coalitionId: coalition.id });
     return succeed({
         ...summarize(coalition, viewerId),
         members,
+        hiddenMemberCount: allMembers.length - members.length,
         campaigns,
-        stats: summarizeCoalitionImpact(allCampaigns, members.length),
+        // The true total, matching `memberCount` from `summarize` — the impact
+        // stats are the coalition's reach, not a roster, so a private member
+        // still counts toward what the group achieved.
+        stats: summarizeCoalitionImpact(allCampaigns, allMembers.length),
         viewer: {
             ...(membership ? { membership } : {}),
             ...(request && (request.status === 'pending' || request.status === 'invited')
@@ -334,14 +390,6 @@ export async function createCoalition(input: CreateCoalitionInput): Promise<{
         module: 'coalitions',
         type: 'coalition.created',
         payload: { coalitionId: id, createdBy: input.createdBy, joinMode: input.joinMode },
-    });
-    // Reputation is a side effect, never a precondition: fire-and-forget so a
-    // slow or absent FBM never delays the founder's first page load.
-    void awardCoalitionKarma({
-        eventType: 'coalition_founded',
-        blackoutUserId: input.createdBy,
-        coalitionId: id,
-        referenceId: id,
     });
     return {
         coalition,
@@ -431,14 +479,6 @@ async function admit(
         module: 'coalitions',
         type: 'coalition.member.joined',
         payload: { coalitionId: coalition.id, userId, role: membership.role, via },
-    });
-    // Keyed on the membership row, not the moment: leaving and rejoining a
-    // coalition reuses the same row, so it cannot farm the join award.
-    void awardCoalitionKarma({
-        eventType: 'member_joined',
-        blackoutUserId: userId,
-        coalitionId: coalition.id,
-        referenceId: membership.id,
     });
     return membership;
 }
@@ -925,8 +965,17 @@ export function transitionCampaign(
     if (to === 'completed') {
         // The campaign's organiser is credited, not the closer — a steward
         // clicking "complete" on someone else's drive did not do the work.
+        //
+        // And only when somebody actually paid in. Completion is a click; a
+        // captured contribution is a fact the platform observed. Without this
+        // one person could found a coalition, create a drive, mark it complete
+        // and repeat, minting soulbound reputation from nothing.
+        //
+        // The transition itself stays unconditional — a drive that raised
+        // nothing must still be closeable, or a failed campaign is trapped
+        // active forever. It is the award that is gated, not the state machine.
         const eventType = completionEventFor(campaign.type);
-        if (eventType) {
+        if (eventType && campaignHasCapturedContributions(campaign.id, campaign.createdBy)) {
             void awardCoalitionKarma({
                 eventType,
                 blackoutUserId: campaign.createdBy,
@@ -1046,12 +1095,6 @@ export function raiseAidPost(
         module: 'coalitions',
         type: 'coalition.aid.raised',
         payload: { coalitionId: coalition.id, campaignId: campaign.id, aidPostId, by: actorId },
-    });
-    void awardCoalitionKarma({
-        eventType: 'aid_raised',
-        blackoutUserId: actorId,
-        coalitionId: coalition.id,
-        referenceId: campaign.id,
     });
     return succeed(campaign);
 }

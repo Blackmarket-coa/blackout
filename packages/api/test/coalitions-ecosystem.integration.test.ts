@@ -124,52 +124,63 @@ test.after(() => {
     __setBridgeFetchForTests(undefined);
 });
 
-test('founding a coalition reports the event, never an amount', async () => {
+test('founding, joining and raising mint no reputation at all', async () => {
+    // Each was a row insert by one actor with no counterparty and no cost, so
+    // one person could found coalitions and join them to farm a soulbound
+    // ladder. Nothing is emitted for any of them now.
     const coalition = await foundCoalition('Ecosystem Founders');
-    await settle();
-
-    const founded = reputationCalls.find((c) => c.body.eventType === 'coalition_founded');
-    assert.ok(founded, 'expected a coalition_founded push');
-    assert.equal(founded.method, 'POST');
-    assert.equal(founded.auth, 'Bearer svc-token-test');
-    assert.equal(founded.body.blackoutUserId, LEAD);
-    assert.equal(founded.body.referenceId, coalition.id);
-    // FBM decides what it is worth. Blackout never sends a delta, so a
-    // compromised Blackout process cannot mint reputation.
-    assert.equal(founded.body.amount, undefined);
-    assert.equal(founded.body.karma, undefined);
-});
-
-test('a member joining is keyed on the membership, so rejoining cannot farm it', async () => {
-    const coalition = await foundCoalition('Open Doors');
-    const join = async () =>
-        app.request(`/v1/coalitions/${coalition.id}/join`, {
-            method: 'POST',
-            headers: auth(MEMBER),
-        });
-
-    assert.equal((await join()).status, 200);
-    await settle();
-    await app.request(`/v1/coalitions/${coalition.id}/leave`, {
+    await app.request(`/v1/coalitions/${coalition.id}/join`, {
         method: 'POST',
         headers: auth(MEMBER),
     });
-    assert.equal((await join()).status, 200);
     await settle();
 
-    const joins = reputationCalls.filter((c) => c.body.eventType === 'member_joined');
-    assert.equal(joins.length, 2, 'both joins push');
-    // Same reference both times: FBM's (source_module, source_id) dedupe means
-    // the second award is a no-op rather than a second 2 KARMA.
-    assert.equal(joins[0]!.body.referenceId, joins[1]!.body.referenceId);
+    assert.deepEqual(
+        reputationCalls.map((c) => c.body.eventType),
+        [],
+        'no award is backed by a click'
+    );
 });
 
-test('completing a drive credits the organiser and pushes absolute totals', async () => {
+test('a completed drive nobody paid into earns nothing', async () => {
+    const coalition = await foundCoalition('Empty Drive');
+    const campaign = await launchCampaign(coalition.id, { type: 'drive', title: 'Coats' });
+    await setStatus(coalition.id, campaign.id, 'completed');
+    await settle();
+
+    assert.equal(
+        reputationCalls.filter((c) => c.body.eventType === 'drive_completed').length,
+        0,
+        'completion is a click; the award needs a captured contribution'
+    );
+
+    // The transition itself still succeeds — a drive that raised nothing must
+    // be closeable, or a failed campaign is trapped active forever.
+    assert.equal(db.getCoalitionCampaign(campaign.id)?.status, 'completed');
+
+    // And the milestone push does not count it, because FBM's coalition quest
+    // gate reads that number.
+    const milestones = bridgeCalls.find((c) => c.url.endsWith('/milestones'));
+    assert.equal(milestones?.body.drives_completed, 0);
+});
+
+test('a drive somebody paid into credits the organiser and pushes absolute totals', async () => {
     const coalition = await foundCoalition('Winter Drive');
     const campaign = await launchCampaign(coalition.id, {
         type: 'drive',
         title: 'Coats',
         goalCents: 20_000,
+    });
+    // A captured contribution from someone other than the organiser is the
+    // fact the completion award now rests on.
+    db.upsertCoalitionCampaignContribution({
+        id: 'contrib-winter-1',
+        campaignId: campaign.id,
+        coalitionId: coalition.id,
+        supporterUserId: MEMBER,
+        tipId: 'tip-winter-1',
+        amountCents: 5_000,
+        currency: 'USD',
     });
     await setStatus(coalition.id, campaign.id, 'completed');
     await settle();

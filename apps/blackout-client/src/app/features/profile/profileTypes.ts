@@ -85,6 +85,12 @@ export interface BmcProfileEvent {
      * (`GET /v1/profile/{userId}/public`) returns 404 unless this is `true`.
      */
     public?: boolean;
+    /**
+     * Opt-OUT of being listed on public coalition rosters. The INVERSE polarity
+     * of `public` above: absent or false means listed, because a coalition is a
+     * public growth surface. Only an explicit `true` hides someone.
+     */
+    hideFromPublicRosters?: boolean;
     /** Curated FreeBlackMarket vendor handles shown as sponsors/backers. */
     sponsors?: string[];
     /** Curated canopy ids surfaced as affiliations on the public profile. */
@@ -360,6 +366,7 @@ export const sanitizeProfileEvent = (input: unknown): BmcProfileEvent => {
         status: sanitizeStatus(data.status),
         pinnedMedia: sanitizePinnedMedia(data.pinnedMedia),
         public: data.public === true ? true : undefined,
+        hideFromPublicRosters: data.hideFromPublicRosters === true ? true : undefined,
         sponsors: Array.isArray(data.sponsors)
             ? data.sponsors
                   .filter(isString)

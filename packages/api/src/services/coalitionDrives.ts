@@ -182,6 +182,24 @@ export async function startContribution(
     }
 }
 
+/**
+ * Did anyone other than the organiser actually pay into this campaign?
+ *
+ * A contribution row exists only because `captureTip` ran, so this reads
+ * "money was captured for this campaign" — the one fact about a campaign that
+ * Blackout observed rather than was told. The organiser's own contributions do
+ * not count: once a campaign can name its own beneficiary and split, paying
+ * yourself would otherwise satisfy your own completion award.
+ */
+export function campaignHasCapturedContributions(
+    campaignId: string,
+    excludeUserId?: string
+): boolean {
+    return db
+        .listCoalitionCampaignContributions({ campaignId })
+        .some((row) => row.supporterUserId !== excludeUserId);
+}
+
 export interface RecordContributionInput {
     campaignId: string;
     supporterUserId: string;

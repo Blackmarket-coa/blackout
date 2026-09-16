@@ -92,8 +92,9 @@ export interface CoalitionMilestones {
 
 /**
  * The coalition's joint-drive totals, recomputed from its own rows. Only
- * COMPLETED drives count: an open drive is an intention, and a quest gate that
- * opened on intentions would be worth nothing.
+ * completed drives that CAPTURED A CONTRIBUTION count: an open drive is an
+ * intention and an unfunded one is a click, and a quest gate that opened on
+ * either would be worth nothing.
  */
 export function computeCoalitionMilestones(coalitionId: string): CoalitionMilestones {
     const campaigns = db.listCoalitionCampaigns({ coalitionId });
@@ -105,7 +106,11 @@ export function computeCoalitionMilestones(coalitionId: string): CoalitionMilest
         .listCoalitionCampaignContributions({ coalitionId })
         .filter((row) => completedIds.has(row.campaignId));
     return {
-        drivesCompleted: completed.length,
+        // Completed drives that somebody actually paid into. Counting bare
+        // completions here would hand the same free number to FBM's coalition
+        // quest gate, which reads it — a coalition could open that gate by
+        // creating and closing empty drives.
+        drivesCompleted: new Set(contributions.map((row) => row.campaignId)).size,
         contributingMembers: new Set(contributions.map((row) => row.supporterUserId)).size,
         raisedCents: contributions.reduce((sum, row) => sum + row.amountCents, 0),
     };

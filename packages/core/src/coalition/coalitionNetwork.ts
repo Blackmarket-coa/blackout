@@ -502,8 +502,13 @@ export function summarizeCoalitionImpact(
     for (const campaign of campaigns) {
         fundsRaisedCents += campaign.raisedCents;
         if (campaign.status === 'active') activeCampaigns += 1;
+        // A completed drive counts only if it raised something. Closing an
+        // empty drive is a click, and this figure is on the coalition's public
+        // page — it should say what the group did, not how often it pressed a
+        // button. `raisedCents` moves only on a captured contribution.
         if (
             campaign.status === 'completed' &&
+            campaign.raisedCents > 0 &&
             (campaign.type === 'drive' || campaign.type === 'goods_drive')
         ) {
             drivesCompleted += 1;
