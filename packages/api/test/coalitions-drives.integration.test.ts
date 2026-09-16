@@ -11,6 +11,11 @@ process.env.AUTH_RATE_LIMIT_MAX = process.env.AUTH_RATE_LIMIT_MAX ?? '1000';
 process.env.LIVEKIT_URL = process.env.LIVEKIT_URL ?? 'wss://livekit.local';
 process.env.LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY ?? 'lk_test_key';
 process.env.LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET ?? 'lk_test_secret';
+// A contribution now records nothing unless a checkout can actually be opened,
+// so these tests run against the stub marketplace rather than asserting the
+// old behaviour, where a drive with no listing behind it still wrote a pending
+// obligation nobody could ever collect.
+process.env.FREEBLACKMARKET_STUB = '1';
 
 const { default: app } = await import('../src/index');
 const { signJwt } = await import('../src/services/auth');
@@ -22,6 +27,21 @@ const { previewContribution, assertFlatCommission, COALITION_COMMISSION_BPS } = 
     '../src/services/coalitionDrives'
 );
 const { listBounties } = await import('../src/services/bountyStore');
+const { resetMarketplaceRegistry } = await import('../src/integrations/marketplace');
+
+/** A published listing the stub provider already carries. */
+const STUB_LISTING = 'stub-theme-noir';
+
+/**
+ * Point a campaign at a real listing. `fbmListingId` is deliberately not
+ * client-writable — it decides which listing takes a contributor's money — so
+ * a test sets it the way the server would.
+ */
+function attachListing(campaignId: string, listingId = STUB_LISTING): void {
+    const campaign = db.getCoalitionCampaign(campaignId);
+    if (!campaign) throw new Error(`no campaign ${campaignId}`);
+    db.upsertCoalitionCampaign({ ...campaign, fbmListingId: listingId });
+}
 
 function auth(user: string): Record<string, string> {
     return {
@@ -74,6 +94,7 @@ async function launchCampaign(coalitionId: string, body: Record<string, unknown>
 test.beforeEach(() => {
     __resetCoalitionsForTests();
     __setCoalitionMatrixForTests(null);
+    resetMarketplaceRegistry();
 });
 
 test('commission stays flat at 3% and the split is computed, never assumed', () => {
@@ -99,6 +120,7 @@ test('contributing records a pending tip with the 3% split and no money moves ye
         title: 'Winter coats',
         goalCents: 50_000,
     });
+    attachListing(campaign.id);
 
     const res = await app.request(
         `/v1/coalitions/${coalition.id}/campaigns/${campaign.id}/contribute`,
@@ -138,6 +160,7 @@ test('a replayed capture never double-counts, and a second gift from the same pe
         title: 'Seeds',
         goalCents: 10_000,
     });
+    attachListing(campaign.id);
     const contribute = async (user: string, amountCents: number) => {
         const res = await app.request(
             `/v1/coalitions/${coalition.id}/campaigns/${campaign.id}/contribute`,

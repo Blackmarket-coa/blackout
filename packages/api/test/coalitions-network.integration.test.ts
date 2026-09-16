@@ -333,14 +333,25 @@ test('changing join mode later never removes existing members', async () => {
     assert.equal(view.coalition.minTierToJoin, 'root');
     assert.equal(view.memberCount, 2, 'existing member kept');
 
-    // New joiners now hit the tier gate before the queue.
+    // A joiner below the gate is queued for a steward, never refused. The gate
+    // resolves a tier from FBM and answers 'seedling' for anyone it cannot
+    // place — every non-vendor, and everyone when the integration is
+    // unconfigured — so a hard refusal on that answer locked the coalition to
+    // nobody. A steward can see what a tier lookup cannot.
     __setTierResolverForTests(async () => 'seedling');
     const gated = await app.request(`/v1/coalitions/${coalition.id}/join`, {
         method: 'POST',
         headers: auth(OUTSIDER),
     });
-    assert.equal(gated.status, 403);
-    assert.equal(((await gated.json()) as { code: string }).code, 'tier_gate');
+    assert.equal(gated.status, 202, 'queued for review rather than rejected');
+
+    const queue = (await (
+        await app.request(`/v1/coalitions/${coalition.id}/requests`, { headers: auth(FOUNDER) })
+    ).json()) as { requests: Array<{ userId: string }> };
+    assert.ok(
+        queue.requests.some((row) => row.userId === OUTSIDER),
+        'a human still gets to decide'
+    );
 
     __setTierResolverForTests(async () => 'canopy');
     const allowed = await app.request(`/v1/coalitions/${coalition.id}/join`, {

@@ -303,9 +303,7 @@ export interface CreateCoalitionInput {
     createdBy: string;
 }
 
-export async function createCoalition(
-    input: CreateCoalitionInput
-): Promise<{
+export async function createCoalition(input: CreateCoalitionInput): Promise<{
     coalition: CoalitionRecord;
     membership: CoalitionMembershipRecord;
     space: { ok: boolean; detail?: string };
@@ -477,14 +475,18 @@ export async function requestJoin(
         return succeed({ joined: true, membership });
     }
 
-    if (coalition.minTierToJoin) {
-        const actual = await resolveMemberTier(userId);
-        if (!tierSatisfies(actual, coalition.minTierToJoin)) {
-            return fail({ kind: 'tier_gate', required: coalition.minTierToJoin, actual });
-        }
-    }
+    // An unmet tier files a request for the steward queue; it never refuses
+    // outright. The gate resolves a member's tier from FBM, so it answers
+    // "seedling" for anyone FBM cannot place — every non-vendor, and everyone
+    // at all when the integration is unconfigured. Refusing on that answer
+    // meant a founder who picked any rung above the floor created a coalition
+    // that rejected 100% of joiners permanently, with no way to appeal to a
+    // human. A steward reading a request can see what a tier lookup cannot.
+    const gated =
+        coalition.minTierToJoin !== undefined &&
+        !tierSatisfies(await resolveMemberTier(userId), coalition.minTierToJoin);
 
-    if (coalition.joinMode === 'open') {
+    if (coalition.joinMode === 'open' && !gated) {
         const membership = await admit(coalition, userId, 'member', 'open');
         return succeed({ joined: true, membership });
     }
@@ -957,6 +959,7 @@ export async function boostCampaign(
 ): Promise<CoalitionResult<{ meter: BoostMeter; remainingToday: number }>> {
     const coalition = getCoalition(idOrSlug);
     if (!coalition) return fail({ kind: 'not_found' });
+    if (coalition.archivedAt) return fail({ kind: 'archived' });
     if (!activeMembership(coalition.id, actorId)) return fail({ kind: 'not_member' });
     const campaign = db.getCoalitionCampaign(campaignId);
     if (!campaign || campaign.coalitionId !== coalition.id) return fail({ kind: 'not_found' });
@@ -1077,9 +1080,14 @@ export function listAmplifiedAid(
             aidPostId: campaign.aidPostId as string,
             boost: campaignBoostMeter(campaign.id, now),
         }))
+        // Reach saturates, so two well-supported asks tie on the multiplier
+        // often. Break that on live activity first and recency second, or the
+        // list becomes a permanent accumulation leaderboard where the
+        // longest-standing ask outranks the one people are backing today.
         .sort(
             (a, b) =>
                 b.boost.visibilityMultiplier - a.boost.visibilityMultiplier ||
+                b.boost.last24h - a.boost.last24h ||
                 b.campaign.createdAt.localeCompare(a.campaign.createdAt)
         );
     return succeed(rows);

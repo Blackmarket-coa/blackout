@@ -61,7 +61,7 @@ export const shellDestinationPanels: ShellPanelEntry[] = [
     {
         id: 'shell.coalition',
         kind: 'mobile-tab',
-        label: 'Coalition',
+        label: 'Commons',
         description:
             'The mutual-aid map — nearby stories, events, projects, and crews organizing on the ground.',
         icon: glyphIcon('🗺️'),

@@ -35,7 +35,7 @@ import type {
     CoalitionRecord,
 } from '../db/types';
 import { emitDomainEvent } from '../modules/domain-events';
-import { encryptSecret, envelopeKeyId } from './secretBox';
+import { encryptSecret } from './secretBox';
 import { activeMembership, getCoalition } from './coalitionNetworkStore';
 
 const NOW_ISO = () => new Date().toISOString();
@@ -184,6 +184,14 @@ export function connectPlatform(
     if (!coalitionRoleCan(membership.role, 'connections.manage'))
         return fail({ kind: 'forbidden' });
 
+    // A connection row is harmless and is what share-link mode runs on, so the
+    // route stays open. Accepting a SECRET does not: it writes a durable
+    // credential we have no revocation route for, and it was reachable while
+    // both sync gates were off. Custody starts when posting does.
+    if (input.authMode === 'shared' && input.secret && !outboundSyncEnabled()) {
+        return fail({ kind: 'disabled', gate: 'outbound' });
+    }
+
     // Shared credentials are encrypted at rest with the same envelope every
     // other third-party secret uses; the plaintext never returns from here.
     let credentialRef: string | undefined;
@@ -192,7 +200,11 @@ export function connectPlatform(
             const ciphertext = encryptSecret(input.secret, {
                 aad: `coalition_connection:${coalition.id}:${input.platform}`,
             });
-            credentialRef = `${envelopeKeyId(ciphertext)}:${ciphertext}`;
+            // The envelope already begins with its key id; prefixing it again
+            // produced a five-part string that `decryptSecret` rejects outright,
+            // so every credential stored this way was write-only ciphertext that
+            // could never be read back or revoked.
+            credentialRef = ciphertext;
         } catch {
             // The envelope key is an operator setting; say so rather than
             // storing a credential in the clear or failing opaquely.
@@ -277,6 +289,10 @@ export function linkMemberAccount(
     const connection = db.getCoalitionConnection(coalition.id, platform);
     if (!connection || !connection.active) return fail({ kind: 'no_connection', platform });
     if (connection.authMode !== 'personal') return fail({ kind: 'forbidden' });
+    // Same rule as the shared credential above: a member's personal platform
+    // token is the highest-value secret this feature touches, so it is not
+    // accepted until the thing that would use it is switched on.
+    if (!outboundSyncEnabled()) return fail({ kind: 'disabled', gate: 'outbound' });
 
     let ciphertext: string;
     try {
@@ -294,7 +310,7 @@ export function linkMemberAccount(
         coalitionId: coalition.id,
         userId,
         platform,
-        credentialRef: `${envelopeKeyId(ciphertext)}:${ciphertext}`,
+        credentialRef: ciphertext,
         ...(displayHandle ? { displayHandle } : {}),
     });
     return succeed({
@@ -462,7 +478,13 @@ export async function crosspostCampaign(
 ): Promise<SyncResult<{ outcomes: CrosspostOutcome[]; guardrails: GuardrailState }>> {
     const coalition = getCoalition(idOrSlug);
     if (!coalition) return fail({ kind: 'not_found' });
-    if (!activeMembership(coalition.id, userId)) return fail({ kind: 'not_member' });
+    const membership = activeMembership(coalition.id, userId);
+    if (!membership) return fail({ kind: 'not_member' });
+    // Posting under the coalition's name is a promotion act, not a membership
+    // act: `campaigns.promote` is held by griot, steward and founder, and was
+    // defined for exactly this. Without the check any member could speak for
+    // the whole coalition on X, Bluesky or Discord.
+    if (!coalitionRoleCan(membership.role, 'campaigns.promote')) return fail({ kind: 'forbidden' });
     if (!outboundSyncEnabled()) return fail({ kind: 'disabled', gate: 'outbound' });
 
     const campaign = db.getCoalitionCampaign(campaignId);

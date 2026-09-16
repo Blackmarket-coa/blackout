@@ -67,6 +67,15 @@ async function setup(name: string) {
         method: 'POST',
         headers: auth(MEMBER),
     });
+    // Promoting the coalition on an external platform is the griot's role —
+    // `campaigns.promote` — not something every member holds. A plain member
+    // speaking for the whole coalition on X or Discord is what that permission
+    // exists to prevent, so the fixture gives the poster the role the act needs.
+    await app.request(`/v1/coalitions/${coalition.id}/members/${MEMBER}`, {
+        method: 'PATCH',
+        headers: auth(LEAD),
+        body: JSON.stringify({ role: 'griot' }),
+    });
     const campaignRes = await app.request(`/v1/coalitions/${coalition.id}/campaigns`, {
         method: 'POST',
         headers: auth(LEAD),

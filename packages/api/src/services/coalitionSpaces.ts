@@ -77,6 +77,16 @@ async function inviteOrJoin(roomId: string, mxid: string, reason: string): Promi
 /** Read-modify-write m.room.power_levels so `users[mxid] = level`. */
 async function applyPowerLevel(roomId: string, mxid: string, level: number): Promise<SpaceOutcome> {
     const current = await matrix.getStateEvent(roomId, 'm.room.power_levels', '');
+    // A 404 means the Space has no power-levels event yet — nothing to preserve,
+    // so `{}` is the right base. ANY OTHER failure aborts: treating an
+    // unreadable event as an empty one turns this read-modify-write into a
+    // REPLACE, and one 429 would strip events_default, invite, state_default
+    // and every other member's level — including the bot's own, locking it out
+    // of a Space it could no longer repair. A missed mirror is recoverable;
+    // this is not.
+    if (!current.ok && current.status !== 404) {
+        return { ok: false, roomId, detail: 'power_levels_unreadable' };
+    }
     const content: { users?: Record<string, number> } & Record<string, unknown> =
         current.ok && 'content' in current && current.content
             ? (current.content as { users?: Record<string, number> } & Record<string, unknown>)

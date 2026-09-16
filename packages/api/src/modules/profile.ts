@@ -13,6 +13,7 @@ import {
 } from '../services/profileStore';
 import type { FeatureModule } from './types';
 import {
+    canViewWall,
     collectDownstreamRelays,
     DEFAULT_PROFILE_LAYOUT,
     normalizeProfileLayout,
@@ -21,7 +22,7 @@ import {
     type RelayLink,
 } from '@blackout/core';
 import { matrixUserIdFor, resolveBlackoutUserId } from '../services/userIdentity';
-import { listFollowing, mutualsOf } from '../services/follows';
+import { circlesOverlap, listFollowing, mutualsOf } from '../services/follows';
 
 /** MXID localpart extractor (`@localpart:domain` → `localpart`). */
 const MXID_LOCALPART_RE = /^@([^:]+):[^:]+$/;
@@ -67,7 +68,6 @@ const upsertSchema = z.object({
     primaryRole: z.preprocess(blankToUndefined, z.string().max(120).optional()),
     roleBadges: z.array(z.string().max(60)).max(20).optional(),
     mutualSpaces: z.array(z.string().max(120)).max(50).optional(),
-    isFriend: z.boolean().optional(),
     profile: z.unknown().optional(),
 });
 
@@ -147,10 +147,32 @@ function createProfileRouter() {
         return c.json({ ...member, event });
     });
 
+    /**
+     * Whether `viewerId` may read the wall owned by `ownerId` — the same rule
+     * the feed applies, so the two surfaces cannot disagree about who a
+     * members-only wall is visible to.
+     */
+    const viewerCanReadWall = (viewerId: string | null, ownerId: string): boolean => {
+        if (viewerId === ownerId) return true;
+        return canViewWall({
+            settings: getProfileOrDefault(ownerId).profile.wall,
+            ownerId,
+            viewerId,
+            viewerConnected: viewerId ? circlesOverlap(viewerId, ownerId) : false,
+        });
+    };
+
     profile.get('/:userId/wall', (c) => {
         const denied = requireDomainCapability(c, 'profile', 'read');
         if (denied) return denied;
         const { userId } = c.req.param();
+        const viewer = requireAuthenticatedUser(c);
+        if (!viewerCanReadWall(viewer, userId)) {
+            // The owner's audience setting is enforced here, not only rendered
+            // in the client. Until this check existed, a wall the UI labelled
+            // members-only answered any caller that asked for it.
+            return c.json({ code: 'forbidden', message: 'This wall is not visible to you' }, 403);
+        }
         return c.json({ userId, posts: listWallPosts(userId) });
     });
 
@@ -163,10 +185,16 @@ function createProfileRouter() {
             return c.json({ code: 'unauthorized', message: 'Unauthorized' }, 401);
         }
 
+        const { userId } = c.req.param();
+        // Posting to a wall you cannot read is not a coherent action, and it is
+        // the route an unwanted message would arrive on.
+        if (!viewerCanReadWall(author, userId)) {
+            return c.json({ code: 'forbidden', message: 'This wall is not open to you' }, 403);
+        }
+
         const parsed = await readJsonBody(c, wallPostSchema);
         if (parsed instanceof Response) return parsed;
 
-        const { userId } = c.req.param();
         try {
             const post = appendWallPost({
                 profileUserId: userId,

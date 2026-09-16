@@ -115,6 +115,9 @@ export const CREATOR_HUB_PATH = '/creator-hub';
 
 /** Top-level Coalition and Coliseum destinations (see their feature `routes.ts`). */
 export const COALITION_PATH = '/coalition';
+/** The coalition network that replaced the friends list. Note the plural: this
+ *  is not COALITION_PATH, which is the map-first mutual-aid hub. */
+export const COALITIONS_PATH = '/coalitions';
 export const COLISEUM_PATH = '/coliseum';
 
 /**

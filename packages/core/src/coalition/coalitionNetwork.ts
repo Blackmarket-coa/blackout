@@ -439,9 +439,24 @@ export function computeBoostMeter(
     const last24h = boosts.filter((b) => b.day === today).length;
     const prev24h = boosts.filter((b) => b.day === yesterday).length;
     const surgeFactor = Math.max(0, Math.min(1, (last24h + 1) / (last24h + prev24h + 2)));
-    // Neutral at 1; up to 1.4x when today's boosts dominate, matching the
-    // (0.8 + 0.4 * surgeFactor) momentum lift used for project feed items.
-    const visibilityMultiplier = 0.8 + 0.4 * surgeFactor + Math.min(0.2, boosts.length / 50);
+    // Two non-negative bonuses over a neutral 1, so that boosting a campaign can
+    // never rank it below one nobody has ever boosted.
+    //
+    // The previous form folded the raw surge factor straight into the
+    // multiplier, which had two consequences nobody would choose: a campaign
+    // boosted three times yesterday and not today scored 0.940 against 1.000
+    // for a campaign with no boosts at all, and a campaign whose boosts were
+    // all older than 48h scored 1.200 against 1.004 for one boosted yesterday —
+    // so amplification demoted, and staleness outranked recency.
+    //
+    //   acceleration  0..1   momentum only, 0 unless today beats yesterday
+    //   reach         0..0.2 distinct support, saturating at 10 boosts
+    //
+    // `surgeFactor` is unchanged and still the project-Surge Laplace ratio; it
+    // is 0.5 at rest, so only its excess over 0.5 counts as acceleration.
+    const acceleration = Math.max(0, surgeFactor - 0.5) * 2;
+    const reach = Math.min(0.2, boosts.length / 50);
+    const visibilityMultiplier = 1 + 0.4 * acceleration + reach;
     return {
         total: boosts.length,
         members,

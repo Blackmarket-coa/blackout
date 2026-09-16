@@ -423,8 +423,13 @@ const campaignSchema = z.object({
     projectId: z.string().max(120).optional(),
     bountyId: z.string().max(120).optional(),
     aidPostId: z.string().max(120).optional(),
-    fbmListingId: z.string().max(120).optional(),
-    fbmOrderCycleId: z.string().max(120).optional(),
+    // `fbmListingId` and `fbmOrderCycleId` are deliberately NOT accepted
+    // here. They decide which FBM listing takes a contributor's money and
+    // which ordering window a goods drive opens, so a client-supplied value
+    // is a way to point a coalition's fundraising at somebody else's
+    // listing. Both are written server-side only: the order cycle id by the
+    // FBM bridge, the listing id by the drive-listing path when it exists.
+
     // Post the project to the Creator Hub bounty board as the coalition.
     bounty: z
         .object({
@@ -547,6 +552,20 @@ coalitions.post('/:id/campaigns/:campaignId/contribute', async (c) => {
             ...(parsed.embed ? { embed: true } : {}),
             ...(origin ? { embedOrigin: origin } : {}),
         });
+        if (!result.tip) {
+            // Nothing was recorded, so this is not a created contribution.
+            // Answering 201 here told the contributor their money was on its
+            // way when no checkout existed to take it.
+            return c.json(
+                {
+                    code: 'contributions_unavailable',
+                    message: 'This drive cannot take contributions right now',
+                    reason: result.checkoutError ?? 'no_listing',
+                    split: result.split,
+                },
+                503
+            );
+        }
         return c.json(
             {
                 tipId: result.tip.id,
@@ -650,7 +669,6 @@ coalitions.get('/:id/campaigns/:campaignId/public', (c) => {
             raisedCents: campaign.raisedCents,
             contributorCount: campaign.contributorCount,
             currency: 'USD',
-            fbmListingId: campaign.fbmListingId ?? null,
             url: `${base}/coalitions/${encodeURIComponent(view.value.coalition.slug)}`,
         },
     });

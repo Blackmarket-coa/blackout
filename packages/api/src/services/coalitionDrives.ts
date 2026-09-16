@@ -23,6 +23,7 @@ import {
 import { db } from '../db/store';
 import type { CoalitionCampaignRecord, CoalitionCampaignContributionRecord } from '../db/types';
 import { emitDomainEvent } from '../modules/domain-events';
+import { incrementCounter, logEvent } from './marketplaceObservability';
 import { awardCoalitionKarma } from './coalitionReputation';
 import { getMarketplaceProvider } from '../integrations/marketplace';
 import { createTip, type TipView } from './tips';
@@ -81,7 +82,8 @@ export interface StartContributionInput {
 }
 
 export interface StartContributionResult {
-    tip: TipView;
+    /** Null when no checkout could be opened — nothing is recorded in that case. */
+    tip: TipView | null;
     split: ContributionSplit;
     redirectUrl: string | null;
     sessionId: string | null;
@@ -99,6 +101,30 @@ export async function startContribution(
     input: StartContributionInput
 ): Promise<StartContributionResult> {
     assertFlatCommission();
+
+    // Check that a checkout can actually be opened BEFORE recording anything.
+    // The previous order wrote the tip first, so every contribution to a drive
+    // with no listing behind it left a permanent pending obligation that
+    // nothing could ever collect — and the route answered 201 Created for it.
+    const provider = getMarketplaceProvider(DEFAULT_PROVIDER);
+    if (!provider?.enabled || !input.campaign.fbmListingId) {
+        const reason = input.campaign.fbmListingId ? 'provider_unavailable' : 'no_listing';
+        incrementCounter('coalition_contribution_unavailable', { reason });
+        logEvent('coalition_contribution_unavailable', {
+            campaignId: input.campaign.id,
+            coalitionId: input.campaign.coalitionId,
+            reason,
+        });
+        return {
+            tip: null,
+            split: previewContribution(input.grossCents),
+            redirectUrl: null,
+            sessionId: null,
+            embed: false,
+            checkoutError: reason,
+        };
+    }
+
     const beneficiary = input.beneficiaryUserId ?? input.campaign.createdBy;
     const tip = createTip({
         senderUserId: input.supporterUserId,
@@ -120,21 +146,6 @@ export async function startContribution(
         netCents: tip.netCents,
     };
 
-    const provider = getMarketplaceProvider(DEFAULT_PROVIDER);
-    if (!provider?.enabled || !input.campaign.fbmListingId) {
-        // No listing yet (or the provider is dark): the obligation is recorded
-        // and stays pending until an operator captures it. The caller tells the
-        // contributor rather than showing a false "sent".
-        return {
-            tip,
-            split,
-            redirectUrl: null,
-            sessionId: null,
-            embed: false,
-            checkoutError: input.campaign.fbmListingId ? 'provider_unavailable' : 'no_listing',
-        };
-    }
-
     const embed = input.embed === true && provider.capabilities.includes('embedded-checkout');
     try {
         const result = await provider.createCheckoutSession({
@@ -149,15 +160,24 @@ export async function startContribution(
             // capture finds its way back to this pending row.
             metadata: { tipId: tip.id, campaignId: input.campaign.id },
         });
+        incrementCounter('coalition_contribution_started');
         return { tip, split, redirectUrl: result.redirectUrl, sessionId: result.sessionId, embed };
     } catch (error) {
+        // A fixed code, never the provider's message: that string carries
+        // operator configuration guidance and was being echoed to API callers.
+        incrementCounter('coalition_contribution_checkout_failed');
+        logEvent('coalition_contribution_checkout_failed', {
+            campaignId: input.campaign.id,
+            tipId: tip.id,
+            error: error instanceof Error ? error.name : 'unknown',
+        });
         return {
             tip,
             split,
             redirectUrl: null,
             sessionId: null,
             embed: false,
-            checkoutError: error instanceof Error ? error.message : String(error),
+            checkoutError: 'checkout_unavailable',
         };
     }
 }

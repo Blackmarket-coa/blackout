@@ -16,9 +16,7 @@
 import { db } from '../../db/store';
 import type { FbmAclStateRecord } from '../../db/types';
 import { matrixClient } from '../../integrations/matrix-client';
-import {
-    getEntitlementsClient,
-} from '../../integrations/fbm/entitlementsClientFactory';
+import { getEntitlementsClient } from '../../integrations/fbm/entitlementsClientFactory';
 import type { FbmEntitlementsClient } from '../../integrations/fbm/entitlementsContract';
 import { incrementCounter, logEvent } from '../marketplaceObservability';
 
@@ -119,6 +117,18 @@ async function applyPowerLevel(
     powerLevel: number
 ): Promise<boolean> {
     const current = await matrix.getStateEvent(roomId, 'm.room.power_levels', '');
+    // A 404 means the room genuinely has no power-levels event yet, so there is
+    // nothing to preserve and `{}` is the right base. ANY OTHER failure — a
+    // 429, a 5xx, a timeout — must abort: treating an unreadable event as an
+    // empty one turns this read-modify-write into a REPLACE, stripping
+    // events_default, invite and every other member's level from the room.
+    // A skipped sync retries on the next pass; a flattened event does not
+    // repair itself.
+    if (!current.ok && current.status !== 404) {
+        incrementCounter('fbm_acl_sync_failed_total', { stage: 'read_power_levels' });
+        logEvent('fbm.acl_sync.read_failed', { mxid, roomId, status: current.status });
+        return false;
+    }
     const content: PowerLevelsContent =
         current.ok && current.content ? (current.content as PowerLevelsContent) : {};
     const users = { ...(content.users ?? {}) };
