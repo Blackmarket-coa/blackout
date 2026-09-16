@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { hashPassword } from '../services/auth';
 import type {
@@ -6044,7 +6044,26 @@ export class FileBackedDb extends InMemoryDb {
         // clobber an existing file before hydrate() loads it.
         if (!this.ready) return;
         mkdirSync(dirname(DB_FILE_PATH), { recursive: true });
-        writeFileSync(DB_FILE_PATH, `${JSON.stringify(this.snapshot(), null, 2)}\n`, 'utf8');
+        // Write to a sibling temp file and rename over the target, rather than
+        // writing the store in place. A direct write truncates the file first,
+        // so anything that interrupts it — a full disk, a killed process —
+        // leaves a half-written JSON document that `hydrate()` cannot parse,
+        // and the store is unrecoverable on next boot. rename(2) within a
+        // directory is atomic, so a reader sees either the previous snapshot
+        // or the new one and never a partial one.
+        const tmpPath = `${DB_FILE_PATH}.tmp`;
+        try {
+            writeFileSync(tmpPath, `${JSON.stringify(this.snapshot(), null, 2)}\n`, 'utf8');
+            renameSync(tmpPath, DB_FILE_PATH);
+        } catch (error) {
+            // Leave the previous snapshot intact and drop the partial temp file.
+            try {
+                rmSync(tmpPath, { force: true });
+            } catch {
+                // Best effort; the temp file is ignored by hydrate() either way.
+            }
+            throw error;
+        }
     }
 
     override createUser(input: Omit<UserRecord, 'createdAt'>): UserRecord {
