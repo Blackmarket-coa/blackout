@@ -24,6 +24,7 @@ import { readJsonBody } from '../middleware/validate';
 import { getAuthUser, requireUser } from '../middleware/require-user';
 import { matrixUserIdFor, resolveBlackoutUserId } from '../services/userIdentity';
 import { isPubliclyListed } from '../services/profileStore';
+import { isAdminUser } from '../services/auth';
 import {
     activeMembership,
     approveCampaign,
@@ -48,7 +49,13 @@ import {
     transferFounder,
     transitionCampaign,
     listAmplifiedAid,
+    getSuccessionPetition,
     listCampaignPayees,
+    openSuccessionPetition,
+    reinstateCoalition,
+    secondSuccessionPetition,
+    takeDownCoalition,
+    withdrawSuccessionPetition,
     raiseAidPost,
     redactCampaignIdentities,
     setCampaignPayees,
@@ -114,6 +121,34 @@ function errorResponse(c: Parameters<typeof requireUser>[0], error: CoalitionErr
                     actual: error.actual,
                 },
                 403
+            );
+        case 'taken_down':
+            return c.json(
+                {
+                    code: 'taken_down',
+                    message: 'This coalition has been taken down by the platform',
+                },
+                403
+            );
+        case 'petition_open':
+            return c.json(
+                { code: 'petition_open', message: 'A succession petition is already open' },
+                409
+            );
+        case 'petition_not_found':
+            return c.json(
+                { code: 'petition_not_found', message: 'No open succession petition' },
+                404
+            );
+        case 'quorum_not_met':
+            return c.json(
+                {
+                    code: 'quorum_not_met',
+                    message: `${error.needed} stewards must back this; ${error.have} have`,
+                    needed: error.needed,
+                    have: error.have,
+                },
+                409
             );
         case 'payees_invalid':
             return c.json(
@@ -278,6 +313,93 @@ coalitions.post('/', async (c) => {
         },
         201
     );
+});
+
+coalitions.get('/platforms', (c) =>
+    c.json({
+        platforms: COALITION_PLATFORMS.map((platform) => ({
+            platform,
+            ...COALITION_PLATFORM_CAPABILITIES[platform],
+        })),
+        authModes: CONNECTION_AUTH_MODES,
+    })
+);
+
+coalitions.get('/:id/connections', (c) => {
+    const viewer = getAuthUser(c);
+    const view = getCoalitionView(c.req.param('id'), viewer?.sub);
+    if (!view.ok) return errorResponse(c, view.error);
+    return c.json({ connections: listConnections(view.value.coalition.id, viewer?.sub) });
+});
+
+/**
+ * Platform authority. Deliberately NOT `requireDomainCapability`, which merges
+ * capabilities asserted in a request header — any concrete scope there is
+ * self-assertable, so it gates nothing an attacker cares about.
+ */
+const requireModerator = (c: Context) => {
+    const user = requireUser(c, 'Sign in required');
+    if (user instanceof Response) return user;
+    if (!isAdminUser(user.sub, user.username)) {
+        return c.json({ code: 'forbidden', message: 'Moderator privileges required' }, 403);
+    }
+    return user;
+};
+
+const takedownSchema = z.object({ reason: z.string().min(1).max(500) });
+
+coalitions.post('/:id/takedown', async (c) => {
+    const user = requireModerator(c);
+    if (user instanceof Response) return user;
+    const parsed = await readJsonBody(c, takedownSchema);
+    if (parsed instanceof Response) return parsed;
+    const result = await takeDownCoalition(c.req.param('id'), user.sub, parsed.reason);
+    if (!result.ok) return errorResponse(c, result.error);
+    return c.json({ coalition: result.value });
+});
+
+coalitions.post('/:id/reinstate', async (c) => {
+    const user = requireModerator(c);
+    if (user instanceof Response) return user;
+    const result = await reinstateCoalition(c.req.param('id'), user.sub);
+    if (!result.ok) return errorResponse(c, result.error);
+    return c.json({ coalition: result.value });
+});
+
+// --- succession: taking over from a founder who has gone ---
+
+const petitionSchema = z.object({ reason: z.string().min(1).max(1000) });
+
+coalitions.get('/:id/succession', (c) => {
+    const result = getSuccessionPetition(c.req.param('id'));
+    if (!result.ok) return errorResponse(c, result.error);
+    return c.json(result.value);
+});
+
+coalitions.post('/:id/succession', async (c) => {
+    const user = requireUser(c);
+    if (user instanceof Response) return user;
+    const parsed = await readJsonBody(c, petitionSchema);
+    if (parsed instanceof Response) return parsed;
+    const result = openSuccessionPetition(c.req.param('id'), user.sub, parsed.reason);
+    if (!result.ok) return errorResponse(c, result.error);
+    return c.json({ petition: result.value }, 201);
+});
+
+coalitions.post('/:id/succession/second', async (c) => {
+    const user = requireUser(c);
+    if (user instanceof Response) return user;
+    const result = await secondSuccessionPetition(c.req.param('id'), user.sub);
+    if (!result.ok) return errorResponse(c, result.error);
+    return c.json({ petition: result.value });
+});
+
+coalitions.post('/:id/succession/withdraw', (c) => {
+    const user = requireUser(c);
+    if (user instanceof Response) return user;
+    const result = withdrawSuccessionPetition(c.req.param('id'), user.sub);
+    if (!result.ok) return errorResponse(c, result.error);
+    return c.json({ petition: result.value });
 });
 
 coalitions.get('/:id', (c) => {
@@ -854,22 +976,6 @@ function syncErrorResponse(c: Parameters<typeof requireUser>[0], error: SyncErro
 }
 
 /** What this server can post to, and how. */
-coalitions.get('/platforms', (c) =>
-    c.json({
-        platforms: COALITION_PLATFORMS.map((platform) => ({
-            platform,
-            ...COALITION_PLATFORM_CAPABILITIES[platform],
-        })),
-        authModes: CONNECTION_AUTH_MODES,
-    })
-);
-
-coalitions.get('/:id/connections', (c) => {
-    const viewer = getAuthUser(c);
-    const view = getCoalitionView(c.req.param('id'), viewer?.sub);
-    if (!view.ok) return errorResponse(c, view.error);
-    return c.json({ connections: listConnections(view.value.coalition.id, viewer?.sub) });
-});
 
 const connectSchema = z.object({
     platform: z.enum(COALITION_PLATFORMS),

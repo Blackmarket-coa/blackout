@@ -528,6 +528,7 @@ const ALL_MAP_NAMES = [
     'coalitionBoosts',
     'coalitionCampaignContributions',
     'coalitionCampaignPayees',
+    'coalitionSuccessionPetitions',
 ] as const;
 
 export const TABLE_DESCRIPTORS: TableDescriptor[] = ALL_MAP_NAMES.map((mapName) => {
@@ -732,6 +733,7 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
     upsertCoalitionBoost: upsert('coalitionBoosts'),
     upsertCoalitionCampaignContribution: upsert('coalitionCampaignContributions'),
     upsertCoalitionCampaignPayee: upsert('coalitionCampaignPayees'),
+    upsertCoalitionSuccessionPetition: upsert('coalitionSuccessionPetitions'),
     recordCoalitionKitApplication: upsert('coalitionKitApplications'),
     createCoalitionTask: upsert('coalitionTasks'),
     updateCoalitionTaskStatus: upsert('coalitionTasks'),

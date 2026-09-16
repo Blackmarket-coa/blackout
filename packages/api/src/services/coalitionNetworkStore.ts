@@ -24,6 +24,8 @@ import {
     type BoostMeter,
     type CampaignStatus,
     campaignPayeeSharesAreValid,
+    successionQuorum,
+    successionQuorumMet,
     type CampaignType,
     type CoalitionImpactStats,
     type CoalitionJoinMode,
@@ -34,6 +36,7 @@ import {
 import { db } from '../db/store';
 import type {
     CoalitionCampaignPayeeRecord,
+    CoalitionSuccessionPetitionRecord,
     CoalitionCampaignRecord,
     CoalitionJoinRequestRecord,
     CoalitionMembershipRecord,
@@ -47,6 +50,7 @@ import {
     syncCoalitionMemberToSpace,
     syncCoalitionRoleToSpace,
     syncCoalitionSpaceSettings,
+    closeCoalitionSpace,
 } from './coalitionSpaces';
 import { resolveMemberTier } from './coalitionTierGate';
 import { isPubliclyListed } from './profileStore';
@@ -55,7 +59,11 @@ import { incrementCounter } from './marketplaceObservability';
 import { resolveBlackoutUserId } from './userIdentity';
 import { awardCoalitionKarma, type CoalitionReputationEvent } from './coalitionReputation';
 import { campaignHasCapturedContributions } from './coalitionDrives';
-import { openWindowForGoodsDrive, pushCoalitionMilestones } from './coalitionFbmBridge';
+import {
+    openWindowForGoodsDrive,
+    pushCoalitionMilestones,
+    pushCoalitionStatus,
+} from './coalitionFbmBridge';
 
 const NOW_ISO = () => new Date().toISOString();
 const rand = () => Math.random().toString(36).slice(2, 10);
@@ -77,6 +85,10 @@ export type CoalitionError =
     | { kind: 'approval_required'; request: CoalitionJoinRequestRecord }
     | { kind: 'tier_gate'; required: CoalitionTierGate; actual: CoalitionTierGate }
     | { kind: 'payees_invalid'; reason: string }
+    | { kind: 'taken_down' }
+    | { kind: 'petition_open' }
+    | { kind: 'petition_not_found' }
+    | { kind: 'quorum_not_met'; needed: number; have: number }
     | { kind: 'invalid_role' }
     | { kind: 'last_founder' }
     | { kind: 'invalid_transition'; from: CampaignStatus; to: CampaignStatus }
@@ -260,7 +272,7 @@ export function listUserCoalitions(
         .map((m) => ({ membership: m, coalition: db.getCoalition(m.coalitionId) }))
         .filter(
             (pair): pair is { membership: CoalitionMembershipRecord; coalition: CoalitionRecord } =>
-                Boolean(pair.coalition && !pair.coalition.archivedAt)
+                Boolean(pair.coalition && !isStopped(pair.coalition))
         )
         .map(({ membership, coalition }) => ({ ...summarize(coalition), role: membership.role }));
 }
@@ -431,7 +443,7 @@ export async function updateCoalition(
 ): Promise<CoalitionResult<CoalitionRecord>> {
     const coalition = getCoalition(idOrSlug);
     if (!coalition) return fail({ kind: 'not_found' });
-    if (coalition.archivedAt) return fail({ kind: 'archived' });
+    if (isStopped(coalition)) return fail(stoppedError(coalition));
     const gate = requirePermission(coalition, actorId, 'coalition.edit');
     if (!gate.ok) return gate;
     const next: CoalitionRecord = { ...coalition };
@@ -452,6 +464,79 @@ export async function updateCoalition(
     return succeed(saved);
 }
 
+/**
+ * A coalition that has stopped accepting activity — archived by its own
+ * founder, or taken down by the platform. Every mutation path tests this one
+ * predicate so the two cannot drift apart.
+ */
+export function isStopped(coalition: CoalitionRecord): boolean {
+    return Boolean(coalition.archivedAt || coalition.takenDownAt);
+}
+
+function stoppedError(coalition: CoalitionRecord): CoalitionError {
+    return coalition.takenDownAt ? { kind: 'taken_down' } : { kind: 'archived' };
+}
+
+/**
+ * Take a coalition down. Platform authority, not the coalition's own.
+ *
+ * Archiving was never a stop: it set a timestamp that seven of twenty mutation
+ * paths happened to check, while money, cross-posting, the public widget and
+ * the Matrix Space all carried on. A takedown has to actually stop things, so
+ * it sets a flag the coalition cannot clear, closes the Space, and tells FBM to
+ * pull the collective storefront.
+ */
+export async function takeDownCoalition(
+    idOrSlug: string,
+    adminUserId: string,
+    reason: string
+): Promise<CoalitionResult<CoalitionRecord>> {
+    const coalition = getCoalition(idOrSlug);
+    if (!coalition) return fail({ kind: 'not_found' });
+    if (coalition.takenDownAt) return succeed(coalition);
+    const saved = db.upsertCoalition({
+        ...coalition,
+        takenDownAt: NOW_ISO(),
+        takenDownBy: adminUserId,
+        takedownReason: reason,
+        reinstatedAt: undefined,
+    });
+    // Both are best-effort and neither may fail the takedown: the flag is what
+    // stops the platform, and a Matrix or FBM outage must not leave a coalition
+    // running because its side effects could not be delivered.
+    await closeCoalitionSpace(saved);
+    void pushCoalitionStatus(saved.id, 'taken_down');
+    emitDomainEvent({
+        module: 'coalitions',
+        type: 'coalition.taken_down',
+        payload: { coalitionId: coalition.id, by: adminUserId, reason },
+    });
+    return succeed(saved);
+}
+
+/** Undo a takedown. Only the platform can, and only it could. */
+export async function reinstateCoalition(
+    idOrSlug: string,
+    adminUserId: string
+): Promise<CoalitionResult<CoalitionRecord>> {
+    const coalition = getCoalition(idOrSlug);
+    if (!coalition) return fail({ kind: 'not_found' });
+    if (!coalition.takenDownAt) return succeed(coalition);
+    const saved = db.upsertCoalition({
+        ...coalition,
+        takenDownAt: undefined,
+        takedownReason: undefined,
+        reinstatedAt: NOW_ISO(),
+    });
+    void pushCoalitionStatus(saved.id, 'active');
+    emitDomainEvent({
+        module: 'coalitions',
+        type: 'coalition.reinstated',
+        payload: { coalitionId: coalition.id, by: adminUserId },
+    });
+    return succeed(saved);
+}
+
 export function archiveCoalition(
     idOrSlug: string,
     actorId: string
@@ -460,7 +545,7 @@ export function archiveCoalition(
     if (!coalition) return fail({ kind: 'not_found' });
     const gate = requirePermission(coalition, actorId, 'coalition.archive');
     if (!gate.ok) return gate;
-    if (coalition.archivedAt) return succeed(coalition);
+    if (isStopped(coalition)) return succeed(coalition);
     const saved = db.upsertCoalition({ ...coalition, archivedAt: NOW_ISO() });
     emitDomainEvent({
         module: 'coalitions',
@@ -514,7 +599,7 @@ export async function requestJoin(
 ): Promise<CoalitionResult<JoinOutcome>> {
     const coalition = getCoalition(idOrSlug);
     if (!coalition) return fail({ kind: 'not_found' });
-    if (coalition.archivedAt) return fail({ kind: 'archived' });
+    if (isStopped(coalition)) return fail(stoppedError(coalition));
     if (activeMembership(coalition.id, userId)) return fail({ kind: 'already_member' });
 
     const existingRequest = db.getCoalitionJoinRequest(coalition.id, userId);
@@ -586,7 +671,7 @@ export async function reviewJoinRequest(
 > {
     const coalition = getCoalition(idOrSlug);
     if (!coalition) return fail({ kind: 'not_found' });
-    if (coalition.archivedAt) return fail({ kind: 'archived' });
+    if (isStopped(coalition)) return fail(stoppedError(coalition));
     const gate = requirePermission(coalition, actorId, 'members.approve');
     if (!gate.ok) return gate;
     const request = db.getCoalitionJoinRequest(coalition.id, userId);
@@ -628,7 +713,7 @@ export function inviteMember(
 ): CoalitionResult<CoalitionJoinRequestRecord> {
     const coalition = getCoalition(idOrSlug);
     if (!coalition) return fail({ kind: 'not_found' });
-    if (coalition.archivedAt) return fail({ kind: 'archived' });
+    if (isStopped(coalition)) return fail(stoppedError(coalition));
     const gate = requirePermission(coalition, actorId, 'members.invite');
     if (!gate.ok) return gate;
     if (activeMembership(coalition.id, userId)) return fail({ kind: 'already_member' });
@@ -657,7 +742,7 @@ export function listInvitesFor(
         .map((request) => ({ request, coalition: db.getCoalition(request.coalitionId) }))
         .filter(
             (pair): pair is { request: CoalitionJoinRequestRecord; coalition: CoalitionRecord } =>
-                Boolean(pair.coalition && !pair.coalition.archivedAt)
+                Boolean(pair.coalition && !isStopped(pair.coalition))
         );
 }
 
@@ -751,15 +836,35 @@ export async function transferFounder(
         return fail({ kind: 'forbidden', permission: 'coalition.archive' });
     const target = activeMembership(coalition.id, userId);
     if (!target || target.userId === actorId) return fail({ kind: 'not_member' });
+    return transferFounderUnchecked(coalition, userId);
+}
+
+/**
+ * The mechanical half of a founder transfer, with no authority check.
+ *
+ * Callers own the authority question: `transferFounder` requires the outgoing
+ * founder, while a succession petition requires a quorum of stewards precisely
+ * because the founder is not there to ask.
+ */
+async function transferFounderUnchecked(
+    coalition: CoalitionRecord,
+    userId: string
+): Promise<
+    CoalitionResult<{ founder: CoalitionMembershipRecord; previous: CoalitionMembershipRecord }>
+> {
+    const target = activeMembership(coalition.id, userId);
+    if (!target) return fail({ kind: 'not_member' });
+    const outgoing = activeMembers(coalition.id).find((m) => m.role === 'founder');
     const founder = db.upsertCoalitionMembership({ ...target, role: 'founder' });
-    const previous = db.upsertCoalitionMembership({ ...actor, role: 'steward' });
-    db.upsertCoalition({ ...coalition, createdBy: coalition.createdBy });
+    const previous = outgoing
+        ? db.upsertCoalitionMembership({ ...outgoing, role: 'steward' })
+        : founder;
     await syncCoalitionRoleToSpace(coalition, userId, 'founder');
-    await syncCoalitionRoleToSpace(coalition, actorId, 'steward');
+    if (outgoing) await syncCoalitionRoleToSpace(coalition, outgoing.userId, 'steward');
     emitDomainEvent({
         module: 'coalitions',
         type: 'coalition.founder.transferred',
-        payload: { coalitionId: coalition.id, from: actorId, to: userId },
+        payload: { coalitionId: coalition.id, from: outgoing?.userId ?? null, to: userId },
     });
     return succeed({ founder, previous });
 }
@@ -809,7 +914,7 @@ export function createCampaign(
 ): CoalitionResult<CoalitionCampaignRecord> {
     const coalition = getCoalition(idOrSlug);
     if (!coalition) return fail({ kind: 'not_found' });
-    if (coalition.archivedAt) return fail({ kind: 'archived' });
+    if (isStopped(coalition)) return fail(stoppedError(coalition));
     const membership = activeMembership(coalition.id, actorId);
     if (!membership) return fail({ kind: 'not_member' });
     const canLaunch = coalitionRoleCan(membership.role, 'campaigns.launch');
@@ -1022,7 +1127,7 @@ export async function boostCampaign(
 ): Promise<CoalitionResult<{ meter: BoostMeter; remainingToday: number }>> {
     const coalition = getCoalition(idOrSlug);
     if (!coalition) return fail({ kind: 'not_found' });
-    if (coalition.archivedAt) return fail({ kind: 'archived' });
+    if (isStopped(coalition)) return fail(stoppedError(coalition));
     // Anyone signed in may boost — membership is not required. Amplifying a
     // neighbour's request is exactly the thing an outsider should be able to
     // do, and it is how someone finds the coalition in the first place.
@@ -1096,7 +1201,7 @@ export function raiseAidPost(
 ): CoalitionResult<CoalitionCampaignRecord> {
     const coalition = getCoalition(idOrSlug);
     if (!coalition) return fail({ kind: 'not_found' });
-    if (coalition.archivedAt) return fail({ kind: 'archived' });
+    if (isStopped(coalition)) return fail(stoppedError(coalition));
     if (!activeMembership(coalition.id, actorId)) return fail({ kind: 'not_member' });
 
     const post = db.listCoalitionAidPosts().find((row) => row.id === aidPostId);
@@ -1139,6 +1244,141 @@ export function raiseAidPost(
     return succeed(campaign);
 }
 
+// ---------------------------------------------------------------------------
+// Succession: taking over a coalition whose founder has gone
+// ---------------------------------------------------------------------------
+
+export const newPetitionId = (): string => `csuc_${rand()}_${stamp()}`;
+
+/** Stewards who could back a petition — everyone but the candidate. */
+function eligibleSeconders(coalitionId: string, candidateUserId: string): string[] {
+    return activeMembers(coalitionId)
+        .filter((m) => m.role === 'steward' && m.userId !== candidateUserId)
+        .map((m) => m.userId);
+}
+
+/**
+ * Open a petition to succeed the founder.
+ *
+ * Only a founder can hand the role on and nobody can be promoted into it, so a
+ * coalition whose founder walks away is otherwise frozen permanently. A steward
+ * petitions; the other stewards decide. One petition at a time, or the seconds
+ * split between candidates and neither reaches quorum.
+ */
+export function openSuccessionPetition(
+    idOrSlug: string,
+    actorId: string,
+    reason: string
+): CoalitionResult<CoalitionSuccessionPetitionRecord> {
+    const coalition = getCoalition(idOrSlug);
+    if (!coalition) return fail({ kind: 'not_found' });
+    if (isStopped(coalition)) return fail(stoppedError(coalition));
+    const gate = requirePermission(coalition, actorId, 'coalition.succeed');
+    if (!gate.ok) return gate;
+    if (db.getOpenCoalitionSuccessionPetition(coalition.id)) return fail({ kind: 'petition_open' });
+    const petition = db.upsertCoalitionSuccessionPetition({
+        id: newPetitionId(),
+        coalitionId: coalition.id,
+        candidateUserId: actorId,
+        openedBy: actorId,
+        reason,
+        secondedBy: [],
+        status: 'open',
+    });
+    emitDomainEvent({
+        module: 'coalitions',
+        type: 'coalition.succession.opened',
+        payload: { coalitionId: coalition.id, petitionId: petition.id, candidate: actorId },
+    });
+    return succeed(petition);
+}
+
+/**
+ * Back an open petition. Reaching quorum resolves it immediately — there is
+ * nobody left to press a separate confirm button, which is the situation.
+ */
+export async function secondSuccessionPetition(
+    idOrSlug: string,
+    actorId: string
+): Promise<CoalitionResult<CoalitionSuccessionPetitionRecord>> {
+    const coalition = getCoalition(idOrSlug);
+    if (!coalition) return fail({ kind: 'not_found' });
+    if (isStopped(coalition)) return fail(stoppedError(coalition));
+    const gate = requirePermission(coalition, actorId, 'coalition.succeed');
+    if (!gate.ok) return gate;
+    const petition = db.getOpenCoalitionSuccessionPetition(coalition.id);
+    if (!petition) return fail({ kind: 'petition_not_found' });
+    // The candidate cannot second themselves into the role.
+    if (petition.candidateUserId === actorId)
+        return fail({ kind: 'forbidden', permission: 'coalition.succeed' });
+
+    const secondedBy = petition.secondedBy.includes(actorId)
+        ? petition.secondedBy
+        : [...petition.secondedBy, actorId];
+    const eligible = eligibleSeconders(coalition.id, petition.candidateUserId).length;
+    if (!successionQuorumMet(secondedBy, eligible)) {
+        const saved = db.upsertCoalitionSuccessionPetition({ ...petition, secondedBy });
+        return succeed(saved);
+    }
+
+    const transferred = await transferFounderUnchecked(coalition, petition.candidateUserId);
+    if (!transferred.ok) return transferred;
+    const saved = db.upsertCoalitionSuccessionPetition({
+        ...petition,
+        secondedBy,
+        status: 'approved',
+        resolvedBy: actorId,
+        resolvedAt: NOW_ISO(),
+    });
+    emitDomainEvent({
+        module: 'coalitions',
+        type: 'coalition.succession.approved',
+        payload: {
+            coalitionId: coalition.id,
+            petitionId: saved.id,
+            candidate: petition.candidateUserId,
+            seconds: secondedBy.length,
+        },
+    });
+    return succeed(saved);
+}
+
+/** Withdraw your own petition. */
+export function withdrawSuccessionPetition(
+    idOrSlug: string,
+    actorId: string
+): CoalitionResult<CoalitionSuccessionPetitionRecord> {
+    const coalition = getCoalition(idOrSlug);
+    if (!coalition) return fail({ kind: 'not_found' });
+    const petition = db.getOpenCoalitionSuccessionPetition(coalition.id);
+    if (!petition) return fail({ kind: 'petition_not_found' });
+    if (petition.candidateUserId !== actorId) {
+        return fail({ kind: 'forbidden', permission: 'coalition.succeed' });
+    }
+    return succeed(
+        db.upsertCoalitionSuccessionPetition({
+            ...petition,
+            status: 'withdrawn',
+            resolvedBy: actorId,
+            resolvedAt: NOW_ISO(),
+        })
+    );
+}
+
+export function getSuccessionPetition(
+    idOrSlug: string
+): CoalitionResult<{ petition: CoalitionSuccessionPetitionRecord | null; quorum: number }> {
+    const coalition = getCoalition(idOrSlug);
+    if (!coalition) return fail({ kind: 'not_found' });
+    const petition = db.getOpenCoalitionSuccessionPetition(coalition.id) ?? null;
+    return succeed({
+        petition,
+        quorum: successionQuorum(
+            eligibleSeconders(coalition.id, petition?.candidateUserId ?? '').length
+        ),
+    });
+}
+
 export interface PayeeInput {
     userId: string;
     shareBps: number;
@@ -1161,7 +1401,7 @@ export function setCampaignPayees(
 ): CoalitionResult<CoalitionCampaignPayeeRecord[]> {
     const coalition = getCoalition(idOrSlug);
     if (!coalition) return fail({ kind: 'not_found' });
-    if (coalition.archivedAt) return fail({ kind: 'archived' });
+    if (isStopped(coalition)) return fail(stoppedError(coalition));
     const gate = requirePermission(coalition, actorId, 'campaigns.launch');
     if (!gate.ok) return gate;
     const campaign = db.getCoalitionCampaign(campaignId);
@@ -1270,4 +1510,6 @@ export function __resetCoalitionsForTests(): void {
     db.coalitionCampaignSyncOptIns.clear();
     db.coalitionBoosts.clear();
     db.coalitionCampaignContributions.clear();
+    db.coalitionSuccessionPetitions.clear();
+    db.coalitionCampaignPayees.clear();
 }

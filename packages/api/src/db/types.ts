@@ -22,6 +22,7 @@ import type {
     CampaignSyncOptIn,
     CoalitionBoost,
     CampaignPayee,
+    CoalitionSuccessionPetition,
     CoalitionCampaignContribution,
     CoalitionTask,
     ContentDistribution,
@@ -1944,6 +1945,12 @@ export interface CoalitionMembershipRecord extends CoalitionMembership {
 }
 
 /** A join request / invitation. Keyed in-memory by `${coalitionId}::${userId}`. */
+/** A steward's petition to succeed an absent founder. Keyed by id. */
+export interface CoalitionSuccessionPetitionRecord extends CoalitionSuccessionPetition {
+    createdAt: string;
+    updatedAt: string;
+}
+
 export interface CoalitionJoinRequestRecord extends CoalitionJoinRequest {
     createdAt: string;
     updatedAt: string;

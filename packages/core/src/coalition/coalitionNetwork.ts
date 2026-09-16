@@ -51,6 +51,7 @@ export const COALITION_TIER_GATES = ['seedling', 'sprout', 'root', 'canopy', 'an
 export type CoalitionTierGate = typeof COALITION_TIER_GATES[number];
 
 export const COALITION_PERMISSIONS = [
+    'coalition.succeed',
     'coalition.edit',
     'coalition.archive',
     'members.approve',
@@ -66,6 +67,9 @@ export const COALITION_PERMISSIONS = [
 export type CoalitionPermission = typeof COALITION_PERMISSIONS[number];
 
 const STEWARD_PERMISSIONS: readonly CoalitionPermission[] = [
+    // Stewards can petition to succeed a founder who has gone; they cannot
+    // archive, which stays the founder's own act.
+    'coalition.succeed',
     'coalition.edit',
     'members.approve',
     'members.role',
@@ -130,6 +134,15 @@ export interface Coalition {
     spaceRoomId?: string;
     createdBy: string;
     archivedAt?: string;
+    /**
+     * Set by the platform, never by the coalition. Separate from `archivedAt`
+     * on purpose: archiving is the founder's own reversible act, and the
+     * subject of a takedown must not be able to clear it by un-archiving.
+     */
+    takenDownAt?: string;
+    takenDownBy?: string;
+    takedownReason?: string;
+    reinstatedAt?: string;
 }
 
 export interface CoalitionMembership {
@@ -240,6 +253,48 @@ export interface CoalitionMemberConnection {
     credentialRef: string;
     displayHandle?: string;
     revokedAt?: string;
+}
+
+export const COALITION_SUCCESSION_STATUSES = ['open', 'approved', 'declined', 'withdrawn'] as const;
+export type CoalitionSuccessionStatus = typeof COALITION_SUCCESSION_STATUSES[number];
+
+/**
+ * A steward's petition to take over a coalition whose founder has gone.
+ *
+ * Only a founder can hand the role on, and nobody can be promoted into it — so
+ * without this a coalition outlives its founder only as a frozen shell. The
+ * petition is seconded by other stewards rather than decided by one, because
+ * the whole point is that the person who would normally decide is absent.
+ */
+export interface CoalitionSuccessionPetition {
+    id: string;
+    coalitionId: string;
+    /** The steward proposed as the new founder. */
+    candidateUserId: string;
+    openedBy: string;
+    reason: string;
+    /** Stewards who have backed it, never including the candidate. */
+    secondedBy: string[];
+    status: CoalitionSuccessionStatus;
+    resolvedBy?: string;
+    resolvedAt?: string;
+}
+
+/**
+ * How many stewards must back a petition: a majority of the stewards who are
+ * not the candidate, and never fewer than one. A sole steward in a coalition
+ * the founder abandoned can therefore succeed alone, which is the case this
+ * exists for; a large coalition needs real agreement.
+ */
+export function successionQuorum(eligibleStewards: number): number {
+    return Math.max(1, Math.ceil(eligibleStewards / 2));
+}
+
+export function successionQuorumMet(
+    secondedBy: readonly string[],
+    eligibleStewards: number
+): boolean {
+    return secondedBy.length >= successionQuorum(eligibleStewards);
 }
 
 export const CAMPAIGN_TYPES = ['drive', 'project', 'boost', 'mutual_aid', 'goods_drive'] as const;

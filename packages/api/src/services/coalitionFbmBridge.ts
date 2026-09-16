@@ -136,6 +136,28 @@ export async function pushCoalitionMilestones(coalitionId: string): Promise<void
     );
 }
 
+/**
+ * Tell FBM a coalition has been taken down (or reinstated), so the collective
+ * storefront stops serving. Same fire-and-forget posture as the milestones
+ * push: a takedown must not wait on FBM being reachable.
+ */
+export async function pushCoalitionStatus(
+    coalitionId: string,
+    status: 'active' | 'taken_down'
+): Promise<void> {
+    const fbm = target();
+    if (!fbm) return;
+    await send(
+        `${fbm.baseUrl}/v1/integrations/blackout/coalitions/${encodeURIComponent(
+            coalitionId
+        )}/status`,
+        'PUT',
+        { status },
+        fbm.serviceToken,
+        'coalition_status'
+    );
+}
+
 export interface OrderWindowInput {
     campaign: CoalitionCampaignRecord;
     opensAt: string;

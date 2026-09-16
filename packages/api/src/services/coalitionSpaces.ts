@@ -50,6 +50,44 @@ export type CoalitionMatrix = Pick<
 let matrix: CoalitionMatrix = matrixClient;
 
 /** Test seam: swap the Matrix client for a fake; pass null to restore. */
+/**
+ * Shut a taken-down coalition's Space: nobody new gets in, and nobody left
+ * inside can post. Read-merge-write on the power levels, never a replace — a
+ * replace would strip every other member's level and the bot's own, and there
+ * is no way back from that.
+ */
+export async function closeCoalitionSpace(coalition: CoalitionRecord): Promise<SpaceOutcome> {
+    const roomId = coalition.spaceRoomId;
+    if (!roomId) return { ok: true };
+    const sealed = await matrix.sendStateEvent(
+        roomId,
+        'm.room.join_rules',
+        { join_rule: 'invite' },
+        ''
+    );
+    const current = await matrix.getStateEvent(roomId, 'm.room.power_levels', '');
+    if (!current.ok && current.status !== 404) {
+        return { ok: false, roomId, detail: 'power_levels_unreadable' };
+    }
+    const content =
+        current.ok && 'content' in current && current.content
+            ? (current.content as Record<string, unknown>)
+            : {};
+    const written = await matrix.sendStateEvent(
+        roomId,
+        'm.room.power_levels',
+        { ...content, events_default: 100, invite: 100 },
+        ''
+    );
+    return written.ok && sealed.ok
+        ? { ok: true, roomId }
+        : {
+              ok: false,
+              roomId,
+              detail: detailOf((written.ok ? sealed : written) as Record<string, unknown>),
+          };
+}
+
 export function __setCoalitionMatrixForTests(client: CoalitionMatrix | null): void {
     matrix = client ?? matrixClient;
 }

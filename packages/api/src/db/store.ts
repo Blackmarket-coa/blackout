@@ -106,6 +106,7 @@ import type {
     CoalitionBoostRecord,
     CoalitionCampaignContributionRecord,
     CoalitionCampaignPayeeRecord,
+    CoalitionSuccessionPetitionRecord,
     CoalitionKitApplicationRecord,
     CoalitionTaskRecord,
     CoalitionNeedRecord,
@@ -280,6 +281,7 @@ type PersistedState = {
     coalitionBoosts: CoalitionBoostRecord[];
     coalitionCampaignContributions: CoalitionCampaignContributionRecord[];
     coalitionCampaignPayees: CoalitionCampaignPayeeRecord[];
+    coalitionSuccessionPetitions: CoalitionSuccessionPetitionRecord[];
     coalitionKitApplications: CoalitionKitApplicationRecord[];
     coalitionTasks: CoalitionTaskRecord[];
     coalitionNeeds: CoalitionNeedRecord[];
@@ -493,6 +495,7 @@ class InMemoryDb {
     coalitionBoosts = new Map<string, CoalitionBoostRecord>();
     coalitionCampaignContributions = new Map<string, CoalitionCampaignContributionRecord>();
     coalitionCampaignPayees = new Map<string, CoalitionCampaignPayeeRecord>();
+    coalitionSuccessionPetitions = new Map<string, CoalitionSuccessionPetitionRecord>();
     /** Records of Coalition Kits applied to a den/coalition, keyed by application id. */
     coalitionKitApplications = new Map<string, CoalitionKitApplicationRecord>();
     /** Coalition den tasks, keyed by task id. */
@@ -3699,6 +3702,38 @@ class InMemoryDb {
         return record;
     }
 
+    listCoalitionSuccessionPetitions(
+        filter: { coalitionId?: string; status?: string } = {}
+    ): CoalitionSuccessionPetitionRecord[] {
+        return [...this.coalitionSuccessionPetitions.values()].filter((row) => {
+            if (filter.coalitionId && row.coalitionId !== filter.coalitionId) return false;
+            if (filter.status && row.status !== filter.status) return false;
+            return true;
+        });
+    }
+
+    getOpenCoalitionSuccessionPetition(
+        coalitionId: string
+    ): CoalitionSuccessionPetitionRecord | undefined {
+        return [...this.coalitionSuccessionPetitions.values()].find(
+            (row) => row.coalitionId === coalitionId && row.status === 'open'
+        );
+    }
+
+    upsertCoalitionSuccessionPetition(
+        input: Omit<CoalitionSuccessionPetitionRecord, 'createdAt' | 'updatedAt'>
+    ): CoalitionSuccessionPetitionRecord {
+        const existing = this.coalitionSuccessionPetitions.get(input.id);
+        const now = nowIso();
+        const record: CoalitionSuccessionPetitionRecord = {
+            ...input,
+            createdAt: existing?.createdAt ?? now,
+            updatedAt: now,
+        };
+        this.coalitionSuccessionPetitions.set(record.id, record);
+        return record;
+    }
+
     listCoalitionCampaignPayees(
         filter: { campaignId?: string; coalitionId?: string; userId?: string } = {}
     ): CoalitionCampaignPayeeRecord[] {
@@ -5613,6 +5648,9 @@ export class FileBackedDb extends InMemoryDb {
                     row,
                 ])
             );
+            this.coalitionSuccessionPetitions = new Map(
+                (parsed.coalitionSuccessionPetitions ?? []).map((row) => [row.id, row])
+            );
         }
         if (parsed.coalitionBoosts) {
             this.coalitionBoosts = new Map(
@@ -5945,6 +5983,7 @@ export class FileBackedDb extends InMemoryDb {
             coalitionBoosts: [...this.coalitionBoosts.values()],
             coalitionCampaignContributions: [...this.coalitionCampaignContributions.values()],
             coalitionCampaignPayees: [...this.coalitionCampaignPayees.values()],
+            coalitionSuccessionPetitions: [...this.coalitionSuccessionPetitions.values()],
             coalitionKitApplications: [...this.coalitionKitApplications.values()],
             coalitionTasks: [...this.coalitionTasks.values()],
             coalitionNeeds: [...this.coalitionNeeds.values()],
