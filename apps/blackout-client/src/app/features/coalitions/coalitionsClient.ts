@@ -318,3 +318,36 @@ export function boostCampaign(
         token
     );
 }
+
+export interface ShareTargetView {
+    target: string;
+    label: string;
+    href?: string;
+    needsInstanceHost?: boolean;
+}
+
+export interface CampaignShareView {
+    campaignId: string;
+    coalitionSlug: string;
+    url: string;
+    text: string;
+    title: string;
+    targets: ShareTargetView[];
+}
+
+/**
+ * Share links for a campaign. Works signed out — the endpoint takes an optional
+ * token, and a visitor who can see a public campaign can pass it on.
+ */
+export function fetchCampaignShare(
+    idOrSlug: string,
+    campaignId: string,
+    instanceHost?: string,
+    token: string | null = readBlackoutApiToken()
+): Promise<CampaignShareView> {
+    const query = instanceHost ? `?instanceHost=${enc(instanceHost)}` : '';
+    return getJson<CampaignShareView>(
+        `${COALITIONS_BASE}/${enc(idOrSlug)}/campaigns/${enc(campaignId)}/share${query}`,
+        token
+    );
+}

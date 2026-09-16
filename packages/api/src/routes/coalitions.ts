@@ -11,6 +11,7 @@ import {
     CAMPAIGN_STATUSES,
     CAMPAIGN_TYPES,
     COALITION_PLATFORMS,
+    isInstanceHost,
     COALITION_PLATFORM_CAPABILITIES,
     CONNECTION_AUTH_MODES,
     COALITION_JOIN_MODES,
@@ -71,7 +72,10 @@ import {
 import {
     checkGuardrails,
     connectPlatform,
+    campaignAppUrl,
+    campaignShareUrl,
     crosspostCampaign,
+    shareCampaign,
     linkMemberAccount,
     listApprovedActivity,
     listCampaignPosts,
@@ -894,7 +898,11 @@ coalitions.get('/:id/campaigns/:campaignId/public', (c) => {
             raisedCents: campaign.raisedCents,
             contributorCount: campaign.contributorCount,
             currency: 'USD',
-            url: `${base}/coalitions/${encodeURIComponent(view.value.coalition.slug)}`,
+            // The campaign deep link, not the coalition page: an embed showing
+            // one drive should open that drive. `shareUrl` is the preview-backed
+            // variant an embed host can post elsewhere and have unfurl.
+            url: campaignAppUrl(view.value.coalition, campaign.id, base),
+            shareUrl: campaignShareUrl(view.value.coalition, campaign.id, base),
         },
     });
 });
@@ -972,6 +980,11 @@ function syncErrorResponse(c: Parameters<typeof requireUser>[0], error: SyncErro
                 },
                 503
             );
+        case 'private_subject':
+            // 404, not 403: a distinguishable "this exists but is private"
+            // answer is an oracle for exactly the thing the member opted out
+            // of. The campaign stays fully visible inside the coalition.
+            return c.json({ code: 'not_found', message: 'Not found' }, 404);
     }
 }
 
@@ -1056,6 +1069,30 @@ coalitions.post('/:id/campaigns/:campaignId/crosspost', async (c) => {
     if (user instanceof Response) return user;
     const result = await crosspostCampaign(c.req.param('id'), user.sub, c.req.param('campaignId'));
     if (!result.ok) return syncErrorResponse(c, result.error);
+    return c.json(result.value);
+});
+
+/**
+ * Share links for a campaign, on every target we can reach.
+ *
+ * `getAuthUser`, not `requireUser`: a logged-out visitor looking at a public
+ * campaign is precisely the person we want passing it on, and making them sign
+ * in first defeats the point. Signing in only widens what they can see (their
+ * own coalition's draft campaigns), never narrows it.
+ */
+coalitions.get('/:id/campaigns/:campaignId/share', (c) => {
+    const viewer = getAuthUser(c);
+    const host = c.req.query('instanceHost');
+    const result = shareCampaign(
+        c.req.param('id'),
+        c.req.param('campaignId'),
+        viewer?.sub,
+        host && isInstanceHost(host) ? host : undefined
+    );
+    if (!result.ok) return syncErrorResponse(c, result.error);
+    // Same cache posture as the public campaign projection: short, revalidating,
+    // and safe because the body carries no viewer-specific field.
+    c.header('Cache-Control', 'public, max-age=30, stale-while-revalidate=300');
     return c.json(result.value);
 });
 

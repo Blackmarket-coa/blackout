@@ -136,7 +136,10 @@ test('post composition is one text for every platform, and unsupported platforms
     );
     assert.match(post.text, /River Keepers is raising for Coats\./);
     assert.match(post.text, /Goal: \$500\./);
-    assert.equal(post.url, 'https://blackout.test/coalitions/river-keepers');
+    // The URL is the campaign's server-rendered preview, not the coalition page
+    // and not the SPA: a crawler reads meta tags and does not run JS, so the SPA
+    // path unfurls as the generic app card on every platform.
+    assert.equal(post.url, 'https://blackout.test/v1/c/river-keepers/k1');
 
     // Platforms that sanction posting get real posts, not links.
     assert.equal(shareLinkFor('discord', post), null);

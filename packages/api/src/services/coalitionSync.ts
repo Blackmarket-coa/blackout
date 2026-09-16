@@ -23,8 +23,12 @@
  */
 import {
     COALITION_PLATFORM_CAPABILITIES,
+    COALITION_SHARE_TARGETS,
+    COALITION_SHARE_TARGET_SPECS,
+    buildShareHref,
     coalitionRoleCan,
     type CoalitionPlatform,
+    type CoalitionShareTarget,
     type ConnectionAuthMode,
 } from '@blackout/core';
 import { db } from '../db/store';
@@ -36,7 +40,8 @@ import type {
 } from '../db/types';
 import { emitDomainEvent } from '../modules/domain-events';
 import { encryptSecret } from './secretBox';
-import { activeMembership, getCoalition } from './coalitionNetworkStore';
+import { activeMembership, getCampaign, getCoalition, isStopped } from './coalitionNetworkStore';
+import { isPubliclyListed } from './profileStore';
 
 const NOW_ISO = () => new Date().toISOString();
 const rand = () => Math.random().toString(36).slice(2, 10);
@@ -149,7 +154,8 @@ export type SyncError =
     | { kind: 'not_opted_in'; platform: CoalitionPlatform }
     | { kind: 'guardrail'; state: GuardrailState }
     | { kind: 'campaign_inactive' }
-    | { kind: 'credentials_unavailable' };
+    | { kind: 'credentials_unavailable' }
+    | { kind: 'private_subject' };
 
 export type SyncResult<T> = { ok: true; value: T } | { ok: false; error: SyncError };
 const fail = <T>(error: SyncError): SyncResult<T> => ({ ok: false, error });
@@ -384,6 +390,7 @@ export function setOptIn(
 export interface ComposedPost {
     text: string;
     url: string;
+    title: string;
 }
 
 const CAMPAIGN_VERB: Record<string, string> = {
@@ -394,47 +401,90 @@ const CAMPAIGN_VERB: Record<string, string> = {
     mutual_aid: 'is amplifying',
 };
 
+/**
+ * Longest campaign title we will put in a post.
+ *
+ * A coalition name is capped at 80 and a title at 160, so an untruncated post
+ * runs to roughly 330 characters and X rejects it. The URL is the one part
+ * that must survive intact — a share that loses its link back to Blackout is
+ * the one failure this feature cannot tolerate — so the title absorbs the cut.
+ */
+const TITLE_BUDGET = 120;
+
+const clip = (value: string, max: number): string =>
+    value.length <= max ? value : `${value.slice(0, Math.max(0, max - 1)).trimEnd()}\u2026`;
+
+export const coalitionBaseUrl = (
+    baseUrl = process.env.BLACKOUT_PUBLIC_BASE_URL ?? 'https://theblackout.app'
+): string => baseUrl.replace(/\/+$/, '');
+
+/**
+ * The URL we put in posts.
+ *
+ * Points at the API's server-rendered preview, not the SPA, because a crawler
+ * reads meta tags and does not run JS: the SPA path unfurls as the static
+ * "Blackout Client" card on every platform. The preview answers with the
+ * campaign's own card and then sends the human on to `campaignAppUrl`.
+ *
+ * Served under `/v1/c/` for the same reason invite links are served under
+ * `/v1/i/` — the pretty top-level `/c/` path needs an nginx rule that may not
+ * be deployed on every host, and a share link that 404s is worse than an ugly
+ * one.
+ */
+export function campaignShareUrl(
+    coalition: Pick<CoalitionRecord, 'slug'>,
+    campaignId: string,
+    baseUrl?: string
+): string {
+    return `${coalitionBaseUrl(baseUrl)}/v1/c/${encodeURIComponent(
+        coalition.slug
+    )}/${encodeURIComponent(campaignId)}`;
+}
+
+/** Where a human ends up: the SPA campaign deep link. */
+export function campaignAppUrl(
+    coalition: Pick<CoalitionRecord, 'slug'>,
+    campaignId: string,
+    baseUrl?: string
+): string {
+    return `${coalitionBaseUrl(baseUrl)}/coalitions/${encodeURIComponent(
+        coalition.slug
+    )}/c/${encodeURIComponent(campaignId)}`;
+}
+
 /** The one place campaign copy is composed, so every platform says the same thing. */
 export function composePost(
     coalition: CoalitionRecord,
     campaign: CoalitionCampaignRecord,
-    baseUrl = process.env.BLACKOUT_PUBLIC_BASE_URL ?? 'https://theblackout.app'
+    baseUrl?: string
 ): ComposedPost {
     const verb = CAMPAIGN_VERB[campaign.type] ?? 'is running';
     const goal =
         campaign.goalCents && campaign.goalCents > 0
             ? ` Goal: $${(campaign.goalCents / 100).toLocaleString()}.`
             : '';
-    const url = `${baseUrl.replace(/\/+$/, '')}/coalitions/${encodeURIComponent(coalition.slug)}`;
+    // The campaign, not the coalition. Every campaign in a coalition used to
+    // share one link, so a shared drive landed on a page that never named it.
+    const url = campaignShareUrl(coalition, campaign.id, baseUrl);
+    const title = clip(campaign.title, TITLE_BUDGET);
     return {
-        text: `${coalition.name} ${verb} ${campaign.title}.${goal} ${url}`,
+        text: `${coalition.name} ${verb} ${title}.${goal} ${url}`,
         url,
+        title: `${coalition.name}: ${title}`,
     };
 }
 
-/** Pre-filled share links for platforms that do not sanction bot posting. */
+/**
+ * Pre-filled share link for a coalition *platform*, used by the crosspost path.
+ *
+ * Thin adapter over the share-target table in core so the crosspost outcomes
+ * and the share sheet can never drift apart. Targets with no reachable web
+ * composer (Instagram, TikTok) get the bare campaign URL, which is honest
+ * about what the link does; Discord gets null, as it always has.
+ */
 export function shareLinkFor(platform: CoalitionPlatform, post: ComposedPost): string | null {
-    const text = encodeURIComponent(post.text);
-    const url = encodeURIComponent(post.url);
-    switch (platform) {
-        case 'instagram':
-            // Instagram has no prefilled web composer; the caller copies the
-            // text and opens the app. Returning the campaign URL is honest
-            // about what the link does.
-            return post.url;
-        case 'tiktok':
-            return post.url;
-        case 'x':
-            return `https://x.com/intent/post?text=${text}`;
-        case 'bluesky':
-            return `https://bsky.app/intent/compose?text=${text}`;
-        case 'mastodon':
-            return `https://mastodon.social/share?text=${text}`;
-        case 'discord':
-            return null;
-        default:
-            return `${post.url}?ref=${url}`;
-    }
+    if (platform === 'discord') return null;
+    return buildShareHref(platform, post) ?? post.url;
 }
 
 export interface CrosspostOutcome {
@@ -507,7 +557,19 @@ export async function crosspostCampaign(
     for (const optIn of optIns) {
         const platform = optIn.platform;
         const connection = db.getCoalitionConnection(coalition.id, platform);
-        if (!connection || !connection.active) continue;
+        if (!connection || !connection.active) {
+            // Report it instead of dropping it. Skipping silently answered 200
+            // with an empty outcomes array, so a member whose steward had
+            // deactivated a connection was told nothing at all and had no way
+            // to tell a successful post from a no-op.
+            outcomes.push({
+                platform,
+                status: 'failed',
+                postId: newCampaignPostId(),
+                error: 'no_connection',
+            });
+            continue;
+        }
 
         const capability = COALITION_PLATFORM_CAPABILITIES[platform];
         const id = newCampaignPostId();
@@ -751,4 +813,106 @@ export function moderateActivity(
         },
     });
     return succeed(toView(saved));
+}
+
+// ---------------------------------------------------------------------------
+// Share sheet
+// ---------------------------------------------------------------------------
+
+export interface ShareTargetView {
+    target: CoalitionShareTarget;
+    label: string;
+    /** Opens a pre-filled composer; absent when the target needs the clipboard. */
+    href?: string;
+    /** True when the caller should ask for a Mastodon instance and retry. */
+    needsInstanceHost?: boolean;
+}
+
+export interface CampaignShareView {
+    campaignId: string;
+    coalitionSlug: string;
+    url: string;
+    text: string;
+    title: string;
+    targets: ShareTargetView[];
+}
+
+/**
+ * Is this campaign safe to broadcast off-platform?
+ *
+ * Coalitions are public on purpose — that is how people find the platform —
+ * but a campaign can still be *about* a person, and a person who has opted out
+ * of public listing must not be pushed onto X by someone else's share button.
+ *
+ * Mutual aid is the case that matters: the campaign exists to raise money for a
+ * named individual, so the subject is the beneficiary (or, when the aid post
+ * carried no resolvable customer, whoever raised it). Drives, projects and
+ * goods drives are about the coalition's work and name no one, so a private
+ * creator does not block them — nothing in the composed copy identifies them,
+ * and `redactCampaignIdentities` keeps it that way on the read paths.
+ */
+export function campaignIsPubliclyShareable(campaign: CoalitionCampaignRecord): boolean {
+    if (campaign.type !== 'mutual_aid') {
+        return campaign.beneficiaryUserId ? isPubliclyListed(campaign.beneficiaryUserId) : true;
+    }
+    const subject = campaign.beneficiaryUserId ?? campaign.createdBy;
+    return subject ? isPubliclyListed(subject) : true;
+}
+
+/**
+ * Mint share links for a campaign, for every target we know how to reach.
+ *
+ * Deliberately unlike `crosspostCampaign` in every way that matters:
+ *
+ *   - **no outbound gate.** `BLACKOUT_COALITION_CROSSPOST_ENABLED` exists to
+ *     hold back *automation posting under a coalition's credentials*. A share
+ *     link carries no credential and posts nothing; it hands a person a URL
+ *     their own click completes.
+ *   - **no connection row, no opt-in, no `campaigns.promote`.** Requiring a
+ *     steward to pre-register a platform before anyone could share meant a
+ *     griot — the role that exists for promotion — could not share at all.
+ *   - **no membership.** A campaign visible to a logged-out visitor is a
+ *     campaign they can pass on. That is the growth surface.
+ *
+ * It writes nothing. A minted link is not a share; recording one would count
+ * intent, not action, and would be farmable by anyone who can open a menu.
+ */
+export function shareCampaign(
+    idOrSlug: string,
+    campaignId: string,
+    viewerId?: string,
+    instanceHost?: string
+): SyncResult<CampaignShareView> {
+    const coalition = getCoalition(idOrSlug);
+    if (!coalition) return fail({ kind: 'not_found' });
+    // A stopped coalition stops promoting itself, whether the founder archived
+    // it or a moderator took it down.
+    if (isStopped(coalition)) return fail({ kind: 'not_found' });
+    const found = getCampaign(coalition.id, campaignId, viewerId);
+    if (!found.ok) return fail({ kind: 'not_found' });
+    const campaign = found.value;
+    if (campaign.status !== 'active' && campaign.status !== 'completed') {
+        return fail({ kind: 'campaign_inactive' });
+    }
+    if (!campaignIsPubliclyShareable(campaign)) return fail({ kind: 'private_subject' });
+
+    const post = composePost(coalition, campaign);
+    const targets: ShareTargetView[] = COALITION_SHARE_TARGETS.map((target) => {
+        const spec = COALITION_SHARE_TARGET_SPECS[target];
+        const href = buildShareHref(target, post, instanceHost) ?? undefined;
+        return {
+            target,
+            label: spec.label,
+            ...(href ? { href } : {}),
+            ...(spec.needsInstanceHost && !href ? { needsInstanceHost: true } : {}),
+        };
+    });
+    return succeed({
+        campaignId: campaign.id,
+        coalitionSlug: coalition.slug,
+        url: post.url,
+        text: post.text,
+        title: post.title,
+        targets,
+    });
 }

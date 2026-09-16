@@ -213,6 +213,157 @@ export const COALITION_PLATFORM_CAPABILITIES: Record<
     tiktok: { apiPost: false, inbound: false, label: 'TikTok' },
 };
 
+/**
+ * Where a campaign can be shared TO.
+ *
+ * Deliberately a superset of `COALITION_PLATFORMS` and a separate type. A
+ * *platform* is something a coalition connects: it has credential rows, opt-in
+ * rows, inbound moderation and a `VARCHAR(16)` column in three tables. A
+ * *share target* is just a URL shape — no credential, no row, no setup, no
+ * steward. Folding the two together would widen the persisted enum of every
+ * connection table with values that can never legally appear in one.
+ *
+ * `copy` is the terminal fallback that makes "any platform" true: whatever the
+ * person uses, they can always take the text and the link.
+ */
+export const COALITION_SHARE_TARGETS = [
+    'copy',
+    'x',
+    'bluesky',
+    'mastodon',
+    'threads',
+    'facebook',
+    'reddit',
+    'linkedin',
+    'telegram',
+    'whatsapp',
+    'email',
+    'sms',
+    'instagram',
+    'tiktok',
+    'discord',
+] as const;
+export type CoalitionShareTarget = typeof COALITION_SHARE_TARGETS[number];
+
+/**
+ * How a target accepts a share:
+ *   - `intent`  the target has a web composer that takes the text in a query
+ *               param, so one click opens a pre-filled post;
+ *   - `copy`    the target has no composer reachable by URL (Instagram,
+ *               TikTok, Discord), so the honest offer is the text on the
+ *               clipboard and the app opened by the person.
+ *
+ * Every target carries the campaign URL one way or another — that is the whole
+ * point of the feature, so `buildShareHref` never returns a bare intent link
+ * without it.
+ */
+export interface CoalitionShareTargetSpec {
+    label: string;
+    kind: 'intent' | 'copy';
+    /**
+     * Mastodon has no central share router: the composer lives on the member's
+     * own instance (`https://<host>/share?text=`). Without a host there is
+     * nowhere correct to send them, so the target degrades to `copy` rather
+     * than dumping everyone on mastodon.social logged out.
+     */
+    needsInstanceHost?: boolean;
+}
+
+export const COALITION_SHARE_TARGET_SPECS: Record<CoalitionShareTarget, CoalitionShareTargetSpec> =
+    {
+        copy: { label: 'Copy link', kind: 'copy' },
+        x: { label: 'X', kind: 'intent' },
+        bluesky: { label: 'Bluesky', kind: 'intent' },
+        mastodon: { label: 'Mastodon', kind: 'intent', needsInstanceHost: true },
+        threads: { label: 'Threads', kind: 'intent' },
+        facebook: { label: 'Facebook', kind: 'intent' },
+        reddit: { label: 'Reddit', kind: 'intent' },
+        linkedin: { label: 'LinkedIn', kind: 'intent' },
+        telegram: { label: 'Telegram', kind: 'intent' },
+        whatsapp: { label: 'WhatsApp', kind: 'intent' },
+        email: { label: 'Email', kind: 'intent' },
+        sms: { label: 'Messages', kind: 'intent' },
+        instagram: { label: 'Instagram', kind: 'copy' },
+        tiktok: { label: 'TikTok', kind: 'copy' },
+        discord: { label: 'Discord', kind: 'copy' },
+    };
+
+export function isCoalitionShareTarget(value: unknown): value is CoalitionShareTarget {
+    return (
+        typeof value === 'string' && (COALITION_SHARE_TARGETS as readonly string[]).includes(value)
+    );
+}
+
+/** A hostname, for Mastodon's per-instance composer. Rejects anything else. */
+const INSTANCE_HOST = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i;
+
+export function isInstanceHost(value: string): boolean {
+    return value.length <= 253 && INSTANCE_HOST.test(value);
+}
+
+export interface ShareComposition {
+    /** The full post copy, which already ends with `url`. */
+    text: string;
+    /** The canonical Blackout campaign URL. Never truncated, never dropped. */
+    url: string;
+    /** Short headline for targets that take a title separately (Reddit, email). */
+    title: string;
+}
+
+/**
+ * Build the href that opens `target`'s composer pre-filled with `post`.
+ *
+ * Returns `null` for `copy`-kind targets and for a Mastodon share with no
+ * instance host: there is no URL that does the right thing, and inventing one
+ * sends the person somewhere they are not logged in. The caller falls back to
+ * the clipboard, which is why `copy` is a first-class target rather than a
+ * failure mode.
+ */
+export function buildShareHref(
+    target: CoalitionShareTarget,
+    post: ShareComposition,
+    instanceHost?: string
+): string | null {
+    const spec = COALITION_SHARE_TARGET_SPECS[target];
+    if (!spec || spec.kind === 'copy') return null;
+    const text = encodeURIComponent(post.text);
+    const url = encodeURIComponent(post.url);
+    const title = encodeURIComponent(post.title);
+    switch (target) {
+        case 'x':
+            return `https://x.com/intent/post?text=${text}`;
+        case 'bluesky':
+            return `https://bsky.app/intent/compose?text=${text}`;
+        case 'mastodon':
+            return instanceHost && isInstanceHost(instanceHost)
+                ? `https://${instanceHost}/share?text=${text}`
+                : null;
+        case 'threads':
+            return `https://www.threads.net/intent/post?text=${text}`;
+        case 'facebook':
+            // Facebook strips any caption a third party supplies and renders
+            // the destination's own OpenGraph card instead — which is exactly
+            // why the campaign preview route exists.
+            return `https://www.facebook.com/sharer/sharer.php?u=${url}`;
+        case 'reddit':
+            return `https://www.reddit.com/submit?url=${url}&title=${title}`;
+        case 'linkedin':
+            return `https://www.linkedin.com/sharing/share-offsite/?url=${url}`;
+        case 'telegram':
+            return `https://t.me/share/url?url=${url}&text=${title}`;
+        case 'whatsapp':
+            return `https://wa.me/?text=${text}`;
+        case 'email':
+            return `mailto:?subject=${title}&body=${text}`;
+        case 'sms':
+            // `?&body=` is the form both iOS and Android parse; `?body=` alone
+            // is dropped by iOS.
+            return `sms:?&body=${text}`;
+        default:
+            return null;
+    }
+}
+
 export function isCoalitionPlatform(value: unknown): value is CoalitionPlatform {
     return typeof value === 'string' && (COALITION_PLATFORMS as readonly string[]).includes(value);
 }

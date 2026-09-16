@@ -1,10 +1,11 @@
-import { useCallback, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useState, type CSSProperties } from 'react';
 import { useAtom, useSetAtom } from 'jotai';
 import { myProfileAtom } from '../profile/profileAtoms';
 import { ProfileEditor } from '../profile/ProfileEditor';
 import { postWall, saveProfile } from '../profile/profileClient';
 import { getPersonalInviteLink } from '../invitations/invitationsClient';
 import { homeFeedRefreshAtom } from '../../state/homeFeed';
+import { useShareTarget } from '../../utils/useShareTarget';
 
 type Panel = 'none' | 'post' | 'share' | 'edit';
 type PostMode = 'status' | 'wall';
@@ -98,6 +99,7 @@ export const HomeComposer = (): JSX.Element => {
     const [busy, setBusy] = useState(false);
     const [feedback, setFeedback] = useState<string | null>(null);
     const [shareUrl, setShareUrl] = useState<string | null>(null);
+    const { status: shareStatus, share } = useShareTarget();
 
     const togglePanel = (next: Panel) => {
         setFeedback(null);
@@ -142,23 +144,15 @@ export const HomeComposer = (): JSX.Element => {
         }
     }, []);
 
+    // Third copy of the share handler, now delegating to the shared one.
     const shareOrCopy = useCallback(async () => {
         if (!shareUrl) return;
-        try {
-            if (typeof navigator !== 'undefined' && navigator.share) {
-                await navigator.share({ title: 'Join me on Blackout', url: shareUrl });
-                return;
-            }
-        } catch {
-            /* user dismissed the share sheet — fall through to copy */
-        }
-        try {
-            await navigator.clipboard?.writeText(shareUrl);
-            setFeedback('Link copied.');
-        } catch {
-            setFeedback('Copy this link manually.');
-        }
-    }, [shareUrl]);
+        await share({ title: 'Join me on Blackout', url: shareUrl });
+    }, [shareUrl, share]);
+    useEffect(() => {
+        if (shareStatus === 'copied') setFeedback('Link copied.');
+        if (shareStatus === 'failed') setFeedback('Copy this link manually.');
+    }, [shareStatus]);
 
     const openShare = () => {
         togglePanel('share');

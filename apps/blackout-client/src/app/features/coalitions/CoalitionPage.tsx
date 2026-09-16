@@ -1,4 +1,11 @@
-import React, { useCallback, useEffect, useState, type CSSProperties, type FormEvent } from 'react';
+import React, {
+    useCallback,
+    useEffect,
+    useRef,
+    useState,
+    type CSSProperties,
+    type FormEvent,
+} from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import {
     CAMPAIGN_TYPES,
@@ -30,7 +37,10 @@ import {
     type CoalitionCampaignView,
     type CoalitionView,
     type JoinRequestView,
+    fetchCampaignShare,
+    type CampaignShareView,
 } from './coalitionsClient';
+import { useShareTarget } from '../../utils/useShareTarget';
 import {
     buttonStyle,
     cardStyle,
@@ -110,11 +120,14 @@ function CampaignCard({
     coalitionId,
     campaign,
     canApprove,
+    highlighted,
     onChanged,
 }: {
     coalitionId: string;
     campaign: CoalitionCampaignView;
     canApprove: boolean;
+    /** The campaign a shared link pointed at, so the landing actually shows it. */
+    highlighted?: boolean;
     onChanged: () => void;
 }) {
     const [busy, setBusy] = useState(false);
@@ -132,11 +145,44 @@ function CampaignCard({
             setBusy(false);
         }
     };
+    const { status: shareStatus, share } = useShareTarget();
+    const highlightRef = useRef<HTMLDivElement | null>(null);
+    useEffect(() => {
+        if (highlighted) highlightRef.current?.scrollIntoView({ block: 'center' });
+    }, [highlighted]);
+    const [shareView, setShareView] = useState<CampaignShareView | null>(null);
+    // Share is offered to everyone, member or not, signed in or not: a campaign
+    // nobody outside the coalition can pass on is a campaign that never leaves
+    // it. The endpoint decides what is shareable, not this button.
+    const openShare = async () => {
+        setNote(null);
+        try {
+            const view = await fetchCampaignShare(coalitionId, campaign.id);
+            // Prefer the OS share sheet when the device has one; it reaches
+            // every app on the phone, which is the "any platform" promise.
+            if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+                await share({ url: view.url, title: view.title, text: view.text });
+                return;
+            }
+            setShareView(view);
+        } catch (error) {
+            setNote(error instanceof Error ? error.message : 'Could not build a share link');
+        }
+    };
     const goal = campaign.goalCents ?? 0;
     const fraction = goal > 0 ? campaign.raisedCents / goal : 0;
     const boost = campaign.boost;
     return (
-        <div style={cardStyle} data-testid="coalition-campaign">
+        <div
+            id={`campaign-${campaign.id}`}
+            ref={highlightRef}
+            style={
+                highlighted
+                    ? { ...cardStyle, outline: '2px solid var(--primary, #8b5cf6)' }
+                    : cardStyle
+            }
+            data-testid="coalition-campaign"
+        >
             <div
                 style={{
                     display: 'flex',
@@ -190,6 +236,20 @@ function CampaignCard({
                         Boost
                     </button>
                 ) : null}
+                {campaign.status === 'active' || campaign.status === 'completed' ? (
+                    <button
+                        type="button"
+                        style={buttonStyle('subtle')}
+                        onClick={() => void openShare()}
+                        data-testid="coalition-campaign-share"
+                    >
+                        {shareStatus === 'copied'
+                            ? 'Copied'
+                            : shareStatus === 'shared'
+                            ? 'Shared'
+                            : 'Share'}
+                    </button>
+                ) : null}
                 {canApprove && campaign.status === 'pending_approval' ? (
                     <button
                         type="button"
@@ -227,6 +287,44 @@ function CampaignCard({
                     </button>
                 ) : null}
             </div>
+            {shareView ? (
+                <div
+                    style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}
+                    data-testid="coalition-campaign-share-targets"
+                >
+                    {shareView.targets.map((target) =>
+                        target.href ? (
+                            <a
+                                key={target.target}
+                                href={target.href}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{ ...buttonStyle('subtle'), textDecoration: 'none' }}
+                            >
+                                {target.label}
+                            </a>
+                        ) : (
+                            // No reachable composer (Instagram, TikTok, Discord,
+                            // or Mastodon with no instance): the clipboard is
+                            // the honest offer, not a dead link.
+                            <button
+                                key={target.target}
+                                type="button"
+                                style={buttonStyle('subtle')}
+                                onClick={() =>
+                                    void share({
+                                        url: shareView.url,
+                                        title: shareView.title,
+                                        text: shareView.text,
+                                    })
+                                }
+                            >
+                                {target.label}
+                            </button>
+                        )
+                    )}
+                </div>
+            ) : null}
             {note ? (
                 <span style={{ fontSize: 12, color: 'var(--danger, #f04747)' }}>{note}</span>
             ) : null}
@@ -459,7 +557,7 @@ function EditCoalitionForm({ view, onSaved }: { view: CoalitionView; onSaved: ()
  * what to show from `viewer.permissions`.
  */
 export const CoalitionPage = () => {
-    const { id } = useParams();
+    const { id, campaignId } = useParams();
     const [view, setView] = useState<CoalitionView | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [requests, setRequests] = useState<JoinRequestView[]>([]);
@@ -764,6 +862,7 @@ export const CoalitionPage = () => {
                                 coalitionId={coalition.id}
                                 campaign={campaign}
                                 canApprove={can('campaigns.approve')}
+                                highlighted={campaign.id === campaignId}
                                 onChanged={() => void load()}
                             />
                         ))}
