@@ -795,7 +795,7 @@ coalitions.post('/:id/campaigns/:campaignId/contribute', async (c) => {
 });
 
 /** What a contribution of this size splits into, before committing to it. */
-coalitions.get('/:id/campaigns/:campaignId/contribution-preview', (c) => {
+coalitions.get('/:id/campaigns/:campaignId/contribution-preview', async (c) => {
     const amount = Number.parseInt(c.req.query('amountCents') ?? '', 10);
     if (!Number.isInteger(amount) || amount < 100) {
         return c.json(
@@ -803,7 +803,14 @@ coalitions.get('/:id/campaigns/:campaignId/contribution-preview', (c) => {
             400
         );
     }
-    return c.json({ split: previewContribution(amount) });
+    // Resolve the campaign so the preview quotes the rate FBM will really
+    // charge this listing's seller. Previewing without it reported 3% to
+    // everyone, including contributors to a drive whose seller pays for a plan
+    // that discounts it.
+    const viewer = getAuthUser(c);
+    const campaign = getCampaign(c.req.param('id'), c.req.param('campaignId'), viewer?.sub);
+    if (!campaign.ok) return errorResponse(c, campaign.error);
+    return c.json({ split: await previewContribution(amount, campaign.value.fbmListingId) });
 });
 
 /** The supporter wall: captured contributions, newest first. */

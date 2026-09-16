@@ -40,6 +40,11 @@ task depends on a decision made here, the decision is recorded in §15.
 -   **3% is a default, not an invariant, in FBM.** Vendor plans lower it to
     2.5/2/1.5%; Blackout hard-codes 300 bps for display. Coalition flows must pin
     the flat rate explicitly (done in Task 2).
+    _Superseded._ The finding is right, but pinning was the wrong response to it:
+    it made Blackout display 3% while FBM charged a plan-holder less. 300 bps is
+    now the standard rate and the ceiling, quoted per listing from FBM and
+    refused if it comes back higher. See ECOSYSTEM_WIRING.md, "The money
+    invariant".
 -   **KARMA has one award API** (`recordXpEvent`) and one canonical log
     (`karma_event`). No inbound path lets Blackout award XP; the tier ladder is
     Seedling/Sprout/Root/Canopy/Ancestor — the six-rung
@@ -242,6 +247,8 @@ Route → service → FBM → ledger, as it must run:
 
 1. Blackout `createTip({contextKind:'coalition_drive'})` computes gross/fee/net with
    `computePlatformCommission` at 300 bps (`core/marketplace/fees.ts:84-105`).
+   _Superseded:_ the rate is now quoted from FBM per listing and passed as that
+   function's third argument, with 300 bps as the default and the ceiling.
 2. Blackout opens `provider.createCheckoutSession({listingId, idempotencyKey:'tip:<id>',
 metadata:{tipId}})` — the leg creator subs already use (`routes/creatorSubs.ts:137-181`)
    and tips never did.

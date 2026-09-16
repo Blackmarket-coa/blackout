@@ -203,6 +203,16 @@ export interface MarketplaceProvider extends MarketplaceProviderInfo {
      * providers serve bundles from a CDN behind the asset-url flow.
      */
     issueSignedBundle?(entitlement: NormalizedEntitlement): Promise<SignedPluginBundleEnvelope>;
+
+    /**
+     * The platform fee this provider will actually charge on a listing, in
+     * basis points — which can be lower than the table rate when the seller
+     * pays for a plan that discounts it.
+     *
+     * `null` means "no opinion, use the table rate". Optional so providers
+     * without a per-listing notion of fee need no change.
+     */
+    getListingFeeBps?(listingId: string): Promise<number | null>;
 }
 
 /**

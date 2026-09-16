@@ -34,38 +34,95 @@ const rand = () => Math.random().toString(36).slice(2, 10);
 
 export const newContributionId = (): string => `coac_${rand()}_${Date.now().toString(36)}`;
 
-/** The one rate, for every coalition. Flat by design — never tiered by size or KARMA. */
+/**
+ * The standard rate for every coalition, and the ceiling.
+ *
+ * A seller who pays for an FBM plan is charged less than this, and coalition
+ * contributions should show and keep the rate actually charged rather than
+ * asserting 3% while the marketplace bills 2%. What stays fixed is the
+ * direction: nothing may push a coalition ABOVE this, and nothing tiers it by
+ * coalition size or KARMA — a discount is bought with a subscription the seller
+ * already pays for, not earned by the coalition's standing.
+ */
 export const COALITION_COMMISSION_BPS = 300;
 
 const DEFAULT_PROVIDER: MarketplaceProviderId = 'freeblackmarket';
 
 /**
- * Guard the invariant at the point of use: if the shared fee table ever moves
- * away from the flat 3%, coalition contributions stop rather than silently
- * charging a different rate than the product promises.
+ * Guard the invariant at the point of use: if the shared fee table ever rises
+ * above the standard 3%, coalition contributions stop rather than silently
+ * charging more than the product promises. A table that sits BELOW the ceiling
+ * is fine — that is the whole point of the plan ladder.
  */
 export function assertFlatCommission(providerId: MarketplaceProviderId = DEFAULT_PROVIDER): void {
     const bps = marketplaceProviderFees[providerId]?.feeBps;
-    if (bps !== COALITION_COMMISSION_BPS) {
+    if (typeof bps !== 'number' || bps > COALITION_COMMISSION_BPS) {
         throw new Error(
-            `coalition commission must stay flat at ${COALITION_COMMISSION_BPS} bps (provider ${providerId} is ${String(
+            `coalition commission must not exceed ${COALITION_COMMISSION_BPS} bps (provider ${providerId} is ${String(
                 bps
             )})`
         );
     }
 }
 
+/** Is a quoted rate one we are willing to charge a contributor? */
+export function commissionWithinCeiling(bps: unknown): bps is number {
+    return (
+        typeof bps === 'number' &&
+        Number.isInteger(bps) &&
+        bps >= 0 &&
+        bps <= COALITION_COMMISSION_BPS
+    );
+}
+
 export interface ContributionSplit {
     grossCents: number;
     feeCents: number;
     netCents: number;
+    /** The rate actually applied, so the client shows the real number. */
+    feeBps: number;
+}
+
+/**
+ * Ask the provider what it will really charge on this listing.
+ *
+ * A quote that cannot be fetched falls back to the standard rate — an outage at
+ * FBM must not stop contributions. A quote ABOVE the ceiling returns null, and
+ * every caller treats that as "cannot take this money", because clamping the
+ * displayed rate down to 3% while FBM charges more would make the split we show
+ * a contributor a lie.
+ */
+export async function quoteCommissionBps(listingId?: string | null): Promise<number | null> {
+    if (!listingId) return COALITION_COMMISSION_BPS;
+    const provider = getMarketplaceProvider(DEFAULT_PROVIDER);
+    if (!provider?.enabled || !provider.getListingFeeBps) return COALITION_COMMISSION_BPS;
+    let quoted: number | null = null;
+    try {
+        quoted = await provider.getListingFeeBps(listingId);
+    } catch {
+        quoted = null;
+    }
+    if (quoted === null) return COALITION_COMMISSION_BPS;
+    return commissionWithinCeiling(quoted) ? quoted : null;
 }
 
 /** Preview the split a contributor will see before they commit. */
-export function previewContribution(grossCents: number): ContributionSplit {
+export async function previewContribution(
+    grossCents: number,
+    listingId?: string | null
+): Promise<ContributionSplit> {
     assertFlatCommission();
-    const split = computePlatformCommission(grossCents, DEFAULT_PROVIDER);
-    return { grossCents: split.grossCents, feeCents: split.feeCents, netCents: split.netCents };
+    // A refused quote still has to render a number, and the standard rate is
+    // the honest one to show: it is what a contributor would pay if the drive
+    // were open. The contribution itself is refused separately.
+    const bps = (await quoteCommissionBps(listingId)) ?? COALITION_COMMISSION_BPS;
+    const split = computePlatformCommission(grossCents, DEFAULT_PROVIDER, bps);
+    return {
+        grossCents: split.grossCents,
+        feeCents: split.feeCents,
+        netCents: split.netCents,
+        feeBps: split.feeBps,
+    };
 }
 
 export interface StartContributionInput {
@@ -118,11 +175,37 @@ export async function startContribution(
         });
         return {
             tip: null,
-            split: previewContribution(input.grossCents),
+            split: await previewContribution(input.grossCents, input.campaign.fbmListingId),
             redirectUrl: null,
             sessionId: null,
             embed: false,
             checkoutError: reason,
+        };
+    }
+
+    // What FBM will really charge this listing's seller. Quoted before the tip
+    // is written, because the rate is baked into the tip's cents and a tip is
+    // the obligation — re-deriving the split later would let the two disagree.
+    const feeBps = await quoteCommissionBps(input.campaign.fbmListingId);
+    if (feeBps === null) {
+        // Above our ceiling. Refuse rather than clamp: showing a contributor a
+        // 3% split while the marketplace takes more is the one outcome the flat
+        // rate exists to prevent.
+        incrementCounter('coalition_contribution_unavailable', {
+            reason: 'commission_above_ceiling',
+        });
+        logEvent('coalition_contribution_unavailable', {
+            campaignId: input.campaign.id,
+            coalitionId: input.campaign.coalitionId,
+            reason: 'commission_above_ceiling',
+        });
+        return {
+            tip: null,
+            split: await previewContribution(input.grossCents),
+            redirectUrl: null,
+            sessionId: null,
+            embed: false,
+            checkoutError: 'commission_above_ceiling',
         };
     }
 
@@ -148,7 +231,7 @@ export async function startContribution(
         });
         return {
             tip: null,
-            split: previewContribution(input.grossCents),
+            split: await previewContribution(input.grossCents, input.campaign.fbmListingId),
             redirectUrl: null,
             sessionId: null,
             embed: false,
@@ -163,6 +246,7 @@ export async function startContribution(
         grossCents: input.grossCents,
         currency: input.currency ?? 'USD',
         note: input.note ?? null,
+        feeBpsOverride: feeBps,
         metadata: {
             coalitionId: input.campaign.coalitionId,
             campaignId: input.campaign.id,
@@ -173,6 +257,7 @@ export async function startContribution(
         grossCents: tip.grossCents,
         feeCents: tip.feeCents,
         netCents: tip.netCents,
+        feeBps,
     };
 
     const embed = input.embed === true && provider.capabilities.includes('embedded-checkout');

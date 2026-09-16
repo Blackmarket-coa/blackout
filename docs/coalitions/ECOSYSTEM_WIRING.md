@@ -18,19 +18,34 @@ other rather than both writing it.
 
 ## The money invariant
 
-Coalition-driven commerce pays the same flat 3% every other transaction pays.
-It is not tiered by coalition size, by KARMA, or by anything else.
-`services/coalitionDrives.ts` asserts this at the point of use:
+Coalition-driven commerce pays 3%, and never more. That is a **ceiling**, not a
+pin: a seller who pays for an FBM plan is charged 2.5 / 2 / 1.5%, and a
+coalition drive on their listing is charged what they are charged. What is
+invariant is the direction and the reason — a discount is bought with a
+subscription the seller already pays for, and is never earned by a coalition's
+size, its KARMA, or its standing.
+
+`services/coalitionDrives.ts` enforces it at the point of use:
 
 ```ts
-export const COALITION_COMMISSION_BPS = 300;
-assertFlatCommission(); // throws if the shared fee table ever moves off 300 bps
+export const COALITION_COMMISSION_BPS = 300; // the standard rate AND the ceiling
+assertFlatCommission(); // throws if the fee table rises above it
+const bps = await quoteCommissionBps(listingId); // null when FBM quotes above the ceiling
 ```
 
-The audit found 3% is a _default_ in FBM (paid plans lower it to 2.5/2/1.5), so
-the assertion is the thing that keeps a plan change from silently tiering a
-trust signal. A drift fails loudly instead of quietly charging a different rate
-than the product promises.
+The audit found 3% is a _default_ in FBM, and the first implementation read that
+as a threat: it asserted the table still said exactly 300 and passed no
+per-listing rate, so a contributor to a drive whose seller pays $99/month was
+shown 3% while FBM took 2%. The displayed split has to be the charged split, so
+the rate is now quoted per listing and baked into the tip's cents — the tip is
+the obligation, and re-deriving the split later would let the two disagree.
+
+A quote **above** the ceiling is refused, not clamped. Clamping the display down
+to 3% while the marketplace takes more would turn the number a contributor
+agreed to into a lie, so `startContribution` takes its existing "record nothing,
+say so" branch with reason `commission_above_ceiling`. A quote that cannot be
+fetched at all falls back to the standard rate: an outage at FBM must not stop
+people funding a drive.
 
 ## Reputation: one ladder, flat deltas
 

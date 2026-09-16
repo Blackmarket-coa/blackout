@@ -41,6 +41,16 @@ export interface CreateTipInput {
     note?: string | null;
     giftSku?: string | null;
     providerId?: MarketplaceProviderId;
+    /**
+     * Charge this rate instead of the provider's table rate, in basis points.
+     *
+     * Only for callers that have asked the provider what it will really charge
+     * — a seller on a paid plan is billed less than the table says, and the tip
+     * has to carry the rate that will actually be taken or its persisted
+     * `netCents` (which is what the recipient is owed) would be wrong. Absent
+     * means the table rate, so every other caller is unaffected.
+     */
+    feeBpsOverride?: number;
     fbmOrderId?: string | null;
     metadata?: Record<string, unknown>;
 }
@@ -129,7 +139,11 @@ export function createTip(input: CreateTipInput): TipView {
     }
 
     const providerId = (input.providerId ?? DEFAULT_PROVIDER) as MarketplaceProviderIdString;
-    const split = computePlatformCommission(input.grossCents, providerId as MarketplaceProviderId);
+    const split = computePlatformCommission(
+        input.grossCents,
+        providerId as MarketplaceProviderId,
+        input.feeBpsOverride
+    );
 
     if (input.fbmOrderId) {
         const conflict = db.findTipByOrderId(providerId, input.fbmOrderId);

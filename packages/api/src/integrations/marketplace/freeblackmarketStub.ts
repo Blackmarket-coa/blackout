@@ -564,6 +564,11 @@ export interface FreeblackmarketStubInternals {
         signature: string;
         eventId: string;
     };
+    /**
+     * Test-only: what `getListingFeeBps` answers for a listing. `null` restores
+     * the default quote. Set it above the ceiling to exercise the refusal path.
+     */
+    setListingFeeBps(listingId: string, feeBps: number | null): void;
     /** Test-only: clear in-memory state. */
     reset(): void;
 }
@@ -591,6 +596,9 @@ export function createFreeblackmarketStubProvider(): MarketplaceProvider {
     for (const seed of SEEDED_LISTINGS) listings.set(seed.listing.providerListingId, { ...seed });
 
     const sessions = new Map<string, StubSession>();
+    // Quoted platform fee per listing. Absent means the standard 3%, which is
+    // what a seller on the free plan is charged.
+    const feeQuotes = new Map<string, number>();
 
     function listFor(query: CatalogQuery): NormalizedListing[] {
         const all = [...listings.values()].filter((l) => l.status === 'published');
@@ -683,6 +691,11 @@ export function createFreeblackmarketStubProvider(): MarketplaceProvider {
 
         async getListing(listingId: string): Promise<NormalizedListing | null> {
             return listings.get(listingId)?.listing ?? null;
+        },
+
+        /** The standard rate unless a test has set this listing's seller onto a plan. */
+        async getListingFeeBps(listingId: string): Promise<number | null> {
+            return feeQuotes.get(listingId) ?? 300;
         },
 
         async createCheckoutSession(input: CheckoutInput): Promise<CheckoutResult> {
@@ -873,12 +886,17 @@ export function createFreeblackmarketStubProvider(): MarketplaceProvider {
             const signature = crypto.createHmac('sha256', webhookSecret).update(body).digest('hex');
             return { body, signature, eventId };
         },
+        setListingFeeBps(listingId: string, feeBps: number | null) {
+            if (feeBps === null) feeQuotes.delete(listingId);
+            else feeQuotes.set(listingId, feeBps);
+        },
         reset() {
             listings.clear();
             for (const seed of SEEDED_LISTINGS) {
                 listings.set(seed.listing.providerListingId, { ...seed });
             }
             sessions.clear();
+            feeQuotes.clear();
         },
     };
 

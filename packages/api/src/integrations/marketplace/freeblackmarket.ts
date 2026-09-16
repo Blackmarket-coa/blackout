@@ -295,6 +295,29 @@ export function createFreeblackmarketProvider(): MarketplaceProvider {
             }
         },
 
+        /**
+         * The fee FBM will actually charge on this listing's seller. Lower than
+         * the table rate when that seller pays for a plan that discounts it.
+         *
+         * Swallows errors into `null` the same way `getListing` does: a fee
+         * quote that cannot be fetched means "use the table rate", not "stop
+         * the contribution". The ceiling check downstream is what protects the
+         * contributor, not this call succeeding.
+         */
+        async getListingFeeBps(listingId: string): Promise<number | null> {
+            if (!enabled || !apiKey) return null;
+            try {
+                const quote = await call<{ feeBps?: unknown }>(
+                    `${apiPrefix}/listings/${listingId}/fee-quote`
+                );
+                return typeof quote.feeBps === 'number' && Number.isFinite(quote.feeBps)
+                    ? quote.feeBps
+                    : null;
+            } catch {
+                return null;
+            }
+        },
+
         async createCheckoutSession(input: CheckoutInput): Promise<CheckoutResult> {
             const path = input.embed
                 ? `${apiPrefix}/checkout/sessions?embed=1`

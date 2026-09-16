@@ -97,19 +97,21 @@ test.beforeEach(() => {
     resetMarketplaceRegistry();
 });
 
-test('commission stays flat at 3% and the split is computed, never assumed', () => {
+test('commission defaults to 3% and the split is computed, never assumed', async () => {
     assert.equal(COALITION_COMMISSION_BPS, 300);
     assert.doesNotThrow(() => assertFlatCommission());
-    assert.deepEqual(previewContribution(10_000), {
+    assert.deepEqual(await previewContribution(10_000), {
         grossCents: 10_000,
         feeCents: 300,
         netCents: 9_700,
+        feeBps: 300,
     });
     // The rate does not move with size — a large drive pays the same 3%.
-    assert.deepEqual(previewContribution(1_000_000), {
+    assert.deepEqual(await previewContribution(1_000_000), {
         grossCents: 1_000_000,
         feeCents: 30_000,
         netCents: 970_000,
+        feeBps: 300,
     });
 });
 
@@ -135,7 +137,7 @@ test('contributing records a pending tip with the 3% split and no money moves ye
         checkoutError?: string;
     };
     assert.equal(body.status, 'pending', 'money moves only when FBM confirms');
-    assert.deepEqual(body.split, { grossCents: 2_500, feeCents: 75, netCents: 2_425 });
+    assert.deepEqual(body.split, { grossCents: 2_500, feeCents: 75, netCents: 2_425, feeBps: 300 });
 
     // The campaign meter has not moved: nothing was captured.
     const before = (await (
