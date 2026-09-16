@@ -48,8 +48,10 @@ import {
     transferFounder,
     transitionCampaign,
     listAmplifiedAid,
+    listCampaignPayees,
     raiseAidPost,
     redactCampaignIdentities,
+    setCampaignPayees,
     updateCoalition,
     withdrawJoinRequest,
     type CoalitionError,
@@ -113,6 +115,16 @@ function errorResponse(c: Parameters<typeof requireUser>[0], error: CoalitionErr
                 },
                 403
             );
+        case 'payees_invalid':
+            return c.json(
+                {
+                    code: 'payees_invalid',
+                    message:
+                        'Every payee must be a member, listed once, and the shares must total 100%',
+                    reason: error.reason,
+                },
+                400
+            );
         case 'invalid_role':
             return c.json(
                 { code: 'invalid_role', message: 'That role cannot be assigned here' },
@@ -142,7 +154,7 @@ function errorResponse(c: Parameters<typeof requireUser>[0], error: CoalitionErr
             return c.json(
                 {
                     code: 'boost_allowance_exhausted',
-                    message: `You have used today's ${error.allowance} boosts in this coalition`,
+                    message: `You have used today's ${error.allowance} boosts`,
                     allowance: error.allowance,
                 },
                 429
@@ -506,6 +518,53 @@ coalitions.post('/:id/campaigns/:campaignId/approve', (c) => {
 
 const statusSchema = z.object({ status: z.enum(CAMPAIGN_STATUSES) });
 
+const payeesSchema = z.object({
+    payees: z
+        .array(
+            z.object({
+                userId: z.string().min(1).max(255),
+                shareBps: z.number().int().min(0).max(10_000),
+                role: z.string().min(1).max(40),
+            })
+        )
+        .min(1)
+        .max(20),
+});
+
+/**
+ * Who a campaign's money divides among. Stewards set it; contributors never do
+ * — a client-chosen payee would be a way to redirect somebody else's donation.
+ */
+coalitions.post('/:id/campaigns/:campaignId/payees', async (c) => {
+    const user = requireUser(c);
+    if (user instanceof Response) return user;
+    const parsed = await readJsonBody(c, payeesSchema);
+    if (parsed instanceof Response) return parsed;
+    const saved = setCampaignPayees(
+        c.req.param('id'),
+        user.sub,
+        c.req.param('campaignId'),
+        parsed.payees
+    );
+    if (!saved.ok) return errorResponse(c, saved.error);
+    return c.json({ payees: saved.value.map((row) => ({ ...row, ...resolveUser(row.userId) })) });
+});
+
+coalitions.get('/:id/campaigns/:campaignId/payees', (c) => {
+    const viewer = getAuthUser(c);
+    const campaign = getCampaign(c.req.param('id'), c.req.param('campaignId'), viewer?.sub);
+    if (!campaign.ok) return errorResponse(c, campaign.error);
+    // Who a public drive pays is part of what a contributor is agreeing to, so
+    // this is readable — but a payee who opted out of public listing is named
+    // only to the coalition.
+    const insider = viewerIsMember(c);
+    return c.json({
+        payees: listCampaignPayees(campaign.value.id)
+            .filter((row) => insider || isPubliclyListed(row.userId))
+            .map((row) => ({ ...row, ...resolveUser(row.userId) })),
+    });
+});
+
 coalitions.post('/:id/campaigns/:campaignId/status', async (c) => {
     const user = requireUser(c);
     if (user instanceof Response) return user;
@@ -564,6 +623,9 @@ coalitions.post('/:id/campaigns/:campaignId/contribute', async (c) => {
         const result = await startContribution({
             campaign: campaign.value,
             supporterUserId: user.sub,
+            ...(campaign.value.beneficiaryUserId
+                ? { beneficiaryUserId: campaign.value.beneficiaryUserId }
+                : {}),
             grossCents: parsed.amountCents,
             ...(parsed.currency ? { currency: parsed.currency } : {}),
             ...(parsed.note ? { note: parsed.note } : {}),
@@ -578,7 +640,10 @@ coalitions.post('/:id/campaigns/:campaignId/contribute', async (c) => {
             return c.json(
                 {
                     code: 'contributions_unavailable',
-                    message: 'This drive cannot take contributions right now',
+                    message:
+                        result.checkoutError === 'no_beneficiary'
+                            ? 'This request has no one to pay — it was mirrored from another platform'
+                            : 'This drive cannot take contributions right now',
                     reason: result.checkoutError ?? 'no_listing',
                     split: result.split,
                 },

@@ -299,10 +299,16 @@ export interface CoalitionCampaign {
     completedAt?: string;
     /** Existing hub project (funding meter, milestones, surge) when type is project/drive. */
     projectId?: string;
-    /** Creator Hub bounty when type is project (bounty splits). */
+    /** Creator Hub bounty when type is project. */
     bountyId?: string;
     /** Mutual-aid post raised to this coalition when type is mutual_aid. */
     aidPostId?: string;
+    /**
+     * Who the money is for. Server-derived and never client-writable — for a
+     * raised mutual-aid campaign it is the person who asked for help, not the
+     * member who raised it. Absent falls back to the organiser.
+     */
+    beneficiaryUserId?: string;
     /** FBM listing contributions are purchased against (drive checkout). */
     fbmListingId?: string;
     /** FBM order cycle for goods drives. */
@@ -399,6 +405,69 @@ export interface CoalitionCampaignContribution {
     tipId: string;
     amountCents: number;
     currency: string;
+}
+
+/**
+ * One share of a campaign's money.
+ *
+ * Basis points, not percentages, so a three-way split is exact and the active
+ * rows can be required to sum to the denominator with no rounding argument.
+ *
+ * A contribution is still ONE payment: Blackout opens a single checkout and
+ * records the allocation against it, because splitting into N tips would mean
+ * N card charges for one contributor and nobody completes three redirects.
+ * The allocation rides the capture event; FBM settles it.
+ */
+export interface CampaignPayee {
+    id: string;
+    campaignId: string;
+    coalitionId: string;
+    userId: string;
+    /** Integer basis points. Active rows must sum to exactly 10000. */
+    shareBps: number;
+    /** Free-text reason this person is on the list ("organiser", "driver"). */
+    role: string;
+    active: boolean;
+}
+
+export const CAMPAIGN_PAYEE_BPS_DENOMINATOR = 10_000;
+
+/** Active shares must divide the whole, exactly. */
+export function campaignPayeeSharesAreValid(
+    payees: readonly Pick<CampaignPayee, 'shareBps' | 'active'>[]
+): boolean {
+    const active = payees.filter((p) => p.active);
+    if (active.length === 0) return false;
+    if (active.some((p) => !Number.isInteger(p.shareBps) || p.shareBps < 0)) return false;
+    return active.reduce((sum, p) => sum + p.shareBps, 0) === CAMPAIGN_PAYEE_BPS_DENOMINATOR;
+}
+
+/**
+ * Divide `netCents` across the shares, in cents, losing nothing.
+ *
+ * Largest-remainder: floor every share, then hand the leftover pennies to the
+ * largest remainders. The parts always sum back to `netCents`, so a split
+ * cannot quietly evaporate a cent or invent one.
+ */
+export function allocatePayeeCents(
+    netCents: number,
+    payees: readonly Pick<CampaignPayee, 'userId' | 'shareBps' | 'active'>[]
+): Array<{ userId: string; amountCents: number }> {
+    const active = payees.filter((p) => p.active);
+    if (active.length === 0 || netCents <= 0) return [];
+    const exact = active.map((p) => ({
+        userId: p.userId,
+        floor: Math.floor((netCents * p.shareBps) / CAMPAIGN_PAYEE_BPS_DENOMINATOR),
+        remainder: (netCents * p.shareBps) % CAMPAIGN_PAYEE_BPS_DENOMINATOR,
+    }));
+    let left = netCents - exact.reduce((sum, e) => sum + e.floor, 0);
+    const order = [...exact].sort((a, b) => b.remainder - a.remainder);
+    for (const entry of order) {
+        if (left <= 0) break;
+        entry.floor += 1;
+        left -= 1;
+    }
+    return exact.map((e) => ({ userId: e.userId, amountCents: e.floor }));
 }
 
 /** Per member, per coalition, per UTC day. Configurable by the server. */

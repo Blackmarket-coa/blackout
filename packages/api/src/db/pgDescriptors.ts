@@ -162,6 +162,10 @@ const OVERRIDES: Record<string, DescriptorOverride> = {
         keyOf: (r) => `${r.campaignId}::${r.userId}::${r.day}`,
         conflictColumns: ['campaign_id', 'user_id', 'day'],
     },
+    coalitionCampaignPayees: {
+        keyOf: (r) => `${r.campaignId}::${r.userId}`,
+        conflictColumns: ['campaign_id', 'user_id'],
+    },
     // coalition_rings flattens the optional nested location into lat/lng/address.
     coalitionRings: {
         toRow: (r) => {
@@ -523,6 +527,7 @@ const ALL_MAP_NAMES = [
     'coalitionCampaignSyncOptIns',
     'coalitionBoosts',
     'coalitionCampaignContributions',
+    'coalitionCampaignPayees',
 ] as const;
 
 export const TABLE_DESCRIPTORS: TableDescriptor[] = ALL_MAP_NAMES.map((mapName) => {
@@ -726,6 +731,7 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
     upsertCoalitionCampaignSyncOptIn: upsert('coalitionCampaignSyncOptIns'),
     upsertCoalitionBoost: upsert('coalitionBoosts'),
     upsertCoalitionCampaignContribution: upsert('coalitionCampaignContributions'),
+    upsertCoalitionCampaignPayee: upsert('coalitionCampaignPayees'),
     recordCoalitionKitApplication: upsert('coalitionKitApplications'),
     createCoalitionTask: upsert('coalitionTasks'),
     updateCoalitionTaskStatus: upsert('coalitionTasks'),

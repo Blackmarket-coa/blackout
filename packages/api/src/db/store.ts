@@ -105,6 +105,7 @@ import type {
     CoalitionCampaignSyncOptInRecord,
     CoalitionBoostRecord,
     CoalitionCampaignContributionRecord,
+    CoalitionCampaignPayeeRecord,
     CoalitionKitApplicationRecord,
     CoalitionTaskRecord,
     CoalitionNeedRecord,
@@ -278,6 +279,7 @@ type PersistedState = {
     coalitionCampaignSyncOptIns: CoalitionCampaignSyncOptInRecord[];
     coalitionBoosts: CoalitionBoostRecord[];
     coalitionCampaignContributions: CoalitionCampaignContributionRecord[];
+    coalitionCampaignPayees: CoalitionCampaignPayeeRecord[];
     coalitionKitApplications: CoalitionKitApplicationRecord[];
     coalitionTasks: CoalitionTaskRecord[];
     coalitionNeeds: CoalitionNeedRecord[];
@@ -490,6 +492,7 @@ class InMemoryDb {
     /** Keyed by `${campaignId}::${userId}::${day}`. */
     coalitionBoosts = new Map<string, CoalitionBoostRecord>();
     coalitionCampaignContributions = new Map<string, CoalitionCampaignContributionRecord>();
+    coalitionCampaignPayees = new Map<string, CoalitionCampaignPayeeRecord>();
     /** Records of Coalition Kits applied to a den/coalition, keyed by application id. */
     coalitionKitApplications = new Map<string, CoalitionKitApplicationRecord>();
     /** Coalition den tasks, keyed by task id. */
@@ -3696,6 +3699,32 @@ class InMemoryDb {
         return record;
     }
 
+    listCoalitionCampaignPayees(
+        filter: { campaignId?: string; coalitionId?: string; userId?: string } = {}
+    ): CoalitionCampaignPayeeRecord[] {
+        return [...this.coalitionCampaignPayees.values()].filter((row) => {
+            if (filter.campaignId && row.campaignId !== filter.campaignId) return false;
+            if (filter.coalitionId && row.coalitionId !== filter.coalitionId) return false;
+            if (filter.userId && row.userId !== filter.userId) return false;
+            return true;
+        });
+    }
+
+    upsertCoalitionCampaignPayee(
+        input: Omit<CoalitionCampaignPayeeRecord, 'createdAt' | 'updatedAt'>
+    ): CoalitionCampaignPayeeRecord {
+        const key = `${input.campaignId}::${input.userId}`;
+        const existing = this.coalitionCampaignPayees.get(key);
+        const now = nowIso();
+        const record: CoalitionCampaignPayeeRecord = {
+            ...input,
+            createdAt: existing?.createdAt ?? now,
+            updatedAt: now,
+        };
+        this.coalitionCampaignPayees.set(key, record);
+        return record;
+    }
+
     listCoalitionCampaignContributions(
         filter: { campaignId?: string; coalitionId?: string; supporterUserId?: string } = {}
     ): CoalitionCampaignContributionRecord[] {
@@ -5578,6 +5607,12 @@ export class FileBackedDb extends InMemoryDb {
             this.coalitionCampaignContributions = new Map(
                 parsed.coalitionCampaignContributions.map((row) => [row.id, row])
             );
+            this.coalitionCampaignPayees = new Map(
+                (parsed.coalitionCampaignPayees ?? []).map((row) => [
+                    `${row.campaignId}::${row.userId}`,
+                    row,
+                ])
+            );
         }
         if (parsed.coalitionBoosts) {
             this.coalitionBoosts = new Map(
@@ -5909,6 +5944,7 @@ export class FileBackedDb extends InMemoryDb {
             coalitionCampaignSyncOptIns: [...this.coalitionCampaignSyncOptIns.values()],
             coalitionBoosts: [...this.coalitionBoosts.values()],
             coalitionCampaignContributions: [...this.coalitionCampaignContributions.values()],
+            coalitionCampaignPayees: [...this.coalitionCampaignPayees.values()],
             coalitionKitApplications: [...this.coalitionKitApplications.values()],
             coalitionTasks: [...this.coalitionTasks.values()],
             coalitionNeeds: [...this.coalitionNeeds.values()],

@@ -16,6 +16,7 @@
  * quietly tiering a trust signal.
  */
 import {
+    allocatePayeeCents,
     computePlatformCommission,
     marketplaceProviderFees,
     type MarketplaceProviderId,
@@ -125,7 +126,35 @@ export async function startContribution(
         };
     }
 
-    const beneficiary = input.beneficiaryUserId ?? input.campaign.createdBy;
+    // The person the campaign is for, then the organiser. For a raised
+    // mutual-aid campaign that is the neighbour who asked, not the member who
+    // raised it on their behalf.
+    const beneficiary =
+        input.beneficiaryUserId ?? input.campaign.beneficiaryUserId ?? input.campaign.createdBy;
+    // A mutual-aid campaign's money belongs to the person who asked, by
+    // definition. If none could be derived — a post mirrored from a platform
+    // that withholds the requester's id — falling back to the organiser would
+    // pay the member who raised it money a contributor meant for a neighbour.
+    const unpayableAid = input.campaign.type === 'mutual_aid' && !input.campaign.beneficiaryUserId;
+    if (unpayableAid || !db.getUserById(beneficiary)) {
+        // A mutual-aid post mirrored in from FBM has no payable author — that
+        // projection withholds the requester's id. Refuse rather than quietly
+        // paying the organiser money a contributor meant for someone else.
+        incrementCounter('coalition_contribution_unavailable', { reason: 'no_beneficiary' });
+        logEvent('coalition_contribution_unavailable', {
+            campaignId: input.campaign.id,
+            coalitionId: input.campaign.coalitionId,
+            reason: 'no_beneficiary',
+        });
+        return {
+            tip: null,
+            split: previewContribution(input.grossCents),
+            redirectUrl: null,
+            sessionId: null,
+            embed: false,
+            checkoutError: 'no_beneficiary',
+        };
+    }
     const tip = createTip({
         senderUserId: input.supporterUserId,
         recipientUserId: beneficiary,
@@ -257,6 +286,19 @@ export function recordContribution(
         referenceId: input.tipId,
     });
 
+    // Freeze the division in CENTS at capture, not basis points at settlement.
+    // The shares can be re-set later, and a payout computed from whatever the
+    // list says next week would not match what the contributor paid into.
+    //
+    // This stays one payment. Splitting into one tip per payee would mean one
+    // card charge per payee for a single contributor, and nobody completes
+    // three redirects — so Blackout records the instruction and FBM, which
+    // already settles multi-party orders, fans it out.
+    const payees = db
+        .listCoalitionCampaignPayees({ campaignId: campaign.id })
+        .filter((row) => row.active);
+    const allocation = allocatePayeeCents(input.amountCents, payees);
+
     emitDomainEvent({
         module: 'coalitions',
         type: 'coalition.campaign.contribution.recorded',
@@ -267,6 +309,8 @@ export function recordContribution(
             tipId: input.tipId,
             amountCents: input.amountCents,
             raisedCents: updated.raisedCents,
+            beneficiaryUserId: campaign.beneficiaryUserId ?? campaign.createdBy,
+            ...(allocation.length > 0 ? { allocation } : {}),
         },
     });
 

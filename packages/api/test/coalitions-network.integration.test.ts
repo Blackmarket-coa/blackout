@@ -602,14 +602,16 @@ test('boost meter: separate pool, one per member per campaign per day, daily all
             headers: auth(user),
         });
 
-    assert.equal((await boost(OUTSIDER, c1)).status, 403, 'non-members cannot boost');
+    // Boosting is open to anyone signed in — amplifying a request is how
+    // someone outside the coalition finds it in the first place.
+    assert.equal((await boost(OUTSIDER, c1)).status, 200, 'non-members can boost');
     const first = await boost(MEMBER, c1);
     assert.equal(first.status, 200);
     const firstBody = (await first.json()) as {
         meter: { total: number; members: number };
         remainingToday: number;
     };
-    assert.equal(firstBody.meter.total, 1);
+    assert.equal(firstBody.meter.total, 2, 'the outsider boosted first');
     assert.equal(firstBody.remainingToday, 1);
     assert.equal((await boost(MEMBER, c1)).status, 409, 'same campaign, same day');
     assert.equal((await boost(MEMBER, c2)).status, 200);
@@ -621,8 +623,8 @@ test('boost meter: separate pool, one per member per campaign per day, daily all
     ).json()) as {
         boost: { total: number; members: number; visibilityMultiplier: number };
     };
-    assert.equal(detail.boost.total, 2);
-    assert.equal(detail.boost.members, 2);
+    assert.equal(detail.boost.total, 3);
+    assert.equal(detail.boost.members, 3);
     assert.ok(detail.boost.visibilityMultiplier > 1, 'a boosted campaign is lifted');
 });
 

@@ -27,6 +27,7 @@ export const RELAY_SCHEMA_VERSION = 1 as const;
  */
 export const RELAY_SUBJECT_SOURCES = [
     'coalition_feed',
+    'coalition_campaign',
     'coliseum_topic',
     'wall_post',
     'status',

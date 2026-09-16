@@ -21,6 +21,7 @@ import type {
     ExternalActivity,
     CampaignSyncOptIn,
     CoalitionBoost,
+    CampaignPayee,
     CoalitionCampaignContribution,
     CoalitionTask,
     ContentDistribution,
@@ -1817,6 +1818,7 @@ export interface CircleEdgeRecord {
  */
 export const RELAY_SUBJECT_SOURCES = [
     'coalition_feed',
+    'coalition_campaign',
     'coliseum_topic',
     'wall_post',
     'status',
@@ -1979,6 +1981,12 @@ export interface CoalitionExternalActivityRecord extends ExternalActivity {
 
 /** Per-member, per-campaign, per-platform opt-in. Keyed by `${campaignId}::${userId}::${platform}`. */
 export interface CoalitionCampaignSyncOptInRecord extends CampaignSyncOptIn {
+    createdAt: string;
+    updatedAt: string;
+}
+
+/** One share of a campaign's money. Keyed by `${campaignId}::${userId}`. */
+export interface CoalitionCampaignPayeeRecord extends CampaignPayee {
     createdAt: string;
     updatedAt: string;
 }

@@ -23,6 +23,7 @@ import {
     utcDayOf,
     type BoostMeter,
     type CampaignStatus,
+    campaignPayeeSharesAreValid,
     type CampaignType,
     type CoalitionImpactStats,
     type CoalitionJoinMode,
@@ -32,6 +33,7 @@ import {
 } from '@blackout/core';
 import { db } from '../db/store';
 import type {
+    CoalitionCampaignPayeeRecord,
     CoalitionCampaignRecord,
     CoalitionJoinRequestRecord,
     CoalitionMembershipRecord,
@@ -48,6 +50,9 @@ import {
 } from './coalitionSpaces';
 import { resolveMemberTier } from './coalitionTierGate';
 import { isPubliclyListed } from './profileStore';
+import { relaySubject } from './relayStore';
+import { incrementCounter } from './marketplaceObservability';
+import { resolveBlackoutUserId } from './userIdentity';
 import { awardCoalitionKarma, type CoalitionReputationEvent } from './coalitionReputation';
 import { campaignHasCapturedContributions } from './coalitionDrives';
 import { openWindowForGoodsDrive, pushCoalitionMilestones } from './coalitionFbmBridge';
@@ -60,6 +65,7 @@ export const newCoalitionId = (): string => `coa_${rand()}_${stamp()}`;
 export const newCoalitionMembershipId = (): string => `coam_${rand()}_${stamp()}`;
 export const newJoinRequestId = (): string => `coaj_${rand()}_${stamp()}`;
 export const newCampaignId = (): string => `camp_${rand()}_${stamp()}`;
+export const newPayeeId = (): string => `cpay_${rand()}_${stamp()}`;
 export const newBoostId = (): string => `boost_${rand()}_${stamp()}`;
 
 export type CoalitionError =
@@ -70,6 +76,7 @@ export type CoalitionError =
     | { kind: 'already_member' }
     | { kind: 'approval_required'; request: CoalitionJoinRequestRecord }
     | { kind: 'tier_gate'; required: CoalitionTierGate; actual: CoalitionTierGate }
+    | { kind: 'payees_invalid'; reason: string }
     | { kind: 'invalid_role' }
     | { kind: 'last_founder' }
     | { kind: 'invalid_transition'; from: CampaignStatus; to: CampaignStatus }
@@ -289,7 +296,14 @@ export function visibleCampaigns(
 export function redactCampaignIdentities(
     campaign: CoalitionCampaignRecord
 ): CoalitionCampaignRecord {
-    const { createdBy: _createdBy, approvedBy: _approvedBy, ...rest } = campaign;
+    const {
+        createdBy: _createdBy,
+        approvedBy: _approvedBy,
+        // On a raised mutual-aid campaign this is the person who asked for
+        // help. Publishing it would name someone in need to the whole internet.
+        beneficiaryUserId: _beneficiaryUserId,
+        ...rest
+    } = campaign;
     return rest as CoalitionCampaignRecord;
 }
 
@@ -1009,17 +1023,18 @@ export async function boostCampaign(
     const coalition = getCoalition(idOrSlug);
     if (!coalition) return fail({ kind: 'not_found' });
     if (coalition.archivedAt) return fail({ kind: 'archived' });
-    if (!activeMembership(coalition.id, actorId)) return fail({ kind: 'not_member' });
+    // Anyone signed in may boost — membership is not required. Amplifying a
+    // neighbour's request is exactly the thing an outsider should be able to
+    // do, and it is how someone finds the coalition in the first place.
     const campaign = db.getCoalitionCampaign(campaignId);
     if (!campaign || campaign.coalitionId !== coalition.id) return fail({ kind: 'not_found' });
     if (campaign.status !== 'active') return fail({ kind: 'campaign_inactive' });
     const day = utcDayOf(now);
     const allowance = boostDailyAllowance();
-    const spentToday = db.listCoalitionBoosts({
-        coalitionId: coalition.id,
-        userId: actorId,
-        day,
-    }).length;
+    // The cap is per person per day across the whole server, not per coalition.
+    // Keyed per coalition it would bound a member and not bound an outsider at
+    // all: they would simply get the full allowance again in every coalition.
+    const spentToday = db.listCoalitionBoosts({ userId: actorId, day }).length;
     if (db.listCoalitionBoosts({ campaignId, userId: actorId, day }).length > 0) {
         return fail({ kind: 'already_boosted' });
     }
@@ -1033,6 +1048,24 @@ export async function boostCampaign(
         userId: actorId,
         day,
     });
+    // Publicize it: the booster's own relay edge carries the campaign into
+    // their Circle and onward through Reach. This is the same mechanism the
+    // feed's own Boost button uses, not a parallel one — so many boosters
+    // collapse into a single card that names who else passed it on.
+    //
+    // Best-effort. A relay that cannot be minted must not lose the boost.
+    try {
+        relaySubject({
+            relayerUserId: actorId,
+            subjectSource: 'coalition_campaign',
+            subjectId: campaignId,
+            viaRelayId: null,
+            note: null,
+        });
+    } catch {
+        incrementCounter('coalition_boost_relay_failed');
+    }
+
     const meter = campaignBoostMeter(campaignId, now);
     emitDomainEvent({
         module: 'coalitions',
@@ -1068,6 +1101,7 @@ export function raiseAidPost(
 
     const post = db.listCoalitionAidPosts().find((row) => row.id === aidPostId);
     if (!post) return fail({ kind: 'not_found' });
+    const beneficiaryUserId = resolveBlackoutUserId(post.customerId) ?? undefined;
 
     // Already raised here: return the existing campaign rather than a duplicate.
     const existing = db
@@ -1090,6 +1124,12 @@ export function raiseAidPost(
         createdBy: actorId,
         approvedBy: actorId,
         aidPostId,
+        // The money is for the person who asked, not the member who raised it
+        // on their behalf. A post mirrored in from FBM has no payable author —
+        // that projection withholds the requester's id — so this can be absent,
+        // and a contribution to such a campaign is refused rather than paid to
+        // the wrong person.
+        ...(beneficiaryUserId ? { beneficiaryUserId } : {}),
     });
     emitDomainEvent({
         module: 'coalitions',
@@ -1097,6 +1137,87 @@ export function raiseAidPost(
         payload: { coalitionId: coalition.id, campaignId: campaign.id, aidPostId, by: actorId },
     });
     return succeed(campaign);
+}
+
+export interface PayeeInput {
+    userId: string;
+    shareBps: number;
+    role: string;
+}
+
+/**
+ * Set who a campaign's money divides among.
+ *
+ * Replaces the list wholesale: every payee not named is deactivated, so the
+ * stored active rows are always exactly what was last agreed. Shares must sum
+ * to the denominator exactly — a list that does not divide the whole is a
+ * drafting error, and accepting it would mean silently keeping the remainder.
+ */
+export function setCampaignPayees(
+    idOrSlug: string,
+    actorId: string,
+    campaignId: string,
+    payees: readonly PayeeInput[]
+): CoalitionResult<CoalitionCampaignPayeeRecord[]> {
+    const coalition = getCoalition(idOrSlug);
+    if (!coalition) return fail({ kind: 'not_found' });
+    if (coalition.archivedAt) return fail({ kind: 'archived' });
+    const gate = requirePermission(coalition, actorId, 'campaigns.launch');
+    if (!gate.ok) return gate;
+    const campaign = db.getCoalitionCampaign(campaignId);
+    if (!campaign || campaign.coalitionId !== coalition.id) return fail({ kind: 'not_found' });
+
+    const resolved: PayeeInput[] = [];
+    for (const entry of payees) {
+        const userId = resolveBlackoutUserId(entry.userId);
+        if (!userId) return fail({ kind: 'payees_invalid', reason: 'unknown_user' });
+        // A payee must be someone the coalition can account for: a member, or
+        // the beneficiary the campaign already names.
+        if (!activeMembership(coalition.id, userId) && campaign.beneficiaryUserId !== userId) {
+            return fail({ kind: 'payees_invalid', reason: 'not_a_member' });
+        }
+        if (resolved.some((r) => r.userId === userId)) {
+            return fail({ kind: 'payees_invalid', reason: 'duplicate' });
+        }
+        resolved.push({ userId, shareBps: entry.shareBps, role: entry.role });
+    }
+    if (!campaignPayeeSharesAreValid(resolved.map((r) => ({ ...r, active: true })))) {
+        return fail({ kind: 'payees_invalid', reason: 'shares_must_total_100' });
+    }
+
+    const named = new Set(resolved.map((r) => r.userId));
+    for (const existing of db.listCoalitionCampaignPayees({ campaignId: campaign.id })) {
+        if (!named.has(existing.userId) && existing.active) {
+            db.upsertCoalitionCampaignPayee({ ...existing, active: false });
+        }
+    }
+    const saved = resolved.map((entry) =>
+        db.upsertCoalitionCampaignPayee({
+            id: newPayeeId(),
+            campaignId: campaign.id,
+            coalitionId: coalition.id,
+            userId: entry.userId,
+            shareBps: entry.shareBps,
+            role: entry.role,
+            active: true,
+        })
+    );
+    emitDomainEvent({
+        module: 'coalitions',
+        type: 'coalition.campaign.payees.set',
+        payload: {
+            coalitionId: coalition.id,
+            campaignId: campaign.id,
+            payees: saved.length,
+            by: actorId,
+        },
+    });
+    return succeed(saved);
+}
+
+/** The active shares on a campaign, or an empty list when it pays one person. */
+export function listCampaignPayees(campaignId: string): CoalitionCampaignPayeeRecord[] {
+    return db.listCoalitionCampaignPayees({ campaignId }).filter((row) => row.active);
 }
 
 export interface AmplifiedAidView {

@@ -110,13 +110,11 @@ function CampaignCard({
     coalitionId,
     campaign,
     canApprove,
-    isMember,
     onChanged,
 }: {
     coalitionId: string;
     campaign: CoalitionCampaignView;
     canApprove: boolean;
-    isMember: boolean;
     onChanged: () => void;
 }) {
     const [busy, setBusy] = useState(false);
@@ -179,7 +177,9 @@ function CampaignCard({
                 </div>
             ) : null}
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {isMember && campaign.status === 'active' ? (
+                {/* Anyone signed in can boost — that is how a request reaches
+                    people who are not in the coalition yet. */}
+                {campaign.status === 'active' ? (
                     <button
                         type="button"
                         style={buttonStyle('primary')}
@@ -764,7 +764,6 @@ export const CoalitionPage = () => {
                                 coalitionId={coalition.id}
                                 campaign={campaign}
                                 canApprove={can('campaigns.approve')}
-                                isMember={isMember}
                                 onChanged={() => void load()}
                             />
                         ))}

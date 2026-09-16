@@ -243,3 +243,58 @@ test('the coalition Space is never published to the federated room directory', a
     const joinRules = initial.find((e) => e.type === 'm.room.join_rules');
     assert.equal(joinRules?.content.join_rule, 'invite');
 });
+
+// --- boosting is open, and publicizes ---------------------------------------
+
+test('anyone signed in can boost, and the boost carries it into their feed', async () => {
+    const coalition = await foundWithMembers('Amplify');
+    const created = await app.request(`/v1/coalitions/${coalition.id}/campaigns`, {
+        method: 'POST',
+        headers: auth(LEAD),
+        body: JSON.stringify({ type: 'drive', title: 'Winter coats', goalCents: 5_000 }),
+    });
+    const campaign = ((await created.json()) as { campaign: { id: string } }).campaign;
+
+    // STRANGER is not a member of this coalition.
+    const boosted = await app.request(
+        `/v1/coalitions/${coalition.id}/campaigns/${campaign.id}/boost`,
+        { method: 'POST', headers: auth(STRANGER) }
+    );
+    assert.equal(boosted.status, 200, await boosted.text());
+
+    // And it is now relayable from their Circle — the same edge the feed's own
+    // Boost button mints, so many boosters collapse into one card.
+    const edges = db.listRelayEdgesByRelayers([STRANGER]);
+    const edge = edges.find((e) => e.subjectId === campaign.id);
+    assert.ok(edge, 'boosting publicizes it');
+    assert.equal(edge.subjectSource, 'coalition_campaign');
+});
+
+test('the daily boost budget is per person, not per coalition', async () => {
+    const first = await foundWithMembers('Budget One');
+    const second = await foundWithMembers('Budget Two');
+    const campaignIn = async (coalitionId: string, title: string) => {
+        const res = await app.request(`/v1/coalitions/${coalitionId}/campaigns`, {
+            method: 'POST',
+            headers: auth(LEAD),
+            body: JSON.stringify({ type: 'drive', title }),
+        });
+        return ((await res.json()) as { campaign: { id: string } }).campaign.id;
+    };
+    const boost = (coalitionId: string, campaignId: string) =>
+        app.request(`/v1/coalitions/${coalitionId}/campaigns/${campaignId}/boost`, {
+            method: 'POST',
+            headers: auth(STRANGER),
+        });
+
+    // Default allowance is 3. Spend it all in the first coalition...
+    for (let i = 0; i < 3; i += 1) {
+        const id = await campaignIn(first.id, `drive ${i}`);
+        assert.equal((await boost(first.id, id)).status, 200);
+    }
+    // ...and the budget is gone in the second one too. Keyed per coalition it
+    // would not bound an outsider at all.
+    const elsewhere = await campaignIn(second.id, 'another');
+    const refused = await boost(second.id, elsewhere);
+    assert.equal(refused.status, 429, await refused.text());
+});
