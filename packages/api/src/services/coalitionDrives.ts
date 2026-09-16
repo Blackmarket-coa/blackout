@@ -265,6 +265,9 @@ export async function startContribution(
         const result = await provider.createCheckoutSession({
             userId: input.supporterUserId,
             listingId: input.campaign.fbmListingId,
+            // A drive's listing is a destination, not a price — the contributor
+            // chose what to give, so that is what the card is charged.
+            amountCents: tip.grossCents,
             idempotencyKey: `coalition-drive:${tip.id}`,
             returnUrl: input.returnUrl,
             embed,

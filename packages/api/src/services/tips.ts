@@ -64,6 +64,8 @@ export interface TipView {
     grossCents: number;
     feeCents: number;
     netCents: number;
+    /** The rate the split was computed at, so callers can show the real number. */
+    feeBps: number;
     currency: string;
     providerId: MarketplaceProviderId;
     fbmOrderId: string | null;
@@ -90,6 +92,7 @@ function toView(record: TipRecord): TipView {
         grossCents: record.grossCents,
         feeCents: record.feeCents,
         netCents: record.netCents,
+        feeBps: record.feeBps,
         currency: record.currency,
         providerId: record.providerId as MarketplaceProviderId,
         fbmOrderId: record.fbmOrderId,
@@ -164,6 +167,7 @@ export function createTip(input: CreateTipInput): TipView {
         grossCents: split.grossCents,
         feeCents: split.feeCents,
         netCents: split.netCents,
+        feeBps: split.feeBps,
         currency,
         providerId,
         fbmOrderId: input.fbmOrderId ?? null,
@@ -194,7 +198,7 @@ export function createTip(input: CreateTipInput): TipView {
 // without re-emitting the domain event. Refunded tips cannot be captured.
 export function captureTip(
     tipId: string,
-    detail: { fbmOrderId?: string | null } = {}
+    detail: { fbmOrderId?: string | null; chargedCents?: number | null } = {}
 ): TipView | undefined {
     const existing = db.getTip(tipId);
     if (!existing) return undefined;
@@ -203,8 +207,45 @@ export function captureTip(
         logEvent('tip.capture.rejected', { tipId, status: existing.status });
         return toView(existing);
     }
+
+    // What the provider says it actually charged. The tip's split was computed
+    // from what the sender asked to give, and for a coalition contribution that
+    // amount is now sent to the provider — so the two should agree. When they
+    // do not, the money that really moved is the truth: capture at the charged
+    // amount, recomputed at the rate this tip was quoted, rather than crediting
+    // a recipient for a number nobody paid. Loud, because a mismatch is a bug.
+    const charged = detail.chargedCents;
+    const chargedIsUsable =
+        typeof charged === 'number' && Number.isInteger(charged) && charged >= 0;
+    const settled =
+        chargedIsUsable && charged !== existing.grossCents
+            ? computePlatformCommission(
+                  charged,
+                  existing.providerId as MarketplaceProviderId,
+                  existing.feeBps
+              )
+            : null;
+    if (settled) {
+        incrementCounter('tip_capture_amount_mismatch_total', {
+            providerId: existing.providerId,
+            contextKind: existing.contextKind,
+        });
+        logEvent('tip.capture.amount_adjusted', {
+            tipId,
+            expectedCents: existing.grossCents,
+            chargedCents: charged,
+        });
+    }
+
     const updated: TipRecord = {
         ...existing,
+        ...(settled
+            ? {
+                  grossCents: settled.grossCents,
+                  feeCents: settled.feeCents,
+                  netCents: settled.netCents,
+              }
+            : {}),
         status: 'captured',
         capturedAt: nowIso(),
         fbmOrderId: detail.fbmOrderId ?? existing.fbmOrderId,

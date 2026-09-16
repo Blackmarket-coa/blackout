@@ -329,6 +329,10 @@ export function createFreeblackmarketProvider(): MarketplaceProvider {
                     userId: input.userId,
                     listingId: input.listingId,
                     sku: input.sku,
+                    // Only sent when the caller is choosing the amount (a
+                    // coalition contribution); otherwise the listing prices
+                    // itself, and FBM's schema is strict about unknown keys.
+                    amountCents: input.amountCents,
                     returnUrl: input.returnUrl,
                     embed: input.embed === true ? true : undefined,
                     embedOrigin: input.embed === true ? input.embedOrigin : undefined,

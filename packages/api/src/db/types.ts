@@ -1404,6 +1404,8 @@ export interface TipRecord {
     grossCents: number;
     feeCents: number;
     netCents: number;
+    /** The rate the split above was computed at, so a capture can redo it. */
+    feeBps: number;
     currency: string;
     providerId: MarketplaceProviderIdString;
     fbmOrderId: string | null;

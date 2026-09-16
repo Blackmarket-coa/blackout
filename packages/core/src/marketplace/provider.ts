@@ -85,6 +85,19 @@ export interface CheckoutInput {
     userId: string;
     listingId: string;
     sku?: string;
+    /**
+     * Charge this instead of the listing's own price, in minor units.
+     *
+     * For a coalition drive the contributor chooses what to give, so the
+     * listing is a destination rather than a price. Without this the card was
+     * charged `listing.price_cents` while Blackout recorded, displayed and
+     * metered the amount the contributor actually picked — two different
+     * numbers, with the contributor shown the one that never reached the rail.
+     *
+     * Omit it and the listing's price stands, which is what every fixed-price
+     * flow (subscriptions, gifts, tickets) wants.
+     */
+    amountCents?: number;
     idempotencyKey: string;
     returnUrl?: string;
     /**
@@ -289,6 +302,15 @@ export interface NormalizedLifecycleEvent {
     sku: string | null;
     kind: EntitlementKind;
     occurredAt: string;
+    /**
+     * What the provider actually charged, in minor units, when it reports it.
+     *
+     * The settling side needs this to confirm that the money that moved is the
+     * money it predicted: a tip's split is frozen when the tip is written, and
+     * before this there was nothing in the return leg to check it against.
+     * Absent for providers that do not report an amount.
+     */
+    amountCents?: number;
     /** `features.*` keys this event grants/revokes; for `subscription_tier`
      *  events this is the full tier bundle to fan out into per-key grants. */
     featureKeys?: string[];

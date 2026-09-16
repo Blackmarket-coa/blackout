@@ -181,7 +181,7 @@ function dispatchMonetizationEvent(
         const fbmOrderId =
             typeof meta['fbmOrderId'] === 'string' ? (meta['fbmOrderId'] as string) : null;
         if (event.type === 'purchase.succeeded') {
-            captureTip(tipId, { fbmOrderId });
+            captureTip(tipId, { fbmOrderId, chargedCents: event.amountCents ?? null });
             incrementCounter('marketplace_tip_captured_total', { providerId: provider.id });
         } else if (event.type === 'purchase.refunded' || event.type === 'purchase.chargebacked') {
             refundTip(tipId);

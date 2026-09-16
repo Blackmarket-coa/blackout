@@ -150,6 +150,19 @@ function parseFeatureKeys(raw: unknown): string[] | undefined {
     return keys.length > 0 ? keys : undefined;
 }
 
+/**
+ * A reported charge amount, or undefined.
+ *
+ * Non-integer, negative and non-finite values are dropped rather than coerced:
+ * a malformed amount must read as "the provider said nothing", so the settling
+ * side falls back to the amount it predicted instead of trusting a number it
+ * cannot make sense of.
+ */
+function parseAmountCents(raw: unknown): number | undefined {
+    if (typeof raw !== 'number' || !Number.isInteger(raw) || raw < 0) return undefined;
+    return raw;
+}
+
 export function parseNormalizedEntitlement(input: unknown): NormalizedEntitlement {
     if (!isRecord(input)) throw new Error('entitlement must be an object');
     return {
@@ -179,6 +192,7 @@ export function parseNormalizedLifecycleEvent(input: unknown): NormalizedLifecyc
         sku: typeof input.sku === 'string' ? input.sku : null,
         kind: oneOf(input.kind, entitlementKinds, 'kind'),
         occurredAt: requireString(input, 'occurredAt'),
+        amountCents: parseAmountCents(input.amountCents),
         featureKeys: parseFeatureKeys(input.featureKeys),
         metadata: isRecord(input.metadata) ? input.metadata : {},
     };

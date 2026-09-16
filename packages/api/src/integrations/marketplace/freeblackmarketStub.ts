@@ -36,6 +36,8 @@ interface StubSession {
     userId: string;
     listingId: string;
     sku: string | null;
+    /** What the caller asked to be charged, when it chose the amount. */
+    amountCents: number | null;
     embed: boolean;
     createdAt: string;
     /** Bounded echo (W1b): mirrored onto the stub's purchase webhook exactly
@@ -708,6 +710,7 @@ export function createFreeblackmarketStubProvider(): MarketplaceProvider {
                 userId: input.userId,
                 listingId: input.listingId,
                 sku: input.sku ?? null,
+                amountCents: input.amountCents ?? null,
                 embed: Boolean(input.embed),
                 createdAt: nowIso(),
                 metadata:
@@ -860,6 +863,9 @@ export function createFreeblackmarketStubProvider(): MarketplaceProvider {
                 sku: session.sku,
                 kind: entry.listing.entitlementKind,
                 occurredAt: nowIso(),
+                // What the caller asked to be charged wins over the listing's
+                // own price, exactly as the real hosted checkout does.
+                amountCents: session.amountCents ?? entry.listing.priceCents,
                 metadata: {
                     // Caller echo first so the stub's own stamps always win.
                     ...(session.metadata ?? {}),
