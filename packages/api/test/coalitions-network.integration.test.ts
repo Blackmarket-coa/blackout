@@ -338,7 +338,7 @@ test('changing join mode later never removes existing members', async () => {
     // place — every non-vendor, and everyone when the integration is
     // unconfigured — so a hard refusal on that answer locked the coalition to
     // nobody. A steward can see what a tier lookup cannot.
-    __setTierResolverForTests(async () => 'seedling');
+    __setTierResolverForTests(async () => ({ known: true, tier: 'seedling' }));
     const gated = await app.request(`/v1/coalitions/${coalition.id}/join`, {
         method: 'POST',
         headers: auth(OUTSIDER),
@@ -353,7 +353,7 @@ test('changing join mode later never removes existing members', async () => {
         'a human still gets to decide'
     );
 
-    __setTierResolverForTests(async () => 'canopy');
+    __setTierResolverForTests(async () => ({ known: true, tier: 'canopy' }));
     const allowed = await app.request(`/v1/coalitions/${coalition.id}/join`, {
         method: 'POST',
         headers: auth(OUTSIDER),

@@ -19,7 +19,9 @@ import {
     countActiveCoalitionMembers,
     slugifyCoalitionName,
     summarizeCoalitionImpact,
-    tierSatisfies,
+    normalizeJoinRequirements,
+    type CoalitionJoinRequirementCheck,
+    type CoalitionJoinRequirements,
     utcDayOf,
     type BoostMeter,
     type CampaignStatus,
@@ -52,7 +54,8 @@ import {
     syncCoalitionSpaceSettings,
     closeCoalitionSpace,
 } from './coalitionSpaces';
-import { resolveMemberTier } from './coalitionTierGate';
+import { describeUnmet, evaluateJoinRequirements } from './coalitionJoinRequirements';
+import { revokeMemberLinks } from './coalitionConnectionCustody';
 import { isPubliclyListed } from './profileStore';
 import { relaySubject } from './relayStore';
 import { incrementCounter } from './marketplaceObservability';
@@ -386,6 +389,7 @@ export interface CreateCoalitionInput {
     bannerUrl?: string;
     joinMode: CoalitionJoinMode;
     minTierToJoin?: CoalitionTierGate;
+    joinRequirements?: CoalitionJoinRequirements;
     createdBy: string;
 }
 
@@ -403,6 +407,9 @@ export async function createCoalition(input: CreateCoalitionInput): Promise<{
         ...(input.bannerUrl ? { bannerUrl: input.bannerUrl } : {}),
         joinMode: input.joinMode,
         ...(input.minTierToJoin ? { minTierToJoin: input.minTierToJoin } : {}),
+        ...(normalizeJoinRequirements(input.joinRequirements)
+            ? { joinRequirements: normalizeJoinRequirements(input.joinRequirements) }
+            : {}),
         createdBy: input.createdBy,
     });
     const membership = db.upsertCoalitionMembership({
@@ -434,6 +441,7 @@ export interface UpdateCoalitionInput {
     bannerUrl?: string | null;
     joinMode?: CoalitionJoinMode;
     minTierToJoin?: CoalitionTierGate | null;
+    joinRequirements?: CoalitionJoinRequirements | null;
 }
 
 /**
@@ -461,6 +469,16 @@ export async function updateCoalition(
     if (patch.joinMode !== undefined) next.joinMode = patch.joinMode;
     if (patch.minTierToJoin === null) delete next.minTierToJoin;
     else if (patch.minTierToJoin !== undefined) next.minTierToJoin = patch.minTierToJoin;
+    if (patch.joinRequirements === null) delete next.joinRequirements;
+    else if (patch.joinRequirements !== undefined) {
+        // Normalizing on the way in means a nonsense threshold is dropped once,
+        // here, rather than re-interpreted on every join for the life of the
+        // coalition. A requirements object that normalizes to nothing clears
+        // the field rather than persisting an empty one.
+        const normalized = normalizeJoinRequirements(patch.joinRequirements);
+        if (normalized) next.joinRequirements = normalized;
+        else delete next.joinRequirements;
+    }
     const saved = db.upsertCoalition(next);
     if (saved.spaceRoomId && (patch.joinMode !== undefined || patch.name !== undefined)) {
         await syncCoalitionSpaceSettings(saved);
@@ -607,7 +625,21 @@ async function admit(
 
 export type JoinOutcome =
     | { joined: true; membership: CoalitionMembershipRecord }
-    | { joined: false; request: CoalitionJoinRequestRecord };
+    | {
+          joined: false;
+          request: CoalitionJoinRequestRecord;
+          /**
+           * Requirements this member did not clear, when that is why they were
+           * queued rather than admitted.
+           *
+           * Carried so the joiner can be told which bar they missed, and so a
+           * steward reading the queue can see it too. Empty on an
+           * approval-mode coalition, where being queued is simply the mode.
+           */
+          unmet?: CoalitionJoinRequirementCheck[];
+          /** One line for the joiner. Null when the coalition just uses approval mode. */
+          reason?: string | null;
+      };
 
 /**
  * Join flow for both modes. `open` admits immediately (after the tier gate);
@@ -637,18 +669,15 @@ export async function requestJoin(
         return succeed({ joined: true, membership });
     }
 
-    // An unmet tier files a request for the steward queue; it never refuses
-    // outright. The gate resolves a member's tier from FBM, so it answers
-    // "seedling" for anyone FBM cannot place — every non-vendor, and everyone
-    // at all when the integration is unconfigured. Refusing on that answer
-    // meant a founder who picked any rung above the floor created a coalition
-    // that rejected 100% of joiners permanently, with no way to appeal to a
-    // human. A steward reading a request can see what a tier lookup cannot.
-    const gated =
-        coalition.minTierToJoin !== undefined &&
-        !tierSatisfies(await resolveMemberTier(userId), coalition.minTierToJoin);
+    // An unmet requirement files a request for the steward queue; it never
+    // refuses outright. A steward reading a request can see what a threshold
+    // cannot, and the tier half of this can be genuinely unanswerable — FBM
+    // unconfigured, no linked identity, a timeout — in which case refusing
+    // would tell everyone their standing was too low on the strength of a
+    // lookup that never happened.
+    const evaluation = await evaluateJoinRequirements(coalition, userId);
 
-    if (coalition.joinMode === 'open' && !gated) {
+    if (coalition.joinMode === 'open' && evaluation.clear) {
         const membership = await admit(coalition, userId, 'member', 'open');
         return succeed({ joined: true, membership });
     }
@@ -663,9 +692,20 @@ export async function requestJoin(
     emitDomainEvent({
         module: 'coalitions',
         type: 'coalition.join.requested',
-        payload: { coalitionId: coalition.id, userId },
+        payload: {
+            coalitionId: coalition.id,
+            userId,
+            // Which bars were missed, so the queue is legible without re-running
+            // the evaluation. Never the member's actual values.
+            unmet: evaluation.unmet.map((check) => check.key),
+        },
     });
-    return succeed({ joined: false, request });
+    return succeed({
+        joined: false,
+        request,
+        unmet: evaluation.unmet,
+        reason: describeUnmet(evaluation.unmet),
+    });
 }
 
 /** The steward-visible queue: pending requests only (invites live on the invitee's side). */
@@ -781,6 +821,10 @@ export async function leaveCoalition(
     if (membership.role === 'founder') return fail({ kind: 'last_founder' });
     const saved = db.upsertCoalitionMembership({ ...membership, active: false });
     await removeCoalitionMemberFromSpace(coalition, userId, `Left ${coalition.name}`);
+    // Custody ends with membership. A departing member's personal platform
+    // token was held only because this coalition asked them to link it, so
+    // the coalition does not get to keep it once they are out.
+    revokeMemberLinks(coalition.id, { userId });
     emitDomainEvent({
         module: 'coalitions',
         type: 'coalition.member.left',
@@ -807,6 +851,10 @@ export async function removeMember(
     }
     const saved = db.upsertCoalitionMembership({ ...target, active: false });
     await removeCoalitionMemberFromSpace(coalition, userId, `Removed from ${coalition.name}`);
+    // Custody ends with membership. A departing member's personal platform
+    // token was held only because this coalition asked them to link it, so
+    // the coalition does not get to keep it once they are out.
+    revokeMemberLinks(coalition.id, { userId });
     emitDomainEvent({
         module: 'coalitions',
         type: 'coalition.member.left',

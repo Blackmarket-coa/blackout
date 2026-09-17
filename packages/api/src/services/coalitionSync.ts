@@ -40,6 +40,7 @@ import type {
 } from '../db/types';
 import { emitDomainEvent } from '../modules/domain-events';
 import { encryptSecret } from './secretBox';
+import { revokeMemberLinks } from './coalitionConnectionCustody';
 import { activeMembership, getCampaign, getCoalition, isStopped } from './coalitionNetworkStore';
 import { isPubliclyListed } from './profileStore';
 
@@ -224,9 +225,14 @@ export function connectPlatform(
         coalitionId: coalition.id,
         platform: input.platform,
         authMode: input.authMode,
+        // Carry the stored credential forward only when the auth mode has not
+        // changed. Flipping shared -> personal used to keep the shared bot
+        // token in the row while `listConnections` reported the new mode, so
+        // a steward who believed they had stopped using the coalition account
+        // still had its secret at rest with nothing pointing at it.
         ...(credentialRef
             ? { credentialRef }
-            : existing?.credentialRef
+            : existing?.credentialRef && existing.authMode === input.authMode
             ? { credentialRef: existing.credentialRef }
             : {}),
         ...(input.displayHandle ? { displayHandle: input.displayHandle } : {}),
@@ -279,6 +285,50 @@ export function listConnections(coalitionId: string, viewerId?: string): Connect
             apiPost: COALITION_PLATFORM_CAPABILITIES[row.platform].apiPost,
             memberLinked: memberLinks.has(row.platform),
         }));
+}
+
+/**
+ * Disconnect a platform: deactivate the row and drop the stored credential.
+ *
+ * This is the answer to "our coalition bot token leaked". Before it, the only
+ * one was a direct database write — nothing in the repo ever set `active` to
+ * false or cleared `credentialRef`, and there was no DELETE or PATCH on any
+ * connection route.
+ *
+ * The credential is dropped, not merely orphaned. A deactivated row that still
+ * holds ciphertext is a secret at rest that nobody is watching and no screen
+ * admits exists; reconnecting asks for a fresh one, which is what a steward
+ * revoking a leaked token wants anyway.
+ *
+ * Personal links for the same platform go with it. Those are members' own
+ * tokens, held only because the coalition asked them to link, so the coalition
+ * ending that arrangement has to end the custody too.
+ */
+export function disconnectPlatform(
+    idOrSlug: string,
+    actorId: string,
+    platform: CoalitionPlatform
+): SyncResult<{ platform: CoalitionPlatform; memberLinksRevoked: number }> {
+    const coalition = getCoalition(idOrSlug);
+    if (!coalition) return fail({ kind: 'not_found' });
+    const membership = activeMembership(coalition.id, actorId);
+    if (!membership) return fail({ kind: 'not_member' });
+    if (!coalitionRoleCan(membership.role, 'connections.manage')) {
+        return fail({ kind: 'forbidden' });
+    }
+    const existing = db.getCoalitionConnection(coalition.id, platform);
+    if (!existing) return fail({ kind: 'no_connection', platform });
+
+    const { credentialRef: _dropped, ...withoutCredential } = existing;
+    db.upsertCoalitionConnection({ ...withoutCredential, active: false });
+
+    const memberLinksRevoked = revokeMemberLinks(coalition.id, { platform });
+    emitDomainEvent({
+        module: 'coalitions',
+        type: 'coalition.connection.revoked',
+        payload: { coalitionId: coalition.id, platform, by: actorId, memberLinksRevoked },
+    });
+    return succeed({ platform, memberLinksRevoked });
 }
 
 /** A member links their own account for a platform the coalition set to `personal`. */
@@ -528,6 +578,11 @@ export async function crosspostCampaign(
 ): Promise<SyncResult<{ outcomes: CrosspostOutcome[]; guardrails: GuardrailState }>> {
     const coalition = getCoalition(idOrSlug);
     if (!coalition) return fail({ kind: 'not_found' });
+    // A stopped coalition stops promoting itself. `shareCampaign` has always
+    // checked this; the credentialed path did not, so an archived coalition —
+    // or one the platform had taken down — kept broadcasting under its own
+    // name to every connected account.
+    if (isStopped(coalition)) return fail({ kind: 'not_found' });
     const membership = activeMembership(coalition.id, userId);
     if (!membership) return fail({ kind: 'not_member' });
     // Posting under the coalition's name is a promotion act, not a membership
@@ -540,6 +595,13 @@ export async function crosspostCampaign(
     const campaign = db.getCoalitionCampaign(campaignId);
     if (!campaign || campaign.coalitionId !== coalition.id) return fail({ kind: 'not_found' });
     if (campaign.status !== 'active') return fail({ kind: 'campaign_inactive' });
+    // The privacy gate every other share surface applies. It exists to stop a
+    // mutual-aid campaign naming someone who kept their profile unlisted from
+    // being broadcast, and this — the credentialed, higher-volume path — was
+    // the one surface that did not consult it. `shareCampaign` checks it, and
+    // so does the OG card; a person who opted out of being listed was
+    // protected from a menu click and not from an API post.
+    if (!campaignIsPubliclyShareable(campaign)) return fail({ kind: 'private_subject' });
 
     const optIns = db
         .listCoalitionCampaignSyncOptIns({ campaignId, userId })
@@ -597,8 +659,10 @@ export async function crosspostCampaign(
         if (connection.authMode === 'personal') {
             const link = db
                 .listCoalitionMemberConnections({ coalitionId: coalition.id, userId })
-                .find((row) => row.platform === platform && !row.revokedAt);
-            if (!link) {
+                // A revoked link keeps its row but not its secret, so both
+                // halves have to hold for it to be usable.
+                .find((row) => row.platform === platform && !row.revokedAt && row.credentialRef);
+            if (!link?.credentialRef) {
                 const shareUrl = shareLinkFor(platform, post) ?? post.url;
                 db.upsertCoalitionCampaignPost({
                     id,

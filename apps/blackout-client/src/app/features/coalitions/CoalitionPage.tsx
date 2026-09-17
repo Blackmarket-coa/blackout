@@ -11,14 +11,18 @@ import {
     CAMPAIGN_TYPES,
     COALITION_JOIN_MODES,
     COALITION_ROLE_LABELS,
-    COALITION_TIER_GATES,
     assignableRolesFor,
     type CampaignStatus,
     type CampaignType,
     type CoalitionJoinMode,
     type CoalitionRole,
-    type CoalitionTierGate,
 } from '@blackout/core';
+import {
+    JoinRequirementsFields,
+    describeJoinRequirements,
+    toJoinRequirementsPayload,
+    type JoinRequirementsValue,
+} from './JoinRequirementsFields';
 import {
     approveCampaign,
     archiveCoalition,
@@ -431,7 +435,10 @@ function EditCoalitionForm({ view, onSaved }: { view: CoalitionView; onSaved: ()
     const [name, setName] = useState(coalition.name);
     const [mission, setMission] = useState(coalition.mission);
     const [joinMode, setJoinMode] = useState<CoalitionJoinMode>(coalition.joinMode);
-    const [minTier, setMinTier] = useState<CoalitionTierGate | ''>(coalition.minTierToJoin ?? '');
+    const [joinRules, setJoinRules] = useState<JoinRequirementsValue>({
+        minTier: coalition.minTierToJoin ?? '',
+        requirements: coalition.joinRequirements ?? {},
+    });
     const [bannerUrl, setBannerUrl] = useState(coalition.bannerUrl ?? '');
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -447,7 +454,7 @@ function EditCoalitionForm({ view, onSaved }: { view: CoalitionView; onSaved: ()
                 name: name.trim(),
                 mission: mission.trim(),
                 joinMode,
-                minTierToJoin: minTier || null,
+                ...toJoinRequirementsPayload(joinRules),
                 bannerUrl: bannerUrl.trim() || null,
             });
             if (saved.coalition.slug !== coalition.slug) {
@@ -498,18 +505,11 @@ function EditCoalitionForm({ view, onSaved }: { view: CoalitionView; onSaved: ()
             <span style={mutedStyle}>
                 Changing how people join never removes anyone already in.
             </span>
-            <select
-                style={inputStyle}
-                value={minTier}
-                onChange={(e) => setMinTier(e.target.value as CoalitionTierGate | '')}
-            >
-                <option value="">No minimum tier</option>
-                {COALITION_TIER_GATES.map((tier) => (
-                    <option key={tier} value={tier}>
-                        {tier}+
-                    </option>
-                ))}
-            </select>
+            <JoinRequirementsFields
+                value={joinRules}
+                onChange={setJoinRules}
+                idPrefix="coalition-edit"
+            />
             <input
                 style={inputStyle}
                 value={bannerUrl}
@@ -588,13 +588,21 @@ export const CoalitionPage = () => {
         void load();
     }, [load]);
 
-    const run = async (fn: () => Promise<unknown>, done?: string) => {
+    /**
+     * `done` may be a function of the result, because for some actions the
+     * outcome is not knowable in advance. Joining is the one that matters: an
+     * open coalition can still queue someone who did not clear its
+     * requirements, and the static message picked from `joinMode` alone told
+     * them "Welcome in." while the server had filed a pending request.
+     */
+    const run = async <T,>(fn: () => Promise<T>, done?: string | ((value: T) => string | null)) => {
         if (busy) return;
         setBusy(true);
         setNotice(null);
         try {
-            await fn();
-            if (done) setNotice(done);
+            const value = await fn();
+            const message = typeof done === 'function' ? done(value) : done;
+            if (message) setNotice(message);
             await load();
         } catch (err) {
             setNotice(err instanceof Error ? err.message : 'Something went wrong');
@@ -654,7 +662,9 @@ export const CoalitionPage = () => {
                         </p>
                         <span style={mutedStyle}>
                             {coalition.joinMode === 'open' ? 'Open to join' : 'Join by approval'}
-                            {coalition.minTierToJoin ? ` · ${coalition.minTierToJoin}+ tier` : ''}
+                            {describeJoinRequirements(coalition)
+                                .map((phrase) => ` · ${phrase}`)
+                                .join('')}
                             {coalition.archivedAt ? ' · Archived' : ''}
                         </span>
                     </div>
@@ -694,9 +704,11 @@ export const CoalitionPage = () => {
                                                     coalition.id,
                                                     joinMessage.trim() || undefined
                                                 ),
-                                            coalition.joinMode === 'open'
-                                                ? 'Welcome in.'
-                                                : 'Request sent to the Stewards.'
+                                            (outcome) =>
+                                                outcome.joined
+                                                    ? 'Welcome in.'
+                                                    : outcome.reason ??
+                                                      'Request sent to the Stewards.'
                                         )
                                     }
                                 >

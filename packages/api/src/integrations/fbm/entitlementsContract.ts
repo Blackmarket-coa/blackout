@@ -78,7 +78,23 @@ export interface EconomicStanding {
      */
     vendorSalesVolumeMinorUnits30d: number | null;
     creatorRewardEligibility: CreatorRewardEligibility[];
+    /**
+     * This member's rung on FBM's **coalition** ladder — XP earned by
+     * coalition work, which Blackout itself reports — lowercased.
+     *
+     * Deliberately not the grower ladder: that one is keyed on seller id, fed
+     * by PRODUCER-stance XP, and its rungs set payout rates.
+     *
+     * `null` means FBM could not place this member: no linked customer, or its
+     * own progression read failed. It does **not** mean the bottom rung, and a
+     * consumer that collapses the two turns an integration outage into a
+     * statement about someone's standing.
+     */
+    coalitionKarmaTier: CoalitionKarmaTier | null;
 }
+
+/** FBM's coalition ladder, lowest to highest. */
+export type CoalitionKarmaTier = 'seedling' | 'sprout' | 'root' | 'canopy' | 'ancestor';
 
 // ---------------------------------------------------------------------------
 // Question 3 — Governance roles

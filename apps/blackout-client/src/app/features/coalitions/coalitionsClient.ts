@@ -12,6 +12,8 @@ import type {
     CoalitionImpactStats,
     CoalitionJoinMode,
     CoalitionJoinRequest,
+    CoalitionJoinRequirementCheck,
+    CoalitionJoinRequirements,
     CoalitionMembership,
     CoalitionPermission,
     CoalitionRole,
@@ -88,6 +90,7 @@ export interface CreateCoalitionInput {
     bannerUrl?: string;
     joinMode: CoalitionJoinMode;
     minTierToJoin?: CoalitionTierGate;
+    joinRequirements?: CoalitionJoinRequirements;
 }
 
 export interface UpdateCoalitionInput {
@@ -96,6 +99,7 @@ export interface UpdateCoalitionInput {
     bannerUrl?: string | null;
     joinMode?: CoalitionJoinMode;
     minTierToJoin?: CoalitionTierGate | null;
+    joinRequirements?: CoalitionJoinRequirements | null;
 }
 
 export interface CreateCampaignInput {
@@ -175,7 +179,14 @@ export function archiveCoalition(
 
 export type JoinOutcome =
     | { joined: true; membership: CoalitionMembership }
-    | { joined: false; request: CoalitionJoinRequest };
+    | {
+          joined: false;
+          request: CoalitionJoinRequest;
+          /** Requirements this member did not clear. Empty in plain approval mode. */
+          unmet?: CoalitionJoinRequirementCheck[];
+          /** One line to show the joiner. Null when approval mode alone queued them. */
+          reason?: string | null;
+      };
 
 export function joinCoalition(
     idOrSlug: string,

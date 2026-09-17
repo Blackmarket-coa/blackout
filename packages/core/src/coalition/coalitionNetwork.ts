@@ -120,6 +120,96 @@ export function tierSatisfies(
     return COALITION_TIER_GATES.indexOf(tier) >= COALITION_TIER_GATES.indexOf(gate);
 }
 
+/**
+ * What a coalition asks of someone before admitting them, beyond its join mode.
+ *
+ * Every field is optional and absent means "do not ask". A coalition that sets
+ * none of them admits on its join mode alone, which is the default and the
+ * common case — the platform has no opinion about who belongs in someone
+ * else's mission.
+ *
+ * These are all answered from Blackout's own records, synchronously, and that
+ * is why they live apart from `minTierToJoin`. The tier comes from FBM over
+ * HTTP and can be genuinely unknowable — the member may have no FBM identity at
+ * all, or the service may be down — so an unmet tier and an unanswerable tier
+ * have to be distinguishable. These cannot fail that way: an account either is
+ * old enough or is not.
+ *
+ * None of them is purchasable, which is deliberate. A subscription must not be
+ * able to answer the question of whether someone may join a community.
+ */
+export interface CoalitionJoinRequirements {
+    /** Whole days the account must have existed. */
+    minAccountAgeDays?: number;
+    /** The member must have confirmed an email address. */
+    requireVerifiedEmail?: boolean;
+    /** Minimum score on Blackout's own reputation event log. */
+    minReputationScore?: number;
+    /** Captured contributions the member has made to any coalition drive. */
+    minCoalitionContributions?: number;
+}
+
+export const COALITION_JOIN_REQUIREMENT_KEYS = [
+    'account_age',
+    'verified_email',
+    'reputation',
+    'contributions',
+    'tier',
+] as const;
+export type CoalitionJoinRequirementKey = typeof COALITION_JOIN_REQUIREMENT_KEYS[number];
+
+/**
+ * One requirement's verdict.
+ *
+ * `unverified` is a third state, not a flavour of `met: false`. A gate the
+ * server could not check must never produce a message telling someone their
+ * reputation is too low — during an FBM outage that would be a lie, and it
+ * would be told to everyone.
+ */
+export interface CoalitionJoinRequirementCheck {
+    key: CoalitionJoinRequirementKey;
+    met: boolean;
+    /** The answer could not be determined. Never grounds for a refusal. */
+    unverified?: boolean;
+    /** What the coalition asks for, rendered for display. */
+    required: string;
+    /** What the member has, when it is known. */
+    actual?: string;
+}
+
+/** Requirements a joiner did not clear. Empty means "admit on join mode". */
+export function unmetRequirements(
+    checks: readonly CoalitionJoinRequirementCheck[]
+): CoalitionJoinRequirementCheck[] {
+    return checks.filter((check) => !check.met);
+}
+
+/**
+ * Normalize founder input. Out-of-range and non-finite numbers are dropped
+ * rather than clamped: a coalition that asked for a nonsense threshold asked
+ * for nothing, which is safer than the platform inventing a number and
+ * enforcing it against real people.
+ */
+export function normalizeJoinRequirements(
+    input: CoalitionJoinRequirements | null | undefined
+): CoalitionJoinRequirements | undefined {
+    if (!input) return undefined;
+    const out: CoalitionJoinRequirements = {};
+    const whole = (value: unknown, max: number): number | undefined => {
+        if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
+        const n = Math.floor(value);
+        return n > 0 && n <= max ? n : undefined;
+    };
+    const age = whole(input.minAccountAgeDays, 3650);
+    if (age !== undefined) out.minAccountAgeDays = age;
+    const rep = whole(input.minReputationScore, 1_000_000);
+    if (rep !== undefined) out.minReputationScore = rep;
+    const contributions = whole(input.minCoalitionContributions, 10_000);
+    if (contributions !== undefined) out.minCoalitionContributions = contributions;
+    if (input.requireVerifiedEmail === true) out.requireVerifiedEmail = true;
+    return Object.keys(out).length > 0 ? out : undefined;
+}
+
 export interface Coalition {
     id: string;
     /** URL-safe handle, unique per server. */
@@ -128,8 +218,16 @@ export interface Coalition {
     mission: string;
     bannerUrl?: string;
     joinMode: CoalitionJoinMode;
-    /** Optional personal-tier gate; existing members are never re-checked. */
+    /**
+     * Optional KARMA-tier gate, resolved from FBM's coalition ladder.
+     *
+     * Checked once, at join. Existing members are never re-checked: a standing
+     * condition evaluated against a remote service would demote a whole roster
+     * during an outage.
+     */
     minTierToJoin?: CoalitionTierGate;
+    /** Founder-chosen local requirements. Absent means the join mode alone decides. */
+    joinRequirements?: CoalitionJoinRequirements;
     /** The Matrix Space this coalition is mirrored to, once provisioned. */
     spaceRoomId?: string;
     createdBy: string;
@@ -401,7 +499,14 @@ export interface CoalitionMemberConnection {
     coalitionId: string;
     userId: string;
     platform: CoalitionPlatform;
-    credentialRef: string;
+    /**
+     * Opaque reference to the member's encrypted platform credential.
+     *
+     * Absent once the link is revoked: revocation deletes the secret rather
+     * than orphaning it, because a dead row still holding ciphertext is a
+     * credential at rest that no screen admits exists and nobody is watching.
+     */
+    credentialRef?: string;
     displayHandle?: string;
     revokedAt?: string;
 }

@@ -3,10 +3,15 @@ import { Link, useNavigate } from 'react-router';
 import {
     COALITION_JOIN_MODES,
     COALITION_ROLE_LABELS,
-    COALITION_TIER_GATES,
     type CoalitionJoinMode,
-    type CoalitionTierGate,
 } from '@blackout/core';
+import {
+    EMPTY_JOIN_REQUIREMENTS,
+    describeJoinRequirements,
+    JoinRequirementsFields,
+    toJoinRequirementsPayload,
+    type JoinRequirementsValue,
+} from './JoinRequirementsFields';
 import { FeatureGuide } from '../../components/feature-guide/FeatureGuide';
 import {
     createCoalition,
@@ -100,7 +105,9 @@ function CoalitionCard({
             onJoined(
                 outcome.joined
                     ? `You joined ${row.coalition.name}.`
-                    : `Request sent to ${row.coalition.name}'s Stewards.`
+                    : // The reason names the bar they missed, which a generic
+                      // "sent to the Stewards" leaves them to guess at.
+                      outcome.reason ?? `Request sent to ${row.coalition.name}'s Stewards.`
             );
         } catch (error) {
             onJoined(error instanceof Error ? error.message : 'Could not join');
@@ -121,9 +128,11 @@ function CoalitionCard({
                 <span style={mutedStyle}>{row.memberCount} members</span>
                 <span style={mutedStyle}>{row.activeCampaigns} active</span>
                 <span style={mutedStyle}>{joinModeCopy[row.coalition.joinMode]}</span>
-                {row.coalition.minTierToJoin ? (
-                    <span style={mutedStyle}>{row.coalition.minTierToJoin}+ to join</span>
-                ) : null}
+                {describeJoinRequirements(row.coalition).map((phrase) => (
+                    <span key={phrase} style={mutedStyle}>
+                        {phrase}
+                    </span>
+                ))}
             </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 {isMember && row.viewerRole ? (
@@ -206,7 +215,7 @@ function FoundTab() {
     const [name, setName] = useState('');
     const [mission, setMission] = useState('');
     const [joinMode, setJoinMode] = useState<CoalitionJoinMode>('open');
-    const [minTier, setMinTier] = useState<CoalitionTierGate | ''>('');
+    const [joinRules, setJoinRules] = useState<JoinRequirementsValue>(EMPTY_JOIN_REQUIREMENTS);
     const [bannerUrl, setBannerUrl] = useState('');
     const [error, setError] = useState<string | null>(null);
     const [busy, setBusy] = useState(false);
@@ -216,12 +225,14 @@ function FoundTab() {
         if (busy) return;
         setBusy(true);
         setError(null);
+        const payload = toJoinRequirementsPayload(joinRules);
         try {
             const created = await createCoalition({
                 name: name.trim(),
                 mission: mission.trim(),
                 joinMode,
-                ...(minTier ? { minTierToJoin: minTier } : {}),
+                ...(payload.minTierToJoin ? { minTierToJoin: payload.minTierToJoin } : {}),
+                ...(payload.joinRequirements ? { joinRequirements: payload.joinRequirements } : {}),
                 ...(bannerUrl.trim() ? { bannerUrl: bannerUrl.trim() } : {}),
             });
             navigate(`/coalitions/${encodeURIComponent(created.coalition.slug)}`);
@@ -276,21 +287,11 @@ function FoundTab() {
                     ))}
                 </select>
             </label>
-            <label style={{ display: 'grid', gap: 4 }}>
-                <span style={mutedStyle}>Minimum KARMA tier to join (optional)</span>
-                <select
-                    style={inputStyle}
-                    value={minTier}
-                    onChange={(e) => setMinTier(e.target.value as CoalitionTierGate | '')}
-                >
-                    <option value="">No gate</option>
-                    {COALITION_TIER_GATES.map((tier) => (
-                        <option key={tier} value={tier}>
-                            {tier}
-                        </option>
-                    ))}
-                </select>
-            </label>
+            <JoinRequirementsFields
+                value={joinRules}
+                onChange={setJoinRules}
+                idPrefix="coalition-found"
+            />
             <label style={{ display: 'grid', gap: 4 }}>
                 <span style={mutedStyle}>Banner image URL (optional)</span>
                 <input

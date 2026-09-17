@@ -75,6 +75,7 @@ import {
     campaignAppUrl,
     campaignShareUrl,
     crosspostCampaign,
+    disconnectPlatform,
     shareCampaign,
     linkMemberAccount,
     listApprovedActivity,
@@ -86,6 +87,7 @@ import {
     setOptIn,
     type SyncError,
 } from '../services/coalitionSync';
+import { revokeMemberLinks } from '../services/coalitionConnectionCustody';
 
 const coalitions = new Hono();
 
@@ -294,12 +296,29 @@ function viewerIsMember(c: Context): boolean {
     return Boolean(coalition && activeMembership(coalition.id, viewer.sub));
 }
 
+/**
+ * Founder-chosen join requirements.
+ *
+ * Bounded in the schema as well as in `normalizeJoinRequirements` so a
+ * nonsense threshold is rejected at the edge with a message, rather than
+ * silently dropped and leaving the founder to wonder why their gate does
+ * nothing. The normalizer is still the authority — it also runs on the
+ * service path.
+ */
+const joinRequirementsSchema = z.object({
+    minAccountAgeDays: z.number().int().min(1).max(3650).optional(),
+    requireVerifiedEmail: z.boolean().optional(),
+    minReputationScore: z.number().int().min(1).max(1_000_000).optional(),
+    minCoalitionContributions: z.number().int().min(1).max(10_000).optional(),
+});
+
 const createSchema = z.object({
     name: z.string().min(2).max(80),
     mission: z.string().min(1).max(2000),
     bannerUrl: z.string().url().max(512).optional(),
     joinMode: z.enum(COALITION_JOIN_MODES).default('open'),
     minTierToJoin: z.enum(COALITION_TIER_GATES).optional(),
+    joinRequirements: joinRequirementsSchema.optional(),
 });
 
 coalitions.post('/', async (c) => {
@@ -422,6 +441,7 @@ const updateSchema = z.object({
     bannerUrl: z.string().url().max(512).nullable().optional(),
     joinMode: z.enum(COALITION_JOIN_MODES).optional(),
     minTierToJoin: z.enum(COALITION_TIER_GATES).nullable().optional(),
+    joinRequirements: joinRequirementsSchema.nullable().optional(),
 });
 
 coalitions.patch('/:id', async (c) => {
@@ -475,7 +495,17 @@ coalitions.post('/:id/join', async (c) => {
     if (outcome.value.joined) {
         return c.json({ joined: true, membership: outcome.value.membership });
     }
-    return c.json({ joined: false, request: outcome.value.request }, 202);
+    // The joiner is told which bar they missed, and an unverifiable tier reads
+    // as a referral to a steward rather than a judgement about their standing.
+    return c.json(
+        {
+            joined: false,
+            request: outcome.value.request,
+            unmet: outcome.value.unmet ?? [],
+            reason: outcome.value.reason ?? null,
+        },
+        202
+    );
 });
 
 coalitions.post('/:id/leave', async (c) => {
@@ -1012,6 +1042,45 @@ coalitions.post('/:id/connections', async (c) => {
     const result = connectPlatform(c.req.param('id'), user.sub, parsed);
     if (!result.ok) return syncErrorResponse(c, result.error);
     return c.json({ connection: result.value }, 201);
+});
+
+/**
+ * Disconnect a platform and destroy the stored credential.
+ *
+ * The answer to "our coalition bot token leaked". Until this existed the only
+ * one was a direct database write.
+ */
+coalitions.delete('/:id/connections/:platform', (c) => {
+    const user = requireUser(c);
+    if (user instanceof Response) return user;
+    const platform = c.req.param('platform');
+    if (!(COALITION_PLATFORMS as readonly string[]).includes(platform)) {
+        return c.json({ code: 'invalid_request', message: 'Unknown platform' }, 400);
+    }
+    const result = disconnectPlatform(
+        c.req.param('id'),
+        user.sub,
+        platform as typeof COALITION_PLATFORMS[number]
+    );
+    if (!result.ok) return syncErrorResponse(c, result.error);
+    return c.json({ disconnected: result.value });
+});
+
+/** A member unlinks their own account, taking their credential with them. */
+coalitions.delete('/:id/connections/me/:platform', (c) => {
+    const user = requireUser(c);
+    if (user instanceof Response) return user;
+    const platform = c.req.param('platform');
+    if (!(COALITION_PLATFORMS as readonly string[]).includes(platform)) {
+        return c.json({ code: 'invalid_request', message: 'Unknown platform' }, 400);
+    }
+    const view = getCoalitionView(c.req.param('id'), user.sub);
+    if (!view.ok) return errorResponse(c, view.error);
+    const revoked = revokeMemberLinks(view.value.coalition.id, {
+        userId: user.sub,
+        platform: platform as typeof COALITION_PLATFORMS[number],
+    });
+    return c.json({ revoked });
 });
 
 const linkSchema = z.object({

@@ -121,7 +121,7 @@ test('a campaign whose boosts are all stale never outranks one boosted yesterday
 test('an unmet tier files a steward request instead of locking the coalition', async () => {
     // The shipped resolver could not read a tier at all, so this is the state
     // every real member was in: unplaceable, and previously refused outright.
-    __setTierResolverForTests(async () => 'seedling');
+    __setTierResolverForTests(async () => ({ known: true, tier: 'seedling' }));
     const coalition = await foundCoalition('Gated', { minTierToJoin: 'canopy' });
 
     const outcome = await requestJoin(coalition.id, JOINER, 'let me in');
