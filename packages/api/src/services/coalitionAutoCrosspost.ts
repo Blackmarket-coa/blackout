@@ -53,6 +53,7 @@ import {
     type PlatformPoster,
 } from './coalitionSync';
 import { postToPlatform, sharedCredentialAad } from './coalitionPlatformAdapters';
+import { withAttribution } from './coalitionAttribution';
 
 /**
  * Campaign types the automation will announce.
@@ -117,9 +118,13 @@ export function composeMilestonePost(
     milestone: CampaignMilestone
 ): { text: string; url: string } {
     const base = composePost(coalition, campaign);
+    // `auto` rather than the platform name: the channel says how the link was
+    // sent, and an automated post has no sharer to credit. A coalition can then
+    // tell what its own account earned from what its members earned.
+    const url = withAttribution(base.url, { campaignId: campaign.id, channel: 'auto' });
     return {
-        text: `${coalition.name} ${MILESTONE_COPY[milestone]} ${campaign.title}. ${base.url}`,
-        url: base.url,
+        text: `${coalition.name} ${MILESTONE_COPY[milestone]} ${campaign.title}. ${url}`,
+        url,
     };
 }
 

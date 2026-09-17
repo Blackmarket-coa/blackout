@@ -90,6 +90,10 @@ import {
 } from '../services/coalitionSync';
 import { revokeMemberLinks } from '../services/coalitionConnectionCustody';
 import { CREDENTIAL_FORMATS } from '../services/coalitionPlatformAdapters';
+import {
+    campaignAttributionTotals,
+    recordAttributedAction,
+} from '../services/coalitionAttribution';
 
 const coalitions = new Hono();
 
@@ -465,7 +469,13 @@ coalitions.post('/:id/archive', (c) => {
     return c.json({ coalition: archived.value });
 });
 
-const joinSchema = z.object({ message: z.string().max(500).optional() }).default({});
+const joinSchema = z
+    .object({
+        message: z.string().max(500).optional(),
+        /** The share that brought them, when they arrived from one. */
+        ref: z.string().max(512).optional(),
+    })
+    .default({});
 
 coalitions.post('/:id/join', async (c) => {
     const user = requireUser(c, 'Sign in to join a coalition');
@@ -473,6 +483,7 @@ coalitions.post('/:id/join', async (c) => {
     // The body is optional: an open-mode join sends none, an approval-mode
     // request may carry a note for the stewards.
     let message: string | undefined;
+    let ref: string | undefined;
     const raw = (await c.req.text()).trim();
     if (raw.length > 0) {
         let body: unknown;
@@ -492,9 +503,13 @@ coalitions.post('/:id/join', async (c) => {
             );
         }
         message = parsed.data.message;
+        ref = parsed.data.ref;
     }
     const outcome = await requestJoin(c.req.param('id'), user.sub, message);
     if (!outcome.ok) return errorResponse(c, outcome.error);
+    // Counted whether they walked in or were queued: the share did its job
+    // either way, and only a steward's decision is still outstanding.
+    recordAttributedAction(ref, 'join');
     if (outcome.value.joined) {
         return c.json({ joined: true, membership: outcome.value.membership });
     }
@@ -756,6 +771,8 @@ const contributeSchema = z.object({
     note: z.string().max(280).optional(),
     returnUrl: z.string().url().max(512).optional(),
     embed: z.boolean().optional(),
+    /** The share that brought them, when they arrived from one. */
+    ref: z.string().max(512).optional(),
 });
 
 /**
@@ -792,6 +809,9 @@ coalitions.post('/:id/campaigns/:campaignId/contribute', async (c) => {
             ...(parsed.embed ? { embed: true } : {}),
             ...(origin ? { embedOrigin: origin } : {}),
         });
+        // Counted when a contribution was actually recorded — the share earned
+        // the intent, and the capture is a separate event on the money path.
+        if (result.tip) recordAttributedAction(parsed.ref, 'contribution');
         if (!result.tip) {
             // Nothing was recorded, so this is not a created contribution.
             // Answering 201 here told the contributor their money was on its
@@ -1167,6 +1187,23 @@ coalitions.get('/:id/campaigns/:campaignId/engagement', (c) => {
             lastReadAt: row.lastReadAt,
         })),
     });
+});
+
+/**
+ * What a campaign's shares produced, per channel.
+ *
+ * Counts only, and that is a rule rather than a simplification. TRUST.md §2:
+ * inbound connections are counted, not listed, because "handing you a list of
+ * everyone who follows you would export their associations under the banner of
+ * your portability". A per-visitor table would be that list, so none is kept
+ * and none can be served.
+ */
+coalitions.get('/:id/campaigns/:campaignId/attribution', (c) => {
+    const user = requireUser(c);
+    if (user instanceof Response) return user;
+    const campaign = getCampaign(c.req.param('id'), c.req.param('campaignId'), user.sub);
+    if (!campaign.ok) return errorResponse(c, campaign.error);
+    return c.json(campaignAttributionTotals(campaign.value.id));
 });
 
 /** The caller's own opt-ins for a campaign. An absent platform means off. */

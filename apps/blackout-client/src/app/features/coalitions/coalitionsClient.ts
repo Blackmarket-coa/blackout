@@ -20,6 +20,7 @@ import type {
     CoalitionTierGate,
 } from '@blackout/core';
 import { deleteJson, getJson, patchJson, postJson } from '../../sdk/json';
+import { clearAttributionRef, readAttributionRef } from './CampaignLandingPage';
 import { readBlackoutApiToken } from '../monetization/marketplace/useMarketplaceAuth';
 
 export const COALITIONS_BASE = '/v1/coalitions';
@@ -188,12 +189,25 @@ export type JoinOutcome =
           reason?: string | null;
       };
 
+/**
+ * Join, spending the share token that brought this visitor if there is one.
+ *
+ * The token is cleared on the way out so one arrival cannot be counted twice —
+ * and cleared whether or not the join succeeded, because a second attempt is
+ * the same arrival either way.
+ */
 export function joinCoalition(
     idOrSlug: string,
     message?: string,
     token: string | null = readBlackoutApiToken()
 ): Promise<JoinOutcome> {
-    return postJson(`${COALITIONS_BASE}/${enc(idOrSlug)}/join`, message ? { message } : {}, token);
+    const ref = readAttributionRef();
+    if (ref) clearAttributionRef();
+    return postJson(
+        `${COALITIONS_BASE}/${enc(idOrSlug)}/join`,
+        { ...(message ? { message } : {}), ...(ref ? { ref } : {}) },
+        token
+    );
 }
 
 export function leaveCoalition(

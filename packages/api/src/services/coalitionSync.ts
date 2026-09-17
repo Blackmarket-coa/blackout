@@ -24,6 +24,7 @@
 import {
     COALITION_PLATFORM_CAPABILITIES,
     platformAllowsAuthMode,
+    isCoalitionPlatform,
     COALITION_SHARE_TARGETS,
     COALITION_SHARE_TARGET_SPECS,
     buildShareHref,
@@ -47,6 +48,7 @@ import {
     postToPlatform,
     sharedCredentialAad,
 } from './coalitionPlatformAdapters';
+import { withAttribution } from './coalitionAttribution';
 import { revokeMemberLinks } from './coalitionConnectionCustody';
 import { activeMembership, getCampaign, getCoalition, isStopped } from './coalitionNetworkStore';
 import { isPubliclyListed } from './profileStore';
@@ -648,7 +650,7 @@ export async function crosspostCampaign(
     const guardrails = checkGuardrails(coalition.id, userId, now);
     if (!guardrails.allowed) return fail({ kind: 'guardrail', state: guardrails });
 
-    const post = composePost(coalition, campaign);
+    const basePost = composePost(coalition, campaign);
     const outcomes: CrosspostOutcome[] = [];
 
     for (const optIn of optIns) {
@@ -670,6 +672,17 @@ export async function crosspostCampaign(
 
         const capability = COALITION_PLATFORM_CAPABILITIES[platform];
         const id = newCampaignPostId();
+        // Per platform, so the coalition can see which one actually worked.
+        const attributedUrl = withAttribution(basePost.url, {
+            campaignId,
+            channel: platform,
+            sharerUserId: userId,
+        });
+        const post = {
+            ...basePost,
+            url: attributedUrl,
+            text: basePost.text.replace(basePost.url, attributedUrl),
+        };
 
         if (!capability.apiPost) {
             const shareUrl = shareLinkFor(platform, post) ?? post.url;
@@ -1061,7 +1074,20 @@ export function shareCampaign(
     const post = composePost(coalition, campaign);
     const targets: ShareTargetView[] = COALITION_SHARE_TARGETS.map((target) => {
         const spec = COALITION_SHARE_TARGET_SPECS[target];
-        const href = buildShareHref(target, post, instanceHost) ?? undefined;
+        // Each target gets its own link, so a coalition can tell a click from
+        // Mastodon from a click from a group chat. The token names the
+        // campaign, the channel and the sharer — never the person who clicks.
+        const attributed = withAttribution(post.url, {
+            campaignId: campaign.id,
+            channel: isCoalitionPlatform(target) ? target : 'copy',
+            ...(viewerId ? { sharerUserId: viewerId } : {}),
+        });
+        const href =
+            buildShareHref(
+                target,
+                { ...post, url: attributed, text: post.text.replace(post.url, attributed) },
+                instanceHost
+            ) ?? undefined;
         return {
             target,
             label: spec.label,

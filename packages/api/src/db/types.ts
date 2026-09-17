@@ -17,6 +17,7 @@ import type {
     CoalitionConnection,
     CoalitionMemberConnection,
     CoalitionCampaign,
+    CampaignAttribution,
     CampaignEngagement,
     CampaignPost,
     ExternalActivity,
@@ -1967,6 +1968,12 @@ export interface CoalitionConnectionRecord extends CoalitionConnection {
 
 /** A member's personal connection. Keyed by `${coalitionId}::${userId}::${platform}`. */
 export interface CoalitionMemberConnectionRecord extends CoalitionMemberConnection {
+    createdAt: string;
+    updatedAt: string;
+}
+
+/** What one share produced, as counts. Keyed by `${campaignId}::${channel}::${sharerUserId ?? ''}`. */
+export interface CampaignAttributionRecord extends CampaignAttribution {
     createdAt: string;
     updatedAt: string;
 }

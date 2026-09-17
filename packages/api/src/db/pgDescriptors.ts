@@ -21,6 +21,10 @@ interface DescriptorOverride {
 }
 
 const OVERRIDES: Record<string, DescriptorOverride> = {
+    coalitionCampaignAttribution: {
+        keyOf: (r) => `${r.campaignId}::${r.channel}::${r.sharerUserId ?? ''}`,
+        conflictColumns: ['campaign_id', 'channel', 'sharer_user_id'],
+    },
     coalitionCampaignEngagement: {
         keyOf: (r) => String(r.campaignPostId),
         conflictColumns: ['campaign_post_id'],
@@ -532,6 +536,7 @@ const ALL_MAP_NAMES = [
     'coalitionBoosts',
     'coalitionCampaignContributions',
     'coalitionCampaignEngagement',
+    'coalitionCampaignAttribution',
     'coalitionCampaignPayees',
     'coalitionSuccessionPetitions',
 ] as const;

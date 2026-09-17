@@ -104,6 +104,7 @@ import type {
     CoalitionExternalActivityRecord,
     CoalitionCampaignSyncOptInRecord,
     CoalitionBoostRecord,
+    CampaignAttributionRecord,
     CampaignEngagementRecord,
     CoalitionCampaignContributionRecord,
     CoalitionCampaignPayeeRecord,
@@ -282,6 +283,7 @@ type PersistedState = {
     coalitionBoosts: CoalitionBoostRecord[];
     coalitionCampaignContributions: CoalitionCampaignContributionRecord[];
     coalitionCampaignEngagement: CampaignEngagementRecord[];
+    coalitionCampaignAttribution: CampaignAttributionRecord[];
     coalitionCampaignPayees: CoalitionCampaignPayeeRecord[];
     coalitionSuccessionPetitions: CoalitionSuccessionPetitionRecord[];
     coalitionKitApplications: CoalitionKitApplicationRecord[];
@@ -497,6 +499,7 @@ class InMemoryDb {
     coalitionBoosts = new Map<string, CoalitionBoostRecord>();
     coalitionCampaignContributions = new Map<string, CoalitionCampaignContributionRecord>();
     coalitionCampaignEngagement = new Map<string, CampaignEngagementRecord>();
+    coalitionCampaignAttribution = new Map<string, CampaignAttributionRecord>();
     coalitionCampaignPayees = new Map<string, CoalitionCampaignPayeeRecord>();
     coalitionSuccessionPetitions = new Map<string, CoalitionSuccessionPetitionRecord>();
     /** Records of Coalition Kits applied to a den/coalition, keyed by application id. */
@@ -3764,6 +3767,39 @@ class InMemoryDb {
     }
 
     /**
+     * The attribution counters for one share.
+     *
+     * Keyed by what identifies a share rather than by a minted id, so two
+     * concurrent visits from the same post increment one row instead of
+     * racing to create two.
+     */
+    listCampaignAttribution(
+        filter: { campaignId?: string; coalitionId?: string } = {}
+    ): CampaignAttributionRecord[] {
+        return [...this.coalitionCampaignAttribution.values()].filter((row) => {
+            if (filter.campaignId && row.campaignId !== filter.campaignId) return false;
+            if (filter.coalitionId && row.coalitionId !== filter.coalitionId) return false;
+            return true;
+        });
+    }
+
+    upsertCampaignAttribution(
+        input: Omit<CampaignAttributionRecord, 'createdAt' | 'updatedAt' | 'id'>
+    ): CampaignAttributionRecord {
+        const key = `${input.campaignId}::${input.channel}::${input.sharerUserId ?? ''}`;
+        const existing = this.coalitionCampaignAttribution.get(key);
+        const now = nowIso();
+        const record: CampaignAttributionRecord = {
+            ...input,
+            id: key,
+            createdAt: existing?.createdAt ?? now,
+            updatedAt: now,
+        };
+        this.coalitionCampaignAttribution.set(key, record);
+        return record;
+    }
+
+    /**
      * Engagement counts for one outbound post, or every post of a campaign.
      *
      * Keyed by `campaignPostId` rather than a minted id: there is exactly one
@@ -5697,6 +5733,11 @@ export class FileBackedDb extends InMemoryDb {
                 parsed.coalitionCampaignEngagement.map((row) => [row.campaignPostId, row])
             );
         }
+        if (parsed.coalitionCampaignAttribution) {
+            this.coalitionCampaignAttribution = new Map(
+                parsed.coalitionCampaignAttribution.map((row) => [row.id, row])
+            );
+        }
         if (parsed.coalitionBoosts) {
             this.coalitionBoosts = new Map(
                 parsed.coalitionBoosts.map((row) => [
@@ -6028,6 +6069,7 @@ export class FileBackedDb extends InMemoryDb {
             coalitionBoosts: [...this.coalitionBoosts.values()],
             coalitionCampaignContributions: [...this.coalitionCampaignContributions.values()],
             coalitionCampaignEngagement: [...this.coalitionCampaignEngagement.values()],
+            coalitionCampaignAttribution: [...this.coalitionCampaignAttribution.values()],
             coalitionCampaignPayees: [...this.coalitionCampaignPayees.values()],
             coalitionSuccessionPetitions: [...this.coalitionSuccessionPetitions.values()],
             coalitionKitApplications: [...this.coalitionKitApplications.values()],

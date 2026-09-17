@@ -8,6 +8,7 @@ import {
     coalitionBaseUrl,
     composePost,
 } from '../services/coalitionSync';
+import { recordAttributedAction } from '../services/coalitionAttribution';
 
 /**
  * Server-rendered OpenGraph card for a coalition campaign.
@@ -26,9 +27,17 @@ import {
  * `routes/invitations.ts` for why: some deployments' nginx only proxies
  * `/v1/*`, and a preview URL that 404s there is worse than no preview.
  */
+/** Carry a `ref` onto the destination, when one came in. */
+const withRef = (url: string, ref: string | undefined): string =>
+    ref ? `${url}${url.includes('?') ? '&' : '?'}ref=${encodeURIComponent(ref)}` : url;
+
 const campaignPreview = new Hono();
 
 campaignPreview.get('/:slug/:campaignId', (c) => {
+    // The one place a real click is observable. The ref rides the link a
+    // crawler also fetches, so only a redirect-following request is counted —
+    // `renderOgHtml` emits the redirect, and a crawler does not follow it.
+    const ref = c.req.query('ref');
     // og:url must be byte-identical to the URL composePost puts in the post,
     // so both sides read the same env rather than each picking a base.
     const base = coalitionBaseUrl();
@@ -43,7 +52,7 @@ campaignPreview.get('/:slug/:campaignId', (c) => {
         description: 'People organising, funding and building together on Blackout.',
         image: defaultImage,
         url: shareUrl,
-        redirectTo: coalitionPath,
+        redirectTo: withRef(coalitionPath, ref),
     };
 
     const coalition = getCoalition(slug);
@@ -60,6 +69,10 @@ campaignPreview.get('/:slug/:campaignId', (c) => {
     // timeline, so the card degrades to the generic one and the destination
     // still works for anyone who follows it.
     if (!campaignIsPubliclyShareable(campaign)) return c.html(renderOgHtml(generic), 200);
+
+    // Counted here rather than in the client, so a visit is recorded even for
+    // someone who never loads the app. Silent on every failure.
+    recordAttributedAction(ref, 'visit');
 
     const post = composePost(coalition, campaign, base);
     const raised = `$${(campaign.raisedCents / 100).toLocaleString()}`;
@@ -83,7 +96,9 @@ campaignPreview.get('/:slug/:campaignId', (c) => {
                     ? coalition.bannerUrl
                     : defaultImage,
             url: shareUrl,
-            redirectTo: campaignAppUrl(coalition, campaign.id, base),
+            // Carry the ref through to the app so the visitor's own actions can
+            // be credited to the share that brought them.
+            redirectTo: withRef(campaignAppUrl(coalition, campaign.id, base), ref),
         }),
         200
     );

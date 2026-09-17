@@ -818,6 +818,40 @@ export interface CampaignEngagement {
  * measured but does not want to run a comment section can have exactly that;
  * engagement counts are unaffected either way, because they are not content.
  */
+/**
+ * What one share produced, as counts.
+ *
+ * Identified by campaign + channel + (optionally) the member who shared — all
+ * known before any visitor exists. There is no visitor identifier in this
+ * shape and there must not be one: TRUST.md §2 says inbound connections are
+ * counted and not listed, and a row per visitor is that list.
+ *
+ * The counters do not sum to `visits`: one person can read a campaign, sign up,
+ * join and contribute, and each of those is its own number.
+ */
+export interface CampaignAttribution {
+    id: string;
+    campaignId: string;
+    coalitionId: string;
+    channel: string;
+    /** The member who shared, when a person did. Absent for automated posts. */
+    sharerUserId?: string;
+    visits: number;
+    signups: number;
+    joins: number;
+    contributions: number;
+}
+
+/** Things a visitor can go on to do, each counted once against a share. */
+export const ATTRIBUTION_CONVERSIONS = ['visit', 'signup', 'join', 'contribution'] as const;
+export type AttributionConversion = typeof ATTRIBUTION_CONVERSIONS[number];
+
+export function isAttributionConversion(value: unknown): value is AttributionConversion {
+    return (
+        typeof value === 'string' && (ATTRIBUTION_CONVERSIONS as readonly string[]).includes(value)
+    );
+}
+
 export const EXTERNAL_REPLY_POLICIES = ['moderated', 'open', 'off'] as const;
 export type ExternalReplyPolicy = typeof EXTERNAL_REPLY_POLICIES[number];
 
