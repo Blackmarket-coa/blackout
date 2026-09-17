@@ -104,6 +104,7 @@ import type {
     CoalitionExternalActivityRecord,
     CoalitionCampaignSyncOptInRecord,
     CoalitionBoostRecord,
+    CampaignEngagementRecord,
     CoalitionCampaignContributionRecord,
     CoalitionCampaignPayeeRecord,
     CoalitionSuccessionPetitionRecord,
@@ -280,6 +281,7 @@ type PersistedState = {
     coalitionCampaignSyncOptIns: CoalitionCampaignSyncOptInRecord[];
     coalitionBoosts: CoalitionBoostRecord[];
     coalitionCampaignContributions: CoalitionCampaignContributionRecord[];
+    coalitionCampaignEngagement: CampaignEngagementRecord[];
     coalitionCampaignPayees: CoalitionCampaignPayeeRecord[];
     coalitionSuccessionPetitions: CoalitionSuccessionPetitionRecord[];
     coalitionKitApplications: CoalitionKitApplicationRecord[];
@@ -494,6 +496,7 @@ class InMemoryDb {
     /** Keyed by `${campaignId}::${userId}::${day}`. */
     coalitionBoosts = new Map<string, CoalitionBoostRecord>();
     coalitionCampaignContributions = new Map<string, CoalitionCampaignContributionRecord>();
+    coalitionCampaignEngagement = new Map<string, CampaignEngagementRecord>();
     coalitionCampaignPayees = new Map<string, CoalitionCampaignPayeeRecord>();
     coalitionSuccessionPetitions = new Map<string, CoalitionSuccessionPetitionRecord>();
     /** Records of Coalition Kits applied to a den/coalition, keyed by application id. */
@@ -3760,6 +3763,43 @@ class InMemoryDb {
         return record;
     }
 
+    /**
+     * Engagement counts for one outbound post, or every post of a campaign.
+     *
+     * Keyed by `campaignPostId` rather than a minted id: there is exactly one
+     * current reading per post, and a fresh read replaces it. A synthetic key
+     * would let two rows exist for the same post and leave nothing to say which
+     * is the count.
+     */
+    getCampaignEngagement(campaignPostId: string): CampaignEngagementRecord | undefined {
+        return this.coalitionCampaignEngagement.get(campaignPostId);
+    }
+
+    listCampaignEngagement(
+        filter: { campaignId?: string; coalitionId?: string } = {}
+    ): CampaignEngagementRecord[] {
+        return [...this.coalitionCampaignEngagement.values()].filter((row) => {
+            if (filter.campaignId && row.campaignId !== filter.campaignId) return false;
+            if (filter.coalitionId && row.coalitionId !== filter.coalitionId) return false;
+            return true;
+        });
+    }
+
+    upsertCampaignEngagement(
+        input: Omit<CampaignEngagementRecord, 'createdAt' | 'updatedAt'>
+    ): CampaignEngagementRecord {
+        const existing = this.coalitionCampaignEngagement.get(input.campaignPostId);
+        const now = nowIso();
+        const record: CampaignEngagementRecord = {
+            ...input,
+            id: input.campaignPostId,
+            createdAt: existing?.createdAt ?? now,
+            updatedAt: now,
+        };
+        this.coalitionCampaignEngagement.set(record.campaignPostId, record);
+        return record;
+    }
+
     listCoalitionCampaignContributions(
         filter: { campaignId?: string; coalitionId?: string; supporterUserId?: string } = {}
     ): CoalitionCampaignContributionRecord[] {
@@ -5652,6 +5692,11 @@ export class FileBackedDb extends InMemoryDb {
                 (parsed.coalitionSuccessionPetitions ?? []).map((row) => [row.id, row])
             );
         }
+        if (parsed.coalitionCampaignEngagement) {
+            this.coalitionCampaignEngagement = new Map(
+                parsed.coalitionCampaignEngagement.map((row) => [row.campaignPostId, row])
+            );
+        }
         if (parsed.coalitionBoosts) {
             this.coalitionBoosts = new Map(
                 parsed.coalitionBoosts.map((row) => [
@@ -5982,6 +6027,7 @@ export class FileBackedDb extends InMemoryDb {
             coalitionCampaignSyncOptIns: [...this.coalitionCampaignSyncOptIns.values()],
             coalitionBoosts: [...this.coalitionBoosts.values()],
             coalitionCampaignContributions: [...this.coalitionCampaignContributions.values()],
+            coalitionCampaignEngagement: [...this.coalitionCampaignEngagement.values()],
             coalitionCampaignPayees: [...this.coalitionCampaignPayees.values()],
             coalitionSuccessionPetitions: [...this.coalitionSuccessionPetitions.values()],
             coalitionKitApplications: [...this.coalitionKitApplications.values()],

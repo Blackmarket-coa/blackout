@@ -31,6 +31,8 @@ const {
     checkGuardrails,
 } = await import('../src/services/coalitionSync');
 
+const DISCORD_WEBHOOK = 'https://discord.com/api/webhooks/123456789/abcDEF-ghi_JKL';
+
 function auth(user: string): Record<string, string> {
     return {
         authorization: `Bearer ${signJwt(user, user, 600)}`,
@@ -154,7 +156,7 @@ test('cross-posting requires an explicit per-campaign opt-in — never auto-blas
     await connect(coalition.id, {
         platform: 'discord',
         authMode: 'shared',
-        secret: 'https://hook',
+        secret: DISCORD_WEBHOOK,
     });
     __setPlatformPosterForTests(async () => ({ ok: true, externalPostId: 'ext-1' }));
 
@@ -221,7 +223,11 @@ test('a personal-mode platform with no linked account degrades to a share link',
     const linked = await app.request(`/v1/coalitions/${coalition.id}/connections/me`, {
         method: 'POST',
         headers: auth(MEMBER),
-        body: JSON.stringify({ platform: 'x', secret: 'member-token', displayHandle: '@member' }),
+        body: JSON.stringify({
+            platform: 'x',
+            secret: 'member.bsky.social|app-pass',
+            displayHandle: '@member',
+        }),
     });
     assert.equal(linked.status, 201);
     // The secret never comes back out of the API.
@@ -237,7 +243,7 @@ test('auth mode is per platform, so one coalition mixes shared and personal', as
     await connect(coalition.id, {
         platform: 'discord',
         authMode: 'shared',
-        secret: 'https://hook',
+        secret: DISCORD_WEBHOOK,
     });
     await connect(coalition.id, { platform: 'x', authMode: 'personal' });
 
@@ -279,7 +285,7 @@ test('a daily cap limits blast fatigue per member per coalition', async () => {
     await connect(coalition.id, {
         platform: 'discord',
         authMode: 'shared',
-        secret: 'https://hook',
+        secret: DISCORD_WEBHOOK,
     });
     await optIn(coalition.id, campaign.id, 'discord', true);
     __setPlatformPosterForTests(async () => ({ ok: true, externalPostId: 'd' }));
@@ -325,7 +331,7 @@ test('two-way sync stays dark until the trust gate is opened', async () => {
     await connect(coalition.id, {
         platform: 'discord',
         authMode: 'shared',
-        secret: 'https://hook',
+        secret: DISCORD_WEBHOOK,
     });
     await optIn(coalition.id, campaign.id, 'discord', true);
     __setPlatformPosterForTests(async () => ({ ok: true, externalPostId: 'ext-9' }));
@@ -352,7 +358,7 @@ test('inbound replies are quarantined, attributed without a profile, and only vi
     await connect(coalition.id, {
         platform: 'discord',
         authMode: 'shared',
-        secret: 'https://hook',
+        secret: DISCORD_WEBHOOK,
     });
     await optIn(coalition.id, campaign.id, 'discord', true);
     __setPlatformPosterForTests(async () => ({ ok: true, externalPostId: 'ext-10' }));
@@ -434,7 +440,7 @@ test('rejected replies never reach the thread', async () => {
     await connect(coalition.id, {
         platform: 'discord',
         authMode: 'shared',
-        secret: 'https://hook',
+        secret: DISCORD_WEBHOOK,
     });
     await optIn(coalition.id, campaign.id, 'discord', true);
     __setPlatformPosterForTests(async () => ({ ok: true, externalPostId: 'ext-11' }));
@@ -463,7 +469,7 @@ test('cross-posting refuses when the outbound gate is off', async () => {
     await connect(coalition.id, {
         platform: 'discord',
         authMode: 'shared',
-        secret: 'https://hook',
+        secret: DISCORD_WEBHOOK,
     });
     await optIn(coalition.id, campaign.id, 'discord', true);
     delete process.env.BLACKOUT_COALITION_CROSSPOST_ENABLED;

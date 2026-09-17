@@ -129,7 +129,7 @@ async function setup(campaignBody: Record<string, unknown>) {
         body: JSON.stringify({
             platform: 'bluesky',
             authMode: 'shared',
-            secret: 'bot-token',
+            secret: 'safety.bsky.social|app-pass',
             displayHandle: '@safety',
         }),
     });
@@ -258,7 +258,7 @@ test('leaving a coalition ends its custody of your personal token', async () => 
     const linked = await app.request(`/v1/coalitions/${coalition.id}/connections/me`, {
         method: 'POST',
         headers: auth(GRIOT),
-        body: JSON.stringify({ platform: 'bluesky', secret: 'my-own-token' }),
+        body: JSON.stringify({ platform: 'bluesky', secret: 'griot.bsky.social|app-pass' }),
     });
     assert.equal(linked.status, 201, await linked.text());
 

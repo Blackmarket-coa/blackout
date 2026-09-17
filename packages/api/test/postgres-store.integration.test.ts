@@ -48,7 +48,8 @@ test('every descriptor maps to a real table with columns', async () => {
         const columns = await introspectColumns(client as never, d.tableName);
         assert.ok(columns.length > 0, `table ${d.tableName} (map ${d.mapName}) should exist`);
     }
-    assert.equal(TABLE_DESCRIPTORS.length, 151);
+    // Bumped by coalition_campaign_engagement, the counts half of two-way sync.
+    assert.equal(TABLE_DESCRIPTORS.length, 152);
     await pg.query('SELECT 1');
 });
 

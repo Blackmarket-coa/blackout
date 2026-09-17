@@ -21,6 +21,10 @@ interface DescriptorOverride {
 }
 
 const OVERRIDES: Record<string, DescriptorOverride> = {
+    coalitionCampaignEngagement: {
+        keyOf: (r) => String(r.campaignPostId),
+        conflictColumns: ['campaign_post_id'],
+    },
     streamModeration: { keyOf: (r) => String(r.streamId), conflictColumns: ['stream_id'] },
     marketplaceWebhookAudit: {
         tableName: 'marketplace_webhook_events',
@@ -527,6 +531,7 @@ const ALL_MAP_NAMES = [
     'coalitionCampaignSyncOptIns',
     'coalitionBoosts',
     'coalitionCampaignContributions',
+    'coalitionCampaignEngagement',
     'coalitionCampaignPayees',
     'coalitionSuccessionPetitions',
 ] as const;

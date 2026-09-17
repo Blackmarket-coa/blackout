@@ -22,6 +22,7 @@ import {
     normalizeJoinRequirements,
     type CoalitionJoinRequirementCheck,
     type CoalitionJoinRequirements,
+    type ExternalReplyPolicy,
     utcDayOf,
     type BoostMeter,
     type CampaignStatus,
@@ -442,6 +443,7 @@ export interface UpdateCoalitionInput {
     joinMode?: CoalitionJoinMode;
     minTierToJoin?: CoalitionTierGate | null;
     joinRequirements?: CoalitionJoinRequirements | null;
+    externalReplyPolicy?: ExternalReplyPolicy | null;
 }
 
 /**
@@ -469,6 +471,10 @@ export async function updateCoalition(
     if (patch.joinMode !== undefined) next.joinMode = patch.joinMode;
     if (patch.minTierToJoin === null) delete next.minTierToJoin;
     else if (patch.minTierToJoin !== undefined) next.minTierToJoin = patch.minTierToJoin;
+    if (patch.externalReplyPolicy === null) delete next.externalReplyPolicy;
+    else if (patch.externalReplyPolicy !== undefined) {
+        next.externalReplyPolicy = patch.externalReplyPolicy;
+    }
     if (patch.joinRequirements === null) delete next.joinRequirements;
     else if (patch.joinRequirements !== undefined) {
         // Normalizing on the way in means a nonsense threshold is dropped once,
@@ -1598,4 +1604,5 @@ export function __resetCoalitionsForTests(): void {
     db.coalitionCampaignContributions.clear();
     db.coalitionSuccessionPetitions.clear();
     db.coalitionCampaignPayees.clear();
+    db.coalitionCampaignEngagement.clear();
 }

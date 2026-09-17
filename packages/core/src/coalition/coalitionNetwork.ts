@@ -228,6 +228,12 @@ export interface Coalition {
     minTierToJoin?: CoalitionTierGate;
     /** Founder-chosen local requirements. Absent means the join mode alone decides. */
     joinRequirements?: CoalitionJoinRequirements;
+    /**
+     * What happens to replies that arrive from external platforms. Absent means
+     * `moderated`, which is the safe default rather than an opinion about how a
+     * community should run its own comment section.
+     */
+    externalReplyPolicy?: ExternalReplyPolicy;
     /** The Matrix Space this coalition is mirrored to, once provisioned. */
     spaceRoomId?: string;
     createdBy: string;
@@ -296,20 +302,105 @@ export const COALITION_PLATFORMS = [
 export type CoalitionPlatform = typeof COALITION_PLATFORMS[number];
 
 /**
- * Platforms that allow bot / webhook posting get full API posting; the others
- * only ever get a pre-filled share link — never an unsupported automation.
+ * What each platform sanctions, and what we have actually built for it.
+ *
+ * `apiPost` was previously a bare claim that a platform *permits* automation,
+ * with nothing recording whether an adapter existed — and none did, so every
+ * `apiPost: true` platform wrote `error: 'no_adapter'` at post time. The two
+ * facts are now separate:
+ *
+ *   - `apiPost` — the platform allows programmatic posting at all. A `false`
+ *     here can only ever yield a pre-filled share link.
+ *   - `adapter` — we have written and tested one. `false` with `apiPost: true`
+ *     means the platform would allow it and we have not done the work, which
+ *     for X means a paid developer agreement this project does not hold.
+ *
+ * `authModes` constrains the pair a steward may configure, and it is narrowed
+ * only where a real terms-of-service hazard exists. Today that is exactly one
+ * platform: Discord is `shared` only, because the only thing a member could
+ * paste for a personal Discord connection is their user token, and user-token
+ * automation is self-botting — terminate-on-sight under Discord's terms. A
+ * coalition-owned incoming webhook is the sanctioned shape and the only one
+ * accepted. Everywhere else a member's own credential is the platform's own
+ * model, so both modes stand.
  */
 export const COALITION_PLATFORM_CAPABILITIES: Record<
     CoalitionPlatform,
-    { apiPost: boolean; inbound: boolean; label: string }
+    {
+        apiPost: boolean;
+        adapter: boolean;
+        inbound: boolean;
+        label: string;
+        authModes: readonly ConnectionAuthMode[];
+    }
 > = {
-    x: { apiPost: true, inbound: true, label: 'X' },
-    bluesky: { apiPost: true, inbound: true, label: 'Bluesky' },
-    discord: { apiPost: true, inbound: true, label: 'Discord' },
-    mastodon: { apiPost: true, inbound: true, label: 'Mastodon' },
-    instagram: { apiPost: false, inbound: false, label: 'Instagram' },
-    tiktok: { apiPost: false, inbound: false, label: 'TikTok' },
+    x: {
+        apiPost: true,
+        // Posting to X needs a paid developer agreement nobody has signed for
+        // this project. Declaring the platform without an adapter is honest;
+        // shipping one that assumes access we do not have is not.
+        adapter: false,
+        inbound: true,
+        label: 'X',
+        // OAuth user tokens are X's own sanctioned posting model, so a member
+        // connecting their own account is legitimate there. Moot until an
+        // adapter exists.
+        authModes: ['shared', 'personal'],
+    },
+    bluesky: {
+        apiPost: true,
+        adapter: true,
+        inbound: true,
+        label: 'Bluesky',
+        // App passwords are the sanctioned automation credential and are
+        // scoped and individually revocable, so a member may use their own.
+        authModes: ['shared', 'personal'],
+    },
+    discord: {
+        apiPost: true,
+        adapter: true,
+        inbound: true,
+        label: 'Discord',
+        authModes: ['shared'],
+    },
+    mastodon: {
+        apiPost: true,
+        adapter: true,
+        inbound: true,
+        label: 'Mastodon',
+        authModes: ['shared', 'personal'],
+    },
+    instagram: {
+        apiPost: false,
+        adapter: false,
+        inbound: false,
+        label: 'Instagram',
+        // No programmatic posting at all, so the mode carries no risk either way.
+        authModes: ['shared', 'personal'],
+    },
+    tiktok: {
+        apiPost: false,
+        adapter: false,
+        inbound: false,
+        label: 'TikTok',
+        // No programmatic posting at all, so the mode carries no risk either way.
+        authModes: ['shared', 'personal'],
+    },
 };
+
+/** Whether this platform may be connected in this auth mode at all. */
+export function platformAllowsAuthMode(
+    platform: CoalitionPlatform,
+    authMode: ConnectionAuthMode
+): boolean {
+    return COALITION_PLATFORM_CAPABILITIES[platform].authModes.includes(authMode);
+}
+
+/** Platforms this server can actually post to without a human completing a link. */
+export function platformCanAutomate(platform: CoalitionPlatform): boolean {
+    const capability = COALITION_PLATFORM_CAPABILITIES[platform];
+    return capability.apiPost && capability.adapter;
+}
 
 /**
  * Where a campaign can be shared TO.
@@ -653,6 +744,87 @@ export interface CampaignPost {
     /** Pre-filled share link for platforms without bot posting. */
     shareUrl?: string;
     error?: string;
+    /**
+     * Set when this post was produced by the automation rather than by a
+     * person pressing share. It names the milestone that triggered it, and it
+     * is the idempotency key: the sweep posts a milestone to a platform once
+     * and then finds its own row and stops.
+     *
+     * Absent on every manual post, which is what keeps the two paths from
+     * suppressing each other — a member sharing a drive does not consume its
+     * launch announcement, and vice versa.
+     */
+    milestone?: CampaignMilestone;
+}
+
+/**
+ * Moments in a campaign's life worth telling the world about, unprompted.
+ *
+ * Deliberately a short closed list rather than a schedule. A timer posting
+ * every N hours says nothing new and trains followers to ignore the account;
+ * these are the three points where something actually changed. `goal_reached`
+ * fires once, on the crossing, not on every contribution after it.
+ */
+export const CAMPAIGN_MILESTONES = ['launched', 'goal_reached', 'completed'] as const;
+export type CampaignMilestone = typeof CAMPAIGN_MILESTONES[number];
+
+export function isCampaignMilestone(value: unknown): value is CampaignMilestone {
+    return typeof value === 'string' && (CAMPAIGN_MILESTONES as readonly string[]).includes(value);
+}
+
+/**
+ * Counts that came back from a platform: likes, reshares, replies, clicks.
+ *
+ * Deliberately separate from `CoalitionExternalActivity`, and the split is the
+ * whole design. Numbers are signal — nobody wrote them, they name nobody, and
+ * they cannot carry abuse — so they flow in unmoderated and a coalition can
+ * watch its own reach in real time. Words are content written by a stranger,
+ * so they land quarantined and a human decides.
+ *
+ * Collapsing the two would force one answer for both: either a steward has to
+ * approve a like counter, or unreviewed text from anyone on the internet
+ * appears under a coalition's banner. Neither is acceptable, so they are two
+ * things.
+ *
+ * One row per post per platform, overwritten each time the poller reads. These
+ * are a current reading, not a ledger: a like that is withdrawn should lower
+ * the number, and an append-only history of counts nobody asked for is
+ * retention for its own sake.
+ */
+export interface CampaignEngagement {
+    /** The post these counts belong to. One row per post. */
+    id: string;
+    campaignPostId: string;
+    campaignId: string;
+    coalitionId: string;
+    platform: CoalitionPlatform;
+    likes: number;
+    reshares: number;
+    replies: number;
+    /** Visits to the campaign from this post, once attribution is wired. */
+    clicks: number;
+    lastReadAt: string;
+}
+
+/**
+ * What a coalition does with text that arrives from outside.
+ *
+ * `moderated` is the default and the safe answer: a stranger's words wait for
+ * a steward. `open` is a coalition choosing, for its own mission, that replies
+ * appear as they arrive — the same principle as the join bar, which the
+ * platform also declines to decide on anyone's behalf.
+ *
+ * `off` refuses inbound text entirely. A coalition that wants its reach
+ * measured but does not want to run a comment section can have exactly that;
+ * engagement counts are unaffected either way, because they are not content.
+ */
+export const EXTERNAL_REPLY_POLICIES = ['moderated', 'open', 'off'] as const;
+export type ExternalReplyPolicy = typeof EXTERNAL_REPLY_POLICIES[number];
+
+export function isExternalReplyPolicy(value: unknown): value is ExternalReplyPolicy {
+    return (
+        typeof value === 'string' && (EXTERNAL_REPLY_POLICIES as readonly string[]).includes(value)
+    );
 }
 
 export const EXTERNAL_ACTIVITY_MODERATION_STATUSES = ['pending', 'approved', 'rejected'] as const;

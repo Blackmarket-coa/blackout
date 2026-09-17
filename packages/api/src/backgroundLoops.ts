@@ -161,6 +161,48 @@ export function startBackgroundLoops(): void {
         );
     }
 
+    // Automated coalition cross-posting. Announces campaign milestones from a
+    // coalition's OWN connected accounts — never a member's. Opt-in on top of
+    // the outbound cross-post gate, which must also be on: turning this one on
+    // alone posts nothing, because credential custody starts with that gate.
+    if (process.env.BLACKOUT_COALITION_AUTOPOST_ENABLED === '1') {
+        const intervalSeconds = Number.parseInt(
+            process.env.BLACKOUT_COALITION_AUTOPOST_INTERVAL_SECONDS ?? '',
+            10
+        );
+        const intervalMs =
+            Number.isFinite(intervalSeconds) && intervalSeconds > 0
+                ? intervalSeconds * 1000
+                : undefined;
+        void import('./services/coalitionAutoCrosspostScheduler').then(
+            ({ startCoalitionAutoCrosspostScheduler }) => {
+                startCoalitionAutoCrosspostScheduler(intervalMs);
+                log.info('coalition_autopost_scheduler_started', { intervalMs });
+            }
+        );
+    }
+
+    // Reading back what coalition posts got. Engagement counts land unmoderated;
+    // replies go through the quarantine. Shares the inbound sync gate, which is
+    // also enforced inside the sweep, so this timer cannot become the thing that
+    // turns two-way sync on.
+    if (process.env.BLACKOUT_COALITION_EXTERNAL_SYNC_ENABLED === '1') {
+        const intervalSeconds = Number.parseInt(
+            process.env.BLACKOUT_COALITION_INBOUND_INTERVAL_SECONDS ?? '',
+            10
+        );
+        const intervalMs =
+            Number.isFinite(intervalSeconds) && intervalSeconds > 0
+                ? intervalSeconds * 1000
+                : undefined;
+        void import('./services/coalitionInboundScheduler').then(
+            ({ startCoalitionInboundScheduler }) => {
+                startCoalitionInboundScheduler(intervalMs);
+                log.info('coalition_inbound_scheduler_started', { intervalMs });
+            }
+        );
+    }
+
     // Dead-man's-switch autonomous sweep. Fires switches whose check-in window
     // has lapsed even when the owner is gone — the whole point of the feature —
     // by evaluating every armed switch server-side on a timer. On by default

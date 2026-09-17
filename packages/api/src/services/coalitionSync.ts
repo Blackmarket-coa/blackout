@@ -23,6 +23,7 @@
  */
 import {
     COALITION_PLATFORM_CAPABILITIES,
+    platformAllowsAuthMode,
     COALITION_SHARE_TARGETS,
     COALITION_SHARE_TARGET_SPECS,
     buildShareHref,
@@ -40,6 +41,12 @@ import type {
 } from '../db/types';
 import { emitDomainEvent } from '../modules/domain-events';
 import { encryptSecret } from './secretBox';
+import {
+    credentialLooksValid,
+    memberCredentialAad,
+    postToPlatform,
+    sharedCredentialAad,
+} from './coalitionPlatformAdapters';
 import { revokeMemberLinks } from './coalitionConnectionCustody';
 import { activeMembership, getCampaign, getCoalition, isStopped } from './coalitionNetworkStore';
 import { isPubliclyListed } from './profileStore';
@@ -156,7 +163,9 @@ export type SyncError =
     | { kind: 'guardrail'; state: GuardrailState }
     | { kind: 'campaign_inactive' }
     | { kind: 'credentials_unavailable' }
-    | { kind: 'private_subject' };
+    | { kind: 'private_subject' }
+    | { kind: 'auth_mode_unsupported'; platform: CoalitionPlatform }
+    | { kind: 'credential_malformed'; platform: CoalitionPlatform };
 
 export type SyncResult<T> = { ok: true; value: T } | { ok: false; error: SyncError };
 const fail = <T>(error: SyncError): SyncResult<T> => ({ ok: false, error });
@@ -191,12 +200,26 @@ export function connectPlatform(
     if (!coalitionRoleCan(membership.role, 'connections.manage'))
         return fail({ kind: 'forbidden' });
 
+    // Not every platform may be connected in every mode. Discord is shared-only
+    // because the only thing a member could paste for a personal Discord
+    // connection is their user token, and user-token automation is self-botting
+    // — terminate-on-sight under Discord's terms. The schema accepted any pair.
+    if (!platformAllowsAuthMode(input.platform, input.authMode)) {
+        return fail({ kind: 'auth_mode_unsupported', platform: input.platform });
+    }
+
     // A connection row is harmless and is what share-link mode runs on, so the
-    // route stays open. Accepting a SECRET does not: it writes a durable
-    // credential we have no revocation route for, and it was reachable while
-    // both sync gates were off. Custody starts when posting does.
+    // route stays open. Accepting a SECRET does not: custody starts when
+    // posting does.
     if (input.authMode === 'shared' && input.secret && !outboundSyncEnabled()) {
         return fail({ kind: 'disabled', gate: 'outbound' });
+    }
+
+    // Tell a steward their webhook URL is wrong now, not at the first post —
+    // and for Discord, refuse anything that is not a Discord webhook URL, so
+    // the coalition's posts cannot be aimed at a third party.
+    if (input.secret && !credentialLooksValid(input.platform, input.secret)) {
+        return fail({ kind: 'credential_malformed', platform: input.platform });
     }
 
     // Shared credentials are encrypted at rest with the same envelope every
@@ -345,6 +368,9 @@ export function linkMemberAccount(
     const connection = db.getCoalitionConnection(coalition.id, platform);
     if (!connection || !connection.active) return fail({ kind: 'no_connection', platform });
     if (connection.authMode !== 'personal') return fail({ kind: 'forbidden' });
+    if (!credentialLooksValid(platform, secret)) {
+        return fail({ kind: 'credential_malformed', platform });
+    }
     // Same rule as the shared credential above: a member's personal platform
     // token is the highest-value secret this feature touches, so it is not
     // accepted until the thing that would use it is switched on.
@@ -551,18 +577,27 @@ export interface PlatformPoster {
         text: string;
         url: string;
         credentialRef: string | null;
+        /**
+         * The additional authenticated data the credential was sealed with.
+         * Decryption fails without the exact string, which is what stops a
+         * credential stored for one coalition being replayed against another.
+         */
+        credentialAad: string;
     }): Promise<{ ok: boolean; externalPostId?: string; error?: string }>;
 }
 
 /**
- * Injected so tests (and a future queue) can stand in for real network calls.
- * The default refuses: nothing posts anywhere until an adapter is registered
- * and the outbound gate is on.
+ * The real adapters, injectable so tests need not stand up three services.
+ *
+ * This used to default to a stub answering `no_adapter`, which meant every
+ * platform the capabilities table marked postable wrote a failed row. The
+ * adapters decide per platform now — and still answer `no_adapter` for the
+ * ones we have genuinely not built, which is the honest half of that stub.
  */
-let poster: PlatformPoster = async () => ({ ok: false, error: 'no_adapter' });
+let poster: PlatformPoster = postToPlatform;
 
 export function __setPlatformPosterForTests(next: PlatformPoster | null): void {
-    poster = next ?? (async () => ({ ok: false, error: 'no_adapter' }));
+    poster = next ?? postToPlatform;
 }
 
 /**
@@ -682,7 +717,16 @@ export async function crosspostCampaign(
             credentialRef = connection.credentialRef ?? null;
         }
 
-        const result = await poster({ platform, text: post.text, url: post.url, credentialRef });
+        const result = await poster({
+            platform,
+            text: post.text,
+            url: post.url,
+            credentialRef,
+            credentialAad:
+                connection.authMode === 'personal'
+                    ? memberCredentialAad(coalition.id, userId, platform)
+                    : sharedCredentialAad(coalition.id, platform),
+        });
         db.upsertCoalitionCampaignPost({
             id,
             campaignId,
@@ -725,6 +769,14 @@ export function listCampaignPosts(campaignId: string): CoalitionCampaignPostReco
 // Inbound (dark until the trust gate lifts) + moderation
 // ---------------------------------------------------------------------------
 
+/** A cap breach reported in the shape the guardrail error already carries. */
+const rejectedByCap = (postsToday: number): GuardrailState => ({
+    allowed: false,
+    reason: 'daily_cap',
+    postsToday,
+    cap: EXTERNAL_REPLY_CAP_PER_POST,
+});
+
 export interface IngestInput {
     campaignPostId: string;
     sourcePlatform: CoalitionPlatform;
@@ -740,6 +792,13 @@ export interface IngestInput {
  * `pending`: no inbound content is visible before a moderator approves it.
  * Refuses entirely while the trust gate is closed.
  */
+/** Bounds on text that arrived from outside. Clamped, never rejected. */
+const EXTERNAL_AUTHOR_MAX = 120;
+const EXTERNAL_CONTENT_MAX = 2000;
+
+/** Replies one post may accumulate before the coalition stops taking more. */
+const EXTERNAL_REPLY_CAP_PER_POST = 500;
+
 export function ingestExternalActivity(
     input: IngestInput
 ): SyncResult<CoalitionExternalActivityRecord> {
@@ -747,12 +806,48 @@ export function ingestExternalActivity(
     const post = db.getCoalitionCampaignPost(input.campaignPostId);
     if (!post) return fail({ kind: 'not_found' });
 
+    // The reply has to have arrived on the platform the post went out on.
+    // Without this a receiver for one platform could file replies against
+    // another platform's post, and the moderation queue would attribute a
+    // stranger's words to an account that never saw them.
+    if (post.platform !== input.sourcePlatform) return fail({ kind: 'not_found' });
+    if (!COALITION_PLATFORM_CAPABILITIES[input.sourcePlatform].inbound) {
+        return fail({ kind: 'disabled', gate: 'inbound' });
+    }
+
+    const coalition = db.getCoalition(post.coalitionId);
+    if (!coalition || isStopped(coalition)) return fail({ kind: 'not_found' });
+
+    // A coalition decides for its own mission what happens to a stranger's
+    // words. `off` is a coalition that wants its reach measured without running
+    // a comment section — engagement counts are unaffected, because they are
+    // not content.
+    const policy = coalition.externalReplyPolicy ?? 'moderated';
+    if (policy === 'off') return fail({ kind: 'forbidden' });
+
+    const campaign = db.getCoalitionCampaign(post.campaignId);
+    if (!campaign) return fail({ kind: 'not_found' });
+    if (campaign.status !== 'active' && campaign.status !== 'completed') {
+        return fail({ kind: 'campaign_inactive' });
+    }
+
+    // A cap per post, because the receiver is reachable by anyone who can reply
+    // on a platform and an unbounded queue is a way to bury a steward or fill a
+    // disk. New arrivals past the cap are refused, not silently dropped.
+    const existingForPost = db
+        .listCoalitionExternalActivity({ campaignId: post.campaignId })
+        .filter((row) => row.campaignPostId === post.id);
+    if (existingForPost.length >= EXTERNAL_REPLY_CAP_PER_POST) {
+        return fail({ kind: 'guardrail', state: rejectedByCap(existingForPost.length) });
+    }
+
     // At-least-once delivery: an origin id we have already stored wins.
     if (input.externalId) {
         const seen = db
             .listCoalitionExternalActivity({ campaignId: post.campaignId })
             .find(
                 (row) =>
+                    row.campaignPostId === post.id &&
                     row.sourcePlatform === input.sourcePlatform &&
                     row.externalId === input.externalId
             );
@@ -765,10 +860,13 @@ export function ingestExternalActivity(
         campaignId: post.campaignId,
         coalitionId: post.coalitionId,
         sourcePlatform: input.sourcePlatform,
-        externalAuthor: input.externalAuthor,
+        // Clamped rather than refused: a long reply is a long reply, not an
+        // attack, and truncating shows the steward what arrived. `clip` is the
+        // same helper the outbound path uses.
+        externalAuthor: clip(input.externalAuthor, EXTERNAL_AUTHOR_MAX),
         ...(input.externalId ? { externalId: input.externalId } : {}),
-        content: input.content,
-        moderationStatus: 'pending',
+        content: clip(input.content, EXTERNAL_CONTENT_MAX),
+        moderationStatus: policy === 'open' ? 'approved' : 'pending',
         receivedAt: input.receivedAt ?? NOW_ISO(),
     });
     emitDomainEvent({

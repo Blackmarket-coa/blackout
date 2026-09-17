@@ -11,6 +11,7 @@ import {
     CAMPAIGN_STATUSES,
     CAMPAIGN_TYPES,
     COALITION_PLATFORMS,
+    EXTERNAL_REPLY_POLICIES,
     isInstanceHost,
     COALITION_PLATFORM_CAPABILITIES,
     CONNECTION_AUTH_MODES,
@@ -88,6 +89,7 @@ import {
     type SyncError,
 } from '../services/coalitionSync';
 import { revokeMemberLinks } from '../services/coalitionConnectionCustody';
+import { CREDENTIAL_FORMATS } from '../services/coalitionPlatformAdapters';
 
 const coalitions = new Hono();
 
@@ -442,6 +444,7 @@ const updateSchema = z.object({
     joinMode: z.enum(COALITION_JOIN_MODES).optional(),
     minTierToJoin: z.enum(COALITION_TIER_GATES).nullable().optional(),
     joinRequirements: joinRequirementsSchema.nullable().optional(),
+    externalReplyPolicy: z.enum(EXTERNAL_REPLY_POLICIES).nullable().optional(),
 });
 
 coalitions.patch('/:id', async (c) => {
@@ -1022,6 +1025,31 @@ function syncErrorResponse(c: Parameters<typeof requireUser>[0], error: SyncErro
             // answer is an oracle for exactly the thing the member opted out
             // of. The campaign stays fully visible inside the coalition.
             return c.json({ code: 'not_found', message: 'Not found' }, 404);
+        case 'auth_mode_unsupported':
+            return c.json(
+                {
+                    code: 'auth_mode_unsupported',
+                    message: `${
+                        COALITION_PLATFORM_CAPABILITIES[error.platform].label
+                    } can only be connected as ${COALITION_PLATFORM_CAPABILITIES[
+                        error.platform
+                    ].authModes.join(' or ')}`,
+                    platform: error.platform,
+                    authModes: COALITION_PLATFORM_CAPABILITIES[error.platform].authModes,
+                },
+                400
+            );
+        case 'credential_malformed':
+            return c.json(
+                {
+                    code: 'credential_malformed',
+                    message:
+                        CREDENTIAL_FORMATS[error.platform] ??
+                        'That credential is not in the expected format',
+                    platform: error.platform,
+                },
+                400
+            );
     }
 }
 
@@ -1104,6 +1132,41 @@ coalitions.post('/:id/connections/me', async (c) => {
     );
     if (!result.ok) return syncErrorResponse(c, result.error);
     return c.json({ connection: result.value }, 201);
+});
+
+/**
+ * Engagement a campaign's posts have drawn, per platform.
+ *
+ * Counts only — no author, no text. Readable by any member, because a
+ * coalition's own reach is not steward-only information and needing a
+ * permission to see whether anyone noticed your drive is a strange rule.
+ */
+coalitions.get('/:id/campaigns/:campaignId/engagement', (c) => {
+    const user = requireUser(c);
+    if (user instanceof Response) return user;
+    const campaign = getCampaign(c.req.param('id'), c.req.param('campaignId'), user.sub);
+    if (!campaign.ok) return errorResponse(c, campaign.error);
+    const rows = db.listCampaignEngagement({ campaignId: campaign.value.id });
+    const totals = rows.reduce(
+        (acc, row) => ({
+            likes: acc.likes + row.likes,
+            reshares: acc.reshares + row.reshares,
+            replies: acc.replies + row.replies,
+            clicks: acc.clicks + row.clicks,
+        }),
+        { likes: 0, reshares: 0, replies: 0, clicks: 0 }
+    );
+    return c.json({
+        totals,
+        byPlatform: rows.map((row) => ({
+            platform: row.platform,
+            likes: row.likes,
+            reshares: row.reshares,
+            replies: row.replies,
+            clicks: row.clicks,
+            lastReadAt: row.lastReadAt,
+        })),
+    });
 });
 
 /** The caller's own opt-ins for a campaign. An absent platform means off. */

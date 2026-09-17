@@ -17,6 +17,7 @@ import type {
     CoalitionConnection,
     CoalitionMemberConnection,
     CoalitionCampaign,
+    CampaignEngagement,
     CampaignPost,
     ExternalActivity,
     CampaignSyncOptIn,
@@ -1966,6 +1967,12 @@ export interface CoalitionConnectionRecord extends CoalitionConnection {
 
 /** A member's personal connection. Keyed by `${coalitionId}::${userId}::${platform}`. */
 export interface CoalitionMemberConnectionRecord extends CoalitionMemberConnection {
+    createdAt: string;
+    updatedAt: string;
+}
+
+/** Engagement counts for one outbound post. Keyed by `campaignPostId`. */
+export interface CampaignEngagementRecord extends CampaignEngagement {
     createdAt: string;
     updatedAt: string;
 }

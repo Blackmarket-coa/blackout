@@ -26,6 +26,8 @@ const { __setCoalitionMatrixForTests } = await import('../src/services/coalition
 const { __setTierResolverForTests } = await import('../src/services/coalitionTierGate');
 const { connectPlatform, linkMemberAccount } = await import('../src/services/coalitionSync');
 
+const DISCORD_WEBHOOK = 'https://discord.com/api/webhooks/123456789/abcDEF-ghi_JKL';
+
 function auth(user: string): Record<string, string> {
     return {
         authorization: `Bearer ${signJwt(user, user, 600)}`,
@@ -139,7 +141,7 @@ test('a shared platform secret is refused while outbound sync is off', () => {
     const outcome = connectPlatform('x', LEAD, {
         platform: 'discord',
         authMode: 'shared',
-        secret: 'https://discord.com/api/webhooks/1/abc',
+        secret: DISCORD_WEBHOOK,
     });
     assert.equal(outcome.ok, false);
 });
@@ -149,7 +151,7 @@ test('credential intake is refused on a real coalition while the gate is off', a
     const shared = connectPlatform(coalition.id, LEAD, {
         platform: 'discord',
         authMode: 'shared',
-        secret: 'https://discord.com/api/webhooks/1/abc',
+        secret: DISCORD_WEBHOOK,
     });
     assert.equal(shared.ok, false);
     assert.equal(shared.ok === false && shared.error.kind, 'disabled');
