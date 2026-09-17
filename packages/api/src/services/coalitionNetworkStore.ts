@@ -58,7 +58,11 @@ import { relaySubject } from './relayStore';
 import { incrementCounter } from './marketplaceObservability';
 import { resolveBlackoutUserId } from './userIdentity';
 import { awardCoalitionKarma, type CoalitionReputationEvent } from './coalitionReputation';
-import { campaignHasCapturedContributions } from './coalitionDrives';
+import {
+    archiveDriveListing,
+    campaignHasCapturedContributions,
+    ensureDriveListing,
+} from './coalitionDrives';
 import {
     openWindowForGoodsDrive,
     pushCoalitionMilestones,
@@ -486,6 +490,21 @@ function stoppedError(coalition: CoalitionRecord): CoalitionError {
  * it sets a flag the coalition cannot clear, closes the Space, and tells FBM to
  * pull the collective storefront.
  */
+/**
+ * Withdraw every drive listing a coalition owns.
+ *
+ * FBM's checkout surfaces resolve a listing and never consult the coalition it
+ * belongs to, so stopping a coalition on this side does nothing to a listing
+ * that is already published: a taken-down coalition would keep taking money
+ * through drives it can no longer run. `pushCoalitionStatus` only flips the
+ * mirrored cooperative's flags and does not reach listings either.
+ */
+async function withdrawCoalitionListings(coalitionId: string): Promise<void> {
+    for (const campaign of db.listCoalitionCampaigns({ coalitionId })) {
+        if (campaign.fbmListingId) await archiveDriveListing(campaign);
+    }
+}
+
 export async function takeDownCoalition(
     idOrSlug: string,
     adminUserId: string,
@@ -506,6 +525,7 @@ export async function takeDownCoalition(
     // running because its side effects could not be delivered.
     await closeCoalitionSpace(saved);
     void pushCoalitionStatus(saved.id, 'taken_down');
+    void withdrawCoalitionListings(saved.id);
     emitDomainEvent({
         module: 'coalitions',
         type: 'coalition.taken_down',
@@ -547,6 +567,9 @@ export function archiveCoalition(
     if (!gate.ok) return gate;
     if (isStopped(coalition)) return succeed(coalition);
     const saved = db.upsertCoalition({ ...coalition, archivedAt: NOW_ISO() });
+    // Same reason as takedown: archiving here does not reach a published
+    // listing, and an archived coalition's drives must stop taking money.
+    void withdrawCoalitionListings(saved.id);
     emitDomainEvent({
         module: 'coalitions',
         type: 'coalition.archived',
@@ -980,7 +1003,10 @@ export function createCampaign(
     // A steward's campaign is born active and never passes through a
     // transition, so the window has to be opened from every path that reaches
     // `active` — here, on approval, and on an explicit status change.
-    if (status === 'active') void openWindowForGoodsDrive(withBounty);
+    if (status === 'active') {
+        void openWindowForGoodsDrive(withBounty);
+        void ensureDriveListing(withBounty);
+    }
     return succeed(withBounty);
 }
 
@@ -1020,6 +1046,7 @@ export function approveCampaign(
         approvedBy: actorId,
     });
     void openWindowForGoodsDrive(saved);
+    void ensureDriveListing(saved);
     emitDomainEvent({
         module: 'coalitions',
         type: 'coalition.campaign.status',
@@ -1080,6 +1107,17 @@ export function transitionCampaign(
         // A goods drive needs somewhere for members to actually order: FBM
         // opens the shared window and projects every member shop into it.
         void openWindowForGoodsDrive(saved);
+    }
+    if (to === 'active') {
+        // A funding drive needs a listing to take money through. Provisioned on
+        // activation rather than at launch, so a campaign that never clears
+        // approval never gets a purchasable listing.
+        void ensureDriveListing(saved);
+    }
+    if (to === 'completed' || to === 'cancelled') {
+        // FBM's checkout surfaces do not consult campaign status, so a drive
+        // that is over keeps taking money until its listing is withdrawn.
+        void archiveDriveListing(saved);
     }
     if (to === 'completed') {
         // The campaign's organiser is credited, not the closer — a steward

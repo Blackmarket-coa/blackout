@@ -214,7 +214,17 @@ export async function createTier(input: CreateTierInput): Promise<TierView> {
                 currency,
             });
             fbmListingId = result.providerListingId;
-            initialStatus = result.status === 'archived' ? 'archived' : 'active';
+            // Publish it. A created listing is a DRAFT, and the provider's
+            // checkout refuses anything not published — so a tier that stopped
+            // at create looked active here and 400'd the moment a subscriber
+            // tried to pay, with nothing between the two to notice.
+            const published = provider.publishCreatorListing
+                ? await provider.publishCreatorListing(
+                      result.providerListingId,
+                      input.creatorUserId
+                  )
+                : result;
+            initialStatus = published.status === 'archived' ? 'archived' : 'active';
         } catch (error) {
             logEvent('creator_sub.tier.upstream_failed', {
                 providerId,

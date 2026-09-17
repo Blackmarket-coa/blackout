@@ -443,3 +443,156 @@ export function listContributions(campaignId: string): ContributionView[] {
             createdAt: row.createdAt,
         }));
 }
+
+// ---------------------------------------------------------------------------
+// Drive listings
+// ---------------------------------------------------------------------------
+
+/**
+ * Who a drive's money settles to.
+ *
+ * FBM pays the LISTING's seller — the shadow product, the order and the fee
+ * quote all resolve against `listing.seller_id`. Blackout's tip is a ledger row
+ * that moves nothing and is never reconciled against it. So the seller on the
+ * listing must be byte-identical to the id `startContribution` credits, or the
+ * ledger says one person was paid while the cash settles to another, silently
+ * and with nothing to detect it.
+ */
+export function driveBeneficiary(campaign: CoalitionCampaignRecord): string | null {
+    // A mutual-aid campaign's money belongs to the person who asked. With no
+    // resolvable beneficiary there is nobody to pay, and falling back to the
+    // organiser would pay the raiser money meant for a neighbour.
+    if (campaign.type === 'mutual_aid') return campaign.beneficiaryUserId ?? null;
+    return campaign.beneficiaryUserId ?? campaign.createdBy ?? null;
+}
+
+/** Price of a drive's listing. The contributor's own amount overrides it at checkout. */
+const DRIVE_LISTING_PRICE_CENTS = 100;
+
+/**
+ * Give an active drive a listing to take money through, once.
+ *
+ * Called when a campaign reaches `active`, not at launch and not lazily on the
+ * first contribution. At launch is too early — a campaign can sit in
+ * `pending_approval` or be cancelled from it, and publishing a purchasable
+ * listing for a drive no steward approved is worse than having none. Lazily is
+ * worse still: it puts two serialized provider calls inside a contributor's
+ * request, surfaces a beneficiary's missing seller account at the moment
+ * somebody is trying to give, and races — two concurrent first contributions
+ * both see no listing, both create, and the second gets a duplicate-slug 409.
+ *
+ * Never throws and never fails the transition. A drive with no listing already
+ * has an honest answer at the point money would move (`no_listing`), which is a
+ * better failure than a campaign that could not be activated because FBM was
+ * briefly down.
+ */
+export async function ensureDriveListing(campaign: CoalitionCampaignRecord): Promise<void> {
+    if (campaign.fbmListingId) return;
+    if (campaign.status !== 'active') return;
+    // Projects are funded through the bounty board and goods drives through an
+    // order window; neither takes contributions through a listing.
+    if (campaign.type !== 'drive' && campaign.type !== 'mutual_aid') return;
+
+    const beneficiary = driveBeneficiary(campaign);
+    if (!beneficiary || !db.getUserById(beneficiary)) {
+        incrementCounter('coalition_drive_listing_skipped', { reason: 'no_beneficiary' });
+        return;
+    }
+
+    const provider = getMarketplaceProvider(DEFAULT_PROVIDER);
+    if (!provider?.enabled || !provider.createCreatorListing || !provider.publishCreatorListing) {
+        return;
+    }
+
+    try {
+        const draft = await provider.createCreatorListing({
+            sellerUserId: beneficiary,
+            // NOT `subscription`: FBM turns a subscription-category listing into
+            // a recurring membership at checkout, and a donation must never
+            // quietly become one. `community_template` is inert wherever kind
+            // is read and keeps the drive off the plugins shelf.
+            artifactKind: 'community_template',
+            category: 'community-template',
+            entitlementKind: 'community_template',
+            title: campaign.title,
+            description: campaign.description || campaign.title,
+            // A contribution carries its own amount, which overrides this at
+            // checkout. It exists only because FBM refuses to build a product
+            // for a listing with no price.
+            priceCents: DRIVE_LISTING_PRICE_CENTS,
+            currency: 'USD',
+            // snake_case on purpose: FBM's embed drive checkout reads
+            // `listing.metadata.coalition_id` / `drive_id` and refuses a listing
+            // without them, so a listing created without these is purchasable
+            // through one surface and rejected by the other.
+            metadata: { coalition_id: campaign.coalitionId, drive_id: campaign.id },
+        });
+
+        // The creator-tier path stops here, and its listings are consequently
+        // unbuyable: FBM's checkout refuses anything not published.
+        await provider.publishCreatorListing(draft.providerListingId, beneficiary);
+
+        // Re-read: the campaign may have been completed, cancelled or taken
+        // down while the two provider calls were in flight.
+        const current = db.getCoalitionCampaign(campaign.id);
+        if (!current || current.status !== 'active' || current.fbmListingId) return;
+        db.upsertCoalitionCampaign({ ...current, fbmListingId: draft.providerListingId });
+
+        incrementCounter('coalition_drive_listing_created');
+        logEvent('coalition.drive.listing_created', {
+            campaignId: campaign.id,
+            coalitionId: campaign.coalitionId,
+            listingId: draft.providerListingId,
+        });
+    } catch (error) {
+        const status = (error as { status?: number }).status;
+        // 404 is the beneficiary having no FBM seller account. Sellers are
+        // never auto-created there — vendor onboarding is deliberately an
+        // explicit flow — so this is a durable state to report, not a blip.
+        const reason = status === 404 ? 'beneficiary_not_a_seller' : 'provider_error';
+        incrementCounter('coalition_drive_listing_failed', { reason });
+        logEvent('coalition.drive.listing_failed', {
+            campaignId: campaign.id,
+            coalitionId: campaign.coalitionId,
+            reason,
+            status: status ?? null,
+        });
+    }
+}
+
+/**
+ * Take a drive's listing out of the marketplace and forget it.
+ *
+ * Both halves matter. Archiving alone leaves `fbmListingId` set, so
+ * `startContribution` sails past its `no_listing` branch and fails later with
+ * the opaque `checkout_unavailable`. Clearing alone leaves a published listing
+ * that keeps taking money: FBM's checkout surfaces do not consult coalition or
+ * campaign status, so a completed, cancelled or taken-down drive stays for sale
+ * until something archives it here.
+ */
+export async function archiveDriveListing(campaign: CoalitionCampaignRecord): Promise<void> {
+    const listingId = campaign.fbmListingId;
+    if (!listingId) return;
+
+    const beneficiary = driveBeneficiary(campaign);
+    const provider = getMarketplaceProvider(DEFAULT_PROVIDER);
+    if (provider?.enabled && provider.archiveCreatorListing && beneficiary) {
+        try {
+            await provider.archiveCreatorListing(listingId, beneficiary);
+        } catch (error) {
+            // Clear the id regardless. A stale id is a worse failure than an
+            // orphaned listing: it routes real money at a drive that is over.
+            incrementCounter('coalition_drive_listing_archive_failed');
+            logEvent('coalition.drive.listing_archive_failed', {
+                campaignId: campaign.id,
+                listingId,
+                error: error instanceof Error ? error.name : 'unknown',
+            });
+        }
+    }
+
+    const current = db.getCoalitionCampaign(campaign.id);
+    if (!current || current.fbmListingId !== listingId) return;
+    const { fbmListingId: _dropped, ...rest } = current;
+    db.upsertCoalitionCampaign(rest as CoalitionCampaignRecord);
+}

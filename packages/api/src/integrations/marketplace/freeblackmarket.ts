@@ -216,7 +216,15 @@ export function createFreeblackmarketProvider(): MarketplaceProvider {
             },
         });
         if (!response.ok) {
-            throw new Error(`freeblackmarket ${path} failed: ${response.status}`);
+            // Carry the status on the error. Flattened into the message it was
+            // unreadable, so a caller could not tell "this seller does not
+            // exist here" (404) from "the provider is down" (5xx) without
+            // parsing prose — and those deserve different answers to a user.
+            const error = new Error(
+                `freeblackmarket ${path} failed: ${response.status}`
+            ) as Error & { status?: number };
+            error.status = response.status;
+            throw error;
         }
         return (await response.json()) as T;
     }
@@ -364,6 +372,7 @@ export function createFreeblackmarketProvider(): MarketplaceProvider {
                 entitlementKind: input.entitlementKind,
                 mediaUrls: input.mediaUrls,
                 tags: input.tags,
+                metadata: input.metadata,
             };
             const raw = await call<{
                 id: string;

@@ -167,6 +167,17 @@ export interface CreatorListingDraftInput {
     currency: string;
     tags?: string[];
     mediaUrls?: string[];
+    /**
+     * Provider-side stamps on the listing. Values are strings because the
+     * provider stores them on an opaque metadata column and consumers read
+     * them back as text.
+     *
+     * A coalition drive needs these: FBM's embed drive checkout refuses a
+     * listing that does not carry the coalition and drive it belongs to, so a
+     * listing created without them is purchasable through one surface and
+     * rejected by the other.
+     */
+    metadata?: Record<string, string>;
     artifactPayload?: unknown;
     artifactUploadId?: string;
 }

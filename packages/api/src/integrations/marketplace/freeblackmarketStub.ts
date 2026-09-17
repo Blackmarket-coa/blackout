@@ -24,6 +24,8 @@ interface StubListing {
     sellerUserId: string | null;
     artifactKind: CreatorListingDraftInput['artifactKind'];
     artifactPayload: unknown;
+    /** Provider-side stamps; a coalition drive carries coalition_id / drive_id. */
+    metadata?: Record<string, string>;
     publicSlug: string;
     status: 'draft' | 'pending_review' | 'published' | 'rejected' | 'archived';
     createdAt: string;
@@ -701,8 +703,16 @@ export function createFreeblackmarketStubProvider(): MarketplaceProvider {
         },
 
         async createCheckoutSession(input: CheckoutInput): Promise<CheckoutResult> {
-            if (!listings.has(input.listingId)) {
+            const forSale = listings.get(input.listingId);
+            if (!forSale) {
                 throw new Error(`stub: unknown listing ${input.listingId}`);
+            }
+            // Live FBM's §5 checkout refuses anything not published, so the stub
+            // must too — otherwise a caller that forgets to publish passes in
+            // CI and 400s in production, which is exactly how the creator-tier
+            // path shipped without its publish step.
+            if (forSale.status !== 'published') {
+                throw new Error(`stub: listing ${input.listingId} is not published`);
             }
             const sessionId = crypto.randomUUID();
             sessions.set(sessionId, {
@@ -776,6 +786,7 @@ export function createFreeblackmarketStubProvider(): MarketplaceProvider {
                 sellerUserId: input.sellerUserId,
                 artifactKind: input.artifactKind,
                 artifactPayload: input.artifactPayload,
+                metadata: input.metadata,
                 publicSlug: slug || id,
                 status: 'draft',
                 createdAt: nowIso(),
