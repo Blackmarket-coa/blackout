@@ -11,6 +11,7 @@ import followRoutes from './routes/follows';
 import circleRoutes from './routes/circle';
 import communityAssetRoutes from './routes/communityAssets';
 import shareRoutes from './routes/sharePreview';
+import campaignPreviewRoutes from './routes/campaignPreview';
 import messageRoutes from './routes/messages';
 import scheduledMessageRoutes from './routes/scheduledMessages';
 import federationRoutes from './routes/federation';
@@ -74,6 +75,7 @@ import rtmpFanoutRoutes from './routes/rtmpFanout';
 import matrixAppserviceRoutes from './routes/matrixAppservice';
 import matrixRoutes from './routes/matrix';
 import coalitionRoutes from './routes/coalition';
+import coalitionsRoutes from './routes/coalitions';
 import coalitionCreditsRoutes from './routes/coalitionCredits';
 import bountyRoutes from './routes/bounties';
 import coliseumRoutes from './routes/coliseum';
@@ -204,6 +206,7 @@ for (const root of legacyAliasEnabled ? [API_ROOTS.v1, API_ROOTS.legacyApiAlias]
     // nginx only proxies /v1/* to the API (the top-level /i mount below needs a
     // dedicated nginx rule). Public via the pass-through auth middleware.
     app.route(`${root}/i`, shareRoutes);
+    app.route(`${root}/c`, campaignPreviewRoutes);
     app.route(`${root}/matrix`, matrixRoutes);
     app.route(`${root}/messages`, messageRoutes);
     app.route(`${root}/scheduled-messages`, scheduledMessageRoutes);
@@ -263,6 +266,8 @@ for (const root of legacyAliasEnabled ? [API_ROOTS.v1, API_ROOTS.legacyApiAlias]
     app.route(`${root}/integrations/obs-ws/passwords`, obsWsPasswordRoutes);
     app.route(`${root}/integrations/simulcast/fanout`, rtmpFanoutRoutes);
     app.route(`${root}/coalition`, coalitionRoutes);
+    // Coalitions network (plural) — multi-member groups replacing the friends list.
+    app.route(`${root}/coalitions`, coalitionsRoutes);
     app.route(`${root}/coalition-credits`, coalitionCreditsRoutes);
     app.route(`${root}/bounties`, bountyRoutes);
     app.route(`${root}/coliseum`, coliseumRoutes);
@@ -309,6 +314,7 @@ app.route('/bug-report/widget', widgetReportRoutes);
 // top-level (outside /v1) so social crawlers can fetch it without auth; it
 // returns OG meta tags and redirects humans into the SPA `/invite/:token` flow.
 app.route('/i', shareRoutes);
+app.route('/c', campaignPreviewRoutes);
 
 app.get('/health', (c) =>
     // Unauthenticated readiness probe: expose only coarse booleans. The detailed

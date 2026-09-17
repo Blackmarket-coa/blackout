@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { hashPassword } from '../services/auth';
 import type {
@@ -94,6 +94,21 @@ import type {
     CoalitionRingRecord,
     RingMembershipRecord,
     RingInvitationRecord,
+    CoalitionRecord,
+    CoalitionMembershipRecord,
+    CoalitionJoinRequestRecord,
+    CoalitionConnectionRecord,
+    CoalitionMemberConnectionRecord,
+    CoalitionCampaignRecord,
+    CoalitionCampaignPostRecord,
+    CoalitionExternalActivityRecord,
+    CoalitionCampaignSyncOptInRecord,
+    CoalitionBoostRecord,
+    CampaignAttributionRecord,
+    CampaignEngagementRecord,
+    CoalitionCampaignContributionRecord,
+    CoalitionCampaignPayeeRecord,
+    CoalitionSuccessionPetitionRecord,
     CoalitionKitApplicationRecord,
     CoalitionTaskRecord,
     CoalitionNeedRecord,
@@ -256,6 +271,21 @@ type PersistedState = {
     coalitionRings: CoalitionRingRecord[];
     ringMemberships: RingMembershipRecord[];
     ringInvitations: RingInvitationRecord[];
+    coalitions: CoalitionRecord[];
+    coalitionMemberships: CoalitionMembershipRecord[];
+    coalitionJoinRequests: CoalitionJoinRequestRecord[];
+    coalitionConnections: CoalitionConnectionRecord[];
+    coalitionMemberConnections: CoalitionMemberConnectionRecord[];
+    coalitionCampaigns: CoalitionCampaignRecord[];
+    coalitionCampaignPosts: CoalitionCampaignPostRecord[];
+    coalitionExternalActivity: CoalitionExternalActivityRecord[];
+    coalitionCampaignSyncOptIns: CoalitionCampaignSyncOptInRecord[];
+    coalitionBoosts: CoalitionBoostRecord[];
+    coalitionCampaignContributions: CoalitionCampaignContributionRecord[];
+    coalitionCampaignEngagement: CampaignEngagementRecord[];
+    coalitionCampaignAttribution: CampaignAttributionRecord[];
+    coalitionCampaignPayees: CoalitionCampaignPayeeRecord[];
+    coalitionSuccessionPetitions: CoalitionSuccessionPetitionRecord[];
     coalitionKitApplications: CoalitionKitApplicationRecord[];
     coalitionTasks: CoalitionTaskRecord[];
     coalitionNeeds: CoalitionNeedRecord[];
@@ -451,6 +481,27 @@ class InMemoryDb {
     ringMemberships = new Map<string, RingMembershipRecord>();
     /** Ring invitations, keyed by `${ringId}::${inviteeId}`. */
     ringInvitations = new Map<string, RingInvitationRecord>();
+    coalitions = new Map<string, CoalitionRecord>();
+    /** Keyed by `${coalitionId}::${userId}`. */
+    coalitionMemberships = new Map<string, CoalitionMembershipRecord>();
+    /** Keyed by `${coalitionId}::${userId}`. */
+    coalitionJoinRequests = new Map<string, CoalitionJoinRequestRecord>();
+    /** Keyed by `${coalitionId}::${platform}`. */
+    coalitionConnections = new Map<string, CoalitionConnectionRecord>();
+    /** Keyed by `${coalitionId}::${userId}::${platform}`. */
+    coalitionMemberConnections = new Map<string, CoalitionMemberConnectionRecord>();
+    coalitionCampaigns = new Map<string, CoalitionCampaignRecord>();
+    coalitionCampaignPosts = new Map<string, CoalitionCampaignPostRecord>();
+    coalitionExternalActivity = new Map<string, CoalitionExternalActivityRecord>();
+    /** Keyed by `${campaignId}::${userId}::${platform}`. */
+    coalitionCampaignSyncOptIns = new Map<string, CoalitionCampaignSyncOptInRecord>();
+    /** Keyed by `${campaignId}::${userId}::${day}`. */
+    coalitionBoosts = new Map<string, CoalitionBoostRecord>();
+    coalitionCampaignContributions = new Map<string, CoalitionCampaignContributionRecord>();
+    coalitionCampaignEngagement = new Map<string, CampaignEngagementRecord>();
+    coalitionCampaignAttribution = new Map<string, CampaignAttributionRecord>();
+    coalitionCampaignPayees = new Map<string, CoalitionCampaignPayeeRecord>();
+    coalitionSuccessionPetitions = new Map<string, CoalitionSuccessionPetitionRecord>();
     /** Records of Coalition Kits applied to a den/coalition, keyed by application id. */
     coalitionKitApplications = new Map<string, CoalitionKitApplicationRecord>();
     /** Coalition den tasks, keyed by task id. */
@@ -3391,6 +3442,462 @@ class InMemoryDb {
         return record;
     }
 
+    // --- coalitions network ---
+
+    private static coalitionMembershipKey(coalitionId: string, userId: string): string {
+        return `${coalitionId}::${userId}`;
+    }
+
+    listCoalitions(): CoalitionRecord[] {
+        return [...this.coalitions.values()];
+    }
+
+    getCoalition(id: string): CoalitionRecord | undefined {
+        return this.coalitions.get(id);
+    }
+
+    getCoalitionBySlug(slug: string): CoalitionRecord | undefined {
+        for (const row of this.coalitions.values()) if (row.slug === slug) return row;
+        return undefined;
+    }
+
+    upsertCoalition(input: Omit<CoalitionRecord, 'createdAt' | 'updatedAt'>): CoalitionRecord {
+        const existing = this.coalitions.get(input.id);
+        const now = nowIso();
+        const record: CoalitionRecord = {
+            ...input,
+            createdAt: existing?.createdAt ?? now,
+            updatedAt: now,
+        };
+        this.coalitions.set(record.id, record);
+        return record;
+    }
+
+    listCoalitionMemberships(
+        filter: { coalitionId?: string; userId?: string } = {}
+    ): CoalitionMembershipRecord[] {
+        return [...this.coalitionMemberships.values()].filter((row) => {
+            if (filter.coalitionId && row.coalitionId !== filter.coalitionId) return false;
+            if (filter.userId && row.userId !== filter.userId) return false;
+            return true;
+        });
+    }
+
+    getCoalitionMembership(
+        coalitionId: string,
+        userId: string
+    ): CoalitionMembershipRecord | undefined {
+        return this.coalitionMemberships.get(
+            InMemoryDb.coalitionMembershipKey(coalitionId, userId)
+        );
+    }
+
+    upsertCoalitionMembership(
+        input: Omit<CoalitionMembershipRecord, 'createdAt' | 'updatedAt'>
+    ): CoalitionMembershipRecord {
+        const key = InMemoryDb.coalitionMembershipKey(input.coalitionId, input.userId);
+        const existing = this.coalitionMemberships.get(key);
+        const now = nowIso();
+        const record: CoalitionMembershipRecord = {
+            ...input,
+            createdAt: existing?.createdAt ?? now,
+            updatedAt: now,
+        };
+        this.coalitionMemberships.set(key, record);
+        return record;
+    }
+
+    listCoalitionJoinRequests(
+        filter: { coalitionId?: string; userId?: string; status?: string } = {}
+    ): CoalitionJoinRequestRecord[] {
+        return [...this.coalitionJoinRequests.values()].filter((row) => {
+            if (filter.coalitionId && row.coalitionId !== filter.coalitionId) return false;
+            if (filter.userId && row.userId !== filter.userId) return false;
+            if (filter.status && row.status !== filter.status) return false;
+            return true;
+        });
+    }
+
+    getCoalitionJoinRequest(
+        coalitionId: string,
+        userId: string
+    ): CoalitionJoinRequestRecord | undefined {
+        return this.coalitionJoinRequests.get(
+            InMemoryDb.coalitionMembershipKey(coalitionId, userId)
+        );
+    }
+
+    upsertCoalitionJoinRequest(
+        input: Omit<CoalitionJoinRequestRecord, 'createdAt' | 'updatedAt'>
+    ): CoalitionJoinRequestRecord {
+        const key = InMemoryDb.coalitionMembershipKey(input.coalitionId, input.userId);
+        const existing = this.coalitionJoinRequests.get(key);
+        const now = nowIso();
+        const record: CoalitionJoinRequestRecord = {
+            ...input,
+            createdAt: existing?.createdAt ?? now,
+            updatedAt: now,
+        };
+        this.coalitionJoinRequests.set(key, record);
+        return record;
+    }
+
+    listCoalitionConnections(coalitionId?: string): CoalitionConnectionRecord[] {
+        const all = [...this.coalitionConnections.values()];
+        return coalitionId ? all.filter((row) => row.coalitionId === coalitionId) : all;
+    }
+
+    getCoalitionConnection(
+        coalitionId: string,
+        platform: string
+    ): CoalitionConnectionRecord | undefined {
+        return this.coalitionConnections.get(`${coalitionId}::${platform}`);
+    }
+
+    upsertCoalitionConnection(
+        input: Omit<CoalitionConnectionRecord, 'createdAt' | 'updatedAt'>
+    ): CoalitionConnectionRecord {
+        const key = `${input.coalitionId}::${input.platform}`;
+        const existing = this.coalitionConnections.get(key);
+        const now = nowIso();
+        const record: CoalitionConnectionRecord = {
+            ...input,
+            createdAt: existing?.createdAt ?? now,
+            updatedAt: now,
+        };
+        this.coalitionConnections.set(key, record);
+        return record;
+    }
+
+    listCoalitionMemberConnections(
+        filter: { coalitionId?: string; userId?: string } = {}
+    ): CoalitionMemberConnectionRecord[] {
+        return [...this.coalitionMemberConnections.values()].filter((row) => {
+            if (filter.coalitionId && row.coalitionId !== filter.coalitionId) return false;
+            if (filter.userId && row.userId !== filter.userId) return false;
+            return true;
+        });
+    }
+
+    upsertCoalitionMemberConnection(
+        input: Omit<CoalitionMemberConnectionRecord, 'createdAt' | 'updatedAt'>
+    ): CoalitionMemberConnectionRecord {
+        const key = `${input.coalitionId}::${input.userId}::${input.platform}`;
+        const existing = this.coalitionMemberConnections.get(key);
+        const now = nowIso();
+        const record: CoalitionMemberConnectionRecord = {
+            ...input,
+            createdAt: existing?.createdAt ?? now,
+            updatedAt: now,
+        };
+        this.coalitionMemberConnections.set(key, record);
+        return record;
+    }
+
+    listCoalitionCampaigns(
+        filter: { coalitionId?: string; status?: string; type?: string } = {}
+    ): CoalitionCampaignRecord[] {
+        return [...this.coalitionCampaigns.values()].filter((row) => {
+            if (filter.coalitionId && row.coalitionId !== filter.coalitionId) return false;
+            if (filter.status && row.status !== filter.status) return false;
+            if (filter.type && row.type !== filter.type) return false;
+            return true;
+        });
+    }
+
+    getCoalitionCampaign(id: string): CoalitionCampaignRecord | undefined {
+        return this.coalitionCampaigns.get(id);
+    }
+
+    upsertCoalitionCampaign(
+        input: Omit<CoalitionCampaignRecord, 'createdAt' | 'updatedAt'>
+    ): CoalitionCampaignRecord {
+        const existing = this.coalitionCampaigns.get(input.id);
+        const now = nowIso();
+        const record: CoalitionCampaignRecord = {
+            ...input,
+            createdAt: existing?.createdAt ?? now,
+            updatedAt: now,
+        };
+        this.coalitionCampaigns.set(record.id, record);
+        return record;
+    }
+
+    listCoalitionCampaignPosts(
+        filter: { campaignId?: string; coalitionId?: string } = {}
+    ): CoalitionCampaignPostRecord[] {
+        return [...this.coalitionCampaignPosts.values()].filter((row) => {
+            if (filter.campaignId && row.campaignId !== filter.campaignId) return false;
+            if (filter.coalitionId && row.coalitionId !== filter.coalitionId) return false;
+            return true;
+        });
+    }
+
+    getCoalitionCampaignPost(id: string): CoalitionCampaignPostRecord | undefined {
+        return this.coalitionCampaignPosts.get(id);
+    }
+
+    upsertCoalitionCampaignPost(
+        input: Omit<CoalitionCampaignPostRecord, 'createdAt' | 'updatedAt'>
+    ): CoalitionCampaignPostRecord {
+        const existing = this.coalitionCampaignPosts.get(input.id);
+        const now = nowIso();
+        const record: CoalitionCampaignPostRecord = {
+            ...input,
+            createdAt: existing?.createdAt ?? now,
+            updatedAt: now,
+        };
+        this.coalitionCampaignPosts.set(record.id, record);
+        return record;
+    }
+
+    listCoalitionExternalActivity(
+        filter: { campaignId?: string; coalitionId?: string; moderationStatus?: string } = {}
+    ): CoalitionExternalActivityRecord[] {
+        return [...this.coalitionExternalActivity.values()].filter((row) => {
+            if (filter.campaignId && row.campaignId !== filter.campaignId) return false;
+            if (filter.coalitionId && row.coalitionId !== filter.coalitionId) return false;
+            if (filter.moderationStatus && row.moderationStatus !== filter.moderationStatus) {
+                return false;
+            }
+            return true;
+        });
+    }
+
+    getCoalitionExternalActivity(id: string): CoalitionExternalActivityRecord | undefined {
+        return this.coalitionExternalActivity.get(id);
+    }
+
+    upsertCoalitionExternalActivity(
+        input: Omit<CoalitionExternalActivityRecord, 'createdAt' | 'updatedAt'>
+    ): CoalitionExternalActivityRecord {
+        const existing = this.coalitionExternalActivity.get(input.id);
+        const now = nowIso();
+        const record: CoalitionExternalActivityRecord = {
+            ...input,
+            createdAt: existing?.createdAt ?? now,
+            updatedAt: now,
+        };
+        this.coalitionExternalActivity.set(record.id, record);
+        return record;
+    }
+
+    listCoalitionCampaignSyncOptIns(
+        filter: { campaignId?: string; userId?: string; coalitionId?: string } = {}
+    ): CoalitionCampaignSyncOptInRecord[] {
+        return [...this.coalitionCampaignSyncOptIns.values()].filter((row) => {
+            if (filter.campaignId && row.campaignId !== filter.campaignId) return false;
+            if (filter.userId && row.userId !== filter.userId) return false;
+            if (filter.coalitionId && row.coalitionId !== filter.coalitionId) return false;
+            return true;
+        });
+    }
+
+    upsertCoalitionCampaignSyncOptIn(
+        input: Omit<CoalitionCampaignSyncOptInRecord, 'createdAt' | 'updatedAt'>
+    ): CoalitionCampaignSyncOptInRecord {
+        const key = `${input.campaignId}::${input.userId}::${input.platform}`;
+        const existing = this.coalitionCampaignSyncOptIns.get(key);
+        const now = nowIso();
+        const record: CoalitionCampaignSyncOptInRecord = {
+            ...input,
+            createdAt: existing?.createdAt ?? now,
+            updatedAt: now,
+        };
+        this.coalitionCampaignSyncOptIns.set(key, record);
+        return record;
+    }
+
+    listCoalitionSuccessionPetitions(
+        filter: { coalitionId?: string; status?: string } = {}
+    ): CoalitionSuccessionPetitionRecord[] {
+        return [...this.coalitionSuccessionPetitions.values()].filter((row) => {
+            if (filter.coalitionId && row.coalitionId !== filter.coalitionId) return false;
+            if (filter.status && row.status !== filter.status) return false;
+            return true;
+        });
+    }
+
+    getOpenCoalitionSuccessionPetition(
+        coalitionId: string
+    ): CoalitionSuccessionPetitionRecord | undefined {
+        return [...this.coalitionSuccessionPetitions.values()].find(
+            (row) => row.coalitionId === coalitionId && row.status === 'open'
+        );
+    }
+
+    upsertCoalitionSuccessionPetition(
+        input: Omit<CoalitionSuccessionPetitionRecord, 'createdAt' | 'updatedAt'>
+    ): CoalitionSuccessionPetitionRecord {
+        const existing = this.coalitionSuccessionPetitions.get(input.id);
+        const now = nowIso();
+        const record: CoalitionSuccessionPetitionRecord = {
+            ...input,
+            createdAt: existing?.createdAt ?? now,
+            updatedAt: now,
+        };
+        this.coalitionSuccessionPetitions.set(record.id, record);
+        return record;
+    }
+
+    listCoalitionCampaignPayees(
+        filter: { campaignId?: string; coalitionId?: string; userId?: string } = {}
+    ): CoalitionCampaignPayeeRecord[] {
+        return [...this.coalitionCampaignPayees.values()].filter((row) => {
+            if (filter.campaignId && row.campaignId !== filter.campaignId) return false;
+            if (filter.coalitionId && row.coalitionId !== filter.coalitionId) return false;
+            if (filter.userId && row.userId !== filter.userId) return false;
+            return true;
+        });
+    }
+
+    upsertCoalitionCampaignPayee(
+        input: Omit<CoalitionCampaignPayeeRecord, 'createdAt' | 'updatedAt'>
+    ): CoalitionCampaignPayeeRecord {
+        const key = `${input.campaignId}::${input.userId}`;
+        const existing = this.coalitionCampaignPayees.get(key);
+        const now = nowIso();
+        const record: CoalitionCampaignPayeeRecord = {
+            ...input,
+            createdAt: existing?.createdAt ?? now,
+            updatedAt: now,
+        };
+        this.coalitionCampaignPayees.set(key, record);
+        return record;
+    }
+
+    /**
+     * The attribution counters for one share.
+     *
+     * Keyed by what identifies a share rather than by a minted id, so two
+     * concurrent visits from the same post increment one row instead of
+     * racing to create two.
+     */
+    listCampaignAttribution(
+        filter: { campaignId?: string; coalitionId?: string } = {}
+    ): CampaignAttributionRecord[] {
+        return [...this.coalitionCampaignAttribution.values()].filter((row) => {
+            if (filter.campaignId && row.campaignId !== filter.campaignId) return false;
+            if (filter.coalitionId && row.coalitionId !== filter.coalitionId) return false;
+            return true;
+        });
+    }
+
+    upsertCampaignAttribution(
+        input: Omit<CampaignAttributionRecord, 'createdAt' | 'updatedAt' | 'id'>
+    ): CampaignAttributionRecord {
+        const key = `${input.campaignId}::${input.channel}::${input.sharerUserId ?? ''}`;
+        const existing = this.coalitionCampaignAttribution.get(key);
+        const now = nowIso();
+        const record: CampaignAttributionRecord = {
+            ...input,
+            id: key,
+            createdAt: existing?.createdAt ?? now,
+            updatedAt: now,
+        };
+        this.coalitionCampaignAttribution.set(key, record);
+        return record;
+    }
+
+    /**
+     * Engagement counts for one outbound post, or every post of a campaign.
+     *
+     * Keyed by `campaignPostId` rather than a minted id: there is exactly one
+     * current reading per post, and a fresh read replaces it. A synthetic key
+     * would let two rows exist for the same post and leave nothing to say which
+     * is the count.
+     */
+    getCampaignEngagement(campaignPostId: string): CampaignEngagementRecord | undefined {
+        return this.coalitionCampaignEngagement.get(campaignPostId);
+    }
+
+    listCampaignEngagement(
+        filter: { campaignId?: string; coalitionId?: string } = {}
+    ): CampaignEngagementRecord[] {
+        return [...this.coalitionCampaignEngagement.values()].filter((row) => {
+            if (filter.campaignId && row.campaignId !== filter.campaignId) return false;
+            if (filter.coalitionId && row.coalitionId !== filter.coalitionId) return false;
+            return true;
+        });
+    }
+
+    upsertCampaignEngagement(
+        input: Omit<CampaignEngagementRecord, 'createdAt' | 'updatedAt'>
+    ): CampaignEngagementRecord {
+        const existing = this.coalitionCampaignEngagement.get(input.campaignPostId);
+        const now = nowIso();
+        const record: CampaignEngagementRecord = {
+            ...input,
+            id: input.campaignPostId,
+            createdAt: existing?.createdAt ?? now,
+            updatedAt: now,
+        };
+        this.coalitionCampaignEngagement.set(record.campaignPostId, record);
+        return record;
+    }
+
+    listCoalitionCampaignContributions(
+        filter: { campaignId?: string; coalitionId?: string; supporterUserId?: string } = {}
+    ): CoalitionCampaignContributionRecord[] {
+        return [...this.coalitionCampaignContributions.values()].filter((row) => {
+            if (filter.campaignId && row.campaignId !== filter.campaignId) return false;
+            if (filter.coalitionId && row.coalitionId !== filter.coalitionId) return false;
+            if (filter.supporterUserId && row.supporterUserId !== filter.supporterUserId)
+                return false;
+            return true;
+        });
+    }
+
+    findCoalitionCampaignContributionByTip(
+        tipId: string
+    ): CoalitionCampaignContributionRecord | undefined {
+        for (const row of this.coalitionCampaignContributions.values()) {
+            if (row.tipId === tipId) return row;
+        }
+        return undefined;
+    }
+
+    upsertCoalitionCampaignContribution(
+        input: Omit<CoalitionCampaignContributionRecord, 'createdAt' | 'updatedAt'>
+    ): CoalitionCampaignContributionRecord {
+        const existing = this.coalitionCampaignContributions.get(input.id);
+        const now = nowIso();
+        const record: CoalitionCampaignContributionRecord = {
+            ...input,
+            createdAt: existing?.createdAt ?? now,
+            updatedAt: now,
+        };
+        this.coalitionCampaignContributions.set(record.id, record);
+        return record;
+    }
+
+    listCoalitionBoosts(
+        filter: { campaignId?: string; coalitionId?: string; userId?: string; day?: string } = {}
+    ): CoalitionBoostRecord[] {
+        return [...this.coalitionBoosts.values()].filter((row) => {
+            if (filter.campaignId && row.campaignId !== filter.campaignId) return false;
+            if (filter.coalitionId && row.coalitionId !== filter.coalitionId) return false;
+            if (filter.userId && row.userId !== filter.userId) return false;
+            if (filter.day && row.day !== filter.day) return false;
+            return true;
+        });
+    }
+
+    upsertCoalitionBoost(
+        input: Omit<CoalitionBoostRecord, 'createdAt' | 'updatedAt'>
+    ): CoalitionBoostRecord {
+        const key = `${input.campaignId}::${input.userId}::${input.day}`;
+        const existing = this.coalitionBoosts.get(key);
+        const now = nowIso();
+        const record: CoalitionBoostRecord = {
+            ...input,
+            createdAt: existing?.createdAt ?? now,
+            updatedAt: now,
+        };
+        this.coalitionBoosts.set(key, record);
+        return record;
+    }
+
     // --- coalition rings ---
 
     private static ringMembershipKey(ringId: string, userId: string): string {
@@ -5152,6 +5659,93 @@ export class FileBackedDb extends InMemoryDb {
                 parsed.ringInvitations.map((row) => [`${row.ringId}::${row.inviteeId}`, row])
             );
         }
+        if (parsed.coalitions) {
+            this.coalitions = new Map(parsed.coalitions.map((row) => [row.id, row]));
+        }
+        if (parsed.coalitionMemberships) {
+            this.coalitionMemberships = new Map(
+                parsed.coalitionMemberships.map((row) => [`${row.coalitionId}::${row.userId}`, row])
+            );
+        }
+        if (parsed.coalitionJoinRequests) {
+            this.coalitionJoinRequests = new Map(
+                parsed.coalitionJoinRequests.map((row) => [
+                    `${row.coalitionId}::${row.userId}`,
+                    row,
+                ])
+            );
+        }
+        if (parsed.coalitionConnections) {
+            this.coalitionConnections = new Map(
+                parsed.coalitionConnections.map((row) => [
+                    `${row.coalitionId}::${row.platform}`,
+                    row,
+                ])
+            );
+        }
+        if (parsed.coalitionMemberConnections) {
+            this.coalitionMemberConnections = new Map(
+                parsed.coalitionMemberConnections.map((row) => [
+                    `${row.coalitionId}::${row.userId}::${row.platform}`,
+                    row,
+                ])
+            );
+        }
+        if (parsed.coalitionCampaigns) {
+            this.coalitionCampaigns = new Map(
+                parsed.coalitionCampaigns.map((row) => [row.id, row])
+            );
+        }
+        if (parsed.coalitionCampaignPosts) {
+            this.coalitionCampaignPosts = new Map(
+                parsed.coalitionCampaignPosts.map((row) => [row.id, row])
+            );
+        }
+        if (parsed.coalitionExternalActivity) {
+            this.coalitionExternalActivity = new Map(
+                parsed.coalitionExternalActivity.map((row) => [row.id, row])
+            );
+        }
+        if (parsed.coalitionCampaignSyncOptIns) {
+            this.coalitionCampaignSyncOptIns = new Map(
+                parsed.coalitionCampaignSyncOptIns.map((row) => [
+                    `${row.campaignId}::${row.userId}::${row.platform}`,
+                    row,
+                ])
+            );
+        }
+        if (parsed.coalitionCampaignContributions) {
+            this.coalitionCampaignContributions = new Map(
+                parsed.coalitionCampaignContributions.map((row) => [row.id, row])
+            );
+            this.coalitionCampaignPayees = new Map(
+                (parsed.coalitionCampaignPayees ?? []).map((row) => [
+                    `${row.campaignId}::${row.userId}`,
+                    row,
+                ])
+            );
+            this.coalitionSuccessionPetitions = new Map(
+                (parsed.coalitionSuccessionPetitions ?? []).map((row) => [row.id, row])
+            );
+        }
+        if (parsed.coalitionCampaignEngagement) {
+            this.coalitionCampaignEngagement = new Map(
+                parsed.coalitionCampaignEngagement.map((row) => [row.campaignPostId, row])
+            );
+        }
+        if (parsed.coalitionCampaignAttribution) {
+            this.coalitionCampaignAttribution = new Map(
+                parsed.coalitionCampaignAttribution.map((row) => [row.id, row])
+            );
+        }
+        if (parsed.coalitionBoosts) {
+            this.coalitionBoosts = new Map(
+                parsed.coalitionBoosts.map((row) => [
+                    `${row.campaignId}::${row.userId}::${row.day}`,
+                    row,
+                ])
+            );
+        }
         if (parsed.coalitionKitApplications) {
             this.coalitionKitApplications = new Map(
                 parsed.coalitionKitApplications.map((row) => [row.id, row])
@@ -5463,6 +6057,21 @@ export class FileBackedDb extends InMemoryDb {
             coalitionRings: [...this.coalitionRings.values()],
             ringMemberships: [...this.ringMemberships.values()],
             ringInvitations: [...this.ringInvitations.values()],
+            coalitions: [...this.coalitions.values()],
+            coalitionMemberships: [...this.coalitionMemberships.values()],
+            coalitionJoinRequests: [...this.coalitionJoinRequests.values()],
+            coalitionConnections: [...this.coalitionConnections.values()],
+            coalitionMemberConnections: [...this.coalitionMemberConnections.values()],
+            coalitionCampaigns: [...this.coalitionCampaigns.values()],
+            coalitionCampaignPosts: [...this.coalitionCampaignPosts.values()],
+            coalitionExternalActivity: [...this.coalitionExternalActivity.values()],
+            coalitionCampaignSyncOptIns: [...this.coalitionCampaignSyncOptIns.values()],
+            coalitionBoosts: [...this.coalitionBoosts.values()],
+            coalitionCampaignContributions: [...this.coalitionCampaignContributions.values()],
+            coalitionCampaignEngagement: [...this.coalitionCampaignEngagement.values()],
+            coalitionCampaignAttribution: [...this.coalitionCampaignAttribution.values()],
+            coalitionCampaignPayees: [...this.coalitionCampaignPayees.values()],
+            coalitionSuccessionPetitions: [...this.coalitionSuccessionPetitions.values()],
             coalitionKitApplications: [...this.coalitionKitApplications.values()],
             coalitionTasks: [...this.coalitionTasks.values()],
             coalitionNeeds: [...this.coalitionNeeds.values()],
@@ -5523,7 +6132,26 @@ export class FileBackedDb extends InMemoryDb {
         // clobber an existing file before hydrate() loads it.
         if (!this.ready) return;
         mkdirSync(dirname(DB_FILE_PATH), { recursive: true });
-        writeFileSync(DB_FILE_PATH, `${JSON.stringify(this.snapshot(), null, 2)}\n`, 'utf8');
+        // Write to a sibling temp file and rename over the target, rather than
+        // writing the store in place. A direct write truncates the file first,
+        // so anything that interrupts it — a full disk, a killed process —
+        // leaves a half-written JSON document that `hydrate()` cannot parse,
+        // and the store is unrecoverable on next boot. rename(2) within a
+        // directory is atomic, so a reader sees either the previous snapshot
+        // or the new one and never a partial one.
+        const tmpPath = `${DB_FILE_PATH}.tmp`;
+        try {
+            writeFileSync(tmpPath, `${JSON.stringify(this.snapshot(), null, 2)}\n`, 'utf8');
+            renameSync(tmpPath, DB_FILE_PATH);
+        } catch (error) {
+            // Leave the previous snapshot intact and drop the partial temp file.
+            try {
+                rmSync(tmpPath, { force: true });
+            } catch {
+                // Best effort; the temp file is ignored by hydrate() either way.
+            }
+            throw error;
+        }
     }
 
     override createUser(input: Omit<UserRecord, 'createdAt'>): UserRecord {

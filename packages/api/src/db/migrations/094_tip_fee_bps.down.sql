@@ -1,0 +1,1 @@
+ALTER TABLE tips DROP COLUMN IF EXISTS fee_bps;

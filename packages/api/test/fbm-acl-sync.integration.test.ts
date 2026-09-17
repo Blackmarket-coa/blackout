@@ -20,8 +20,12 @@ const { FbmEntitlementsHttpClient, FbmEntitlementsServiceError } = await import(
 const { FbmEntitlementsStubClient } = await import(
     '../src/integrations/fbm/entitlementsStubClient'
 );
-const { CachingEntitlementsClient, getEntitlementsClient, getEntitlementsStubForTest, resetEntitlementsClientForTest } =
-    await import('../src/integrations/fbm/entitlementsClientFactory');
+const {
+    CachingEntitlementsClient,
+    getEntitlementsClient,
+    getEntitlementsStubForTest,
+    resetEntitlementsClientForTest,
+} = await import('../src/integrations/fbm/entitlementsClientFactory');
 const { syncMxidAcls, reconcileAllAcls } = await import('../src/services/fbmAclSync');
 const { tryHandleEntitlementsChanged } = await import('../src/services/fbmAclSync/webhookTrigger');
 const { resetMarketplaceEntitlementsForTest } = await import(
@@ -150,7 +154,10 @@ test('syncMxidAcls: applies highest power level per room, idempotent, drift-corr
 
     const first = await syncMxidAcls('@a:srv', { entitlements, matrix });
     assert.equal(first.applied, 1);
-    assert.equal((matrix.rooms.get('!room:srv') as { users: Record<string, number> }).users['@a:srv'], 75);
+    assert.equal(
+        (matrix.rooms.get('!room:srv') as { users: Record<string, number> }).users['@a:srv'],
+        75
+    );
     assert.equal(db.getFbmAclState('@a:srv', '!room:srv')!.powerLevel, 75);
 
     // Replay → skipped (no new write).
@@ -171,7 +178,35 @@ test('syncMxidAcls: applies highest power level per room, idempotent, drift-corr
     });
     const third = await reconcileAllAcls({ entitlements, matrix });
     assert.equal(third.mxids, 1);
-    assert.equal((matrix.rooms.get('!room:srv') as { users: Record<string, number> }).users['@a:srv'], 75);
+    assert.equal(
+        (matrix.rooms.get('!room:srv') as { users: Record<string, number> }).users['@a:srv'],
+        75
+    );
+});
+
+test('syncMxidAcls: an unreadable power-levels event is never overwritten', async () => {
+    // A 404 is "no event yet" and is safe to write from scratch. A 429 is "we
+    // could not read it", and writing then REPLACES the event — stripping
+    // events_default, invite and every other member's level from the room.
+    db.resetFbmAclStateForTest();
+    const entitlements = new FbmEntitlementsStubClient();
+    entitlements.seed('@a:srv', { governanceRoles: [roleWith('!room:srv', 50)] });
+
+    const matrix = fakeMatrix();
+    matrix.rooms.set('!room:srv', {
+        users: { '@other:srv': 100 },
+        events_default: 0,
+        invite: 50,
+    });
+    // Make the read fail transiently, the way a rate-limited homeserver does.
+    matrix.getStateEvent = async () => ({ ok: false as const, status: 429 });
+
+    const res = await syncMxidAcls('@a:srv', { entitlements, matrix });
+    assert.equal(res.applied, 0, 'nothing is written from an unreadable read');
+    assert.equal(matrix.writes.length, 0);
+    const room = matrix.rooms.get('!room:srv') as Record<string, unknown>;
+    assert.deepEqual(room.users, { '@other:srv': 100 }, 'other members survive');
+    assert.equal(room.invite, 50, 'the rest of the event survives');
 });
 
 test('syncMxidAcls: no entitlements client configured → unavailable no-op', async () => {

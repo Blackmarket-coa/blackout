@@ -7,7 +7,7 @@ import {
     type ProfileMilestoneStats,
     type RelayLink,
 } from '@blackout/core';
-import { resolveBlackoutUserId } from './userIdentity';
+import { matrixUserIdFor, resolveBlackoutUserId } from './userIdentity';
 
 import { db } from '../db/store';
 
@@ -84,6 +84,16 @@ export interface BmcProfileEvent {
     pinnedMedia?: ProfilePinnedMedia[];
     /** Opt-in publish flag for the zero-auth public profile page. */
     public?: boolean;
+    /**
+     * Opt-OUT of being listed on public coalition rosters.
+     *
+     * Note the polarity is the INVERSE of `public` directly above: absent or
+     * false means LISTED, because a coalition is a public growth surface and
+     * a member who does nothing should appear on it. Only an explicit `true`
+     * hides someone. Reading the wrong one of these two adjacent fields either
+     * hides everybody or publicizes everybody, so they are spelled out.
+     */
+    hideFromPublicRosters?: boolean;
     /** Curated FreeBlackMarket vendor handles shown as sponsors/backers. */
     sponsors?: string[];
     /** Curated canopy ids surfaced as affiliations on the public profile. */
@@ -314,6 +324,9 @@ export function sanitizeProfileEvent(input: unknown): BmcProfileEvent {
         status: sanitizeStatus(data.status),
         pinnedMedia: sanitizePinnedMedia(data.pinnedMedia),
         public: data.public === true ? true : undefined,
+        // Anything that is not literally `true` means listed, so a garbage
+        // value fails open to visible rather than silently hiding a member.
+        hideFromPublicRosters: data.hideFromPublicRosters === true ? true : undefined,
         sponsors: Array.isArray(data.sponsors)
             ? data.sponsors
                   .filter(isString)
@@ -380,6 +393,26 @@ export function getProfileOrDefault(userId: string): MemberProfile {
             profile: {},
         }
     );
+}
+
+/**
+ * Whether this member appears on public coalition rosters.
+ *
+ * Defaults to TRUE for everyone — no profile, no flag, an unreadable flag —
+ * because a coalition's reach is the point and a member who never opened
+ * settings should not vanish from it.
+ *
+ * Bridges the two id spaces on purpose. Profiles are keyed by MXID while
+ * coalition memberships hold Blackout UUIDs, and `db.getMemberProfile` is a
+ * raw map read with no normalization: look up only one of them and every real
+ * member reads back as "no profile", which would publish people who asked not
+ * to be. That failure is silent and looks like it works, so both are tried.
+ */
+export function isPubliclyListed(blackoutUserId: string): boolean {
+    const mxid = matrixUserIdFor(blackoutUserId);
+    const profile =
+        (mxid ? db.getMemberProfile(mxid) : undefined) ?? db.getMemberProfile(blackoutUserId);
+    return profile?.profile.hideFromPublicRosters !== true;
 }
 
 export interface UpsertProfileInput {

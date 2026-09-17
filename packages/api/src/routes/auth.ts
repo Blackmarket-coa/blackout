@@ -18,6 +18,7 @@ import {
 import { authRateLimit } from '../middleware/rate-limit';
 import { readJsonBody } from '../middleware/validate';
 import { getAuthUser, requireUser } from '../middleware/require-user';
+import { recordAttributedAction } from '../services/coalitionAttribution';
 import {
     issueRefreshToken,
     revokeRefreshToken,
@@ -143,6 +144,14 @@ const registerSchema = z.object({
     /** Plaintext invite token from a /v1/invitations link. Optional unless
      *  REQUIRE_INVITE_TOKEN=1, in which case registration is closed without one. */
     inviteToken: z.string().min(1).max(512).optional(),
+    /**
+     * The coalition share that brought this person, when they arrived from one.
+     *
+     * Credited as a count against that share and nothing more: no row links
+     * this account to the visit, and no coalition is ever handed a list of who
+     * signed up from whose post.
+     */
+    ref: z.string().max(512).optional(),
 });
 
 const loginSchema = z.object({
@@ -198,6 +207,10 @@ auth.post('/register', async (c) => {
         reputationTier: 'member',
         pubkeyEd25519,
     });
+
+    // The share earned an account. Silent on any failure — a counter must
+    // never be able to fail a registration.
+    recordAttributedAction(parsed.ref, 'signup');
 
     let matrix: Awaited<ReturnType<typeof matrixClient.registerUser>>;
     try {

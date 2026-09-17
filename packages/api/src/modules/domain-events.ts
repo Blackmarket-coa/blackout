@@ -11,7 +11,8 @@ export interface DomainEvent<TPayload = unknown> {
         | 'profile'
         | 'settings'
         | 'stego'
-        | 'feed';
+        | 'feed'
+        | 'coalitions';
     type: string;
     payload: TPayload;
     emittedAt: string;

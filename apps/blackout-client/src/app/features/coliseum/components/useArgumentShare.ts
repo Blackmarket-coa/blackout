@@ -1,35 +1,35 @@
-import { useCallback, useState } from 'react';
+import { useCallback } from 'react';
+import { useShareTarget, type ShareStatus } from '../../../utils/useShareTarget';
+
+const LABEL: Record<ShareStatus, string | null> = {
+    idle: null,
+    shared: 'Shared',
+    copied: 'Link copied',
+    failed: 'Share unsupported',
+};
 
 /**
- * Share a Coliseum debate/argument: Web Share API when available, clipboard
- * fallback, with a transient status string for a toast. (Same contract as the
- * coalition reel's useVideoShare.)
+ * Share a Coliseum debate/argument. Builds the topic URL and hands it to
+ * `useShareTarget`, the one share implementation; this file used to be a
+ * second hand-rolled copy of it.
  */
 export function useArgumentShare(): {
     shareStatus: string | null;
     onShare: (topicId: string, title: string) => Promise<void>;
 } {
-    const [shareStatus, setShareStatus] = useState<string | null>(null);
-    const onShare = useCallback(async (topicId: string, title: string) => {
-        const url = `${window.location.origin}/coliseum?tab=debate&topic=${encodeURIComponent(
-            topicId
-        )}`;
-        try {
-            if (navigator.share) {
-                await navigator.share({ title, url });
-                setShareStatus('Shared');
-            } else if (navigator.clipboard) {
-                await navigator.clipboard.writeText(url);
-                setShareStatus('Link copied');
-            } else {
-                setShareStatus('Share unsupported');
-            }
-        } catch {
-            setShareStatus('Share cancelled');
-        }
-        window.setTimeout(() => setShareStatus(null), 1500);
-    }, []);
-    return { shareStatus, onShare };
+    const { status, share } = useShareTarget();
+    const onShare = useCallback(
+        async (topicId: string, title: string) => {
+            await share({
+                url: `${window.location.origin}/coliseum?tab=debate&topic=${encodeURIComponent(
+                    topicId
+                )}`,
+                title,
+            });
+        },
+        [share]
+    );
+    return { shareStatus: LABEL[status], onShare };
 }
 
 export default useArgumentShare;

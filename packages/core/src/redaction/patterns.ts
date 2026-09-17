@@ -10,8 +10,17 @@
 
 export const REDACTED = '[REDACTED]';
 
+/**
+ * Key names whose VALUE must never reach a log.
+ *
+ * `credential` and `credentialRef` are here because the coalition sync
+ * feature names its stored platform secret `credentialRef` throughout, and the
+ * pattern matched none of it — so the most natural debug line an adapter
+ * author writes, `log.warn('crosspost_failed', { platform, credentialRef })`,
+ * passed straight through unredacted. `secret` alone did not cover it.
+ */
 export const SECRET_KEY_RE =
-    /\b(authorization|cookie|set-cookie|password|passphrase|recovery|jwt|token|access[_-]?token|refresh[_-]?token|api[_-]?key|secret|otp|totp|client[_-]?secret)\b/i;
+    /\b(authorization|cookie|set-cookie|password|passphrase|recovery|jwt|token|access[_-]?token|refresh[_-]?token|api[_-]?key|secret|otp|totp|client[_-]?secret|credential|credential[_-]?ref|shared[_-]?secret|signing[_-]?key)\b/i;
 
 export const PII_KEY_RE =
     /\b(email|phone|ip|ip[_-]?address|x[_-]?forwarded[_-]?for|user[_-]?agent)\b/i;

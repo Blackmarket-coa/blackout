@@ -85,6 +85,19 @@ export interface CheckoutInput {
     userId: string;
     listingId: string;
     sku?: string;
+    /**
+     * Charge this instead of the listing's own price, in minor units.
+     *
+     * For a coalition drive the contributor chooses what to give, so the
+     * listing is a destination rather than a price. Without this the card was
+     * charged `listing.price_cents` while Blackout recorded, displayed and
+     * metered the amount the contributor actually picked — two different
+     * numbers, with the contributor shown the one that never reached the rail.
+     *
+     * Omit it and the listing's price stands, which is what every fixed-price
+     * flow (subscriptions, gifts, tickets) wants.
+     */
+    amountCents?: number;
     idempotencyKey: string;
     returnUrl?: string;
     /**
@@ -154,6 +167,17 @@ export interface CreatorListingDraftInput {
     currency: string;
     tags?: string[];
     mediaUrls?: string[];
+    /**
+     * Provider-side stamps on the listing. Values are strings because the
+     * provider stores them on an opaque metadata column and consumers read
+     * them back as text.
+     *
+     * A coalition drive needs these: FBM's embed drive checkout refuses a
+     * listing that does not carry the coalition and drive it belongs to, so a
+     * listing created without them is purchasable through one surface and
+     * rejected by the other.
+     */
+    metadata?: Record<string, string>;
     artifactPayload?: unknown;
     artifactUploadId?: string;
 }
@@ -203,6 +227,16 @@ export interface MarketplaceProvider extends MarketplaceProviderInfo {
      * providers serve bundles from a CDN behind the asset-url flow.
      */
     issueSignedBundle?(entitlement: NormalizedEntitlement): Promise<SignedPluginBundleEnvelope>;
+
+    /**
+     * The platform fee this provider will actually charge on a listing, in
+     * basis points — which can be lower than the table rate when the seller
+     * pays for a plan that discounts it.
+     *
+     * `null` means "no opinion, use the table rate". Optional so providers
+     * without a per-listing notion of fee need no change.
+     */
+    getListingFeeBps?(listingId: string): Promise<number | null>;
 }
 
 /**
@@ -279,6 +313,15 @@ export interface NormalizedLifecycleEvent {
     sku: string | null;
     kind: EntitlementKind;
     occurredAt: string;
+    /**
+     * What the provider actually charged, in minor units, when it reports it.
+     *
+     * The settling side needs this to confirm that the money that moved is the
+     * money it predicted: a tip's split is frozen when the tip is written, and
+     * before this there was nothing in the return leg to check it against.
+     * Absent for providers that do not report an amount.
+     */
+    amountCents?: number;
     /** `features.*` keys this event grants/revokes; for `subscription_tier`
      *  events this is the full tier bundle to fan out into per-key grants. */
     featureKeys?: string[];

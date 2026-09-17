@@ -1,0 +1,13 @@
+-- A revoked personal link must be able to hold no credential.
+--
+-- `credential_ref` was NOT NULL, which meant revocation could only ever
+-- deactivate the row and leave the member's platform token sitting in it.
+-- Nothing in the codebase set `revoked_at` at all, so a member who left a
+-- coalition kept a live row holding their own secret and there was no route
+-- that could clear it — the coalition retained custody of a credential from
+-- someone no longer in it.
+--
+-- Dropping the constraint is what lets `revokeMemberLinks` delete the secret
+-- rather than orphan it. The sibling `coalition_connections.credential_ref` was
+-- already nullable, so this brings the two tables into line.
+ALTER TABLE coalition_member_connections ALTER COLUMN credential_ref DROP NOT NULL;

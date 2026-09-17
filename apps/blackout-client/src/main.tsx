@@ -51,6 +51,7 @@ import { InviteLandingPage, PendingInviteRedeemer } from './app/components/invit
 import { OnboardingPage } from './app/features/welcome/OnboardingPage';
 import { OnboardingAnalyticsPage } from './app/features/onboarding/OnboardingAnalyticsPage';
 import { PublicDirectory } from './app/features/discovery/PublicDirectory';
+import { CampaignLandingPage } from './app/features/coalitions/CampaignLandingPage';
 import { ExplorePage } from './app/features/discovery/ExplorePage';
 import {
     CreatorStorefront as PublicProfileRoute,
@@ -381,6 +382,18 @@ const BootstrapStatus = () => {
         authState !== 'crypto_failed'
     ) {
         return <InviteLandingPage />;
+    }
+
+    // A shared campaign link. The router only mounts for logged-in users, so a
+    // stranger who followed a coalition's post used to land on the "Signed
+    // out" card with the campaign never named — the click was earned and then
+    // thrown away. Render the campaign instead.
+    if (
+        typeof window !== 'undefined' &&
+        /^\/coalitions\/[^/]+\/c\/[^/]+/.test(window.location.pathname) &&
+        authState === 'logged_out'
+    ) {
+        return <CampaignLandingPage />;
     }
 
     // Public room directory is browsable without an account. The full router

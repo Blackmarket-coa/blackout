@@ -11,7 +11,7 @@ export { default as MiniProfile } from './MiniProfile';
 export { default as ProfilePage } from './ProfilePage';
 export { default as ProfileWall, canPostOnWall, canViewWall } from './ProfileWall';
 export type { WallPost } from './ProfileWall';
-export { default as TopFriendsGrid } from './TopFriendsGrid';
+export { default as ProfileCoalitions } from './ProfileCoalitions';
 export { default as PinnedMediaShelf } from './PinnedMediaShelf';
 export { default as ProfileStatusBar } from './ProfileStatusBar';
 export { default as ProfileThemeEditor } from './ProfileThemeEditor';

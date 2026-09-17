@@ -83,7 +83,8 @@ export const BLACKOUT_GLOSSARY: Readonly<Record<BlackoutGlossaryKey, string>> = 
         'Archiving — sending content to a recoverable but hidden state instead of deleting it.',
     garden: 'The cross-canopy view of work in progress; the opposite of a ledger.',
     mycelium: 'The federation layer linking co-ops across servers.',
-    coalition: 'A team or org structure spanning members across canopies.',
+    coalition:
+        'A group of members with roles (Founder, Steward, Griot, Member) that runs drives, projects and mutual aid together across canopies. The map-first mutual-aid hub is the Commons.',
     coliseum: 'The competitive-event surface (rankings, brackets, arenas).',
     deaddrop: 'A way to hide ephemeral messages inside images that disappear after delivery.',
     stego: 'Steganography — hiding messages inside other content like images.',

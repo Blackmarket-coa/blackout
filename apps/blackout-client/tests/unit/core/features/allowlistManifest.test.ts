@@ -26,6 +26,7 @@ describe('feature allowlist manifest', () => {
             'auth-threads',
             'education',
             'coalition',
+            'coalitions',
             'coliseum',
             'circle-feed',
             'community-assets',

@@ -21,6 +21,14 @@ interface DescriptorOverride {
 }
 
 const OVERRIDES: Record<string, DescriptorOverride> = {
+    coalitionCampaignAttribution: {
+        keyOf: (r) => `${r.campaignId}::${r.channel}::${r.sharerUserId ?? ''}`,
+        conflictColumns: ['campaign_id', 'channel', 'sharer_user_id'],
+    },
+    coalitionCampaignEngagement: {
+        keyOf: (r) => String(r.campaignPostId),
+        conflictColumns: ['campaign_post_id'],
+    },
     streamModeration: { keyOf: (r) => String(r.streamId), conflictColumns: ['stream_id'] },
     marketplaceWebhookAudit: {
         tableName: 'marketplace_webhook_events',
@@ -137,6 +145,34 @@ const OVERRIDES: Record<string, DescriptorOverride> = {
     ringInvitations: {
         keyOf: (r) => `${r.ringId}::${r.inviteeId}`,
         conflictColumns: ['ring_id', 'invitee_id'],
+    },
+    coalitionMemberships: {
+        keyOf: (r) => `${r.coalitionId}::${r.userId}`,
+        conflictColumns: ['coalition_id', 'user_id'],
+    },
+    coalitionJoinRequests: {
+        keyOf: (r) => `${r.coalitionId}::${r.userId}`,
+        conflictColumns: ['coalition_id', 'user_id'],
+    },
+    coalitionConnections: {
+        keyOf: (r) => `${r.coalitionId}::${r.platform}`,
+        conflictColumns: ['coalition_id', 'platform'],
+    },
+    coalitionMemberConnections: {
+        keyOf: (r) => `${r.coalitionId}::${r.userId}::${r.platform}`,
+        conflictColumns: ['coalition_id', 'user_id', 'platform'],
+    },
+    coalitionCampaignSyncOptIns: {
+        keyOf: (r) => `${r.campaignId}::${r.userId}::${r.platform}`,
+        conflictColumns: ['campaign_id', 'user_id', 'platform'],
+    },
+    coalitionBoosts: {
+        keyOf: (r) => `${r.campaignId}::${r.userId}::${r.day}`,
+        conflictColumns: ['campaign_id', 'user_id', 'day'],
+    },
+    coalitionCampaignPayees: {
+        keyOf: (r) => `${r.campaignId}::${r.userId}`,
+        conflictColumns: ['campaign_id', 'user_id'],
     },
     // coalition_rings flattens the optional nested location into lat/lng/address.
     coalitionRings: {
@@ -488,6 +524,21 @@ const ALL_MAP_NAMES = [
     'subscriptionAuditEvents',
     'processedBillingWebhookEvents',
     'subscriptionGifts',
+    'coalitions',
+    'coalitionMemberships',
+    'coalitionJoinRequests',
+    'coalitionConnections',
+    'coalitionMemberConnections',
+    'coalitionCampaigns',
+    'coalitionCampaignPosts',
+    'coalitionExternalActivity',
+    'coalitionCampaignSyncOptIns',
+    'coalitionBoosts',
+    'coalitionCampaignContributions',
+    'coalitionCampaignEngagement',
+    'coalitionCampaignAttribution',
+    'coalitionCampaignPayees',
+    'coalitionSuccessionPetitions',
 ] as const;
 
 export const TABLE_DESCRIPTORS: TableDescriptor[] = ALL_MAP_NAMES.map((mapName) => {
@@ -680,6 +731,19 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
     upsertCoalitionRing: upsert('coalitionRings'),
     upsertRingMembership: upsert('ringMemberships'),
     upsertRingInvitation: upsert('ringInvitations'),
+    upsertCoalition: upsert('coalitions'),
+    upsertCoalitionMembership: upsert('coalitionMemberships'),
+    upsertCoalitionJoinRequest: upsert('coalitionJoinRequests'),
+    upsertCoalitionConnection: upsert('coalitionConnections'),
+    upsertCoalitionMemberConnection: upsert('coalitionMemberConnections'),
+    upsertCoalitionCampaign: upsert('coalitionCampaigns'),
+    upsertCoalitionCampaignPost: upsert('coalitionCampaignPosts'),
+    upsertCoalitionExternalActivity: upsert('coalitionExternalActivity'),
+    upsertCoalitionCampaignSyncOptIn: upsert('coalitionCampaignSyncOptIns'),
+    upsertCoalitionBoost: upsert('coalitionBoosts'),
+    upsertCoalitionCampaignContribution: upsert('coalitionCampaignContributions'),
+    upsertCoalitionCampaignPayee: upsert('coalitionCampaignPayees'),
+    upsertCoalitionSuccessionPetition: upsert('coalitionSuccessionPetitions'),
     recordCoalitionKitApplication: upsert('coalitionKitApplications'),
     createCoalitionTask: upsert('coalitionTasks'),
     updateCoalitionTaskStatus: upsert('coalitionTasks'),

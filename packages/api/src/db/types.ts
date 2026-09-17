@@ -11,6 +11,21 @@ import type {
     CoalitionProject,
     CoalitionResource,
     CoalitionRing,
+    Coalition,
+    CoalitionMembership,
+    CoalitionJoinRequest,
+    CoalitionConnection,
+    CoalitionMemberConnection,
+    CoalitionCampaign,
+    CampaignAttribution,
+    CampaignEngagement,
+    CampaignPost,
+    ExternalActivity,
+    CampaignSyncOptIn,
+    CoalitionBoost,
+    CampaignPayee,
+    CoalitionSuccessionPetition,
+    CoalitionCampaignContribution,
     CoalitionTask,
     ContentDistribution,
     CreatorContent,
@@ -1377,7 +1392,8 @@ export type TipContextKind =
     | 'ambassador_commission'
     | 'quest_reward'
     | 'bounty_reward'
-    | 'coalition_project';
+    | 'coalition_project'
+    | 'coalition_drive';
 
 export type TipStatus = 'pending' | 'captured' | 'refunded' | 'failed';
 
@@ -1390,6 +1406,8 @@ export interface TipRecord {
     grossCents: number;
     feeCents: number;
     netCents: number;
+    /** The rate the split above was computed at, so a capture can redo it. */
+    feeBps: number;
     currency: string;
     providerId: MarketplaceProviderIdString;
     fbmOrderId: string | null;
@@ -1805,6 +1823,7 @@ export interface CircleEdgeRecord {
  */
 export const RELAY_SUBJECT_SOURCES = [
     'coalition_feed',
+    'coalition_campaign',
     'coliseum_topic',
     'wall_post',
     'status',
@@ -1914,3 +1933,95 @@ export type MemberProfileRecord = import('../services/profileStore').MemberProfi
 
 /** A post on someone's wall. `profileUserId` is the wall; `authorId` wrote it. */
 export type ProfileWallPostRecord = import('../services/profileStore').WallPost;
+
+// --- Coalitions network (replaces the friends list) ---
+
+/** A coalition. Keyed in-memory by id; `slug` is unique per server. */
+export interface CoalitionRecord extends Coalition {
+    createdAt: string;
+    updatedAt: string;
+}
+
+/** A coalition membership. Keyed in-memory by `${coalitionId}::${userId}`. */
+export interface CoalitionMembershipRecord extends CoalitionMembership {
+    createdAt: string;
+    updatedAt: string;
+}
+
+/** A join request / invitation. Keyed in-memory by `${coalitionId}::${userId}`. */
+/** A steward's petition to succeed an absent founder. Keyed by id. */
+export interface CoalitionSuccessionPetitionRecord extends CoalitionSuccessionPetition {
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface CoalitionJoinRequestRecord extends CoalitionJoinRequest {
+    createdAt: string;
+    updatedAt: string;
+}
+
+/** A coalition's per-platform connection. Keyed by `${coalitionId}::${platform}`. */
+export interface CoalitionConnectionRecord extends CoalitionConnection {
+    createdAt: string;
+    updatedAt: string;
+}
+
+/** A member's personal connection. Keyed by `${coalitionId}::${userId}::${platform}`. */
+export interface CoalitionMemberConnectionRecord extends CoalitionMemberConnection {
+    createdAt: string;
+    updatedAt: string;
+}
+
+/** What one share produced, as counts. Keyed by `${campaignId}::${channel}::${sharerUserId ?? ''}`. */
+export interface CampaignAttributionRecord extends CampaignAttribution {
+    createdAt: string;
+    updatedAt: string;
+}
+
+/** Engagement counts for one outbound post. Keyed by `campaignPostId`. */
+export interface CampaignEngagementRecord extends CampaignEngagement {
+    createdAt: string;
+    updatedAt: string;
+}
+
+/** A coalition campaign (drive / project / boost / mutual_aid / goods_drive). */
+export interface CoalitionCampaignRecord extends CoalitionCampaign {
+    createdAt: string;
+    updatedAt: string;
+}
+
+/** An outbound or inbound campaign post on an external platform. */
+export interface CoalitionCampaignPostRecord extends CampaignPost {
+    createdAt: string;
+    updatedAt: string;
+}
+
+/** Quarantined external reply; invisible until approved. */
+export interface CoalitionExternalActivityRecord extends ExternalActivity {
+    createdAt: string;
+    updatedAt: string;
+}
+
+/** Per-member, per-campaign, per-platform opt-in. Keyed by `${campaignId}::${userId}::${platform}`. */
+export interface CoalitionCampaignSyncOptInRecord extends CampaignSyncOptIn {
+    createdAt: string;
+    updatedAt: string;
+}
+
+/** One share of a campaign's money. Keyed by `${campaignId}::${userId}`. */
+export interface CoalitionCampaignPayeeRecord extends CampaignPayee {
+    createdAt: string;
+    updatedAt: string;
+}
+
+/** One captured contribution. Keyed by id; `tipId` is unique. */
+export interface CoalitionCampaignContributionRecord extends CoalitionCampaignContribution {
+    createdAt: string;
+    updatedAt: string;
+}
+
+/** One boost per (campaign, member, UTC day). Keyed by `${campaignId}::${userId}::${day}`. */
+export interface CoalitionBoostRecord extends CoalitionBoost {
+    createdAt: string;
+    updatedAt: string;
+}

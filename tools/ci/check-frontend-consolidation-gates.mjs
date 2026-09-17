@@ -106,6 +106,22 @@ function parseFeaturePluginIds(source) {
     return values;
 }
 
+/**
+ * Is this a markdown table's header separator?
+ *
+ * Decided by content - every cell holds only dashes and alignment colons - not
+ * by a prefix. The old test required the line to begin `|---` with no space, so
+ * it recognised the parity matrix's hand-written `|---|---|` but not the
+ * disposition table's Prettier-formatted `| ---------- | ---------- |`. That
+ * separator was then parsed as a data row whose feature_id was a run of dashes,
+ * and the gate failed against a table that was perfectly valid - it had simply
+ * been formatted.
+ */
+function isSeparatorRow(line) {
+    const cells = line.slice(1, -1).split('|');
+    return cells.length > 0 && cells.every((cell) => /^\s*:?-{2,}:?\s*$/.test(cell));
+}
+
 function parseTableRows(markdown, expectedColumns) {
     const lines = markdown.split(/\r?\n/);
     const rows = [];
@@ -126,7 +142,7 @@ function parseTableRows(markdown, expectedColumns) {
             }
             continue;
         }
-        if (/^\|---/.test(line)) continue;
+        if (isSeparatorRow(line)) continue;
         const cols = line
             .slice(1, -1)
             .split(' | ')
@@ -149,7 +165,7 @@ function parseBacklogTraceability(markdown) {
         }
         if (!inTable) continue;
         if (!line.startsWith('|')) break;
-        if (/^\|---/.test(line)) continue;
+        if (isSeparatorRow(line)) continue;
         const cols = line
             .slice(1, -1)
             .split(' | ')

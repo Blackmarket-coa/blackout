@@ -1,5 +1,6 @@
-import { type CSSProperties } from 'react';
-import { FriendsPanel, friendsButtonStyle } from './FriendsPanel';
+import React, { type CSSProperties } from 'react';
+import { MyCoalitionsPanel } from './MyCoalitionsPanel';
+import { buttonStyle } from './coalitionsStyles';
 
 const OVERLAY_STYLE: CSSProperties = {
     position: 'fixed',
@@ -26,16 +27,16 @@ const CARD_STYLE: CSSProperties = {
 };
 
 /**
- * Modal chrome around {@link FriendsPanel}. The list itself lives in the panel
- * so the canopies hub can render the same thing as a tab without a dialog.
+ * Modal chrome around {@link MyCoalitionsPanel}. Opened from the canopy member
+ * panel header where the Friends dialog used to live.
  */
-export const FriendsDialog = ({ onClose }: { onClose: () => void }) => (
+export const CoalitionsDialog = ({ onClose }: { onClose: () => void }) => (
     <div
         style={OVERLAY_STYLE}
         role="dialog"
         aria-modal="true"
-        aria-label="Friends"
-        data-testid="friends-dialog"
+        aria-label="Coalitions"
+        data-testid="coalitions-dialog"
         onClick={onClose}
     >
         <div style={CARD_STYLE} onClick={(event) => event.stopPropagation()}>
@@ -48,22 +49,23 @@ export const FriendsDialog = ({ onClose }: { onClose: () => void }) => (
                     borderBottom: '1px solid var(--border-default)',
                 }}
             >
-                <strong style={{ fontSize: 16 }}>Friends</strong>
+                <strong style={{ fontSize: 16 }}>Coalitions</strong>
                 <button
                     type="button"
                     onClick={onClose}
-                    aria-label="Close friends"
-                    style={{ ...friendsButtonStyle('subtle'), width: 30, height: 30, padding: 0 }}
+                    aria-label="Close coalitions"
+                    data-testid="coalitions-close"
+                    style={{ ...buttonStyle('subtle'), width: 30, height: 30, padding: 0 }}
                 >
                     ✕
                 </button>
             </header>
 
             <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '4px 16px 16px' }}>
-                <FriendsPanel onNavigatedAway={onClose} />
+                <MyCoalitionsPanel onNavigatedAway={onClose} />
             </div>
         </div>
     </div>
 );
 
-export default FriendsDialog;
+export default CoalitionsDialog;

@@ -4,6 +4,7 @@ import { db } from '../db/store';
 import type { TipContextKind, TipRecord, TipStatus } from '../db/types';
 import type { MarketplaceProviderIdString } from '../db/types';
 import { emitDomainEvent } from '../modules/domain-events';
+import { recordContribution } from './coalitionDrives';
 import { recordProjectSupport } from './coalitionProjectSupport';
 import { incrementCounter, logEvent } from './marketplaceObservability';
 import { dispatchEvent as dispatchOutboundEvent } from './outboundEventWebhooks';
@@ -40,6 +41,16 @@ export interface CreateTipInput {
     note?: string | null;
     giftSku?: string | null;
     providerId?: MarketplaceProviderId;
+    /**
+     * Charge this rate instead of the provider's table rate, in basis points.
+     *
+     * Only for callers that have asked the provider what it will really charge
+     * — a seller on a paid plan is billed less than the table says, and the tip
+     * has to carry the rate that will actually be taken or its persisted
+     * `netCents` (which is what the recipient is owed) would be wrong. Absent
+     * means the table rate, so every other caller is unaffected.
+     */
+    feeBpsOverride?: number;
     fbmOrderId?: string | null;
     metadata?: Record<string, unknown>;
 }
@@ -53,6 +64,8 @@ export interface TipView {
     grossCents: number;
     feeCents: number;
     netCents: number;
+    /** The rate the split was computed at, so callers can show the real number. */
+    feeBps: number;
     currency: string;
     providerId: MarketplaceProviderId;
     fbmOrderId: string | null;
@@ -79,6 +92,7 @@ function toView(record: TipRecord): TipView {
         grossCents: record.grossCents,
         feeCents: record.feeCents,
         netCents: record.netCents,
+        feeBps: record.feeBps,
         currency: record.currency,
         providerId: record.providerId as MarketplaceProviderId,
         fbmOrderId: record.fbmOrderId,
@@ -128,7 +142,11 @@ export function createTip(input: CreateTipInput): TipView {
     }
 
     const providerId = (input.providerId ?? DEFAULT_PROVIDER) as MarketplaceProviderIdString;
-    const split = computePlatformCommission(input.grossCents, providerId as MarketplaceProviderId);
+    const split = computePlatformCommission(
+        input.grossCents,
+        providerId as MarketplaceProviderId,
+        input.feeBpsOverride
+    );
 
     if (input.fbmOrderId) {
         const conflict = db.findTipByOrderId(providerId, input.fbmOrderId);
@@ -149,6 +167,7 @@ export function createTip(input: CreateTipInput): TipView {
         grossCents: split.grossCents,
         feeCents: split.feeCents,
         netCents: split.netCents,
+        feeBps: split.feeBps,
         currency,
         providerId,
         fbmOrderId: input.fbmOrderId ?? null,
@@ -179,7 +198,7 @@ export function createTip(input: CreateTipInput): TipView {
 // without re-emitting the domain event. Refunded tips cannot be captured.
 export function captureTip(
     tipId: string,
-    detail: { fbmOrderId?: string | null } = {}
+    detail: { fbmOrderId?: string | null; chargedCents?: number | null } = {}
 ): TipView | undefined {
     const existing = db.getTip(tipId);
     if (!existing) return undefined;
@@ -188,8 +207,45 @@ export function captureTip(
         logEvent('tip.capture.rejected', { tipId, status: existing.status });
         return toView(existing);
     }
+
+    // What the provider says it actually charged. The tip's split was computed
+    // from what the sender asked to give, and for a coalition contribution that
+    // amount is now sent to the provider — so the two should agree. When they
+    // do not, the money that really moved is the truth: capture at the charged
+    // amount, recomputed at the rate this tip was quoted, rather than crediting
+    // a recipient for a number nobody paid. Loud, because a mismatch is a bug.
+    const charged = detail.chargedCents;
+    const chargedIsUsable =
+        typeof charged === 'number' && Number.isInteger(charged) && charged >= 0;
+    const settled =
+        chargedIsUsable && charged !== existing.grossCents
+            ? computePlatformCommission(
+                  charged,
+                  existing.providerId as MarketplaceProviderId,
+                  existing.feeBps
+              )
+            : null;
+    if (settled) {
+        incrementCounter('tip_capture_amount_mismatch_total', {
+            providerId: existing.providerId,
+            contextKind: existing.contextKind,
+        });
+        logEvent('tip.capture.amount_adjusted', {
+            tipId,
+            expectedCents: existing.grossCents,
+            chargedCents: charged,
+        });
+    }
+
     const updated: TipRecord = {
         ...existing,
+        ...(settled
+            ? {
+                  grossCents: settled.grossCents,
+                  feeCents: settled.feeCents,
+                  netCents: settled.netCents,
+              }
+            : {}),
         status: 'captured',
         capturedAt: nowIso(),
         fbmOrderId: detail.fbmOrderId ?? existing.fbmOrderId,
@@ -224,6 +280,25 @@ export function captureTip(
     // on capture (money confirmed). `contextRef` is the project id; the project
     // nets `netCents` toward its goal. recordProjectSupport is idempotent on the
     // tip id, so a replayed capture never double-counts.
+    // Coalition drive: a contribution advances its campaign's meter on capture.
+    // `contextRef` is the campaign id and the campaign nets `netCents`.
+    // recordContribution is idempotent on the tip id, so a replayed capture
+    // never double-counts.
+    if (updated.contextKind === 'coalition_drive' && updated.contextRef) {
+        try {
+            recordContribution({
+                campaignId: updated.contextRef,
+                supporterUserId: updated.senderUserId,
+                tipId: updated.id,
+                amountCents: updated.netCents,
+                currency: updated.currency,
+            });
+        } catch (err) {
+            // A campaign-side failure must never block tip capture (money
+            // already moved); surface it for reconciliation instead.
+            logEvent('tip.coalition_drive_threw', { tipId: updated.id, error: String(err) });
+        }
+    }
     if (updated.contextKind === 'coalition_project' && updated.contextRef) {
         try {
             recordProjectSupport({

@@ -1,5 +1,5 @@
 import {
-    COALITION_PATH,
+    COALITIONS_PATH,
     CREATE_PATH,
     CREATOR_DASHBOARD_PATH,
     CREATOR_LISTINGS_PATH,
@@ -27,7 +27,7 @@ export const FIRST_ACTIONS: FirstAction[] = [
     { id: 'launch_stream', label: 'Launch a stream', to: STREAMING_PATH },
     { id: 'create_den', label: 'Create a den', to: CREATE_PATH },
     { id: 'schedule_event', label: 'Schedule an event', to: EVENTS_PATH },
-    { id: 'create_coalition', label: 'Start a coalition', to: COALITION_PATH },
+    { id: 'create_coalition', label: 'Start a coalition', to: COALITIONS_PATH },
     { id: 'upload_listing', label: 'Upload a listing', to: CREATOR_LISTINGS_PATH },
     { id: 'host_discussion', label: 'Host a discussion', to: CREATE_PATH },
 ];

@@ -8,7 +8,7 @@ import { LocationServicesSection } from '../location/LocationServicesSection';
 
 const dmOptions: Array<{ value: DmPermission; label: string }> = [
     { value: 'everyone', label: 'Everyone' },
-    { value: 'friends', label: 'Friends' },
+    { value: 'friends', label: 'Coalition members' },
     { value: 'mutual-spaces', label: `Mutual ${BLACKOUT_TERMS.canopy.titlePlural}` },
     { value: 'nobody', label: 'Nobody' },
 ];

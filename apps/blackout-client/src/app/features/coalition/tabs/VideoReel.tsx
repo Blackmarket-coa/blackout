@@ -3,34 +3,39 @@ import type { CoalitionFeedItem } from '@blackout/core';
 import { useCoalitionVideoEngagement } from '../hooks/useCoalitionFeed';
 import { buildCommunitiesPath } from '../../../pages/paths';
 import { ProjectSupportCard } from './ProjectSupportCard';
+import { useShareTarget, type ShareStatus } from '../../../utils/useShareTarget';
 
 export type ShareHandler = (id: string, title: string) => void | Promise<void>;
 
 /**
- * Build a share handler for coalition videos. Uses the Web Share API when
- * available, falling back to clipboard, surfacing a transient status string.
- * Shared by the (map) reel overlay and any reel container.
+ * Build a share handler for coalition videos.
+ *
+ * Delegates to `useShareTarget` — the one share implementation — and only maps
+ * its status onto the labels this surface renders. This was a hand-rolled copy
+ * that had drifted from the other two (no clipboard fallback for browsers
+ * without `navigator.clipboard`).
  */
+
+/** The status labels these surfaces already render, from the shared enum. */
+const LABEL: Record<ShareStatus, string | null> = {
+    idle: null,
+    shared: 'Shared',
+    copied: 'Link copied',
+    failed: 'Share unsupported',
+};
+
 export function useVideoShare(): { shareStatus: string | null; onShare: ShareHandler } {
-    const [shareStatus, setShareStatus] = useState<string | null>(null);
-    const onShare = useCallback<ShareHandler>(async (id, title) => {
-        const url = `${window.location.origin}/coalition/video/${encodeURIComponent(id)}`;
-        try {
-            if (navigator.share) {
-                await navigator.share({ title, url });
-                setShareStatus('Shared');
-            } else if (navigator.clipboard) {
-                await navigator.clipboard.writeText(url);
-                setShareStatus('Link copied');
-            } else {
-                setShareStatus('Share unsupported');
-            }
-        } catch {
-            setShareStatus('Share cancelled');
-        }
-        window.setTimeout(() => setShareStatus(null), 1500);
-    }, []);
-    return { shareStatus, onShare };
+    const { status, share } = useShareTarget();
+    const onShare = useCallback<ShareHandler>(
+        async (id, title) => {
+            await share({
+                url: `${window.location.origin}/coalition/video/${encodeURIComponent(id)}`,
+                title,
+            });
+        },
+        [share]
+    );
+    return { shareStatus: LABEL[status], onShare };
 }
 
 export interface VideoReelProps {

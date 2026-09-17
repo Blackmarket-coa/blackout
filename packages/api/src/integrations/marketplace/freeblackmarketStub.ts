@@ -24,6 +24,8 @@ interface StubListing {
     sellerUserId: string | null;
     artifactKind: CreatorListingDraftInput['artifactKind'];
     artifactPayload: unknown;
+    /** Provider-side stamps; a coalition drive carries coalition_id / drive_id. */
+    metadata?: Record<string, string>;
     publicSlug: string;
     status: 'draft' | 'pending_review' | 'published' | 'rejected' | 'archived';
     createdAt: string;
@@ -36,6 +38,8 @@ interface StubSession {
     userId: string;
     listingId: string;
     sku: string | null;
+    /** What the caller asked to be charged, when it chose the amount. */
+    amountCents: number | null;
     embed: boolean;
     createdAt: string;
     /** Bounded echo (W1b): mirrored onto the stub's purchase webhook exactly
@@ -564,6 +568,11 @@ export interface FreeblackmarketStubInternals {
         signature: string;
         eventId: string;
     };
+    /**
+     * Test-only: what `getListingFeeBps` answers for a listing. `null` restores
+     * the default quote. Set it above the ceiling to exercise the refusal path.
+     */
+    setListingFeeBps(listingId: string, feeBps: number | null): void;
     /** Test-only: clear in-memory state. */
     reset(): void;
 }
@@ -591,6 +600,9 @@ export function createFreeblackmarketStubProvider(): MarketplaceProvider {
     for (const seed of SEEDED_LISTINGS) listings.set(seed.listing.providerListingId, { ...seed });
 
     const sessions = new Map<string, StubSession>();
+    // Quoted platform fee per listing. Absent means the standard 3%, which is
+    // what a seller on the free plan is charged.
+    const feeQuotes = new Map<string, number>();
 
     function listFor(query: CatalogQuery): NormalizedListing[] {
         const all = [...listings.values()].filter((l) => l.status === 'published');
@@ -685,9 +697,22 @@ export function createFreeblackmarketStubProvider(): MarketplaceProvider {
             return listings.get(listingId)?.listing ?? null;
         },
 
+        /** The standard rate unless a test has set this listing's seller onto a plan. */
+        async getListingFeeBps(listingId: string): Promise<number | null> {
+            return feeQuotes.get(listingId) ?? 300;
+        },
+
         async createCheckoutSession(input: CheckoutInput): Promise<CheckoutResult> {
-            if (!listings.has(input.listingId)) {
+            const forSale = listings.get(input.listingId);
+            if (!forSale) {
                 throw new Error(`stub: unknown listing ${input.listingId}`);
+            }
+            // Live FBM's §5 checkout refuses anything not published, so the stub
+            // must too — otherwise a caller that forgets to publish passes in
+            // CI and 400s in production, which is exactly how the creator-tier
+            // path shipped without its publish step.
+            if (forSale.status !== 'published') {
+                throw new Error(`stub: listing ${input.listingId} is not published`);
             }
             const sessionId = crypto.randomUUID();
             sessions.set(sessionId, {
@@ -695,6 +720,7 @@ export function createFreeblackmarketStubProvider(): MarketplaceProvider {
                 userId: input.userId,
                 listingId: input.listingId,
                 sku: input.sku ?? null,
+                amountCents: input.amountCents ?? null,
                 embed: Boolean(input.embed),
                 createdAt: nowIso(),
                 metadata:
@@ -760,6 +786,7 @@ export function createFreeblackmarketStubProvider(): MarketplaceProvider {
                 sellerUserId: input.sellerUserId,
                 artifactKind: input.artifactKind,
                 artifactPayload: input.artifactPayload,
+                metadata: input.metadata,
                 publicSlug: slug || id,
                 status: 'draft',
                 createdAt: nowIso(),
@@ -847,6 +874,9 @@ export function createFreeblackmarketStubProvider(): MarketplaceProvider {
                 sku: session.sku,
                 kind: entry.listing.entitlementKind,
                 occurredAt: nowIso(),
+                // What the caller asked to be charged wins over the listing's
+                // own price, exactly as the real hosted checkout does.
+                amountCents: session.amountCents ?? entry.listing.priceCents,
                 metadata: {
                     // Caller echo first so the stub's own stamps always win.
                     ...(session.metadata ?? {}),
@@ -873,12 +903,17 @@ export function createFreeblackmarketStubProvider(): MarketplaceProvider {
             const signature = crypto.createHmac('sha256', webhookSecret).update(body).digest('hex');
             return { body, signature, eventId };
         },
+        setListingFeeBps(listingId: string, feeBps: number | null) {
+            if (feeBps === null) feeQuotes.delete(listingId);
+            else feeQuotes.set(listingId, feeBps);
+        },
         reset() {
             listings.clear();
             for (const seed of SEEDED_LISTINGS) {
                 listings.set(seed.listing.providerListingId, { ...seed });
             }
             sessions.clear();
+            feeQuotes.clear();
         },
     };
 

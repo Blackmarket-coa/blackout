@@ -28,6 +28,9 @@ const EMPTY_STANDING: EconomicStanding = {
     pendingPayouts: [],
     vendorSalesVolumeMinorUnits30d: null,
     creatorRewardEligibility: [],
+    // Not 'seedling': an unseeded stub has not placed this member, and the
+    // coalition gate must be able to tell that apart from the bottom rung.
+    coalitionKarmaTier: null,
 };
 
 export class FbmEntitlementsStubClient implements FbmEntitlementsClient {

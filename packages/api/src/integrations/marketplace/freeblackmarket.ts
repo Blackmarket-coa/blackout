@@ -216,7 +216,15 @@ export function createFreeblackmarketProvider(): MarketplaceProvider {
             },
         });
         if (!response.ok) {
-            throw new Error(`freeblackmarket ${path} failed: ${response.status}`);
+            // Carry the status on the error. Flattened into the message it was
+            // unreadable, so a caller could not tell "this seller does not
+            // exist here" (404) from "the provider is down" (5xx) without
+            // parsing prose — and those deserve different answers to a user.
+            const error = new Error(
+                `freeblackmarket ${path} failed: ${response.status}`
+            ) as Error & { status?: number };
+            error.status = response.status;
+            throw error;
         }
         return (await response.json()) as T;
     }
@@ -295,6 +303,29 @@ export function createFreeblackmarketProvider(): MarketplaceProvider {
             }
         },
 
+        /**
+         * The fee FBM will actually charge on this listing's seller. Lower than
+         * the table rate when that seller pays for a plan that discounts it.
+         *
+         * Swallows errors into `null` the same way `getListing` does: a fee
+         * quote that cannot be fetched means "use the table rate", not "stop
+         * the contribution". The ceiling check downstream is what protects the
+         * contributor, not this call succeeding.
+         */
+        async getListingFeeBps(listingId: string): Promise<number | null> {
+            if (!enabled || !apiKey) return null;
+            try {
+                const quote = await call<{ feeBps?: unknown }>(
+                    `${apiPrefix}/listings/${listingId}/fee-quote`
+                );
+                return typeof quote.feeBps === 'number' && Number.isFinite(quote.feeBps)
+                    ? quote.feeBps
+                    : null;
+            } catch {
+                return null;
+            }
+        },
+
         async createCheckoutSession(input: CheckoutInput): Promise<CheckoutResult> {
             const path = input.embed
                 ? `${apiPrefix}/checkout/sessions?embed=1`
@@ -306,6 +337,10 @@ export function createFreeblackmarketProvider(): MarketplaceProvider {
                     userId: input.userId,
                     listingId: input.listingId,
                     sku: input.sku,
+                    // Only sent when the caller is choosing the amount (a
+                    // coalition contribution); otherwise the listing prices
+                    // itself, and FBM's schema is strict about unknown keys.
+                    amountCents: input.amountCents,
                     returnUrl: input.returnUrl,
                     embed: input.embed === true ? true : undefined,
                     embedOrigin: input.embed === true ? input.embedOrigin : undefined,
@@ -337,6 +372,7 @@ export function createFreeblackmarketProvider(): MarketplaceProvider {
                 entitlementKind: input.entitlementKind,
                 mediaUrls: input.mediaUrls,
                 tags: input.tags,
+                metadata: input.metadata,
             };
             const raw = await call<{
                 id: string;

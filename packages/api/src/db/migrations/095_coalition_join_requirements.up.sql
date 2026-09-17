@@ -1,0 +1,17 @@
+-- What a coalition asks of someone before admitting them, beyond its join mode.
+--
+-- One JSONB column rather than a column per requirement: the set is expected to
+-- grow with what founders ask for, and each addition would otherwise be a
+-- migration plus a descriptor change for a field most coalitions leave unset.
+-- The write path serializes it automatically off the live column type
+-- (pgWriter.serializeValue), so no descriptor override is needed.
+--
+-- Nullable with no default. NULL means "asks nothing", which is the default and
+-- the common case — the platform has no opinion about who belongs in someone
+-- else's mission.
+--
+-- `min_tier_to_join` stays where it is and is NOT folded in here. It is the one
+-- requirement resolved from another service, so it is the one that can be
+-- unanswerable rather than merely unmet, and the join path treats it
+-- differently for that reason.
+ALTER TABLE coalitions ADD COLUMN IF NOT EXISTS join_requirements JSONB;

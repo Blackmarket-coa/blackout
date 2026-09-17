@@ -13,6 +13,7 @@
 import { randomUUID } from 'node:crypto';
 import { MAX_RELAY_CHAIN_DEPTH, nextChainDepth, type RelayLink } from '@blackout/core';
 import { db } from '../db/store';
+import { isPubliclyListed } from './profileStore';
 import type { RelayEdgeRecord, RelaySubjectSource } from '../db/types';
 import { findWallPost, getProfile } from './profileStore';
 
@@ -66,6 +67,36 @@ export function resolveSubject(
                 createdAt: item.createdAt,
                 mediaUrl: item.mediaUrl ?? null,
                 tags: item.tags ?? [],
+            };
+        }
+        case 'coalition_campaign': {
+            // Boosting a campaign is what puts it in other people's feeds, so
+            // this resolver is also the write gate: `relaySubject` refuses any
+            // subject that resolves to null. A draft or pending campaign must
+            // therefore be unrelayable, or boosting would be a way to push an
+            // unapproved title and description to strangers.
+            //
+            // Completed campaigns stay resolvable. Reach renders an unresolved
+            // subject as a tombstone rather than dropping it, so refusing them
+            // would turn every boosted drive into "no longer available" the
+            // moment it closed.
+            const campaign = db.getCoalitionCampaign(subjectId);
+            if (!campaign) return null;
+            if (campaign.status !== 'active' && campaign.status !== 'completed') return null;
+            const coalition = db.getCoalition(campaign.coalitionId);
+            if (!coalition || coalition.archivedAt) return null;
+            return {
+                source,
+                id: campaign.id,
+                title: campaign.title,
+                body: campaign.description,
+                // The organiser, and only when they are publicly listed. On a
+                // raised mutual-aid campaign that is the member who raised a
+                // neighbour's request, and this card travels to strangers.
+                authorId: isPubliclyListed(campaign.createdBy) ? campaign.createdBy : null,
+                createdAt: campaign.createdAt,
+                mediaUrl: null,
+                tags: [campaign.type],
             };
         }
         case 'coliseum_topic': {

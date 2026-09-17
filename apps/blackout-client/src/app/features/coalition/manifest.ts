@@ -5,7 +5,7 @@ import { coalitionRoutes } from './routes';
 
 export const coalitionFeature: BlackoutFeature = {
     id: 'coalition',
-    name: 'Coalition',
+    name: 'Commons',
     customizations: [
         {
             id: 'coalition-shell',

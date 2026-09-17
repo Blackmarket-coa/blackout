@@ -14,12 +14,12 @@ vi.mock('../../../../src/app/features/profile/ConnectedProfileModal', () => ({
     ),
 }));
 
-// The Friends dialog only renders when opened; stub it so its matrix/account-data
-// hooks never run in this isolated panel render.
-vi.mock('../../../../src/app/features/friends/FriendsDialog', () => ({
-    FriendsDialog: ({ onClose }: { onClose: () => void }) => (
-        <div data-testid="friends-dialog">
-            <button type="button" data-testid="friends-close" onClick={onClose}>
+// The Coalitions dialog only renders when opened; stub it so its API hooks
+// never run in this isolated panel render.
+vi.mock('../../../../src/app/features/coalitions/CoalitionsDialog', () => ({
+    CoalitionsDialog: ({ onClose }: { onClose: () => void }) => (
+        <div data-testid="coalitions-dialog">
+            <button type="button" data-testid="coalitions-close" onClick={onClose}>
                 close
             </button>
         </div>
@@ -104,24 +104,26 @@ describe('CanopyMemberPanel', () => {
         expect(modal?.textContent).toBe('@alice:server');
     });
 
-    it('opens and closes the friends dialog from the header button', async () => {
+    it('opens and closes the coalitions dialog from the header button', async () => {
         const { container } = await mount();
-        expect(container.querySelector('[data-testid="friends-dialog"]')).toBeNull();
+        expect(container.querySelector('[data-testid="coalitions-dialog"]')).toBeNull();
 
         const open = container.querySelector<HTMLButtonElement>(
-            '[data-testid="canopy-friends-open"]'
+            '[data-testid="canopy-coalitions-open"]'
         );
         await act(async () => {
             open?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
             await Promise.resolve();
         });
-        expect(container.querySelector('[data-testid="friends-dialog"]')).not.toBeNull();
+        expect(container.querySelector('[data-testid="coalitions-dialog"]')).not.toBeNull();
 
-        const close = container.querySelector<HTMLButtonElement>('[data-testid="friends-close"]');
+        const close = container.querySelector<HTMLButtonElement>(
+            '[data-testid="coalitions-close"]'
+        );
         await act(async () => {
             close?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
             await Promise.resolve();
         });
-        expect(container.querySelector('[data-testid="friends-dialog"]')).toBeNull();
+        expect(container.querySelector('[data-testid="coalitions-dialog"]')).toBeNull();
     });
 });

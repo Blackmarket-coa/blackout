@@ -14,9 +14,10 @@ interface ProfileModalProps {
     profile: MemberProfile;
     onClose: () => void;
     onStartDm?: (userId: string) => void;
-    onAddFriend?: (userId: string) => void;
-    /** A friend request to this user is already pending — show "Requested". */
-    requestPending?: boolean;
+    /** Invite this user into one of the viewer's coalitions. */
+    onInviteToCoalition?: (userId: string) => void;
+    /** An invitation to this user was just sent — show "Invited". */
+    inviteSent?: boolean;
     onBlock?: (userId: string) => void;
 }
 
@@ -91,8 +92,8 @@ export const ProfileModal = ({
     profile,
     onClose,
     onStartDm,
-    onAddFriend,
-    requestPending = false,
+    onInviteToCoalition,
+    inviteSent = false,
     onBlock,
 }: ProfileModalProps) => {
     const [viewingSheet, setViewingSheet] = useState(false);
@@ -207,22 +208,14 @@ export const ProfileModal = ({
                                     Message
                                 </DcButton>
                             )}
-                            {onAddFriend && (
+                            {onInviteToCoalition && (
                                 <DcButton
-                                    variant={
-                                        profile.isFriend || requestPending ? 'secondary' : 'primary'
-                                    }
+                                    variant={inviteSent ? 'secondary' : 'primary'}
                                     onClick={() => {
-                                        if (!profile.isFriend && !requestPending) {
-                                            onAddFriend(profile.userId);
-                                        }
+                                        if (!inviteSent) onInviteToCoalition(profile.userId);
                                     }}
                                 >
-                                    {profile.isFriend
-                                        ? 'Friends'
-                                        : requestPending
-                                        ? 'Requested'
-                                        : 'Add Friend'}
+                                    {inviteSent ? 'Invited' : 'Invite to coalition'}
                                 </DcButton>
                             )}
                         </div>

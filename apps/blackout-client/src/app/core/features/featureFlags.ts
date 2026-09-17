@@ -35,6 +35,8 @@ export type FeatureFlags = {
     rightPanelPlugins: boolean;
     liveInteractionBundle: boolean;
     coalition: boolean;
+    /** The Coalitions network (`/coalitions`): groups with roles and campaigns that replaced the friends list. */
+    coalitions: boolean;
     coliseum: boolean;
     /**
      * The Circle & Reach feed. Owns the `/circle` destination: a feed built
@@ -400,6 +402,7 @@ export const defaultFeatureFlags: FeatureFlags = {
     rightPanelPlugins: true,
     liveInteractionBundle: true,
     coalition: true,
+    coalitions: true,
     coliseum: true,
     circleFeed: true,
     communityAssets: true,
@@ -694,6 +697,12 @@ export const resolveFeatureFlags = (
         }
         if (env.BLACKOUT_COALITION === 'false') {
             nextFlags.coalition = false;
+        }
+        if (env.BLACKOUT_COALITIONS === 'true') {
+            nextFlags.coalitions = true;
+        }
+        if (env.BLACKOUT_COALITIONS === 'false') {
+            nextFlags.coalitions = false;
         }
         if (env.BLACKOUT_COLISEUM === 'true') {
             nextFlags.coliseum = true;
@@ -1048,6 +1057,12 @@ export const resolveFeatureFlags = (
     }
     if (env.BLACKOUT_COALITION === 'false') {
         nextFlags.coalition = false;
+    }
+    if (env.BLACKOUT_COALITIONS === 'true') {
+        nextFlags.coalitions = true;
+    }
+    if (env.BLACKOUT_COALITIONS === 'false') {
+        nextFlags.coalitions = false;
     }
     if (env.BLACKOUT_COLISEUM === 'true') {
         nextFlags.coliseum = true;
