@@ -14,6 +14,8 @@ import {
     EXTERNAL_REPLY_POLICIES,
     isInstanceHost,
     COALITION_PLATFORM_CAPABILITIES,
+    COALITION_PLATFORM_POLICY,
+    platformAutomationBlockers,
     CONNECTION_AUTH_MODES,
     COALITION_JOIN_MODES,
     COALITION_ROLES,
@@ -86,6 +88,7 @@ import {
     listPendingActivity,
     moderateActivity,
     setOptIn,
+    takeDownExternalActivity,
     type SyncError,
 } from '../services/coalitionSync';
 import { revokeMemberLinks } from '../services/coalitionConnectionCustody';
@@ -124,16 +127,6 @@ function errorResponse(c: Parameters<typeof requireUser>[0], error: CoalitionErr
             return c.json({ code: 'already_member', message: 'Already a member' }, 409);
         case 'approval_required':
             return c.json({ code: 'approval_required', request: error.request }, 202);
-        case 'tier_gate':
-            return c.json(
-                {
-                    code: 'tier_gate',
-                    message: `This coalition asks for ${error.required} or above`,
-                    required: error.required,
-                    actual: error.actual,
-                },
-                403
-            );
         case 'taken_down':
             return c.json(
                 {
@@ -344,11 +337,20 @@ coalitions.post('/', async (c) => {
     );
 });
 
+/**
+ * Every platform a coalition could connect: the capability flags, the policy
+ * record behind them, and — where automation is not possible — why. `blockers`
+ * is what a steward should be shown instead of a switch that silently does
+ * nothing, and the policy is served whole so the terms an adapter runs under
+ * can be read from the client and not only from the source.
+ */
 coalitions.get('/platforms', (c) =>
     c.json({
         platforms: COALITION_PLATFORMS.map((platform) => ({
             platform,
             ...COALITION_PLATFORM_CAPABILITIES[platform],
+            policy: COALITION_PLATFORM_POLICY[platform],
+            blockers: platformAutomationBlockers(platform),
         })),
         authModes: CONNECTION_AUTH_MODES,
     })
@@ -1070,6 +1072,15 @@ function syncErrorResponse(c: Parameters<typeof requireUser>[0], error: SyncErro
                 },
                 400
             );
+        case 'already_moderated':
+            return c.json(
+                {
+                    code: 'already_moderated',
+                    status: error.status,
+                    message: 'This reply has already been rejected and cannot be approved',
+                },
+                409
+            );
     }
 }
 
@@ -1312,5 +1323,25 @@ for (const decision of ['approve', 'reject'] as const) {
         return c.json({ activity: result.value });
     });
 }
+
+/**
+ * Platform removal of one external reply. Same authority and same body shape
+ * as a coalition takedown; unlike a steward's reject it works on a stopped
+ * coalition too, and the result cannot be approved back.
+ */
+coalitions.post('/:id/externals/:activityId/takedown', async (c) => {
+    const user = requireModerator(c);
+    if (user instanceof Response) return user;
+    const parsed = await readJsonBody(c, takedownSchema);
+    if (parsed instanceof Response) return parsed;
+    const result = takeDownExternalActivity(
+        c.req.param('id'),
+        user.sub,
+        c.req.param('activityId'),
+        parsed.reason
+    );
+    if (!result.ok) return syncErrorResponse(c, result.error);
+    return c.json({ activity: result.value });
+});
 
 export default coalitions;

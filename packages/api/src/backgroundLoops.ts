@@ -203,6 +203,30 @@ export function startBackgroundLoops(): void {
         );
     }
 
+    // Retention for quarantined external replies. NOT gated on the inbound
+    // sync flag above: that flag decides whether new replies arrive, while the
+    // rows already held are owed their retention window whether or not more
+    // are coming — switching two-way sync off must not freeze a stranger's
+    // words in place. On by default like the dead-man sweep (it discharges an
+    // obligation, not a feature); set BLACKOUT_COALITION_EXTERNAL_RETENTION_SWEEP=0
+    // to disable, or ..._INTERVAL_SECONDS for a custom cadence.
+    if (process.env.BLACKOUT_COALITION_EXTERNAL_RETENTION_SWEEP !== '0') {
+        const intervalSeconds = Number.parseInt(
+            process.env.BLACKOUT_COALITION_EXTERNAL_RETENTION_INTERVAL_SECONDS ?? '',
+            10
+        );
+        const intervalMs =
+            Number.isFinite(intervalSeconds) && intervalSeconds > 0
+                ? intervalSeconds * 1000
+                : undefined;
+        void import('./services/coalitionExternalRetentionScheduler').then(
+            ({ startCoalitionExternalRetentionScheduler }) => {
+                startCoalitionExternalRetentionScheduler(intervalMs);
+                log.info('coalition_external_retention_scheduler_started', { intervalMs });
+            }
+        );
+    }
+
     // Dead-man's-switch autonomous sweep. Fires switches whose check-in window
     // has lapsed even when the owner is gone — the whole point of the feature —
     // by evaluating every armed switch server-side on a timer. On by default

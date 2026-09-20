@@ -323,6 +323,13 @@ export type CoalitionPlatform = typeof COALITION_PLATFORMS[number];
  * coalition-owned incoming webhook is the sanctioned shape and the only one
  * accepted. Everywhere else a member's own credential is the platform's own
  * model, so both modes stand.
+ *
+ * This table says only what is *built*. What each platform's terms permit,
+ * under which agreement, at what cost, within which limit, and who accepted
+ * that agreement for this project lives in `COALITION_PLATFORM_POLICY` below.
+ * `platformCanAutomate` reads both: an `apiPost: true` row here whose policy
+ * row requires an agreement nobody has accepted is not automatable, whatever
+ * `adapter` says.
  */
 export const COALITION_PLATFORM_CAPABILITIES: Record<
     CoalitionPlatform,
@@ -396,10 +403,179 @@ export function platformAllowsAuthMode(
     return COALITION_PLATFORM_CAPABILITIES[platform].authModes.includes(authMode);
 }
 
-/** Platforms this server can actually post to without a human completing a link. */
-export function platformCanAutomate(platform: CoalitionPlatform): boolean {
+/** What sanctions programmatic posting, in the platform's own vocabulary. */
+export type PlatformAutomationBasis =
+    | 'incoming_webhook'
+    | 'app_password'
+    | 'application_token'
+    | 'developer_agreement'
+    | 'none';
+
+/**
+ * The terms each adapter operates under.
+ *
+ * `COALITION_PLATFORM_CAPABILITIES` records what is built; this records what
+ * the platform's own terms permit and on what footing. It exists because an
+ * `apiPost: true` flag recorded no developer agreement: nothing said which
+ * document was read, what access tier posting needs, what limit the adapter
+ * must stay under, or whether anyone had actually accepted the terms for this
+ * project. Acceptance is recorded here, in code, so that it can only ever
+ * happen as a visible diff with a name, a date and a reference on it.
+ */
+export interface CoalitionPlatformPolicy {
+    /** The governing document. `url` is null only when the terms are instance-specific. */
+    terms: { name: string; url: string | null };
+    /** What sanctions programmatic posting, in the platform's own vocabulary. */
+    automationBasis: PlatformAutomationBasis;
+    /** What the basis costs to obtain. */
+    accessTier: 'free' | 'paid' | 'application';
+    /** A signed or paid developer agreement is a precondition of posting. */
+    agreementRequired: boolean;
+    /**
+     * Who accepted the agreement for this project, when, and under what
+     * reference. `null` means nobody has. Changing this is a deliberate,
+     * reviewable act, which is why it is source and not configuration.
+     */
+    agreementAccepted: { by: string; on: string; reference: string } | null;
+    /** The documented limit the adapter is expected to stay under. */
+    rateLimit: { posts: number; perSeconds: number; source: string } | null;
+    /** YYYY-MM-DD the terms were last read against the adapter. */
+    reviewedOn: string;
+}
+
+export const COALITION_PLATFORM_POLICY: Record<CoalitionPlatform, CoalitionPlatformPolicy> = {
+    x: {
+        terms: {
+            name: 'X Developer Agreement and Policy',
+            url: 'https://developer.x.com/en/developer-terms/agreement-and-policy',
+        },
+        automationBasis: 'developer_agreement',
+        accessTier: 'paid',
+        agreementRequired: true,
+        // Nobody has accepted the developer agreement for this project. Until a
+        // named person records that here, X is blocked for automation whatever
+        // the capabilities table says about an adapter.
+        agreementAccepted: null,
+        // X publishes a separate write limit for each paid tier, and the
+        // numbers have been revised more than once. No tier has been bought,
+        // so no limit is binding on any adapter yet; whoever records the
+        // agreement above cites the limit for the tier they bought.
+        rateLimit: null,
+        reviewedOn: '2026-09-20',
+    },
+    bluesky: {
+        terms: {
+            name: 'Bluesky Social Terms of Service',
+            url: 'https://bsky.social/about/support/tos',
+        },
+        automationBasis: 'app_password',
+        accessTier: 'free',
+        agreementRequired: false,
+        agreementAccepted: null,
+        // The adapter opens a fresh session for every post, so the binding
+        // limit is the per-account `createSession` limit rather than the far
+        // looser record-creation points budget.
+        rateLimit: {
+            posts: 30,
+            perSeconds: 300,
+            source: 'AT Protocol PDS rate limits (docs.bsky.app/docs/advanced-guides/rate-limits), createSession per account',
+        },
+        reviewedOn: '2026-09-20',
+    },
+    discord: {
+        terms: {
+            name: 'Discord Developer Terms of Service',
+            url: 'https://discord.com/developers/docs/policies-and-agreements/developer-terms-of-service',
+        },
+        automationBasis: 'incoming_webhook',
+        accessTier: 'free',
+        agreementRequired: false,
+        agreementAccepted: null,
+        rateLimit: {
+            posts: 30,
+            perSeconds: 60,
+            source: 'Discord Developer Documentation, Rate Limits, per webhook',
+        },
+        reviewedOn: '2026-09-20',
+    },
+    mastodon: {
+        // Every instance publishes its own terms; there is no single document
+        // for the network, so the adapter operates under whichever instance the
+        // steward pointed it at.
+        terms: { name: "The instance's own terms of service", url: null },
+        automationBasis: 'application_token',
+        accessTier: 'free',
+        agreementRequired: false,
+        agreementAccepted: null,
+        rateLimit: {
+            posts: 300,
+            perSeconds: 300,
+            source: 'Mastodon API documentation, Rate limits, default per-account limit',
+        },
+        reviewedOn: '2026-09-20',
+    },
+    instagram: {
+        terms: {
+            name: 'Instagram Terms of Use',
+            url: 'https://help.instagram.com/581066165581870',
+        },
+        // Nothing is built and nothing is planned: publishing would need an
+        // app that passes Meta's review, which is why the tier reads
+        // `application` even though no basis is claimed.
+        automationBasis: 'none',
+        accessTier: 'application',
+        agreementRequired: false,
+        agreementAccepted: null,
+        rateLimit: null,
+        reviewedOn: '2026-09-20',
+    },
+    tiktok: {
+        terms: {
+            name: 'TikTok Terms of Service',
+            url: 'https://www.tiktok.com/legal/page/row/terms-of-service/en',
+        },
+        // As for Instagram: posting would need an approved application, and
+        // none has been made.
+        automationBasis: 'none',
+        accessTier: 'application',
+        agreementRequired: false,
+        agreementAccepted: null,
+        rateLimit: null,
+        reviewedOn: '2026-09-20',
+    },
+};
+
+/**
+ * Why a platform cannot be posted to unattended, in the order a steward should
+ * hear them: the platform forbids it, we have not built it, nobody has signed
+ * for it.
+ */
+export type PlatformAutomationBlocker = 'share_link_only' | 'no_adapter' | 'agreement_unsigned';
+
+/** Every reason this platform cannot be automated; empty means it can. */
+export function platformAutomationBlockers(
+    platform: CoalitionPlatform
+): PlatformAutomationBlocker[] {
     const capability = COALITION_PLATFORM_CAPABILITIES[platform];
-    return capability.apiPost && capability.adapter;
+    const policy = COALITION_PLATFORM_POLICY[platform];
+    const blockers: PlatformAutomationBlocker[] = [];
+    if (!capability.apiPost) blockers.push('share_link_only');
+    if (capability.apiPost && !capability.adapter) blockers.push('no_adapter');
+    if (policy.agreementRequired && policy.agreementAccepted === null) {
+        blockers.push('agreement_unsigned');
+    }
+    return blockers;
+}
+
+/**
+ * Platforms this server can actually post to without a human completing a link.
+ *
+ * Derived from the blockers rather than the capabilities table alone, so that
+ * flipping `adapter: true` for a platform whose agreement nobody has accepted
+ * does not quietly start posting under terms this project has not agreed to.
+ */
+export function platformCanAutomate(platform: CoalitionPlatform): boolean {
+    return platformAutomationBlockers(platform).length === 0;
 }
 
 /**

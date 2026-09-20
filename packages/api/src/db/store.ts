@@ -3682,6 +3682,11 @@ class InMemoryDb {
         return record;
     }
 
+    /** Remove a quarantined/reviewed external reply (used by the retention sweeper). */
+    deleteCoalitionExternalActivity(id: string): boolean {
+        return this.coalitionExternalActivity.delete(id);
+    }
+
     listCoalitionCampaignSyncOptIns(
         filter: { campaignId?: string; userId?: string; coalitionId?: string } = {}
     ): CoalitionCampaignSyncOptInRecord[] {
@@ -7215,6 +7220,12 @@ export class FileBackedDb extends InMemoryDb {
 
     override deleteCoalitionSpatialItem(id: string): boolean {
         const deleted = super.deleteCoalitionSpatialItem(id);
+        this.persist();
+        return deleted;
+    }
+
+    override deleteCoalitionExternalActivity(id: string): boolean {
+        const deleted = super.deleteCoalitionExternalActivity(id);
         this.persist();
         return deleted;
     }
