@@ -21,6 +21,8 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 
+import { getJson } from '../../sdk/json';
+
 const REF_STORAGE_KEY = 'blackout.coalition.ref';
 
 export interface PublicCampaign {
@@ -149,13 +151,15 @@ export function CampaignLandingPage() {
         let cancelled = false;
         void (async () => {
             try {
-                const res = await fetch(
+                // Through the sdk, not a bare fetch: feature layers are lint-blocked
+                // from calling fetch() directly. Token is null on purpose — this is
+                // the public projection and the visitor is, by construction, logged out.
+                const body = await getJson<{ drive: PublicCampaign }>(
                     `/v1/coalitions/${encodeURIComponent(slug)}/campaigns/${encodeURIComponent(
                         campaignId
-                    )}/public`
+                    )}/public`,
+                    null
                 );
-                if (!res.ok) throw new Error(String(res.status));
-                const body = (await res.json()) as { drive: PublicCampaign };
                 if (!cancelled) setCampaign(body.drive);
             } catch {
                 if (!cancelled) setFailed(true);
