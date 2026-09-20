@@ -26,6 +26,166 @@ should be described as a published privacy policy until that review lands.
 
 ---
 
+## 2026-09-20 — Coalitions: cross-posting, inbound replies, attribution
+
+**Why this entry exists:** this work introduces a new category of data
+collection and retention — third-party reply text and engagement counters read
+back from external platforms — and stores platform credentials on a coalition's
+behalf, which the process document lists as requiring an entry.
+
+Nothing in [`TRUST.md`](../../TRUST.md) becomes less true. The encryption and
+monetization commitments are untouched, and the one place this work meets an
+existing promise — §2's rule that inbound connections are _counted, not listed_
+— is exactly the shape attribution takes below: founders see totals per
+channel, never a list of people. Every capability here ships behind a flag that
+defaults **off**; the three flags are named at the end.
+
+### Posting out
+
+-   **Nothing is posted to an external platform without an explicit
+    per-campaign, per-platform, per-member opt-in.** An absent opt-in row means
+    off; there is no opt-out default and no coalition-wide switch that enrols
+    people. Rule 1 of the module header and `setOptIn` in
+    [`coalitionSync.ts`](../../packages/api/src/services/coalitionSync.ts).
+
+-   **Automated announcements come only from accounts the coalition itself
+    connected — never from a member's personal account unattended.** The
+    milestone sweep uses `authMode: 'shared'` connections only. Campaign types
+    that ask the public for money or goods (`drive`, `goods_drive`,
+    `mutual_aid`) are never auto-announced; a member can still share them by
+    hand. `ANNOUNCEABLE_TYPES` and the `'shared'` check in
+    [`coalitionAutoCrosspost.ts`](../../packages/api/src/services/coalitionAutoCrosspost.ts).
+
+-   **Automation is limited to platforms whose terms sanction it, and the
+    record of those terms lives in code so that a change to it is a visible
+    diff.** `COALITION_PLATFORM_POLICY` in
+    [`coalitionNetwork.ts`](../../packages/core/src/coalition/coalitionNetwork.ts)
+    records, per platform: the terms (name and URL), the automation basis, the
+    access tier, whether an agreement is required, whether one has been accepted
+    (`null` everywhere today), the rate limit with its source, and a `reviewedOn`
+    date (2026-09-20). `platformCanAutomate` derives the answer from that record
+    and fails closed. Today: X is **not** automated, because its paid developer
+    agreement has been accepted by nobody (`agreement_unsigned`) and no adapter
+    exists (`no_adapter`); Discord posts only through a coalition-owned incoming
+    webhook — a member's personal token would be self-botting and is refused at
+    connection time (`authModes: ['shared']`); Bluesky posts by app password and
+    Mastodon by application token under the instance's terms; Instagram and
+    TikTok are share links a person completes. Adapters:
+    [`coalitionPlatformAdapters.ts`](../../packages/api/src/services/coalitionPlatformAdapters.ts).
+
+### Platform credentials
+
+-   **Credentials a coalition connects are stored as AES-256-GCM envelopes
+    bound to their connection, decrypted only to post or to read back, never
+    returned by the API, revocable per connection, and rotatable by key id.**
+    The envelope is [`secretBox.ts`](../../packages/api/src/services/secretBox.ts)
+    under `LINKED_ACCOUNT_ENCRYPTION_KEYS`; the AAD ties each secret to
+    `coalition_connection:{coalitionId}:{platform}` or
+    `coalition_member_connection:{coalitionId}:{userId}:{platform}`
+    ([`coalitionPlatformAdapters.ts`](../../packages/api/src/services/coalitionPlatformAdapters.ts)),
+    so a ciphertext cannot be replayed against another connection. Only the
+    posting adapter and the inbound poller decrypt. The routes
+    `DELETE /v1/coalitions/:id/connections/:platform` and
+    `DELETE /v1/coalitions/:id/connections/me/:platform` in
+    [`routes/coalitions.ts`](../../packages/api/src/routes/coalitions.ts)
+    revoke; `revokeMemberLinks` in
+    [`coalitionConnectionCustody.ts`](../../packages/api/src/services/coalitionConnectionCustody.ts)
+    drops the credential from the row.
+
+    **Said plainly: the server operator holds the key.** This is server-side
+    encryption at rest, not end-to-end encryption, and must not be described as
+    E2EE. The server has to be able to post and poll on the coalition's behalf,
+    so the secret has to be usable server-side. Recorded as accepted risk R8 in
+    [`THREAT_MODEL.md`](../../THREAT_MODEL.md).
+
+### Replies from other platforms
+
+-   **Reply text from other platforms is quarantined: invisible until a
+    coalition moderator approves it.** A coalition may instead choose `'open'`
+    for its own mission (replies land approved) or `'off'` (reply text is
+    refused outright); the default is `'moderated'`. The external author is
+    display text — `"Ada via Discord"` — with no Blackout account, profile, or
+    permission. Author is clipped to 120 characters and content to 2000; a post
+    accepts at most 500 replies and refuses further arrivals; a reply must
+    arrive on the platform the post went out on; duplicate origin ids are
+    ignored. Approve only from pending, reject from pending or approved,
+    rejected is terminal. A platform moderator (`BLACKOUT_ADMIN_USERS`
+    allowlist) can remove any reply with
+    `POST /v1/coalitions/:id/externals/:activityId/takedown`; the resulting
+    event carries ids and the reason only, never the text. Approved replies are not
+    served for an archived or taken-down coalition. `ingestExternalActivity`,
+    `moderateActivity`, `takeDownExternalActivity` and `listApprovedActivity`
+    in [`coalitionSync.ts`](../../packages/api/src/services/coalitionSync.ts);
+    routes in [`routes/coalitions.ts`](../../packages/api/src/routes/coalitions.ts).
+
+-   **Quarantined reply text is retained for a bounded time, then purged.**
+    Pending replies are held 30 days from receipt; rejected replies 30 days
+    from the decision (else receipt); approved replies 365 days from receipt.
+    The windows are `BLACKOUT_COALITION_EXTERNAL_RETENTION_PENDING_DAYS`,
+    `_REJECTED_DAYS` and `_APPROVED_DAYS` (positive integers; anything else
+    falls back to the default). A daily sweep enforces them and runs whether or
+    not inbound sync is enabled — turning the feature off stops new rows, it
+    does not excuse the old ones. `BLACKOUT_COALITION_EXTERNAL_RETENTION_SWEEP=0`
+    disables the timer and `..._INTERVAL_SECONDS` changes its cadence; a
+    deployment that disables the sweep must not enable inbound sync
+    ([`THREAT_MODEL.md`](../../THREAT_MODEL.md) §8, criterion 8). The sweep
+    never touches engagement counters and logs counts only.
+    [`coalitionExternalRetention.ts`](../../packages/api/src/services/coalitionExternalRetention.ts),
+    [`coalitionExternalRetentionScheduler.ts`](../../packages/api/src/services/coalitionExternalRetentionScheduler.ts),
+    registered in [`backgroundLoops.ts`](../../packages/api/src/backgroundLoops.ts);
+    variables documented in [`.env.example`](../../packages/api/.env.example).
+
+-   **Engagement is stored as numbers only.** Likes, reshares, reply totals and
+    link clicks land in `coalition_campaign_engagement` as integers — nobody
+    wrote them and they name nobody. The numbers/words split is the header of
+    [`coalitionInboundSync.ts`](../../packages/api/src/services/coalitionInboundSync.ts);
+    the table is
+    [migration 098](../../packages/api/src/db/migrations/098_external_engagement.up.sql).
+
+### Attribution
+
+-   **Share links carry a signed token that identifies the campaign, the
+    channel, and — for a manual share — the member who shared. It never
+    identifies the visitor.** The token is minted before any visitor exists,
+    one per share, and expires after 90 days. No cookie, IP address, IP hash,
+    fingerprint or user agent is recorded for attribution. The client holds the
+    token in `sessionStorage` (key `blackout.coalition.ref`) and replays it only
+    if the visitor goes on to act. Founders see totals per channel, via
+    `GET /v1/coalitions/:id/campaigns/:campaignId/attribution`, and never a
+    list of people — the same rule TRUST.md §2 applies to followers and invite
+    redemptions. HMAC-SHA256 under `BLACKOUT_ATTRIBUTION_SECRET`, falling back
+    to `JWT_SECRET_PRIMARY`, in
+    [`coalitionAttribution.ts`](../../packages/api/src/services/coalitionAttribution.ts);
+    the counters table is
+    [migration 099](../../packages/api/src/db/migrations/099_campaign_attribution.up.sql);
+    the landing page is
+    [`CampaignLandingPage.tsx`](../../apps/blackout-client/src/app/features/coalitions/CampaignLandingPage.tsx).
+
+### Flags
+
+-   **Everything above ships behind flags that default off.**
+    `BLACKOUT_COALITION_CROSSPOST_ENABLED` opens outbound manual sharing;
+    `BLACKOUT_COALITION_AUTOPOST_ENABLED` opens milestone announcements from the
+    coalition's shared accounts; `BLACKOUT_COALITION_EXTERNAL_SYNC_ENABLED`
+    opens the inbound poller and ingestion. Each is read in
+    [`coalitionSync.ts`](../../packages/api/src/services/coalitionSync.ts),
+    [`coalitionAutoCrosspost.ts`](../../packages/api/src/services/coalitionAutoCrosspost.ts)
+    and [`backgroundLoops.ts`](../../packages/api/src/backgroundLoops.ts), and an
+    unset variable means off. Inbound sync is not sequenced behind BO-1: it moves
+    public text between public platforms and makes no confidentiality claim
+    ([`TRANSMUTATION_NOTES.md`](../../TRANSMUTATION_NOTES.md) §5); its operator
+    preconditions are stated in `inboundSyncEnabled`.
+
+**What this does not change:** the encryption commitments (E2EE never behind a
+paywall; every private room and DM encrypted by default), what a tier is allowed
+to gate, and the deliberately-unencrypted room list are all untouched. Nothing
+here weakens a prior commitment. For the sequencing, gates and platform record,
+see [`ECOSYSTEM_WIRING.md`](../coalitions/ECOSYSTEM_WIRING.md) §External sync
+sequencing; for the adversary and residual-risk analysis, see
+[`THREAT_MODEL.md`](../../THREAT_MODEL.md) (A12, §5 asset rows, R8–R9).
+
+---
+
 ## 2026-08-10 — Initial record
 
 The first entry. It establishes the current commitments as a baseline so that

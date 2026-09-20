@@ -288,6 +288,14 @@ off by default, ack webhooks while dark (`fbmMatrixBridge/config.ts`); client
 Two-way external sync therefore ships dark behind
 `BLACKOUT_COALITION_EXTERNAL_SYNC_ENABLED` with every inbound row quarantined.
 
+**Superseded 2026-09-20.** Inbound sync is not sequenced behind BO-1 after
+all: it moves public text between public platforms and makes no
+confidentiality claim, which is exactly the exemption the paragraph above
+names. Its actual preconditions, the moderation state machine, the platform
+takedown route and the retention windows are in `ECOSYSTEM_WIRING.md`
+§External sync sequencing; and since a coalition may choose the `open` reply
+policy, "every inbound row quarantined" is no longer literally true.
+
 ## 13. Black Mask
 
 `/home/user/blackmask` is the Bitwarden clients fork for the privacy product. Its only

@@ -202,15 +202,88 @@ as every other job — no parallel board, no second claim mechanic.
 
 ## External sync sequencing
 
-Two-way sync stays dark until inbound moderation is in place; the gates are
-`BLACKOUT_COALITION_CROSSPOST_ENABLED` (outbound) and
-`BLACKOUT_COALITION_EXTERNAL_SYNC_ENABLED` (inbound), both off by default.
+Two-way sync is off by default and is **not** sequenced behind BO-1: what it
+ingests is public text from public platforms, moderated before display, and it
+makes no confidentiality claim — `TRANSMUTATION_NOTES.md` §5 draws the BO-1
+line at surfaces that make one. The wording of record is
+`services/coalitionSync.ts` (module header rule 3 and `inboundSyncEnabled`).
+Three flags, all off by default:
+
+| Flag                                       | Opens                                                                                                                                                          |
+| ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `BLACKOUT_COALITION_CROSSPOST_ENABLED`     | outbound — a member's manual share                                                                                                                             |
+| `BLACKOUT_COALITION_AUTOPOST_ENABLED`      | milestone announcements from the coalition's own shared accounts only; `drive`, `goods_drive` and `mutual_aid` campaigns are never auto-announced              |
+| `BLACKOUT_COALITION_EXTERNAL_SYNC_ENABLED` | inbound — the poller (`coalitionInboundSync.ts`) and ingestion (`coalitionSync.ts`). Like/reshare/reply _counts_ land unmoderated; reply _text_ is quarantined |
 
 -   Nothing broadcasts without explicit per-campaign, per-platform, per-member
     opt-in. There is no auto-enrolment of personal accounts.
--   Everything inbound lands `pending` and is invisible until moderated.
+-   Everything inbound lands `pending` and is invisible until moderated, unless
+    the coalition set its own `externalReplyPolicy` to `open` (lands
+    `approved`). `off` refuses reply text outright while engagement counts still
+    flow. The default is `moderated`.
 -   External reply authors are never Blackout users: they are rendered as
     `"Ada via Discord"` with no profile, no permissions, and no account implied.
+
+Ingestion bounds (`ingestExternalActivity`): a reply must arrive on the platform
+the post went out on; author clipped to 120 chars and content to 2000; at most
+500 replies per post, further arrivals refused; origin-id dedupe, because
+delivery is at-least-once.
+
+### Turning inbound on
+
+Set `BLACKOUT_COALITION_EXTERNAL_SYNC_ENABLED=1` only with all four in place.
+Nothing else gates it.
+
+1. Migrations `095`–`099` applied (`packages/api/src/db/migrations/`).
+2. The external-activity retention sweep running (on by default — see below).
+3. Each coalition's `externalReplyPolicy` settled: `moderated` (default), `open`
+   or `off`.
+4. A platform moderator (`BLACKOUT_ADMIN_USERS` allowlist, `requireModerator`)
+   able to remove any reply via the takedown route below.
+
+### Moderation
+
+Stewards holding `externals.moderate` read the queue at
+`GET /v1/coalitions/:id/externals/pending` and decide with
+`POST /v1/coalitions/:id/externals/:activityId/approve` or `.../reject`. Approve
+only from `pending`; reject from `pending` or `approved`; `rejected` is terminal
+(`409 { code: 'already_moderated' }`); repeating the same decision is a no-op.
+
+A platform moderator removes any reply, on a stopped coalition too, with
+`POST /v1/coalitions/:id/externals/:activityId/takedown` and body `{ reason }`.
+The row lands `rejected` and cannot be approved back; the
+`coalition.external.taken_down` event carries ids and the reason only, never the
+text. Approved replies are not served for an archived or taken-down coalition
+(`listApprovedActivity` returns `[]`).
+
+### Retention
+
+`services/coalitionExternalRetention.ts`, driven daily by
+`coalitionExternalRetentionScheduler.ts` from `backgroundLoops.ts`. The sweep
+runs whether or not the inbound flag is on — rows are owed their window whenever
+they exist — never purges `coalition_campaign_engagement` counters, and logs
+counts only.
+
+| Status     | Window   | Aged from                       | Env override                                          |
+| ---------- | -------- | ------------------------------- | ----------------------------------------------------- |
+| `pending`  | 30 days  | `receivedAt`                    | `BLACKOUT_COALITION_EXTERNAL_RETENTION_PENDING_DAYS`  |
+| `rejected` | 30 days  | `reviewedAt`, else `receivedAt` | `BLACKOUT_COALITION_EXTERNAL_RETENTION_REJECTED_DAYS` |
+| `approved` | 365 days | `receivedAt`                    | `BLACKOUT_COALITION_EXTERNAL_RETENTION_APPROVED_DAYS` |
+
+An override must be a positive integer; anything else falls back to the default.
+`BLACKOUT_COALITION_EXTERNAL_RETENTION_SWEEP=0` disables the timer and
+`BLACKOUT_COALITION_EXTERNAL_RETENTION_INTERVAL_SECONDS` changes its cadence.
+
+### Which platforms may be automated
+
+`COALITION_PLATFORM_POLICY` in `packages/core/src/coalition/coalitionNetwork.ts`
+records each platform's terms, automation basis and rate limit (reviewed
+2026-09-20), and `platformCanAutomate` derives the answer from it: X is blocked
+(`agreement_unsigned` — its paid developer agreement has been accepted by
+nobody — and `no_adapter`), Discord posts only through a shared coalition
+incoming webhook (a member's personal token would be self-botting and is refused
+at connection time), Bluesky and Mastodon post by app password and application
+token, and Instagram and TikTok are share links only.
 
 ## Failure posture
 

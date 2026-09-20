@@ -814,11 +814,6 @@ export interface IngestInput {
     receivedAt?: string;
 }
 
-/**
- * Record an inbound reply against the campaign post it answers. Always lands
- * `pending`: no inbound content is visible before a moderator approves it.
- * Refuses entirely while the trust gate is closed.
- */
 /** Bounds on text that arrived from outside. Clamped, never rejected. */
 const EXTERNAL_AUTHOR_MAX = 120;
 const EXTERNAL_CONTENT_MAX = 2000;
@@ -826,6 +821,13 @@ const EXTERNAL_CONTENT_MAX = 2000;
 /** Replies one post may accumulate before the coalition stops taking more. */
 const EXTERNAL_REPLY_CAP_PER_POST = 500;
 
+/**
+ * Record an inbound reply against the campaign post it answers. Lands
+ * `pending` unless the coalition chose the `open` reply policy for its own
+ * mission, and nothing pending is visible before a moderator approves it.
+ * Refuses entirely while `BLACKOUT_COALITION_EXTERNAL_SYNC_ENABLED` is off —
+ * it does not half-work.
+ */
 export function ingestExternalActivity(
     input: IngestInput
 ): SyncResult<CoalitionExternalActivityRecord> {

@@ -186,6 +186,11 @@ precise coordinates, governance — sits behind this. Public surfaces that make
 no confidentiality claim (a Coliseum debate, a public den) do not. `TRUST.md`
 should be read against BO-1 and reconciled.
 
+Coalition external sync — cross-posting out, replies and counts back in — sits
+outside the BO-1 line by this section's own rule: it moves public text between
+public platforms and makes no confidentiality claim. Its own gates are the ones
+in `docs/coalitions/ECOSYSTEM_WIRING.md` §External sync sequencing.
+
 ## 6. What Blackout already contributes that the brief undercounted
 
 The Documents feature (`apps/blackout-client/src/app/features/documents/templates/index.ts`)

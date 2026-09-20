@@ -161,11 +161,16 @@ export function startBackgroundLoops(): void {
         );
     }
 
+    // The same reading the service gates use (`1` or `true`, nothing else), so a
+    // deployment that sets `true` gets the timers as well as the service paths.
+    const flagOn = (value: string | undefined): boolean =>
+        value === '1' || value?.toLowerCase() === 'true';
+
     // Automated coalition cross-posting. Announces campaign milestones from a
     // coalition's OWN connected accounts — never a member's. Opt-in on top of
     // the outbound cross-post gate, which must also be on: turning this one on
     // alone posts nothing, because credential custody starts with that gate.
-    if (process.env.BLACKOUT_COALITION_AUTOPOST_ENABLED === '1') {
+    if (flagOn(process.env.BLACKOUT_COALITION_AUTOPOST_ENABLED)) {
         const intervalSeconds = Number.parseInt(
             process.env.BLACKOUT_COALITION_AUTOPOST_INTERVAL_SECONDS ?? '',
             10
@@ -186,7 +191,7 @@ export function startBackgroundLoops(): void {
     // replies go through the quarantine. Shares the inbound sync gate, which is
     // also enforced inside the sweep, so this timer cannot become the thing that
     // turns two-way sync on.
-    if (process.env.BLACKOUT_COALITION_EXTERNAL_SYNC_ENABLED === '1') {
+    if (flagOn(process.env.BLACKOUT_COALITION_EXTERNAL_SYNC_ENABLED)) {
         const intervalSeconds = Number.parseInt(
             process.env.BLACKOUT_COALITION_INBOUND_INTERVAL_SECONDS ?? '',
             10
