@@ -91,7 +91,6 @@ export type CoalitionError =
     | { kind: 'not_member' }
     | { kind: 'already_member' }
     | { kind: 'approval_required'; request: CoalitionJoinRequestRecord }
-    | { kind: 'tier_gate'; required: CoalitionTierGate; actual: CoalitionTierGate }
     | { kind: 'payees_invalid'; reason: string }
     | { kind: 'taken_down' }
     | { kind: 'petition_open' }

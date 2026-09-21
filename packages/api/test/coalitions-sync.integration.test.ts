@@ -326,7 +326,7 @@ test('a cooldown spaces posts out when one is configured', () => {
     }
 });
 
-test('two-way sync stays dark until the trust gate is opened', async () => {
+test('inbound ingestion refuses while BLACKOUT_COALITION_EXTERNAL_SYNC_ENABLED is off', async () => {
     const { coalition, campaign } = await setup('Dark by default');
     await connect(coalition.id, {
         platform: 'discord',
@@ -338,7 +338,7 @@ test('two-way sync stays dark until the trust gate is opened', async () => {
     const posted = await crosspost(coalition.id, campaign.id);
     const { outcomes } = (await posted.json()) as { outcomes: Array<{ postId: string }> };
 
-    // Inbound refuses entirely while the gate is closed — it does not half-work.
+    // Inbound refuses entirely while the flag is off — it does not half-work.
     const refused = ingestExternalActivity({
         campaignPostId: outcomes[0].postId,
         sourcePlatform: 'discord',

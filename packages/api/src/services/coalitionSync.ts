@@ -12,10 +12,13 @@
  *     `coalition_external_activity` as `pending` and are invisible until a
  *     moderator approves them. The external author is display text — never a
  *     Blackout user, never a profile, never a permission.
- *  3. **Two-way sync stays dark** until the trust work gating other launches
- *     is resolved (BO-1, see TRUST.md / TRANSMUTATION_NOTES.md §5). The
- *     inbound half is behind `BLACKOUT_COALITION_EXTERNAL_SYNC_ENABLED`, off
- *     by default, and refuses rather than half-working.
+ *  3. **Two-way sync is off by default**, behind
+ *     `BLACKOUT_COALITION_EXTERNAL_SYNC_ENABLED`, and refuses rather than
+ *     half-working. It is not sequenced behind BO-1: what it ingests is public
+ *     text from public platforms, moderated before display, and it makes no
+ *     confidentiality claim — TRANSMUTATION_NOTES.md §5 draws the BO-1 line at
+ *     surfaces that make one. See `inboundSyncEnabled` for what an operator
+ *     needs in place before turning it on.
  *
  * Platforms that permit bot/webhook posting get real posts; the rest get a
  * pre-filled share link a human completes. We never automate a platform that
@@ -68,9 +71,19 @@ export const newExternalActivityId = (): string => `coaext_${rand()}_${stamp()}`
 // ---------------------------------------------------------------------------
 
 /**
- * Inbound (two-way) sync master gate. Off by default and sequenced behind the
- * trust/encryption-audit work that gates other launches: until that resolves,
- * Blackout does not ingest third-party content into coalition threads.
+ * Inbound (two-way) sync master gate. Off by default; not sequenced behind
+ * BO-1 (see rule 3 in the module header). An operator turning it on needs:
+ *
+ *   - migrations 095–099 applied;
+ *   - the external-activity retention sweep running
+ *     (`services/coalitionExternalRetention.ts`, daily; windows pending 30d /
+ *     rejected 30d / approved 365d, set by
+ *     `BLACKOUT_COALITION_EXTERNAL_RETENTION_{PENDING,REJECTED,APPROVED}_DAYS`);
+ *   - each coalition's `externalReplyPolicy` (default `moderated`);
+ *   - a platform moderator able to remove any reply via
+ *     `POST /v1/coalitions/:id/externals/:activityId/takedown`.
+ *
+ * Those are the conditions; nothing else gates it.
  */
 export const inboundSyncEnabled = (): boolean =>
     process.env.BLACKOUT_COALITION_EXTERNAL_SYNC_ENABLED === '1' ||
@@ -167,7 +180,8 @@ export type SyncError =
     | { kind: 'credentials_unavailable' }
     | { kind: 'private_subject' }
     | { kind: 'auth_mode_unsupported'; platform: CoalitionPlatform }
-    | { kind: 'credential_malformed'; platform: CoalitionPlatform };
+    | { kind: 'credential_malformed'; platform: CoalitionPlatform }
+    | { kind: 'already_moderated'; status: 'rejected' };
 
 export type SyncResult<T> = { ok: true; value: T } | { ok: false; error: SyncError };
 const fail = <T>(error: SyncError): SyncResult<T> => ({ ok: false, error });
@@ -779,7 +793,7 @@ export function listCampaignPosts(campaignId: string): CoalitionCampaignPostReco
 }
 
 // ---------------------------------------------------------------------------
-// Inbound (dark until the trust gate lifts) + moderation
+// Inbound (off by default) + moderation
 // ---------------------------------------------------------------------------
 
 /** A cap breach reported in the shape the guardrail error already carries. */
@@ -800,11 +814,6 @@ export interface IngestInput {
     receivedAt?: string;
 }
 
-/**
- * Record an inbound reply against the campaign post it answers. Always lands
- * `pending`: no inbound content is visible before a moderator approves it.
- * Refuses entirely while the trust gate is closed.
- */
 /** Bounds on text that arrived from outside. Clamped, never rejected. */
 const EXTERNAL_AUTHOR_MAX = 120;
 const EXTERNAL_CONTENT_MAX = 2000;
@@ -812,6 +821,13 @@ const EXTERNAL_CONTENT_MAX = 2000;
 /** Replies one post may accumulate before the coalition stops taking more. */
 const EXTERNAL_REPLY_CAP_PER_POST = 500;
 
+/**
+ * Record an inbound reply against the campaign post it answers. Lands
+ * `pending` unless the coalition chose the `open` reply policy for its own
+ * mission, and nothing pending is visible before a moderator approves it.
+ * Refuses entirely while `BLACKOUT_COALITION_EXTERNAL_SYNC_ENABLED` is off —
+ * it does not half-work.
+ */
 export function ingestExternalActivity(
     input: IngestInput
 ): SyncResult<CoalitionExternalActivityRecord> {
@@ -927,8 +943,19 @@ function toView(row: CoalitionExternalActivityRecord): ExternalActivityView {
     };
 }
 
-/** Approved replies on a campaign thread — the only inbound content anyone sees. */
+/**
+ * Approved replies on a campaign thread — the only inbound content anyone sees.
+ *
+ * A stopped coalition shows none. `getCampaign` still resolves a campaign of an
+ * archived or taken-down coalition (members need to read their own history),
+ * but a stranger's words were approved for display under a coalition that no
+ * longer stands, and a platform takedown that left them up would not be one.
+ */
 export function listApprovedActivity(campaignId: string): ExternalActivityView[] {
+    const campaign = db.getCoalitionCampaign(campaignId);
+    if (!campaign) return [];
+    const coalition = db.getCoalition(campaign.coalitionId);
+    if (!coalition || isStopped(coalition)) return [];
     return db
         .listCoalitionExternalActivity({ campaignId, moderationStatus: 'approved' })
         .sort((a, b) => a.receivedAt.localeCompare(b.receivedAt))
@@ -971,9 +998,22 @@ export function moderateActivity(
         return fail({ kind: 'forbidden' });
     const row = db.getCoalitionExternalActivity(activityId);
     if (!row || row.coalitionId !== coalition.id) return fail({ kind: 'not_found' });
+
+    const target = decision === 'approve' ? 'approved' : 'rejected';
+    // Same decision twice is a no-op: the row keeps its original reviewer and
+    // time, and no second event is written for a click that changed nothing.
+    if (row.moderationStatus === target) return succeed(toView(row));
+    // Rejection is terminal. A rejected row is scheduled for purge, and a
+    // platform takedown lands here too — neither may be reversed by a steward
+    // approving after the fact.
+    if (row.moderationStatus === 'rejected') {
+        return fail({ kind: 'already_moderated', status: 'rejected' });
+    }
+    // What remains: approve from pending, reject from pending, and reject from
+    // approved (a steward retracting an approval).
     const saved = db.upsertCoalitionExternalActivity({
         ...row,
-        moderationStatus: decision === 'approve' ? 'approved' : 'rejected',
+        moderationStatus: target,
         reviewedBy: actorId,
         reviewedAt: NOW_ISO(),
     });
@@ -985,6 +1025,48 @@ export function moderateActivity(
             activityId: saved.id,
             decision,
             reviewedBy: actorId,
+        },
+    });
+    return succeed(toView(saved));
+}
+
+/**
+ * Platform removal of a single external reply.
+ *
+ * Platform authority, not the coalition's: the route behind this is gated on
+ * the admin allowlist, the same as a coalition takedown. A stopped coalition
+ * is still in scope — a moderator can always remove content — and the result
+ * is a `rejected` row, so a steward cannot approve it back (see
+ * `moderateActivity`) and the retention sweep purges it on the rejected
+ * window. The event carries ids and the reason only; the reply's text and
+ * author never leave the row.
+ */
+export function takeDownExternalActivity(
+    idOrSlug: string,
+    moderatorId: string,
+    activityId: string,
+    reason: string
+): SyncResult<ExternalActivityView> {
+    const coalition = getCoalition(idOrSlug);
+    if (!coalition) return fail({ kind: 'not_found' });
+    const row = db.getCoalitionExternalActivity(activityId);
+    if (!row || row.coalitionId !== coalition.id) return fail({ kind: 'not_found' });
+    if (row.moderationStatus === 'rejected') return succeed(toView(row));
+    const saved = db.upsertCoalitionExternalActivity({
+        ...row,
+        moderationStatus: 'rejected',
+        reviewedBy: moderatorId,
+        reviewedAt: NOW_ISO(),
+    });
+    emitDomainEvent({
+        module: 'coalitions',
+        type: 'coalition.external.taken_down',
+        payload: {
+            coalitionId: coalition.id,
+            campaignId: saved.campaignId,
+            activityId: saved.id,
+            moderatorId,
+            reason,
         },
     });
     return succeed(toView(saved));

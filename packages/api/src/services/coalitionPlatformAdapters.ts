@@ -15,9 +15,13 @@
  *     refuses `personal` for Discord outright and no code here could do it.
  *     Bluesky app passwords and Mastodon application tokens are both the
  *     sanctioned automation credential for their platform. X permits posting
- *     under a paid developer agreement nobody has signed for this project, so
- *     there is deliberately no X adapter — `platformCanAutomate` reports false
- *     and the caller falls back to a share link a human completes.
+ *     only under a paid developer agreement, and `COALITION_PLATFORM_POLICY.x`
+ *     records that nobody has accepted one for this project, so there is
+ *     deliberately no X adapter — `platformAutomationBlockers` names both
+ *     gaps, `platformCanAutomate` reports false, and the caller falls back to
+ *     a share link a human completes. Which terms each adapter here operates
+ *     under, and within what limit, is that policy record's job, not this
+ *     file's.
  *  2. **The secret is read once, here, and never returned.** Credentials are
  *     stored as an encrypted envelope bound to the connection with AAD; this is
  *     the only module that decrypts them. Nothing in this file logs a credential
@@ -27,11 +31,7 @@
  *     a post row and moves to the next platform; one unreachable instance must
  *     not abort a cross-post to three others.
  */
-import {
-    COALITION_PLATFORM_CAPABILITIES,
-    platformCanAutomate,
-    type CoalitionPlatform,
-} from '@blackout/core';
+import { platformAutomationBlockers, type CoalitionPlatform } from '@blackout/core';
 import { decryptSecret } from './secretBox';
 
 const TIMEOUT_MS = 8_000;
@@ -235,14 +235,14 @@ export interface AdapterInput {
  * part of a credential.
  */
 export async function postToPlatform(input: AdapterInput): Promise<PostResult> {
-    const capability = COALITION_PLATFORM_CAPABILITIES[input.platform];
-    if (!capability.apiPost) return { ok: false, error: 'share_link_only' };
-    if (!platformCanAutomate(input.platform)) {
-        // The platform would allow this; we have not built it. Distinct from
-        // `share_link_only` so a steward is not told Bluesky is impossible when
-        // what is missing is an X developer agreement.
-        return { ok: false, error: 'no_adapter' };
-    }
+    // The first blocker is the one a steward should hear: `share_link_only`
+    // when the platform forbids posting outright, `no_adapter` when it would
+    // allow it and we have not built it, `agreement_unsigned` when the only
+    // thing missing is a signature on the platform's developer agreement. Kept
+    // distinct so a steward is not told Bluesky is impossible when what is
+    // missing is an X developer agreement.
+    const [blocker] = platformAutomationBlockers(input.platform);
+    if (blocker) return { ok: false, error: blocker };
     if (!input.credentialRef) return { ok: false, error: 'no_credential' };
 
     let secret: string;

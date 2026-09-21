@@ -52,6 +52,13 @@ rather than newly discovered defects.
 Filed by the 2026-08-10 encryption audit
 ([`docs/audits/2026-08-10-encryption-audit.md`](docs/audits/2026-08-10-encryption-audit.md)).
 
+What BO-1 gates is anything that routes trust through Blackout
+(`TRANSMUTATION_NOTES.md` §5). It does not gate coalition external sync:
+cross-posting out and replies back in move public text between public
+platforms and make no confidentiality claim, and that feature's own
+preconditions are in `docs/coalitions/ECOSYSTEM_WIRING.md` §External sync
+sequencing.
+
 The audit could not size this defect, and that was itself the finding:
 `apps/blackout-client/src/client/matrixLogger.ts` deliberately drops both the
 rust layer's `Failed to decrypt a room event: Can't find the room key` warning

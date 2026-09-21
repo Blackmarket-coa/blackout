@@ -739,6 +739,7 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
     upsertCoalitionCampaign: upsert('coalitionCampaigns'),
     upsertCoalitionCampaignPost: upsert('coalitionCampaignPosts'),
     upsertCoalitionExternalActivity: upsert('coalitionExternalActivity'),
+    deleteCoalitionExternalActivity: resync('coalitionExternalActivity'),
     upsertCoalitionCampaignSyncOptIn: upsert('coalitionCampaignSyncOptIns'),
     upsertCoalitionBoost: upsert('coalitionBoosts'),
     upsertCoalitionCampaignContribution: upsert('coalitionCampaignContributions'),

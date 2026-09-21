@@ -161,11 +161,16 @@ export function startBackgroundLoops(): void {
         );
     }
 
+    // The same reading the service gates use (`1` or `true`, nothing else), so a
+    // deployment that sets `true` gets the timers as well as the service paths.
+    const flagOn = (value: string | undefined): boolean =>
+        value === '1' || value?.toLowerCase() === 'true';
+
     // Automated coalition cross-posting. Announces campaign milestones from a
     // coalition's OWN connected accounts — never a member's. Opt-in on top of
     // the outbound cross-post gate, which must also be on: turning this one on
     // alone posts nothing, because credential custody starts with that gate.
-    if (process.env.BLACKOUT_COALITION_AUTOPOST_ENABLED === '1') {
+    if (flagOn(process.env.BLACKOUT_COALITION_AUTOPOST_ENABLED)) {
         const intervalSeconds = Number.parseInt(
             process.env.BLACKOUT_COALITION_AUTOPOST_INTERVAL_SECONDS ?? '',
             10
@@ -186,7 +191,7 @@ export function startBackgroundLoops(): void {
     // replies go through the quarantine. Shares the inbound sync gate, which is
     // also enforced inside the sweep, so this timer cannot become the thing that
     // turns two-way sync on.
-    if (process.env.BLACKOUT_COALITION_EXTERNAL_SYNC_ENABLED === '1') {
+    if (flagOn(process.env.BLACKOUT_COALITION_EXTERNAL_SYNC_ENABLED)) {
         const intervalSeconds = Number.parseInt(
             process.env.BLACKOUT_COALITION_INBOUND_INTERVAL_SECONDS ?? '',
             10
@@ -199,6 +204,30 @@ export function startBackgroundLoops(): void {
             ({ startCoalitionInboundScheduler }) => {
                 startCoalitionInboundScheduler(intervalMs);
                 log.info('coalition_inbound_scheduler_started', { intervalMs });
+            }
+        );
+    }
+
+    // Retention for quarantined external replies. NOT gated on the inbound
+    // sync flag above: that flag decides whether new replies arrive, while the
+    // rows already held are owed their retention window whether or not more
+    // are coming — switching two-way sync off must not freeze a stranger's
+    // words in place. On by default like the dead-man sweep (it discharges an
+    // obligation, not a feature); set BLACKOUT_COALITION_EXTERNAL_RETENTION_SWEEP=0
+    // to disable, or ..._INTERVAL_SECONDS for a custom cadence.
+    if (process.env.BLACKOUT_COALITION_EXTERNAL_RETENTION_SWEEP !== '0') {
+        const intervalSeconds = Number.parseInt(
+            process.env.BLACKOUT_COALITION_EXTERNAL_RETENTION_INTERVAL_SECONDS ?? '',
+            10
+        );
+        const intervalMs =
+            Number.isFinite(intervalSeconds) && intervalSeconds > 0
+                ? intervalSeconds * 1000
+                : undefined;
+        void import('./services/coalitionExternalRetentionScheduler').then(
+            ({ startCoalitionExternalRetentionScheduler }) => {
+                startCoalitionExternalRetentionScheduler(intervalMs);
+                log.info('coalition_external_retention_scheduler_started', { intervalMs });
             }
         );
     }
