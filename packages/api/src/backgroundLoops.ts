@@ -166,19 +166,22 @@ export function startBackgroundLoops(): void {
     const flagOn = (value: string | undefined): boolean =>
         value === '1' || value?.toLowerCase() === 'true';
 
+    // Seconds from the environment as a timer delay, clamped to the largest
+    // delay Node's timers honour: past 2^31-1 ms a setInterval fires every
+    // millisecond rather than never.
+    const MAX_TIMER_MS = 2_147_483_647;
+    const intervalMsFromEnv = (name: string): number | undefined => {
+        const seconds = Number.parseInt(process.env[name] ?? '', 10);
+        if (!Number.isFinite(seconds) || seconds <= 0) return undefined;
+        return Math.min(seconds * 1000, MAX_TIMER_MS);
+    };
+
     // Automated coalition cross-posting. Announces campaign milestones from a
     // coalition's OWN connected accounts — never a member's. Opt-in on top of
     // the outbound cross-post gate, which must also be on: turning this one on
     // alone posts nothing, because credential custody starts with that gate.
     if (flagOn(process.env.BLACKOUT_COALITION_AUTOPOST_ENABLED)) {
-        const intervalSeconds = Number.parseInt(
-            process.env.BLACKOUT_COALITION_AUTOPOST_INTERVAL_SECONDS ?? '',
-            10
-        );
-        const intervalMs =
-            Number.isFinite(intervalSeconds) && intervalSeconds > 0
-                ? intervalSeconds * 1000
-                : undefined;
+        const intervalMs = intervalMsFromEnv('BLACKOUT_COALITION_AUTOPOST_INTERVAL_SECONDS');
         void import('./services/coalitionAutoCrosspostScheduler').then(
             ({ startCoalitionAutoCrosspostScheduler }) => {
                 startCoalitionAutoCrosspostScheduler(intervalMs);
@@ -192,14 +195,7 @@ export function startBackgroundLoops(): void {
     // also enforced inside the sweep, so this timer cannot become the thing that
     // turns two-way sync on.
     if (flagOn(process.env.BLACKOUT_COALITION_EXTERNAL_SYNC_ENABLED)) {
-        const intervalSeconds = Number.parseInt(
-            process.env.BLACKOUT_COALITION_INBOUND_INTERVAL_SECONDS ?? '',
-            10
-        );
-        const intervalMs =
-            Number.isFinite(intervalSeconds) && intervalSeconds > 0
-                ? intervalSeconds * 1000
-                : undefined;
+        const intervalMs = intervalMsFromEnv('BLACKOUT_COALITION_INBOUND_INTERVAL_SECONDS');
         void import('./services/coalitionInboundScheduler').then(
             ({ startCoalitionInboundScheduler }) => {
                 startCoalitionInboundScheduler(intervalMs);
@@ -216,14 +212,9 @@ export function startBackgroundLoops(): void {
     // obligation, not a feature); set BLACKOUT_COALITION_EXTERNAL_RETENTION_SWEEP=0
     // to disable, or ..._INTERVAL_SECONDS for a custom cadence.
     if (process.env.BLACKOUT_COALITION_EXTERNAL_RETENTION_SWEEP !== '0') {
-        const intervalSeconds = Number.parseInt(
-            process.env.BLACKOUT_COALITION_EXTERNAL_RETENTION_INTERVAL_SECONDS ?? '',
-            10
+        const intervalMs = intervalMsFromEnv(
+            'BLACKOUT_COALITION_EXTERNAL_RETENTION_INTERVAL_SECONDS'
         );
-        const intervalMs =
-            Number.isFinite(intervalSeconds) && intervalSeconds > 0
-                ? intervalSeconds * 1000
-                : undefined;
         void import('./services/coalitionExternalRetentionScheduler').then(
             ({ startCoalitionExternalRetentionScheduler }) => {
                 startCoalitionExternalRetentionScheduler(intervalMs);

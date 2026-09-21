@@ -23,8 +23,9 @@
  *     under, and within what limit, is that policy record's job, not this
  *     file's.
  *  2. **The secret is read once, here, and never returned.** Credentials are
- *     stored as an encrypted envelope bound to the connection with AAD; this is
- *     the only module that decrypts them. Nothing in this file logs a credential
+ *     stored as an encrypted envelope bound to the connection with AAD; only
+ *     this module (to post) and the inbound poller in `coalitionInboundSync.ts`
+ *     (to read back what was posted) decrypt them. Nothing in this file logs a credential
  *     or puts one in an error, and the failure strings are deliberately coarse
  *     for that reason.
  *  3. **A failure is a value, never a throw.** The caller records the outcome on

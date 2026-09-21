@@ -36,6 +36,17 @@
 import { db } from '../db/store';
 import type { CoalitionExternalActivityRecord } from '../db/types';
 import { log } from '../telemetry/logger';
+import { INBOUND_READ_WINDOW_DAYS } from './coalitionInboundSync';
+
+/**
+ * No window may be shorter than the poller's read window. The origin-id dedupe
+ * in `ingestExternalActivity` only sees live rows, so a row purged while the
+ * poller is still re-reading its post would be ingested again as new — and a
+ * rejected or taken-down reply would be back in the queue. Every reply is
+ * younger than its post, so a window at least this long expires a row only
+ * after the poller has stopped looking at the post.
+ */
+export const MIN_WINDOW_DAYS = INBOUND_READ_WINDOW_DAYS;
 
 export const DEFAULT_PENDING_DAYS = 30;
 export const DEFAULT_REJECTED_DAYS = 30;
@@ -69,18 +80,23 @@ function positiveIntDays(raw: string | undefined, fallback: number): number {
     return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-/** Resolve the three windows from the environment. Never throws, never zero. */
+/**
+ * Resolve the three windows from the environment. Never throws, never zero,
+ * never shorter than `MIN_WINDOW_DAYS` (see above).
+ */
 export function retentionWindows(env: NodeJS.ProcessEnv = process.env): RetentionWindows {
+    const floored = (raw: string | undefined, fallback: number): number =>
+        Math.max(positiveIntDays(raw, fallback), MIN_WINDOW_DAYS);
     return {
-        pendingDays: positiveIntDays(
+        pendingDays: floored(
             env.BLACKOUT_COALITION_EXTERNAL_RETENTION_PENDING_DAYS,
             DEFAULT_PENDING_DAYS
         ),
-        rejectedDays: positiveIntDays(
+        rejectedDays: floored(
             env.BLACKOUT_COALITION_EXTERNAL_RETENTION_REJECTED_DAYS,
             DEFAULT_REJECTED_DAYS
         ),
-        approvedDays: positiveIntDays(
+        approvedDays: floored(
             env.BLACKOUT_COALITION_EXTERNAL_RETENTION_APPROVED_DAYS,
             DEFAULT_APPROVED_DAYS
         ),
@@ -156,18 +172,34 @@ export function sweepExternalActivityRetention(now: number = Date.now()): Retent
     }
 
     let failed = 0;
+    const due = new Map<string, Bucket>();
     for (const row of rows) {
         result.scanned += 1;
         try {
             const { bucket, pastDue } = isPastDue(row, windows, now);
-            if (!pastDue) continue;
-            if (db.deleteCoalitionExternalActivity(row.id)) {
-                result.purged[bucket] += 1;
-            }
+            if (pastDue) due.set(row.id, bucket);
         } catch {
             // Counted, never described: the row's fields are a stranger's and
             // do not belong in a log line.
             failed += 1;
+        }
+    }
+
+    // One delete for the whole batch. On the durable backends a delete is a
+    // whole-table reconcile, so purging N rows one at a time would cost N
+    // rewrites of the table; one call costs one.
+    if (due.size > 0) {
+        try {
+            for (const id of db.deleteCoalitionExternalActivities([...due.keys()])) {
+                const bucket = due.get(id);
+                if (bucket) result.purged[bucket] += 1;
+            }
+        } catch (err) {
+            failed += due.size;
+            log.warn('coalition_external_retention_delete_failed', {
+                count: due.size,
+                error: err instanceof Error ? err.name : 'unknown',
+            });
         }
     }
 

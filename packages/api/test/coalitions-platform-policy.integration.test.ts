@@ -123,8 +123,18 @@ test('the platforms with adapters run on free, sanctioned credentials', () => {
         const policy = COALITION_PLATFORM_POLICY[platform];
         assert.equal(policy.accessTier, 'free', platform);
         assert.equal(policy.agreementRequired, false, platform);
-        assert.notEqual(policy.rateLimit, null, `${platform} cites the limit it stays under`);
     }
+    // Bluesky and Mastodon publish the limit their adapter stays under. Discord
+    // publishes webhook limits only in response headers, so its row cites
+    // nothing rather than a number nobody can check.
+    for (const platform of ['bluesky', 'mastodon'] as const) {
+        assert.notEqual(
+            COALITION_PLATFORM_POLICY[platform].rateLimit,
+            null,
+            `${platform} cites the limit it stays under`
+        );
+    }
+    assert.equal(COALITION_PLATFORM_POLICY.discord.rateLimit, null);
 });
 
 test('platforms with no programmatic posting claim no basis and no limit', () => {

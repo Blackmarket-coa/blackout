@@ -3687,6 +3687,11 @@ class InMemoryDb {
         return this.coalitionExternalActivity.delete(id);
     }
 
+    /** Batch form; returns the ids that were actually present and removed. */
+    deleteCoalitionExternalActivities(ids: string[]): string[] {
+        return ids.filter((id) => this.coalitionExternalActivity.delete(id));
+    }
+
     listCoalitionCampaignSyncOptIns(
         filter: { campaignId?: string; userId?: string; coalitionId?: string } = {}
     ): CoalitionCampaignSyncOptInRecord[] {
@@ -7227,6 +7232,12 @@ export class FileBackedDb extends InMemoryDb {
     override deleteCoalitionExternalActivity(id: string): boolean {
         const deleted = super.deleteCoalitionExternalActivity(id);
         this.persist();
+        return deleted;
+    }
+
+    override deleteCoalitionExternalActivities(ids: string[]): string[] {
+        const deleted = super.deleteCoalitionExternalActivities(ids);
+        if (deleted.length > 0) this.persist();
         return deleted;
     }
 

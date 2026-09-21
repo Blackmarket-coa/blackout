@@ -491,11 +491,11 @@ export const COALITION_PLATFORM_POLICY: Record<CoalitionPlatform, CoalitionPlatf
         accessTier: 'free',
         agreementRequired: false,
         agreementAccepted: null,
-        rateLimit: {
-            posts: 30,
-            perSeconds: 60,
-            source: 'Discord Developer Documentation, Rate Limits, per webhook',
-        },
+        // Discord's Rate Limits page names webhooks as a limited resource but
+        // publishes the numbers only in response headers; the commonly repeated
+        // 30 per 60 s per webhook is folklore, not a cited figure, so none is
+        // recorded here. The adapter honours 429s rather than a budget.
+        rateLimit: null,
         reviewedOn: '2026-09-20',
     },
     mastodon: {

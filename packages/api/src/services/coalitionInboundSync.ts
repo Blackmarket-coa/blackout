@@ -40,7 +40,14 @@ import { decryptSecret } from './secretBox';
 const TIMEOUT_MS = 8_000;
 
 /** How far back to keep re-reading a post. */
-const READ_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+/**
+ * How far back the poller re-reads posts, in days. Exported because the
+ * retention sweep floors every window at this: a reply purged while its post
+ * is still being re-read would come straight back as a fresh `pending` row —
+ * including one a steward rejected or a platform moderator took down.
+ */
+export const INBOUND_READ_WINDOW_DAYS = 30;
+const READ_WINDOW_MS = INBOUND_READ_WINDOW_DAYS * 24 * 60 * 60 * 1000;
 
 /** Replies taken from any single read. A busy post does not get to flood. */
 const REPLIES_PER_READ = 50;
