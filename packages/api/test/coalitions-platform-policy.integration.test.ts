@@ -5,7 +5,7 @@
  * nothing recording that posting there needs a paid developer agreement nobody
  * has signed. `COALITION_PLATFORM_POLICY` now records, for every platform,
  * which terms the adapter operates under, what that access costs, what limit
- * it must respect and who accepted what. What is pinned here is that the
+ * it must respect and which role accepted what. What is pinned here is that the
  * record is complete and honest, and that an unsigned agreement blocks
  * automation on its own — even if someone later flips `adapter: true` for X.
  */
@@ -88,6 +88,19 @@ test('a cited rate limit is a positive number with a named source', () => {
         assert.ok(rateLimit.posts > 0, `${platform} posts`);
         assert.ok(rateLimit.perSeconds > 0, `${platform} perSeconds`);
         assert.ok(rateLimit.source.length > 0, `${platform} cites the document`);
+    }
+});
+
+test('an accepted agreement names a role, never a person', () => {
+    // The policy is served on an unauthenticated route, so whatever is recorded
+    // as having accepted an agreement is public. The field is a role or an
+    // organisation; the shape leaves no slot for an individual's name.
+    for (const platform of COALITION_PLATFORMS) {
+        const { agreementAccepted } = COALITION_PLATFORM_POLICY[platform];
+        assert.ok(
+            agreementAccepted === null || typeof agreementAccepted.role === 'string',
+            `${platform} agreementAccepted names a role`
+        );
     }
 });
 
