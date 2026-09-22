@@ -1,10 +1,12 @@
 /**
  * Periodic driver for the external-reply retention sweep.
  *
- * Mirrors the other schedulers here: idempotent start/stop around a setInterval
- * with an overlap guard. Daily by default — retention windows are measured in
- * days, so nothing is gained by asking more often, and the sweep walks the
- * whole table each time.
+ * Mirrors the other schedulers here — idempotent start/stop around a
+ * setInterval with an overlap guard — with one deliberate difference: the
+ * first pass runs at start, not one interval later. The interval is a day, and
+ * a process that is restarted more often than that (rolling deploys, daily
+ * container recycling, a crash loop) would otherwise never sweep at all while
+ * every document describes a working daily purge.
  *
  * Deliberately NOT gated on `BLACKOUT_COALITION_EXTERNAL_SYNC_ENABLED`. That
  * flag controls whether new replies arrive; the rows already held are owed
@@ -16,29 +18,50 @@ import { log } from '../telemetry/logger';
 
 export const DEFAULT_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
+/**
+ * The largest delay Node's timers honour. Past 2^31-1 ms a timer fires every
+ * millisecond instead of never, which for a table sweep is the worst outcome.
+ */
+export const MAX_TIMER_MS = 2_147_483_647;
+
 let timer: ReturnType<typeof setInterval> | null = null;
+let firstPass: ReturnType<typeof setTimeout> | null = null;
 let running = false;
+
+function tick(): void {
+    if (running) return;
+    running = true;
+    try {
+        sweepExternalActivityRetention();
+    } catch (err) {
+        log.warn('coalition_external_retention_sweep_threw', { error: String(err) });
+    } finally {
+        running = false;
+    }
+}
 
 export const startCoalitionExternalRetentionScheduler = (
     intervalMs: number = DEFAULT_INTERVAL_MS
 ): { stop: () => void } => {
     if (timer) return { stop: stopCoalitionExternalRetentionScheduler };
-    timer = setInterval(() => {
-        if (running) return;
-        running = true;
-        try {
-            sweepExternalActivityRetention();
-        } catch (err) {
-            log.warn('coalition_external_retention_sweep_threw', { error: String(err) });
-        } finally {
-            running = false;
-        }
-    }, intervalMs);
+    const delay = Number.isFinite(intervalMs)
+        ? Math.min(Math.max(1, Math.floor(intervalMs)), MAX_TIMER_MS)
+        : DEFAULT_INTERVAL_MS;
+    firstPass = setTimeout(() => {
+        firstPass = null;
+        tick();
+    }, 0);
+    if (typeof firstPass.unref === 'function') firstPass.unref();
+    timer = setInterval(tick, delay);
     if (typeof timer.unref === 'function') timer.unref();
     return { stop: stopCoalitionExternalRetentionScheduler };
 };
 
 export const stopCoalitionExternalRetentionScheduler = (): void => {
+    if (firstPass) {
+        clearTimeout(firstPass);
+        firstPass = null;
+    }
     if (timer) {
         clearInterval(timer);
         timer = null;

@@ -1326,8 +1326,8 @@ for (const decision of ['approve', 'reject'] as const) {
 
 /**
  * Platform removal of one external reply. Same authority and same body shape
- * as a coalition takedown; unlike a steward's reject it works on a stopped
- * coalition too, and the result cannot be approved back.
+ * as a coalition takedown; it works on a stopped coalition, and the result
+ * cannot be approved back by the coalition.
  */
 coalitions.post('/:id/externals/:activityId/takedown', async (c) => {
     const user = requireModerator(c);

@@ -74,7 +74,7 @@ export const newExternalActivityId = (): string => `coaext_${rand()}_${stamp()}`
  * Inbound (two-way) sync master gate. Off by default; not sequenced behind
  * BO-1 (see rule 3 in the module header). An operator turning it on needs:
  *
- *   - migrations 095–099 applied;
+ *   - every migration through 099 applied (the coalition tables begin at 091);
  *   - the external-activity retention sweep running
  *     (`services/coalitionExternalRetention.ts`, daily; windows pending 30d /
  *     rejected 30d / approved 365d, set by

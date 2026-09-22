@@ -38,7 +38,9 @@ const {
     DEFAULT_PENDING_DAYS,
     DEFAULT_REJECTED_DAYS,
     DEFAULT_APPROVED_DAYS,
+    MIN_WINDOW_DAYS,
 } = await import('../src/services/coalitionExternalRetention');
+const { INBOUND_READ_WINDOW_DAYS } = await import('../src/services/coalitionInboundSync');
 const scheduler = await import('../src/services/coalitionExternalRetentionScheduler');
 
 function auth(user: string): Record<string, string> {
@@ -169,11 +171,27 @@ test('defaults: 30 / 30 / 365 days', () => {
 
 test('env override changes the window', () => {
     const windows = retentionWindows({
-        BLACKOUT_COALITION_EXTERNAL_RETENTION_PENDING_DAYS: '7',
-        BLACKOUT_COALITION_EXTERNAL_RETENTION_REJECTED_DAYS: '14',
-        BLACKOUT_COALITION_EXTERNAL_RETENTION_APPROVED_DAYS: '90',
+        BLACKOUT_COALITION_EXTERNAL_RETENTION_PENDING_DAYS: '45',
+        BLACKOUT_COALITION_EXTERNAL_RETENTION_REJECTED_DAYS: '60',
+        BLACKOUT_COALITION_EXTERNAL_RETENTION_APPROVED_DAYS: '400',
     });
-    assert.deepEqual(windows, { pendingDays: 7, rejectedDays: 14, approvedDays: 90 });
+    assert.deepEqual(windows, { pendingDays: 45, rejectedDays: 60, approvedDays: 400 });
+});
+
+test("no window can be shorter than the poller's read window", () => {
+    // A rejected reply purged while its post is still being re-read would be
+    // ingested again as pending, so a shorter window is raised, not honoured.
+    const windows = retentionWindows({
+        BLACKOUT_COALITION_EXTERNAL_RETENTION_PENDING_DAYS: '1',
+        BLACKOUT_COALITION_EXTERNAL_RETENTION_REJECTED_DAYS: '7',
+        BLACKOUT_COALITION_EXTERNAL_RETENTION_APPROVED_DAYS: '29',
+    });
+    assert.deepEqual(windows, {
+        pendingDays: MIN_WINDOW_DAYS,
+        rejectedDays: MIN_WINDOW_DAYS,
+        approvedDays: MIN_WINDOW_DAYS,
+    });
+    assert.equal(MIN_WINDOW_DAYS, INBOUND_READ_WINDOW_DAYS);
 });
 
 test('a value that is not a positive integer falls back to the default for that key', () => {
@@ -284,13 +302,19 @@ test('the boundary is strictly past due: exactly on the window is kept', async (
 
 test('an env override is what the sweep actually uses', async () => {
     const ctx = await setup();
-    process.env.BLACKOUT_COALITION_EXTERNAL_RETENTION_PENDING_DAYS = '5';
-    const sixDays = seedReply(ctx, { moderationStatus: 'pending', receivedAt: daysAgo(6) });
-    const fourDays = seedReply(ctx, { moderationStatus: 'pending', receivedAt: daysAgo(4) });
+    process.env.BLACKOUT_COALITION_EXTERNAL_RETENTION_PENDING_DAYS = '40';
+    const olderThanOverride = seedReply(ctx, {
+        moderationStatus: 'pending',
+        receivedAt: daysAgo(41),
+    });
+    const olderThanDefaultOnly = seedReply(ctx, {
+        moderationStatus: 'pending',
+        receivedAt: daysAgo(35),
+    });
 
     sweepExternalActivityRetention(NOW);
-    assert.equal(has(sixDays), false);
-    assert.equal(has(fourDays), true);
+    assert.equal(has(olderThanOverride), false);
+    assert.equal(has(olderThanDefaultOnly), true);
 });
 
 test('garbage env values leave the sweep on its defaults', async () => {
@@ -386,6 +410,26 @@ test('an empty table is a no-op', () => {
 });
 
 // --- scheduler --------------------------------------------------------------------
+
+test('scheduler: the first sweep runs at start, not one interval later', async () => {
+    const ctx = await setup();
+    const stale = seedReply(ctx, { moderationStatus: 'rejected', receivedAt: daysAgo(400) });
+    // An interval long enough that only a start-time pass could have purged it.
+    const handle = scheduler.startCoalitionExternalRetentionScheduler(60 * 60 * 1000);
+    try {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        assert.equal(has(stale), false, 'a restart-prone process still discharges retention');
+    } finally {
+        handle.stop();
+    }
+});
+
+test('scheduler: an interval past the timer limit is clamped, never wrapped to 1 ms', () => {
+    assert.equal(scheduler.MAX_TIMER_MS, 2_147_483_647);
+    const handle = scheduler.startCoalitionExternalRetentionScheduler(Number.MAX_SAFE_INTEGER);
+    assert.equal(scheduler.isCoalitionExternalRetentionSchedulerRunning(), true);
+    handle.stop();
+});
 
 test('scheduler: idempotent start; stop clears the timer', () => {
     assert.equal(scheduler.isCoalitionExternalRetentionSchedulerRunning(), false);

@@ -234,7 +234,8 @@ delivery is at-least-once.
 Set `BLACKOUT_COALITION_EXTERNAL_SYNC_ENABLED=1` only with all four in place.
 Nothing else gates it.
 
-1. Migrations `095`–`099` applied (`packages/api/src/db/migrations/`).
+1. Every migration through `099` applied (`packages/api/src/db/migrations/`; the
+   coalition tables begin at `091`).
 2. The external-activity retention sweep running (on by default — see below).
 3. Each coalition's `externalReplyPolicy` settled: `moderated` (default), `open`
    or `off`.
@@ -271,6 +272,9 @@ counts only.
 | `approved` | 365 days | `receivedAt`                    | `BLACKOUT_COALITION_EXTERNAL_RETENTION_APPROVED_DAYS` |
 
 An override must be a positive integer; anything else falls back to the default.
+No window can be shorter than the poller's 30-day read window: a row purged
+while its post is still being re-read would be ingested again, and a rejected or
+taken-down reply would be back in the queue. Shorter values are raised to 30.
 `BLACKOUT_COALITION_EXTERNAL_RETENTION_SWEEP=0` disables the timer and
 `BLACKOUT_COALITION_EXTERNAL_RETENTION_INTERVAL_SECONDS` changes its cadence.
 
