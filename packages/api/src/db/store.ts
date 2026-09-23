@@ -7241,6 +7241,194 @@ export class FileBackedDb extends InMemoryDb {
         return deleted;
     }
 
+    override upsertCoalition(
+        input: Omit<CoalitionRecord, 'createdAt' | 'updatedAt'>
+    ): CoalitionRecord {
+        const written = super.upsertCoalition(input);
+        this.persist();
+        return written;
+    }
+
+    override upsertCoalitionMembership(
+        input: Omit<CoalitionMembershipRecord, 'createdAt' | 'updatedAt'>
+    ): CoalitionMembershipRecord {
+        const written = super.upsertCoalitionMembership(input);
+        this.persist();
+        return written;
+    }
+
+    override upsertCoalitionJoinRequest(
+        input: Omit<CoalitionJoinRequestRecord, 'createdAt' | 'updatedAt'>
+    ): CoalitionJoinRequestRecord {
+        const written = super.upsertCoalitionJoinRequest(input);
+        this.persist();
+        return written;
+    }
+
+    override upsertCoalitionConnection(
+        input: Omit<CoalitionConnectionRecord, 'createdAt' | 'updatedAt'>
+    ): CoalitionConnectionRecord {
+        const written = super.upsertCoalitionConnection(input);
+        this.persist();
+        return written;
+    }
+
+    override upsertCoalitionMemberConnection(
+        input: Omit<CoalitionMemberConnectionRecord, 'createdAt' | 'updatedAt'>
+    ): CoalitionMemberConnectionRecord {
+        const written = super.upsertCoalitionMemberConnection(input);
+        this.persist();
+        return written;
+    }
+
+    override upsertCoalitionCampaign(
+        input: Omit<CoalitionCampaignRecord, 'createdAt' | 'updatedAt'>
+    ): CoalitionCampaignRecord {
+        const written = super.upsertCoalitionCampaign(input);
+        this.persist();
+        return written;
+    }
+
+    override upsertCoalitionCampaignPost(
+        input: Omit<CoalitionCampaignPostRecord, 'createdAt' | 'updatedAt'>
+    ): CoalitionCampaignPostRecord {
+        const written = super.upsertCoalitionCampaignPost(input);
+        this.persist();
+        return written;
+    }
+
+    override upsertCoalitionExternalActivity(
+        input: Omit<CoalitionExternalActivityRecord, 'createdAt' | 'updatedAt'>
+    ): CoalitionExternalActivityRecord {
+        const written = super.upsertCoalitionExternalActivity(input);
+        this.persist();
+        return written;
+    }
+
+    override upsertCoalitionCampaignSyncOptIn(
+        input: Omit<CoalitionCampaignSyncOptInRecord, 'createdAt' | 'updatedAt'>
+    ): CoalitionCampaignSyncOptInRecord {
+        const written = super.upsertCoalitionCampaignSyncOptIn(input);
+        this.persist();
+        return written;
+    }
+
+    override upsertCoalitionSuccessionPetition(
+        input: Omit<CoalitionSuccessionPetitionRecord, 'createdAt' | 'updatedAt'>
+    ): CoalitionSuccessionPetitionRecord {
+        const written = super.upsertCoalitionSuccessionPetition(input);
+        this.persist();
+        return written;
+    }
+
+    override upsertCoalitionCampaignPayee(
+        input: Omit<CoalitionCampaignPayeeRecord, 'createdAt' | 'updatedAt'>
+    ): CoalitionCampaignPayeeRecord {
+        const written = super.upsertCoalitionCampaignPayee(input);
+        this.persist();
+        return written;
+    }
+
+    override upsertCampaignAttribution(
+        input: Omit<CampaignAttributionRecord, 'createdAt' | 'updatedAt' | 'id'>
+    ): CampaignAttributionRecord {
+        const written = super.upsertCampaignAttribution(input);
+        this.persist();
+        return written;
+    }
+
+    override upsertCampaignEngagement(
+        input: Omit<CampaignEngagementRecord, 'createdAt' | 'updatedAt'>
+    ): CampaignEngagementRecord {
+        const written = super.upsertCampaignEngagement(input);
+        this.persist();
+        return written;
+    }
+
+    override upsertCoalitionCampaignContribution(
+        input: Omit<CoalitionCampaignContributionRecord, 'createdAt' | 'updatedAt'>
+    ): CoalitionCampaignContributionRecord {
+        const written = super.upsertCoalitionCampaignContribution(input);
+        this.persist();
+        return written;
+    }
+
+    override upsertCoalitionBoost(
+        input: Omit<CoalitionBoostRecord, 'createdAt' | 'updatedAt'>
+    ): CoalitionBoostRecord {
+        const written = super.upsertCoalitionBoost(input);
+        this.persist();
+        return written;
+    }
+
+    override updateCoalitionProject(
+        id: string,
+        patch: Partial<
+            Pick<
+                CoalitionProjectRecord,
+                | 'title'
+                | 'description'
+                | 'category'
+                | 'fundingGoalCents'
+                | 'currency'
+                | 'useOfFunds'
+                | 'deadlineAt'
+                | 'milestones'
+                | 'place'
+            >
+        >
+    ): CoalitionProjectRecord | undefined {
+        const updated = super.updateCoalitionProject(id, patch);
+        if (updated) this.persist();
+        return updated;
+    }
+
+    override addCoalitionProjectSupport(
+        input: Omit<CoalitionProjectSupportRecord, 'createdAt'> & { createdAt?: string }
+    ): CoalitionProjectSupportRecord {
+        const created = super.addCoalitionProjectSupport(input);
+        this.persist();
+        return created;
+    }
+
+    override applyCoalitionProjectSupport(
+        id: string,
+        amountCents: number,
+        milestones: CoalitionProjectRecord['milestones']
+    ): CoalitionProjectRecord | undefined {
+        const updated = super.applyCoalitionProjectSupport(id, amountCents, milestones);
+        if (updated) this.persist();
+        return updated;
+    }
+
+    override upsertCoalitionSurge(
+        input: Omit<CoalitionSurgeRecord, 'createdAt' | 'updatedAt'> & {
+            createdAt?: string;
+            updatedAt?: string;
+        }
+    ): CoalitionSurgeRecord {
+        const written = super.upsertCoalitionSurge(input);
+        this.persist();
+        return written;
+    }
+
+    override addCoalitionNotification(
+        input: Omit<CoalitionNotificationRecord, 'createdAt'> & { createdAt?: string }
+    ): CoalitionNotificationRecord {
+        const created = super.addCoalitionNotification(input);
+        this.persist();
+        return created;
+    }
+
+    override markCoalitionNotificationRead(
+        id: string,
+        recipientUserId: string
+    ): CoalitionNotificationRecord | undefined {
+        const updated = super.markCoalitionNotificationRead(id, recipientUserId);
+        if (updated) this.persist();
+        return updated;
+    }
+
     override createCoalitionAidPost(
         input: Omit<CoalitionAidPostRecord, 'createdAt'>
     ): CoalitionAidPostRecord {

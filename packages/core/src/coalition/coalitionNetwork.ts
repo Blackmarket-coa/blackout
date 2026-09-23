@@ -325,8 +325,9 @@ export type CoalitionPlatform = typeof COALITION_PLATFORMS[number];
  * model, so both modes stand.
  *
  * This table says only what is *built*. What each platform's terms permit,
- * under which agreement, at what cost, within which limit, and who accepted
- * that agreement for this project lives in `COALITION_PLATFORM_POLICY` below.
+ * under which agreement, at what cost, within which limit, and which role
+ * accepted that agreement for this project lives in `COALITION_PLATFORM_POLICY`
+ * below.
  * `platformCanAutomate` reads both: an `apiPost: true` row here whose policy
  * row requires an agreement nobody has accepted is not automatable, whatever
  * `adapter` says.
@@ -420,7 +421,7 @@ export type PlatformAutomationBasis =
  * document was read, what access tier posting needs, what limit the adapter
  * must stay under, or whether anyone had actually accepted the terms for this
  * project. Acceptance is recorded here, in code, so that it can only ever
- * happen as a visible diff with a name, a date and a reference on it.
+ * happen as a visible diff with a role, a date and a reference on it.
  */
 export interface CoalitionPlatformPolicy {
     /** The governing document. `url` is null only when the terms are instance-specific. */
@@ -432,11 +433,15 @@ export interface CoalitionPlatformPolicy {
     /** A signed or paid developer agreement is a precondition of posting. */
     agreementRequired: boolean;
     /**
-     * Who accepted the agreement for this project, when, and under what
+     * Which role accepted the agreement for this project, when, and under what
      * reference. `null` means nobody has. Changing this is a deliberate,
      * reviewable act, which is why it is source and not configuration.
+     *
+     * `role` is the role or organisation that accepted ("project steward",
+     * "the operating collective"), never an individual's name: this record is
+     * served on an unauthenticated route, so whatever is written here is public.
      */
-    agreementAccepted: { by: string; on: string; reference: string } | null;
+    agreementAccepted: { role: string; on: string; reference: string } | null;
     /** The documented limit the adapter is expected to stay under. */
     rateLimit: { posts: number; perSeconds: number; source: string } | null;
     /** YYYY-MM-DD the terms were last read against the adapter. */
@@ -452,9 +457,9 @@ export const COALITION_PLATFORM_POLICY: Record<CoalitionPlatform, CoalitionPlatf
         automationBasis: 'developer_agreement',
         accessTier: 'paid',
         agreementRequired: true,
-        // Nobody has accepted the developer agreement for this project. Until a
-        // named person records that here, X is blocked for automation whatever
-        // the capabilities table says about an adapter.
+        // Nobody has accepted the developer agreement for this project. Until
+        // whoever holds that role records it here, X is blocked for automation
+        // whatever the capabilities table says about an adapter.
         agreementAccepted: null,
         // X publishes a separate write limit for each paid tier, and the
         // numbers have been revised more than once. No tier has been bought,
