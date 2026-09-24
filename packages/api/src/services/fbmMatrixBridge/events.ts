@@ -13,7 +13,6 @@ import type {
     FbmLedgerEventKind,
     FbmOrderStatus,
     FbmOrderLineItem,
-    FbmCycleEventKind,
     FbmCycleAvailableItem,
     FbmVendorTrustTier,
     FbmLogisticsEventKind,

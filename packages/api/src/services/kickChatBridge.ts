@@ -88,7 +88,9 @@ const buildOnMessage =
                 body: msg.body,
                 platformMessageId: msg.platformMessageId,
             },
-        }).catch(() => {});
+        }).catch(() => {
+            /* fire-and-forget: the dispatcher logs its own failures; chat ingest must not reject */
+        });
         // Fan out to the chatMessageHub so the Twitch IRC bot shim delivers
         // Kick chat as a Twitch-shape PRIVMSG to any bot that JOIN'd
         // `#kick:<chatroomId>`. Kick usernames are already IRC-safe-ish; we

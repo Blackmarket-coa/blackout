@@ -135,9 +135,13 @@ export async function compareSnapshotToDatabase(
         connect: async (): Promise<PgClient> => ({
             query: <T = Record<string, unknown>>(sql: string, params?: unknown[]) =>
                 client.query<T>(sql, params),
-            release: () => {},
+            release: () => {
+                /* no-op: the caller owns the live client (see above) */
+            },
         }),
-        end: async () => {},
+        end: async () => {
+            /* no-op: ending the wrapper must not close the caller's client */
+        },
     };
     const checksums = await verifyMigrationChecksums(checksumPool, MIGRATIONS_DIR);
     if (!checksums.ok) ok = false;

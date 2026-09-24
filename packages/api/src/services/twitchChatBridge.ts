@@ -149,7 +149,9 @@ const buildOnMessage =
                 platformMessageId: msg.platformMessageId,
                 bits: msg.bits,
             },
-        }).catch(() => {});
+        }).catch(() => {
+            /* fire-and-forget: the dispatcher logs its own failures; chat ingest must not reject */
+        });
         void matrix
             .sendEvent(record.matrixRoomId, content, { txnId })
             .then((result) => {

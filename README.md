@@ -583,9 +583,10 @@ For local bootstrap steps, see [Quick start](#quick-start) above.
 ### Health checks in CI
 
 `.github/workflows/ci.yml` runs per-workspace jobs rather than the root
-aggregate scripts — chiefly `@blackout/client` eslint, `typecheck` for the
-client and API, `test:coverage` and `test:integration` for the client, mobile
-preflight, per-project builds, plus the `qa:monorepo` and `guard:*` gates.
+aggregate scripts — chiefly `@blackout/client` and `@blackout/api` eslint,
+`typecheck` for the client and API, `test:coverage` and `test:integration` for
+the client, mobile preflight, per-project builds, plus the `qa:monorepo` and
+`guard:*` gates.
 
 Locally, the closest equivalent from the monorepo root is:
 

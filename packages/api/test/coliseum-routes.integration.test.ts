@@ -16,7 +16,7 @@ process.env.LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET ?? 'lk_test_secr
 const { default: app } = await import('../src/index');
 const { signJwt } = await import('../src/services/auth');
 
-function authHeader(userId: string = 'coliseum-test-user'): Record<string, string> {
+function authHeader(userId = 'coliseum-test-user'): Record<string, string> {
     return { authorization: `Bearer ${signJwt(userId, 'coliseum', 600)}` };
 }
 

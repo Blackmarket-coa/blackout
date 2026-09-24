@@ -225,7 +225,9 @@ export const syncBridge = async (
                 snippetType: normalized.snippetType,
                 superChatAmountDisplay: normalized.superChatAmountDisplay,
             },
-        }).catch(() => {});
+        }).catch(() => {
+            /* fire-and-forget: the dispatcher logs its own failures; chat ingest must not reject */
+        });
         // SuperChat / Super Sticker events are the YouTube analogue of Twitch
         // bits — fire cheer.received in addition to the chat.message.received
         // dispatch above so a creator subscribing to "cheers" sees both
@@ -249,7 +251,9 @@ export const syncBridge = async (
                     platformMessageId: normalized.platformMessageId,
                     snippetType: normalized.snippetType,
                 },
-            }).catch(() => {});
+            }).catch(() => {
+                /* fire-and-forget: the dispatcher logs its own failures; chat ingest must not reject */
+            });
         }
         // Fan out to the chatMessageHub so the Twitch IRC bot shim can
         // deliver this YouTube chat message as a Twitch-shape PRIVMSG to any
