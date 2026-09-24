@@ -151,10 +151,7 @@ test('coliseum create argument accepts a valid argument and validates citations'
     assert.ok(body.argument.id.startsWith('arg_'));
     assert.equal(body.argument.stance, 'nuance');
     assert.equal(body.argument.citations.length, 2);
-    assert.deepEqual(
-        body.argument.citations.map((c) => c.kind).sort(),
-        ['article', 'live'],
-    );
+    assert.deepEqual(body.argument.citations.map((c) => c.kind).sort(), ['article', 'live']);
 });
 
 test('coliseum create argument accepts valid video media and drops malformed media', async () => {
@@ -342,7 +339,9 @@ test('coliseum reel returns ranked arguments across multiple topics', async () =
 });
 
 test('coliseum reel respects limit and offset', async () => {
-    const first = await app.request('/v1/coliseum/reel?limit=1&offset=0', { headers: authHeader() });
+    const first = await app.request('/v1/coliseum/reel?limit=1&offset=0', {
+        headers: authHeader(),
+    });
     const firstBody = (await first.json()) as {
         items: Array<{ id: string }>;
         nextOffset: number | null;
@@ -350,7 +349,9 @@ test('coliseum reel respects limit and offset', async () => {
     assert.equal(firstBody.items.length, 1);
     assert.equal(firstBody.nextOffset, 1);
 
-    const second = await app.request('/v1/coliseum/reel?limit=1&offset=1', { headers: authHeader() });
+    const second = await app.request('/v1/coliseum/reel?limit=1&offset=1', {
+        headers: authHeader(),
+    });
     const secondBody = (await second.json()) as { items: Array<{ id: string }> };
     assert.equal(secondBody.items.length, 1);
     assert.notEqual(firstBody.items[0]!.id, secondBody.items[0]!.id);
