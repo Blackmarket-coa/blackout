@@ -1,8 +1,17 @@
-# Activates the Hono-based blackout-api service on top of docker-compose.yml.
+# Production host override: what /opt/blackout-infra/docker-compose.override.yml
+# must contain (RUNBOOK §1 "Images"). deploy.sh runs `docker compose up` in that
+# directory, so Compose layers this file over docker-compose.yml automatically.
 #
-# Copy to docker-compose.override.yml to enable. Requires BLACKOUT_DB_PASSWORD
-# and JWT_SECRET_PRIMARY in .env (see .env.example). Adjust CORS_ALLOWED_ORIGINS
-# to the frontend host(s) that will call this API.
+# It pins the three images deploy.sh builds locally — blackout-frontend:stable,
+# blackout-api:hono, and the Synapse fork blackout-synapse:stable — plus their
+# healthchecks. The current docker-compose.yml already defaults to the same
+# images; the pins are kept so this file also reproduces production when layered
+# over an older base copy (ghcr.io/blackout/* / stock Synapse).
+#
+# It also points the API at its own blackout_api database (run migrations via
+# api-migrate first). Copy to docker-compose.override.yml to enable. Requires
+# BLACKOUT_DB_PASSWORD and JWT_SECRET_PRIMARY in .env (see .env.example).
+# Adjust CORS_ALLOWED_ORIGINS to the frontend host(s) that will call this API.
 #
 # The FREEBLACKMARKET_* block wires the marketplace to a Free Black Market
 # backend running on the same host (RUNBOOK §19). One-time prerequisite:
@@ -11,12 +20,33 @@
 
 services:
 
+  frontend:
+    image: blackout-frontend:stable
+
+  synapse:
+    # Blackout Synapse fork (apps/blackout-server, 1.98.0+blackout.1), built by
+    # deploy.sh from apps/blackout-server/docker/Dockerfile. Config, volumes and
+    # networks come from docker-compose.yml; the fork uses the same /start.py
+    # entrypoint and SYNAPSE_CONFIG_PATH contract as upstream.
+    image: blackout-synapse:stable
+    # The fork image ships curl, not wget; a wget probe never goes healthy and
+    # reverse-proxy (depends_on: service_healthy) would never start.
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8008/health >/dev/null || exit 1"]
+
   api:
     image: blackout-api:hono
+    # node:alpine image: busybox wget, no python. /health is the API's
+    # unauthenticated readiness probe.
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9000/health >/dev/null || exit 1"]
     environment:
       DATABASE_URL: "postgres://blackout:${BLACKOUT_DB_PASSWORD}@postgres:5432/blackout_api"
       MATRIX_HOMESERVER: "http://synapse:8008"
       JWT_SECRET_PRIMARY: "${JWT_SECRET_PRIMARY}"
+      # Required in production (the API exits at boot without it). Repeated
+      # here so the override is complete even over an older base file.
+      LOG_HASH_SALT: "${LOG_HASH_SALT}"
       MAIL_PROVIDER: "console"
       CORS_ALLOWED_ORIGINS: "https://chat.theblackout.app"
       CORS_ALLOW_CREDENTIALS: "true"
@@ -28,6 +58,16 @@ services:
       FREEBLACKMARKET_BASE_URL: "http://free-black-market-backend-1:9000"
       FREEBLACKMARKET_API_KEY: "${FREEBLACKMARKET_API_KEY}"
       FREEBLACKMARKET_WEBHOOK_SECRET: "${FREEBLACKMARKET_WEBHOOK_SECRET}"
+      # FBM service-token integration (entitlements reads, coalition pushes,
+      # reputation events) and the two FBM-driven workers. All default-off;
+      # uncomment only as part of a deliberate rollout (RUNBOOK §19). The base
+      # URL is the FBM origin over bmc-bridge; the API also accepts it with
+      # /v1/integrations/blackout appended. The token must equal FBM's
+      # ENTITLEMENTS_SERVICE_TOKEN.
+      # FBM_ENTITLEMENTS_BASE_URL: "${FBM_ENTITLEMENTS_BASE_URL:-http://free-black-market-backend-1:9000}"
+      # FBM_ENTITLEMENTS_SERVICE_TOKEN: "${FBM_ENTITLEMENTS_SERVICE_TOKEN}"
+      # FBM_MATRIX_BRIDGE_ENABLED: "${FBM_MATRIX_BRIDGE_ENABLED:-0}"
+      # FBM_ACL_SYNC_ENABLED: "${FBM_ACL_SYNC_ENABLED:-0}"
     depends_on:
       api-migrate:
         condition: service_completed_successfully
