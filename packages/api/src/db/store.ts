@@ -166,6 +166,7 @@ import {
     COALITION_TASK_SEED,
     COALITION_SELLER_SEED,
     COALITION_FEED_SEED,
+    shouldSeedCoalitionDemoData,
 } from './coalitionSeed';
 import { hydrateMap, introspectColumns, rowToRecord, type TablePlan } from './pgWriter';
 import { MUTATOR_SPECS, TABLE_DESCRIPTORS } from './pgDescriptors';
@@ -176,6 +177,9 @@ import { log } from '../telemetry/logger';
 import { randomUUID } from 'node:crypto';
 
 const nowIso = () => new Date().toISOString();
+
+/** Coalition demo seed rows, or none when demo seeding is off (default in production). */
+const demoSeedRows = <T>(rows: T[]): T[] => (shouldSeedCoalitionDemoData() ? rows : []);
 
 /** Cap for the durable mesh-relay store-and-forward queue (M17; relocated from
  *  services/meshRelay.ts). Newest-wins: the oldest envelope is evicted past this. */
@@ -457,11 +461,11 @@ class InMemoryDb {
     channelPointsLedger = new Map<string, ChannelPointsLedgerRecord>();
     /** Coalition spatial map pins, keyed by item id. */
     coalitionSpatialItems = new Map<string, CoalitionSpatialItemRecord>(
-        COALITION_SPATIAL_SEED.map((row) => [row.id, row])
+        demoSeedRows(COALITION_SPATIAL_SEED).map((row) => [row.id, row])
     );
     /** Coalition mutual-aid posts, keyed by post id. */
     coalitionAidPosts = new Map<string, CoalitionAidPostRecord>(
-        COALITION_AID_SEED.map((row) => [row.id, row])
+        demoSeedRows(COALITION_AID_SEED).map((row) => [row.id, row])
     );
     /** Coalition events (gatherings), keyed by event id. */
     coalitionEvents = new Map<string, CoalitionEventRecord>();
@@ -506,7 +510,7 @@ class InMemoryDb {
     coalitionKitApplications = new Map<string, CoalitionKitApplicationRecord>();
     /** Coalition den tasks, keyed by task id. */
     coalitionTasks = new Map<string, CoalitionTaskRecord>(
-        COALITION_TASK_SEED.map((row) => [row.id, row])
+        demoSeedRows(COALITION_TASK_SEED).map((row) => [row.id, row])
     );
     /** Coalition Needs Board posts, keyed by need id. */
     coalitionNeeds = new Map<string, CoalitionNeedRecord>();
@@ -531,13 +535,13 @@ class InMemoryDb {
     bountyApplications = new Map<string, BountyApplicationRecord>();
     /** Seller map locations, keyed by location id. */
     sellerLocations = new Map<string, SellerLocationRecord>(
-        COALITION_SELLER_SEED.map((row) => [row.id, row])
+        demoSeedRows(COALITION_SELLER_SEED).map((row) => [row.id, row])
     );
     /** Seller/producer profiles, keyed by `${userId}::${providerId}`. */
     marketplaceSellerProfiles = new Map<string, SellerProfileRecord>();
     /** Coalition feed items (video/event/aid/listing/proposal), keyed by item id. */
     coalitionFeedItems = new Map<string, CoalitionFeedItemRecord>(
-        COALITION_FEED_SEED.map((row) => [row.id, row])
+        demoSeedRows(COALITION_FEED_SEED).map((row) => [row.id, row])
     );
     /** Feed likes, keyed by `${feedItemId}::${userId}`. */
     coalitionFeedLikes = new Map<string, CoalitionFeedLikeRecord>();
