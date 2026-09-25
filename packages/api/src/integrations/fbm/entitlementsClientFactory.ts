@@ -18,6 +18,7 @@ import type {
 } from './entitlementsContract';
 import { FbmEntitlementsHttpClient } from './entitlementsClient';
 import { FbmEntitlementsStubClient } from './entitlementsStubClient';
+import { fbmIntegrationTarget } from './integrationRoot';
 
 interface CacheEntry<T> {
     value: T;
@@ -123,14 +124,13 @@ export function getEntitlementsClient(env = process.env): FbmEntitlementsClient 
         cached = stubInstance;
         return cached;
     }
-    const baseUrl = env.FBM_ENTITLEMENTS_BASE_URL;
-    const serviceToken = env.FBM_ENTITLEMENTS_SERVICE_TOKEN;
-    if (!baseUrl || !serviceToken) {
+    const target = fbmIntegrationTarget(env);
+    if (!target) {
         cached = undefined;
         return cached;
     }
     cached = new CachingEntitlementsClient(
-        new FbmEntitlementsHttpClient({ baseUrl, serviceToken })
+        new FbmEntitlementsHttpClient({ baseUrl: target.root, serviceToken: target.serviceToken })
     );
     return cached;
 }

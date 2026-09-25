@@ -20,7 +20,8 @@
         "migrate:down": "tsx src/db/migrate.ts down",
         "migrate:status": "tsx src/db/migrate.ts status",
         "db:import-json": "tsx src/scripts/importJsonStoreToPostgres.ts",
-        "db:verify-import": "tsx src/scripts/verifyJsonStoreImport.ts"
+        "db:verify-import": "tsx src/scripts/verifyJsonStoreImport.ts",
+        "db:clean-demo-seed": "tsx src/scripts/cleanCoalitionDemoSeed.ts"
     },
     "dependencies": {
         "@blackout/contracts": "workspace:*",

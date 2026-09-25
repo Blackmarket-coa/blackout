@@ -19,6 +19,7 @@
 // of a coalition's effort to open a quest gate, not its members' giving history.
 
 import { db } from '../db/store';
+import { fbmIntegrationTarget } from '../integrations/fbm/integrationRoot';
 import type { CoalitionCampaignRecord } from '../db/types';
 import { incrementCounter, logEvent } from './marketplaceObservability';
 
@@ -30,18 +31,6 @@ let fetchImpl: FetchImpl | undefined;
 /** Test seam: swap the transport without standing up an FBM instance. */
 export function __setBridgeFetchForTests(impl: FetchImpl | undefined): void {
     fetchImpl = impl;
-}
-
-interface Target {
-    baseUrl: string;
-    serviceToken: string;
-}
-
-function target(env = process.env): Target | null {
-    const baseUrl = env.FBM_ENTITLEMENTS_BASE_URL;
-    const serviceToken = env.FBM_ENTITLEMENTS_SERVICE_TOKEN;
-    if (!baseUrl || !serviceToken) return null;
-    return { baseUrl: baseUrl.replace(/\/+$/, ''), serviceToken };
 }
 
 async function send(
@@ -118,13 +107,11 @@ export function computeCoalitionMilestones(coalitionId: string): CoalitionMilest
 
 /** Push the coalition's current totals. Safe to call on every drive close. */
 export async function pushCoalitionMilestones(coalitionId: string): Promise<void> {
-    const fbm = target();
+    const fbm = fbmIntegrationTarget();
     if (!fbm) return;
     const totals = computeCoalitionMilestones(coalitionId);
     await send(
-        `${fbm.baseUrl}/v1/integrations/blackout/coalitions/${encodeURIComponent(
-            coalitionId
-        )}/milestones`,
+        `${fbm.root}/coalitions/${encodeURIComponent(coalitionId)}/milestones`,
         'PUT',
         {
             drives_completed: totals.drivesCompleted,
@@ -145,12 +132,10 @@ export async function pushCoalitionStatus(
     coalitionId: string,
     status: 'active' | 'taken_down'
 ): Promise<void> {
-    const fbm = target();
+    const fbm = fbmIntegrationTarget();
     if (!fbm) return;
     await send(
-        `${fbm.baseUrl}/v1/integrations/blackout/coalitions/${encodeURIComponent(
-            coalitionId
-        )}/status`,
+        `${fbm.root}/coalitions/${encodeURIComponent(coalitionId)}/status`,
         'PUT',
         { status },
         fbm.serviceToken,
@@ -173,13 +158,11 @@ export interface OrderWindowInput {
  * coalition member with a shop — the projection Blackout has no way to write.
  */
 export async function openSharedOrderWindow(input: OrderWindowInput): Promise<string | null> {
-    const fbm = target();
+    const fbm = fbmIntegrationTarget();
     if (!fbm) return null;
     const { campaign } = input;
     const body = await send(
-        `${fbm.baseUrl}/v1/integrations/blackout/coalitions/${encodeURIComponent(
-            campaign.coalitionId
-        )}/order-cycles`,
+        `${fbm.root}/coalitions/${encodeURIComponent(campaign.coalitionId)}/order-cycles`,
         'POST',
         {
             campaign_id: campaign.id,

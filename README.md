@@ -4,19 +4,25 @@
 # Blackout
 
 Federated, end-to-end-encrypted communication platform built on the Matrix
-protocol — with first-class governance, mutual aid, steganography, deaddrop
-encrypted messaging, LiveKit-based voice and video, and post-quantum hybrid
-encryption (X25519 + ML-KEM-768). It also ships OPSEC tooling (panic button,
-burner identities, dead-man's switch), a creator economy (live streaming,
-tips, subscriptions, marketplace), first-party Twitch/YouTube/Kick/Discord
-bridges, and a sandboxed plugin ecosystem — see the
+protocol — with first-class governance, mutual aid, steganography, and
+deaddrop encrypted messaging (Dead Drop envelopes use post-quantum hybrid
+encryption, X25519 + ML-KEM-768; regular Matrix rooms use standard Matrix
+E2EE). Voice and video are LiveKit-based and only work on deployments where
+LiveKit is configured (`LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`
+on the API server). It also ships OPSEC tooling (panic button, burner
+identities, dead-man's switch), a creator economy (live streaming, tips,
+subscriptions, marketplace), Twitch and YouTube account linking and chat
+bridges (Kick account linking is not yet available), Discord bridging that
+requires a separately deployed mautrix-discord bridge (not part of the
+baseline stack), and a sandboxed plugin ecosystem — see the
 [feature overview](docs/features/OVERVIEW.md) for the full map. This
 repository is a pnpm/turborepo monorepo containing web, Tauri desktop,
 Capacitor mobile, a Synapse-derived homeserver, and a Node/Hono API server.
 
 ## For testers (no setup required)
 
--   Hosted instance: **[`https://matrix.theblackout.app`](https://matrix.theblackout.app)**.
+-   Hosted instance: **[`https://chat.theblackout.app`](https://chat.theblackout.app)**
+    (web client; `matrix.theblackout.app` is the homeserver API, not the app).
 -   **Join the beta — no CLI needed:** registration is invite-gated. A standing
     community invite link is not yet published here; request one via the
     [invite-request issue template](https://github.com/Blackmarket-coa/blackout/issues/new/choose)
@@ -25,11 +31,11 @@ Capacitor mobile, a Synapse-derived homeserver, and a Node/Hono API server.
 
     > _Maintainers: once a multi-use community invitation is minted via the
     > invitations flow (`POST /v1/invitations`, or the in-app Invitations panel),
-    > publish it here as `https://matrix.theblackout.app/invite/<TOKEN>` and
+    > publish it here as `https://chat.theblackout.app/invite/<TOKEN>` and
     > remove this note._
 
 -   Browse public rooms before signing up at
-    [`https://matrix.theblackout.app/explore`](https://matrix.theblackout.app/explore).
+    [`https://chat.theblackout.app/explore`](https://chat.theblackout.app/explore).
 -   See [`TESTERS.md`](TESTERS.md) for the 5-minute orientation and what to try first.
 -   **Sell a digital product:** the black market is open to sellers — see
     [`docs/guides/selling-on-the-black-market.md`](docs/guides/selling-on-the-black-market.md)
@@ -45,7 +51,8 @@ Capacitor mobile, a Synapse-derived homeserver, and a Node/Hono API server.
 For the full map of implemented features — core comms, safety/OPSEC tooling
 (panic button, burner identities, dead-man's switch, canary tripwires),
 governance and coalitions, the creator economy (streaming, tips,
-subscriptions, marketplace), Twitch/YouTube/Kick/Discord bridges, and the
+subscriptions, marketplace), Twitch/YouTube bridges (Kick linking not yet
+available; Discord bridging needs mautrix-discord deployed), and the
 plugin ecosystem — see
 [`docs/features/OVERVIEW.md`](docs/features/OVERVIEW.md).
 

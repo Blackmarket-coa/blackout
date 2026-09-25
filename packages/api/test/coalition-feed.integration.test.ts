@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 
 process.env.NODE_ENV = process.env.NODE_ENV ?? 'test';
 process.env.BLACKOUT_DB_MODE = process.env.BLACKOUT_DB_MODE ?? 'memory';
+// The feed assertions below read the coalition demo seed (feed-video-1, ...).
+process.env.BLACKOUT_SEED_DEMO_DATA = process.env.BLACKOUT_SEED_DEMO_DATA ?? '1';
 process.env.JWT_SECRET_PRIMARY =
     process.env.JWT_SECRET_PRIMARY ?? 'Str0ng!TestKey-For-Api-Integration-1234#ABCxyzZZ';
 process.env.JWT_ISSUER = process.env.JWT_ISSUER ?? 'blackout-api-test';

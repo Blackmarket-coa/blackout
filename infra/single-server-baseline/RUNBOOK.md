@@ -33,6 +33,53 @@ This runbook provides deployment manifests and operating steps for:
 
 No database or Redis ports are published to the host.
 
+## Images
+
+The three application images are built on the host by `deploy.sh`; none of
+them is pulled from a registry:
+
+| Service    | Image                      | Built from                                                                                                       |
+| ---------- | -------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `frontend` | `blackout-frontend:stable` | `apps/blackout-client/Dockerfile` (context: repo root)                                                           |
+| `api`      | `blackout-api:hono`        | `infra/single-server-baseline/Dockerfile.blackout-api-hono` (Hono `@blackout/api`, context: repo root)           |
+| `synapse`  | `blackout-synapse:stable`  | `apps/blackout-server/docker/Dockerfile` — the Blackout Synapse fork (`1.98.0+blackout.1`), not upstream Synapse |
+
+`docker-compose.yml` defaults to these tags (`FRONTEND_TAG`, `API_TAG`,
+`SYNAPSE_TAG` in `.env`). `deploy.sh` also builds `blackout-api:stable` and
+`blackout-api:stable-pg` (the legacy Python service under
+`apps/blackout-server/services/blackout-api`); this stack does not run them.
+
+`deploy.sh` runs `docker compose up` in `$INFRA_DIR` (default
+`/opt/blackout-infra`), so Compose layers that directory's
+`docker-compose.override.yml` over `docker-compose.yml`. That host override
+is not tracked in git; `docker-compose.override.yml.example` is the committed
+copy of what it must contain:
+
+-   the three image pins above, with healthchecks matching each image (the
+    Synapse fork ships `curl` but not `wget`; the Hono image is `node:alpine`
+    with busybox `wget` and no `python`) — without them a base file from before
+    these images landed would start `ghcr.io/blackout/*` and stock Synapse;
+-   the Hono API's `blackout_api` database URL and the `api-migrate` one-shot.
+    The `blackout` role and `blackout_api` database are not created by
+    `postgres/initdb/`; create them once on a fresh volume;
+-   the `FREEBLACKMARKET_*` block and `bmc-bridge` attachment (§19).
+
+The Hono API exits at boot in production unless `LOG_HASH_SALT` is set
+(`packages/api/src/config/env.ts`); `.env.example` lists it next to
+`JWT_SECRET_PRIMARY`, and both compose files pass it to `api`. Use a
+high-entropy value and keep it stable (`docs/security/metadata-minimization.md`).
+
+When you change the example, mirror the change into the host override.
+
+## Not part of this stack
+
+There is no rageshake server and no Dimension integration manager in this
+stack, and nginx has no `/rageshake/` or `/dimension/` route. A client
+`config.json` that sets `bugReportEndpointUrl` or `integrationsUrl` /
+`integrationsUiUrl` to `https://matrix.theblackout.app/rageshake/...` or
+`/dimension/...` points at endpoints that do not exist here; the committed
+client `config.json` drops those keys.
+
 ## 2) Pre-deploy checklist
 
 1. DNS records point all required names to this server:
@@ -49,12 +96,30 @@ No database or Redis ports are published to the host.
       websocket itself stays behind nginx at `/livekit/sfu`)
 3. Install Docker Engine and Compose plugin.
 4. Copy this folder to `/opt/blackout`.
-5. Create env file:
+5. Create env file and the host override:
 
 ```bash
 cd /opt/blackout
 cp .env.example .env
 chmod 600 .env
+# Replace every CHANGE_ME value, including JWT_SECRET_PRIMARY and LOG_HASH_SALT
+# (the api container will not start without LOG_HASH_SALT).
+cp docker-compose.override.yml.example docker-compose.override.yml
+# The override attaches api to the external bmc-bridge network (§19); create it
+# once even before the FBM link is live, or compose refuses to start:
+docker network create --internal bmc-bridge
+```
+
+Build the images (see "Images" above) before the first `docker compose up`;
+they are local tags, so `up` has nothing to pull. These are the build steps
+`deploy.sh` runs (it also resets `REPO_DIR` to `origin/develop` and recreates
+the stack, so use it for later deploys, not for first boot):
+
+```bash
+cd <repo-checkout>
+docker build -f apps/blackout-client/Dockerfile -t blackout-frontend:stable .
+docker build -f infra/single-server-baseline/Dockerfile.blackout-api-hono -t blackout-api:hono .
+(cd apps/blackout-server && DOCKER_BUILDKIT=1 docker build -f docker/Dockerfile -t blackout-synapse:stable .)
 ```
 
 6. Render templated configs:
@@ -170,12 +235,19 @@ systemctl list-timers blackout-backup.timer
 
 ### A) Application image rollback
 
-1. Edit `.env` and set previous `FRONTEND_TAG` and/or `API_TAG`.
+Images are local builds, so there is nothing to `pull`. Before a deploy,
+keep the running image under a second tag, e.g.
+`docker tag blackout-api:hono blackout-api:hono-prev` (same for
+`blackout-frontend:stable` / `blackout-synapse:stable`).
+
+1. Point the service back at the retained tag: set `FRONTEND_TAG` /
+   `API_TAG` / `SYNAPSE_TAG` in `.env`, and the matching `image:` line in
+   `docker-compose.override.yml` (the override's pin wins over `.env`). Or
+   rebuild the previous commit with the commands in `deploy.sh`.
 2. Re-deploy:
 
 ```bash
-docker compose pull frontend api
-docker compose up -d frontend api reverse-proxy
+docker compose up -d frontend api synapse reverse-proxy
 ```
 
 3. Validate health endpoints.
@@ -566,6 +638,46 @@ Topology rules:
     which is the provider's default path prefix. `FREEBLACKMARKET_API_PREFIX`
     exists as an override if FBM ever moves that mount (a path packed into
     the base URL would be discarded by URL resolution).
+-   The reverse direction uses the same bridge. FBM signs its outbound
+    webhooks (purchases, membership sync, ledger) with
+    `FREEBLACKMARKET_WEBHOOK_SECRET` and POSTs them to
+    `${BLACKOUT_API_BASE}/v1/marketplace/webhooks/freeblackmarket`. On the FBM
+    backend set:
+
+    ```
+    BLACKOUT_API_BASE=http://blackout-api:9000
+    ```
+
+    `blackout-api` is the api container name (resolvable on `bmc-bridge`) and
+    9000 is its listen port (`PORT=9000` in `docker-compose.yml`, the port
+    nginx's `blackout_api` upstream uses; the `EXPOSE 3001` in
+    `Dockerfile.blackout-api-hono` is not what it listens on). Give the bare
+    origin: FBM appends `/v1/marketplace/webhooks/freeblackmarket` itself. With
+    `BLACKOUT_API_BASE` unset FBM's emitter treats the channel as unconfigured
+    and sends nothing — FBM's config does not require the variable, so the
+    gap is silent. FBM also reads `BLACKOUT_API_BASE` for its spatial
+    consumer (`FBM_BLACKOUT_SPATIAL`, server-to-server, fine over the bridge)
+    and for the scaffolded Blackout content-platform provider, whose OAuth
+    authorize URL is a browser redirect and would not resolve at the bridge
+    address; that provider is unimplemented today.
+
+### FBM service-token integration (default off)
+
+`docker-compose.override.yml.example` and `.env.example` carry commented
+entries for the second FBM link. Leave them commented until you roll it out:
+
+-   `FBM_ENTITLEMENTS_BASE_URL` — FBM origin over the bridge,
+    `http://free-black-market-backend-1:9000`. The API also accepts
+    `…:9000/v1/integrations/blackout`; both resolve to the same integration
+    root (`packages/api/src/integrations/fbm/integrationRoot.ts`).
+-   `FBM_ENTITLEMENTS_SERVICE_TOKEN` — must equal FBM's
+    `ENTITLEMENTS_SERVICE_TOKEN`. With either of these two unset, entitlement
+    reads, coalition pushes and reputation events no-op.
+-   `FBM_MATRIX_BRIDGE_ENABLED=0` — FBM → Matrix room bridge and its sweepers.
+-   `FBM_ACL_SYNC_ENABLED=0` — entitlements → Matrix ACL sync and its
+    reconcile loop.
+
+The two worker gates are on only when set to `1` or `true`.
 
 ### One-time prerequisite
 
@@ -592,6 +704,8 @@ docker compose up -d backend
 #   FBM_BLACKOUT_INTEGRATION=1 and FREEBLACKMARKET_API_KEY matching
 #   Blackout's — otherwise the commerce surface answers 503/401, which
 #   Blackout's logs still report as marketplace.catalog.fetch_failed.
+#   For FBM -> Blackout webhooks, also FREEBLACKMARKET_WEBHOOK_SECRET matching
+#   Blackout's and BLACKOUT_API_BASE=http://blackout-api:9000 (see above).
 
 # 3) Blackout side: back up, then mirror the FREEBLACKMARKET_* environment
 #    block and the api networks list from docker-compose.override.yml.example
@@ -629,4 +743,8 @@ docker exec blackout-api wget -qO- --timeout=5 https://api.github.com \
 
 # 5) Shared network exists and is internal (expect: true)
 docker network inspect bmc-bridge -f '{{.Internal}}'
+
+# 6) FBM can reach the webhook target named by its BLACKOUT_API_BASE (expect 200)
+docker exec free-black-market-backend-1 node -e \
+  "fetch('http://blackout-api:9000/health').then(r => console.log(r.status))"
 ```

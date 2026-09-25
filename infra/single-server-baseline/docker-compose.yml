@@ -62,7 +62,9 @@ services:
         <<: *common-logging
 
     frontend:
-        image: ghcr.io/blackout/frontend:${FRONTEND_TAG}
+        # Built locally by deploy.sh (apps/blackout-client/Dockerfile); not
+        # pulled from a registry. See RUNBOOK §1 "Images".
+        image: blackout-frontend:${FRONTEND_TAG:-stable}
         container_name: blackout-frontend
         restart: unless-stopped
         expose:
@@ -91,7 +93,11 @@ services:
         <<: *common-logging
 
     api:
-        image: ghcr.io/blackout/api:${API_TAG}
+        # Hono @blackout/api, built locally by deploy.sh
+        # (Dockerfile.blackout-api-hono). The `stable`/`stable-pg` tags deploy.sh
+        # also builds are the legacy Python service and are not run by this
+        # stack. See RUNBOOK §1 "Images".
+        image: blackout-api:${API_TAG:-hono}
         container_name: blackout-api
         restart: unless-stopped
         expose:
@@ -110,6 +116,9 @@ services:
             # both hosts need to be whitelisted.
             - CORS_ALLOWED_ORIGINS=https://${PRIMARY_DOMAIN},https://chat.${PRIMARY_DOMAIN}
             - JWT_SECRET_PRIMARY=${JWT_SECRET_PRIMARY}
+            # Log pseudonymization salt. Required: the API refuses to start in
+            # production without it (config/env.ts validateEnv).
+            - LOG_HASH_SALT=${LOG_HASH_SALT}
             # Internal Synapse listener (admin + client APIs). Both env names
             # are accepted by matrix-client.ts; keep both to stay tolerant of
             # the legacy *_URL spelling.
@@ -122,6 +131,11 @@ services:
             # Prometheus scrape token. The API returns 503 on /metrics when
             # this is unset in production.
             - INTERNAL_METRICS_TOKEN=${INTERNAL_METRICS_TOKEN}
+            # Voice/video (Townhall). services/livekit.ts reads these three and
+            # /v1/voice/config returns 500 without them. Same values lk-jwt uses.
+            - LIVEKIT_URL=${LIVEKIT_PUBLIC_WS_URL:-}
+            - LIVEKIT_API_KEY=${LIVEKIT_API_KEY:-}
+            - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET:-}
             # Runtime store mode. `postgres` makes the API persist all state to the
             # Postgres service above via the write-through store: it runs migrations
             # on boot, hydrates an in-memory read mirror, and write-throughs every
@@ -163,12 +177,10 @@ services:
                 condition: service_healthy
             redis:
                 condition: service_healthy
+        # The Hono image is node:alpine (busybox wget, no python); the API's
+        # unauthenticated readiness probe is /health.
         healthcheck:
-            test:
-                - 'CMD'
-                - 'python'
-                - '-c'
-                - "import sys, urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:9000/healthz', timeout=4).status == 200 else 1)"
+            test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1:9000/health >/dev/null || exit 1']
             interval: 30s
             timeout: 5s
             retries: 5
@@ -181,7 +193,10 @@ services:
         <<: *common-logging
 
     synapse:
-        image: matrixdotorg/synapse:v1.130.0
+        # Blackout Synapse fork (apps/blackout-server, reports
+        # 1.98.0+blackout.1), built locally by deploy.sh from
+        # apps/blackout-server/docker/Dockerfile. Not upstream Synapse.
+        image: blackout-synapse:${SYNAPSE_TAG:-stable}
         container_name: blackout-synapse
         restart: unless-stopped
         user: '991:991'
@@ -201,12 +216,9 @@ services:
                 condition: service_healthy
             redis:
                 condition: service_healthy
+        # The fork image ships curl, not wget.
         healthcheck:
-            test:
-                [
-                    'CMD-SHELL',
-                    'wget -qO- http://127.0.0.1:8008/health || wget -qO- http://127.0.0.1:8008/_matrix/client/versions || exit 1',
-                ]
+            test: ['CMD-SHELL', 'curl -fsS http://127.0.0.1:8008/health >/dev/null || exit 1']
             interval: 30s
             timeout: 5s
             retries: 8
