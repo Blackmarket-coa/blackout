@@ -105,7 +105,7 @@ test('http client: 401 is terminal (no retry) and typed', async () => {
 
 test('http client: circuit opens after consecutive failures', async () => {
     const fetchImpl = (async () => new Response('x', { status: 500 })) as unknown as typeof fetch;
-    let t = 0;
+    const t = 0;
     const client = new FbmEntitlementsHttpClient({
         baseUrl: 'https://ent.example/v1',
         serviceToken: 'tok',

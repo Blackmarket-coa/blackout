@@ -247,20 +247,6 @@ export interface BugRoomPipelineDeps {
     readonly forwardToGithub?: WidgetGithubForwarder;
 }
 
-const failure = (error: string): WidgetReportOutcome => ({
-    ok: false,
-    roomId: null,
-    eventId: null,
-    messageLink: null,
-    attachmentPosted: false,
-    threadSeeded: false,
-    reactionSeeded: false,
-    devNoop: false,
-    issueUrl: null,
-    issueError: null,
-    error,
-});
-
 // Bare localpart for the #bugs alias (e.g. `#bugs:host` → `bugs`), used when
 // self-healing creates the room. Synapse derives the full alias from it.
 const aliasLocalpart = (alias: string): string => alias.replace(/^#/, '').split(':')[0] || 'bugs';

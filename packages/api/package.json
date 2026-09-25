@@ -9,7 +9,7 @@
         "start": "tsx src/index.ts",
         "worker": "tsx src/worker.ts",
         "build": "node -e \"console.log('api build scaffold ok')\"",
-        "lint": "node -e \"console.log('api lint scaffold ok')\"",
+        "lint": "eslint \"src/**/*.ts\" \"test/**/*.ts\" --max-warnings=0",
         "test": "tsx --test --test-force-exit --test-concurrency=1 test/**/*.test.ts",
         "typecheck": "tsc --noEmit -p tsconfig.json",
         "test:integration": "tsx --test test/**/*.integration.test.ts",
@@ -39,9 +39,15 @@
         "zod": "^4.3.6"
     },
     "devDependencies": {
+        "@eslint/js": "8.57.1",
         "@types/node": "^22.19.15",
         "@types/nodemailer": "^7.0.4",
         "@types/pg": "^8.11.10",
+        "@typescript-eslint/eslint-plugin": "5.46.1",
+        "@typescript-eslint/parser": "5.46.1",
+        "eslint": "8.29.0",
+        "eslint-config-prettier": "8.5.0",
+        "globals": "15.15.0",
         "socket.io-client": "^4.8.3",
         "typescript": "5.9.3"
     }

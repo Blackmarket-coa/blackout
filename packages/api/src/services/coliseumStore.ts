@@ -115,7 +115,7 @@ const seedTopics: DemoTopicFixture[] = [
     },
 ];
 
-interface ArgumentSeed extends Omit<ColiseumArgument, 'voteScore' | 'nuanceScore'> {}
+type ArgumentSeed = Omit<ColiseumArgument, 'voteScore' | 'nuanceScore'>;
 
 const seedArguments: ArgumentSeed[] = [
     {

@@ -4,13 +4,13 @@ import type { YoutubeChatBridgeRecord } from '../db/types';
 import { ensureFreshAccessToken } from './oauthProviders';
 import { getLinkedAccount } from './linkedAccounts';
 import {
-  findActiveLiveBroadcast,
-  insertLiveChatMessage,
-  listLiveChatMessages,
+    findActiveLiveBroadcast,
+    insertLiveChatMessage,
+    listLiveChatMessages,
 } from '../integrations/youtube/api';
 import {
-  toMatrixForwardedMessage,
-  toNormalizedYoutubeChatMessage,
+    toMatrixForwardedMessage,
+    toNormalizedYoutubeChatMessage,
 } from '../integrations/youtube/chatBridge';
 import { matrixClient as defaultMatrixClient } from '../integrations/matrix-client';
 import type { MatrixSendEventClient } from './twitchChatBridge';
@@ -34,114 +34,117 @@ import { log } from '../telemetry/logger';
  */
 
 export interface BridgeServiceOptions {
-  matrixClient?: MatrixSendEventClient;
-  fetch?: typeof fetch;
+    matrixClient?: MatrixSendEventClient;
+    fetch?: typeof fetch;
 }
 
 export interface CreateBridgeInput {
-  blackoutUserId: string;
-  /** YouTube channel id (UCxxxx...). */
-  youtubeChannelId: string;
-  matrixRoomId: string;
+    blackoutUserId: string;
+    /** YouTube channel id (UCxxxx...). */
+    youtubeChannelId: string;
+    matrixRoomId: string;
 }
 
 export type CreateBridgeOutcome =
-  | { kind: 'ok'; record: YoutubeChatBridgeRecord }
-  | { kind: 'youtube_not_linked' }
-  | { kind: 'already_bridged'; record: YoutubeChatBridgeRecord }
-  | { kind: 'invalid_input'; reason: string };
+    | { kind: 'ok'; record: YoutubeChatBridgeRecord }
+    | { kind: 'youtube_not_linked' }
+    | { kind: 'already_bridged'; record: YoutubeChatBridgeRecord }
+    | { kind: 'invalid_input'; reason: string };
 
 const MATRIX_ROOM_RE = /^[!#][^:\s]+:[^:\s]+$/;
 const YOUTUBE_CHANNEL_RE = /^UC[A-Za-z0-9_-]{20,40}$/;
 
 const validateInput = (input: CreateBridgeInput): { ok: true } | { ok: false; reason: string } => {
-  if (!input.blackoutUserId) return { ok: false, reason: 'blackoutUserId is required' };
-  const ch = input.youtubeChannelId?.trim();
-  if (!ch) return { ok: false, reason: 'youtubeChannelId is required' };
-  if (!YOUTUBE_CHANNEL_RE.test(ch)) {
-    return { ok: false, reason: 'youtubeChannelId must look like "UCxxxxxxxxxxxxxxxxxxxxxx" (UC + 22-42 chars)' };
-  }
-  if (!input.matrixRoomId?.trim()) return { ok: false, reason: 'matrixRoomId is required' };
-  if (!MATRIX_ROOM_RE.test(input.matrixRoomId.trim())) {
-    return { ok: false, reason: 'matrixRoomId must look like "!opaque:server" or "#alias:server"' };
-  }
-  return { ok: true };
+    if (!input.blackoutUserId) return { ok: false, reason: 'blackoutUserId is required' };
+    const ch = input.youtubeChannelId?.trim();
+    if (!ch) return { ok: false, reason: 'youtubeChannelId is required' };
+    if (!YOUTUBE_CHANNEL_RE.test(ch)) {
+        return {
+            ok: false,
+            reason: 'youtubeChannelId must look like "UCxxxxxxxxxxxxxxxxxxxxxx" (UC + 22-42 chars)',
+        };
+    }
+    if (!input.matrixRoomId?.trim()) return { ok: false, reason: 'matrixRoomId is required' };
+    if (!MATRIX_ROOM_RE.test(input.matrixRoomId.trim())) {
+        return {
+            ok: false,
+            reason: 'matrixRoomId must look like "!opaque:server" or "#alias:server"',
+        };
+    }
+    return { ok: true };
 };
 
 export const createBridge = (input: CreateBridgeInput): CreateBridgeOutcome => {
-  const valid = validateInput(input);
-  if (!valid.ok) return { kind: 'invalid_input', reason: valid.reason };
+    const valid = validateInput(input);
+    if (!valid.ok) return { kind: 'invalid_input', reason: valid.reason };
 
-  const matrixRoomId = input.matrixRoomId.trim();
-  const link = getLinkedAccount(input.blackoutUserId, 'youtube');
-  if (!link) return { kind: 'youtube_not_linked' };
+    const matrixRoomId = input.matrixRoomId.trim();
+    const link = getLinkedAccount(input.blackoutUserId, 'youtube');
+    if (!link) return { kind: 'youtube_not_linked' };
 
-  const existing = db.findYoutubeChatBridge(input.blackoutUserId, input.youtubeChannelId);
-  if (existing) {
-    if (existing.matrixRoomId !== matrixRoomId) {
-      return { kind: 'already_bridged', record: existing };
+    const existing = db.findYoutubeChatBridge(input.blackoutUserId, input.youtubeChannelId);
+    if (existing) {
+        if (existing.matrixRoomId !== matrixRoomId) {
+            return { kind: 'already_bridged', record: existing };
+        }
+        if (!existing.isActive) {
+            const reactivated = db.updateYoutubeChatBridge(existing.id, {
+                isActive: true,
+                lastStoppedAt: undefined,
+                lastStoppedReason: undefined,
+            });
+            if (reactivated) return { kind: 'ok', record: reactivated };
+        }
+        return { kind: 'ok', record: existing };
     }
-    if (!existing.isActive) {
-      const reactivated = db.updateYoutubeChatBridge(existing.id, {
+
+    const record = db.createYoutubeChatBridge({
+        id: randomUUID(),
+        blackoutUserId: input.blackoutUserId,
+        youtubeChannelId: input.youtubeChannelId,
+        matrixRoomId,
         isActive: true,
-        lastStoppedAt: undefined,
-        lastStoppedReason: undefined,
-      });
-      if (reactivated) return { kind: 'ok', record: reactivated };
-    }
-    return { kind: 'ok', record: existing };
-  }
-
-  const record = db.createYoutubeChatBridge({
-    id: randomUUID(),
-    blackoutUserId: input.blackoutUserId,
-    youtubeChannelId: input.youtubeChannelId,
-    matrixRoomId,
-    isActive: true,
-  });
-  return { kind: 'ok', record };
+    });
+    return { kind: 'ok', record };
 };
 
 export const listBridgesForUser = (userId: string): YoutubeChatBridgeRecord[] =>
-  db.listYoutubeChatBridgesForUser(userId);
+    db.listYoutubeChatBridgesForUser(userId);
 
-export type DeleteBridgeOutcome =
-  | { kind: 'ok' }
-  | { kind: 'not_found' }
-  | { kind: 'forbidden' };
+export type DeleteBridgeOutcome = { kind: 'ok' } | { kind: 'not_found' } | { kind: 'forbidden' };
 
 export const deleteBridge = (
-  blackoutUserId: string,
-  bridgeId: string,
-  reason = 'user_deleted',
+    blackoutUserId: string,
+    bridgeId: string,
+    reason = 'user_deleted'
 ): DeleteBridgeOutcome => {
-  const existing = db.getYoutubeChatBridge(bridgeId);
-  if (!existing) return { kind: 'not_found' };
-  if (existing.blackoutUserId !== blackoutUserId) return { kind: 'forbidden' };
-  db.updateYoutubeChatBridge(bridgeId, {
-    isActive: false,
-    lastStoppedAt: new Date().toISOString(),
-    lastStoppedReason: reason,
-  });
-  db.deleteYoutubeChatBridge(bridgeId);
-  return { kind: 'ok' };
+    const existing = db.getYoutubeChatBridge(bridgeId);
+    if (!existing) return { kind: 'not_found' };
+    if (existing.blackoutUserId !== blackoutUserId) return { kind: 'forbidden' };
+    db.updateYoutubeChatBridge(bridgeId, {
+        isActive: false,
+        lastStoppedAt: new Date().toISOString(),
+        lastStoppedReason: reason,
+    });
+    db.deleteYoutubeChatBridge(bridgeId);
+    return { kind: 'ok' };
 };
 
 // ----------------------------- per-bridge sync -----------------------------
 
 export type BridgeSyncOutcome =
-  | {
-      kind: 'ok';
-      messages: number;
-      delivered: number;
-      pollingIntervalMillis?: number;
-      nextPageToken?: string;
-    }
-  | { kind: 'no_link' }
-  | { kind: 'token_unavailable'; reason: string }
-  | { kind: 'no_active_broadcast' }
-  | { kind: 'rate_limited'; retryAfterSeconds?: number }
-  | { kind: 'failed'; status: number; detail: string };
+    | {
+          kind: 'ok';
+          messages: number;
+          delivered: number;
+          pollingIntervalMillis?: number;
+          nextPageToken?: string;
+      }
+    | { kind: 'no_link' }
+    | { kind: 'token_unavailable'; reason: string }
+    | { kind: 'no_active_broadcast' }
+    | { kind: 'rate_limited'; retryAfterSeconds?: number }
+    | { kind: 'failed'; status: number; detail: string };
 
 /**
  * Pull new chat messages for one bridge and forward them into Matrix.
@@ -149,164 +152,174 @@ export type BridgeSyncOutcome =
  * we never re-process a message across restarts.
  */
 export const syncBridge = async (
-  bridge: YoutubeChatBridgeRecord,
-  options: BridgeServiceOptions = {},
+    bridge: YoutubeChatBridgeRecord,
+    options: BridgeServiceOptions = {}
 ): Promise<BridgeSyncOutcome> => {
-  const matrix = options.matrixClient ?? defaultMatrixClient;
+    const matrix = options.matrixClient ?? defaultMatrixClient;
 
-  const fresh = await ensureFreshAccessToken(bridge.blackoutUserId, 'youtube', {
-    fetch: options.fetch,
-  });
-  if (fresh.kind === 'no_link' || fresh.kind === 'provider_not_implemented') {
-    return { kind: 'no_link' };
-  }
-  if (fresh.kind === 'refresh_failed') {
-    return { kind: 'token_unavailable', reason: `refresh_failed:${fresh.status}` };
-  }
-  const accessToken = fresh.accessToken;
-  if (!accessToken) return { kind: 'token_unavailable', reason: 'empty_token' };
-
-  // Each tick re-resolves the active broadcast; broadcasts come and go
-  // independently of the bridge declaration.
-  const broadcastOutcome = await findActiveLiveBroadcast(accessToken, { fetch: options.fetch });
-  if (broadcastOutcome.kind === 'unauthorized') {
-    return { kind: 'token_unavailable', reason: 'unauthorized' };
-  }
-  if (broadcastOutcome.kind === 'rate_limited') {
-    return { kind: 'rate_limited', retryAfterSeconds: broadcastOutcome.retryAfterSeconds };
-  }
-  if (broadcastOutcome.kind === 'failed') {
-    return { kind: 'failed', status: broadcastOutcome.status, detail: broadcastOutcome.detail };
-  }
-  const broadcast = broadcastOutcome.broadcast;
-  if (!broadcast?.snippet?.liveChatId) {
-    return { kind: 'no_active_broadcast' };
-  }
-  const liveChatId = broadcast.snippet.liveChatId;
-
-  // Resume from the persisted page-token cursor.
-  const persistedCursor = db.getLinkedAccount(bridge.blackoutUserId, 'youtube')?.syncCursor;
-
-  const pageOutcome = await listLiveChatMessages(accessToken, {
-    liveChatId,
-    pageToken: persistedCursor,
-    fetch: options.fetch,
-  });
-  if (pageOutcome.kind === 'unauthorized') {
-    return { kind: 'token_unavailable', reason: 'unauthorized' };
-  }
-  if (pageOutcome.kind === 'rate_limited') {
-    return { kind: 'rate_limited', retryAfterSeconds: pageOutcome.retryAfterSeconds };
-  }
-  if (pageOutcome.kind === 'failed') {
-    return { kind: 'failed', status: pageOutcome.status, detail: pageOutcome.detail };
-  }
-
-  let delivered = 0;
-  for (const raw of pageOutcome.page.items) {
-    const normalized = toNormalizedYoutubeChatMessage(raw, bridge.youtubeChannelId);
-    const content = toMatrixForwardedMessage(normalized);
-    const txnId = `youtube-${normalized.platformMessageId}`;
-    // Chat is high-volume; the outbound dispatcher's eventType filter
-    // is what gates whether subscribers receive these — same posture as
-    // twitchChatBridge / kickChatBridge.
-    void dispatchOutboundEvent({
-      type: 'chat.message.received',
-      blackoutUserId: bridge.blackoutUserId,
-      data: {
-        source: 'youtube',
-        youtubeChannelId: bridge.youtubeChannelId,
-        authorDisplayName: normalized.authorDisplayName,
-        body: normalized.body,
-        platformMessageId: normalized.platformMessageId,
-        snippetType: normalized.snippetType,
-        superChatAmountDisplay: normalized.superChatAmountDisplay,
-      },
-    }).catch(() => {});
-    // SuperChat / Super Sticker events are the YouTube analogue of Twitch
-    // bits — fire cheer.received in addition to the chat.message.received
-    // dispatch above so a creator subscribing to "cheers" sees both
-    // platforms' high-value chat events without setting up a Twitch-only
-    // pipe AND a YouTube-only pipe.
-    if (
-      normalized.superChatAmountDisplay ||
-      normalized.snippetType === 'superChatEvent' ||
-      normalized.snippetType === 'superStickerEvent'
-    ) {
-      void dispatchOutboundEvent({
-        type: 'cheer.received',
-        blackoutUserId: bridge.blackoutUserId,
-        data: {
-          source: 'youtube',
-          youtubeChannelId: bridge.youtubeChannelId,
-          authorDisplayName: normalized.authorDisplayName,
-          authorChannelId: normalized.authorChannelId,
-          superChatAmountDisplay: normalized.superChatAmountDisplay,
-          message: normalized.body,
-          platformMessageId: normalized.platformMessageId,
-          snippetType: normalized.snippetType,
-        },
-      }).catch(() => {});
+    const fresh = await ensureFreshAccessToken(bridge.blackoutUserId, 'youtube', {
+        fetch: options.fetch,
+    });
+    if (fresh.kind === 'no_link' || fresh.kind === 'provider_not_implemented') {
+        return { kind: 'no_link' };
     }
-    // Fan out to the chatMessageHub so the Twitch IRC bot shim can
-    // deliver this YouTube chat message as a Twitch-shape PRIVMSG to any
-    // bot that JOIN'd `#yt:<channelId>`. The author's *channel id* on
-    // YouTube isn't IRC-safe (URL-safe base64 with hyphens) — we
-    // lowercase + sanitize for the IRC userhost while keeping the
-    // display-name in the IRCv3 tag.
-    const safeAuthor = (normalized.authorChannelId || normalized.authorDisplayName || 'yt-user')
-      .toLowerCase()
-      .replace(/[^a-z0-9_]/g, '_')
-      .slice(0, 24) || 'yt-user';
-    publishChatMessage(
-      { blackoutUserId: bridge.blackoutUserId, channelKey: `#yt:${bridge.youtubeChannelId.toLowerCase()}` },
-      {
-        source: 'youtube',
-        authorLogin: safeAuthor,
-        authorDisplayName: normalized.authorDisplayName,
-        body: normalized.body,
-        platformMessageId: normalized.platformMessageId,
-        tags: {
-          ...(normalized.authorDisplayName ? { 'display-name': normalized.authorDisplayName } : {}),
-          ...(normalized.platformMessageId ? { id: normalized.platformMessageId } : {}),
-          ...(normalized.superChatAmountDisplay
-            ? { 'blackout-superchat': normalized.superChatAmountDisplay }
-            : {}),
-          'tmi-sent-ts': String(normalized.sentAtMs),
-        },
-      },
-    );
-    try {
-      const result = await matrix.sendEvent(bridge.matrixRoomId, content, { txnId });
-      if (result.ok) delivered += 1;
-      else
-        log.warn('youtube_chat_bridge_matrix_send_failed', {
-          bridgeId: bridge.id,
-          status: result.status,
-          reason: result.reason,
+    if (fresh.kind === 'refresh_failed') {
+        return { kind: 'token_unavailable', reason: `refresh_failed:${fresh.status}` };
+    }
+    const accessToken = fresh.accessToken;
+    if (!accessToken) return { kind: 'token_unavailable', reason: 'empty_token' };
+
+    // Each tick re-resolves the active broadcast; broadcasts come and go
+    // independently of the bridge declaration.
+    const broadcastOutcome = await findActiveLiveBroadcast(accessToken, { fetch: options.fetch });
+    if (broadcastOutcome.kind === 'unauthorized') {
+        return { kind: 'token_unavailable', reason: 'unauthorized' };
+    }
+    if (broadcastOutcome.kind === 'rate_limited') {
+        return { kind: 'rate_limited', retryAfterSeconds: broadcastOutcome.retryAfterSeconds };
+    }
+    if (broadcastOutcome.kind === 'failed') {
+        return { kind: 'failed', status: broadcastOutcome.status, detail: broadcastOutcome.detail };
+    }
+    const broadcast = broadcastOutcome.broadcast;
+    if (!broadcast?.snippet?.liveChatId) {
+        return { kind: 'no_active_broadcast' };
+    }
+    const liveChatId = broadcast.snippet.liveChatId;
+
+    // Resume from the persisted page-token cursor.
+    const persistedCursor = db.getLinkedAccount(bridge.blackoutUserId, 'youtube')?.syncCursor;
+
+    const pageOutcome = await listLiveChatMessages(accessToken, {
+        liveChatId,
+        pageToken: persistedCursor,
+        fetch: options.fetch,
+    });
+    if (pageOutcome.kind === 'unauthorized') {
+        return { kind: 'token_unavailable', reason: 'unauthorized' };
+    }
+    if (pageOutcome.kind === 'rate_limited') {
+        return { kind: 'rate_limited', retryAfterSeconds: pageOutcome.retryAfterSeconds };
+    }
+    if (pageOutcome.kind === 'failed') {
+        return { kind: 'failed', status: pageOutcome.status, detail: pageOutcome.detail };
+    }
+
+    let delivered = 0;
+    for (const raw of pageOutcome.page.items) {
+        const normalized = toNormalizedYoutubeChatMessage(raw, bridge.youtubeChannelId);
+        const content = toMatrixForwardedMessage(normalized);
+        const txnId = `youtube-${normalized.platformMessageId}`;
+        // Chat is high-volume; the outbound dispatcher's eventType filter
+        // is what gates whether subscribers receive these — same posture as
+        // twitchChatBridge / kickChatBridge.
+        void dispatchOutboundEvent({
+            type: 'chat.message.received',
+            blackoutUserId: bridge.blackoutUserId,
+            data: {
+                source: 'youtube',
+                youtubeChannelId: bridge.youtubeChannelId,
+                authorDisplayName: normalized.authorDisplayName,
+                body: normalized.body,
+                platformMessageId: normalized.platformMessageId,
+                snippetType: normalized.snippetType,
+                superChatAmountDisplay: normalized.superChatAmountDisplay,
+            },
+        }).catch(() => {
+            /* fire-and-forget: the dispatcher logs its own failures; chat ingest must not reject */
         });
-    } catch (err) {
-      log.warn('youtube_chat_bridge_matrix_send_threw', {
-        bridgeId: bridge.id,
-        error: String(err),
-      });
+        // SuperChat / Super Sticker events are the YouTube analogue of Twitch
+        // bits — fire cheer.received in addition to the chat.message.received
+        // dispatch above so a creator subscribing to "cheers" sees both
+        // platforms' high-value chat events without setting up a Twitch-only
+        // pipe AND a YouTube-only pipe.
+        if (
+            normalized.superChatAmountDisplay ||
+            normalized.snippetType === 'superChatEvent' ||
+            normalized.snippetType === 'superStickerEvent'
+        ) {
+            void dispatchOutboundEvent({
+                type: 'cheer.received',
+                blackoutUserId: bridge.blackoutUserId,
+                data: {
+                    source: 'youtube',
+                    youtubeChannelId: bridge.youtubeChannelId,
+                    authorDisplayName: normalized.authorDisplayName,
+                    authorChannelId: normalized.authorChannelId,
+                    superChatAmountDisplay: normalized.superChatAmountDisplay,
+                    message: normalized.body,
+                    platformMessageId: normalized.platformMessageId,
+                    snippetType: normalized.snippetType,
+                },
+            }).catch(() => {
+                /* fire-and-forget: the dispatcher logs its own failures; chat ingest must not reject */
+            });
+        }
+        // Fan out to the chatMessageHub so the Twitch IRC bot shim can
+        // deliver this YouTube chat message as a Twitch-shape PRIVMSG to any
+        // bot that JOIN'd `#yt:<channelId>`. The author's *channel id* on
+        // YouTube isn't IRC-safe (URL-safe base64 with hyphens) — we
+        // lowercase + sanitize for the IRC userhost while keeping the
+        // display-name in the IRCv3 tag.
+        const safeAuthor =
+            (normalized.authorChannelId || normalized.authorDisplayName || 'yt-user')
+                .toLowerCase()
+                .replace(/[^a-z0-9_]/g, '_')
+                .slice(0, 24) || 'yt-user';
+        publishChatMessage(
+            {
+                blackoutUserId: bridge.blackoutUserId,
+                channelKey: `#yt:${bridge.youtubeChannelId.toLowerCase()}`,
+            },
+            {
+                source: 'youtube',
+                authorLogin: safeAuthor,
+                authorDisplayName: normalized.authorDisplayName,
+                body: normalized.body,
+                platformMessageId: normalized.platformMessageId,
+                tags: {
+                    ...(normalized.authorDisplayName
+                        ? { 'display-name': normalized.authorDisplayName }
+                        : {}),
+                    ...(normalized.platformMessageId ? { id: normalized.platformMessageId } : {}),
+                    ...(normalized.superChatAmountDisplay
+                        ? { 'blackout-superchat': normalized.superChatAmountDisplay }
+                        : {}),
+                    'tmi-sent-ts': String(normalized.sentAtMs),
+                },
+            }
+        );
+        try {
+            const result = await matrix.sendEvent(bridge.matrixRoomId, content, { txnId });
+            if (result.ok) delivered += 1;
+            else
+                log.warn('youtube_chat_bridge_matrix_send_failed', {
+                    bridgeId: bridge.id,
+                    status: result.status,
+                    reason: result.reason,
+                });
+        } catch (err) {
+            log.warn('youtube_chat_bridge_matrix_send_threw', {
+                bridgeId: bridge.id,
+                error: String(err),
+            });
+        }
     }
-  }
 
-  // Always advance the cursor to the page's nextPageToken (even when the
-  // page was empty — YouTube returns a fresh token each call).
-  const nextPageToken = pageOutcome.page.nextPageToken;
-  if (nextPageToken && nextPageToken !== persistedCursor) {
-    db.setLinkedAccountSyncCursor(bridge.blackoutUserId, 'youtube', nextPageToken);
-  }
+    // Always advance the cursor to the page's nextPageToken (even when the
+    // page was empty — YouTube returns a fresh token each call).
+    const nextPageToken = pageOutcome.page.nextPageToken;
+    if (nextPageToken && nextPageToken !== persistedCursor) {
+        db.setLinkedAccountSyncCursor(bridge.blackoutUserId, 'youtube', nextPageToken);
+    }
 
-  return {
-    kind: 'ok',
-    messages: pageOutcome.page.items.length,
-    delivered,
-    pollingIntervalMillis: pageOutcome.page.pollingIntervalMillis,
-    nextPageToken,
-  };
+    return {
+        kind: 'ok',
+        messages: pageOutcome.page.items.length,
+        delivered,
+        pollingIntervalMillis: pageOutcome.page.pollingIntervalMillis,
+        nextPageToken,
+    };
 };
 
 // ----------------------------- outbound: send a chat message -----------------------------
@@ -314,13 +327,13 @@ export const syncBridge = async (
 const YT_PRIVMSG_MAX_CHARS = 200;
 
 export type SendBridgeMessageOutcome =
-  | { kind: 'ok'; messageId: string }
-  | { kind: 'invalid_body'; reason: string }
-  | { kind: 'no_link' }
-  | { kind: 'token_unavailable'; reason: string }
-  | { kind: 'no_active_broadcast' }
-  | { kind: 'rate_limited'; retryAfterSeconds?: number }
-  | { kind: 'failed'; status: number; detail: string };
+    | { kind: 'ok'; messageId: string }
+    | { kind: 'invalid_body'; reason: string }
+    | { kind: 'no_link' }
+    | { kind: 'token_unavailable'; reason: string }
+    | { kind: 'no_active_broadcast' }
+    | { kind: 'rate_limited'; retryAfterSeconds?: number }
+    | { kind: 'failed'; status: number; detail: string };
 
 /**
  * Send a chat message into the bridge's YouTube live chat. Resolves the
@@ -331,58 +344,61 @@ export type SendBridgeMessageOutcome =
  * `m.blackout.origin = 'youtube'` so we don't echo our own ingress.
  */
 export const sendBridgeMessage = async (
-  bridge: YoutubeChatBridgeRecord,
-  body: string,
-  options: BridgeServiceOptions = {},
+    bridge: YoutubeChatBridgeRecord,
+    body: string,
+    options: BridgeServiceOptions = {}
 ): Promise<SendBridgeMessageOutcome> => {
-  if (typeof body !== 'string') return { kind: 'invalid_body', reason: 'body is not a string' };
-  const sanitized = body.replace(/[\r\n]+/g, ' ').trim();
-  if (sanitized.length === 0) return { kind: 'invalid_body', reason: 'body is empty' };
-  // YouTube caps live-chat messages at 200 chars; truncate defensively.
-  const truncated =
-    sanitized.length <= YT_PRIVMSG_MAX_CHARS
-      ? sanitized
-      : sanitized.slice(0, YT_PRIVMSG_MAX_CHARS);
+    if (typeof body !== 'string') return { kind: 'invalid_body', reason: 'body is not a string' };
+    const sanitized = body.replace(/[\r\n]+/g, ' ').trim();
+    if (sanitized.length === 0) return { kind: 'invalid_body', reason: 'body is empty' };
+    // YouTube caps live-chat messages at 200 chars; truncate defensively.
+    const truncated =
+        sanitized.length <= YT_PRIVMSG_MAX_CHARS
+            ? sanitized
+            : sanitized.slice(0, YT_PRIVMSG_MAX_CHARS);
 
-  const fresh = await ensureFreshAccessToken(bridge.blackoutUserId, 'youtube', {
-    fetch: options.fetch,
-  });
-  if (fresh.kind === 'no_link' || fresh.kind === 'provider_not_implemented') {
-    return { kind: 'no_link' };
-  }
-  if (fresh.kind === 'refresh_failed') {
-    return { kind: 'token_unavailable', reason: `refresh_failed:${fresh.status}` };
-  }
-  const accessToken = fresh.accessToken;
-  if (!accessToken) return { kind: 'token_unavailable', reason: 'empty_token' };
+    const fresh = await ensureFreshAccessToken(bridge.blackoutUserId, 'youtube', {
+        fetch: options.fetch,
+    });
+    if (fresh.kind === 'no_link' || fresh.kind === 'provider_not_implemented') {
+        return { kind: 'no_link' };
+    }
+    if (fresh.kind === 'refresh_failed') {
+        return { kind: 'token_unavailable', reason: `refresh_failed:${fresh.status}` };
+    }
+    const accessToken = fresh.accessToken;
+    if (!accessToken) return { kind: 'token_unavailable', reason: 'empty_token' };
 
-  const broadcastOutcome = await findActiveLiveBroadcast(accessToken, { fetch: options.fetch });
-  if (broadcastOutcome.kind === 'unauthorized') {
-    return { kind: 'token_unavailable', reason: 'unauthorized' };
-  }
-  if (broadcastOutcome.kind === 'rate_limited') {
-    return { kind: 'rate_limited', retryAfterSeconds: broadcastOutcome.retryAfterSeconds };
-  }
-  if (broadcastOutcome.kind === 'failed') {
-    return { kind: 'failed', status: broadcastOutcome.status, detail: broadcastOutcome.detail };
-  }
-  const liveChatId = broadcastOutcome.broadcast?.snippet?.liveChatId;
-  if (!liveChatId) return { kind: 'no_active_broadcast' };
+    const broadcastOutcome = await findActiveLiveBroadcast(accessToken, { fetch: options.fetch });
+    if (broadcastOutcome.kind === 'unauthorized') {
+        return { kind: 'token_unavailable', reason: 'unauthorized' };
+    }
+    if (broadcastOutcome.kind === 'rate_limited') {
+        return { kind: 'rate_limited', retryAfterSeconds: broadcastOutcome.retryAfterSeconds };
+    }
+    if (broadcastOutcome.kind === 'failed') {
+        return { kind: 'failed', status: broadcastOutcome.status, detail: broadcastOutcome.detail };
+    }
+    const liveChatId = broadcastOutcome.broadcast?.snippet?.liveChatId;
+    if (!liveChatId) return { kind: 'no_active_broadcast' };
 
-  const insertOutcome = await insertLiveChatMessage(accessToken, {
-    liveChatId,
-    body: truncated,
-    fetch: options.fetch,
-  });
-  if (insertOutcome.kind === 'unauthorized') {
-    return { kind: 'token_unavailable', reason: 'unauthorized' };
-  }
-  if (insertOutcome.kind === 'rate_limited') {
-    return { kind: 'rate_limited', retryAfterSeconds: insertOutcome.retryAfterSeconds };
-  }
-  if (insertOutcome.kind === 'failed') {
-    return { kind: 'failed', status: insertOutcome.status, detail: insertOutcome.detail };
-  }
-  log.info('youtube_chat_bridge_sent', { bridgeId: bridge.id, messageId: insertOutcome.messageId });
-  return { kind: 'ok', messageId: insertOutcome.messageId };
+    const insertOutcome = await insertLiveChatMessage(accessToken, {
+        liveChatId,
+        body: truncated,
+        fetch: options.fetch,
+    });
+    if (insertOutcome.kind === 'unauthorized') {
+        return { kind: 'token_unavailable', reason: 'unauthorized' };
+    }
+    if (insertOutcome.kind === 'rate_limited') {
+        return { kind: 'rate_limited', retryAfterSeconds: insertOutcome.retryAfterSeconds };
+    }
+    if (insertOutcome.kind === 'failed') {
+        return { kind: 'failed', status: insertOutcome.status, detail: insertOutcome.detail };
+    }
+    log.info('youtube_chat_bridge_sent', {
+        bridgeId: bridge.id,
+        messageId: insertOutcome.messageId,
+    });
+    return { kind: 'ok', messageId: insertOutcome.messageId };
 };

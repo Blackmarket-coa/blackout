@@ -27,6 +27,10 @@ jobs:
                   cache: pnpm
             - run: pnpm install --frozen-lockfile
             - run: pnpm --filter @blackout/client exec eslint "src/**/*.{ts,tsx}" --max-warnings=0
+            # The API was never linted here: the root .eslintrc.cjs needs the
+            # never-installed eslint-plugin-matrix-org and died before reading a
+            # file. Its flat config lives in packages/api/eslint.config.js.
+            - run: pnpm --filter @blackout/api run lint
 
     typecheck:
         name: Type check (tsc --noEmit)
