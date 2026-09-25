@@ -20,6 +20,7 @@
 //     coalition award ever needs to scale with dollars, that is a legal-review
 //     change on the FBM side, not a field added here.
 
+import { fbmIntegrationTarget } from '../integrations/fbm/integrationRoot';
 import { matrixUserIdFor } from './userIdentity';
 import { incrementCounter, logEvent } from './marketplaceObservability';
 
@@ -68,13 +69,9 @@ interface Endpoint {
  * coalition action.
  */
 function endpoint(env = process.env): Endpoint | null {
-    const baseUrl = env.FBM_ENTITLEMENTS_BASE_URL;
-    const serviceToken = env.FBM_ENTITLEMENTS_SERVICE_TOKEN;
-    if (!baseUrl || !serviceToken) return null;
-    return {
-        url: `${baseUrl.replace(/\/+$/, '')}/v1/integrations/blackout/reputation/events`,
-        serviceToken,
-    };
+    const target = fbmIntegrationTarget(env);
+    if (!target) return null;
+    return { url: `${target.root}/reputation/events`, serviceToken: target.serviceToken };
 }
 
 async function post(input: CoalitionReputationInput, target: Endpoint): Promise<void> {
