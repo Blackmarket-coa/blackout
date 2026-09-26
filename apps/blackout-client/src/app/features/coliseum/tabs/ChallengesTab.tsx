@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState, type CSSProperties } from 'react';
+import { SkeletonList } from '../../../components/skeleton/SkeletonList';
 import {
     SUGGESTED_CHALLENGE_CATEGORIES,
     type ColiseumChallenge,
@@ -237,6 +238,7 @@ function ChallengeCard({ challenge }: { challenge: ColiseumChallenge }) {
 
 export function ChallengesTab() {
     const [challenges, setChallenges] = useState<ColiseumChallenge[]>([]);
+    const [loaded, setLoaded] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [title, setTitle] = useState('');
     const [category, setCategory] = useState<string>(SUGGESTED_CHALLENGE_CATEGORIES[0]);
@@ -250,7 +252,8 @@ export function ChallengesTab() {
             })
             .catch((err: unknown) =>
                 setError(err instanceof Error ? err.message : 'Failed to load challenges')
-            );
+            )
+            .finally(() => setLoaded(true));
     }, []);
 
     useEffect(() => {
@@ -321,7 +324,9 @@ export function ChallengesTab() {
                         }
                     />
                 ) : null}
-                {!error && challenges.length === 0 ? (
+                {!error && !loaded ? (
+                    <SkeletonList count={3} height={120} label="Loading challenges" />
+                ) : !error && challenges.length === 0 ? (
                     <EmptyState
                         title="No challenges yet"
                         description="Start the first one — grow food, launch a business, build something."

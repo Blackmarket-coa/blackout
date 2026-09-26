@@ -1,4 +1,5 @@
 import React, { type CSSProperties } from 'react';
+import { useOverflowFade } from '../../../hooks/useOverflowFade';
 
 export interface HubSubTabsProps<V extends string> {
     /** Selectable sub-views, in order. */
@@ -17,6 +18,7 @@ const rowStyle: CSSProperties = {
     gap: 8,
     padding: '12px 16px 0',
     overflowX: 'auto',
+    scrollbarWidth: 'none',
 };
 
 const pillBaseStyle: CSSProperties = {
@@ -29,6 +31,7 @@ const pillBaseStyle: CSSProperties = {
     padding: '5px 14px',
     cursor: 'pointer',
     whiteSpace: 'nowrap',
+    flexShrink: 0,
 };
 
 const pillActiveStyle: CSSProperties = {
@@ -51,8 +54,9 @@ export function HubSubTabs<V extends string>({
     onSelect,
     ariaLabel,
 }: HubSubTabsProps<V>) {
+    const fadeRef = useOverflowFade<HTMLElement>(active);
     return (
-        <nav style={rowStyle} role="tablist" aria-label={ariaLabel}>
+        <nav ref={fadeRef} style={rowStyle} role="tablist" aria-label={ariaLabel}>
             {views.map((view) => (
                 <button
                     key={view}

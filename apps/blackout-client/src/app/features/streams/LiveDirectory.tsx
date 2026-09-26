@@ -1,4 +1,5 @@
 import { useEffect, useState, type CSSProperties } from 'react';
+import { SkeletonList } from '../../components/skeleton/SkeletonList';
 import { Link } from 'react-router';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 import { LIVE_PATH } from '../../pages/paths';
@@ -292,7 +293,14 @@ export const LiveDirectory = (): JSX.Element => {
                     {error}
                 </p>
             ) : !loaded ? (
-                <p style={emptyStyle}>Loading streams…</p>
+                <SkeletonList
+                    layout="grid"
+                    count={4}
+                    height={132}
+                    label="Loading streams"
+                    style={{ padding: '12px 16px 24px' }}
+                    data-testid="live-directory-loading"
+                />
             ) : streams.length === 0 ? (
                 <p style={emptyStyle} data-testid="live-directory-empty">
                     {search.trim() || category

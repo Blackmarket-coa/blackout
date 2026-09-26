@@ -17,6 +17,7 @@ import { TopicComposerSheet } from '../components/TopicComposerSheet';
 import { TopicSeedLine } from '../components/TopicSeedLine';
 import { cx } from '../components/cx';
 import * as ui from '../components/coliseumUi.css';
+import { useOverflowFade } from '../../../hooks/useOverflowFade';
 
 export interface TopicsTabProps {
     scope: ColiseumScopeQuery;
@@ -76,6 +77,7 @@ function TopicSkeleton() {
 
 export function TopicsTab({ scope }: TopicsTabProps) {
     const [category, setCategory] = useState<CategoryFilter>('all');
+    const chipRowRef = useOverflowFade<HTMLDivElement>();
     const { data, loading, error, refetch } = useColiseumTopics(scope, {
         limit: 50,
         category: category === 'all' ? undefined : category,
@@ -108,7 +110,12 @@ export function TopicsTab({ scope }: TopicsTabProps) {
 
     return (
         <div data-testid="coliseum-topics-tab" style={{ minHeight: '100%' }}>
-            <div className={ui.chipRow} role="group" aria-label="Filter topics by category">
+            <div
+                ref={chipRowRef}
+                className={ui.chipRow}
+                role="group"
+                aria-label="Filter topics by category"
+            >
                 <button
                     type="button"
                     className={cx(category === 'all' ? ui.chipActive : ui.chip)}
@@ -153,6 +160,7 @@ export function TopicsTab({ scope }: TopicsTabProps) {
 
             {!loading && !error && topics.length === 0 ? (
                 <EmptyState
+                    style={{ margin: 16 }}
                     title={category === 'all' ? 'No debates yet' : 'Nothing in this category yet'}
                     description="Curate a debate from a recent headline and let the arena decide."
                     action={

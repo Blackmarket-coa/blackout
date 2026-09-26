@@ -30,6 +30,13 @@ const DOUBLE_TAP_MS = 300;
 
 const HINT_SEEN_KEY = 'bmc-coliseum-reel-hint-seen';
 
+/** Picks the text-card type scale from the argument's length. */
+function textCardSize(body: string): keyof typeof css.textCardBody {
+    if (body.length <= 140) return 'short';
+    if (body.length <= 320) return 'medium';
+    return 'long';
+}
+
 export interface ArgumentReelItem extends RankedColiseumArgument {
     topicTitle?: string;
 }
@@ -263,7 +270,17 @@ function ReelSlide({
                     onPointerDown={onMediaPointerDown}
                     onPointerUp={onMediaPointerUp}
                 >
-                    {!videoSrc ? <p className={css.textCardBody}>{item.body}</p> : null}
+                    {!videoSrc ? (
+                        <div
+                            className={css.textCardQuote}
+                            style={{ color: STANCE_COLOR[item.stance] }}
+                        >
+                            <span className={css.textCardMark} aria-hidden>
+                                “
+                            </span>
+                            <p className={css.textCardBody[textCardSize(item.body)]}>{item.body}</p>
+                        </div>
+                    ) : null}
                 </div>
             )}
 

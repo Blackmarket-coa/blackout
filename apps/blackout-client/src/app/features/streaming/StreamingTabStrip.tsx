@@ -5,6 +5,7 @@ import {
     STREAMING_TAB_ORDER,
     type StreamingTabId,
 } from '../../state/streaming';
+import { useOverflowFade } from '../../hooks/useOverflowFade';
 
 export interface StreamingTabStripProps {
     activeTab: StreamingTabId;
@@ -21,6 +22,7 @@ const stripStyle: CSSProperties = {
     borderBottom: '1px solid var(--border-default)',
     background: 'var(--bg-surface)',
     overflowX: 'auto',
+    scrollbarWidth: 'none',
 };
 
 const tabBaseStyle: CSSProperties = {
@@ -33,6 +35,7 @@ const tabBaseStyle: CSSProperties = {
     padding: '6px 4px',
     cursor: 'pointer',
     whiteSpace: 'nowrap',
+    flexShrink: 0,
 };
 
 const tabActiveStyle: CSSProperties = {
@@ -47,8 +50,9 @@ export function StreamingTabStrip({
     onSelectTab,
     tabs = STREAMING_TAB_ORDER,
 }: StreamingTabStripProps) {
+    const fadeRef = useOverflowFade<HTMLElement>(activeTab);
     return (
-        <nav style={stripStyle} role="tablist" aria-label="Streaming tabs">
+        <nav ref={fadeRef} style={stripStyle} role="tablist" aria-label="Streaming tabs">
             {tabs.map((tab) => (
                 <button
                     key={tab}

@@ -59,8 +59,8 @@ export const COLISEUM_TAB_GUIDES: Record<ColiseumTabId, ReactNode> = {
     sources: <>Curated news and feeds you can cite to back up your arguments.</>,
     knowledge: (
         <>
-            The <strong>Knowledge</strong> archive — every settled match and resolved debate,
-            searchable by domain. Ranked by how well it resolved, not how much it was watched.
+            Everything here is <strong>settled</strong> — ranked by how well it resolved, not how
+            much it was watched.
         </>
     ),
 };

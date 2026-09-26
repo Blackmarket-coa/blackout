@@ -3,6 +3,7 @@ import { Box, Button, Input, Spinner, Text } from 'folds';
 import { SequenceCard } from '../../../components/sequence-card';
 import { SequenceCardStyle } from '../styles.css';
 import { SettingTile } from '../../../components/setting-tile';
+import { FormSubmitBar } from '../../../components/form-submit-bar/FormSubmitBar';
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
 import { useAlive } from '../../../hooks/useAlive';
 import {
@@ -67,6 +68,8 @@ export function TwitchExtensions({ apiClient: testApiClient }: TwitchExtensionsP
         () => isValidExtensionLabel(label) && isValidBundleUrl(bundleUrl),
         [label, bundleUrl],
     );
+    const requiredFilled =
+        Number(isValidExtensionLabel(label)) + Number(isValidBundleUrl(bundleUrl));
 
     const toggleCap = (cap: ExtensionCapability) =>
         setCaps((prev) => (prev.includes(cap) ? prev.filter((c) => c !== cap) : [...prev, cap]));
@@ -179,7 +182,12 @@ export function TwitchExtensions({ apiClient: testApiClient }: TwitchExtensionsP
                                 </Button>
                             ))}
                         </Box>
-                        <Box gap="200">
+                        <FormSubmitBar
+                            completed={requiredFilled}
+                            total={2}
+                            readyLabel="Ready to register"
+                            data-testid="ext-submit-bar"
+                        >
                             <Button
                                 size="300"
                                 variant="Primary"
@@ -191,7 +199,7 @@ export function TwitchExtensions({ apiClient: testApiClient }: TwitchExtensionsP
                             >
                                 <Text size="B300">Register</Text>
                             </Button>
-                        </Box>
+                        </FormSubmitBar>
                     </Box>
                 </SequenceCard>
             )}

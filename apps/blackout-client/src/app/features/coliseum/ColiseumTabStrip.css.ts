@@ -7,6 +7,18 @@ export const strip = style({
     padding: '4px 12px',
     borderBottom: '1px solid var(--border-default)',
     background: 'var(--bg-surface)',
+});
+
+/**
+ * The tabs scroll on their own so the search button stays pinned at the end
+ * of the strip instead of being scrolled off-screen with the last tab.
+ */
+export const tabScroller = style({
+    display: 'flex',
+    alignItems: 'center',
+    gap: 4,
+    flex: 1,
+    minWidth: 0,
     overflowX: 'auto',
     scrollbarWidth: 'none',
     selectors: { '&::-webkit-scrollbar': { display: 'none' } },
@@ -45,8 +57,6 @@ export const scopeBadge = style({
     padding: '2px 8px',
     marginRight: 4,
 });
-
-export const spacer = style({ flex: 1 });
 
 export const iconButton = style({
     display: 'inline-flex',

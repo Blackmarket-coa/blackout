@@ -4,6 +4,7 @@ import { COLISEUM_TAB_HINTS, COLISEUM_TAB_LABELS, COLISEUM_TAB_ORDER } from '../
 import { splitColiseumTabs } from './tabConsolidation';
 import { cx } from './components/cx';
 import * as css from './ColiseumTabStrip.css';
+import { useOverflowFade } from '../../hooks/useOverflowFade';
 
 export interface ColiseumTabStripProps {
     activeTab: ColiseumTabId;
@@ -36,25 +37,27 @@ export function ColiseumTabStrip({
 }: ColiseumTabStripProps) {
     const tabs = enabledTabs && enabledTabs.length > 0 ? enabledTabs : COLISEUM_TAB_ORDER;
     const { primary } = useMemo(() => splitColiseumTabs(tabs), [tabs]);
+    const fadeRef = useOverflowFade<HTMLDivElement>(activeTab);
 
     return (
-        <nav className={css.strip} role="tablist" aria-label="Coliseum tabs">
+        <nav className={css.strip} aria-label="Coliseum tabs">
             {scopeLabel ? <span className={css.scopeBadge}>{scopeLabel}</span> : null}
-            {primary.map((tab) => (
-                <button
-                    key={tab}
-                    type="button"
-                    role="tab"
-                    aria-selected={tab === activeTab}
-                    title={COLISEUM_TAB_HINTS[tab]}
-                    className={cx(css.tab, tab === activeTab && css.tabActive)}
-                    onClick={() => onSelectTab(tab)}
-                    data-coliseum-tab={tab}
-                >
-                    {COLISEUM_TAB_LABELS[tab]}
-                </button>
-            ))}
-            <span className={css.spacer} />
+            <div ref={fadeRef} className={css.tabScroller} role="tablist">
+                {primary.map((tab) => (
+                    <button
+                        key={tab}
+                        type="button"
+                        role="tab"
+                        aria-selected={tab === activeTab}
+                        title={COLISEUM_TAB_HINTS[tab]}
+                        className={cx(css.tab, tab === activeTab && css.tabActive)}
+                        onClick={() => onSelectTab(tab)}
+                        data-coliseum-tab={tab}
+                    >
+                        {COLISEUM_TAB_LABELS[tab]}
+                    </button>
+                ))}
+            </div>
             {onSearch ? (
                 <button
                     type="button"
