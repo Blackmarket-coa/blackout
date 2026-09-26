@@ -126,6 +126,20 @@ button {
   overflow: visible;
   -webkit-appearance: button;
 }
+/*
+ * Placeholder contrast. Browser defaults and the folds Input/TextArea
+ * (inherited colour at 50% opacity) fall below WCAG AA (4.5:1) on the dark
+ * surfaces, so hint text like "rtmp://live.twitch.tv/app" was hard to read.
+ * Use the theme's muted text token at full opacity instead. `!important` is
+ * needed to beat the class-scoped folds rules; the token itself is still
+ * theme-driven, so light themes get their own muted colour.
+ */
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-muted, #9ca3af) !important;
+  opacity: 1 !important;
+}
+
 textarea,
 input,
 input[type],

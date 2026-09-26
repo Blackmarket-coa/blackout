@@ -7,11 +7,22 @@ export const root = style({
     alignItems: 'center',
     textAlign: 'center',
     gap: designSpacing.compactGapPx,
-    padding: designSpacing.comfortableGapPx,
+    padding: '28px 20px',
+    // Dashed frame + icon read as "settled: there is nothing here", distinct
+    // from the pulsing skeleton blocks used while content is still loading.
+    border: `1px dashed ${designColors.borderDefault}`,
+    borderRadius: 14,
     color: designColors.textSecondary,
 });
 
 export const icon = style({
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 48,
+    height: 48,
+    borderRadius: '50%',
+    background: 'rgba(148, 163, 184, 0.1)',
     color: designColors.textMuted,
 });
 

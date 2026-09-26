@@ -7,6 +7,7 @@ import {
 } from '../../state/canopy';
 import { cx } from '../coliseum/components/cx';
 import * as css from './CanopyTabStrip.css';
+import { useOverflowFade } from '../../hooks/useOverflowFade';
 
 export interface CanopyTabStripProps {
     activeTab: CanopyHubTabId;
@@ -20,8 +21,9 @@ export interface CanopyTabStripProps {
  * point of the consolidation is that a strip should fit on a phone.
  */
 export function CanopyTabStrip({ activeTab, onSelectTab, counts }: CanopyTabStripProps) {
+    const fadeRef = useOverflowFade<HTMLElement>(activeTab);
     return (
-        <nav className={css.strip} role="tablist" aria-label="Canopies tabs">
+        <nav ref={fadeRef} className={css.strip} role="tablist" aria-label="Canopies tabs">
             {CANOPY_HUB_TAB_ORDER.map((tab) => {
                 const count = counts?.[tab] ?? 0;
                 return (

@@ -3,6 +3,7 @@ import { Box, Button, Input, Spinner, Text } from 'folds';
 import { SequenceCard } from '../../../components/sequence-card';
 import { SequenceCardStyle } from '../styles.css';
 import { SettingTile } from '../../../components/setting-tile';
+import { FormSubmitBar } from '../../../components/form-submit-bar/FormSubmitBar';
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
 import { useAlive } from '../../../hooks/useAlive';
 import {
@@ -115,6 +116,10 @@ export function SimulcastDestinations({
             streamKey.trim().length > 0,
         [provider, ingestUrl, streamKey],
     );
+    const requiredFilled =
+        Number(isValidProvider(provider)) +
+        Number(isValidRtmpUrl(ingestUrl)) +
+        Number(streamKey.trim().length > 0);
 
     const applyPreset = (presetProvider: string) => {
         const preset = PRESETS.find((p) => p.provider === presetProvider);
@@ -296,7 +301,12 @@ export function SimulcastDestinations({
                             onChange={(evt) => setStreamKey(evt.currentTarget.value)}
                             data-testid="simulcast-stream-key-input"
                         />
-                        <Box gap="200">
+                        <FormSubmitBar
+                            completed={requiredFilled}
+                            total={3}
+                            readyLabel="Ready to add"
+                            data-testid="simulcast-submit-bar"
+                        >
                             <Button
                                 size="300"
                                 variant="Primary"
@@ -308,7 +318,7 @@ export function SimulcastDestinations({
                             >
                                 <Text size="B300">Add destination</Text>
                             </Button>
-                        </Box>
+                        </FormSubmitBar>
                     </Box>
                 </SequenceCard>
             )}

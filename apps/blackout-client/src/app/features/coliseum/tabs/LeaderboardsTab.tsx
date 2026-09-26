@@ -8,6 +8,7 @@ import { fetchLeaderboard } from '../challengesClient';
 import { EmptyState } from '@blackout/ui/primitives';
 import { cx } from '../components/cx';
 import * as ui from '../components/coliseumUi.css';
+import { useOverflowFade } from '../../../hooks/useOverflowFade';
 
 const CATEGORY_LABEL: Record<LeaderboardCategory, string> = {
     creators: 'Creators',
@@ -63,6 +64,7 @@ function RowSkeleton() {
 
 export function LeaderboardsTab() {
     const [category, setCategory] = useState<LeaderboardCategory>('creators');
+    const chipRowRef = useOverflowFade<HTMLDivElement>();
     const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -80,7 +82,12 @@ export function LeaderboardsTab() {
 
     return (
         <div data-testid="coliseum-leaderboards" style={{ minHeight: '100%' }}>
-            <div className={ui.chipRow} role="group" aria-label="Leaderboard category">
+            <div
+                ref={chipRowRef}
+                className={ui.chipRow}
+                role="group"
+                aria-label="Leaderboard category"
+            >
                 {LEADERBOARD_CATEGORIES.map((cat) => (
                     <button
                         key={cat}
@@ -102,6 +109,7 @@ export function LeaderboardsTab() {
                 </div>
             ) : entries.length === 0 ? (
                 <EmptyState
+                    style={{ margin: 16 }}
                     title="Nothing ranked here yet"
                     description={`Activity in ${CATEGORY_LABEL[
                         category

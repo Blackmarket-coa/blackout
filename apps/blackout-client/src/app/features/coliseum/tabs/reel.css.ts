@@ -1,4 +1,4 @@
-import { keyframes, style } from '@vanilla-extract/css';
+import { keyframes, style, styleVariants } from '@vanilla-extract/css';
 
 export const container = style({
     position: 'relative',
@@ -35,23 +35,72 @@ export const media = style({
     background: '#000',
 });
 
+/**
+ * Full-bleed backdrop for text-only arguments. Right padding clears the
+ * action rail (46px buttons at right: 8) so the quote never runs underneath
+ * it; top padding clears the scope pill / position chrome; bottom padding
+ * clears the metadata overlay.
+ */
 export const textCard = style({
     position: 'absolute',
     inset: 0,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: '32px 24px 180px',
+    padding: '64px 76px 200px 24px',
 });
 
-export const textCardBody = style({
-    margin: 0,
-    fontSize: 22,
-    lineHeight: 1.45,
-    fontWeight: 600,
-    textAlign: 'center',
+/** The quote block: stance-coloured rule + opening mark + the argument. */
+export const textCardQuote = style({
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 8,
+    width: '100%',
     maxWidth: 640,
-    textShadow: '0 1px 12px rgba(0,0,0,0.45)',
+    paddingLeft: 16,
+    borderLeft: '4px solid currentColor',
+});
+
+export const textCardMark = style({
+    fontSize: 64,
+    lineHeight: 0.8,
+    fontWeight: 800,
+    fontFamily: 'Georgia, serif',
+    opacity: 0.9,
+});
+
+/**
+ * Type scales with the argument's length so a one-line take fills the card
+ * with intent instead of floating in empty space, while long arguments stay
+ * readable without overflowing.
+ */
+export const textCardBody = styleVariants({
+    short: {
+        margin: 0,
+        fontSize: 'clamp(24px, 7vw, 34px)',
+        lineHeight: 1.3,
+        fontWeight: 700,
+        color: '#fff',
+        textShadow: '0 1px 12px rgba(0,0,0,0.45)',
+    },
+    medium: {
+        margin: 0,
+        fontSize: 'clamp(20px, 5.6vw, 26px)',
+        lineHeight: 1.4,
+        fontWeight: 650,
+        color: '#fff',
+        textShadow: '0 1px 12px rgba(0,0,0,0.45)',
+    },
+    long: {
+        margin: 0,
+        fontSize: 17,
+        lineHeight: 1.5,
+        fontWeight: 500,
+        color: '#fff',
+        textShadow: '0 1px 12px rgba(0,0,0,0.45)',
+        overflowY: 'auto',
+        maxHeight: '100%',
+    },
 });
 
 /** Bottom-left metadata overlay (author, body, citations). */

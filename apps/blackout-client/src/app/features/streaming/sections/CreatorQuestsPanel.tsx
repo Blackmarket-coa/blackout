@@ -1,4 +1,5 @@
 import React, { useEffect, useState, type CSSProperties, type FormEvent } from 'react';
+import { SkeletonList } from '../../../components/skeleton/SkeletonList';
 import { createCreatorQuest, endQuest, fetchMyQuests, type MyQuestRecord } from '../../growth';
 
 /**
@@ -61,6 +62,7 @@ const isEnded = (quest: MyQuestRecord): boolean =>
 
 export const CreatorQuestsPanel = (): JSX.Element => {
     const [quests, setQuests] = useState<MyQuestRecord[]>([]);
+    const [questsLoaded, setQuestsLoaded] = useState(false);
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
     const [rewardDollars, setRewardDollars] = useState('1');
@@ -74,7 +76,10 @@ export const CreatorQuestsPanel = (): JSX.Element => {
             .then((response) => {
                 if (!cancelled) setQuests(response.items);
             })
-            .catch(() => undefined);
+            .catch(() => undefined)
+            .finally(() => {
+                if (!cancelled) setQuestsLoaded(true);
+            });
         return () => {
             cancelled = true;
         };
@@ -182,7 +187,9 @@ export const CreatorQuestsPanel = (): JSX.Element => {
                 </span>
             ) : null}
 
-            {quests.length > 0 ? (
+            {!questsLoaded ? (
+                <SkeletonList count={2} height={36} label="Loading your quests" />
+            ) : quests.length > 0 ? (
                 <div style={{ display: 'grid', gap: 6 }}>
                     {quests.map((quest) => (
                         <div key={quest.id} style={questRowStyle} data-testid="creator-quest-row">

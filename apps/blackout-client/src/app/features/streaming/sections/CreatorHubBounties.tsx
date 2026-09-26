@@ -1,4 +1,5 @@
 import React, { type CSSProperties, useEffect, useMemo, useState } from 'react';
+import { SkeletonList } from '../../../components/skeleton/SkeletonList';
 import type { Bounty, BountyCategory } from '@blackout/core';
 import { applyToBounty, fetchRecommendedBounties } from '../../bounty/bountyClient';
 import { interestTagsToBountyCategories } from '../../bounty/bountyInterestMatch';
@@ -102,7 +103,7 @@ export const CreatorHubBounties = (): JSX.Element => {
             shellRegion="creator-hub-bounties"
         >
             {bounties === null ? (
-                <p style={hubEmptyStyle}>Loading matches…</p>
+                <SkeletonList count={3} height={72} label="Loading matches" />
             ) : list.length === 0 ? (
                 <p style={hubEmptyStyle} data-testid="creator-hub-bounties-empty">
                     No matched bounties right now. Check back as producers post work.

@@ -11,15 +11,23 @@ import { ExplainerComposer } from '../components/ExplainerComposer';
 import { RelativeTime } from '../components/RelativeTime';
 import { cx } from '../components/cx';
 import * as ui from '../components/coliseumUi.css';
+import { useOverflowFade } from '../../../hooks/useOverflowFade';
 
 type DomainFilter = ColiseumTopicCategoryKey | 'all';
 type KindFilter = ColiseumKnowledgeKind | 'all';
 
-const KIND_FILTERS: Array<{ key: KindFilter; label: string }> = [
-    { key: 'all', label: 'Everything' },
-    { key: 'brief', label: 'Match Briefs' },
-    { key: 'debate_verdict', label: 'Debate verdicts' },
-    { key: 'explainer', label: 'Explainers' },
+// The kind chips are the one place the archive's contents are named; the tab
+// guide banner above deliberately doesn't repeat them. Hints ride along as
+// tooltips for anyone who wants the longer definition.
+const KIND_FILTERS: Array<{ key: KindFilter; label: string; hint: string }> = [
+    { key: 'all', label: 'Everything', hint: 'Every settled item, all kinds' },
+    { key: 'brief', label: 'Match Briefs', hint: 'Summaries minted when an Arena match ends' },
+    {
+        key: 'debate_verdict',
+        label: 'Debate verdicts',
+        hint: 'Outcomes of topic debates that closed with a verdict',
+    },
+    { key: 'explainer', label: 'Explainers', hint: 'Community write-ups of a settled question' },
 ];
 
 const KIND_BADGE: Record<ColiseumKnowledgeKind, string> = {
@@ -109,6 +117,8 @@ export function KnowledgeTab() {
     const [composing, setComposing] = useState(false);
     // Bumped after a publish or endorsement to refetch the ranked list.
     const [refreshKey, setRefreshKey] = useState(0);
+    const kindRowRef = useOverflowFade<HTMLDivElement>();
+    const domainRowRef = useOverflowFade<HTMLDivElement>();
 
     const [debouncedQuery, setDebouncedQuery] = useState('');
     useEffect(() => {
@@ -190,20 +200,26 @@ export function KnowledgeTab() {
                     onCancel={() => setComposing(false)}
                 />
             ) : null}
-            <div className={ui.chipRow} role="group" aria-label="Knowledge kind">
+            <div ref={kindRowRef} className={ui.chipRow} role="group" aria-label="Knowledge kind">
                 {KIND_FILTERS.map((filter) => (
                     <button
                         key={filter.key}
                         type="button"
                         className={cx(kind === filter.key ? ui.chipActive : ui.chip)}
                         aria-pressed={kind === filter.key}
+                        title={filter.hint}
                         onClick={() => setKind(filter.key)}
                     >
                         {filter.label}
                     </button>
                 ))}
             </div>
-            <div className={ui.chipRow} role="group" aria-label="Knowledge domain">
+            <div
+                ref={domainRowRef}
+                className={ui.chipRow}
+                role="group"
+                aria-label="Knowledge domain"
+            >
                 <button
                     type="button"
                     className={cx(domain === 'all' ? ui.chipActive : ui.chip)}
@@ -233,6 +249,7 @@ export function KnowledgeTab() {
                 </div>
             ) : entries.length === 0 ? (
                 <EmptyState
+                    style={{ margin: 16 }}
                     title={hasFilters ? 'Nothing settled matches that' : 'Nothing settled yet'}
                     description={
                         hasFilters

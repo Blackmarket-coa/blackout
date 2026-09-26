@@ -1,4 +1,5 @@
 import React, { lazy, Suspense, type CSSProperties, useEffect, useState } from 'react';
+import { SkeletonList } from '../../../components/skeleton/SkeletonList';
 import { listClips, type ClipSummary } from '../../streams';
 import { useMatrixClientOrNull } from '../../../hooks/useMatrixClient';
 import { mxcUrlToHttp } from '../../../utils/matrix';
@@ -164,7 +165,7 @@ export const ClipsDirectory = (): JSX.Element => {
                     {error}
                 </p>
             ) : !loaded ? (
-                <p style={hubEmptyStyle}>Loading clips…</p>
+                <SkeletonList layout="grid" count={4} height={160} label="Loading clips" />
             ) : clips.length === 0 ? (
                 <p style={hubEmptyStyle} data-testid="clips-directory-empty">
                     No clips yet. Highlights from streams will show up here.

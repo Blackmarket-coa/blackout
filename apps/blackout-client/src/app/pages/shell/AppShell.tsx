@@ -1,4 +1,4 @@
-import { useEffect, type CSSProperties } from 'react';
+import { useEffect, useRef, type CSSProperties } from 'react';
 import { Outlet, useLocation } from 'react-router';
 import { useSetAtom } from 'jotai';
 import { shellModeAtom } from '../../state/navigation';
@@ -7,6 +7,7 @@ import { createRoomModalAtom } from '../../state/createRoomModal';
 import { searchModalAtom } from '../../state/searchModal';
 import { isMobileViewport } from '../client/layoutMetrics';
 import { useViewportWidth } from '../../hooks/useViewportWidth';
+import { useHideOnScrollDown } from '../../hooks/useHideOnScrollDown';
 import { resolveShellMode } from './modeRouter';
 import { BottomTabBar } from './BottomTabBar';
 import { MobileTopBar } from './MobileTopBar';
@@ -20,11 +21,11 @@ import { runtimeFeatureFlags } from '../../core/features/featureFlags';
 import { BugReportFab } from '../../features/bug-widget/BugReportFab';
 import { KeyBackupNudge } from '../../features/settings/security/KeyBackupNudge';
 import { AutoRestoreBackupOnVerification } from '../../components/BackupRestore';
+import * as css from './AppShell.css';
 
 const ROOT_STYLE: CSSProperties = {
     display: 'flex',
     flexDirection: 'column',
-    minHeight: '100vh',
     width: '100%',
     background: 'var(--bg-surface, #0f172a)',
     color: 'var(--text-primary, #f8fafc)',
@@ -88,6 +89,9 @@ export const AppShell = () => {
     const viewportWidth = useViewportWidth();
     const mobile = isMobileViewport(viewportWidth);
 
+    const mainRef = useRef<HTMLElement>(null);
+    const bottomBarHidden = useHideOnScrollDown(mainRef, mobile, location.pathname);
+
     const mode = resolveShellMode(location.pathname);
     useEffect(() => {
         setShellMode(mode);
@@ -142,7 +146,13 @@ export const AppShell = () => {
 
     return (
         <div
-            style={ROOT_STYLE}
+            className={css.root}
+            style={{
+                ...ROOT_STYLE,
+                // Consumed by floating controls (e.g. BugReportFab) so they
+                // sit above the bottom tab bar and follow it when it hides.
+                ['--shell-bottom-bar-inset' as string]: mobile && !bottomBarHidden ? '64px' : '0px',
+            }}
             data-shell="app"
             data-shell-mode={mode}
             data-shell-viewport={mobile ? 'mobile' : 'desktop'}
@@ -150,13 +160,13 @@ export const AppShell = () => {
             {mobile ? <MobileTopBar /> : <PrimaryNavBar />}
             <div style={mobile ? BODY_MOBILE_STYLE : BODY_DESKTOP_STYLE}>
                 {mobile ? null : <CanopyRail />}
-                <main style={mobile ? OUTLET_MOBILE_STYLE : OUTLET_DESKTOP_STYLE}>
+                <main ref={mainRef} style={mobile ? OUTLET_MOBILE_STYLE : OUTLET_DESKTOP_STYLE}>
                     {mobile ? null : <WorkspaceTabBar />}
                     <Outlet />
                 </main>
                 {mobile ? null : <DynamicRightPanel />}
             </div>
-            {mobile ? <BottomTabBar /> : null}
+            {mobile ? <BottomTabBar hidden={bottomBarHidden} /> : null}
             <DialogHost />
             {runtimeFeatureFlags.bugReportWidget ? <BugReportFab /> : null}
         </div>
