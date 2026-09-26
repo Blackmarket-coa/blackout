@@ -55,6 +55,30 @@ Once a `needs-review` row has been resolved, edit the row in place to
 
 | Date | Project | Advisory ID | URL | Classification | BMC patch | Reviewer |
 |------|---------|-------------|-----|----------------|-----------|----------|
+| 2026-05-14 | Cinny | GHSA-mxfq-g77w-7668 | https://github.com/cinnyapp/cinny/security/advisories/GHSA-mxfq-g77w-7668 | needs-review | _(pending)_ | _(automation)_ |
+| 2026-05-07 | Cinny | GHSA-j944-w549-3453 | https://github.com/cinnyapp/cinny/security/advisories/GHSA-j944-w549-3453 | needs-review | _(pending)_ | _(automation)_ |
+| 2026-07-28 | Synapse | GHSA-hgcg-p9gx-fq5f | https://github.com/element-hq/synapse/security/advisories/GHSA-hgcg-p9gx-fq5f | needs-review | _(pending)_ | _(automation)_ |
+| 2026-07-28 | Synapse | GHSA-vh4c-pqh4-w3wq | https://github.com/element-hq/synapse/security/advisories/GHSA-vh4c-pqh4-w3wq | needs-review | _(pending)_ | _(automation)_ |
+| 2026-07-28 | Synapse | GHSA-6wjm-9p2x-gvpm | https://github.com/element-hq/synapse/security/advisories/GHSA-6wjm-9p2x-gvpm | needs-review | _(pending)_ | _(automation)_ |
+| 2026-07-28 | Synapse | GHSA-jhcg-5392-5mjw | https://github.com/element-hq/synapse/security/advisories/GHSA-jhcg-5392-5mjw | needs-review | _(pending)_ | _(automation)_ |
+| 2026-07-28 | Synapse | GHSA-95fh-hv8c-chvq | https://github.com/element-hq/synapse/security/advisories/GHSA-95fh-hv8c-chvq | needs-review | _(pending)_ | _(automation)_ |
+| 2026-07-28 | Synapse | GHSA-r66v-qhwx-8rg4 | https://github.com/element-hq/synapse/security/advisories/GHSA-r66v-qhwx-8rg4 | needs-review | _(pending)_ | _(automation)_ |
+| 2026-07-28 | Synapse | GHSA-27p5-4f45-gx76 | https://github.com/element-hq/synapse/security/advisories/GHSA-27p5-4f45-gx76 | needs-review | _(pending)_ | _(automation)_ |
+| 2026-07-28 | Synapse | GHSA-fp53-rw9v-hcf9 | https://github.com/element-hq/synapse/security/advisories/GHSA-fp53-rw9v-hcf9 | needs-review | _(pending)_ | _(automation)_ |
+| 2026-07-28 | Synapse | GHSA-rgv2-84w7-5j9p | https://github.com/element-hq/synapse/security/advisories/GHSA-rgv2-84w7-5j9p | needs-review | _(pending)_ | _(automation)_ |
+| 2026-07-28 | Synapse | GHSA-qcjr-46gf-7f4r | https://github.com/element-hq/synapse/security/advisories/GHSA-qcjr-46gf-7f4r | needs-review | _(pending)_ | _(automation)_ |
+| 2026-07-28 | Synapse | GHSA-cjh7-rcpx-xpf8 | https://github.com/element-hq/synapse/security/advisories/GHSA-cjh7-rcpx-xpf8 | needs-review | _(pending)_ | _(automation)_ |
+| 2026-05-08 | Synapse | GHSA-8q93-326v-3m7g | https://github.com/element-hq/synapse/security/advisories/GHSA-8q93-326v-3m7g | needs-review | _(pending)_ | _(automation)_ |
+| 2026-05-08 | Synapse | GHSA-6qf2-7x63-mm6v | https://github.com/element-hq/synapse/security/advisories/GHSA-6qf2-7x63-mm6v | needs-review | _(pending)_ | _(automation)_ |
+| 2025-10-08 | Synapse | GHSA-fh66-fcv5-jjfr | https://github.com/element-hq/synapse/security/advisories/GHSA-fh66-fcv5-jjfr | needs-review | _(pending)_ | _(automation)_ |
+| 2025-03-26 | Synapse | GHSA-v56r-hwv5-mxg6 | https://github.com/element-hq/synapse/security/advisories/GHSA-v56r-hwv5-mxg6 | needs-review | _(pending)_ | _(automation)_ |
+| 2024-12-03 | Synapse | GHSA-vp6v-whfm-rv3g | https://github.com/element-hq/synapse/security/advisories/GHSA-vp6v-whfm-rv3g | needs-review | _(pending)_ | _(automation)_ |
+| 2024-12-03 | Synapse | GHSA-f3r3-h2mq-hx2h | https://github.com/element-hq/synapse/security/advisories/GHSA-f3r3-h2mq-hx2h | needs-review | _(pending)_ | _(automation)_ |
+| 2024-12-03 | Synapse | GHSA-rfq8-j7rh-8hf2 | https://github.com/element-hq/synapse/security/advisories/GHSA-rfq8-j7rh-8hf2 | needs-review | _(pending)_ | _(automation)_ |
+| 2024-12-03 | Synapse | GHSA-56w4-5538-8v8h | https://github.com/element-hq/synapse/security/advisories/GHSA-56w4-5538-8v8h | needs-review | _(pending)_ | _(automation)_ |
+| 2024-12-03 | Synapse | GHSA-gjgr-7834-rhxr | https://github.com/element-hq/synapse/security/advisories/GHSA-gjgr-7834-rhxr | needs-review | _(pending)_ | _(automation)_ |
+| 2024-12-03 | Synapse | GHSA-4mhg-xv73-xq2x | https://github.com/element-hq/synapse/security/advisories/GHSA-4mhg-xv73-xq2x | needs-review | _(pending)_ | _(automation)_ |
+| 2024-04-23 | Synapse | GHSA-3h7q-rfh9-xm4v | https://github.com/element-hq/synapse/security/advisories/GHSA-3h7q-rfh9-xm4v | needs-review | _(pending)_ | _(automation)_ |
 | 2026-05-12 | fast-uri (devDep: vite-plugin-pwa → workbox-build → ajv) | GHSA-v39h-62p7-jpjc | https://github.com/advisories/GHSA-v39h-62p7-jpjc | accepted | none — `pnpm audit --prod` excludes; resolves when vite-plugin-pwa upgrades to a workbox-build with patched ajv | Release Eng |
 | 2026-05-12 | fast-uri (devDep: vite-plugin-pwa → workbox-build → ajv) | GHSA-q3j6-qgpj-74h6 | https://github.com/advisories/GHSA-q3j6-qgpj-74h6 | accepted | none — same devDep chain as v39h advisory; resolves when vite-plugin-pwa upgrades to fast-uri >= 3.1.1 | Release Eng |
 | 2026-05-12 | @babel/plugin-transform-modules-systemjs (devDep: vite-plugin-pwa → workbox-build → @babel/preset-env) | GHSA-fv7c-fp4j-7gwp | https://github.com/advisories/GHSA-fv7c-fp4j-7gwp | accepted | none — `pnpm audit --prod` excludes; resolves when vite-plugin-pwa upgrades to a workbox-build with patched @babel/preset-env | Release Eng |
