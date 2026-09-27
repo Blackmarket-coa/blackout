@@ -72,6 +72,29 @@ them when behaviour changes rather than letting them drift.
 
 ---
 
+## nginx `add_header` inheritance — an open, real risk
+
+There are 113 `add_header` directives across the nginx configs, concentrated in:
+
+| File                                                                      | count  |
+| ------------------------------------------------------------------------- | ------ |
+| `infra/single-server-baseline/nginx/sites-available/theblackout.app.conf` | 46     |
+| `deploy/docker/blackout-backend/nginx/nginx.conf`                         | 35     |
+| `infra/nginx/sites-available/theblackout.app.conf`                        | 19     |
+| `infra/{,single-server-baseline/}nginx/snippets/security-headers.conf`    | 6 each |
+
+The nginx rule that makes this dangerous: **an `add_header` in an inner block
+discards every inherited `add_header` from the outer block** rather than adding
+to it. So a `location` block that sets one header silently drops all six from
+the `security-headers.conf` snippet included at server level. That is a live
+security-header gap, not a style issue — and equally, "fixing" it by mechanical
+edit can create one.
+
+Do not batch-edit these. Any change needs `nginx -t` **and** an actual
+response-header check against a running instance (`curl -I`), per location.
+
+---
+
 ## Licensing
 
 Three files, deliberately: `LICENSE-AGPL-3.0`, `LICENSE-GPL-3.0`,
