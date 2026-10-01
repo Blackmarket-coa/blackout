@@ -33,7 +33,7 @@
         "ioredis": "5.10.1",
         "jose": "5.10.0",
         "livekit-server-sdk": "^2.15.2",
-        "nodemailer": "^9.0.1",
+        "nodemailer": "^10.0.9",
         "pg": "^8.13.1",
         "socket.io": "^4.8.3",
         "ws": "^8.18.0",
