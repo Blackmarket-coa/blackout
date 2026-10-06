@@ -148,6 +148,7 @@
             "postcss@8": "^8.5.23",
             "sanitize-html@2.12.1": "^2.17.7",
             "serialize-javascript@6.0.2": "^7.0.5",
+            "source-map-js@1": "^1.2.2",
             "shell-quote": "^1.9.0",
             "socket.io-parser@4": "^4.2.7",
             "tar@7": "^7.5.21",
