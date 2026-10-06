@@ -115,7 +115,7 @@ function PayItForwardPanel({
         createElement(
             'p',
             { style: { ...mutedStyle, margin: 0 } },
-            `You have an active ${subscription.tier} subscription. Donate the equivalent of one period to a future user instead of letting it expire.`,
+            `You have an active ${subscription.tier} subscription. Donate the equivalent of one period to a future user instead of letting it expire.`
         ),
         createElement(
             'button',
@@ -125,19 +125,14 @@ function PayItForwardPanel({
                 disabled: busy,
                 onClick: () => void handleDonate(),
             },
-            busy ? 'Sending…' : 'Pay it forward',
+            busy ? 'Sending…' : 'Pay it forward'
         ),
-        error && createElement('span', { style: { ...mutedStyle, color: 'var(--text-danger)' } }, error),
+        error &&
+            createElement('span', { style: { ...mutedStyle, color: 'var(--text-danger)' } }, error)
     );
 }
 
-function AvailableGiftsPanel({
-    gifts,
-    onAction,
-}: {
-    gifts: GiftSummary[];
-    onAction: () => void;
-}) {
+function AvailableGiftsPanel({ gifts, onAction }: { gifts: GiftSummary[]; onAction: () => void }) {
     const [busyId, setBusyId] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
 
@@ -155,7 +150,7 @@ function AvailableGiftsPanel({
                 setBusyId(null);
             }
         },
-        [onAction],
+        [onAction]
     );
 
     const handlePass = useCallback(
@@ -172,7 +167,7 @@ function AvailableGiftsPanel({
                 setBusyId(null);
             }
         },
-        [onAction],
+        [onAction]
     );
 
     if (gifts.length === 0) {
@@ -183,8 +178,8 @@ function AvailableGiftsPanel({
             createElement(
                 'p',
                 { style: { ...mutedStyle, margin: 0 } },
-                'Check back later — paying members can donate a free month forward at any time.',
-            ),
+                'Check back later — paying members can donate a free month forward at any time.'
+            )
         );
     }
 
@@ -194,7 +189,7 @@ function AvailableGiftsPanel({
         createElement(
             'h4',
             { style: headingStyle },
-            `${gifts.length} gift${gifts.length === 1 ? '' : 's'} waiting`,
+            `${gifts.length} gift${gifts.length === 1 ? '' : 's'} waiting`
         ),
         createElement(
             'div',
@@ -206,8 +201,16 @@ function AvailableGiftsPanel({
                     createElement(
                         'div',
                         { style: { display: 'grid', gap: 2 } },
-                        createElement('span', undefined, `${gift.donorTier} · ${formatChain(gift.chainDepth)}`),
-                        createElement('span', { style: mutedStyle }, `Expires ${gift.expiresAt.slice(0, 10)}`),
+                        createElement(
+                            'span',
+                            undefined,
+                            `${gift.donorTier} · ${formatChain(gift.chainDepth)}`
+                        ),
+                        createElement(
+                            'span',
+                            { style: mutedStyle },
+                            `Expires ${gift.expiresAt.slice(0, 10)}`
+                        )
                     ),
                     createElement(
                         'button',
@@ -217,7 +220,7 @@ function AvailableGiftsPanel({
                             disabled: busyId === gift.id,
                             onClick: () => void handleClaim(gift.id),
                         },
-                        'Claim',
+                        'Claim'
                     ),
                     createElement(
                         'button',
@@ -227,25 +230,23 @@ function AvailableGiftsPanel({
                             disabled: busyId === gift.id,
                             onClick: () => void handlePass(gift.id),
                         },
-                        'Pass on',
-                    ),
-                ),
-            ),
+                        'Pass on'
+                    )
+                )
+            )
         ),
-        error && createElement('span', { style: { ...mutedStyle, color: 'var(--text-danger)' } }, error),
+        error &&
+            createElement('span', { style: { ...mutedStyle, color: 'var(--text-danger)' } }, error)
     );
 }
 
-function MyChainPanel({
-    donated,
-    received,
-}: {
-    donated: GiftSummary[];
-    received: GiftSummary[];
-}) {
+function MyChainPanel({ donated, received }: { donated: GiftSummary[]; received: GiftSummary[] }) {
     if (donated.length === 0 && received.length === 0) return null;
 
-    const longestChain = [...donated, ...received].reduce((max, gift) => Math.max(max, gift.chainDepth), 0);
+    const longestChain = [...donated, ...received].reduce(
+        (max, gift) => Math.max(max, gift.chainDepth),
+        0
+    );
 
     return createElement(
         'div',
@@ -254,8 +255,8 @@ function MyChainPanel({
         createElement(
             'p',
             { style: { ...mutedStyle, margin: 0 } },
-            `Donated ${donated.length} · Received ${received.length} · Longest hop ${longestChain}`,
-        ),
+            `Donated ${donated.length} · Received ${received.length} · Longest hop ${longestChain}`
+        )
     );
 }
 
@@ -339,11 +340,7 @@ function CreateTierForm(props: { onCreated: (tier: CreatorTier) => void }) {
             onChange: (e: { currentTarget: { value: string } }) => setPrice(e.currentTarget.value),
         }),
         error
-            ? createElement(
-                  'div',
-                  { style: { fontSize: 11, color: 'var(--text-danger)' } },
-                  error
-              )
+            ? createElement('div', { style: { fontSize: 11, color: 'var(--text-danger)' } }, error)
             : null,
         createElement(
             'div',
@@ -377,7 +374,9 @@ function CreatorTierPanels() {
                 setSubscriptions(subsResp.subscriptions);
             } catch (err) {
                 if (!cancelled)
-                    setError(err instanceof Error ? err.message : 'Failed to load creator subscriptions');
+                    setError(
+                        err instanceof Error ? err.message : 'Failed to load creator subscriptions'
+                    );
             }
         })();
         return () => {
@@ -389,7 +388,10 @@ function CreatorTierPanels() {
         setActioning(tierId);
         try {
             await creatorSubsApi.archiveTier(tierId, token);
-            setTiers((prev) => prev?.map((t) => (t.id === tierId ? { ...t, status: 'archived' } : t)) ?? null);
+            setTiers(
+                (prev) =>
+                    prev?.map((t) => (t.id === tierId ? { ...t, status: 'archived' } : t)) ?? null
+            );
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to archive tier');
         } finally {
@@ -403,7 +405,9 @@ function CreatorTierPanels() {
             await creatorSubsApi.cancel(subId, token);
             setSubscriptions(
                 (prev) =>
-                    prev?.map((s) => (s.id === subId ? { ...s, status: 'canceled' as const } : s)) ?? null
+                    prev?.map((s) =>
+                        s.id === subId ? { ...s, status: 'canceled' as const } : s
+                    ) ?? null
             );
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to cancel subscription');
@@ -415,12 +419,9 @@ function CreatorTierPanels() {
     return createElement(
         'div',
         { style: { display: 'grid', gap: 10 } },
-        error
-            ? createElement('div', { style: { color: 'var(--text-danger)' } }, error)
-            : null,
+        error ? createElement('div', { style: { color: 'var(--text-danger)' } }, error) : null,
         createElement(CreateTierForm, {
-            onCreated: (tier: CreatorTier) =>
-                setTiers((prev) => (prev ? [...prev, tier] : [tier])),
+            onCreated: (tier: CreatorTier) => setTiers((prev) => (prev ? [...prev, tier] : [tier])),
         }),
         createElement(
             'div',
@@ -433,57 +434,61 @@ function CreatorTierPanels() {
                       'Loading…'
                   )
                 : tiers.length === 0
-                  ? createElement(
-                        'div',
-                        { style: { fontSize: 12, color: 'var(--text-secondary)' } },
-                        'No tiers yet. Create one above to start accepting subscribers.'
-                    )
-                  : createElement(
-                        'div',
-                        { style: { display: 'grid', gap: 6 } },
-                        ...tiers.map((tier) =>
-                            createElement(
-                                'div',
-                                {
-                                    key: tier.id,
-                                    style: {
-                                        display: 'grid',
-                                        gridTemplateColumns: '1fr auto auto auto',
-                                        gap: 8,
-                                        alignItems: 'center',
-                                        fontSize: 12,
-                                        padding: 6,
-                                        borderRadius: 6,
-                                        background: 'var(--bg-input)',
-                                        opacity: tier.status === 'archived' ? 0.5 : 1,
-                                    },
-                                },
-                                createElement('span', undefined, tier.name),
-                                createElement(
-                                    'span',
-                                    undefined,
-                                    `${formatCents(tier.priceCents, tier.currency)}/mo`
-                                ),
-                                createElement(
-                                    'span',
-                                    { style: { color: 'var(--text-secondary)' } },
-                                    tier.status
-                                ),
-                                tier.status !== 'archived'
-                                    ? createElement(
-                                          'button',
-                                          {
-                                              type: 'button',
-                                              style: { ...inlineButtonStyle, background: 'var(--bg-input)', color: 'var(--text-primary)' },
-                                              onClick: () => archive(tier.id),
-                                              disabled: actioning === tier.id,
-                                          },
-                                          actioning === tier.id ? '…' : 'Archive'
-                                      )
-                                    : createElement('span', undefined, '')
-                            )
-                        )
-                    )
+                ? createElement(
+                      'div',
+                      { style: { fontSize: 12, color: 'var(--text-secondary)' } },
+                      'No tiers yet. Create one above to start accepting subscribers.'
+                  )
+                : createElement(
+                      'div',
+                      { style: { display: 'grid', gap: 6 } },
+                      ...tiers.map((tier) =>
+                          createElement(
+                              'div',
+                              {
+                                  key: tier.id,
+                                  style: {
+                                      display: 'grid',
+                                      gridTemplateColumns: '1fr auto auto auto',
+                                      gap: 8,
+                                      alignItems: 'center',
+                                      fontSize: 12,
+                                      padding: 6,
+                                      borderRadius: 6,
+                                      background: 'var(--bg-input)',
+                                      opacity: tier.status === 'archived' ? 0.5 : 1,
+                                  },
+                              },
+                              createElement('span', undefined, tier.name),
+                              createElement(
+                                  'span',
+                                  undefined,
+                                  `${formatCents(tier.priceCents, tier.currency)}/mo`
+                              ),
+                              createElement(
+                                  'span',
+                                  { style: { color: 'var(--text-secondary)' } },
+                                  tier.status
+                              ),
+                              tier.status !== 'archived'
+                                  ? createElement(
+                                        'button',
+                                        {
+                                            type: 'button',
+                                            style: {
+                                                ...inlineButtonStyle,
+                                                background: 'var(--bg-input)',
+                                                color: 'var(--text-primary)',
+                                            },
+                                            onClick: () => archive(tier.id),
+                                            disabled: actioning === tier.id,
+                                        },
+                                        actioning === tier.id ? '…' : 'Archive'
+                                    )
+                                  : createElement('span', undefined, '')
+                          )
+                      )
+                  )
         ),
         createElement(
             'div',
@@ -496,53 +501,59 @@ function CreatorTierPanels() {
                       'Loading…'
                   )
                 : subscriptions.length === 0
-                  ? createElement(
-                        'div',
-                        { style: { fontSize: 12, color: 'var(--text-secondary)' } },
-                        'You\'re not subscribed to any creators yet.'
-                    )
-                  : createElement(
-                        'div',
-                        { style: { display: 'grid', gap: 6 } },
-                        ...subscriptions.map((sub) =>
-                            createElement(
-                                'div',
-                                {
-                                    key: sub.id,
-                                    style: {
-                                        display: 'grid',
-                                        gridTemplateColumns: '1fr 1fr auto',
-                                        gap: 8,
-                                        alignItems: 'center',
-                                        fontSize: 12,
-                                        padding: 6,
-                                        borderRadius: 6,
-                                        background: 'var(--bg-input)',
-                                    },
-                                },
-                                createElement('span', undefined, `Creator ${sub.creatorUserId}`),
-                                createElement(
-                                    'span',
-                                    { style: { color: 'var(--text-secondary)' } },
-                                    sub.status === 'active' && sub.currentPeriodEndsAt
-                                        ? `Renews ${new Date(sub.currentPeriodEndsAt).toLocaleDateString()}`
-                                        : sub.status
-                                ),
-                                sub.status === 'active'
-                                    ? createElement(
-                                          'button',
-                                          {
-                                              type: 'button',
-                                              style: { ...inlineButtonStyle, background: 'var(--bg-input)', color: 'var(--text-primary)' },
-                                              onClick: () => cancel(sub.id),
-                                              disabled: actioning === sub.id,
-                                          },
-                                          actioning === sub.id ? '…' : 'Cancel'
-                                      )
-                                    : createElement('span', undefined, '')
-                            )
-                        )
-                    )
+                ? createElement(
+                      'div',
+                      { style: { fontSize: 12, color: 'var(--text-secondary)' } },
+                      "You're not subscribed to any creators yet."
+                  )
+                : createElement(
+                      'div',
+                      { style: { display: 'grid', gap: 6 } },
+                      ...subscriptions.map((sub) =>
+                          createElement(
+                              'div',
+                              {
+                                  key: sub.id,
+                                  style: {
+                                      display: 'grid',
+                                      gridTemplateColumns: '1fr 1fr auto',
+                                      gap: 8,
+                                      alignItems: 'center',
+                                      fontSize: 12,
+                                      padding: 6,
+                                      borderRadius: 6,
+                                      background: 'var(--bg-input)',
+                                  },
+                              },
+                              createElement('span', undefined, `Creator ${sub.creatorUserId}`),
+                              createElement(
+                                  'span',
+                                  { style: { color: 'var(--text-secondary)' } },
+                                  sub.status === 'active' && sub.currentPeriodEndsAt
+                                      ? `Renews ${new Date(
+                                            sub.currentPeriodEndsAt
+                                        ).toLocaleDateString()}`
+                                      : sub.status
+                              ),
+                              sub.status === 'active'
+                                  ? createElement(
+                                        'button',
+                                        {
+                                            type: 'button',
+                                            style: {
+                                                ...inlineButtonStyle,
+                                                background: 'var(--bg-input)',
+                                                color: 'var(--text-primary)',
+                                            },
+                                            onClick: () => cancel(sub.id),
+                                            disabled: actioning === sub.id,
+                                        },
+                                        actioning === sub.id ? '…' : 'Cancel'
+                                    )
+                                  : createElement('span', undefined, '')
+                          )
+                      )
+                  )
         )
     );
 }
@@ -588,7 +599,11 @@ export function SubscriptionsSlice() {
         return createElement(
             'section',
             { style: sectionStyle },
-            createElement('p', { style: { ...mutedStyle, margin: 0 } }, 'Loading subscription state…'),
+            createElement(
+                'p',
+                { style: { ...mutedStyle, margin: 0 } },
+                'Loading subscription state…'
+            )
         );
     }
 
@@ -596,8 +611,12 @@ export function SubscriptionsSlice() {
         return createElement(
             'section',
             { style: sectionStyle },
-            createElement('p', { style: { ...mutedStyle, margin: 0, color: 'var(--text-danger)' } }, loadError),
-            createElement(CreatorTierPanels),
+            createElement(
+                'p',
+                { style: { ...mutedStyle, margin: 0, color: 'var(--text-danger)' } },
+                loadError
+            ),
+            createElement(CreatorTierPanels)
         );
     }
 
@@ -607,7 +626,7 @@ export function SubscriptionsSlice() {
         createElement(
             'p',
             { style: { margin: 0, color: 'var(--text-secondary)' } },
-            'Pay it forward — donate an unused period of your plan so the next person joins for free.',
+            'Pay it forward — donate an unused period of your plan so the next person joins for free.'
         ),
         subscription &&
             createElement(PayItForwardPanel, { subscription, onAction: () => void refresh() }),
@@ -616,12 +635,18 @@ export function SubscriptionsSlice() {
             onAction: () => void refresh(),
         }),
         createElement(MyChainPanel, { donated: mine.donated, received: mine.received }),
-        createElement('hr', { style: { border: 0, borderTop: '1px solid var(--border-default)', margin: '12px 0 4px' } }),
+        createElement('hr', {
+            style: {
+                border: 0,
+                borderTop: '1px solid var(--border-default)',
+                margin: '12px 0 4px',
+            },
+        }),
         createElement(
             'p',
             { style: { margin: 0, color: 'var(--text-secondary)' } },
-            'Per-creator subscriptions — Patreon-style monthly tiers you publish, plus the creators you support.',
+            'Per-creator subscriptions — Patreon-style monthly tiers you publish, plus the creators you support.'
         ),
-        createElement(CreatorTierPanels),
+        createElement(CreatorTierPanels)
     );
 }

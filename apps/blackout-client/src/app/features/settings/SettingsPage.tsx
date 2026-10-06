@@ -24,7 +24,9 @@ const AppearanceSettings = lazy(() => import('./AppearanceSettings'));
 const NotificationSettings = lazy(() => import('./NotificationSettings'));
 const PrivacySettings = lazy(() => import('./PrivacySettings'));
 const PrivacyToolsSettings = lazy(() => import('../privacy-tools/PrivacyToolsSettings'));
-const DataTransparencySettings = lazy(() => import('../data-transparency/DataTransparencySettings'));
+const DataTransparencySettings = lazy(
+    () => import('../data-transparency/DataTransparencySettings')
+);
 const DataDeletionPanel = lazy(() => import('../data-deletion/DataDeletionPanel'));
 const BurnerIdentitiesPanel = lazy(() => import('../burner-identity/BurnerIdentitiesPanel'));
 const VoiceVideoSettings = lazy(() => import('./VoiceVideoSettings'));
@@ -35,7 +37,7 @@ const AboutSettings = lazy(() => import('./AboutSettings'));
 const BugReportSettings = lazy(() => import('./BugReportSettings'));
 const PanicSettings = lazy(() => import('../panic/PanicSettings'));
 const CharacterSheetSection = lazy(() =>
-    import('../character-sheet/CharacterSheet').then((m) => ({ default: m.CharacterSheet })),
+    import('../character-sheet/CharacterSheet').then((m) => ({ default: m.CharacterSheet }))
 );
 
 interface SettingsSection {
@@ -205,7 +207,7 @@ export const SettingsPage = () => {
     const { flags } = useAtomValue(capabilityContextAtom);
     const visibleSections = sections.filter((section) => !section.flag || flags[section.flag]);
     const [isMobile, setIsMobile] = useState(
-        typeof window !== 'undefined' ? isSettingsMobileViewport(window.innerWidth) : false,
+        typeof window !== 'undefined' ? isSettingsMobileViewport(window.innerWidth) : false
     );
 
     useEffect(() => {
@@ -279,7 +281,7 @@ export const SettingsPage = () => {
                                             trackSettingsInteraction(
                                                 'settings',
                                                 'navigate-section',
-                                                section.id,
+                                                section.id
                                             );
                                         }}
                                         style={{

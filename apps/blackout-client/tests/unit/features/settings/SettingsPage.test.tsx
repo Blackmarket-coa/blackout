@@ -5,15 +5,33 @@ import { act } from 'react-dom/test-utils';
 import ReactDOM from 'react-dom/client';
 import { Provider, createStore } from 'jotai';
 
-vi.mock('../../../../src/app/features/settings/AccountSettings', () => ({ default: () => <div>Account view</div> }));
-vi.mock('../../../../src/app/features/settings/AppearanceSettings', () => ({ default: () => <div>Appearance view</div> }));
-vi.mock('../../../../src/app/features/settings/NotificationSettings', () => ({ default: () => <div>Notifications view</div> }));
-vi.mock('../../../../src/app/features/settings/PrivacySettings', () => ({ default: () => <div>Privacy view</div> }));
-vi.mock('../../../../src/app/features/settings/VoiceVideoSettings', () => ({ default: () => <div>Voice view</div> }));
-vi.mock('../../../../src/app/features/settings/AccessibilitySettings', () => ({ default: () => <div>Accessibility view</div> }));
-vi.mock('../../../../src/app/features/settings/KeybindsSettings', () => ({ default: () => <div>Keybinds view</div> }));
-vi.mock('../../../../src/app/features/settings/DeveloperSettings', () => ({ default: () => <div>Developer view</div> }));
-vi.mock('../../../../src/app/features/settings/AboutSettings', () => ({ default: () => <div>About view</div> }));
+vi.mock('../../../../src/app/features/settings/AccountSettings', () => ({
+    default: () => <div>Account view</div>,
+}));
+vi.mock('../../../../src/app/features/settings/AppearanceSettings', () => ({
+    default: () => <div>Appearance view</div>,
+}));
+vi.mock('../../../../src/app/features/settings/NotificationSettings', () => ({
+    default: () => <div>Notifications view</div>,
+}));
+vi.mock('../../../../src/app/features/settings/PrivacySettings', () => ({
+    default: () => <div>Privacy view</div>,
+}));
+vi.mock('../../../../src/app/features/settings/VoiceVideoSettings', () => ({
+    default: () => <div>Voice view</div>,
+}));
+vi.mock('../../../../src/app/features/settings/AccessibilitySettings', () => ({
+    default: () => <div>Accessibility view</div>,
+}));
+vi.mock('../../../../src/app/features/settings/KeybindsSettings', () => ({
+    default: () => <div>Keybinds view</div>,
+}));
+vi.mock('../../../../src/app/features/settings/DeveloperSettings', () => ({
+    default: () => <div>Developer view</div>,
+}));
+vi.mock('../../../../src/app/features/settings/AboutSettings', () => ({
+    default: () => <div>About view</div>,
+}));
 vi.mock('../../../../src/app/features/settings/subscriptions/SubscriptionsSettings', () => ({
     default: () => <div>Subscriptions view</div>,
 }));
@@ -50,13 +68,13 @@ describe('SettingsPage surfaces', () => {
             root.render(
                 <Provider store={createStore()}>
                     <SettingsPage />
-                </Provider>,
+                </Provider>
             );
             await Promise.resolve();
         });
 
         const navButton = Array.from(container.querySelectorAll('button')).find((button) =>
-            button.textContent?.includes('About'),
+            button.textContent?.includes('About')
         );
         expect(navButton).toBeTruthy();
 
@@ -82,7 +100,7 @@ describe('SettingsPage surfaces', () => {
             root.render(
                 <Provider store={createStore()}>
                     <SettingsPage />
-                </Provider>,
+                </Provider>
             );
             await Promise.resolve();
         });
@@ -96,7 +114,7 @@ describe('SettingsPage surfaces', () => {
 
     const navLabels = (container: HTMLElement): string[] =>
         Array.from(container.querySelectorAll('nav button strong')).map(
-            (el) => el.textContent ?? '',
+            (el) => el.textContent ?? ''
         );
 
     it('hides the Subscriptions section while accountSubscriptions is off (the default)', async () => {
@@ -110,7 +128,7 @@ describe('SettingsPage surfaces', () => {
             root.render(
                 <Provider store={createStore()}>
                     <SettingsPage />
-                </Provider>,
+                </Provider>
             );
             await Promise.resolve();
         });
@@ -134,7 +152,7 @@ describe('SettingsPage surfaces', () => {
             root.render(
                 <Provider store={store}>
                     <SettingsPage />
-                </Provider>,
+                </Provider>
             );
             await Promise.resolve();
         });
@@ -143,7 +161,7 @@ describe('SettingsPage surfaces', () => {
         expect(labels.indexOf('Subscriptions')).toBe(labels.indexOf('Account') + 1);
 
         const navButton = Array.from(container.querySelectorAll('button')).find((button) =>
-            button.textContent?.includes('Subscriptions'),
+            button.textContent?.includes('Subscriptions')
         );
         await act(async () => {
             navButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));

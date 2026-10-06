@@ -72,7 +72,9 @@ export async function createManageBillingSession(
 }
 
 export async function fetchAvailableGifts(limit = 25): Promise<GiftSummary[]> {
-    const response = await getJson<{ gifts: GiftSummary[] }>(`${SUBS_BASE}/forward/available?limit=${limit}`);
+    const response = await getJson<{ gifts: GiftSummary[] }>(
+        `${SUBS_BASE}/forward/available?limit=${limit}`
+    );
     return response.gifts;
 }
 
@@ -85,16 +87,22 @@ export async function donateForward(): Promise<GiftSummary> {
     return response.gift;
 }
 
-export async function claimGift(giftId: string): Promise<{ gift: GiftSummary; subscription: SubscriptionSummary }> {
-    const response = await postJson<{ ok: boolean; gift: GiftSummary; subscription: SubscriptionSummary }>(
-        `${SUBS_BASE}/forward/${encodeURIComponent(giftId)}/claim`,
-    );
+export async function claimGift(
+    giftId: string
+): Promise<{ gift: GiftSummary; subscription: SubscriptionSummary }> {
+    const response = await postJson<{
+        ok: boolean;
+        gift: GiftSummary;
+        subscription: SubscriptionSummary;
+    }>(`${SUBS_BASE}/forward/${encodeURIComponent(giftId)}/claim`);
     return { gift: response.gift, subscription: response.subscription };
 }
 
-export async function passGift(giftId: string): Promise<{ previous: GiftSummary; next: GiftSummary }> {
+export async function passGift(
+    giftId: string
+): Promise<{ previous: GiftSummary; next: GiftSummary }> {
     const response = await postJson<{ ok: boolean; previous: GiftSummary; next: GiftSummary }>(
-        `${SUBS_BASE}/forward/${encodeURIComponent(giftId)}/pass`,
+        `${SUBS_BASE}/forward/${encodeURIComponent(giftId)}/pass`
     );
     return { previous: response.previous, next: response.next };
 }
