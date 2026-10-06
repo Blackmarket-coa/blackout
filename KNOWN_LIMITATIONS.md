@@ -60,10 +60,20 @@ For the source-of-truth triage with tier/owner detail see
         management is not available yet. Changes made on the FBM page reach
         Blackout by webhook, so the Blackout screen can lag behind them.
         Comped and gifted access is local to Blackout and is not shown on FBM.
-        The button is hidden on iOS outside the US. Not verified on the Tauri
-        desktop shell: it has no opener plugin or new-window handler behind
-        `window.open`, so the button may open nothing there; the screen then
-        shows the link itself.
+        The button is hidden on iOS outside the US. On the Tauri desktop shell
+        (2026-10-06) external purchase and billing links go to the system
+        browser through `tauri-plugin-opener`, scoped to `https://*` in
+        `blackout-desktop/src-tauri/capabilities/default.json`; if the plugin
+        refuses, the client falls back to `window.open` and the screen still
+        shows the link. That shell is compile-checked (`cargo check --locked`)
+        but has not been exercised in a running desktop build.
+-   **Desktop shell build:** until 2026-10-06 `blackout-desktop` did not
+    compile on `develop` (an autostart argument type and the global-shortcut
+    plugin's changed `register` API), unnoticed because
+    `.github/workflows/blackout-desktop-tauri.yml` runs only for pull requests
+    and pushes to `main`. Both are fixed; the desktop workflow still does not
+    run on `develop` pull requests, so a desktop break can again land unseen
+    until a release.
 -   **Placeholder integrations:** Blamazon, MayhemMarketplaze, AntinAmazon
     (`packages/api/src/integrations/marketplace/{blamazon,mayhemMarketplaze,antinAmazon}.ts`).
     -   These are wired as registered providers but return empty catalogs,

@@ -7,7 +7,7 @@ use tauri::menu::{MenuBuilder, MenuItemBuilder};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager, WindowEvent};
 use tauri_plugin_autostart::MacosLauncher;
-use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};
+use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 use tauri_plugin_notification::NotificationExt;
 
 #[derive(Default)]
@@ -17,7 +17,11 @@ struct AppState {
 }
 
 #[tauri::command]
-fn set_unread_count(app: AppHandle, state: tauri::State<'_, AppState>, unread: u32) -> Result<(), String> {
+fn set_unread_count(
+    app: AppHandle,
+    state: tauri::State<'_, AppState>,
+    unread: u32,
+) -> Result<(), String> {
     if let Ok(mut guard) = state.unread.lock() {
         *guard = unread;
     }
@@ -57,7 +61,7 @@ fn main() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_autostart::init(
             MacosLauncher::LaunchAgent,
-            Some(vec!["--hidden".to_string()]),
+            Some(vec!["--hidden"]),
         ))
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_single_instance::init(|app, argv, cwd| {
@@ -69,6 +73,7 @@ fn main() {
         }))
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             set_unread_count,
             notify_native,
@@ -128,17 +133,23 @@ fn main() {
                 .build(app)?;
 
             let shortcut = Shortcut::new(Some(Modifiers::SUPER | Modifiers::SHIFT), Code::KeyB);
-            app.global_shortcut().register(shortcut, move |app, _, _| {
-                if let Some(window) = app.get_webview_window("main") {
-                    let visible = window.is_visible().unwrap_or(false);
-                    if visible {
-                        let _ = window.hide();
-                    } else {
-                        let _ = window.show();
-                        let _ = window.set_focus();
+            // `on_shortcut` fires on key-down AND key-up; toggle on key-down
+            // only, or one press would hide and re-show the window.
+            app.global_shortcut()
+                .on_shortcut(shortcut, move |app, _, event| {
+                    if event.state != ShortcutState::Pressed {
+                        return;
                     }
-                }
-            })?;
+                    if let Some(window) = app.get_webview_window("main") {
+                        let visible = window.is_visible().unwrap_or(false);
+                        if visible {
+                            let _ = window.hide();
+                        } else {
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                        }
+                    }
+                })?;
 
             Ok(())
         })

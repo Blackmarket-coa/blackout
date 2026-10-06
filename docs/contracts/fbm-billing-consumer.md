@@ -142,13 +142,14 @@ Blackout members, who have no FBM storefront login.
     `VITE_FBM_MANAGE_ORIGINS` (build time; default
     `https://api.freeblackmarket.com`) and its path against FBM's
     `/…/manage-sessions/{token}/page` (no query or fragment), and opens it
-    with `openExternalCheckoutUrl` (new tab with `noopener,noreferrer`, or the
-    Capacitor system browser). Never an iframe, on any platform; the contract
-    also requires FBM to serve the page with `frame-ancestors 'none'` (not yet
-    verified). Not verified on the Tauri desktop shell, which has no opener
-    plugin or new-window handler behind `window.open`: the button may open
-    nothing there (the screen then shows the link itself), so the copy says
-    the page is hosted by FBM rather than that it opens outside Blackout. The button is hidden where
+    with `openExternalCheckoutUrl` (new tab with `noopener,noreferrer`, the
+    Capacitor system browser, or on the Tauri desktop shell the system browser
+    through `tauri-plugin-opener`, https only). Never an iframe, on any
+    platform; the contract also requires FBM to serve the page with
+    `frame-ancestors 'none'` (not yet verified). The desktop path is
+    compile-checked but not exercised in a running desktop build and falls
+    back to `window.open`, so the copy says the page is hosted by FBM rather
+    than that it opens outside Blackout. The button is hidden where
     `getExternalPurchasePolicy()` blocks purchase links (iOS outside the US).
 -   **What changes where**: renewal and cancellation happen on FBM. Blackout
     learns of them through FBM's existing webhooks (§3 below), so the screen

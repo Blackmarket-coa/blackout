@@ -20,8 +20,17 @@ const setCapacitor = (stub: CapacitorStub | undefined) => {
     (window as unknown as { Capacitor?: CapacitorStub }).Capacitor = stub;
 };
 
+const setTauri = (
+    invoke: ((cmd: string, args?: Record<string, unknown>) => Promise<unknown>) | undefined
+) => {
+    (window as unknown as { __TAURI__?: unknown }).__TAURI__ = invoke
+        ? { core: { invoke } }
+        : undefined;
+};
+
 afterEach(() => {
     setCapacitor(undefined);
+    setTauri(undefined);
     vi.restoreAllMocks();
 });
 
@@ -137,6 +146,43 @@ describe('resolveDeviceRegion', () => {
 });
 
 describe('openExternalCheckoutUrl', () => {
+    it('opens https links in the system browser inside the Tauri desktop shell', async () => {
+        const invoke = vi.fn(async () => undefined);
+        const open = vi.spyOn(window, 'open');
+        setTauri(invoke);
+        await expect(openExternalCheckoutUrl('https://fbm.example/billing/abc')).resolves.toBe(
+            'system-browser'
+        );
+        expect(invoke).toHaveBeenCalledWith('plugin:opener|open_url', {
+            url: 'https://fbm.example/billing/abc',
+        });
+        expect(open).not.toHaveBeenCalled();
+    });
+
+    it('falls back to window.open when the desktop opener refuses or is missing', async () => {
+        setTauri(vi.fn(async () => Promise.reject(new Error('not allowed'))));
+        const open = vi.spyOn(window, 'open').mockReturnValue({} as Window);
+        await expect(openExternalCheckoutUrl('https://fbm.example/billing/abc')).resolves.toBe(
+            'window-open'
+        );
+        expect(open).toHaveBeenCalledWith(
+            'https://fbm.example/billing/abc',
+            '_blank',
+            'noopener,noreferrer'
+        );
+    });
+
+    it('never hands a non-https link to the desktop opener (local dev http stays in window.open)', async () => {
+        const invoke = vi.fn(async () => undefined);
+        setTauri(invoke);
+        vi.spyOn(window, 'open').mockReturnValue({} as Window);
+        await expect(openExternalCheckoutUrl('http://localhost:9000/checkout')).resolves.toBe(
+            'window-open'
+        );
+        await expect(openExternalCheckoutUrl('javascript:alert(1)')).resolves.toBe('failed');
+        expect(invoke).not.toHaveBeenCalled();
+    });
+
     it('rejects malformed and non-https URLs', async () => {
         await expect(openExternalCheckoutUrl('not a url')).resolves.toBe('failed');
         await expect(openExternalCheckoutUrl('javascript:alert(1)')).resolves.toBe('failed');
