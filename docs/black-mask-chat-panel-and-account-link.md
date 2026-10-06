@@ -11,15 +11,18 @@ holds the steps that land in **this** repository. Anything marked
 -   The Blackout chat panel is **free** for anyone with the Black Mask extension
     and a Blackout account.
 -   It is a **minimal sandbox** showing only Canopies (communities and channels),
-    dens and DMs. No Town Square, Coliseum, Market or feeds. No unread badges
-    unless the operator decides otherwise. A link to anything else opens in a
-    normal Blackout tab.
+    dens and DMs. No Town Square, Coliseum, Market or feeds. A link to anything
+    else opens in a normal Blackout tab.
+-   The panel gets **unread indicators and push notifications** (operator,
+    2026-10-06). Whether each is on by default or opt-in is still to confirm.
+    A push travels through Apple's or Google's push service, which learns when a
+    message arrived even when it cannot read it; the panel must not describe
+    push as private, and the content of a push must not include message text.
 -   A Blackout account can **accept a Black Mask registration**, or **link to a
     Black Mask account**, on request. The user picks how long the link lasts: a
     timeframe or indefinitely, nothing preselected.
 -   Unlinking or expiry ends the chat session and signs that device out. **The
     Blackout account is never deleted.**
--   Mobile push notifications are out of scope for the panel for now.
 
 ## Placeholder or proposed
 
@@ -50,7 +53,7 @@ holds the steps that land in **this** repository. Anything marked
 -   Links to other Blackout content open in a normal Blackout tab (the embed
     never navigates itself). External links are handed to the host so Black
     Mask's phishing check runs first.
--   No unread badges by default (open decision whether to add them).
+-   Unread indicators (decided 2026-10-06; default-on or opt-in to confirm).
 
 ### 2. Framing policy
 
@@ -108,9 +111,10 @@ answer. Needs counsel; surfaced, not resolved. Mirrored in the FBM repo's
 
 ## Open decisions touching this repo
 
--   [ ] Unread indicators or push notifications in the chat panel (none by
-        default).
--   [ ] Confirm the 3% fee on Blackout creator transactions (a revenue-model
-        assumption, not a Blackout decision).
--   [ ] Dead drops or the dead man's switch first, and the audience each is built
-        for (whistleblower-style versus inheritance-style continuity).
+-   [x] Unread indicators or push notifications in the chat panel. **Add
+        both** (2026-10-06); default-on or opt-in to confirm.
+-   [x] Confirm the 3% fee on Blackout creator transactions (a revenue-model
+        assumption, not a Blackout decision). **Confirmed** (2026-10-05).
+-   [x] Dead drops or the dead man's switch first, and the audience each is built
+        for (whistleblower-style versus inheritance-style continuity). **Dead
+        drops first** (2026-10-05); the audience is still to be written down.
