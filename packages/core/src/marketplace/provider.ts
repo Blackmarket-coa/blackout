@@ -19,7 +19,8 @@ export type MarketplaceCapability =
     | 'payouts'
     | 'creator-sso'
     | 'creator-write'
-    | 'embedded-checkout';
+    | 'embedded-checkout'
+    | 'subscription-manage';
 
 export type MarketplaceCategory =
     | 'emoji-sticker'
@@ -193,6 +194,29 @@ export interface CreatorOnboardingHandle {
     expiresAt: string;
 }
 
+/**
+ * Input to mint a provider-hosted subscription management page. `userId` is
+ * the authenticated Blackout user (the route takes it from the verified token,
+ * never from a request body). `returnUrl` is optional and already checked
+ * against Blackout's own origin allowlist; the provider applies its own
+ * allowlist on top and may ignore it.
+ */
+export interface SubscriptionManageSessionInput {
+    userId: string;
+    returnUrl?: string;
+}
+
+/**
+ * A short-lived link to the provider's subscription management page. The URL
+ * carries a bearer token: whoever holds it can manage that member's
+ * subscriptions until `expiresAt`, so it must never be logged, audited or
+ * persisted.
+ */
+export interface SubscriptionManageSession {
+    url: string;
+    expiresAt: string;
+}
+
 export interface MarketplaceProvider extends MarketplaceProviderInfo {
     fetchCatalog(query: CatalogQuery): Promise<NormalizedListing[]>;
     getListing(listingId: string): Promise<NormalizedListing | null>;
@@ -237,6 +261,15 @@ export interface MarketplaceProvider extends MarketplaceProviderInfo {
      * without a per-listing notion of fee need no change.
      */
     getListingFeeBps?(listingId: string): Promise<number | null>;
+
+    /**
+     * Optional: mint a link to the provider-hosted page where a member turns
+     * off automatic renewal or cancels a subscription. Present when the
+     * `subscription-manage` capability is advertised.
+     */
+    createSubscriptionManageSession?(
+        input: SubscriptionManageSessionInput
+    ): Promise<SubscriptionManageSession>;
 }
 
 /**

@@ -11,6 +11,8 @@ import type {
     NormalizedLifecycleEvent,
     NormalizedListing,
     SignedPluginBundleEnvelope,
+    SubscriptionManageSession,
+    SubscriptionManageSessionInput,
     WebhookVerification,
 } from '@blackout/core';
 import { parseNormalizedLifecycleEvent, parseNormalizedListing } from '@blackout/core';
@@ -201,11 +203,15 @@ export function createFreeblackmarketProvider(): MarketplaceProvider {
         // which previously called out to the production host with an empty
         // `authorization` header when no API key was set.
         if (!enabled || !apiKey) {
-            throw new Error(
+            // `code` lets a caller answer "not configured here" (503) rather
+            // than "the provider failed" (502) without parsing the message.
+            const refusal = new Error(
                 `[freeblackmarket] refusing to call ${path}: provider not configured ` +
                     `(set FREEBLACKMARKET_API_KEY and FREEBLACKMARKET_ENABLED, or use the ` +
                     `stub via FREEBLACKMARKET_STUB=1)`
-            );
+            ) as Error & { code?: string };
+            refusal.code = 'provider_not_configured';
+            throw refusal;
         }
         const response = await fetch(new URL(path, baseUrl), {
             ...init,
@@ -222,8 +228,24 @@ export function createFreeblackmarketProvider(): MarketplaceProvider {
             // parsing prose — and those deserve different answers to a user.
             const error = new Error(
                 `freeblackmarket ${path} failed: ${response.status}`
-            ) as Error & { status?: number };
+            ) as Error & { status?: number; bodyCode?: string };
             error.status = response.status;
+            // FBM's machine-readable `code` (e.g. 404 `feature_disabled` vs a
+            // plain route-not-found), when the body has one. Only a short
+            // identifier is kept; the rest of the body is never read into the
+            // error or a log.
+            try {
+                const body = (await response.json()) as { code?: unknown } | null;
+                if (
+                    body &&
+                    typeof body.code === 'string' &&
+                    /^[a-z0-9_.-]{1,64}$/i.test(body.code)
+                ) {
+                    error.bodyCode = body.code;
+                }
+            } catch {
+                // Not JSON: no body code.
+            }
             throw error;
         }
         return (await response.json()) as T;
@@ -268,6 +290,7 @@ export function createFreeblackmarketProvider(): MarketplaceProvider {
             'creator-sso',
             'creator-write',
             'embedded-checkout',
+            'subscription-manage',
         ],
 
         async fetchCatalog(query: CatalogQuery): Promise<NormalizedListing[]> {
@@ -433,6 +456,73 @@ export function createFreeblackmarketProvider(): MarketplaceProvider {
                 }
             );
             return { onboardingUrl: raw.url, expiresAt: raw.expiresAt };
+        },
+
+        /**
+         * Mint a link to FBM's hosted subscription management page
+         * (manage-session contract, 2026-10-06). Same credential and mount as
+         * the checkout mint. FBM's body schema is strict and snake_case;
+         * `return_url` is left out when there is none. No idempotency key:
+         * each mint revokes the member's earlier unexpired sessions, so a
+         * replayed key would only hand back a link FBM may already have
+         * revoked.
+         *
+         * The returned URL is a bearer capability. It is validated here and
+         * handed back; nothing in this method logs it, and the error path
+         * names only the fixed mint path, never the URL.
+         */
+        async createSubscriptionManageSession(
+            input: SubscriptionManageSessionInput
+        ): Promise<SubscriptionManageSession> {
+            const raw = await call<{ url?: unknown; expires_at?: unknown }>(
+                `${apiPrefix}/subscriptions/manage-sessions`,
+                {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        blackout_user_id: input.userId,
+                        return_url: input.returnUrl,
+                    }),
+                }
+            );
+            if (typeof raw.url !== 'string' || typeof raw.expires_at !== 'string') {
+                throw new Error(
+                    'freeblackmarket manage-session response is missing url/expires_at'
+                );
+            }
+            let parsed: URL;
+            try {
+                parsed = new URL(raw.url);
+            } catch {
+                throw new Error('freeblackmarket manage-session url is not an absolute URL');
+            }
+            // Pinned to the configured FBM origin (which also limits plain
+            // http to a local-dev base URL) and to FBM's manage page path,
+            // `{prefix}/subscriptions/manage-sessions/{token}/page`, with no
+            // query or fragment. The client pins it again before opening.
+            if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+                throw new Error('freeblackmarket manage-session url is not https');
+            }
+            if (parsed.origin !== new URL(baseUrl).origin) {
+                throw new Error(
+                    'freeblackmarket manage-session url is not on FREEBLACKMARKET_BASE_URL'
+                );
+            }
+            const pagePrefix = `${apiPrefix}/subscriptions/manage-sessions/`;
+            const token = parsed.pathname.startsWith(pagePrefix)
+                ? parsed.pathname.slice(pagePrefix.length).replace(/\/page$/, '')
+                : '';
+            if (
+                parsed.username ||
+                parsed.password ||
+                parsed.search ||
+                parsed.hash ||
+                !parsed.pathname.endsWith('/page') ||
+                token.length === 0 ||
+                token.includes('/')
+            ) {
+                throw new Error('freeblackmarket manage-session url is not the manage page');
+            }
+            return { url: parsed.toString(), expiresAt: raw.expires_at };
         },
 
         /**

@@ -52,6 +52,18 @@ For the source-of-truth triage with tier/owner detail see
         as an override if FBM ever moves the mount; a path inside
         `FREEBLACKMARKET_BASE_URL` is discarded by URL resolution.
     -   Set `FREEBLACKMARKET_ENABLED=false` to opt out entirely.
+    -   Settings -> Subscriptions "Manage billing on Free Black Market"
+        (2026-10-06) depends on FBM's manage-session endpoint, which FBM is
+        building in parallel. Until it is live and `FBM_MANAGE_SESSION_ENABLED`
+        is set, `POST /v1/subscriptions/manage-session` answers 503 and the
+        section (client flag `accountSubscriptions`, default off) says billing
+        management is not available yet. Changes made on the FBM page reach
+        Blackout by webhook, so the Blackout screen can lag behind them.
+        Comped and gifted access is local to Blackout and is not shown on FBM.
+        The button is hidden on iOS outside the US. Not verified on the Tauri
+        desktop shell: it has no opener plugin or new-window handler behind
+        `window.open`, so the button may open nothing there; the screen then
+        shows the link itself.
 -   **Placeholder integrations:** Blamazon, MayhemMarketplaze, AntinAmazon
     (`packages/api/src/integrations/marketplace/{blamazon,mayhemMarketplaze,antinAmazon}.ts`).
     -   These are wired as registered providers but return empty catalogs,

@@ -607,7 +607,7 @@ export function SubscriptionsSlice() {
         createElement(
             'p',
             { style: { margin: 0, color: 'var(--text-secondary)' } },
-            'Manage your plan and pay it forward — donate an unused period so the next person joins for free.',
+            'Pay it forward — donate an unused period of your plan so the next person joins for free.',
         ),
         subscription &&
             createElement(PayItForwardPanel, { subscription, onAction: () => void refresh() }),

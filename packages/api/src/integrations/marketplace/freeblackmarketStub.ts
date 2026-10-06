@@ -11,6 +11,8 @@ import type {
     NormalizedLifecycleEvent,
     NormalizedListing,
     SignedPluginBundleEnvelope,
+    SubscriptionManageSession,
+    SubscriptionManageSessionInput,
     WebhookVerification,
 } from '@blackout/core';
 import { parseNormalizedLifecycleEvent } from '@blackout/core';
@@ -573,6 +575,11 @@ export interface FreeblackmarketStubInternals {
      * the default quote. Set it above the ceiling to exercise the refusal path.
      */
     setListingFeeBps(listingId: string, feeBps: number | null): void;
+    /**
+     * Test-only: the manage-session mints this stub has answered, oldest
+     * first. Lets a route test assert which user id reached the provider.
+     */
+    listManageSessionMints(): SubscriptionManageSessionInput[];
     /** Test-only: clear in-memory state. */
     reset(): void;
 }
@@ -603,6 +610,7 @@ export function createFreeblackmarketStubProvider(): MarketplaceProvider {
     // Quoted platform fee per listing. Absent means the standard 3%, which is
     // what a seller on the free plan is charged.
     const feeQuotes = new Map<string, number>();
+    const manageSessionMints: SubscriptionManageSessionInput[] = [];
 
     function listFor(query: CatalogQuery): NormalizedListing[] {
         const all = [...listings.values()].filter((l) => l.status === 'published');
@@ -687,6 +695,7 @@ export function createFreeblackmarketStubProvider(): MarketplaceProvider {
             'creator-sso',
             'creator-write',
             'embedded-checkout',
+            'subscription-manage',
         ],
 
         async fetchCatalog(query: CatalogQuery): Promise<NormalizedListing[]> {
@@ -842,6 +851,27 @@ export function createFreeblackmarketStubProvider(): MarketplaceProvider {
             };
         },
 
+        /**
+         * Mirrors the live mint's shape: an opaque token in the path of FBM's
+         * page route, 15-minute expiry. The stub serves no such page; the URL
+         * only has to look like the real one so the route and client paths
+         * are exercised.
+         */
+        async createSubscriptionManageSession(
+            input: SubscriptionManageSessionInput
+        ): Promise<SubscriptionManageSession> {
+            manageSessionMints.push({ ...input });
+            const token = crypto.randomBytes(32).toString('base64url');
+            const url = new URL(
+                `/v1/integrations/blackout/commerce/subscriptions/manage-sessions/${token}/page`,
+                baseUrl
+            );
+            return {
+                url: url.toString(),
+                expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+            };
+        },
+
         async issueSignedBundle(
             entitlement: NormalizedEntitlement
         ): Promise<SignedPluginBundleEnvelope> {
@@ -907,6 +937,9 @@ export function createFreeblackmarketStubProvider(): MarketplaceProvider {
             if (feeBps === null) feeQuotes.delete(listingId);
             else feeQuotes.set(listingId, feeBps);
         },
+        listManageSessionMints() {
+            return manageSessionMints.map((mint) => ({ ...mint }));
+        },
         reset() {
             listings.clear();
             for (const seed of SEEDED_LISTINGS) {
@@ -914,6 +947,7 @@ export function createFreeblackmarketStubProvider(): MarketplaceProvider {
             }
             sessions.clear();
             feeQuotes.clear();
+            manageSessionMints.length = 0;
         },
     };
 

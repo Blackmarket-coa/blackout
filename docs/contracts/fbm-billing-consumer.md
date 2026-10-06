@@ -78,6 +78,83 @@ via the §3 subscription bridge events below. The local grace machinery
 admin comp) are untouched — FBM is the money truth, Blackout remains the
 access-policy truth.
 
+### Subscription management (manage session)
+
+Added 2026-10-06 (operator round 3, item 21). The FBM half is fixed by the
+shared manage-session contract; FBM builds the endpoint and page, Blackout
+integrates against it. It keeps the approved disclosure ("turn off automatic
+renewal or cancel at any time under Account -> Subscriptions") true for
+Blackout members, who have no FBM storefront login.
+
+`POST /v1/subscriptions/manage-session` `{ returnUrl? }` →
+`201 { url, expiresAt }` (`cache-control: no-store`).
+
+-   **Auth**: `requireUser`. The user id sent to FBM is `user.sub` from the
+    verified token. A `userId` in the body is not part of the schema and is
+    stripped.
+-   **Server switch**: `FBM_MANAGE_SESSION_ENABLED` (`1`/`true`). Unset or
+    anything else answers `503 billing_unavailable` before FBM is called.
+-   **returnUrl**: optional, at most 2048 characters (longer is `400`).
+    Forwarded only when it is the native deep link `blackout://checkout/return`
+    or an http(s) URL without credentials whose origin is in an explicit
+    `CORS_ALLOWED_ORIGINS` list. A `*` wildcard (refused in production anyway)
+    is not a list, so it forwards no web return link at all. A forwarded web
+    link is cut to its origin plus `/`: the client's page URL names the open
+    space, room and event, and none of that goes to FBM. The client sends
+    only `${origin}/` in the first place (or the native deep link). Anything
+    else is dropped, not refused. FBM applies its own `BLACKOUT_RETURN_ORIGINS`
+    allowlist on top and may ignore it.
+-   **Upstream call**: the FBM provider's
+    `createSubscriptionManageSession` (capability `subscription-manage`)
+    POSTs `{FREEBLACKMARKET_BASE_URL}{FREEBLACKMARKET_API_PREFIX}/subscriptions/manage-sessions`
+    with the same bearer `FREEBLACKMARKET_API_KEY` as the checkout mint, body
+    `{ blackout_user_id, return_url? }` (snake_case, strict), and no
+    idempotency key: each mint revokes the member's earlier links, so a
+    replayed key could only return a revoked one. FBM answers
+    `201 { url, expires_at }`. The provider returns the link only when it is
+    on the `FREEBLACKMARKET_BASE_URL` origin (so plain http only for a
+    local-dev base URL) and its path is exactly
+    `{prefix}/subscriptions/manage-sessions/{token}/page`, with no
+    credentials, query or fragment; anything else is a `502`.
+-   **Error mapping**: FBM `404 { code: "feature_disabled" }`, an
+    unconfigured provider, or a provider without the method →
+    `503 billing_unavailable`. A 404 without that body code (a wrong
+    `FREEBLACKMARKET_API_PREFIX` or base URL) is a misconfiguration, not
+    "FBM's flag is off", and is a `502 manage_session_failed`.
+    FBM `409 identity_ambiguous` (more than one FBM customer carries the
+    Blackout user id) → `409 billing_identity_ambiguous`; Blackout does not
+    pick one either. Any other failure → `502 manage_session_failed`.
+-   **The URL is a bearer capability**. Whoever holds it can manage that
+    member's FBM subscriptions until it expires (15 minutes, per the
+    contract; not yet verified against a live FBM).
+    The API never logs it or writes it to the audit timeline; the audit row
+    `billing.manage_session_created` records only the provider, `expiresAt`
+    and whether a return URL was sent. Failure logs carry the error code only.
+-   **Client** (`apps/blackout-client/src/app/features/settings/subscriptions/`):
+    Settings -> Subscriptions, behind the client flag `accountSubscriptions`
+    (default off; a beta build with `VITE_BLACKOUT_BETA_UNLOCK_ALL` turns
+    every client flag on, this one included, and `BLACKOUT_ACCOUNT_SUBSCRIPTIONS=false`
+    cannot override that, so there the section shows and the server switch
+    alone keeps the endpoint at 503). Shows the plan from `GET /v1/subscriptions/me` and creator
+    subscriptions from `GET /v1/creator-subs/subscriptions/me`, read-only.
+    The "Manage billing on Free Black Market" button calls the endpoint once
+    (no retry), checks the returned link's origin against
+    `VITE_FBM_MANAGE_ORIGINS` (build time; default
+    `https://api.freeblackmarket.com`) and its path against FBM's
+    `/…/manage-sessions/{token}/page` (no query or fragment), and opens it
+    with `openExternalCheckoutUrl` (new tab with `noopener,noreferrer`, or the
+    Capacitor system browser). Never an iframe, on any platform; the contract
+    also requires FBM to serve the page with `frame-ancestors 'none'` (not yet
+    verified). Not verified on the Tauri desktop shell, which has no opener
+    plugin or new-window handler behind `window.open`: the button may open
+    nothing there (the screen then shows the link itself), so the copy says
+    the page is hosted by FBM rather than that it opens outside Blackout. The button is hidden where
+    `getExternalPurchasePolicy()` blocks purchase links (iOS outside the US).
+-   **What changes where**: renewal and cancellation happen on FBM. Blackout
+    learns of them through FBM's existing webhooks (§3 below), so the screen
+    can lag behind the FBM page. Comped and gifted access is local to Blackout
+    and does not appear on FBM.
+
 ## Inbound: §3 subscription bridge events
 
 `subscription.activated` / `subscription.lapsed` (tier room ACL sync) are
@@ -114,6 +191,10 @@ willRetry, nextRetryAt?, occurredAt }` — one per FBM dunning attempt.
 | `FREEBLACKMARKET_ENABLED` / `FREEBLACKMARKET_API_KEY` / `FREEBLACKMARKET_WEBHOOK_SECRET` | provider auth (unchanged)                                                                                               |
 | `FREEBLACKMARKET_STUB=1`                                                                 | in-memory provider for dev/CI; its stub sessions echo `metadata` onto the synthesized webhook exactly like live FBM     |
 | `CANOPY_FBM_LISTING_IDS`                                                                 | JSON planCode→FBM listing id mapping (go-live step)                                                                     |
+| `FBM_MANAGE_SESSION_ENABLED`                                                             | server switch for `POST /v1/subscriptions/manage-session`; unset/off answers 503 (fail-closed)                          |
+| `CORS_ALLOWED_ORIGINS`                                                                   | also the allowlist for a manage-session `returnUrl` origin (only origin + `/` is forwarded; `*` forwards none)          |
+| `VITE_FBM_MANAGE_ORIGINS` (client, build time)                                           | origins the client will open a manage link on; default `https://api.freeblackmarket.com`                                |
+| `BLACKOUT_ACCOUNT_SUBSCRIPTIONS` (client)                                                | overrides the `accountSubscriptions` flag (default off) for Settings -> Subscriptions; beta unlock-all wins             |
 | removed                                                                                  | `STRIPE_*` (secret/public keys, price ids, checkout URLs, webhook secret, portal URL) and `LAGO_*` — nothing reads them |
 
 ## Non-goals / declared decisions
@@ -125,5 +206,8 @@ willRetry, nextRetryAt?, occurredAt }` — one per FBM dunning attempt.
     only via redeem, zero cents/CCR edges in the schema. Any future
     purchasable points product would be a NEW FBM-listed product, not a
     conversion of this ledger.
--   No Blackout-side billing portal: subscription management is local
-    (cancel routes) + FBM-side checkout; there is no card-on-file UI here.
+-   No Blackout-hosted billing portal and no card-on-file UI here. Creator
+    subscriptions keep their local cancel route; renewal and cancellation of
+    FBM-billed subscriptions happen on FBM's own hosted manage page, which
+    Blackout only links to through a short-lived manage session (above). It
+    is never framed.

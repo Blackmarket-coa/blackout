@@ -89,6 +89,19 @@ export type FeatureFlags = {
      */
     pluginCodeSandbox: boolean;
     /**
+     * Settings -> Subscriptions: the member's plan and creator subscriptions
+     * (read-only) plus a "Manage billing on Free Black Market" button that
+     * opens FBM's hosted manage page in a new tab or the system browser.
+     * Default OFF until FBM's manage-session endpoint ships; the server keeps
+     * its own fail-closed switch (`FBM_MANAGE_SESSION_ENABLED`), so turning
+     * this on alone only shows a "not available yet" answer. Per-env override
+     * `BLACKOUT_ACCOUNT_SUBSCRIPTIONS=true|false`. Exception: a beta build
+     * with `BLACKOUT_BETA_UNLOCK_ALL` / `VITE_BLACKOUT_BETA_UNLOCK_ALL` turns
+     * every flag on, this one included, before that override is read; there
+     * the server switch alone keeps the endpoint at 503.
+     */
+    accountSubscriptions: boolean;
+    /**
      * AppShell mode-routing flag. When enabled (default-on as of PR-10),
      * every destination renders inside the AppShell wrapper (bottom-tab
      * bar + mode-aware top bar + dynamic right panel) and the canonical
@@ -414,6 +427,7 @@ export const defaultFeatureFlags: FeatureFlags = {
     canopyServer: true,
     plugins: true,
     pluginCodeSandbox: false,
+    accountSubscriptions: false,
     shellAppShell: true,
     // HomeFeed is the default `/` surface so the home tour (gated by
     // onboardingHomeTour below) has a place to run — invited users land here
@@ -751,6 +765,12 @@ export const resolveFeatureFlags = (
         }
         if (env.BLACKOUT_PLUGIN_CODE_SANDBOX === 'false') {
             nextFlags.pluginCodeSandbox = false;
+        }
+        if (env.BLACKOUT_ACCOUNT_SUBSCRIPTIONS === 'true') {
+            nextFlags.accountSubscriptions = true;
+        }
+        if (env.BLACKOUT_ACCOUNT_SUBSCRIPTIONS === 'false') {
+            nextFlags.accountSubscriptions = false;
         }
         if (env.BLACKOUT_SHELL_APP_SHELL === 'true') {
             nextFlags.shellAppShell = true;
@@ -1105,6 +1125,12 @@ export const resolveFeatureFlags = (
     }
     if (env.BLACKOUT_PLUGIN_CODE_SANDBOX === 'false') {
         nextFlags.pluginCodeSandbox = false;
+    }
+    if (env.BLACKOUT_ACCOUNT_SUBSCRIPTIONS === 'true') {
+        nextFlags.accountSubscriptions = true;
+    }
+    if (env.BLACKOUT_ACCOUNT_SUBSCRIPTIONS === 'false') {
+        nextFlags.accountSubscriptions = false;
     }
     if (env.BLACKOUT_SHELL_APP_SHELL === 'true') {
         nextFlags.shellAppShell = true;

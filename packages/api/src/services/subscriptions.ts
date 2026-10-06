@@ -228,6 +228,138 @@ export async function createCheckoutSession(input: {
 }
 
 /**
+ * Native shells bounce back from the system browser on this deep link (the
+ * client's `NATIVE_CHECKOUT_RETURN_URL`). It is not an origin, so it cannot
+ * pass the CORS allowlist; it is accepted by exact match instead.
+ */
+export const NATIVE_RETURN_URL = 'blackout://checkout/return';
+
+export type ManageSessionErrorCode =
+    | 'billing_unavailable'
+    | 'identity_ambiguous'
+    | 'manage_session_failed';
+
+export class ManageSessionError extends Error {
+    constructor(public readonly code: ManageSessionErrorCode, message: string) {
+        super(message);
+        this.name = 'ManageSessionError';
+    }
+}
+
+/**
+ * Server switch for the FBM-hosted manage page. Fail-closed: anything other
+ * than `1` / `true` (including unset) keeps the endpoint answering 503.
+ */
+export function isManageSessionEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+    const raw = env.FBM_MANAGE_SESSION_ENABLED;
+    if (raw === undefined) return false;
+    return raw === '1' || raw.toLowerCase() === 'true';
+}
+
+/**
+ * The `returnUrl` FBM may link back to, or `undefined` to send none. Accepted
+ * only when it is the native deep link, or an http(s) URL whose origin passes
+ * `isAllowedOrigin` (the route passes the CORS allowlist check). Anything
+ * else is dropped rather than refused: the manage page works without a
+ * return link, and FBM applies its own allowlist on top.
+ *
+ * An accepted web URL is cut down to its origin plus `/`. The client's page
+ * URL carries the open space, room and event ids (and a fragment), and FBM
+ * needs none of that to link back, so path, query and fragment never leave
+ * Blackout whatever the client sends.
+ */
+export function acceptManageReturnUrl(
+    raw: string | undefined,
+    isAllowedOrigin: (origin: string) => boolean
+): string | undefined {
+    if (!raw) return undefined;
+    if (raw === NATIVE_RETURN_URL) return raw;
+    let parsed: URL;
+    try {
+        parsed = new URL(raw);
+    } catch {
+        return undefined;
+    }
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return undefined;
+    if (parsed.username || parsed.password) return undefined;
+    return isAllowedOrigin(parsed.origin) ? `${parsed.origin}/` : undefined;
+}
+
+/**
+ * Mint a link to FBM's hosted subscription management page for `userId`
+ * (manage-session contract, 2026-10-06). `userId` must be the authenticated
+ * caller (`user.sub`); the route never takes it from a request body.
+ *
+ * The returned URL is a short-lived bearer capability for that member's
+ * billing. It is returned to the caller and nowhere else: it is not logged,
+ * not written to the audit timeline, and not stored. The audit row records
+ * only that a link was issued and when it expires.
+ */
+export async function createSubscriptionManageSession(input: {
+    userId: string;
+    returnUrl?: string;
+}): Promise<{ url: string; expiresAt: string }> {
+    if (!isManageSessionEnabled()) {
+        throw new ManageSessionError('billing_unavailable', 'FBM_MANAGE_SESSION_ENABLED is off');
+    }
+    const provider = getMarketplaceProvider('freeblackmarket');
+    if (
+        !provider?.enabled ||
+        !provider.capabilities.includes('subscription-manage') ||
+        !provider.createSubscriptionManageSession
+    ) {
+        throw new ManageSessionError(
+            'billing_unavailable',
+            'The FBM provider cannot mint manage sessions here'
+        );
+    }
+
+    let session: { url: string; expiresAt: string };
+    try {
+        session = await provider.createSubscriptionManageSession({
+            userId: input.userId,
+            returnUrl: input.returnUrl,
+        });
+    } catch (error) {
+        const detail = error as { status?: unknown; code?: unknown; bodyCode?: unknown };
+        // FBM answers 404 { code: 'feature_disabled' } while its flag (or the
+        // Blackout integration) is off; an unconfigured provider refuses
+        // before calling out. Both mean "not available here", not "broken".
+        // Any other 404 (a wrong FREEBLACKMARKET_API_PREFIX or base URL) is a
+        // misconfiguration and falls through to manage_session_failed, so it
+        // is not logged as if FBM's flag were simply off.
+        if (
+            detail.code === 'provider_not_configured' ||
+            (detail.status === 404 && detail.bodyCode === 'feature_disabled')
+        ) {
+            throw new ManageSessionError('billing_unavailable', 'FBM manage sessions are off');
+        }
+        // 409 identity_ambiguous: more than one FBM customer carries this
+        // Blackout user id. FBM fails closed and so do we.
+        if (detail.status === 409) {
+            throw new ManageSessionError(
+                'identity_ambiguous',
+                'More than one FBM billing account matches this user'
+            );
+        }
+        throw new ManageSessionError(
+            'manage_session_failed',
+            typeof detail.status === 'number'
+                ? `FBM manage-session mint answered ${detail.status}`
+                : 'FBM manage-session mint failed'
+        );
+    }
+
+    addAudit(input.userId, 'billing.manage_session_created', 'system', {
+        provider: 'freeblackmarket',
+        expiresAt: session.expiresAt,
+        returnUrlSent: input.returnUrl !== undefined,
+    });
+
+    return { url: session.url, expiresAt: session.expiresAt };
+}
+
+/**
  * W1b advisory: a renewal charge failed upstream on FBM (dunning). Recorded on
  * the member's audit timeline; access itself only lapses via the
  * `subscription.lapsed` / local grace machinery.

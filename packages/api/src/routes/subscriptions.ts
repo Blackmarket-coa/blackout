@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { z } from 'zod';
+import { isOriginAllowed, readCorsRuntimeConfig } from '../config/cors';
 import { requireUser } from '../middleware/require-user';
 import { readJsonBody } from '../middleware/validate';
 import {
@@ -8,13 +9,17 @@ import {
     CanopyBillingError,
     claimGift,
     createCheckoutSession,
+    createSubscriptionManageSession,
+    acceptManageReturnUrl,
     donateForward,
     forwardGift,
     getMyGifts,
     getSubscription,
     getSubscriptionAuditTimeline,
     listAvailableGifts,
+    isManageSessionEnabled,
     listCanopyProducts,
+    ManageSessionError,
     syncRefund,
 } from '../services/subscriptions';
 import { log } from '../telemetry/logger';
@@ -25,7 +30,10 @@ import { log } from '../telemetry/logger';
 // `applySubscriptionWebhookEvent`). The former `/portal`, `/webhooks/lago`
 // and `/webhooks/stripe` endpoints are gone with it; plan/state changes are
 // managed locally + via FBM, and `getSubscriptionAuditTimeline` keeps the
-// ops-facing trail. See docs/contracts/fbm-billing-consumer.md.
+// ops-facing trail. There is still no Blackout-hosted billing portal:
+// `/manage-session` below only mints a short-lived link to FBM's own hosted
+// manage page, where renewal and cancellation happen. See
+// docs/contracts/fbm-billing-consumer.md.
 
 const subscriptions = new Hono();
 
@@ -35,6 +43,24 @@ const checkoutSchema = z.object({
     cancelUrl: z.string().optional(),
     embed: z.boolean().optional(),
 });
+
+const manageSessionSchema = z.object({
+    returnUrl: z.string().max(2048).optional(),
+});
+
+function returnOriginAllowed(origin: string): boolean {
+    try {
+        const config = readCorsRuntimeConfig();
+        // A wildcard CORS config (allowed outside production) is not an
+        // allowlist, so it forwards no return origin at all rather than all
+        // of them.
+        if (config.allowAny) return false;
+        return isOriginAllowed(origin, config);
+    } catch {
+        // An unreadable CORS config allows nothing.
+        return false;
+    }
+}
 
 const adminUserSchema = z.object({
     userId: z.string().min(1),
@@ -96,6 +122,69 @@ subscriptions.post('/checkout', async (c) => {
             error: error instanceof Error ? error.message : String(error),
         });
         return c.json({ code: 'checkout_failed', message: 'Checkout could not be started' }, 502);
+    }
+});
+
+// Mint a link to FBM's hosted subscription management page (manage-session
+// contract, 2026-10-06). The member turns off automatic renewal or cancels
+// there; the result reaches Blackout through FBM's existing webhooks, not
+// through this route. The response body is a bearer capability for the
+// member's billing: it is never logged or audited, and it is marked
+// uncacheable.
+subscriptions.post('/manage-session', async (c) => {
+    const user = requireUser(c);
+    if (user instanceof Response) return user;
+    if (!isManageSessionEnabled()) {
+        return c.json(
+            {
+                code: 'billing_unavailable',
+                message: 'Billing management is not available in this environment yet',
+            },
+            503
+        );
+    }
+    const parsed = await readJsonBody(c, manageSessionSchema);
+    if (parsed instanceof Response) return parsed;
+
+    try {
+        const session = await createSubscriptionManageSession({
+            // From the verified token only. A `userId` in the body is not
+            // part of the schema and is stripped by the parse above.
+            userId: user.sub,
+            returnUrl: acceptManageReturnUrl(parsed.returnUrl, returnOriginAllowed),
+        });
+        c.header('cache-control', 'no-store');
+        return c.json({ url: session.url, expiresAt: session.expiresAt }, 201);
+    } catch (error) {
+        const code = error instanceof ManageSessionError ? error.code : 'manage_session_failed';
+        // Code only: never the URL, and not the provider's error text.
+        log.warn('subscription_manage_session_failed', { code });
+        if (code === 'billing_unavailable') {
+            return c.json(
+                {
+                    code: 'billing_unavailable',
+                    message: 'Billing management is not available in this environment yet',
+                },
+                503
+            );
+        }
+        if (code === 'identity_ambiguous') {
+            return c.json(
+                {
+                    code: 'billing_identity_ambiguous',
+                    message:
+                        'More than one Free Black Market billing account matches this account. Contact support.',
+                },
+                409
+            );
+        }
+        return c.json(
+            {
+                code: 'manage_session_failed',
+                message: 'Free Black Market did not return a management link',
+            },
+            502
+        );
     }
 });
 

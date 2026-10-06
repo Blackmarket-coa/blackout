@@ -14,8 +14,13 @@ vi.mock('../../../../src/app/features/settings/AccessibilitySettings', () => ({ 
 vi.mock('../../../../src/app/features/settings/KeybindsSettings', () => ({ default: () => <div>Keybinds view</div> }));
 vi.mock('../../../../src/app/features/settings/DeveloperSettings', () => ({ default: () => <div>Developer view</div> }));
 vi.mock('../../../../src/app/features/settings/AboutSettings', () => ({ default: () => <div>About view</div> }));
+vi.mock('../../../../src/app/features/settings/subscriptions/SubscriptionsSettings', () => ({
+    default: () => <div>Subscriptions view</div>,
+}));
 
 import { SettingsPage } from '../../../../src/app/features/settings';
+import { capabilityContextAtom } from '../../../../src/app/core/features/capabilityContext';
+import { runtimeFeatureFlags } from '../../../../src/app/core/features/featureFlags';
 
 const setViewportWidth = (width: number) => {
     Object.defineProperty(window, 'innerWidth', {
@@ -85,6 +90,69 @@ describe('SettingsPage surfaces', () => {
         const pageSection = container.querySelector('section');
         expect(pageSection).toBeTruthy();
         expect((pageSection as HTMLElement).style.gridTemplateColumns).toBe('1fr');
+
+        root.unmount();
+    });
+
+    const navLabels = (container: HTMLElement): string[] =>
+        Array.from(container.querySelectorAll('nav button strong')).map(
+            (el) => el.textContent ?? '',
+        );
+
+    it('hides the Subscriptions section while accountSubscriptions is off (the default)', async () => {
+        setViewportWidth(1280);
+        expect(runtimeFeatureFlags.accountSubscriptions).toBe(false);
+        const container = document.createElement('div');
+        document.body.appendChild(container);
+        const root = ReactDOM.createRoot(container);
+
+        await act(async () => {
+            root.render(
+                <Provider store={createStore()}>
+                    <SettingsPage />
+                </Provider>,
+            );
+            await Promise.resolve();
+        });
+
+        expect(navLabels(container)).not.toContain('Subscriptions');
+        root.unmount();
+    });
+
+    it('lists Subscriptions right after Account when accountSubscriptions is on', async () => {
+        setViewportWidth(1280);
+        const store = createStore();
+        store.set(capabilityContextAtom, {
+            capabilities: [],
+            flags: { ...runtimeFeatureFlags, accountSubscriptions: true },
+        });
+        const container = document.createElement('div');
+        document.body.appendChild(container);
+        const root = ReactDOM.createRoot(container);
+
+        await act(async () => {
+            root.render(
+                <Provider store={store}>
+                    <SettingsPage />
+                </Provider>,
+            );
+            await Promise.resolve();
+        });
+
+        const labels = navLabels(container);
+        expect(labels.indexOf('Subscriptions')).toBe(labels.indexOf('Account') + 1);
+
+        const navButton = Array.from(container.querySelectorAll('button')).find((button) =>
+            button.textContent?.includes('Subscriptions'),
+        );
+        await act(async () => {
+            navButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+            await Promise.resolve();
+        });
+        await act(async () => {
+            await new Promise((resolve) => setTimeout(resolve, 0));
+        });
+        expect(container.textContent).toContain('Subscriptions view');
 
         root.unmount();
     });

@@ -14,9 +14,10 @@
                         "ephemeral_stego_lifecycle",
                         "governance_entitlements",
                         "federation_boost_policy",
-                        "townhall_sfu"
+                        "townhall_sfu",
+                        "account_subscriptions_manage"
                     ],
-                    "total": 5
+                    "total": 6
                 },
                 {
                     "id": "discord_like",
@@ -53,7 +54,7 @@
                     "total": 6
                 }
             ],
-            "globalTotal": 22
+            "globalTotal": 23
         }
     ],
     "features": [
@@ -828,6 +829,45 @@
                 "docs/features/data-export.md"
             ],
             "lastVerifiedAt": "2026-08-10",
+            "verifiedBy": "blackout-coa"
+        },
+        {
+            "id": "account_subscriptions_manage",
+            "name": "Account subscriptions and FBM-hosted billing management",
+            "category": "novel",
+            "status": "partial",
+            "presetKey": "features.account.subscriptions",
+            "uiEntry": "settings_toggle:feature-toggle-account-subscriptions-manage",
+            "owner": "billing-eng",
+            "testCoverage": "unit+integration",
+            "notes": "Settings -> Subscriptions (client flag accountSubscriptions, default off) shows the member's Canopy plan and creator subscriptions read-only and a 'Manage billing on Free Black Market' button. The button calls POST /v1/subscriptions/manage-session, which takes the user id from the verified token only, forwards a returnUrl only when its origin is in an explicit CORS_ALLOWED_ORIGINS list (a '*' wildcard forwards none) and then only as origin + '/', so the open space, room and event never reach FBM (blackout://checkout/return is forwarded as is), and mints a link to FBM's manage page through the FBM provider (same API key as the checkout mint). The provider returns the link only on the FREEBLACKMARKET_BASE_URL origin and FBM's exact manage-page path. The client opens it with openExternalCheckoutUrl in a new tab or the system browser, never in an iframe, after pinning its origin to VITE_FBM_MANAGE_ORIGINS (default https://api.freeblackmarket.com) and its path to FBM's manage page with no query or fragment. Not verified on the Tauri desktop shell, where window.open has no opener plugin behind it; the copy says only that the page is hosted by FBM. The button is hidden where getExternalPurchasePolicy blocks purchase links (iOS outside the US). The link is a short-lived bearer capability: the API never logs or audits it and marks the response no-store. Renewal and cancellation happen on FBM; Blackout learns of them through FBM's existing webhooks, so the screen can lag. Partial until FBM ships its manage-session endpoint and an operator sets FBM_MANAGE_SESSION_ENABLED.",
+            "sourcePointers": [
+                "docs/contracts/fbm-billing-consumer.md",
+                "packages/api/src/routes/subscriptions.ts",
+                "packages/api/src/services/subscriptions.ts",
+                "packages/api/src/integrations/marketplace/freeblackmarket.ts",
+                "packages/api/src/integrations/marketplace/freeblackmarketStub.ts",
+                "packages/core/src/marketplace/provider.ts",
+                "apps/blackout-client/src/app/features/settings/subscriptions/SubscriptionsSettings.tsx",
+                "apps/blackout-client/src/app/features/settings/subscriptions/manageBillingLink.ts"
+            ],
+            "presetPolicy": {
+                "baseline_matrix": false,
+                "community_plus": false,
+                "blackout_full": false
+            },
+            "uiTestRefs": [
+                "apps/blackout-client/tests/unit/features/settings/subscriptionsSettings.test.tsx::feature-toggle-account-subscriptions-manage"
+            ],
+            "fallbackBehavior": "Client flag off: the Subscriptions section is not listed (except in a beta build with VITE_BLACKOUT_BETA_UNLOCK_ALL, which turns every client flag on and wins over BLACKOUT_ACCOUNT_SUBSCRIPTIONS=false; there the server switch alone keeps the endpoint at 503). Server switch FBM_MANAGE_SESSION_ENABLED unset or off, provider disabled or unable to mint, or FBM answering 404 { code: feature_disabled }: 503 billing_unavailable, and the screen says billing management is not available yet. FBM 409 identity_ambiguous: 409 billing_identity_ambiguous with a contact-support message; no account is picked. Any other 404 (a wrong FBM prefix or base URL) and other FBM failures: 502 manage_session_failed. A link off the pinned origin or path is refused and not opened. Where purchase links are blocked the button is hidden and the plan stays visible.",
+            "evidenceType": "code",
+            "evidencePaths": [
+                "packages/api/test/subscriptions-manage-session.integration.test.ts",
+                "packages/api/test/freeblackmarket-provider-paths.test.ts",
+                "apps/blackout-client/tests/unit/features/settings/subscriptionsSettings.test.tsx",
+                "apps/blackout-client/tests/unit/features/settings/SettingsPage.test.tsx"
+            ],
+            "lastVerifiedAt": "2026-10-06",
             "verifiedBy": "blackout-coa"
         }
     ]

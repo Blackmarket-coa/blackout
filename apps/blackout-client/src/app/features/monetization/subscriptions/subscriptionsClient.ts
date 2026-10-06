@@ -47,6 +47,30 @@ export async function fetchMySubscription(): Promise<SubscriptionSummary> {
     return response.subscription;
 }
 
+/** A short-lived link to FBM's hosted subscription management page. */
+export interface ManageBillingSession {
+    url: string;
+    expiresAt: string;
+}
+
+/**
+ * Ask the Blackout API to mint a manage-billing link on FBM. One attempt
+ * only: each mint revokes the member's earlier links, and a 503 here means
+ * "switched off", which a retry cannot change. The returned URL is a bearer
+ * capability for the member's billing: do not log or persist it.
+ */
+export async function createManageBillingSession(
+    returnUrl?: string
+): Promise<ManageBillingSession> {
+    const response = await createAuthorizedApiClient(readBlackoutApiToken())<ManageBillingSession>({
+        method: 'POST',
+        path: `${SUBS_BASE}/manage-session`,
+        body: returnUrl ? { returnUrl } : {},
+        retry: { attempts: 1 },
+    });
+    return { url: response.url, expiresAt: response.expiresAt };
+}
+
 export async function fetchAvailableGifts(limit = 25): Promise<GiftSummary[]> {
     const response = await getJson<{ gifts: GiftSummary[] }>(`${SUBS_BASE}/forward/available?limit=${limit}`);
     return response.gifts;

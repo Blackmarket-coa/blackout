@@ -190,3 +190,157 @@ test('startCreatorOnboarding hits the commerce onboarding path', async () => {
         reset();
     }
 });
+
+// Manage-session contract (2026-10-06): same credential and mount as the
+// checkout mint, strict snake_case body, `{ url, expires_at }` back.
+test('createSubscriptionManageSession POSTs the commerce manage-sessions path', async () => {
+    let headers: Record<string, string> = {};
+    globalThis.fetch = (async (input: unknown, init?: RequestInit) => {
+        captured = {
+            url: String(input),
+            method: (init?.method ?? 'GET').toUpperCase(),
+            body: typeof init?.body === 'string' ? init.body : null,
+        };
+        headers = (init?.headers ?? {}) as Record<string, string>;
+        return new Response(
+            JSON.stringify({
+                url: `${BASE}${PREFIX}/subscriptions/manage-sessions/tok_abc/page`,
+                expires_at: '2026-10-06T12:15:00.000Z',
+            }),
+            { status: 201, headers: { 'content-type': 'application/json' } }
+        );
+    }) as typeof fetch;
+    try {
+        const session = await provider.createSubscriptionManageSession!({
+            userId: 'u-manage-1',
+            returnUrl: 'https://app.blackout.test/settings',
+        });
+        const u = new URL(captured!.url);
+        assert.equal(u.origin, BASE);
+        assert.equal(u.pathname, `${PREFIX}/subscriptions/manage-sessions`);
+        assert.equal(captured!.method, 'POST');
+        assert.equal(headers.authorization, 'Bearer fbm_test_key');
+        assert.equal('idempotency-key' in headers, false);
+        assert.deepEqual(JSON.parse(captured!.body!), {
+            blackout_user_id: 'u-manage-1',
+            return_url: 'https://app.blackout.test/settings',
+        });
+        assert.deepEqual(session, {
+            url: `${BASE}${PREFIX}/subscriptions/manage-sessions/tok_abc/page`,
+            expiresAt: '2026-10-06T12:15:00.000Z',
+        });
+    } finally {
+        reset();
+    }
+});
+
+test('createSubscriptionManageSession leaves return_url out when there is none', async () => {
+    mockFetchReturning({
+        url: `${BASE}${PREFIX}/subscriptions/manage-sessions/tok_def/page`,
+        expires_at: '2026-10-06T12:15:00.000Z',
+    });
+    try {
+        await provider.createSubscriptionManageSession!({ userId: 'u-manage-2' });
+        assert.deepEqual(JSON.parse(captured!.body!), { blackout_user_id: 'u-manage-2' });
+    } finally {
+        reset();
+    }
+});
+
+test('createSubscriptionManageSession refuses a link off the FBM origin or page path', async () => {
+    const page = `${PREFIX}/subscriptions/manage-sessions/tok_abc/page`;
+    for (const url of [
+        'http://evil.example/page',
+        'javascript:alert(1)',
+        'not a url',
+        // https, but not FREEBLACKMARKET_BASE_URL.
+        `https://evil.example${page}`,
+        // Right origin, wrong path.
+        `${BASE}/somewhere/else`,
+        `${BASE}${PREFIX}/subscriptions/manage-sessions//page`,
+        `${BASE}${PREFIX}/subscriptions/manage-sessions/a/b/page`,
+        // Right page, but with a query or fragment riding along.
+        `${BASE}${page}?next=https://evil.example`,
+        `${BASE}${page}#x`,
+        `https://u:p@fbm.example.test${page}`,
+    ]) {
+        mockFetchReturning({ url, expires_at: '2026-10-06T12:15:00.000Z' });
+        try {
+            await assert.rejects(
+                provider.createSubscriptionManageSession!({ userId: 'u-manage-3' }),
+                (error: Error) => {
+                    // The refusal must not echo the link it refused.
+                    assert.equal(error.message.includes(url), false);
+                    return true;
+                }
+            );
+        } finally {
+            reset();
+        }
+    }
+});
+
+test('createSubscriptionManageSession carries FBM body codes on failure', async () => {
+    globalThis.fetch = (async () =>
+        new Response(JSON.stringify({ code: 'feature_disabled' }), {
+            status: 404,
+            headers: { 'content-type': 'application/json' },
+        })) as typeof fetch;
+    try {
+        await assert.rejects(
+            provider.createSubscriptionManageSession!({ userId: 'u-manage-6' }),
+            (error: Error & { status?: number; bodyCode?: string }) =>
+                error.status === 404 && error.bodyCode === 'feature_disabled'
+        );
+    } finally {
+        reset();
+    }
+    globalThis.fetch = (async () =>
+        new Response('<html>Not Found</html>', { status: 404 })) as typeof fetch;
+    try {
+        await assert.rejects(
+            provider.createSubscriptionManageSession!({ userId: 'u-manage-7' }),
+            (error: Error & { status?: number; bodyCode?: string }) =>
+                error.status === 404 && error.bodyCode === undefined
+        );
+    } finally {
+        reset();
+    }
+});
+
+test('createSubscriptionManageSession carries FBM status codes on failure', async () => {
+    globalThis.fetch = (async () =>
+        new Response(JSON.stringify({ code: 'identity_ambiguous' }), {
+            status: 409,
+            headers: { 'content-type': 'application/json' },
+        })) as typeof fetch;
+    try {
+        await assert.rejects(
+            provider.createSubscriptionManageSession!({ userId: 'u-manage-4' }),
+            (error: Error & { status?: number }) => error.status === 409
+        );
+    } finally {
+        reset();
+    }
+});
+
+test('createSubscriptionManageSession refuses to egress without an API key', async () => {
+    const savedKey = process.env.FREEBLACKMARKET_API_KEY;
+    process.env.FREEBLACKMARKET_API_KEY = '';
+    const unconfigured = createFreeblackmarketProvider();
+    process.env.FREEBLACKMARKET_API_KEY = savedKey;
+    let called = false;
+    globalThis.fetch = (async () => {
+        called = true;
+        return new Response('{}');
+    }) as typeof fetch;
+    try {
+        await assert.rejects(
+            unconfigured.createSubscriptionManageSession!({ userId: 'u-manage-5' }),
+            (error: Error & { code?: string }) => error.code === 'provider_not_configured'
+        );
+        assert.equal(called, false);
+    } finally {
+        reset();
+    }
+});

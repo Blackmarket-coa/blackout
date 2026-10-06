@@ -5,6 +5,7 @@ import { trackSettingsSaveFailure } from './settingsTelemetry';
 
 export type SettingsSectionId =
     | 'account'
+    | 'subscriptions'
     | 'appearance'
     | 'notifications'
     | 'privacy'
