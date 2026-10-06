@@ -6,7 +6,7 @@ import React, {
     useEffect,
     useState,
 } from 'react';
-import { useAtom } from 'jotai';
+import { useAtom, useAtomValue } from 'jotai';
 import {
     designBreakpoints,
     designShellLayout,
@@ -15,13 +15,18 @@ import {
 import { settingsPageAtom, type SettingsSectionId } from './settingsAtoms';
 import { trackSettingsInteraction } from './settingsTelemetry';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
+import { capabilityContextAtom } from '../../core/features/capabilityContext';
+import type { FeatureFlags } from '../../core/features/featureFlags';
 
 const AccountSettings = lazy(() => import('./AccountSettings'));
+const SubscriptionsSettings = lazy(() => import('./subscriptions/SubscriptionsSettings'));
 const AppearanceSettings = lazy(() => import('./AppearanceSettings'));
 const NotificationSettings = lazy(() => import('./NotificationSettings'));
 const PrivacySettings = lazy(() => import('./PrivacySettings'));
 const PrivacyToolsSettings = lazy(() => import('../privacy-tools/PrivacyToolsSettings'));
-const DataTransparencySettings = lazy(() => import('../data-transparency/DataTransparencySettings'));
+const DataTransparencySettings = lazy(
+    () => import('../data-transparency/DataTransparencySettings')
+);
 const DataDeletionPanel = lazy(() => import('../data-deletion/DataDeletionPanel'));
 const BurnerIdentitiesPanel = lazy(() => import('../burner-identity/BurnerIdentitiesPanel'));
 const VoiceVideoSettings = lazy(() => import('./VoiceVideoSettings'));
@@ -32,7 +37,7 @@ const AboutSettings = lazy(() => import('./AboutSettings'));
 const BugReportSettings = lazy(() => import('./BugReportSettings'));
 const PanicSettings = lazy(() => import('../panic/PanicSettings'));
 const CharacterSheetSection = lazy(() =>
-    import('../character-sheet/CharacterSheet').then((m) => ({ default: m.CharacterSheet })),
+    import('../character-sheet/CharacterSheet').then((m) => ({ default: m.CharacterSheet }))
 );
 
 interface SettingsSection {
@@ -40,6 +45,8 @@ interface SettingsSection {
     label: string;
     summary: string;
     component: LazyExoticComponent<ComponentType>;
+    /** When set, the section is listed only while this feature flag is on. */
+    flag?: keyof FeatureFlags;
 }
 
 interface SettingsGroup {
@@ -52,7 +59,7 @@ const groups: SettingsGroup[] = [
     {
         id: 'identity',
         label: 'Account & identity',
-        sectionIds: ['account', 'identities', 'character-sheet', 'about'],
+        sectionIds: ['account', 'subscriptions', 'identities', 'character-sheet', 'about'],
     },
     {
         id: 'look-feel',
@@ -84,6 +91,13 @@ const sections: SettingsSection[] = [
         label: 'Account',
         summary: 'Profile, credentials, and active sessions',
         component: AccountSettings,
+    },
+    {
+        id: 'subscriptions',
+        label: 'Subscriptions',
+        summary: 'Plans and creator subscriptions billed through Free Black Market',
+        component: SubscriptionsSettings,
+        flag: 'accountSubscriptions',
     },
     {
         id: 'appearance',
@@ -190,8 +204,10 @@ export const isSettingsMobileViewport = (width: number): boolean =>
 
 export const SettingsPage = () => {
     const [activeSection, setActiveSection] = useAtom(settingsPageAtom);
+    const { flags } = useAtomValue(capabilityContextAtom);
+    const visibleSections = sections.filter((section) => !section.flag || flags[section.flag]);
     const [isMobile, setIsMobile] = useState(
-        typeof window !== 'undefined' ? isSettingsMobileViewport(window.innerWidth) : false,
+        typeof window !== 'undefined' ? isSettingsMobileViewport(window.innerWidth) : false
     );
 
     useEffect(() => {
@@ -200,7 +216,12 @@ export const SettingsPage = () => {
         return () => window.removeEventListener('resize', onResize);
     }, []);
 
-    const active = sections.find((section) => section.id === activeSection) ?? sections[1];
+    // An unknown persisted id, or one for a section whose flag is now off,
+    // falls back to Appearance (the previous `sections[1]` default).
+    const active =
+        visibleSections.find((section) => section.id === activeSection) ??
+        visibleSections.find((section) => section.id === 'appearance') ??
+        visibleSections[0];
     const ActiveSection = active.component;
 
     return (
@@ -228,7 +249,7 @@ export const SettingsPage = () => {
                 <nav style={{ display: 'grid', gap: settingsLayoutMetrics.sectionGapPx }}>
                     {groups.map((group) => {
                         const groupSections = group.sectionIds
-                            .map((id) => sections.find((s) => s.id === id))
+                            .map((id) => visibleSections.find((s) => s.id === id))
                             .filter((s): s is SettingsSection => Boolean(s));
                         if (groupSections.length === 0) return null;
                         return (
@@ -260,7 +281,7 @@ export const SettingsPage = () => {
                                             trackSettingsInteraction(
                                                 'settings',
                                                 'navigate-section',
-                                                section.id,
+                                                section.id
                                             );
                                         }}
                                         style={{

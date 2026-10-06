@@ -2,7 +2,7 @@
 
 This document is the authoritative top-level threat model for Blackout. It defines the adversary classes we defend against, the trust boundaries in the system, the assets we protect, and the residual risks we have explicitly accepted. Narrow per-feature threat models live alongside their features and are linked from §6.
 
-Last updated: 2026-09-20 (coalition cross-posting: adversary A12, credential / inbound-reply / attribution assets and posture rows, residual risks R8–R9, release criterion 8). Previous: 2026-05-03 (deferral landings: ML-KEM-768 wired, WebAuthn verification wired, KT log persistence + Ed25519 witness wired)
+Last updated: 2026-10-06 (FBM-hosted subscription management: adversary A13, manage-link asset, §6b). Previous: 2026-09-20 (coalition cross-posting: adversary A12, credential / inbound-reply / attribution assets and posture rows, residual risks R8–R9, release criterion 8). Earlier: 2026-05-03 (deferral landings: ML-KEM-768 wired, WebAuthn verification wired, KT log persistence + Ed25519 witness wired)
 
 ---
 
@@ -45,6 +45,7 @@ Blackout is a federated, end-to-end-encrypted communication platform built on th
 | A10 | **Physical adversary with device seizure**          | Cold-boot attacks, forensic imaging                                                                                                                                                                                                    | Out of scope (delegated to OS keystore / FDE)                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | A11 | **Malicious client build**                          | Distributes a tampered client                                                                                                                                                                                                          | Yes — addressed by signed releases + reproducible builds                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | A12 | **Hostile external replier / third-party platform** | Anyone who can reply on Discord, Bluesky or Mastodon to a post the coalition made: can flood the receiver, post abusive or doxxing text, replay or forge origin ids. The platform itself can change terms, rate-limit or revoke access | Yes — reply text lands `pending` and is invisible until coalition moderation (`ingestExternalActivity` in `packages/api/src/services/coalitionSync.ts`); at most 500 replies per post, further arrivals refused; origin-id dedupe; a reply is refused unless it arrived on the platform the post went out on; purged on the retention windows; a platform moderator can remove any reply via the takedown route; platform terms and rate limits are recorded per platform in `COALITION_PLATFORM_POLICY` |
+| A13 | **Billing provider (Free Black Market, FBM)**       | Bills plans and creator subscriptions. Sees the Blackout user id and the member's billing identity; its card processor sees the card. A manage link it mints is a short-lived bearer capability over that member's FBM subscriptions   | Yes — trusted for billing only. The manage flow sends FBM no message content, keys or room data (a return link is cut to the app origin). The API mints manage links with the user id from the verified token only (`POST /v1/subscriptions/manage-session`), never logs or audits them, and marks them `no-store`; the API and the client each accept one only on the pinned FBM origin and manage-page path, and the client never frames it. See §6b                                                   |
 
 ## 3. Trust boundaries
 
@@ -71,6 +72,7 @@ Blackout is a federated, end-to-end-encrypted communication platform built on th
 -   Coalition platform credentials (shared and member connection secrets).
 -   Inbound external replies (third-party text held for moderation).
 -   Campaign attribution and engagement counters.
+-   FBM manage-billing links (short-lived bearer capabilities over a member's FBM subscriptions).
 
 ## 5. Per-asset confidentiality / integrity / availability posture
 
@@ -145,6 +147,76 @@ manifest is shown to the user before install and capabilities can be
 revoked from Settings → Plugins. Production releases must pin the
 freeblackmarket publishing keyset at build time (no
 `BLACKOUT_PLUGIN_DEV_HMAC` shortcut).
+
+### 6b. FBM-hosted subscription management (manage session)
+
+**Asset**: a link to Free Black Market's hosted subscription management page
+(Settings -> Subscriptions -> "Manage billing on Free Black Market"). The
+token in its path lets whoever holds it turn off automatic renewal or cancel
+the member's FBM subscriptions until it expires. Contract:
+`docs/contracts/fbm-billing-consumer.md` (§"Subscription management").
+
+FBM-side properties are **contract requirements, not verified behaviour**:
+the manage-session contract requires FBM to expire the token after 15
+minutes, revoke earlier tokens on a new mint, store only the token's sha256,
+and serve the page with `frame-ancestors 'none'`. FBM is building the endpoint
+and page in parallel; none of this has been checked against a live FBM yet.
+Blackout's own mitigations below do not depend on them.
+
+**What FBM learns**: the Blackout user id (sent as `blackout_user_id`) and,
+from the member's purchases, their billing identity. The card processor FBM
+uses sees the card. None of this is private from FBM, and the screen does not
+say it is. FBM receives no message content, keys or room data from this flow:
+the only other thing sent is an optional return link, which the client builds
+from the app origin alone and the API cuts down to origin plus `/` whatever it
+is sent, so the open space, room or event id never reaches FBM.
+
+**Threats and mitigations**:
+
+-   **Minting a link for someone else**: the user id comes only from the
+    verified Blackout token (`user.sub`); a body `userId` is stripped. FBM
+    answers `409 identity_ambiguous` rather than picking one when more than one
+    FBM customer carries the id, and Blackout passes that through as a refusal.
+-   **Link leakage**: the API returns the link and nothing else touches it — no
+    log line, no audit detail (the audit row has the expiry only), and
+    `cache-control: no-store`. The client opens it with `noopener,noreferrer`
+    or the system browser, so no `Referer` or opener handle carries it.
+    Residual: the link is in the browser history of the tab FBM opens in, and
+    on the web the screen keeps a fallback anchor to it until the page is left.
+    The short expiry bounds both.
+-   **Open redirect / phishing through a tampered API response**: the client
+    opens the link only when its origin is on the build-time pin
+    (`VITE_FBM_MANAGE_ORIGINS`, default `https://api.freeblackmarket.com`) and
+    its path is FBM's manage page with no query or fragment; anything else is
+    refused. The provider applies the same check first: it returns a link only
+    when it is on the `FREEBLACKMARKET_BASE_URL` origin and is exactly FBM's
+    manage-page path, with no credentials, query or fragment.
+-   **Clickjacking / framing**: Blackout never puts the page in an iframe; it
+    opens it through the external-purchase opener (the Capacitor system
+    browser on Android and iOS, `window.open` with `noopener,noreferrer`
+    elsewhere). Per the contract FBM must also serve it with
+    `frame-ancestors 'none'` (not yet verified). Unverified: on the Tauri
+    desktop shell, `window.open` has no opener plugin or new-window handler
+    behind it, so the button may open nothing there (the screen then offers
+    the link itself) or open in a shell webview; the copy therefore says only
+    that the page is hosted by FBM, not that it opens outside Blackout.
+-   **Open return link**: a `returnUrl` is forwarded only when its origin is
+    in an explicit `CORS_ALLOWED_ORIGINS` list (a `*` wildcard, which is
+    refused in production anyway, forwards none) or it is the native
+    `blackout://checkout/return` link, and FBM applies its own allowlist on
+    top. A forwarded web link is reduced to its origin plus `/`.
+-   **Availability**: fail-closed. The server switch
+    `FBM_MANAGE_SESSION_ENABLED` defaults off (503), FBM's own flag answers
+    `404 feature_disabled` (mapped to 503; any other 404 is a misconfiguration
+    and answers 502), and the client section is behind `accountSubscriptions`
+    (default off, except that a beta build with `VITE_BLACKOUT_BETA_UNLOCK_ALL`
+    turns every client flag on, this one included; the server switch still
+    answers 503 there). Where purchase links are blocked (iOS outside the US)
+    the button is hidden.
+
+**Residual risk**: changes made on FBM reach Blackout by webhook, so the
+Blackout screen can lag; the UI says so instead of claiming changes are
+immediate.
 
 ## 7. Accepted residual risks
 

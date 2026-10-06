@@ -13,11 +13,12 @@ holds the steps that land in **this** repository. Anything marked
 -   It is a **minimal sandbox** showing only Canopies (communities and channels),
     dens and DMs. No Town Square, Coliseum, Market or feeds. A link to anything
     else opens in a normal Blackout tab.
--   The panel gets **unread indicators and push notifications** (operator,
-    2026-10-06). Whether each is on by default or opt-in is still to confirm.
-    A push travels through Apple's or Google's push service, which learns when a
-    message arrived even when it cannot read it; the panel must not describe
-    push as private, and the content of a push must not include message text.
+-   The panel gets **unread indicators and push notifications**, and **both are
+    on by default** (operator, 2026-10-06). A push travels through Apple's or
+    Google's push service, which learns when a message arrived even when it
+    cannot read it; the panel must not describe push as private, and the
+    content of a push must not include message text. Being on by default does
+    not relax either constraint.
 -   A Blackout account can **accept a Black Mask registration**, or **link to a
     Black Mask account**, on request. The user picks how long the link lasts: a
     timeframe or indefinitely, nothing preselected.
@@ -53,7 +54,9 @@ holds the steps that land in **this** repository. Anything marked
 -   Links to other Blackout content open in a normal Blackout tab (the embed
     never navigates itself). External links are handed to the host so Black
     Mask's phishing check runs first.
--   Unread indicators (decided 2026-10-06; default-on or opt-in to confirm).
+-   Unread indicators and push notifications, both on by default (decided
+    2026-10-06). A push must not carry message text, and the panel must not
+    call push private.
 
 ### 2. Framing policy
 
@@ -112,7 +115,8 @@ answer. Needs counsel; surfaced, not resolved. Mirrored in the FBM repo's
 ## Open decisions touching this repo
 
 -   [x] Unread indicators or push notifications in the chat panel. **Add
-        both** (2026-10-06); default-on or opt-in to confirm.
+        both, on by default** (2026-10-06). A push must never carry message
+        text, and the panel must never call push private.
 -   [x] Confirm the 3% fee on Blackout creator transactions (a revenue-model
         assumption, not a Blackout decision). **Confirmed** (2026-10-05).
 -   [x] Dead drops or the dead man's switch first, and the audience each is built
