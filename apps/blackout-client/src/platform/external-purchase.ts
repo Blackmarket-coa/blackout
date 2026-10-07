@@ -141,7 +141,21 @@ export async function getExternalPurchasePolicy(): Promise<ExternalPurchasePolic
     return resolveExternalPurchasePolicy({ platform, region });
 }
 
-export type ExternalOpenOutcome = 'capacitor-browser' | 'window-open' | 'failed';
+export type ExternalOpenOutcome = 'capacitor-browser' | 'system-browser' | 'window-open' | 'failed';
+
+type TauriGlobal = {
+    core?: { invoke?: (cmd: string, args?: Record<string, unknown>) => Promise<unknown> };
+};
+
+/**
+ * The Tauri desktop shell's global API (`app.withGlobalTauri` is on in
+ * blackout-desktop/src-tauri/tauri.conf.json), or undefined in a browser
+ * and in the Capacitor shells.
+ */
+const getTauri = (): TauriGlobal | undefined => {
+    if (typeof window === 'undefined') return undefined;
+    return (window as unknown as { __TAURI__?: TauriGlobal }).__TAURI__;
+};
 
 const isOpenableCheckoutUrl = (url: string): boolean => {
     try {
@@ -159,10 +173,13 @@ const isOpenableCheckoutUrl = (url: string): boolean => {
 
 /**
  * Open an external checkout URL with the most appropriate transport:
- * `@capacitor/browser` inside the shells (SFSafariViewController /
+ * `@capacitor/browser` inside the mobile shells (SFSafariViewController /
  * Chrome Custom Tabs, which keep their own persistent cookie jar so the
- * web checkout session and cart survive repeat opens), `window.open`
- * everywhere else.
+ * web checkout session and cart survive repeat opens); the system browser
+ * via `tauri-plugin-opener` inside the desktop shell, whose webview has no
+ * new-window handler and so cannot be relied on to act on `window.open`
+ * (the capability scopes the plugin to https URLs); `window.open`
+ * everywhere else, and as the fallback when a native path fails.
  */
 export async function openExternalCheckoutUrl(url: string): Promise<ExternalOpenOutcome> {
     if (!isOpenableCheckoutUrl(url)) return 'failed';
@@ -176,6 +193,16 @@ export async function openExternalCheckoutUrl(url: string): Promise<ExternalOpen
             } catch {
                 // Plugin failed — fall through to window.open below.
             }
+        }
+    }
+
+    const tauriInvoke = getTauri()?.core?.invoke;
+    if (tauriInvoke && new URL(url).protocol === 'https:') {
+        try {
+            await tauriInvoke('plugin:opener|open_url', { url });
+            return 'system-browser';
+        } catch {
+            // Plugin missing or refused (scope) — fall through to window.open.
         }
     }
 

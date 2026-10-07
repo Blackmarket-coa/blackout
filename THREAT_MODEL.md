@@ -193,13 +193,14 @@ is sent, so the open space, room or event id never reaches FBM.
     manage-page path, with no credentials, query or fragment.
 -   **Clickjacking / framing**: Blackout never puts the page in an iframe; it
     opens it through the external-purchase opener (the Capacitor system
-    browser on Android and iOS, `window.open` with `noopener,noreferrer`
-    elsewhere). Per the contract FBM must also serve it with
-    `frame-ancestors 'none'` (not yet verified). Unverified: on the Tauri
-    desktop shell, `window.open` has no opener plugin or new-window handler
-    behind it, so the button may open nothing there (the screen then offers
-    the link itself) or open in a shell webview; the copy therefore says only
-    that the page is hosted by FBM, not that it opens outside Blackout.
+    browser on Android and iOS, the system browser through
+    `tauri-plugin-opener` on the desktop shell — https only, by capability
+    scope — and `window.open` with `noopener,noreferrer` elsewhere). Per the
+    contract FBM must also serve it with `frame-ancestors 'none'` (not yet
+    verified). The desktop path is compile-checked but not yet exercised in a
+    running desktop build, and falls back to `window.open` if the plugin
+    refuses; the copy therefore still says only that the page is hosted by
+    FBM, not that it opens outside Blackout.
 -   **Open return link**: a `returnUrl` is forwarded only when its origin is
     in an explicit `CORS_ALLOWED_ORIGINS` list (a `*` wildcard, which is
     refused in production anyway, forwards none) or it is the native
