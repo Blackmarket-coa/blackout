@@ -48,25 +48,199 @@ holds the steps that land in **this** repository. Anything marked
 
 ### 1. Embed route
 
--   Add a client route that renders only Canopies, dens and DMs. Everything else
-    in the client is unreachable from that route: no Town Square, Coliseum,
-    Market, feeds or settings beyond what sign-in needs.
--   Links to other Blackout content open in a normal Blackout tab (the embed
-    never navigates itself). External links are handed to the host so Black
-    Mask's phishing check runs first.
--   Unread indicators and push notifications, both on by default (decided
-    2026-10-06). A push must not carry message text, and the panel must not
-    call push private.
+**Status 2026-10-09: built, not deployed** (B1). Push notifications are not part
+of this step.
+
+What the panel is. Everything lives under `/embed` (constants in
+`apps/blackout-client/src/app/pages/paths.ts`, code in
+`apps/blackout-client/src/app/features/black-mask-embed/`):
+
+| Path                                    | Shows                                                                                          |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `/embed`                                | Your canopies, dens that sit in no canopy, and direct messages, each with its unread indicator |
+| `/embed/canopies/:canopyId`             | That canopy's text dens and sub-canopies                                                       |
+| `/embed/canopies/:canopyId/dens/:denId` | One den: its timeline and composer, nothing else                                               |
+| `/embed/dens/:denId`                    | A den with no parent canopy                                                                    |
+| `/embed/dms/:roomId`                    | One direct message                                                                             |
+| `/embed/elsewhere?to=<path>`            | "That part of Blackout isn't shown in the chat panel", with an "Open in Blackout" button       |
+
+-   **Shown:** joined canopies (Matrix spaces), joined `text` and
+    `announcement` dens, joined DMs (`m.direct`). One rule decides this,
+    `classifyEmbedRoom` in `embedScope.ts`, and it is applied both to the lists
+    and again on each room page, since a panel URL can name any room id.
+-   **Not shown:** Town Square, Coliseum, Market, feeds, Explore, settings and
+    every other app surface (the panel has no route for them); voice, stage
+    and forum dens (listed on the canopy page under "Open in Blackout" with
+    their unread counts); rooms of any custom room type; invites; DM creation;
+    calls, the threads panel, member lists and room settings. Text only, per
+    precondition P4.
+-   **Unread indicators are on by default** (operator, 2026-10-06), with no
+    switch to turn them off in the panel. They read the same live unread map
+    as the full app's room list, so a canopy's count includes activity in its
+    voice and forum dens. They are counts this session already syncs from the
+    homeserver; nothing is sent to the host page.
+-   **Links never navigate the panel's frame.** A link to another den or DM
+    stays in the panel; a link to any other Blackout page opens a normal
+    Blackout tab; a link to another site opens a new tab. New tabs open with
+    `noopener,noreferrer` (checked in a real browser: no `window.opener`, empty
+    `document.referrer`). A navigation started by code rather than a click
+    lands on `/embed/elsewhere`, so the frame's URL stays under `/embed`.
+-   **External links are not checked.** Black Mask's phishing check (B6) is not
+    built, and the panel does not claim any link protection. An external link
+    opened from the panel is exactly as safe as the same link opened from
+    Blackout.
+-   **Signed out:** the app's existing sign-in renders inside the panel, with
+    two differences: the tabs do not rewrite the URL to `/login`, and single
+    sign-on is not offered (it redirects the whole frame to the identity
+    provider). The panel says so and offers to open Blackout in a tab instead.
+    Today's Blackout homeserver offers password sign-in only, so this changes
+    nothing for it. There is **no session-length choice** (B3 is not built):
+    the panel signs in exactly as the full app does.
+-   **How it mounts:** `main.tsx` decides "panel or full app" once, from the
+    path the page loaded on, and renders `EmbedApp` instead of the full app's
+    bootstrap: no AppShell, no main router, none of the app's hydrators. It is
+    imported statically on purpose: as a lazy chunk it made Rolldown split
+    `MessageComposer`/`RoomTimeline` into a chunk that imports the main chunk
+    back, and that production build crashed on boot for every page (caught by
+    loading the build in a browser; the chunk set is now identical to
+    `develop`'s, at +23 KB raw / +5 KB gzipped on the main bundle).
+-   **No feature-registry row.** `pnpm guard:feature-registry` checks
+    `features/*/manifest.ts` modules and the registry JSON; the panel is a
+    pre-router surface like the invite landing page, not a registry feature,
+    so it has no manifest and needs no row. The guard passes.
+-   **For the Black Mask side:** if the extension frames the panel with an
+    iframe `sandbox`, it needs `allow-scripts allow-same-origin allow-forms
+allow-popups allow-popups-to-escape-sandbox` for the panel to run and its
+    "Open in Blackout" tabs to open, and should not grant
+    `allow-top-navigation`. Not yet tried in a real extension.
+
+Verified: unit tests for the scoping rule, the link rule and the routes (with
+the timeline and composer stubbed), deliberately broken once each to confirm
+they fail; and a real Chromium loading the production build through the
+nginx image, signed out. **Not verified:** the signed-in panel against a real
+homeserver (none was reachable from the build sandbox). The timeline and
+composer are the same components the full app uses.
 
 ### 2. Framing policy
 
-`packages/api/src/middleware/security-headers.ts` sets `frame-ancestors
-'none'` and `frame-src 'none'` for every response today. The embed route needs
-a **per-route** `frame-ancestors` allow-list of Black Mask origins — the
-extension origin(s), the desktop app's origin and the mobile webview origins —
-while every other route keeps `'none'`. Keep COOP/CORP as they are unless the
-embed proves they block it. **Verify with a real response-header check** on
-the embed route and on a non-embed route, not by reading the file.
+**Status 2026-10-09: built for the web client's nginx image; off by default**
+(B2). Nothing has been set in any deployed environment.
+
+**What actually serves the web client's HTML.** The anchor this step started
+from, `packages/api/src/middleware/security-headers.ts`, is the Hono API's
+middleware. It sets `frame-ancestors 'none'`, `frame-src 'none'` and
+`X-Frame-Options: DENY` on API responses only. The API never serves the web
+client, so it is unchanged and keeps `'none'` everywhere.
+
+| Deployment                                                                                                                     | Serves the client HTML                                                                                                                                               | Framing headers before this change                                                                                                                                                                                                                                                      |
+| ------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `chat.theblackout.app` (live)                                                                                                  | Appears to be the `apps/blackout-client/Dockerfile` image (`docker-nginx.conf`) behind Cloudflare: `/healthz` answers `ok`, `/health/ready` falls through to the SPA | **None at all.** `curl -I https://chat.theblackout.app/` on 2026-10-09 returned no `X-Frame-Options` and no CSP, so any site could frame the full client. This change makes that image send `DENY` / `frame-ancestors 'none'` on every route                                            |
+| `infra/single-server-baseline` (compose on one host)                                                                           | `reverse-proxy` nginx → `frontend` container built from `apps/blackout-client/Dockerfile`                                                                            | `snippets/security-headers.conf` at server level: `X-Frame-Options: DENY`, CSP with `frame-ancestors 'none'`                                                                                                                                                                            |
+| `infra/nginx` (host nginx)                                                                                                     | Proxies `/` to `127.0.0.1:8080`                                                                                                                                      | Same snippet, same values                                                                                                                                                                                                                                                               |
+| `deploy/docker/Dockerfile` and `Dockerfile.blackout` (`ghcr.io/blackmarket-coa/blackout-web`)                                  | nginx with `deploy/docker/nginx-templates/default.conf.template`                                                                                                     | Server level `SAMEORIGIN` / `frame-ancestors 'self'`, but `location = /`, `= /index.html`, `/home`, `/sites`, `/config`, `/i18n` and `= /version` set their own `add_header`, which drops both (nginx inheritance). Not changed here; see `docs/security/framing-headers-2026-10-09.md` |
+| `deploy/docker/blackout-backend` nginx                                                                                         | Proxies `/` to `blackout-app:80`                                                                                                                                     | HSTS only at its own level; whatever the upstream sends                                                                                                                                                                                                                                 |
+| Railway (`railway.json`, root `index.js`), Vercel (default of `deploy-web.yml`), Netlify (`apps/blackout-client/netlify.toml`) | Node static server / static hosts                                                                                                                                    | None. `deploy-web.yml` has never run (0 runs; it triggers on `main`, which does not exist)                                                                                                                                                                                              |
+| `.github/cfp_headers`                                                                                                          | Nothing uses it                                                                                                                                                      | Upstream leftover (`SAMEORIGIN` / `'self'`)                                                                                                                                                                                                                                             |
+| Desktop (Tauri), mobile (Capacitor)                                                                                            | The built client bundled into the app (`tauri://`, `https://localhost`)                                                                                              | Not served over the network; framing headers do not apply                                                                                                                                                                                                                               |
+
+**What changed** (only the `apps/blackout-client/Dockerfile` image):
+
+-   `docker-nginx.conf` includes `nginx/frame-deny.conf` (`X-Frame-Options:
+DENY`, `Content-Security-Policy: frame-ancestors 'none'`) at server level,
+    and again in `/healthz`, the one location with its own `add_header`.
+-   `location = /embed` and `location ^~ /embed/` are the only locations that
+    include `nginx/embed-frame.conf`. The image ships that file denying framing
+    too. At container start,
+    `nginx/docker-entrypoint.d/40-black-mask-frame-ancestors.sh` rewrites it
+    from **`BLACK_MASK_FRAME_ANCESTORS`**.
+-   Those two locations answer `404` with the deny headers when the raw request
+    URI does not literally start with `/embed` (`/%65mbed/`, `//embed/`), which
+    nginx would otherwise normalise into them. The browser's
+    `location.pathname` is the raw path, so without this the panel's framing
+    policy could be served to a page the client does not treat as the panel.
+-   The header is CSP `frame-ancestors` only; it does not restrict what the
+    page loads. COOP/CORP are not sent by this image, before or after.
+
+**`BLACK_MASK_FRAME_ANCESTORS`**, set on the web client container:
+
+-   Origins separated by spaces and/or commas. Empty or unset (the default):
+    the panel gets `frame-ancestors 'none'` like every other route.
+-   Each entry must be exactly one of: `https://<hostname>[:port]` (dotted
+    letters/digits/hyphens), `http://localhost[:port]` or
+    `http://127.0.0.1[:port]` (local testing), `chrome-extension://<32 letters
+a–p>`, `moz-extension://<uuid>`, `safari-web-extension://<uuid>`. Scheme and
+    host are lower-cased; duplicates are dropped.
+-   Rejected: `*` or any wildcard, any path (even a trailing `/`), query,
+    fragment or user-info, keywords such as `'self'`, plain-`http` hosts other
+    than loopback, IP addresses over `https`, a port outside 1–65535, non-ASCII
+    hosts (use punycode), quotes, `;`, `$` or anything else that is not part of
+    an origin.
+-   **One bad entry rejects the whole list** and the panel stays `'none'`; the
+    container log names the rejected entries. The script always exits 0, so a
+    typo cannot stop the chat app from serving.
+-   With a valid list, `/embed` and `/embed/*` send
+    `Content-Security-Policy: frame-ancestors <list>` and **no**
+    `X-Frame-Options`: it cannot express an allow-list (`ALLOW-FROM` is
+    obsolete and ignored), and `DENY` next to an allow-list would contradict it
+    in any browser that still reads it. Browsers that support
+    `frame-ancestors` ignore `X-Frame-Options` when both are present.
+
+**Verified** against `nginx:1.29.5-alpine` (the image's base, pulled from a
+registry mirror) running the repository's config with a real `pnpm build` of
+the client. The one deviation: this sandbox has no IPv6, so the verification
+copy dropped `listen [::]:8080;`. `nginx -t` passed with the variable unset,
+valid and invalid. `curl -I` on `/`, `/index.html`, `/home/`, `/coliseum`,
+`/market`, `/config.json`, `/manifest.json`, `/sw.js`, `/trust`, `/assets/…`,
+`/public/…`, `/healthz`, `/embedded` and `/embed-x` returned `DENY` /
+`frame-ancestors 'none'` in every mode. `/embed`, `/embed/`, `/embed?x=1` and
+`/embed/dms/…` returned the allow-list only when it was valid. In a real
+Chromium, a page on an allow-listed origin rendered the panel in an iframe and
+was refused `/`; a page on any other origin was refused both.
+
+**Constraints, stated plainly:**
+
+-   **Firefox:** a `moz-extension://` origin is a random UUID generated per
+    installation, so a fixed server-side list cannot name "the Black Mask
+    extension" for Firefox users. It can name one install (useful for
+    testing), and the script warns when it does. Firefox users will need
+    another approach: a hosted `https://` page of Black Mask's that frames the
+    panel, or opening the panel as a top-level tab.
+-   **Chromium browsers:** the `chrome-extension://` id comes from the
+    extension's key. The Chrome Web Store and Edge Add-ons listings get
+    different ids unless the extension pins the same `key`, so list each one.
+-   **Safari:** whether `safari-web-extension://` ids are stable across
+    installs has not been checked.
+-   **Desktop and mobile apps:** if Black Mask loads the panel as a top-level
+    page in a native webview, `frame-ancestors` does not apply and nothing
+    needs listing. If it frames the panel inside its own web UI, that UI's
+    origin must be listed, and an opaque origin (`file://`, `null`) cannot be.
+-   **Reverse proxies in front:** `infra/nginx` and
+    `infra/single-server-baseline/nginx` add `X-Frame-Options: DENY` and a CSP
+    with `frame-ancestors 'none'` to everything at server level. Browsers
+    enforce every CSP they receive, so behind either proxy the panel stays
+    unframeable even with the variable set. That fails closed, but turning the
+    panel on there needs an `/embed` location in the proxy that re-includes the
+    rest of its header set without those two. Not done here; it needs its own
+    `nginx -t` and `curl -I` per location on that proxy.
+-   **Other images:** the `blackout-web` image, Railway, Vercel and Netlify do
+    not implement the allow-list. On those the panel is never framed by
+    Black Mask: `'self'` or `DENY` on the `blackout-web` image, no protection
+    at all on the static hosts (as for the whole client there today).
+-   **Storage partitioning, not verified:** whether a panel framed inside an
+    extension page shares the browser's normal Blackout session or gets its
+    own depends on the browser's storage partitioning for extension-embedded
+    frames. If it gets its own, it signs in as a new session, and older
+    encrypted messages may not be readable there (see BO-1). If it shares, the
+    panel and an open Blackout tab run two clients on one session; the client
+    has no cross-tab lock. B3 has to settle this.
+
+**Turning it on** (operator, after the panel is deployed): set
+`BLACK_MASK_FRAME_ANCESTORS` on the web client container to Black Mask's
+origins, restart it, then check `curl -I https://<host>/embed` (expect
+`frame-ancestors <your list>` and no `X-Frame-Options`) and
+`curl -I https://<host>/` (expect `DENY` and `frame-ancestors 'none'`).
+**Rollback:** unset the variable and restart. The panel route itself stays
+reachable as a normal page, which is harmless.
 
 ### 3. Sign-in inside the sandbox
 

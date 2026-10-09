@@ -44,7 +44,18 @@ const tabLabel: Record<AuthTab, string> = {
     reset: 'Reset password',
 };
 
-export const LoginPage = () => {
+type LoginPageProps = {
+    /**
+     * Rendered inside the Black Mask chat panel (`/embed`). The panel's frame
+     * must never leave the panel, so in this mode the page does not rewrite
+     * the URL to `/login` / `/register` / `/reset-password` when the tab
+     * changes, and single sign-on (a full-frame redirect to the identity
+     * provider) is not offered.
+     */
+    embedded?: boolean;
+};
+
+export const LoginPage = ({ embedded = false }: LoginPageProps = {}) => {
     const [server, setServer] = useState<ResolvedHomeserver | null>(null);
     const [bootstrapError, setBootstrapError] = useState<string | null>(null);
     const [tab, setTabState] = useState<AuthTab>(initialTab());
@@ -64,6 +75,7 @@ export const LoginPage = () => {
     // adding history entries for every tab click.
     const setTab = (next: AuthTab) => {
         setTabState(next);
+        if (embedded) return;
         try {
             const targetPath = TAB_PATHS[next];
             if (window.location.pathname !== targetPath) {
@@ -98,9 +110,7 @@ export const LoginPage = () => {
             } catch (e) {
                 if (cancelled) return;
                 setBootstrapError(
-                    e instanceof Error
-                        ? e.message
-                        : 'Could not connect to the default homeserver.'
+                    e instanceof Error ? e.message : 'Could not connect to the default homeserver.'
                 );
             }
         };
@@ -145,8 +155,7 @@ export const LoginPage = () => {
     const tabs: AuthTab[] = registrationDisabled
         ? ['login', 'reset']
         : ['login', 'register', 'reset'];
-    const showRegistrationDisabledNotice =
-        registrationDisabled && startedOnRegisterRef.current;
+    const showRegistrationDisabledNotice = registrationDisabled && startedOnRegisterRef.current;
 
     return (
         <div style={{ display: 'grid', gap: 16 }}>
@@ -170,8 +179,8 @@ export const LoginPage = () => {
                         padding: '8px 10px',
                     }}
                 >
-                    New signups are disabled on {server.serverName}. Sign in below if you
-                    already have an account.
+                    New signups are disabled on {server.serverName}. Sign in below if you already
+                    have an account.
                 </p>
             ) : null}
             <div style={tabBarStyle} role="tablist">
@@ -193,6 +202,7 @@ export const LoginPage = () => {
                     server={server}
                     canRegister={!registrationDisabled}
                     onSwitchTab={(next) => setTab(next)}
+                    allowSso={!embedded}
                 />
             ) : null}
             {tab === 'register' ? (

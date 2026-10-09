@@ -64,6 +64,13 @@ import {
     SWIPE_FEED_PATH,
 } from './app/pages/paths';
 import { NotFoundPage, RouteErrorFallback } from './app/pages/RouteErrorPage';
+import { isEmbedPath } from './app/features/black-mask-embed/embedPaths';
+// Black Mask chat panel (launch-plan step B1). Imported statically on purpose:
+// as a React.lazy() chunk it shares MessageComposer/RoomTimeline with the main
+// bundle, and Rolldown then split those into a separate chunk that imports the
+// main chunk back — a cycle that crashed the production build on boot
+// ("s is not iterable" in the emoji table) for every page, not just the panel.
+import { EmbedApp } from './app/features/black-mask-embed/EmbedApp';
 import { trimTrailingSlash } from './app/utils/common';
 
 // HomeFeed is gated behind two flags and a small Matrix-tied data path
@@ -539,6 +546,12 @@ const CIRCLE_FEED_HARNESS_PATH = '/__dev__/circle-feed';
 const currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
 const harnessActive = currentPath === HARNESS_PATH;
 const circleFeedHarnessActive = currentPath === CIRCLE_FEED_HARNESS_PATH;
+// Decided once, at load, from the path the page was loaded on — the same way
+// the harnesses are — so nothing inside the panel (a tab switch that rewrites
+// the URL, a stray navigation) can flip the frame over to the full app. The
+// panel renders its own minimal tree (EmbedApp) instead of BootstrapStatus:
+// no AppShell, no main router, no app hydrators.
+const embedActive = isEmbedPath(currentPath);
 
 const renderHarness = (node: React.ReactNode): void => {
     ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
@@ -573,7 +586,7 @@ if (harnessActive) {
                             <LifecycleSyncBroker />
                             <QueryClientProvider client={queryClient}>
                                 <RegistryFetcherProvider fetchers={registryFetchers}>
-                                    <BootstrapStatus />
+                                    {embedActive ? <EmbedApp /> : <BootstrapStatus />}
                                 </RegistryFetcherProvider>
                             </QueryClientProvider>
                         </CrashBoundary>

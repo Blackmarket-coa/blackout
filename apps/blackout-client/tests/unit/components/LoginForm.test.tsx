@@ -49,18 +49,14 @@ describe('LoginForm', () => {
         await act(async () => {
             root.render(
                 <Provider store={createStore()}>
-                    <LoginForm
-                        server={defaultServer}
-                        canRegister={true}
-                        onSwitchTab={vi.fn()}
-                    />
-                </Provider>,
+                    <LoginForm server={defaultServer} canRegister={true} onSwitchTab={vi.fn()} />
+                </Provider>
             );
             await Promise.resolve();
         });
 
         expect(container.textContent).toContain(
-            'Couldn’t load supported flows; try SSO or switch homeserver.',
+            'Couldn’t load supported flows; try SSO or switch homeserver.'
         );
         expect(container.textContent).toContain('Continue with SSO');
         expect(container.textContent).not.toContain('Password');
@@ -80,18 +76,16 @@ describe('LoginForm', () => {
         await act(async () => {
             root.render(
                 <Provider store={createStore()}>
-                    <LoginForm
-                        server={defaultServer}
-                        canRegister={false}
-                        onSwitchTab={vi.fn()}
-                    />
-                </Provider>,
+                    <LoginForm server={defaultServer} canRegister={false} onSwitchTab={vi.fn()} />
+                </Provider>
             );
             await Promise.resolve();
         });
 
         expect(container.textContent).toContain('This homeserver uses token sign-in.');
-        expect(container.textContent).not.toContain('This homeserver does not advertise a supported sign-in method.');
+        expect(container.textContent).not.toContain(
+            'This homeserver does not advertise a supported sign-in method.'
+        );
         expect(container.textContent).not.toContain('Password');
 
         root.unmount();
@@ -103,7 +97,7 @@ describe('LoginForm', () => {
 
         window.sessionStorage.setItem(
             'blackout.sso.pending',
-            JSON.stringify({ baseUrl: 'https://sso.example.org' }),
+            JSON.stringify({ baseUrl: 'https://sso.example.org' })
         );
         window.history.replaceState(null, '', '/?loginToken=abc123');
 
@@ -114,12 +108,8 @@ describe('LoginForm', () => {
         await act(async () => {
             root.render(
                 <Provider store={createStore()}>
-                    <LoginForm
-                        server={defaultServer}
-                        canRegister={true}
-                        onSwitchTab={vi.fn()}
-                    />
-                </Provider>,
+                    <LoginForm server={defaultServer} canRegister={true} onSwitchTab={vi.fn()} />
+                </Provider>
             );
             await Promise.resolve();
             await Promise.resolve();
@@ -139,7 +129,7 @@ describe('LoginForm', () => {
     it('surfaces SSO callback failures', async () => {
         loginFlowsMock.mockResolvedValueOnce({ flows: [{ type: 'm.login.sso' }] });
         loginWithTokenMock.mockRejectedValueOnce(
-            new MatrixInitError('network_failure', 'Unable to complete SSO.'),
+            new MatrixInitError('network_failure', 'Unable to complete SSO.')
         );
 
         window.history.replaceState(null, '', '/?loginToken=abc123');
@@ -151,12 +141,8 @@ describe('LoginForm', () => {
         await act(async () => {
             root.render(
                 <Provider store={createStore()}>
-                    <LoginForm
-                        server={defaultServer}
-                        canRegister={true}
-                        onSwitchTab={vi.fn()}
-                    />
-                </Provider>,
+                    <LoginForm server={defaultServer} canRegister={true} onSwitchTab={vi.fn()} />
+                </Provider>
             );
             await Promise.resolve();
             await Promise.resolve();
@@ -173,12 +159,12 @@ describe('LoginForm', () => {
 
         window.sessionStorage.setItem(
             'blackout.sso.pending',
-            JSON.stringify({ baseUrl: 'https://sso.example.org' }),
+            JSON.stringify({ baseUrl: 'https://sso.example.org' })
         );
         window.history.replaceState(
             null,
             '',
-            '/?error=access_denied&error_description=User%20cancelled%20sign-in',
+            '/?error=access_denied&error_description=User%20cancelled%20sign-in'
         );
 
         const container = document.createElement('div');
@@ -188,12 +174,8 @@ describe('LoginForm', () => {
         await act(async () => {
             root.render(
                 <Provider store={createStore()}>
-                    <LoginForm
-                        server={defaultServer}
-                        canRegister={true}
-                        onSwitchTab={vi.fn()}
-                    />
-                </Provider>,
+                    <LoginForm server={defaultServer} canRegister={true} onSwitchTab={vi.fn()} />
+                </Provider>
             );
             await Promise.resolve();
             await Promise.resolve();
@@ -210,16 +192,21 @@ describe('LoginForm', () => {
     it('uses a sanitized callback redirect URL when starting SSO', async () => {
         loginFlowsMock.mockResolvedValueOnce({
             flows: [
-                { type: 'm.login.sso', identity_providers: [{ id: 'authentik', name: 'Authentik' }] },
+                {
+                    type: 'm.login.sso',
+                    identity_providers: [{ id: 'authentik', name: 'Authentik' }],
+                },
             ],
         });
         loginWithTokenMock.mockResolvedValueOnce({});
-        beginSsoRedirectMock.mockReturnValue('https://example.org/_matrix/client/v3/login/sso/redirect');
+        beginSsoRedirectMock.mockReturnValue(
+            'https://example.org/_matrix/client/v3/login/sso/redirect'
+        );
 
         window.history.replaceState(
             null,
             '',
-            '/?loginToken=stale&code=123&state=456&error=access_denied&error_description=oops',
+            '/?loginToken=stale&code=123&state=456&error=access_denied&error_description=oops'
         );
 
         const container = document.createElement('div');
@@ -229,12 +216,8 @@ describe('LoginForm', () => {
         await act(async () => {
             root.render(
                 <Provider store={createStore()}>
-                    <LoginForm
-                        server={defaultServer}
-                        canRegister={true}
-                        onSwitchTab={vi.fn()}
-                    />
-                </Provider>,
+                    <LoginForm server={defaultServer} canRegister={true} onSwitchTab={vi.fn()} />
+                </Provider>
             );
             await Promise.resolve();
         });
@@ -253,9 +236,84 @@ describe('LoginForm', () => {
             'https://example.org',
             redirectUrl,
             'sso',
-            'authentik',
+            'authentik'
         );
         expect(parsed.search).toBe('');
+
+        root.unmount();
+    });
+    // Black Mask chat panel (/embed): SSO would redirect the panel's whole
+    // frame to the identity provider, so the panel does not offer it.
+    it('hides SSO and explains why when allowSso is false (chat panel)', async () => {
+        loginFlowsMock.mockResolvedValueOnce({
+            flows: [
+                { type: 'm.login.password' },
+                {
+                    type: 'm.login.sso',
+                    identity_providers: [{ id: 'authentik', name: 'Authentik' }],
+                },
+            ],
+        });
+
+        const container = document.createElement('div');
+        document.body.appendChild(container);
+        const root = ReactDOM.createRoot(container);
+
+        await act(async () => {
+            root.render(
+                <Provider store={createStore()}>
+                    <LoginForm
+                        server={defaultServer}
+                        canRegister={true}
+                        onSwitchTab={vi.fn()}
+                        allowSso={false}
+                    />
+                </Provider>
+            );
+            await Promise.resolve();
+        });
+
+        expect(container.textContent).not.toContain('Continue with Authentik');
+        expect(container.textContent).not.toContain('Continue with SSO');
+        const note = container.querySelector('[data-testid="login-sso-unavailable-in-panel"]');
+        expect(note).not.toBeNull();
+        const link = note?.querySelector('a');
+        expect(link?.getAttribute('target')).toBe('_blank');
+        expect(link?.getAttribute('rel')).toBe('noopener noreferrer');
+        // Password sign-in is still offered.
+        expect(container.querySelector('form[aria-label="Sign in with password"]')).not.toBeNull();
+        expect(beginSsoRedirectMock).not.toHaveBeenCalled();
+
+        root.unmount();
+    });
+
+    it('still offers SSO by default (full app)', async () => {
+        loginFlowsMock.mockResolvedValueOnce({
+            flows: [
+                {
+                    type: 'm.login.sso',
+                    identity_providers: [{ id: 'authentik', name: 'Authentik' }],
+                },
+            ],
+        });
+
+        const container = document.createElement('div');
+        document.body.appendChild(container);
+        const root = ReactDOM.createRoot(container);
+
+        await act(async () => {
+            root.render(
+                <Provider store={createStore()}>
+                    <LoginForm server={defaultServer} canRegister={true} onSwitchTab={vi.fn()} />
+                </Provider>
+            );
+            await Promise.resolve();
+        });
+
+        expect(container.textContent).toContain('Continue with Authentik');
+        expect(
+            container.querySelector('[data-testid="login-sso-unavailable-in-panel"]')
+        ).toBeNull();
 
         root.unmount();
     });
