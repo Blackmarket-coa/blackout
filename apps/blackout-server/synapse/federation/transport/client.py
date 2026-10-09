@@ -36,6 +36,7 @@ import ijson
 
 from synapse.api.constants import Direction, Membership
 from synapse.api.errors import Codes, HttpResponseException, SynapseError
+from synapse.api.ratelimiting import Ratelimiter
 from synapse.api.room_versions import RoomVersion
 from synapse.api.urls import (
     FEDERATION_UNSTABLE_PREFIX,
@@ -812,6 +813,8 @@ class TransportLayerClient:
         output_stream: BinaryIO,
         max_size: int,
         max_timeout_ms: int,
+        download_ratelimiter: Ratelimiter,
+        ip_address: str,
     ) -> Tuple[int, Dict[bytes, List[bytes]]]:
         path = f"/_matrix/media/r0/download/{destination}/{media_id}"
 
@@ -827,6 +830,8 @@ class TransportLayerClient:
                 "allow_remote": "false",
                 "timeout_ms": str(max_timeout_ms),
             },
+            download_ratelimiter=download_ratelimiter,
+            ip_address=ip_address,
         )
 
     async def download_media_v3(
@@ -836,6 +841,8 @@ class TransportLayerClient:
         output_stream: BinaryIO,
         max_size: int,
         max_timeout_ms: int,
+        download_ratelimiter: Ratelimiter,
+        ip_address: str,
     ) -> Tuple[int, Dict[bytes, List[bytes]]]:
         path = f"/_matrix/media/v3/download/{destination}/{media_id}"
 
@@ -855,6 +862,8 @@ class TransportLayerClient:
                 "allow_redirect": "true",
             },
             follow_redirects=True,
+            download_ratelimiter=download_ratelimiter,
+            ip_address=ip_address,
         )
 
 

@@ -227,3 +227,26 @@ upstream.
   has persisted events; the older read path would compute incomplete auth
   chains.
 - Tests: `tests/storage/test_event_chain.py` (upstream 1.105.1 changes).
+
+### Remote media download rate limit (upstream 1.109.0 -> 1.110.0 and 1.111.0 -> 1.112.0)
+
+- `synapse/config/ratelimiting.py`: new `remote_media_download_burst_count`
+  (default 500M) and `remote_media_download_per_second` (default 87K).
+- `synapse/media/media_repository.py`, `synapse/federation/federation_client.py`,
+  `synapse/federation/transport/client.py`, `synapse/http/matrixfederationclient.py`
+  (`get_file`), `synapse/rest/media/download_resource.py`,
+  `synapse/rest/media/thumbnail_resource.py`: a per-requester-IP leaky bucket
+  charged with the bytes of each remote download, at most 6 concurrent remote
+  downloads per IP, and an explicit `max_upload_size` check on the remote's
+  `Content-Length`. GHSA-4mhg-xv73-xq2x. The advisory says "1.106"; the code
+  actually shipped in 1.110.0 (#17256) and was refined in 1.112.0 (#17439),
+  and those are the diffs ported. Only the rate-limit hunks were taken; the
+  MSC3916 federation multipart-download changes in the same releases were not.
+  `thumbnail_resource.py` diverged from upstream, so its `ip_address` plumbing
+  was done by hand.
+- `docs/usage/configuration/config_documentation.md`: documents both options.
+- The bucket is keyed on `request.getClientAddress()`, so a listener behind a
+  reverse proxy needs `x_forwarded: true` (both production templates under
+  `deploy/` and `infra/` have it) or every user shares one bucket.
+- Tests: `tests/media/test_media_storage.py` (`RemoteDownloadLimiterTestCase`,
+  upstream 1.110 + 1.112).
