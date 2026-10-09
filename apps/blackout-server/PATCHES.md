@@ -61,3 +61,37 @@ To keep upstream reconciliation explicit, the following non-`blackout_runtime/` 
 - `docs/ci_readiness_triage_2026-03-17.md`, `docs/reports/readiness_next_25_steps_2026-03-17.md`: readiness execution logs and blocker tracking.
 
 These files should be explicitly reviewed during any future upstream rebase/reconciliation effort.
+
+## 2026-10-09 upstream security advisory ports
+
+Hand-ported fixes for upstream Synapse security advisories. The fork is based
+on Synapse **1.98.0** (`pyproject.toml` `version = "1.98.0+blackout.1"`), so
+every advisory fixed upstream after December 2023 had to be checked against
+this tree individually. Triage, per-advisory evidence and the advisories that
+were *not* ported (and why) are in
+`docs/security/upstream-advisory-triage-2026-10-09.md`. Each source of truth
+for "what upstream changed" is the diff between the vulnerable and patched
+upstream sdists from PyPI, named per entry.
+
+Each file below is a direct edit to core Synapse source outside
+`blackout_runtime/` and must be re-checked during any reconciliation with
+upstream.
+
+### Federation endpoints and to-device (upstream 1.157.1 -> 1.157.2)
+
+- `synapse/handlers/devicemessage.py`: drop to-device EDUs whose `sender`
+  domain does not match the origin (it was logged and then delivered anyway).
+  GHSA-rgv2-84w7-5j9p.
+- `synapse/federation/federation_server.py`
+  (`on_timestamp_to_event_request`): require the requesting server to be in
+  the room. GHSA-r66v-qhwx-8rg4.
+- `synapse/federation/federation_server.py` (`on_event_auth`),
+  `synapse/handlers/federation.py` (`on_event_auth` now takes `room_id`):
+  look the event up with `check_room_id`, so an event from another room is a
+  404 like an unknown one. GHSA-qcjr-46gf-7f4r.
+- `synapse/storage/databases/main/event_federation.py`
+  (`_get_missing_events`): constrain the starting events and every step of the
+  backwards walk to the requested room. GHSA-27p5-4f45-gx76.
+- Tests: `tests/federation/test_federation_server_advisories.py` (new; upstream
+  tests adapted to this harness), `tests/rest/client/test_sendtodevice.py`
+  (`test_remote_spoofed_sender`).

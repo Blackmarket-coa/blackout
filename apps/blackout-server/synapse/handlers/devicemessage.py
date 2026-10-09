@@ -109,6 +109,10 @@ class DeviceMessageHandler:
                 origin,
                 sender_user_id,
             )
+            # Actually drop it. Before this port the warning above was logged
+            # but the message was still delivered.
+            # See: https://github.com/element-hq/synapse/security/advisories/GHSA-rgv2-84w7-5j9p
+            return
         message_type = content["type"]
         message_id = content["message_id"]
         for user_id, by_device in content["messages"].items():

@@ -245,6 +245,8 @@ class FederationServer(FederationBase):
             body including `event_id`.
         """
         async with self._server_linearizer.queue((origin, room_id)):
+            # GHSA-r66v-qhwx-8rg4: only answer for rooms the requester is in.
+            await self._event_auth_handler.assert_host_in_room(room_id, origin)
             origin_host, _ = parse_server_name(origin)
             await self.check_server_matches_acl(origin_host, room_id)
 
@@ -981,7 +983,8 @@ class FederationServer(FederationBase):
             await self.check_server_matches_acl(origin_host, room_id)
 
             time_now = self._clock.time_msec()
-            auth_pdus = await self.handler.on_event_auth(event_id)
+            # GHSA-qcjr-46gf-7f4r: the event must belong to the room in the URL.
+            auth_pdus = await self.handler.on_event_auth(event_id, room_id)
             res = {"auth_chain": [a.get_pdu_json(time_now) for a in auth_pdus]}
         return 200, res
 
