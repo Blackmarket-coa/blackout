@@ -16,11 +16,12 @@ from parameterized import parameterized
 
 from twisted.test.proto_helpers import MemoryReactor
 
-from synapse.api.constants import Membership
+from synapse.api.constants import EventTypes, Membership
 from synapse.api.errors import Codes
 from synapse.api.room_versions import RoomVersions
+from synapse.events import make_event_from_dict
 from synapse.rest import admin
-from synapse.rest.client import login, room
+from synapse.rest.client import login, room, sync
 from synapse.server import HomeServer
 from synapse.types import JsonDict
 from synapse.util import Clock
@@ -371,3 +372,81 @@ class EventAuthFederationTests(unittest.FederatingHomeserverTestCase):
         self.assertEqual(
             channel.json_body["errcode"], Codes.NOT_FOUND, channel.json_body
         )
+
+
+class MalformedInviteRoomStateTests(unittest.FederatingHomeserverTestCase):
+    """
+    A remote server must not be able to break a local user's /sync by sending
+    an invite whose `invite_room_state` is not a list.
+
+    https://github.com/element-hq/synapse/security/advisories/GHSA-f3r3-h2mq-hx2h
+    (upstream 1.120.1 shipped the fix without a test; this one is ours).
+    """
+
+    servlets = [
+        admin.register_servlets,
+        login.register_servlets,
+        room.register_servlets,
+        sync.register_servlets,
+    ]
+
+    def prepare(self, reactor: MemoryReactor, clock: Clock, hs: HomeServer) -> None:
+        super().prepare(reactor, clock, hs)
+        self.user_id = self.register_user("bob", "pass")
+        self.tok = self.login("bob", "pass")
+
+    def _send_invite(self, invite_room_state: object) -> str:
+        room_version = RoomVersions.V10
+        room_id = f"!evil:{self.OTHER_SERVER_NAME}"
+        event_dict = self.add_hashes_and_signatures_from_other_server(
+            {
+                "room_id": room_id,
+                "type": EventTypes.Member,
+                "state_key": self.user_id,
+                "sender": f"@mallory:{self.OTHER_SERVER_NAME}",
+                "content": {"membership": Membership.INVITE},
+                "depth": 10,
+                "origin_server_ts": self.clock.time_msec(),
+                "prev_events": [],
+                "auth_events": [],
+            },
+            room_version,
+        )
+        event_id = make_event_from_dict(event_dict, room_version).event_id
+        channel = self.make_signed_federation_request(
+            "PUT",
+            f"/_matrix/federation/v2/invite/{room_id}/{event_id}",
+            content={
+                "event": event_dict,
+                "room_version": room_version.identifier,
+                "invite_room_state": invite_room_state,
+            },
+        )
+        self.assertEqual(channel.code, HTTPStatus.OK, channel.json_body)
+        return room_id
+
+    @parameterized.expand(
+        [
+            ("dict", {"not": "a list"}),
+            ("int", 5),
+            ("list", [{"type": "m.room.name", "state_key": "", "content": {}}]),
+        ]
+    )
+    def test_sync_survives_malformed_invite_room_state(
+        self, _name: str, invite_room_state: object
+    ) -> None:
+        room_id = self._send_invite(invite_room_state)
+
+        channel = self.make_request("GET", "/sync", access_token=self.tok)
+        self.assertEqual(channel.code, HTTPStatus.OK, channel.json_body)
+
+        # Sentinel: the invite itself really did arrive.
+        invite = channel.json_body["rooms"]["invite"][room_id]
+        events = invite["invite_state"]["events"]
+        for ev in events:
+            self.assertIsInstance(ev, dict, str(events))
+        self.assertEqual(events[-1]["state_key"], self.user_id)
+        expected_len = (
+            len(invite_room_state) + 1 if isinstance(invite_room_state, list) else 1
+        )
+        self.assertEqual(len(events), expected_len, events)

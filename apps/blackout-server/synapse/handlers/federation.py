@@ -777,6 +777,59 @@ class FederationHandler:
             if not predecessor or not isinstance(predecessor.get("room_id"), str):
                 return event.event_id, max_stream_id
             old_room_id = predecessor["room_id"]
+
+            # We can't take the new room's word for it.
+            # Check to see that the predecessor room consents to the
+            # room upgrade.
+            # Ported from upstream Synapse 1.157.2 (GHSA-cjh7-rcpx-xpf8): without
+            # this check, a malicious remote room could name any local room as its
+            # predecessor, and joining it moved that room's aliases (and directory
+            # listing) to the malicious room.
+            if not await self._event_auth_handler.is_host_in_room(
+                room_id=old_room_id, host=self.hs.hostname
+            ):
+                logger.info(
+                    "Ignoring unverified predecessor for %s during remote join: %s (not in old room)",
+                    room_id,
+                    old_room_id,
+                )
+                return event.event_id, max_stream_id
+
+            tombstone = await self._state_storage_controller.get_current_state_event(
+                old_room_id,
+                event_type=EventTypes.Tombstone,
+                state_key="",
+            )
+
+            if tombstone is None:
+                logger.warning(
+                    "Ignoring unverified predecessor for %s during remote join: %s (no tombstone in old room)",
+                    room_id,
+                    old_room_id,
+                )
+                return event.event_id, max_stream_id
+
+            intended_successor_room = tombstone.content.get(
+                EventContentFields.TOMBSTONE_SUCCESSOR_ROOM, None
+            )
+
+            if not isinstance(intended_successor_room, str):
+                logger.warning(
+                    "Ignoring unverified predecessor for %s during remote join: %s (tombstone is invalid)",
+                    room_id,
+                    old_room_id,
+                )
+                return event.event_id, max_stream_id
+
+            if intended_successor_room != room_id:
+                logger.warning(
+                    "Ignoring unverified predecessor for %s during remote join: predecessor defined as %s (the old room ID) but the old room's tombstone points to %r which doesn't match",
+                    room_id,
+                    old_room_id,
+                    intended_successor_room,
+                )
+                return event.event_id, max_stream_id
+
             logger.debug(
                 "Found predecessor for %s during remote join: %s", room_id, old_room_id
             )
@@ -874,6 +927,10 @@ class FederationHandler:
 
         if stripped_room_state is None:
             raise KeyError("Missing 'knock_room_state' field in send_knock response")
+
+        # GHSA-f3r3-h2mq-hx2h
+        if not isinstance(stripped_room_state, list):
+            raise TypeError("'knock_room_state' has wrong type")
 
         event.unsigned["knock_room_state"] = stripped_room_state
 

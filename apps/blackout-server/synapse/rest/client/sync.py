@@ -389,7 +389,13 @@ class SyncRestServlet(RestServlet):
             )
             unsigned = dict(invite.get("unsigned", {}))
             invite["unsigned"] = unsigned
-            invited_state = list(unsigned.pop("invite_room_state", []))
+
+            # GHSA-f3r3-h2mq-hx2h: a malformed invite must not break /sync.
+            invited_state = unsigned.pop("invite_room_state", [])
+            if not isinstance(invited_state, list):
+                invited_state = []
+
+            invited_state = list(invited_state)
             invited_state.append(invite)
             invited[room.room_id] = {"invite_state": {"events": invited_state}}
 
@@ -429,7 +435,10 @@ class SyncRestServlet(RestServlet):
             # Extract the stripped room state from the unsigned dict
             # This is for clients to get a little bit of information about
             # the room they've knocked on, without revealing any sensitive information
-            knocked_state = list(unsigned.pop("knock_room_state", []))
+            knocked_state = unsigned.pop("knock_room_state", [])
+            if not isinstance(knocked_state, list):
+                knocked_state = []
+            knocked_state = list(knocked_state)
 
             # Append the actual knock membership event itself as well. This provides
             # the client with:

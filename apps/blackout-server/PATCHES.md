@@ -121,3 +121,32 @@ upstream.
   `tests/api/test_errors_advisories.py` (new),
   `tests/util/test_httpresourcetree.py` (new, upstream),
   `tests/rest/test_pattern_anchoring.py` (new).
+
+### Event and media input validation (upstream 1.120.1, 1.127.1, 1.157.2)
+
+- `synapse/federation/transport/server/federation.py`,
+  `synapse/handlers/federation.py` (knock), `synapse/push/push_tools.py`,
+  `synapse/rest/client/sync.py`: tolerate / reject non-list
+  `invite_room_state` and `knock_room_state`, which a remote server could use
+  to break the invitee's `/sync`. GHSA-f3r3-h2mq-hx2h (upstream 1.120.1).
+- `synapse/api/constants.py` (`MAX_DEPTH` lowered to the canonical-JSON
+  integer limit, `CANONICALJSON_{MAX,MIN}_INT` moved here from
+  `synapse/events/utils.py`), `synapse/events/validator.py` (validate the whole
+  PDU), `synapse/federation/units.py` (`filter_pdus_for_valid_depth`,
+  `serialize_and_filter_pdus`), `synapse/federation/federation_base.py`
+  (`parse_events_from_pdu_json`), `synapse/federation/federation_client.py`,
+  `synapse/federation/federation_server.py`: events with an out-of-range
+  `depth` are no longer accepted, stored or forwarded. GHSA-v56r-hwv5-mxg6
+  (upstream 1.127.1; exploited in the wild).
+- `synapse/media/thumbnailer.py`: Pillow may only decode JPEG, PNG, WebP and
+  GIF when thumbnailing. GHSA-vp6v-whfm-rv3g (upstream 1.120.1).
+- `synapse/handlers/federation.py` (`do_invite_join`) and
+  `synapse/api/constants.py` (`EventContentFields.TOMBSTONE_SUCCESSOR_ROOM`):
+  only migrate aliases / directory state from a predecessor room that we are
+  in and whose tombstone names the joined room. GHSA-cjh7-rcpx-xpf8
+  (upstream 1.157.2).
+- Tests: `tests/federation/test_federation_server_advisories.py`
+  (`MalformedInviteRoomStateTests`), `tests/federation/test_pdu_depth_advisory.py`
+  (new), `tests/media/test_thumbnailer_formats.py` (new),
+  `tests/federation/_remote_join.py` and
+  `tests/federation/test_federation_join_upgraded_room.py` (upstream, adapted).

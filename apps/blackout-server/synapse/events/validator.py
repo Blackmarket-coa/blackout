@@ -199,9 +199,10 @@ class EventValidator:
 
         # Depending on the room version, ensure the data is spec compliant JSON.
         if event.room_version.strict_canonicaljson:
-            # Note that only the client controlled portion of the event is
-            # checked, since we trust the portions of the event we created.
-            validate_canonicaljson(event.content)
+            # GHSA-v56r-hwv5-mxg6: check the whole PDU, not only the
+            # client-controlled content, since e.g. `depth` derives from
+            # (possibly remote) prev events.
+            validate_canonicaljson(event.get_pdu_json())
 
         if event.type == EventTypes.Aliases:
             if "aliases" in event.content:
