@@ -4245,6 +4245,34 @@ push:
 
 ---
 
+### `push_rules`
+
+*(object)* Options for push rules. Added to this fork when porting the fix for
+[GHSA-fp53-rw9v-hcf9](https://github.com/element-hq/synapse/security/advisories/GHSA-fp53-rw9v-hcf9)
+from upstream Synapse 1.157.2.
+
+This setting has the following sub-options:
+
+* `limits` (object): Limits on the size of push rules that users can have
+
+  This setting has the following sub-options:
+
+  * `rule_count` (integer): This is the total number of push rules that each user can have. Power users may expect to have one push rule per room. Defaults to `10000`.
+
+  * `rule_id_length` (integer): This is the maximum length of a push rule ID, in bytes. Push rule IDs need to be allowed to be at least as long as a room ID (which are [limited to 255 bytes per specification](https://spec.matrix.org/v1.19/appendices/#room-ids))
+    It's recommended to leave this option as it is. Defaults to `300`.
+
+  * `rule_size` (integer or size string): This is the maximum size of a push rule's body, in bytes.
+    The exact mechanism for calculating this size is currently an implementation detail, subject to change. This limit should be treated as a coarse sanity limit rather than something to fine-tune.
+    It's recommended to leave this option as it is. Defaults to `1024`.
+
+Example configuration:
+```yaml
+push_rules:
+  limits:
+    rule_count: 10000
+```
+---
 ## Rooms
 
 Config options relating to rooms.

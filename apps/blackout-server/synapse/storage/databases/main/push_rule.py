@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import logging
+from http import HTTPStatus
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -30,7 +31,7 @@ from typing import (
 
 from twisted.internet import defer
 
-from synapse.api.errors import StoreError
+from synapse.api.errors import Codes, StoreError, SynapseError
 from synapse.config.homeserver import ExperimentalConfig
 from synapse.logging.context import make_deferred_yieldable, run_in_background
 from synapse.replication.tcp.streams import PushRulesStream
@@ -110,6 +111,22 @@ def _load_rules(
     )
 
     return filtered_rules
+
+
+def _push_rule_size_for_limits(*, conditions_json: str, actions_json: str) -> int:
+    """
+    Returns the size of a push rule, as used for applying the size limit.
+
+    We aren't tied to any particular definition, but currently this is
+    simply the size in bytes of the conditions and actions JSON added together.
+
+    Ported from upstream Synapse 1.157.2 (GHSA-fp53-rw9v-hcf9).
+    """
+    # This is not a very predictable way of calculating the size from the
+    # point of view of the client, but since it's an out-of-spec limit
+    # entirely at our discretion, we don't really have to worry about
+    # the exact calculation.
+    return len(conditions_json.encode("utf-8")) + len(actions_json.encode("utf-8"))
 
 
 class PushRulesWorkerStore(
@@ -394,6 +411,9 @@ class PushRuleStore(PushRulesWorkerStore):
         self._push_rule_id_gen = IdGenerator(db_conn, "push_rules", "id")
         self._push_rules_enable_id_gen = IdGenerator(db_conn, "push_rules_enable", "id")
 
+        # GHSA-fp53-rw9v-hcf9: per-user push rule limits.
+        self._push_rules_limits = hs.config.push_rules.limits
+
     async def add_push_rule(
         self,
         user_id: str,
@@ -406,6 +426,25 @@ class PushRuleStore(PushRulesWorkerStore):
     ) -> None:
         conditions_json = json_encoder.encode(conditions)
         actions_json = json_encoder.encode(actions)
+
+        rule_id_len = len(rule_id.encode("utf-8"))
+        if rule_id_len > self._push_rules_limits.rule_id_length:
+            raise SynapseError(
+                HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
+                f"Push rule ID length exceeds server limit ({rule_id_len} bytes > {self._push_rules_limits.rule_id_length} bytes).",
+                Codes.UNKNOWN,
+            )
+
+        rule_body_size = _push_rule_size_for_limits(
+            conditions_json=conditions_json, actions_json=actions_json
+        )
+        if rule_body_size > self._push_rules_limits.rule_size:
+            raise SynapseError(
+                HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
+                f"Push rule size exceeds server limit ({rule_body_size} bytes > {self._push_rules_limits.rule_size} bytes).",
+                Codes.UNKNOWN,
+            )
+
         async with self._push_rules_stream_id_gen.get_next() as stream_id:
             event_stream_ordering = self._stream_id_gen.get_current_token()
 
@@ -570,8 +609,13 @@ class PushRuleStore(PushRulesWorkerStore):
         update_stream: bool = True,
     ) -> None:
         """Specialised version of simple_upsert_txn that picks a push_rule_id
-        using the _push_rule_id_gen if it needs to insert the rule. It assumes
-        that the "push_rules" table is locked"""
+        using the _push_rule_id_gen if it needs to insert the rule.
+
+        Preconditions:
+            - the "push_rules" table is locked
+            - the push rule has already been validated,
+              including for rule ID length and rule body size.
+        """
 
         sql = (
             "UPDATE push_rules"
@@ -585,6 +629,22 @@ class PushRuleStore(PushRulesWorkerStore):
         )
 
         if txn.rowcount == 0:
+            # About to add a new rule, so check our limits first.
+            txn.execute(
+                """
+                SELECT COUNT(*) FROM push_rules
+                WHERE user_name = ?
+                """,
+                (user_id,),
+            )
+            (num_push_rules,) = cast(Tuple[int], txn.fetchone())
+            if num_push_rules >= self._push_rules_limits.rule_count:
+                raise SynapseError(
+                    HTTPStatus.BAD_REQUEST,
+                    f"Creating a push rule would exceed the limit on the number of push rules associated with your account ({num_push_rules + 1} rules > {self._push_rules_limits.rule_count} rules)",
+                    Codes.UNKNOWN,
+                )
+
             # We didn't update a row with the given rule_id so insert one
             push_rule_id = self._push_rule_id_gen.get_next()
 
@@ -816,6 +876,26 @@ class PushRuleStore(PushRulesWorkerStore):
                 )
             else:
                 try:
+                    # Before updating the push rule, we need to check that we won't exceed
+                    # the size limit on push rules.
+                    # For that, we need to fetch the `conditions` JSON.
+                    conditions_json = self.db_pool.simple_select_one_onecol_txn(
+                        txn,
+                        "push_rules",
+                        {"user_name": user_id, "rule_id": rule_id},
+                        "conditions",
+                    )
+
+                    rule_body_size = _push_rule_size_for_limits(
+                        conditions_json=conditions_json, actions_json=actions_json
+                    )
+                    if rule_body_size > self._push_rules_limits.rule_size:
+                        raise SynapseError(
+                            HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
+                            f"Push rule size exceeds server limit ({rule_body_size} bytes > {self._push_rules_limits.rule_size} bytes).",
+                            Codes.UNKNOWN,
+                        )
+
                     self.db_pool.simple_update_one_txn(
                         txn,
                         "push_rules",

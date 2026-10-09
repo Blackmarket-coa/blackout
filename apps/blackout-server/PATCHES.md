@@ -188,3 +188,18 @@ upstream.
   that is not security-relevant and is left in place here.)
 - Tests: `tests/rest/client/test_keys.py` (`KeyUploadTestCase`, upstream),
   `tests/handlers/test_e2e_keys.py` (unstable alias now ignored).
+
+### Push rule limits (upstream 1.157.1 -> 1.157.2)
+
+- `synapse/config/push_rules.py` (new), `synapse/config/homeserver.py`,
+  `synapse/config/_base.pyi`: new `push_rules.limits` section (`rule_count`
+  10000, `rule_id_length` 300, `rule_size` 1024 bytes by default). Upstream
+  parses it with pydantic `ParseModel`, which this tree lacks; the same
+  defaults and bounds are enforced by hand.
+- `synapse/storage/databases/main/push_rule.py` (`PushRuleStore`): enforce the
+  limits when adding a rule, when inserting a new row, and when changing a
+  rule's actions. GHSA-fp53-rw9v-hcf9. As upstream, actions set on a
+  *server-default* rule are not size-checked (see the triage doc).
+- `docs/usage/configuration/config_documentation.md`: documents `push_rules`.
+- Tests: `tests/rest/client/test_push_rule_attrs.py` (`PushRuleLimitTestCase`,
+  upstream), `tests/config/test_push_rules_config.py` (new).
