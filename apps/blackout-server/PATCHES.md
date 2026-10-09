@@ -171,3 +171,20 @@ upstream.
 - Tests: `tests/handlers/test_worker_lock.py` (upstream test plus
   `test_missed_notification_is_retried_within_cap`),
   `tests/rest/client/test_rooms_pagination_advisory.py` (upstream test).
+
+### Device key upload validation (upstream 1.138.2 -> 1.138.4)
+
+- `synapse/rest/client/keys.py` (`KeyUploadServlet`): validate the
+  `/keys/upload` body with a pydantic model (`KeyUploadRequestBody`) and
+  require `device_keys.user_id` / `device_keys.device_id` to match the
+  requester. `null` fields are accepted (the 1.138.4 regression fix).
+  GHSA-fh66-fcv5-jjfr. The request body handed to the handler is unchanged;
+  unknown fields (including any Blackout extensions) are ignored by the model,
+  not stripped.
+- `synapse/handlers/e2e_keys.py` (`upload_keys_for_user`): stop reading the
+  unstable `org.matrix.msc2732.fallback_keys` alias, which would bypass the new
+  validation. (Upstream also dropped the unstable
+  `org.matrix.msc2732.device_unused_fallback_key_types` field from `/sync`;
+  that is not security-relevant and is left in place here.)
+- Tests: `tests/rest/client/test_keys.py` (`KeyUploadTestCase`, upstream),
+  `tests/handlers/test_e2e_keys.py` (unstable alias now ignored).

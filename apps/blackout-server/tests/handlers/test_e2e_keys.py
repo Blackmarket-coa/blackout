@@ -458,7 +458,8 @@ class E2eKeysHandlerTestCase(unittest.HomeserverTestCase):
             {"failures": {}, "one_time_keys": {local_user: {device_id: fallback_key2}}},
         )
 
-        # using the unstable prefix should also set the fallback key
+        # The unstable prefix is no longer honoured (GHSA-fh66-fcv5-jjfr): it
+        # would bypass the /keys/upload request validation.
         self.get_success(
             self.handler.upload_keys_for_user(
                 local_user,
@@ -477,7 +478,7 @@ class E2eKeysHandlerTestCase(unittest.HomeserverTestCase):
         )
         self.assertEqual(
             claim_res,
-            {"failures": {}, "one_time_keys": {local_user: {device_id: fallback_key3}}},
+            {"failures": {}, "one_time_keys": {local_user: {device_id: fallback_key2}}},
         )
 
     def test_fallback_key_bulk(self) -> None:
