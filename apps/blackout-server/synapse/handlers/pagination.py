@@ -501,7 +501,7 @@ class PaginationHandler:
 
         # Initially fetch the events from the database. With any luck, we can return
         # these without blocking on backfill (handled below).
-        events, next_key = await self.store.paginate_room_events(
+        events, next_key, limited = await self.store.paginate_room_events(
             room_id=room_id,
             from_key=from_token.room_key,
             to_key=to_room_key,
@@ -572,7 +572,7 @@ class PaginationHandler:
                 # If we did backfill something, refetch the events from the database to
                 # catch anything new that might have been added since we last fetched.
                 if did_backfill:
-                    events, next_key = await self.store.paginate_room_events(
+                    events, next_key, limited = await self.store.paginate_room_events(
                         room_id=room_id,
                         from_key=from_token.room_key,
                         to_key=to_room_key,
@@ -594,11 +594,14 @@ class PaginationHandler:
 
         next_token = from_token.copy_and_replace(StreamKeyType.ROOM, next_key)
 
-        # if no events are returned from pagination, that implies
-        # we have reached the end of the available events.
+        # if no events are returned from pagination (this page is empty)
+        # and there aren't any more pages (not limited),
+        # that implies we have reached the end of the available events.
         # In that case we do not return end, to tell the client
         # there is no need for further queries.
-        if not events:
+        # (GHSA-6qf2-7x63-mm6v: a page made entirely of rejected events is empty
+        # but `limited`, and must not end pagination.)
+        if not limited and not events:
             return {
                 "chunk": [],
                 "start": await from_token.to_string(self.store),

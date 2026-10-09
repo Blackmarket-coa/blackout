@@ -839,7 +839,7 @@ class StreamWorkerStore(EventsWorkerStore, SQLBaseStore):
         if limit == 0:
             return [], end_token
 
-        rows, token = await self.db_pool.runInteraction(
+        rows, token, _ = await self.db_pool.runInteraction(
             "get_recent_event_ids_for_room",
             self._paginate_room_events_txn,
             room_id,
@@ -1196,7 +1196,7 @@ class StreamWorkerStore(EventsWorkerStore, SQLBaseStore):
             topological=topological_ordering, stream=stream_ordering
         )
 
-        rows, start_token = self._paginate_room_events_txn(
+        rows, start_token, _ = self._paginate_room_events_txn(
             txn,
             room_id,
             before_token,
@@ -1206,7 +1206,7 @@ class StreamWorkerStore(EventsWorkerStore, SQLBaseStore):
         )
         events_before = [r.event_id for r in rows]
 
-        rows, end_token = self._paginate_room_events_txn(
+        rows, end_token, _ = self._paginate_room_events_txn(
             txn,
             room_id,
             after_token,
@@ -1378,7 +1378,7 @@ class StreamWorkerStore(EventsWorkerStore, SQLBaseStore):
         direction: Direction = Direction.BACKWARDS,
         limit: int = -1,
         event_filter: Optional[Filter] = None,
-    ) -> Tuple[List[_EventDictReturn], RoomStreamToken]:
+    ) -> Tuple[List[_EventDictReturn], RoomStreamToken, bool]:
         """Returns list of events before or after a given token.
 
         Args:
@@ -1393,10 +1393,11 @@ class StreamWorkerStore(EventsWorkerStore, SQLBaseStore):
                 those that match the filter.
 
         Returns:
-            A list of _EventDictReturn and a token that points to the end of the
-            result set. If no events are returned then the end of the stream has
-            been reached (i.e. there are no events between `from_token` and
-            `to_token`), or `limit` is zero.
+            A list of _EventDictReturn, a token that points to the end of the
+            result set, and a boolean (`limited`) indicating whether there were
+            more rows than we returned. If no events are returned and `limited` is
+            false then the end of the stream has been reached (i.e. there are no
+            events between `from_token` and `to_token`), or `limit` is zero.
         """
 
         args: List[Any] = [room_id]
@@ -1420,7 +1421,8 @@ class StreamWorkerStore(EventsWorkerStore, SQLBaseStore):
             args.extend(filter_args)
 
         # We fetch more events as we'll filter the result set
-        args.append(int(limit) * 2)
+        requested_limit = int(limit) * 2
+        args.append(requested_limit)
 
         select_keywords = "SELECT"
         join_clause = ""
@@ -1485,10 +1487,16 @@ class StreamWorkerStore(EventsWorkerStore, SQLBaseStore):
 
         txn.execute(sql, args)
 
+        # Get all the rows and check if we hit the limit.
+        # (Ported from upstream: GHSA-6qf2-7x63-mm6v needs to know whether more
+        # rows exist even when every returned row is later filtered out.)
+        fetched_rows = txn.fetchall()
+        limited = len(fetched_rows) >= requested_limit
+
         # Filter the result set.
         rows = [
             _EventDictReturn(event_id, topological_ordering, stream_ordering)
-            for event_id, instance_name, topological_ordering, stream_ordering in txn
+            for event_id, instance_name, topological_ordering, stream_ordering in fetched_rows
             if _filter_results(
                 lower_token=to_token
                 if direction == Direction.BACKWARDS
@@ -1500,7 +1508,12 @@ class StreamWorkerStore(EventsWorkerStore, SQLBaseStore):
                 topological_ordering=topological_ordering,
                 stream_ordering=stream_ordering,
             )
-        ][:limit]
+        ]
+
+        if len(rows) > limit:
+            limited = True
+
+        rows = rows[:limit]
 
         if rows:
             assert rows[-1].topological_ordering is not None
@@ -1511,7 +1524,7 @@ class StreamWorkerStore(EventsWorkerStore, SQLBaseStore):
             # Keep this as a conservative fallback for unknown stream rows.
             next_token = to_token if to_token else from_token
 
-        return rows, next_token
+        return rows, next_token, limited
 
     @trace
     async def paginate_room_events(
@@ -1522,7 +1535,7 @@ class StreamWorkerStore(EventsWorkerStore, SQLBaseStore):
         direction: Direction = Direction.BACKWARDS,
         limit: int = -1,
         event_filter: Optional[Filter] = None,
-    ) -> Tuple[List[EventBase], RoomStreamToken]:
+    ) -> Tuple[List[EventBase], RoomStreamToken, bool]:
         """Returns list of events before or after a given token.
 
         Args:
@@ -1535,13 +1548,21 @@ class StreamWorkerStore(EventsWorkerStore, SQLBaseStore):
             event_filter: If provided filters the events to those that match the filter.
 
         Returns:
-            The results as a list of events and a token that points to the end
-            of the result set. If no events are returned then the end of the
+            - The results as a list of events;
+            - a token that points to the end of the result set; and
+            - a boolean to indicate if there were more events
+              but we hit the limit (`limited`)
+
+            If no events are returned and `limited` is false, then the end of the
             stream has been reached (i.e. there are no events between `from_key`
             and `to_key`).
+
+            When `limited` is true, that means that more pagination can be attempted.
+            Note that `limited` can be true even if no events are returned,
+            because rejected events are filtered out after the limit check.
         """
 
-        rows, token = await self.db_pool.runInteraction(
+        rows, token, limited = await self.db_pool.runInteraction(
             "paginate_room_events",
             self._paginate_room_events_txn,
             room_id,
@@ -1558,7 +1579,7 @@ class StreamWorkerStore(EventsWorkerStore, SQLBaseStore):
 
         self._set_before_and_after(events, rows)
 
-        return events, token
+        return events, token, limited
 
     @cached()
     async def get_id_for_instance(self, instance_name: str) -> int:

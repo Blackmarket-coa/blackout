@@ -196,7 +196,7 @@ class AdminHandler:
             # events that we have and then filtering, this isn't the most
             # efficient method perhaps but it does guarantee we get everything.
             while True:
-                events, _ = await self._store.paginate_room_events(
+                events, _, _ = await self._store.paginate_room_events(
                     room_id, from_key, to_key, limit=100, direction=Direction.FORWARDS
                 )
                 if not events:

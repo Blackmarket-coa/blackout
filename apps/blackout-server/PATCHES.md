@@ -150,3 +150,24 @@ upstream.
   (new), `tests/media/test_thumbnailer_formats.py` (new),
   `tests/federation/_remote_join.py` and
   `tests/federation/test_federation_join_upgraded_room.py` (upstream, adapted).
+
+### Worker locks and pagination (upstream 1.152.0 -> 1.152.1)
+
+- `synapse/handlers/worker_lock.py` (`WaitingLock`, `WaitingMultiLock`): cap
+  the lock re-poll interval at 60 s, only back off on real timeouts, and log
+  rather than swallow other exceptions. The old `max(5, next * 2)` was meant
+  to be `min`. GHSA-8q93-326v-3m7g. Upstream's CPU-spin path goes through
+  `Duration(timedelta)` overflowing, which this tree does not have; here the
+  same defect shows up as a waiter that stops re-polling on its own (see the
+  triage doc).
+- `synapse/storage/databases/main/stream.py` (`_paginate_room_events_txn` and
+  `paginate_room_events` now also return `limited`; internal callers updated),
+  `synapse/handlers/pagination.py` (only end pagination when the page is empty
+  *and* not limited), `synapse/handlers/admin.py` and
+  `tests/storage/test_stream.py` (unpacking only). A page consisting solely of
+  rejected events no longer ends `/messages` back-pagination.
+  GHSA-6qf2-7x63-mm6v. The admin data-export loop in `handlers/admin.py` keeps
+  its "empty page means done" logic, as upstream does.
+- Tests: `tests/handlers/test_worker_lock.py` (upstream test plus
+  `test_missed_notification_is_retried_within_cap`),
+  `tests/rest/client/test_rooms_pagination_advisory.py` (upstream test).
