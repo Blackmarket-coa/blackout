@@ -497,6 +497,11 @@ class FederationV2InviteServlet(BaseFederationServerServlet):
         event = content["event"]
         invite_room_state = content.get("invite_room_state", [])
 
+        # GHSA-f3r3-h2mq-hx2h: a non-list here used to be stored and later break
+        # the invitee's /sync.
+        if not isinstance(invite_room_state, list):
+            invite_room_state = []
+
         # Synapse expects invite_room_state to be in unsigned, as it is in v1
         # API
 

@@ -20,6 +20,7 @@ from typing import (
     Collection,
     Dict,
     FrozenSet,
+    Generator,
     Iterable,
     List,
     Optional,
@@ -153,6 +154,13 @@ class EventFederationWorkerStore(SignatureWorkerStore, EventsWorkerStore, SQLBas
                 unique_columns=("event_id", "room_id"),
             )
 
+        self.db_pool.updates.register_background_index_update(
+            update_name="event_auth_chain_links_origin_index",
+            index_name="event_auth_chain_links_origin_index",
+            table="event_auth_chain_links",
+            columns=("origin_chain_id", "origin_sequence_number"),
+        )
+
     async def get_auth_chain(
         self, room_id: str, event_ids: Collection[str], include_given: bool = False
     ) -> List[EventBase]:
@@ -265,38 +273,15 @@ class EventFederationWorkerStore(SignatureWorkerStore, EventsWorkerStore, SQLBas
 
         # Now we look up all links for the chains we have, adding chains that
         # are reachable from any event.
-        sql = """
-            SELECT
-                origin_chain_id, origin_sequence_number,
-                target_chain_id, target_sequence_number
-            FROM event_auth_chain_links
-            WHERE %s
-        """
 
         # A map from chain ID to max sequence number *reachable* from any event ID.
         chains: Dict[int, int] = {}
+        for links in self._get_chain_links(txn, set(event_chains.keys())):
+            for chain_id in links:
+                if chain_id not in event_chains:
+                    continue
 
-        # Add all linked chains reachable from initial set of chains.
-        for batch2 in batch_iter(event_chains, 1000):
-            clause, args = make_in_list_sql_clause(
-                txn.database_engine, "origin_chain_id", batch2
-            )
-            txn.execute(sql % (clause,), args)
-
-            for (
-                origin_chain_id,
-                origin_sequence_number,
-                target_chain_id,
-                target_sequence_number,
-            ) in txn:
-                # chains are only reachable if the origin sequence number of
-                # the link is less than the max sequence number in the
-                # origin chain.
-                if origin_sequence_number <= event_chains.get(origin_chain_id, 0):
-                    chains[target_chain_id] = max(
-                        target_sequence_number,
-                        chains.get(target_chain_id, 0),
-                    )
+                _materialize(chain_id, event_chains[chain_id], links, chains)
 
         # Add the initial set of chains, excluding the sequence corresponding to
         # initial event.
@@ -340,6 +325,68 @@ class EventFederationWorkerStore(SignatureWorkerStore, EventsWorkerStore, SQLBas
                 results.update(r for r, in txn)
 
         return results
+
+    @classmethod
+    def _get_chain_links(
+        cls, txn: LoggingTransaction, chains_to_fetch: Set[int]
+    ) -> Generator[Dict[int, List[Tuple[int, int, int]]], None, None]:
+        """Fetch all auth chain links from the given set of chains, and all
+        links from those chains, recursively.
+
+        Note: This may return links that are not reachable from the given
+        chains.
+
+        Returns a generator that produces dicts from origin chain ID to 3-tuple
+        of origin sequence number, target chain ID and target sequence number.
+        """
+
+        # This query is structured to first get all chain IDs reachable, and
+        # then pull out all links from those chains. This does pull out more
+        # rows than is strictly necessary, however there isn't a way of
+        # structuring the recursive part of query to pull out the links without
+        # also returning large quantities of redundant data (which can make it a
+        # lot slower).
+        sql = """
+            WITH RECURSIVE links(chain_id) AS (
+                SELECT
+                    DISTINCT origin_chain_id
+                FROM event_auth_chain_links WHERE %s
+                UNION
+                SELECT
+                    target_chain_id
+                FROM event_auth_chain_links
+                INNER JOIN links ON (chain_id = origin_chain_id)
+            )
+            SELECT
+                origin_chain_id, origin_sequence_number,
+                target_chain_id, target_sequence_number
+            FROM links
+            INNER JOIN event_auth_chain_links ON (chain_id = origin_chain_id)
+        """
+
+        while chains_to_fetch:
+            batch2 = tuple(itertools.islice(chains_to_fetch, 1000))
+            chains_to_fetch.difference_update(batch2)
+            clause, args = make_in_list_sql_clause(
+                txn.database_engine, "origin_chain_id", batch2
+            )
+            txn.execute(sql % (clause,), args)
+
+            links: Dict[int, List[Tuple[int, int, int]]] = {}
+
+            for (
+                origin_chain_id,
+                origin_sequence_number,
+                target_chain_id,
+                target_sequence_number,
+            ) in txn:
+                links.setdefault(origin_chain_id, []).append(
+                    (origin_sequence_number, target_chain_id, target_sequence_number)
+                )
+
+            chains_to_fetch.difference_update(links)
+
+            yield links
 
     def _get_auth_chain_ids_txn(
         self, txn: LoggingTransaction, event_ids: Collection[str], include_given: bool
@@ -523,41 +570,19 @@ class EventFederationWorkerStore(SignatureWorkerStore, EventsWorkerStore, SQLBas
 
                 chains[chain_id] = max(seq_no, chains.get(chain_id, 0))
 
-        # Now we look up all links for the chains we have, adding chains to
-        # set_to_chain that are reachable from each set.
-        sql = """
-            SELECT
-                origin_chain_id, origin_sequence_number,
-                target_chain_id, target_sequence_number
-            FROM event_auth_chain_links
-            WHERE %s
-        """
+        # Now we look up all links for the chains we have, adding chains that
+        # are reachable from any event.
 
-        # (We need to take a copy of `seen_chains` as we want to mutate it in
-        # the loop)
-        for batch2 in batch_iter(set(seen_chains), 1000):
-            clause, args = make_in_list_sql_clause(
-                txn.database_engine, "origin_chain_id", batch2
-            )
-            txn.execute(sql % (clause,), args)
+        # (We need to take a copy of `seen_chains` as the function mutates it)
+        for links in self._get_chain_links(txn, set(seen_chains)):
+            for chains in set_to_chain:
+                for chain_id in links:
+                    if chain_id not in chains:
+                        continue
 
-            for (
-                origin_chain_id,
-                origin_sequence_number,
-                target_chain_id,
-                target_sequence_number,
-            ) in txn:
-                for chains in set_to_chain:
-                    # chains are only reachable if the origin sequence number of
-                    # the link is less than the max sequence number in the
-                    # origin chain.
-                    if origin_sequence_number <= chains.get(origin_chain_id, 0):
-                        chains[target_chain_id] = max(
-                            target_sequence_number,
-                            chains.get(target_chain_id, 0),
-                        )
+                    _materialize(chain_id, chains[chain_id], links, chains)
 
-                seen_chains.add(target_chain_id)
+                seen_chains.update(chains)
 
         # Now for each chain we figure out the maximum sequence number reachable
         # from *any* state set and the minimum sequence number reachable from
@@ -1637,6 +1662,13 @@ class EventFederationWorkerStore(SignatureWorkerStore, EventsWorkerStore, SQLBas
         latest_events: List[str],
         limit: int,
     ) -> List[EventBase]:
+        """
+        Walk backwards in the DAG of events,
+        starting at `latest_events` and stopping at `earliest_events` (or when having reached `limit` events).
+
+        This function will check that `latest_events` and `earliest_events` are in the correct
+        room (`room_id`), appropriately ignoring any that aren't.
+        """
         ids = await self.db_pool.runInteraction(
             "get_missing_events",
             self._get_missing_events,
@@ -1655,20 +1687,53 @@ class EventFederationWorkerStore(SignatureWorkerStore, EventsWorkerStore, SQLBas
         latest_events: List[str],
         limit: int,
     ) -> List[str]:
-        seen_events = set(earliest_events)
-        front = set(latest_events) - seen_events
-        event_results: List[str] = []
+        # Ported from upstream Synapse 1.157.2 (GHSA-27p5-4f45-gx76): both the
+        # starting events and every step of the walk are constrained to
+        # `room_id`, so events from another room are treated as unknown.
 
-        query = (
-            "SELECT prev_event_id FROM event_edges "
-            "WHERE event_id = ? AND NOT is_state "
-            "LIMIT ?"
+        # It's OK that this has not been filtered by correct-room,
+        # because we will only compare based on event ID from the events
+        # we happen to run into.
+        seen_events = set(earliest_events)
+
+        # Pre-filter the `latest_events` to only include those
+        # that are in this room (and that we know about)
+        # This makes events in the wrong room get treated the same as unknown events.
+        events_clause, events_args = make_in_list_sql_clause(
+            self.database_engine,
+            "event_id",
+            # Don't waste time looking at events that the requester told us
+            # they already know about.
+            # (They probably shouldn't send this in the first place)
+            set(latest_events) - seen_events,
         )
+        txn.execute(
+            f"""
+            SELECT event_id
+            FROM events
+            WHERE {events_clause} AND room_id = ?
+            """,
+            (*events_args, room_id),
+        )
+        # Start walking back from the legitimate and known `latest_events`
+        front = {latest_event_id for (latest_event_id,) in txn}
+
+        event_results: List[str] = []
 
         while front and len(event_results) < limit:
             new_front = set()
             for event_id in front:
-                txn.execute(query, (event_id, limit - len(event_results)))
+                txn.execute(
+                    """
+                    SELECT ee.prev_event_id FROM event_edges AS ee
+                    JOIN events ON events.event_id = ee.prev_event_id
+                    WHERE ee.event_id = ?
+                    AND events.room_id = ?
+                    AND NOT ee.is_state
+                    LIMIT ?
+                    """,
+                    (event_id, room_id, limit - len(event_results)),
+                )
                 new_results = {t[0] for t in txn} - seen_events
 
                 new_front |= new_results
@@ -2097,3 +2162,49 @@ class EventFederationStore(EventFederationWorkerStore):
             )
 
         return batch_size
+
+
+def _materialize(
+    origin_chain_id: int,
+    origin_sequence_number: int,
+    links: Dict[int, List[Tuple[int, int, int]]],
+    materialized: Dict[int, int],
+) -> None:
+    """Helper function for fetching auth chain links. For a given origin chain
+    ID / sequence number and a dictionary of links, updates the materialized
+    dict with the reachable chains.
+
+    To get a dict of all chains reachable from a set of chains this function can
+    be called in a loop, once per origin chain with the same links and
+    materialized args. The materialized dict will the result.
+
+    Args:
+        origin_chain_id, origin_sequence_number
+        links: map of the links between chains as a dict from origin chain ID
+            to list of 3-tuples of origin sequence number, target chain ID and
+            target sequence number.
+        materialized: dict to update with new reachability information, as a
+            map from chain ID to max sequence number reachable.
+    """
+
+    # Do a standard graph traversal.
+    stack = [(origin_chain_id, origin_sequence_number)]
+
+    while stack:
+        c, s = stack.pop()
+
+        chain_links = links.get(c, [])
+        for (
+            sequence_number,
+            target_chain_id,
+            target_sequence_number,
+        ) in chain_links:
+            # Ignore any links that are higher up the chain
+            if sequence_number > s:
+                continue
+
+            # Check if we have already visited the target chain before, if so we
+            # can skip it.
+            if materialized.get(target_chain_id, 0) < target_sequence_number:
+                stack.append((target_chain_id, target_sequence_number))
+                materialized[target_chain_id] = target_sequence_number

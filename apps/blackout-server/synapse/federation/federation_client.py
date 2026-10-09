@@ -50,6 +50,7 @@ from synapse.api.errors import (
     SynapseError,
     UnsupportedRoomVersionError,
 )
+from synapse.api.ratelimiting import Ratelimiter
 from synapse.api.room_versions import (
     KNOWN_ROOM_VERSIONS,
     EventFormatVersions,
@@ -61,6 +62,7 @@ from synapse.federation.federation_base import (
     FederationBase,
     InvalidEventSignatureError,
     event_from_pdu_json,
+    parse_events_from_pdu_json,
 )
 from synapse.federation.transport.client import SendJoinResponse
 from synapse.http.client import is_unknown_endpoint
@@ -343,7 +345,7 @@ class FederationClient(FederationBase):
 
         room_version = await self.store.get_room_version(room_id)
 
-        pdus = [event_from_pdu_json(p, room_version) for p in transaction_data_pdus]
+        pdus = parse_events_from_pdu_json(transaction_data_pdus, room_version)
 
         # Check signatures and hash of pdus, removing any from the list that fail checks
         pdus[:] = await self._check_sigs_and_hash_for_pulled_events_and_fetch(
@@ -387,9 +389,7 @@ class FederationClient(FederationBase):
             transaction_data,
         )
 
-        pdu_list: List[EventBase] = [
-            event_from_pdu_json(p, room_version) for p in transaction_data["pdus"]
-        ]
+        pdu_list = parse_events_from_pdu_json(transaction_data["pdus"], room_version)
 
         if pdu_list and pdu_list[0]:
             pdu = pdu_list[0]
@@ -812,7 +812,7 @@ class FederationClient(FederationBase):
 
         room_version = await self.store.get_room_version(room_id)
 
-        auth_chain = [event_from_pdu_json(p, room_version) for p in res["auth_chain"]]
+        auth_chain = parse_events_from_pdu_json(res["auth_chain"], room_version)
 
         signed_auth = await self._check_sigs_and_hash_for_pulled_events_and_fetch(
             destination, auth_chain, room_version=room_version
@@ -1533,9 +1533,7 @@ class FederationClient(FederationBase):
 
             room_version = await self.store.get_room_version(room_id)
 
-            events = [
-                event_from_pdu_json(e, room_version) for e in content.get("events", [])
-            ]
+            events = parse_events_from_pdu_json(content.get("events", []), room_version)
 
             signed_events = await self._check_sigs_and_hash_for_pulled_events_and_fetch(
                 destination, events, room_version=room_version
@@ -1878,6 +1876,8 @@ class FederationClient(FederationBase):
         output_stream: BinaryIO,
         max_size: int,
         max_timeout_ms: int,
+        download_ratelimiter: Ratelimiter,
+        ip_address: str,
     ) -> Tuple[int, Dict[bytes, List[bytes]]]:
         try:
             return await self.transport_layer.download_media_v3(
@@ -1886,6 +1886,8 @@ class FederationClient(FederationBase):
                 output_stream=output_stream,
                 max_size=max_size,
                 max_timeout_ms=max_timeout_ms,
+                download_ratelimiter=download_ratelimiter,
+                ip_address=ip_address,
             )
         except HttpResponseException as e:
             # If an error is received that is due to an unrecognised endpoint,
@@ -1906,6 +1908,8 @@ class FederationClient(FederationBase):
             output_stream=output_stream,
             max_size=max_size,
             max_timeout_ms=max_timeout_ms,
+            download_ratelimiter=download_ratelimiter,
+            ip_address=ip_address,
         )
 
 

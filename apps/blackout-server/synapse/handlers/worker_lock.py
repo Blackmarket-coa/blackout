@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging
 import random
 from types import TracebackType
 from typing import (
@@ -47,6 +48,13 @@ if TYPE_CHECKING:
 # This is because it is fine to create several events concurrently, since referenced events
 # will not disappear under our feet as long as we don't delete the room.
 NEW_EVENT_DURING_PURGE_LOCK_NAME = "new_event_during_purge_lock"
+
+# Ported from upstream Synapse 1.152.1 (GHSA-8q93-326v-3m7g). Upstream expresses
+# these as `Duration`s; this tree has no `Duration`, so they are plain numbers.
+WORKER_LOCK_MAX_RETRY_INTERVAL_SECS = 60.0
+WORKER_LOCK_EXCESSIVE_WAITING_WARN_MS = 10 * 60 * 1000
+
+logger = logging.getLogger(__name__)
 
 
 class WorkerLocksHandler:
@@ -197,13 +205,15 @@ class WaitingLock:
     lock_key: str
     write: Optional[bool]
     deferred: "defer.Deferred[None]" = attr.Factory(defer.Deferred)
+    start_ts_ms: int = 0
     _inner_lock: Optional[Lock] = None
-    _retry_interval: float = 0.1
+    _timeout_interval: float = 0.1
     _lock_span: "opentracing.Scope" = attr.Factory(
         lambda: start_active_span("WaitingLock.lock")
     )
 
     async def __aenter__(self) -> None:
+        self.start_ts_ms = int(self.reactor.seconds() * 1000)
         self._lock_span.__enter__()
 
         with start_active_span("WaitingLock.waiting_for_lock"):
@@ -224,18 +234,40 @@ class WaitingLock:
                     break
 
                 try:
-                    # Wait until the we get notified the lock might have been
+                    # Wait until the notification that the lock might have been
                     # released (by the deferred being resolved). We also
-                    # periodically wake up in case the lock was released but we
+                    # periodically wake up in case the lock was released, but we
                     # weren't notified.
                     with PreserveLoggingContext():
                         await timeout_deferred(
                             deferred=self.deferred,
-                            timeout=self._get_next_retry_interval(),
+                            timeout=self._timeout_interval,
                             reactor=self.reactor,
                         )
-                except Exception:
-                    pass
+                except defer.TimeoutError:
+                    # Only increment the timeout value if this was an actual timeout
+                    # (defer.TimeoutError)
+                    self._increment_timeout_interval()
+
+                    time_spent_ms = (
+                        int(self.reactor.seconds() * 1000) - self.start_ts_ms
+                    )
+                    if time_spent_ms > WORKER_LOCK_EXCESSIVE_WAITING_WARN_MS:
+                        logger.warning(
+                            "(WaitingLock (%s, %s)) Time spent waiting to acquire lock "
+                            "is getting excessive: %ss. There may be a deadlock.",
+                            self.lock_name,
+                            self.lock_key,
+                            time_spent_ms / 1000,
+                        )
+
+                except Exception as e:
+                    logger.warning(
+                        "Caught an exception while waiting on WaitingLock(lock_name=%s, lock_key=%s): %r",
+                        self.lock_name,
+                        self.lock_key,
+                        e,
+                    )
 
         return await self._inner_lock.__aenter__()
 
@@ -256,10 +288,17 @@ class WaitingLock:
 
         return r
 
-    def _get_next_retry_interval(self) -> float:
-        next = self._retry_interval
-        self._retry_interval = max(5, next * 2)
-        return next * random.uniform(0.9, 1.1)
+    def _increment_timeout_interval(self) -> float:
+        # Previously `max(5, next * 2)`: `max` and `min` were swapped, so the
+        # interval was never capped and grew on every wake-up, including
+        # notifications. See GHSA-8q93-326v-3m7g.
+        next_interval = self._timeout_interval
+        next_interval = min(WORKER_LOCK_MAX_RETRY_INTERVAL_SECS, next_interval * 2)
+
+        # The jitter value is maintained for the timeout, to help avoid a "thundering
+        # herd" situation when all locks may time out at the same time.
+        self._timeout_interval = next_interval * random.uniform(0.9, 1.1)
+        return self._timeout_interval
 
 
 @attr.s(auto_attribs=True, eq=False)
@@ -274,13 +313,15 @@ class WaitingMultiLock:
 
     deferred: "defer.Deferred[None]" = attr.Factory(defer.Deferred)
 
+    start_ts_ms: int = 0
     _inner_lock_cm: Optional[AsyncContextManager] = None
-    _retry_interval: float = 0.1
+    _timeout_interval: float = 0.1
     _lock_span: "opentracing.Scope" = attr.Factory(
         lambda: start_active_span("WaitingLock.lock")
     )
 
     async def __aenter__(self) -> None:
+        self.start_ts_ms = int(self.reactor.seconds() * 1000)
         self._lock_span.__enter__()
 
         with start_active_span("WaitingLock.waiting_for_lock"):
@@ -296,18 +337,38 @@ class WaitingMultiLock:
                     break
 
                 try:
-                    # Wait until the we get notified the lock might have been
+                    # Wait until the notification that the lock might have been
                     # released (by the deferred being resolved). We also
-                    # periodically wake up in case the lock was released but we
+                    # periodically wake up in case the lock was released, but we
                     # weren't notified.
                     with PreserveLoggingContext():
                         await timeout_deferred(
                             deferred=self.deferred,
-                            timeout=self._get_next_retry_interval(),
+                            timeout=self._timeout_interval,
                             reactor=self.reactor,
                         )
-                except Exception:
-                    pass
+                except defer.TimeoutError:
+                    # Only increment the timeout value if this was an actual timeout
+                    # (defer.TimeoutError)
+                    self._increment_timeout_interval()
+
+                    time_spent_ms = (
+                        int(self.reactor.seconds() * 1000) - self.start_ts_ms
+                    )
+                    if time_spent_ms > WORKER_LOCK_EXCESSIVE_WAITING_WARN_MS:
+                        logger.warning(
+                            "(WaitingMultiLock (%r)) Time spent waiting to acquire lock "
+                            "is getting excessive: %ss. There may be a deadlock.",
+                            self.lock_names,
+                            time_spent_ms / 1000,
+                        )
+
+                except Exception as e:
+                    logger.warning(
+                        "Caught an exception while waiting on WaitingMultiLock(lock_names=%r): %r",
+                        self.lock_names,
+                        e,
+                    )
 
         assert self._inner_lock_cm
         await self._inner_lock_cm.__aenter__()
@@ -331,7 +392,14 @@ class WaitingMultiLock:
 
         return r
 
-    def _get_next_retry_interval(self) -> float:
-        next = self._retry_interval
-        self._retry_interval = max(5, next * 2)
-        return next * random.uniform(0.9, 1.1)
+    def _increment_timeout_interval(self) -> float:
+        # Previously `max(5, next * 2)`: `max` and `min` were swapped, so the
+        # interval was never capped and grew on every wake-up, including
+        # notifications. See GHSA-8q93-326v-3m7g.
+        next_interval = self._timeout_interval
+        next_interval = min(WORKER_LOCK_MAX_RETRY_INTERVAL_SECS, next_interval * 2)
+
+        # The jitter value is maintained for the timeout, to help avoid a "thundering
+        # herd" situation when all locks may time out at the same time.
+        self._timeout_interval = next_interval * random.uniform(0.9, 1.1)
+        return self._timeout_interval

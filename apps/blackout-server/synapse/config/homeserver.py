@@ -35,6 +35,7 @@ from .oembed import OembedConfig
 from .oidc import OIDCConfig
 from .password_auth_providers import PasswordAuthProviderConfig
 from .push import PushConfig
+from .push_rules import PushRulesConfig
 from .ratelimiting import RatelimitConfig
 from .redis import RedisConfig
 from .registration import RegistrationConfig
@@ -87,6 +88,7 @@ class HomeServerConfig(RootConfig):
         EmailConfig,
         PasswordAuthProviderConfig,
         PushConfig,
+        PushRulesConfig,
         SpamCheckerConfig,
         RoomConfig,
         UserDirectoryConfig,

@@ -54,7 +54,7 @@ class AccountDataServlet(RestServlet):
     """
 
     PATTERNS = client_patterns(
-        "/user/(?P<user_id>[^/]*)/account_data/(?P<account_data_type>[^/]*)"
+        "/user/(?P<user_id>[^/]*)/account_data/(?P<account_data_type>[^/]*)$"
     )
     CATEGORY = "Account data requests"
 
@@ -133,7 +133,7 @@ class UnstableAccountDataServlet(RestServlet):
 
     PATTERNS = client_patterns(
         "/org.matrix.msc3391/user/(?P<user_id>[^/]*)"
-        "/account_data/(?P<account_data_type>[^/]*)",
+        "/account_data/(?P<account_data_type>[^/]*)$",
         unstable=True,
         releases=(),
     )
@@ -172,7 +172,7 @@ class RoomAccountDataServlet(RestServlet):
     PATTERNS = client_patterns(
         "/user/(?P<user_id>[^/]*)"
         "/rooms/(?P<room_id>[^/]*)"
-        "/account_data/(?P<account_data_type>[^/]*)"
+        "/account_data/(?P<account_data_type>[^/]*)$"
     )
     CATEGORY = "Account data requests"
 
@@ -280,7 +280,7 @@ class UnstableRoomAccountDataServlet(RestServlet):
     PATTERNS = client_patterns(
         "/org.matrix.msc3391/user/(?P<user_id>[^/]*)"
         "/rooms/(?P<room_id>[^/]*)"
-        "/account_data/(?P<account_data_type>[^/]*)",
+        "/account_data/(?P<account_data_type>[^/]*)$",
         unstable=True,
         releases=(),
     )

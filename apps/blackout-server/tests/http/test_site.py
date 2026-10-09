@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from parameterized import parameterized
+
 from twisted.internet.address import IPv6Address
 from twisted.test.proto_helpers import MemoryReactor, StringTransport
 
@@ -83,3 +85,69 @@ class SynapseRequestTestCase(HomeserverTestCase):
         # default max upload size is 50M, so it should drop on the next buffer after
         # that.
         self.assertEqual(sent, 50 * 1024 * 1024 + 1024)
+
+    @parameterized.expand(
+        [
+            (b"multipart/form-data",),
+            # Also check with a boundary
+            (b"multipart/form-data; boundary=abc123",),
+            # Headers are case-insensitive, so test that too (GHSA-6wjm-9p2x-gvpm).
+            (b"Multipart/Form-Data",),
+        ]
+    )
+    def test_content_type_multipart(self, content_type: bytes) -> None:
+        """HTTP POST requests with `content-type: multipart/form-data` should be rejected
+
+        Ported from upstream Synapse 1.120.1 (GHSA-rfq8-j7rh-8hf2) and 1.157.2
+        (GHSA-6wjm-9p2x-gvpm).
+        """
+        self.hs.start_listening()
+
+        # find the HTTP server which is configured to listen on port 0
+        (port, factory, _backlog, interface) = self.reactor.tcpServers[0]
+        self.assertEqual(interface, "::")
+        self.assertEqual(port, 0)
+
+        # as a control case, first send a regular request.
+
+        # complete the connection and wire it up to a fake transport
+        client_address = IPv6Address("TCP", "::1", 2345)
+        protocol = factory.buildProtocol(client_address)
+        transport = StringTransport()
+        protocol.makeConnection(transport)
+
+        protocol.dataReceived(
+            b"POST / HTTP/1.1\r\n"
+            b"Connection: close\r\n"
+            b"Transfer-Encoding: chunked\r\n"
+            b"\r\n"
+            b"0\r\n"
+            b"\r\n"
+        )
+
+        while not transport.disconnecting:
+            self.reactor.advance(1)
+
+        # we should get a 404
+        self.assertRegex(transport.value().decode(), r"^HTTP/1\.1 404 ")
+
+        # now send request with content-type header
+        protocol = factory.buildProtocol(client_address)
+        transport = StringTransport()
+        protocol.makeConnection(transport)
+
+        protocol.dataReceived(
+            b"POST / HTTP/1.1\r\n"
+            b"Connection: close\r\n"
+            b"Transfer-Encoding: chunked\r\n"
+            b"Content-Type: " + content_type + b"\r\n"
+            b"\r\n"
+            b"0\r\n"
+            b"\r\n"
+        )
+
+        while not transport.disconnecting:
+            self.reactor.advance(1)
+
+        # we should get a 415
+        self.assertRegex(transport.value().decode(), r"^HTTP/1\.1 415 ")

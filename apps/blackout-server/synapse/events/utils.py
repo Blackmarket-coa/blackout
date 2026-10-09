@@ -33,6 +33,8 @@ import attr
 from canonicaljson import encode_canonical_json
 
 from synapse.api.constants import (
+    CANONICALJSON_MAX_INT,
+    CANONICALJSON_MIN_INT,
     MAX_PDU_SIZE,
     EventContentFields,
     EventTypes,
@@ -54,8 +56,6 @@ SPLIT_FIELD_REGEX = re.compile(r"\\*\.")
 # Find escaped characters, e.g. those with a \ in front of them.
 ESCAPE_SEQUENCE_PATTERN = re.compile(r"\\(.)")
 
-CANONICALJSON_MAX_INT = (2**53) - 1
-CANONICALJSON_MIN_INT = -CANONICALJSON_MAX_INT
 
 
 # Module API callback that allows adding fields to the unsigned section of
