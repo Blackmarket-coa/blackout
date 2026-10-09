@@ -135,6 +135,7 @@
             "engine.io": "^6.6.10",
             "esbuild": "^0.28.1",
             "fast-uri@3": "^3.1.8",
+            "handlebars": "^4.7.10",
             "hono": "^4.13.5",
             "i18next-http-backend@2.5.2": "^4.0.2",
             "colord": "^2.9.4",
