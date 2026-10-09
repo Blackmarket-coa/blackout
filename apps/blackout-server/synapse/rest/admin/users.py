@@ -1250,7 +1250,7 @@ class RateLimitRestServlet(RestServlet):
 class AccountDataRestServlet(RestServlet):
     """Retrieve the given user's account data"""
 
-    PATTERNS = admin_patterns("/users/(?P<user_id>[^/]*)/accountdata")
+    PATTERNS = admin_patterns("/users/(?P<user_id>[^/]*)/accountdata$")
 
     def __init__(self, hs: "HomeServer"):
         self._auth = hs.get_auth()
@@ -1288,7 +1288,7 @@ class UserReplaceMasterCrossSigningKeyRestServlet(RestServlet):
     """
 
     PATTERNS = admin_patterns(
-        "/users/(?P<user_id>[^/]*)/_allow_cross_signing_replacement_without_uia"
+        "/users/(?P<user_id>[^/]*)/_allow_cross_signing_replacement_without_uia$"
     )
     REPLACEMENT_PERIOD_MS = 10 * 60 * 1000  # 10 minutes
 
@@ -1322,7 +1322,7 @@ class UserByExternalId(RestServlet):
     """Find a user based on an external ID from an auth provider"""
 
     PATTERNS = admin_patterns(
-        "/auth_providers/(?P<provider>[^/]*)/users/(?P<external_id>[^/]*)"
+        "/auth_providers/(?P<provider>[^/]*)/users/(?P<external_id>[^/]*)$"
     )
 
     def __init__(self, hs: "HomeServer"):
@@ -1348,7 +1348,7 @@ class UserByExternalId(RestServlet):
 class UserByThreePid(RestServlet):
     """Find a user based on 3PID of a particular medium"""
 
-    PATTERNS = admin_patterns("/threepid/(?P<medium>[^/]*)/users/(?P<address>[^/]*)")
+    PATTERNS = admin_patterns("/threepid/(?P<medium>[^/]*)/users/(?P<address>[^/]*)$")
 
     def __init__(self, hs: "HomeServer"):
         self._auth = hs.get_auth()

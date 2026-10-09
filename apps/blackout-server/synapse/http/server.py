@@ -28,6 +28,7 @@ from typing import (
     Awaitable,
     Callable,
     Dict,
+    Final,
     Iterable,
     Iterator,
     List,
@@ -608,8 +609,40 @@ class UnrecognizedRequestResource(resource.Resource):
         # or the response bytes as a return value.
         return NOT_DONE_YET
 
-    def getChild(self, name: str, request: Request) -> resource.Resource:
-        return self
+    def getChild(self, path: str, request: Request) -> resource.Resource:
+        # The child of a catch-all unrecognised request handler
+        # is itself another unrecognised request handler.
+        # We can return any UnrecognizedRequestResource that doesn't
+        # have children.
+        #
+        # Returning `self` here (as before) meant that an intermediate
+        # UnrecognizedRequestResource in the resource tree (e.g. the one at
+        # `/_matrix`) swallowed any unknown path segment and still resolved its
+        # real children below it, so `/_matrix/INSERTED/static/...` was served
+        # as `/_matrix/static/...`.
+        # Ported from upstream Synapse 1.157.2 (GHSA-vh4c-pqh4-w3wq).
+        assert len(_BLANK_LEAF_UNRECOGNISED_REQUEST_RESOURCE.children) == 0
+        return _BLANK_LEAF_UNRECOGNISED_REQUEST_RESOURCE
+
+
+class _LeafUnrecognisedRequestResource(UnrecognizedRequestResource):
+    """
+    UnrecognizedRequestResource, but with the added caveat that it can't have any children.
+    This makes it safe for it to return itself as a dynamic child.
+
+    Constructed as a singleton; use `_BLANK_LEAF_UNRECOGNISED_REQUEST_RESOURCE`
+    """
+
+    def putChild(self, path: bytes, child: IResource) -> None:
+        raise RuntimeError("_LeafUnrecognisedRequestResource does not accept children")
+
+
+_BLANK_LEAF_UNRECOGNISED_REQUEST_RESOURCE: Final[_LeafUnrecognisedRequestResource] = (
+    _LeafUnrecognisedRequestResource()
+)
+"""
+An UnrecognizedRequestResource that is guaranteed not to have children.
+"""
 
 
 class RootRedirect(resource.Resource):

@@ -323,7 +323,11 @@ class ReplicationEndpoint(metaclass=abc.ABCMeta):
                     # on the main process that we should send to the client. (And
                     # importantly, not stack traces everywhere)
                     _outgoing_request_counter.labels(cls.NAME, e.code).inc()
-                    raise e.to_synapse_error()
+                    # This error is coming from another worker, so we trust it to be safe
+                    # to relay to clients directly (e.g. to tell clients when they are
+                    # rate-limited). See GHSA-95fh-hv8c-chvq for why the untrusted
+                    # `to_synapse_error` must not be used here.
+                    raise e.unsafe_to_verbatim_synapse_error()
                 except Exception as e:
                     _outgoing_request_counter.labels(cls.NAME, "ERR").inc()
                     raise SynapseError(

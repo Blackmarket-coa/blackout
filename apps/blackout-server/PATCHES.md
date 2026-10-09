@@ -95,3 +95,29 @@ upstream.
 - Tests: `tests/federation/test_federation_server_advisories.py` (new; upstream
   tests adapted to this harness), `tests/rest/client/test_sendtodevice.py`
   (`test_remote_spoofed_sender`).
+
+### HTTP layer (upstream 1.120.0 -> 1.120.2 and 1.157.1 -> 1.157.2)
+
+- `synapse/http/site.py` (`SynapseRequest.requestReceived`, new): reject
+  `POST` with `Content-Type: multipart/form-data` (compared case-insensitively)
+  with 415 before Twisted buffers the body in memory. GHSA-rfq8-j7rh-8hf2 and
+  its bypass GHSA-6wjm-9p2x-gvpm. No Blackout endpoint accepts multipart.
+- `synapse/api/errors.py`: `HttpResponseException.to_synapse_error` no longer
+  relays a remote `401` or `M_UNKNOWN_TOKEN` to clients (clients treat those as
+  "you have been logged out"); the verbatim behaviour moves to
+  `unsafe_to_verbatim_synapse_error`, used only for worker-to-worker replication
+  in `synapse/replication/http/_base.py`. GHSA-95fh-hv8c-chvq.
+- `synapse/http/server.py` (`UnrecognizedRequestResource.getChild`): return a
+  childless leaf instead of `self`, so an inserted path segment such as
+  `/_matrix/INSERTED/static/...` is a 404 instead of resolving to
+  `/_matrix/static/...`. GHSA-vh4c-pqh4-w3wq.
+- Servlet `PATTERNS` anchored with `$` (GHSA-hgcg-p9gx-fq5f), exactly the set
+  upstream anchored that exists in this tree:
+  `synapse/rest/admin/{experimental_features,users}.py`,
+  `synapse/rest/client/{account_data,appservice_ping,auth,devices,filter,knock,login,openid,presence,profile,register,relations,room,tags,thirdparty,tokenrefresh}.py`,
+  `synapse/rest/media/create_resource.py`. In `profile.py` this tree still has
+  the separate `displayname` / `avatar_url` servlets, so both are anchored.
+- Tests: `tests/http/test_site.py` (`test_content_type_multipart`),
+  `tests/api/test_errors_advisories.py` (new),
+  `tests/util/test_httpresourcetree.py` (new, upstream),
+  `tests/rest/test_pattern_anchoring.py` (new).
