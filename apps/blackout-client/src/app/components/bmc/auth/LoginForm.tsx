@@ -117,7 +117,7 @@ export const LoginForm = ({ server, canRegister, onSwitchTab }: LoginFormProps) 
             setError(
                 e instanceof MatrixInitError || e instanceof Error
                     ? e.message
-                    : 'Could not sign in with that account number.',
+                    : 'Could not sign in with that account number.'
             );
         } finally {
             setAnonBusy(false);
@@ -208,8 +208,8 @@ export const LoginForm = ({ server, canRegister, onSwitchTab }: LoginFormProps) 
                     err instanceof MatrixInitError
                         ? err.message
                         : err instanceof Error
-                          ? err.message
-                          : 'SSO login failed.';
+                        ? err.message
+                        : 'SSO login failed.';
                 setError(message);
             })
             .finally(() => {
@@ -242,8 +242,8 @@ export const LoginForm = ({ server, canRegister, onSwitchTab }: LoginFormProps) 
                 err instanceof MatrixInitError
                     ? err.message
                     : err instanceof Error
-                      ? err.message
-                      : 'Sign-in failed.';
+                    ? err.message
+                    : 'Sign-in failed.';
             setError(message);
         } finally {
             setSubmitting(false);
@@ -402,8 +402,8 @@ export const LoginForm = ({ server, canRegister, onSwitchTab }: LoginFormProps) 
             {createdNumber ? (
                 <div style={{ display: 'grid', gap: 10 }}>
                     <p style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary, #94a3b8)' }}>
-                        This is your account number — your <strong>only</strong> credential. There is
-                        no email and no recovery. Save it somewhere safe before continuing.
+                        This is your account number — your <strong>only</strong> credential. There
+                        is no email and no recovery. Save it somewhere safe before continuing.
                     </p>
                     <code
                         style={{

@@ -49,7 +49,7 @@ const mountLoginPage = async () => {
         root.render(
             <Provider store={createStore()}>
                 <LoginPage />
-            </Provider>,
+            </Provider>
         );
         await flushAsync();
     });
@@ -73,7 +73,7 @@ describe('LoginPage URL-driven tab + registration availability', () => {
             Object.assign(new Error('uia challenge'), {
                 httpStatus: 401,
                 data: { flows: [{ stages: ['m.login.dummy'] }] },
-            }),
+            })
         );
     });
 
@@ -81,9 +81,7 @@ describe('LoginPage URL-driven tab + registration availability', () => {
         window.history.replaceState(null, '', '/register');
         const { container, root } = await mountLoginPage();
 
-        const registerTab = container.querySelector(
-            'button[role="tab"][aria-selected="true"]',
-        );
+        const registerTab = container.querySelector('button[role="tab"][aria-selected="true"]');
         expect(registerTab?.textContent).toContain('Create account');
         root.unmount();
     });
@@ -91,7 +89,7 @@ describe('LoginPage URL-driven tab + registration availability', () => {
     it('hides the register tab and surfaces a notice when the homeserver rejects signups', async () => {
         window.history.replaceState(null, '', '/register');
         registerRequestMock.mockRejectedValue(
-            Object.assign(new Error('forbidden'), { httpStatus: 403 }),
+            Object.assign(new Error('forbidden'), { httpStatus: 403 })
         );
 
         const { container, root } = await mountLoginPage();
@@ -101,14 +99,12 @@ describe('LoginPage URL-driven tab + registration availability', () => {
 
         // Only two tabs render (login, reset) and none of them is the register tab.
         const tabs = Array.from(
-            container.querySelectorAll('button[role="tab"]'),
+            container.querySelectorAll('button[role="tab"]')
         ) as HTMLButtonElement[];
         expect(tabs).toHaveLength(2);
         expect(tabs.map((t) => t.textContent)).not.toContain('Create account');
 
-        const notice = container.querySelector(
-            '[data-testid="registration-disabled-notice"]',
-        );
+        const notice = container.querySelector('[data-testid="registration-disabled-notice"]');
         expect(notice).not.toBeNull();
         expect(notice?.textContent).toMatch(/signups are disabled/i);
         root.unmount();
@@ -118,9 +114,9 @@ describe('LoginPage URL-driven tab + registration availability', () => {
         window.history.replaceState(null, '', '/login');
         const { container, root } = await mountLoginPage();
 
-        const registerButton = Array.from(
-            container.querySelectorAll('button[role="tab"]'),
-        ).find((b) => b.textContent?.includes('Create account')) as HTMLButtonElement;
+        const registerButton = Array.from(container.querySelectorAll('button[role="tab"]')).find(
+            (b) => b.textContent?.includes('Create account')
+        ) as HTMLButtonElement;
 
         await act(async () => {
             registerButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));

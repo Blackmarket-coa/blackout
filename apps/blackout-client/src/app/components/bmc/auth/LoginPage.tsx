@@ -98,9 +98,7 @@ export const LoginPage = () => {
             } catch (e) {
                 if (cancelled) return;
                 setBootstrapError(
-                    e instanceof Error
-                        ? e.message
-                        : 'Could not connect to the default homeserver.'
+                    e instanceof Error ? e.message : 'Could not connect to the default homeserver.'
                 );
             }
         };
@@ -145,8 +143,7 @@ export const LoginPage = () => {
     const tabs: AuthTab[] = registrationDisabled
         ? ['login', 'reset']
         : ['login', 'register', 'reset'];
-    const showRegistrationDisabledNotice =
-        registrationDisabled && startedOnRegisterRef.current;
+    const showRegistrationDisabledNotice = registrationDisabled && startedOnRegisterRef.current;
 
     return (
         <div style={{ display: 'grid', gap: 16 }}>
@@ -170,8 +167,8 @@ export const LoginPage = () => {
                         padding: '8px 10px',
                     }}
                 >
-                    New signups are disabled on {server.serverName}. Sign in below if you
-                    already have an account.
+                    New signups are disabled on {server.serverName}. Sign in below if you already
+                    have an account.
                 </p>
             ) : null}
             <div style={tabBarStyle} role="tablist">
