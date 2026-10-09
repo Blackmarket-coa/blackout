@@ -203,3 +203,27 @@ upstream.
 - `docs/usage/configuration/config_documentation.md`: documents `push_rules`.
 - Tests: `tests/rest/client/test_push_rule_attrs.py` (`PushRuleLimitTestCase`,
   upstream), `tests/config/test_push_rules_config.py` (new).
+
+### Auth chain cover index (upstream 1.98.0 -> 1.105.0 read side, 1.105.1 write side)
+
+- `synapse/storage/databases/main/event_federation.py`: read auth-chain links
+  by graph traversal (`_get_chain_links`, `_materialize`) instead of assuming
+  `event_auth_chain_links` holds the transitive closure; register the
+  `event_auth_chain_links_origin_index` background index. This is upstream's
+  1.105.0 read path, a prerequisite for the security fix.
+- `synapse/storage/databases/main/events.py` (`_add_chain_cover_index`,
+  `_LinkMap.exists_path_from`): stop writing transitive links. Writing them was
+  what let a remote room member blow up CPU and disk. GHSA-3h7q-rfh9-xm4v.
+- `synapse/storage/schema/main/delta/84/01_auth_links_stats.sql.postgres`,
+  `02_auth_links_index.sql`, `03_auth_links_analyze.sql.postgres`: upstream's
+  deltas, same file names (Postgres planner statistics, the index's background
+  update, `ANALYZE`). This tree's own `84/01_blackout_monetization_foundations.sql`
+  is unaffected; servers already at schema 84 pick the new files up on start.
+- **Rollback hazard.** Upstream bumped `SCHEMA_COMPAT_VERSION` to 84 so that
+  code expecting transitive links cannot run against a database written
+  without them. This tree already used schema version 84 for the monetization
+  delta, so the same bump would not stop a rollback to an earlier Blackout
+  build and was not made. Do not roll a server back past this change once it
+  has persisted events; the older read path would compute incomplete auth
+  chains.
+- Tests: `tests/storage/test_event_chain.py` (upstream 1.105.1 changes).
