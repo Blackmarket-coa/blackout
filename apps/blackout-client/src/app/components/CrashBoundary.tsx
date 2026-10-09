@@ -1,5 +1,7 @@
 import React, { Component, Suspense, lazy, type ErrorInfo, type ReactNode } from 'react';
 import { setCrashHandoff } from './crashHandoffStore';
+import { isEmbedPath } from '../features/black-mask-embed/embedPaths';
+import { EMBED_PATH } from '../pages/paths';
 
 // Lazy-import so the boundary itself doesn't drag the settings bundle in.
 // BugReportSettings has its own `Suspense` boundary internally but the lazy()
@@ -100,7 +102,9 @@ export class CrashBoundary extends Component<CrashBoundaryProps, CrashBoundarySt
     };
 
     private handleGoHome = (): void => {
-        window.location.assign('/');
+        // Inside the Black Mask chat panel, "home" is the panel's home: the
+        // panel's frame must never be sent to the full app.
+        window.location.assign(isEmbedPath(window.location.pathname) ? EMBED_PATH : '/');
     };
 
     render(): ReactNode {

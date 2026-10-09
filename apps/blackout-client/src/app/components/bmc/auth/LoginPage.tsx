@@ -44,7 +44,18 @@ const tabLabel: Record<AuthTab, string> = {
     reset: 'Reset password',
 };
 
-export const LoginPage = () => {
+type LoginPageProps = {
+    /**
+     * Rendered inside the Black Mask chat panel (`/embed`). The panel's frame
+     * must never leave the panel, so in this mode the page does not rewrite
+     * the URL to `/login` / `/register` / `/reset-password` when the tab
+     * changes, and single sign-on (a full-frame redirect to the identity
+     * provider) is not offered.
+     */
+    embedded?: boolean;
+};
+
+export const LoginPage = ({ embedded = false }: LoginPageProps = {}) => {
     const [server, setServer] = useState<ResolvedHomeserver | null>(null);
     const [bootstrapError, setBootstrapError] = useState<string | null>(null);
     const [tab, setTabState] = useState<AuthTab>(initialTab());
@@ -64,6 +75,7 @@ export const LoginPage = () => {
     // adding history entries for every tab click.
     const setTab = (next: AuthTab) => {
         setTabState(next);
+        if (embedded) return;
         try {
             const targetPath = TAB_PATHS[next];
             if (window.location.pathname !== targetPath) {
@@ -190,6 +202,7 @@ export const LoginPage = () => {
                     server={server}
                     canRegister={!registrationDisabled}
                     onSwitchTab={(next) => setTab(next)}
+                    allowSso={!embedded}
                 />
             ) : null}
             {tab === 'register' ? (

@@ -80,9 +80,19 @@ type LoginFormProps = {
     server: ResolvedHomeserver;
     canRegister: boolean;
     onSwitchTab: (tab: 'register' | 'reset') => void;
+    /**
+     * False inside the Black Mask chat panel: SSO redirects the whole frame to
+     * the identity provider, and the panel's frame must never leave the panel.
+     */
+    allowSso?: boolean;
 };
 
-export const LoginForm = ({ server, canRegister, onSwitchTab }: LoginFormProps) => {
+export const LoginForm = ({
+    server,
+    canRegister,
+    onSwitchTab,
+    allowSso = true,
+}: LoginFormProps) => {
     const store = useStore();
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
@@ -291,7 +301,9 @@ export const LoginForm = ({ server, canRegister, onSwitchTab }: LoginFormProps) 
         <div style={{ display: 'grid', gap: 12 }}>
             {flows.discoveryFailed ? (
                 <p role="alert" style={errorTextStyle}>
-                    Couldn’t load supported flows; try SSO or switch homeserver.
+                    {allowSso
+                        ? 'Couldn’t load supported flows; try SSO or switch homeserver.'
+                        : 'Couldn’t load supported sign-in options; try another homeserver.'}
                 </p>
             ) : null}
 
@@ -360,7 +372,20 @@ export const LoginForm = ({ server, canRegister, onSwitchTab }: LoginFormProps) 
                 </form>
             ) : null}
 
-            {flows.hasPassword && flows.sso ? (
+            {flows.sso && !allowSso ? (
+                <p
+                    data-testid="login-sso-unavailable-in-panel"
+                    style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary, #94a3b8)' }}
+                >
+                    Single sign-on isn’t available in this panel.{' '}
+                    <a href="/login" target="_blank" rel="noopener noreferrer">
+                        Open Blackout in a tab
+                    </a>{' '}
+                    to use it.
+                </p>
+            ) : null}
+
+            {flows.hasPassword && flows.sso && allowSso ? (
                 <div style={dividerStyle}>
                     <span style={dividerLineStyle} />
                     <span>or</span>
@@ -368,7 +393,7 @@ export const LoginForm = ({ server, canRegister, onSwitchTab }: LoginFormProps) 
                 </div>
             ) : null}
 
-            {flows.sso ? (
+            {flows.sso && allowSso ? (
                 <div style={{ display: 'grid', gap: 8 }}>
                     {ssoIdps.length > 0 ? (
                         ssoIdps.map((idp) => (

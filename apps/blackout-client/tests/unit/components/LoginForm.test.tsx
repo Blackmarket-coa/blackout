@@ -242,4 +242,79 @@ describe('LoginForm', () => {
 
         root.unmount();
     });
+    // Black Mask chat panel (/embed): SSO would redirect the panel's whole
+    // frame to the identity provider, so the panel does not offer it.
+    it('hides SSO and explains why when allowSso is false (chat panel)', async () => {
+        loginFlowsMock.mockResolvedValueOnce({
+            flows: [
+                { type: 'm.login.password' },
+                {
+                    type: 'm.login.sso',
+                    identity_providers: [{ id: 'authentik', name: 'Authentik' }],
+                },
+            ],
+        });
+
+        const container = document.createElement('div');
+        document.body.appendChild(container);
+        const root = ReactDOM.createRoot(container);
+
+        await act(async () => {
+            root.render(
+                <Provider store={createStore()}>
+                    <LoginForm
+                        server={defaultServer}
+                        canRegister={true}
+                        onSwitchTab={vi.fn()}
+                        allowSso={false}
+                    />
+                </Provider>
+            );
+            await Promise.resolve();
+        });
+
+        expect(container.textContent).not.toContain('Continue with Authentik');
+        expect(container.textContent).not.toContain('Continue with SSO');
+        const note = container.querySelector('[data-testid="login-sso-unavailable-in-panel"]');
+        expect(note).not.toBeNull();
+        const link = note?.querySelector('a');
+        expect(link?.getAttribute('target')).toBe('_blank');
+        expect(link?.getAttribute('rel')).toBe('noopener noreferrer');
+        // Password sign-in is still offered.
+        expect(container.querySelector('form[aria-label="Sign in with password"]')).not.toBeNull();
+        expect(beginSsoRedirectMock).not.toHaveBeenCalled();
+
+        root.unmount();
+    });
+
+    it('still offers SSO by default (full app)', async () => {
+        loginFlowsMock.mockResolvedValueOnce({
+            flows: [
+                {
+                    type: 'm.login.sso',
+                    identity_providers: [{ id: 'authentik', name: 'Authentik' }],
+                },
+            ],
+        });
+
+        const container = document.createElement('div');
+        document.body.appendChild(container);
+        const root = ReactDOM.createRoot(container);
+
+        await act(async () => {
+            root.render(
+                <Provider store={createStore()}>
+                    <LoginForm server={defaultServer} canRegister={true} onSwitchTab={vi.fn()} />
+                </Provider>
+            );
+            await Promise.resolve();
+        });
+
+        expect(container.textContent).toContain('Continue with Authentik');
+        expect(
+            container.querySelector('[data-testid="login-sso-unavailable-in-panel"]')
+        ).toBeNull();
+
+        root.unmount();
+    });
 });

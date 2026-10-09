@@ -81,6 +81,31 @@ export const COMMUNITIES_NO_CANOPY_SENTINEL = '-';
 export const CANOPIES_PATH = '/canopies';
 
 /**
+ * Black Mask chat panel (launch-plan step B1). A minimal surface that renders
+ * only canopies, their dens and direct messages, meant to be framed by the
+ * Black Mask extension. Every panel address lives under this one prefix on
+ * purpose: the web server applies the panel's framing policy to `/embed` and
+ * `/embed/*` and to nothing else (see `apps/blackout-client/docker-nginx.conf`
+ * and `docs/black-mask-chat-panel-and-account-link.md`). Don't add a panel
+ * route outside the prefix — it would not get the panel's headers.
+ *
+ * The panel is intercepted in `main.tsx` before the main router mounts, so
+ * these paths never reach the main router (where `/embed` would otherwise
+ * match the dynamic `SPACE_PATH`).
+ */
+export const EMBED_PATH = '/embed';
+export const EMBED_CANOPY_PATH = '/embed/canopies/:canopyId';
+export const EMBED_CANOPY_DEN_PATH = '/embed/canopies/:canopyId/dens/:denId';
+/** A den with no parent canopy. */
+export const EMBED_DEN_PATH = '/embed/dens/:denId';
+export const EMBED_DM_PATH = '/embed/dms/:roomId';
+/**
+ * Where the panel parks a navigation to something it does not show
+ * (`?to=<same-origin path>`), so the frame's own URL never leaves the prefix.
+ */
+export const EMBED_ELSEWHERE_PATH = '/embed/elsewhere';
+
+/**
  * Top-level destinations introduced by the AppShell (bottom-tab + desktop
  * rail). Surface bodies still live in their feature manifests; these
  * constants are the canonical link targets.

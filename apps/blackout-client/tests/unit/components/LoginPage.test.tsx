@@ -41,14 +41,14 @@ const flushAsync = async () => {
     await Promise.resolve();
 };
 
-const mountLoginPage = async () => {
+const mountLoginPage = async ({ embedded = false }: { embedded?: boolean } = {}) => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = ReactDOM.createRoot(container);
     await act(async () => {
         root.render(
             <Provider store={createStore()}>
-                <LoginPage />
+                <LoginPage embedded={embedded} />
             </Provider>
         );
         await flushAsync();
@@ -124,6 +124,27 @@ describe('LoginPage URL-driven tab + registration availability', () => {
         });
 
         expect(window.location.pathname).toBe('/register');
+        root.unmount();
+    });
+    // Black Mask chat panel: the panel's frame must stay on /embed, and
+    // main.tsx decides panel-vs-app from the path, so the tabs must not
+    // rewrite it.
+    it('leaves the URL alone on tab switches when embedded in the chat panel', async () => {
+        window.history.replaceState(null, '', '/embed');
+        const { container, root } = await mountLoginPage({ embedded: true });
+
+        const registerButton = Array.from(container.querySelectorAll('button[role="tab"]')).find(
+            (b) => b.textContent?.includes('Create account')
+        ) as HTMLButtonElement;
+        expect(registerButton).toBeTruthy();
+
+        await act(async () => {
+            registerButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+            await flushAsync();
+        });
+
+        expect(registerButton.getAttribute('aria-selected')).toBe('true');
+        expect(window.location.pathname).toBe('/embed');
         root.unmount();
     });
 });
