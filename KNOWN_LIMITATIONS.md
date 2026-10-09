@@ -99,6 +99,33 @@ For the source-of-truth triage with tier/owner detail see
     arrive with `room_id` only and fall back to room-level routing. Manual
     reports welcome.
 
+### Black Mask chat panel (`/embed`)
+
+-   **Where:** `apps/blackout-client/src/app/features/black-mask-embed/`;
+    spec and status in `docs/black-mask-chat-panel-and-account-link.md`.
+-   **State:** built, not deployed. Shows canopies, text dens and DMs with
+    unread indicators (on by default). Framing is off unless the operator sets
+    `BLACK_MASK_FRAME_ANCESTORS` on the web client container.
+-   **Not there yet:**
+    -   push notifications;
+    -   a session-length choice at sign-in (B3);
+    -   account linking (B4/B5);
+    -   any check of external links (B6): links open in a new tab unchecked;
+    -   single sign-on inside the panel (it would redirect the frame);
+    -   voice, stage and forum dens (they open in a normal Blackout tab);
+    -   a sign-out button.
+-   **Only the `apps/blackout-client/Dockerfile` image can allow framing.**
+    Behind the `infra/nginx` or single-server-baseline proxies, the panel stays
+    unframeable until those proxies get an `/embed` location; the
+    `blackout-web` image and the Railway, Vercel and Netlify paths do not
+    implement the allow-list.
+-   **Firefox:** extension origins are per-install, so a fixed allow-list
+    cannot name the Firefox extension.
+-   **Unverified:** the signed-in panel against a real homeserver, the panel
+    inside a real extension, and whether a framed panel shares the browser's
+    Blackout session or signs in separately. If it signs in separately, older
+    encrypted messages may not be readable in it (BO-1).
+
 ---
 
 ## Deferred multi-week workstreams

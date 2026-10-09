@@ -219,6 +219,49 @@ is sent, so the open space, room or event id never reaches FBM.
 Blackout screen can lag; the UI says so instead of claiming changes are
 immediate.
 
+### 6c. Black Mask chat panel (embed route and framing)
+
+**Asset**: a signed-in Blackout session rendered at `/embed` inside a frame on
+another origin (the Black Mask extension). Spec and status:
+`docs/black-mask-chat-panel-and-account-link.md` (steps 1 and 2).
+
+**Who can frame it**: nobody by default. The web client's nginx image sends
+`frame-ancestors 'none'` and `X-Frame-Options: DENY` on every route. On `/embed`
+and `/embed/*` only, it sends `frame-ancestors <list>` when
+`BLACK_MASK_FRAME_ANCESTORS` holds a valid list of origins. Listing an origin
+**trusts that origin not to clickjack the panel**: the framing page controls
+the frame's size, position and what is drawn over it. It cannot read the
+panel's content (same-origin policy) and the panel sends it nothing (no
+`postMessage`, no unread counts).
+
+**Threats and mitigations**:
+
+-   **Clickjacking by an unlisted site**: refused by the browser. Checked in a
+    real Chromium: an unlisted origin is refused both `/embed` and `/`.
+-   **A mistyped or over-broad allow-list**: each entry must be a bare origin
+    (no wildcard, path, keyword or CSP syntax), and one bad entry rejects the
+    whole list, so the panel stays `'none'`
+    (`apps/blackout-client/nginx/docker-entrypoint.d/40-black-mask-frame-ancestors.sh`).
+-   **The full app served under the panel's policy**: the client decides
+    "panel or full app" once, from the path it loaded on (`main.tsx`), and
+    nginx refuses panel requests whose raw URI does not literally start with
+    `/embed` (encoded or doubled-slash variants it would otherwise normalise
+    into the panel's locations).
+-   **The panel's frame navigating into the app**: every link click inside the
+    panel is intercepted. Panel content stays in the panel, everything else
+    opens a new top-level tab with `noopener,noreferrer`, and code-driven
+    navigation is parked on an in-panel card. SSO, which would redirect the
+    whole frame, is not offered in the panel.
+-   **Phishing through links in messages**: **not mitigated by the panel.**
+    Black Mask's link check (launch-plan B6) is not built; an external link
+    opened from the panel is as safe as the same link opened from Blackout.
+
+**Residual risk**: whether a framed panel shares the browser's Blackout
+session or gets its own depends on the browser's storage partitioning for
+extension-embedded frames, and has not been checked. Firefox extension origins
+are per-install, so a fixed list cannot name the Firefox extension. Both are
+recorded as constraints, not solved.
+
 ## 7. Accepted residual risks
 
 These risks are known and accepted, with the rationale recorded so reviewers do not need to re-litigate them.
