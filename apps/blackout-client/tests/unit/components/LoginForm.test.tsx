@@ -317,4 +317,38 @@ describe('LoginForm', () => {
 
         root.unmount();
     });
+
+    // Launch-plan B3: the panel offers no SSO, so a login token in its URL is
+    // not one it asked for. Trading it would start a panel session with no
+    // chosen length (or sign the panel into someone else's account).
+    it('never trades a login token from the URL when allowSso is false (chat panel)', async () => {
+        loginFlowsMock.mockResolvedValueOnce({ flows: [{ type: 'm.login.password' }] });
+        window.sessionStorage.setItem(
+            'blackout.sso.pending',
+            JSON.stringify({ baseUrl: 'https://sso.example.org' })
+        );
+        window.history.replaceState(null, '', '/embed?loginToken=planted');
+
+        const container = document.createElement('div');
+        document.body.appendChild(container);
+        const root = ReactDOM.createRoot(container);
+        await act(async () => {
+            root.render(
+                <Provider store={createStore()}>
+                    <LoginForm
+                        server={defaultServer}
+                        canRegister={true}
+                        onSwitchTab={vi.fn()}
+                        allowSso={false}
+                    />
+                </Provider>
+            );
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+
+        expect(loginWithTokenMock).not.toHaveBeenCalled();
+        expect(container.textContent).not.toContain('Completing SSO sign-in');
+        root.unmount();
+    });
 });

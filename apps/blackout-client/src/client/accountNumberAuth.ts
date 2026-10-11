@@ -7,21 +7,27 @@ import {
 } from '@blackout/core';
 import { API_BASE_URL } from '../app/sdk/apiBaseUrl';
 import { loginWithPassword } from './auth';
+import type { PanelSessionChoice } from './sessionLength';
 
 type AtomStore = ReturnType<typeof createStore>;
 
 const loginIntoAccount = async (
     store: AtomStore,
     baseUrl: string,
-    accountNumber: string
+    accountNumber: string,
+    choice?: PanelSessionChoice
 ): Promise<void> => {
     const normalized = normalizeAccountNumber(accountNumber);
     const localpart = await accountNumberToLocalpart(normalized);
-    await loginWithPassword(store, {
-        baseUrl,
-        identifier: { type: 'm.id.user', user: localpart },
-        password: normalized,
-    });
+    await loginWithPassword(
+        store,
+        {
+            baseUrl,
+            identifier: { type: 'm.id.user', user: localpart },
+            password: normalized,
+        },
+        choice
+    );
 };
 
 /**
@@ -45,14 +51,19 @@ export const createAnonymousAccount = async (): Promise<string> => {
     return result.accountNumber;
 };
 
-/** Sign in with an existing account number (derives the localpart locally). */
+/**
+ * Sign in with an existing account number (derives the localpart locally).
+ * `choice` is the chat panel's session length (launch-plan B3); omitted in the
+ * full app.
+ */
 export const loginWithAccountNumber = async (
     store: AtomStore,
     baseUrl: string,
-    accountNumber: string
+    accountNumber: string,
+    choice?: PanelSessionChoice
 ): Promise<void> => {
     if (!isValidAccountNumber(accountNumber)) {
         throw new Error('That account number is not valid.');
     }
-    await loginIntoAccount(store, baseUrl, accountNumber);
+    await loginIntoAccount(store, baseUrl, accountNumber, choice);
 };

@@ -64,9 +64,7 @@ export const tabStyle = (active: boolean): CSSProperties => ({
     cursor: 'pointer',
     fontSize: 14,
     fontWeight: active ? 600 : 500,
-    borderBottom: active
-        ? '2px solid var(--accent, #2563eb)'
-        : '2px solid transparent',
+    borderBottom: active ? '2px solid var(--accent, #2563eb)' : '2px solid transparent',
 });
 
 export const errorTextStyle: CSSProperties = {
@@ -86,4 +84,14 @@ export const dividerStyle: CSSProperties = {
 export const dividerLineStyle: CSSProperties = {
     flex: 1,
     borderTop: '1px solid var(--border-default, #374151)',
+};
+
+/**
+ * Chat panel: a sign-in button waiting for a session length (launch-plan B3)
+ * must look unavailable, not just be disabled. Merged in only while waiting,
+ * so the full app's buttons keep their styles.
+ */
+export const awaitingChoiceButtonStyle: CSSProperties = {
+    opacity: 0.55,
+    cursor: 'not-allowed',
 };

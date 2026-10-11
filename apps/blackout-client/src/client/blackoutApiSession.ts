@@ -2,14 +2,18 @@ import { createFetchApiClient } from '@blackout/sdk';
 import { API_BASE_URL } from '../app/sdk/apiBaseUrl';
 import { restoreActiveSession, type StoredSession } from './sessionManager';
 import { readBlackoutApiToken } from '../app/features/monetization/marketplace/useMarketplaceAuth';
+import { storageNamespace } from './storageNamespace';
 
 /**
- * localStorage key the Blackout API JWT lives under. Kept in sync with the
- * reader in
- * `app/features/monetization/marketplace/useMarketplaceAuth.ts` —
- * `readBlackoutApiToken()` reads this exact key.
+ * localStorage key the full app's Blackout API JWT lives under. The chat
+ * panel keeps its own under `storageNamespace().apiTokenKey`, so the two never
+ * share a token. `readBlackoutApiToken()` in
+ * `app/features/monetization/marketplace/useMarketplaceAuth.ts` reads the
+ * current namespace's key.
  */
 export const BLACKOUT_API_TOKEN_KEY = 'blackout.api.token';
+
+const apiTokenKey = (): string => storageNamespace().apiTokenKey;
 
 interface MatrixExchangeResponse {
     token: string;
@@ -81,7 +85,7 @@ export const isBlackoutTokenExpired = (token: string | null | undefined): boolea
 
 const writeToken = (token: string): void => {
     try {
-        window.localStorage.setItem(BLACKOUT_API_TOKEN_KEY, token);
+        window.localStorage.setItem(apiTokenKey(), token);
     } catch {
         // Storage can be unavailable (private mode / blocked); the API just
         // stays unauthenticated until the next successful exchange.
@@ -91,7 +95,7 @@ const writeToken = (token: string): void => {
 export const clearBlackoutApiToken = (): void => {
     inFlightExchange = null;
     try {
-        window.localStorage.removeItem(BLACKOUT_API_TOKEN_KEY);
+        window.localStorage.removeItem(apiTokenKey());
     } catch {
         // ignore — nothing else to clean up
     }

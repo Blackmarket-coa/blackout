@@ -9,8 +9,14 @@ import { LoginForm } from './LoginForm';
 import { RegisterForm } from './RegisterForm';
 import { ResetPasswordForm } from './ResetPasswordForm';
 import { ServerPicker } from './ServerPicker';
+import {
+    SessionLengthPicker,
+    toPanelSessionChoice,
+    useEnforcedSessionLengths,
+} from './SessionLengthPicker';
 import { errorTextStyle, tabBarStyle, tabStyle } from './styles';
 import type { AuthTab, ResolvedHomeserver } from './types';
+import type { SessionLength } from '../../../../client/sessionLength';
 
 const FALLBACK_HOMESERVER_HOST = 'matrix.theblackout.app';
 
@@ -50,7 +56,8 @@ type LoginPageProps = {
      * must never leave the panel, so in this mode the page does not rewrite
      * the URL to `/login` / `/register` / `/reset-password` when the tab
      * changes, and single sign-on (a full-frame redirect to the identity
-     * provider) is not offered.
+     * provider) is not offered. The person must also choose how long the
+     * sign-in lasts (launch-plan B3) before they can sign in or sign up.
      */
     embedded?: boolean;
 };
@@ -69,6 +76,11 @@ export const LoginPage = ({ embedded = false }: LoginPageProps = {}) => {
     const probeServer = tab === 'register' || startedOnRegisterRef.current ? server : null;
     const registrationProbe = useRegistrationProbe(probeServer);
     const registrationAvailability = registrationProbe.state;
+    // Chat panel only: the session length. Nothing is chosen until the person
+    // chooses; the full app never asks and never looks the lengths up.
+    const [sessionLength, setSessionLength] = useState<SessionLength | null>(null);
+    const enforcedLengths = useEnforcedSessionLengths(embedded && server ? server.baseUrl : null);
+    const sessionChoice = embedded ? toPanelSessionChoice(sessionLength, enforcedLengths) : null;
 
     // Keep the URL in sync with the active tab so links to `/register` work
     // and users can copy/share the active surface. `replaceState` avoids
@@ -164,8 +176,17 @@ export const LoginPage = ({ embedded = false }: LoginPageProps = {}) => {
                 onChange={(next) => {
                     setServer(next);
                     setTab('login');
+                    // A different server may enforce different lengths.
+                    setSessionLength(null);
                 }}
             />
+            {embedded && tab !== 'reset' ? (
+                <SessionLengthPicker
+                    value={sessionLength}
+                    onChange={setSessionLength}
+                    enforced={enforcedLengths}
+                />
+            ) : null}
             {showRegistrationDisabledNotice ? (
                 <p
                     role="status"
@@ -203,6 +224,8 @@ export const LoginPage = ({ embedded = false }: LoginPageProps = {}) => {
                     canRegister={!registrationDisabled}
                     onSwitchTab={(next) => setTab(next)}
                     allowSso={!embedded}
+                    requireSessionChoice={embedded}
+                    sessionChoice={sessionChoice}
                 />
             ) : null}
             {tab === 'register' ? (
@@ -210,6 +233,8 @@ export const LoginPage = ({ embedded = false }: LoginPageProps = {}) => {
                     server={server}
                     onSwitchTab={(next) => setTab(next)}
                     probe={registrationProbe}
+                    requireSessionChoice={embedded}
+                    sessionChoice={sessionChoice}
                 />
             ) : null}
             {tab === 'reset' ? (

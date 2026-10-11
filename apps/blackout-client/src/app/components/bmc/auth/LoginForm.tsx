@@ -14,6 +14,7 @@ import {
     loginWithAccountNumber,
 } from '../../../../client/accountNumberAuth';
 import { formatAccountNumber } from '@blackout/core';
+import type { PanelSessionChoice } from '../../../../client/sessionLength';
 import { getMxIdLocalPart, getMxIdServer, isUserId } from '../../../utils/matrix';
 import { EMAIL_REGEX } from '../../../utils/regex';
 import {
@@ -25,6 +26,7 @@ import {
     linkButtonStyle,
     primaryButtonStyle,
     secondaryButtonStyle,
+    awaitingChoiceButtonStyle,
 } from './styles';
 import type { LoginFlowsState, ResolvedHomeserver } from './types';
 
@@ -85,13 +87,23 @@ type LoginFormProps = {
      * the identity provider, and the panel's frame must never leave the panel.
      */
     allowSso?: boolean;
+    /**
+     * True inside the chat panel (launch-plan B3): no sign-in button works
+     * until a session length is chosen (`sessionChoice`).
+     */
+    requireSessionChoice?: boolean;
+    sessionChoice?: PanelSessionChoice | null;
 };
+
+export const SESSION_CHOICE_HINT_ID = 'panel-session-choice-hint';
 
 export const LoginForm = ({
     server,
     canRegister,
     onSwitchTab,
     allowSso = true,
+    requireSessionChoice = false,
+    sessionChoice = null,
 }: LoginFormProps) => {
     const store = useStore();
     const [username, setUsername] = useState('');
@@ -105,6 +117,9 @@ export const LoginForm = ({
     const [accountNumberInput, setAccountNumberInput] = useState('');
     const [anonBusy, setAnonBusy] = useState(false);
     const [createdNumber, setCreatedNumber] = useState<string | null>(null);
+    // Chat panel: signing in waits for a session length.
+    const awaitingSessionChoice = requireSessionChoice && !sessionChoice;
+    const choice = requireSessionChoice ? sessionChoice ?? undefined : undefined;
 
     const handleCreateAnonymous = async () => {
         setAnonBusy(true);
@@ -119,10 +134,11 @@ export const LoginForm = ({
     };
 
     const handleAccountNumberLogin = async (number: string) => {
+        if (awaitingSessionChoice) return;
         setAnonBusy(true);
         setError(null);
         try {
-            await loginWithAccountNumber(store, server.baseUrl, number);
+            await loginWithAccountNumber(store, server.baseUrl, number, choice);
         } catch (e) {
             setError(
                 e instanceof MatrixInitError || e instanceof Error
@@ -177,6 +193,10 @@ export const LoginForm = ({
     // Handle SSO callback: if we land here with ?loginToken=... and a stored
     // pending entry, trade the token for a session.
     useEffect(() => {
+        // Never in the chat panel: it offers no SSO, so a login token in its
+        // URL is not one it asked for, and trading it would start a session
+        // with no chosen length.
+        if (!allowSso) return;
         const url = new URL(window.location.href);
         const token = url.searchParams.get('loginToken');
         const errorCode = url.searchParams.get('error');
@@ -234,6 +254,7 @@ export const LoginForm = ({
 
     const onPasswordSubmit = async (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
+        if (awaitingSessionChoice) return;
         setError(null);
         const resolved = resolveLoginIdentifier(username, server.baseUrl);
         if ('error' in resolved) {
@@ -242,11 +263,15 @@ export const LoginForm = ({
         }
         setSubmitting(true);
         try {
-            await loginWithPassword(store, {
-                baseUrl: resolved.baseUrl,
-                identifier: resolved.identifier,
-                password,
-            });
+            await loginWithPassword(
+                store,
+                {
+                    baseUrl: resolved.baseUrl,
+                    identifier: resolved.identifier,
+                    password,
+                },
+                choice
+            );
         } catch (err) {
             const message =
                 err instanceof MatrixInitError
@@ -314,6 +339,16 @@ export const LoginForm = ({
                 </p>
             ) : null}
 
+            {awaitingSessionChoice ? (
+                <p
+                    id={SESSION_CHOICE_HINT_ID}
+                    data-testid="session-choice-hint"
+                    style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary, #94a3b8)' }}
+                >
+                    Choose how long to stay signed in first.
+                </p>
+            ) : null}
+
             {error ? (
                 <p role="alert" style={errorTextStyle}>
                     {error}
@@ -366,7 +401,18 @@ export const LoginForm = ({
                             style={inputStyle}
                         />
                     </label>
-                    <button type="submit" disabled={submitting} style={primaryButtonStyle}>
+                    <button
+                        type="submit"
+                        disabled={submitting || awaitingSessionChoice}
+                        aria-describedby={
+                            awaitingSessionChoice ? SESSION_CHOICE_HINT_ID : undefined
+                        }
+                        style={
+                            awaitingSessionChoice
+                                ? { ...primaryButtonStyle, ...awaitingChoiceButtonStyle }
+                                : primaryButtonStyle
+                        }
+                    >
                         {submitting ? 'Signing in…' : 'Sign in'}
                     </button>
                 </form>
@@ -445,9 +491,16 @@ export const LoginForm = ({
                     </code>
                     <button
                         type="button"
-                        disabled={anonBusy}
+                        disabled={anonBusy || awaitingSessionChoice}
+                        aria-describedby={
+                            awaitingSessionChoice ? SESSION_CHOICE_HINT_ID : undefined
+                        }
                         onClick={() => void handleAccountNumberLogin(createdNumber)}
-                        style={primaryButtonStyle}
+                        style={
+                            awaitingSessionChoice
+                                ? { ...primaryButtonStyle, ...awaitingChoiceButtonStyle }
+                                : primaryButtonStyle
+                        }
                     >
                         {anonBusy ? 'Signing in…' : "I've saved it — sign in"}
                     </button>
@@ -481,8 +534,19 @@ export const LoginForm = ({
                         />
                         <button
                             type="submit"
-                            disabled={anonBusy || accountNumberInput.trim().length === 0}
-                            style={secondaryButtonStyle}
+                            disabled={
+                                anonBusy ||
+                                awaitingSessionChoice ||
+                                accountNumberInput.trim().length === 0
+                            }
+                            aria-describedby={
+                                awaitingSessionChoice ? SESSION_CHOICE_HINT_ID : undefined
+                            }
+                            style={
+                                awaitingSessionChoice
+                                    ? { ...secondaryButtonStyle, ...awaitingChoiceButtonStyle }
+                                    : secondaryButtonStyle
+                            }
                         >
                             Sign in with account number
                         </button>

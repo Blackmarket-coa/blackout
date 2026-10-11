@@ -1,3 +1,6 @@
+import { storageNamespace } from './storageNamespace';
+import { isSessionLength, type SessionLength } from './sessionLength';
+
 export interface StoredSession {
     baseUrl: string;
     accessToken: string;
@@ -5,6 +8,14 @@ export interface StoredSession {
     userId: string;
     deviceId: string;
     expiresAt?: number;
+    /**
+     * Chat panel only (launch-plan B3): the length chosen at sign-in. The
+     * servers enforce it; this copy drives the panel's own sign-out timer and
+     * header text.
+     */
+    sessionLength?: SessionLength;
+    /** Chat panel only: when the session ends, in ms on this device's clock. */
+    sessionEndsAt?: number;
 }
 
 export interface SessionMap {
@@ -12,7 +23,9 @@ export interface SessionMap {
     sessions: Record<string, StoredSession>;
 }
 
-const SESSION_STORAGE_KEY = 'blackout.matrix.sessions.v1';
+// The full app's key is 'blackout.matrix.sessions.v1'; the chat panel keeps
+// its sessions under its own key (see storageNamespace).
+const sessionStorageKey = (): string => storageNamespace().sessionMapKey;
 
 const createEmptySessionMap = (): SessionMap => ({
     activeUserId: null,
@@ -26,13 +39,19 @@ const isStoredSession = (value: unknown): value is StoredSession => {
         typeof candidate.baseUrl === 'string' &&
         typeof candidate.accessToken === 'string' &&
         typeof candidate.userId === 'string' &&
-        typeof candidate.deviceId === 'string'
+        typeof candidate.deviceId === 'string' &&
+        // A garbled session length or end must not read as "no end": drop the
+        // session instead (the servers end it on time regardless).
+        (candidate.sessionLength === undefined || isSessionLength(candidate.sessionLength)) &&
+        (candidate.sessionEndsAt === undefined ||
+            (typeof candidate.sessionEndsAt === 'number' &&
+                Number.isFinite(candidate.sessionEndsAt)))
     );
 };
 
 export const loadSessionMap = (): SessionMap => {
     try {
-        const raw = window.localStorage.getItem(SESSION_STORAGE_KEY);
+        const raw = window.localStorage.getItem(sessionStorageKey());
         if (!raw) return createEmptySessionMap();
 
         const parsed = JSON.parse(raw) as Partial<SessionMap>;
@@ -57,7 +76,7 @@ export const loadSessionMap = (): SessionMap => {
 };
 
 export const saveSessionMap = (sessionMap: SessionMap): void => {
-    window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(sessionMap));
+    window.localStorage.setItem(sessionStorageKey(), JSON.stringify(sessionMap));
 };
 
 export const saveSession = (session: StoredSession): void => {
@@ -86,7 +105,7 @@ export const setActiveSessionUser = (userId: string): void => {
 
 export const clearSession = (userId?: string): void => {
     if (!userId) {
-        window.localStorage.removeItem(SESSION_STORAGE_KEY);
+        window.localStorage.removeItem(sessionStorageKey());
         return;
     }
 

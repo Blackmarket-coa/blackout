@@ -1,7 +1,13 @@
 import React, { useMemo } from 'react';
 import { useAtomValue } from 'jotai';
 import { createBrowserRouter, RouterProvider } from 'react-router';
-import { authStateAtom, cryptoInitErrorAtom, type AuthState } from '../../state/auth';
+import {
+    authStateAtom,
+    cryptoInitErrorAtom,
+    panelSignedOutReasonAtom,
+    type AuthState,
+    type PanelSignedOutReason,
+} from '../../state/auth';
 import { LoginPage } from '../../components/bmc/auth';
 import { SpecVersionsBootstrap } from '../../components/SpecVersionsBootstrap';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
@@ -40,18 +46,25 @@ const statusText = (authState: AuthState, cryptoInitError: string | null): strin
     return '';
 };
 
+const signedOutReasonText: Record<PanelSignedOutReason, string> = {
+    session_ended: 'The session length you chose is up, so you were signed out on this device.',
+    signed_out: 'This device was signed out of Blackout.',
+};
+
 /**
  * Signed-out (or still-starting) panel: the app's own sign-in, inside the
- * panel's frame, with no links out to the rest of the app. Session length
- * (launch-plan step B3) is not offered here: the panel signs in exactly like
- * the full app does today.
+ * panel's frame, with no links out to the rest of the app. Signing in here
+ * asks how long the session should last (launch-plan step B3); see
+ * `LoginPage`'s `embedded` mode.
  */
 export const EmbedSignedOut = ({
     authState,
     cryptoInitError,
+    signedOutReason = null,
 }: {
     authState: AuthState;
     cryptoInitError: string | null;
+    signedOutReason?: PanelSignedOutReason | null;
 }) => (
     <EmbedLinkGuard>
         <div
@@ -65,6 +78,15 @@ export const EmbedSignedOut = ({
                 <section style={cardStyle}>
                     {authState === 'logged_out' ? (
                         <>
+                            {signedOutReason ? (
+                                <p
+                                    role="status"
+                                    data-testid="embed-signed-out-reason"
+                                    style={{ margin: 0 }}
+                                >
+                                    {signedOutReasonText[signedOutReason]}
+                                </p>
+                            ) : null}
                             <p style={{ margin: 0 }}>
                                 Sign in to Blackout to see your canopies, dens and direct messages
                                 here.
@@ -100,6 +122,7 @@ export const EmbedSignedOut = ({
 export const EmbedApp = () => {
     const authState = useAtomValue(authStateAtom);
     const cryptoInitError = useAtomValue(cryptoInitErrorAtom);
+    const signedOutReason = useAtomValue(panelSignedOutReasonAtom);
 
     if (authState === 'logged_in') {
         return (
@@ -109,7 +132,13 @@ export const EmbedApp = () => {
             </SpecVersionsBootstrap>
         );
     }
-    return <EmbedSignedOut authState={authState} cryptoInitError={cryptoInitError} />;
+    return (
+        <EmbedSignedOut
+            authState={authState}
+            cryptoInitError={cryptoInitError}
+            signedOutReason={signedOutReason}
+        />
+    );
 };
 
 export default EmbedApp;

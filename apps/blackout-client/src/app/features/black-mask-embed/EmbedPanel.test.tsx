@@ -45,14 +45,21 @@ vi.mock('../room/MessageComposer', () => ({
     ),
 }));
 
+const logoutMock = vi.fn(async () => undefined);
+vi.mock('../../../client/auth', () => ({
+    logout: (...args: unknown[]) => logoutMock(...(args as [])),
+}));
+
 import { embedRoutes } from './embedRoutes';
 import { EmbedApp } from './EmbedApp';
 import { allRoomsBaseAtom } from '../../state/rooms';
 import { mDirectAtom } from '../../state/mDirectList';
 import { roomToParentsAtom } from '../../state/room/roomToParents';
 import { roomToUnreadAtom } from '../../state/room/roomToUnread';
-import { authStateAtom } from '../../state/auth';
+import { authStateAtom, panelSignedOutReasonAtom } from '../../state/auth';
 import { MatrixClientProvider } from '../../hooks/useMatrixClient';
+import { saveSession } from '../../../client/sessionManager';
+import { setStorageNamespaceForTests } from '../../../client/storageNamespace';
 import type { MatrixClient } from 'matrix-js-sdk';
 
 type FakeRoomSpec = {
@@ -405,8 +412,10 @@ describe('chat panel signed out', () => {
         expect($(container, '[data-testid="bootstrap-explore"]')).toBeNull();
         const text = container.textContent ?? '';
         expect(text).not.toContain('Town Square');
-        // No session-length picker yet (launch-plan step B3).
-        expect(text.toLowerCase()).not.toContain('stay signed in');
+        // The session-length choice (launch-plan B3) lives in LoginPage's
+        // embedded mode, stubbed here; tests/unit/components/LoginPage.test.tsx
+        // covers it. With no previous session there is no "signed out" notice.
+        expect($(container, '[data-testid="embed-signed-out-reason"]')).toBeNull();
 
         await click($(container, '[data-testid="embed-open-blackout"]'));
         expect(openSpy).toHaveBeenCalledWith(
@@ -414,5 +423,84 @@ describe('chat panel signed out', () => {
             '_blank',
             'noopener,noreferrer'
         );
+    });
+});
+
+describe('chat panel session (launch-plan B3)', () => {
+    afterEach(() => {
+        window.localStorage.clear();
+        setStorageNamespaceForTests(null);
+        logoutMock.mockClear();
+    });
+
+    const renderSignedOut = async (reason: 'session_ended' | 'signed_out' | null) => {
+        const store = createStore();
+        store.set(authStateAtom, 'logged_out');
+        store.set(panelSignedOutReasonAtom, reason);
+        const container = document.createElement('div');
+        document.body.appendChild(container);
+        const root = ReactDOM.createRoot(container);
+        mounted.push({ root, container });
+        await act(async () => {
+            root.render(
+                <JotaiProvider store={store}>
+                    <EmbedApp />
+                </JotaiProvider>
+            );
+        });
+        return container;
+    };
+
+    it('says why the panel signed out when the chosen length ran out', async () => {
+        const container = await renderSignedOut('session_ended');
+        expect($(container, '[data-testid="embed-signed-out-reason"]')?.textContent).toBe(
+            'The session length you chose is up, so you were signed out on this device.'
+        );
+        expect($(container, '[data-testid="stub-login"]')).not.toBeNull();
+    });
+
+    it('says the device was signed out when the server dropped the session', async () => {
+        const container = await renderSignedOut('signed_out');
+        expect($(container, '[data-testid="embed-signed-out-reason"]')?.textContent).toBe(
+            'This device was signed out of Blackout.'
+        );
+    });
+
+    it('shows when a timed session ends, and signs out from the panel', async () => {
+        setStorageNamespaceForTests(true);
+        const endsAt = new Date(2026, 9, 11, 15, 45).getTime();
+        saveSession({
+            baseUrl: 'https://hs.example.test',
+            accessToken: 'panel-token',
+            userId: '@alice:hs.example.test',
+            deviceId: 'PANELDEV',
+            sessionLength: '1h',
+            sessionEndsAt: endsAt,
+        });
+        const { container } = await renderPanel('/embed');
+        const until = $(container, '[data-testid="embed-session-until"]')?.textContent ?? '';
+        expect(until.startsWith('Signed in until ')).toBe(true);
+        expect(until).toContain(
+            new Date(endsAt).toLocaleString(undefined, { hour: 'numeric', minute: '2-digit' })
+        );
+
+        await click($(container, '[data-testid="embed-sign-out"]'));
+        expect(logoutMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('says "until you sign out" for a session with no end', async () => {
+        setStorageNamespaceForTests(true);
+        saveSession({
+            baseUrl: 'https://hs.example.test',
+            accessToken: 'panel-token',
+            userId: '@alice:hs.example.test',
+            deviceId: 'PANELDEV',
+            sessionLength: 'until_sign_out',
+        });
+        const { container } = await renderPanel('/embed');
+        expect($(container, '[data-testid="embed-session-until"]')?.textContent).toBe(
+            'Signed in until you sign out'
+        );
+        expect($(container, '[data-testid="embed-sign-out"]')?.textContent).toBe('Sign out');
     });
 });
