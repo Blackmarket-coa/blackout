@@ -19,6 +19,8 @@
     </strong></p>
 </header>
 <main>
+    {# redirect_url is the identity provider's login URL from server config (OIDC endpoints must be https). #}
+    {# nosemgrep: generic.html-templates.security.var-in-href.var-in-href #}
     <a href="{{ redirect_url }}" class="primary-button">
         Continue with {{ idp.idp_name }}
     </a>

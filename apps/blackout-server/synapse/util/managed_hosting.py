@@ -114,6 +114,8 @@ def run_verification_hooks(
 
 def check_health_endpoint(url: str, timeout: float = 5.0) -> Optional[str]:
     try:
+        # url is the operator's --url, or the fixed http:// URL in hosting_smoke.py.
+        # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
         with urllib.request.urlopen(url, timeout=timeout) as response:
             code = getattr(response, "status", response.getcode())
             if code < 200 or code >= 300:

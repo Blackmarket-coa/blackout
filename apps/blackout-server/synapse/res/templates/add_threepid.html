@@ -3,6 +3,8 @@
 
 {% block body %}
 <p>A request to add an email address to your Matrix account has been received. If this was you, please click the link below to confirm adding this email:</p>
+{# link is public_baseurl + a fixed path + a URL-encoded query (Mailer.send_add_threepid_mail). #}
+{# nosemgrep: generic.html-templates.security.var-in-href.var-in-href #}
 <a href="{{ link }}">{{ link }}</a>
 <p>If this was not you, you can safely ignore this email. Thank you.</p>
 {% endblock %}

@@ -274,6 +274,8 @@ def run_test_snippet(source: str) -> None:
     globals_: Dict[str, object]
     locals_: Dict[str, object]
     globals_ = locals_ = {}
+    # source is one of the literal test snippets in this file, not outside input.
+    # nosemgrep: python.lang.security.audit.exec-detected.exec-detected
     exec(textwrap.dedent(source), globals_, locals_)
 
 
