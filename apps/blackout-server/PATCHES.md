@@ -20,7 +20,6 @@ This repository tracks upstream Synapse while carrying Blackout-specific extensi
   - `git rev-list --left-right --count upstream/develop...HEAD` -> `1 310`
 - Interpretation: this branch currently has 310 local commits not in `upstream/develop`, while upstream has 1 commit not present locally from the fetched head snapshot.
 
-
 ## Full upstream merge rehearsal
 
 - Performed non-shallow upstream fetch:
@@ -35,11 +34,13 @@ This repository tracks upstream Synapse while carrying Blackout-specific extensi
 ## Current non-upstreamed patch surface
 
 Primary Blackout surface:
+
 - `blackout_runtime/`: module semantics, API resources, and governance/reputation integration.
 - `blackout_runtime_tests/`: runtime + integration coverage for Blackout behavior.
 - `tests/blackout_runtime/`: end-to-end homeserver API tests for module behavior.
 
 Current non-`blackout_runtime` deltas kept intentionally:
+
 - `synapse/storage/_base.py`: cache invalidation fallback now safely handles non-cache callables (avoids crashing when a looked-up attribute has no `invalidate` method).
 - `docs/bmc_server_execution_plan.md`: deployment/runbook-facing module enablement snippet.
 - `DEPLOYMENT_READINESS.md`: rollout status pointers to execution plan.
@@ -68,7 +69,7 @@ Hand-ported fixes for upstream Synapse security advisories. The fork is based
 on Synapse **1.98.0** (`pyproject.toml` `version = "1.98.0+blackout.1"`), so
 every advisory fixed upstream after December 2023 had to be checked against
 this tree individually. Triage, per-advisory evidence and the advisories that
-were *not* ported (and why) are in
+were _not_ ported (and why) are in
 `docs/security/upstream-advisory-triage-2026-10-09.md`. Each source of truth
 for "what upstream changed" is the diff between the vulnerable and patched
 upstream sdists from PyPI, named per entry.
@@ -163,7 +164,7 @@ upstream.
 - `synapse/storage/databases/main/stream.py` (`_paginate_room_events_txn` and
   `paginate_room_events` now also return `limited`; internal callers updated),
   `synapse/handlers/pagination.py` (only end pagination when the page is empty
-  *and* not limited), `synapse/handlers/admin.py` and
+  _and_ not limited), `synapse/handlers/admin.py` and
   `tests/storage/test_stream.py` (unpacking only). A page consisting solely of
   rejected events no longer ends `/messages` back-pagination.
   GHSA-6qf2-7x63-mm6v. The admin data-export loop in `handlers/admin.py` keeps
@@ -199,7 +200,7 @@ upstream.
 - `synapse/storage/databases/main/push_rule.py` (`PushRuleStore`): enforce the
   limits when adding a rule, when inserting a new row, and when changing a
   rule's actions. GHSA-fp53-rw9v-hcf9. As upstream, actions set on a
-  *server-default* rule are not size-checked (see the triage doc).
+  _server-default_ rule are not size-checked (see the triage doc).
 - `docs/usage/configuration/config_documentation.md`: documents `push_rules`.
 - Tests: `tests/rest/client/test_push_rule_attrs.py` (`PushRuleLimitTestCase`,
   upstream), `tests/config/test_push_rules_config.py` (new).
@@ -272,5 +273,17 @@ internals, which an upstream sync must re-check:
 - It signs devices out with `DeviceHandler.delete_devices` from a looping call
   that acts only on the main process, and registers an `on_logged_out`
   password-auth-provider callback to forget a deleted device's length.
+- That callback (`SessionLengthStore.forget_if_device_gone`) deletes the
+  length row only when the `devices` row is already gone. It relies on
+  `DeviceHandler.delete_devices` (`synapse/handlers/device.py`) calling
+  `store.delete_devices` before `AuthHandler.delete_access_tokens_for_user`,
+  which is what fires `on_logged_out` (`synapse/handlers/auth.py`). Logout,
+  `/logout/all` and the devices API all go through that method. If an upstream
+  change makes `on_logged_out` fire while the `devices` row still exists, the
+  rows of devices signed out that way are never deleted: a timed one is still
+  cleared by the sweep at its end, an "Until I sign out" one never is, and a
+  later sign-in that reuses the device ID gets 409 when it binds a length.
+  `test_logout_forgets_the_length` would catch it, but CI runs no
+  `apps/blackout-server` tests, so it has to be run by hand.
 - It stays off under MSC3861 (delegated auth), where these tables do not hold
   the tokens.

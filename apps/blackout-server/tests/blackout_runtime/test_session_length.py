@@ -535,6 +535,36 @@ class SessionLengthRefreshTokenTestCase(_ModuleTestCase):
         assert info.valid_until_ms is not None
         self.assertLess(info.valid_until_ms, ends_at)
 
+    @override_config({"refreshable_access_token_lifetime": "2h"})
+    def test_the_bind_lowers_an_access_token_that_would_outlive_the_session(
+        self,
+    ) -> None:
+        # An access token minted to last longer than the chosen length must be
+        # cut back to the session end, not left to run past it.
+        self._pause_sweep()
+        session = self._login_refreshable()
+        access = session["access_token"]
+        # Use it first, so its two-hour lookup sits in Synapse's cache.
+        self.assertEqual(self._whoami(access).code, 200)
+        info = self.get_success(self.store.get_user_by_access_token(access))
+        assert info is not None and info.valid_until_ms is not None
+        self.assertGreater(info.valid_until_ms, self.clock.time_msec() + 3_600_000)
+
+        bound = self._bind(access, {"session_length": "1h"})
+        self.assertEqual(bound.code, 200, bound.result)
+        ends_at = bound.json_body["expires_at_ms"]
+        info = self.get_success(self.store.get_user_by_access_token(access))
+        assert info is not None
+        self.assertEqual(info.valid_until_ms, ends_at)
+
+        # Refused from the end on by the cap alone (the sweep is paused), an
+        # hour before the token's own two hours were up.
+        self.reactor.advance((ends_at - self.clock.time_msec()) / 1000 + 5)
+        channel = self._whoami(access)
+        self.assertEqual(channel.code, 401, channel.result)
+        self.assertEqual(channel.json_body["errcode"], "M_UNKNOWN_TOKEN")
+        self.assertTrue(channel.json_body.get("soft_logout"))
+
 
 class SessionLengthConfigTestCase(HomeserverTestCase):
     """The pieces of config handling that need no homeserver."""
