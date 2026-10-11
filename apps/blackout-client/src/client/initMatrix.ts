@@ -23,7 +23,11 @@ import {
     saveSession,
     type StoredSession,
 } from './sessionManager';
-import { clearBlackoutApiToken, exchangeMatrixForBlackoutToken } from './blackoutApiSession';
+import {
+    clearBlackoutApiToken,
+    exchangeMatrixForBlackoutToken,
+    revokeBlackoutApiToken,
+} from './blackoutApiSession';
 import { storageNamespace } from './storageNamespace';
 import { isTimedSessionLength, MAX_TIMER_DELAY_MS, signOutDeviceByToken } from './sessionLength';
 import { cryptoCallbacks } from './secretStorageKeys';
@@ -351,7 +355,11 @@ export const startSyncWithRetry = async (client: MatrixClient): Promise<void> =>
  */
 export const handleSessionLoggedOut = (store: AtomStore, client: MatrixClient): void => {
     stopMatrixClient(client);
-    clearBlackoutApiToken();
+    // The chat panel (B3's client switch on) also asks the API to refuse its
+    // API token, and drops one an exchange still running would mint; the
+    // local part is immediate, the request is not awaited.
+    if (storageNamespace().embed) void revokeBlackoutApiToken();
+    else clearBlackoutApiToken();
     const userId = client.getUserId();
     clearSession(userId ?? undefined);
     applyAuthAtoms(store, null, 'logged_out');
@@ -431,7 +439,9 @@ export const endPanelSession = async (
         return;
     }
     clearSession(session.userId);
-    clearBlackoutApiToken();
+    // Refuse the panel's API token on the API too (not awaited), and drop one
+    // an exchange still running would mint.
+    void revokeBlackoutApiToken();
     store.set(panelSignedOutReasonAtom, reason);
     applyAuthAtoms(store, null, 'logged_out');
 };

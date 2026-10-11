@@ -93,35 +93,55 @@ const writeToken = (token: string): void => {
 };
 
 /**
- * Chat panel Sign out (launch-plan B3): ask the API to refuse this page's
- * Blackout API token from now on (`POST /v1/auth/sign-out` puts its jti on the
- * denylist until it expires), then forget it locally. Best effort, and capped
- * at 10 s so signing out never hangs: if the API cannot be reached, the
- * token's own expiry still bounds it.
+ * Chat panel (B3's client switch on) only: bumped each time the panel's
+ * session ends in this page (`revokeBlackoutApiToken`). An exchange started
+ * before an end and finishing after it must not leave its token behind: its
+ * result is dropped and the API is asked to refuse it (see `runExchange`).
+ * Never bumped in the full app, so the full app's exchanges are unchanged.
+ */
+let panelSessionGeneration = 0;
+
+/**
+ * Ask the API to refuse `token` from now on (`POST /v1/auth/sign-out` puts its
+ * jti on the denylist until it expires) and, when given, the refresh-token
+ * family of `refreshToken`. Best effort, and capped at 10 s so it never hangs:
+ * if the API cannot be reached, the token's own expiry still bounds it.
+ */
+const signOutApiToken = async (token: string, refreshToken?: string): Promise<void> => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 10_000);
+    try {
+        const client = createFetchApiClient({
+            baseUrl: API_BASE_URL,
+            defaultHeaders: { authorization: `Bearer ${token}` },
+        });
+        await client({
+            method: 'POST',
+            path: '/v1/auth/sign-out',
+            body: refreshToken ? { refreshToken } : {},
+            signal: controller.signal,
+        });
+    } catch {
+        // Unreachable or refused: nothing more to do here.
+    } finally {
+        clearTimeout(timer);
+    }
+};
+
+/**
+ * Chat panel (launch-plan B3): the panel's session has ended in this page —
+ * its Sign out, its chosen length running out, or the homeserver dropping it.
+ * Forget the panel's Blackout API token here and ask the API to refuse it.
+ * An exchange still running at this point, or started before it and finishing
+ * later, never leaves its token behind either: its result is dropped and the
+ * API is asked to refuse that token too. The local part happens before the
+ * first `await`, so callers that do not wait still get it at once.
  */
 export const revokeBlackoutApiToken = async (): Promise<void> => {
+    panelSessionGeneration += 1;
     const token = readBlackoutApiToken();
-    if (token && !isBlackoutTokenExpired(token)) {
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 10_000);
-        try {
-            const client = createFetchApiClient({
-                baseUrl: API_BASE_URL,
-                defaultHeaders: { authorization: `Bearer ${token}` },
-            });
-            await client({
-                method: 'POST',
-                path: '/v1/auth/sign-out',
-                body: {},
-                signal: controller.signal,
-            });
-        } catch {
-            // Unreachable or refused: the local copy is dropped below anyway.
-        } finally {
-            clearTimeout(timer);
-        }
-    }
     clearBlackoutApiToken();
+    if (token && !isBlackoutTokenExpired(token)) await signOutApiToken(token);
 };
 
 export const clearBlackoutApiToken = (): void => {
@@ -141,6 +161,7 @@ export const clearBlackoutApiToken = (): void => {
  */
 const runExchange = async (session: StoredSession): Promise<string | null> => {
     if (!session.accessToken) return null;
+    const generation = panelSessionGeneration;
 
     try {
         const client = createFetchApiClient({
@@ -155,6 +176,14 @@ const runExchange = async (session: StoredSession): Promise<string | null> => {
         })) as MatrixExchangeResponse;
 
         if (result?.token) {
+            if (generation !== panelSessionGeneration) {
+                // The chat panel's session ended while this exchange was
+                // running (Sign out, its end, or the homeserver dropping it):
+                // never keep the token, and ask the API to refuse it and its
+                // refresh token.
+                void signOutApiToken(result.token, result.refreshToken);
+                return null;
+            }
             lastFailedExchange = null;
             writeToken(result.token);
             return result.token;

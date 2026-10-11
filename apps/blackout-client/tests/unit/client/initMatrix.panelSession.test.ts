@@ -37,9 +37,12 @@ vi.mock('../../../src/client/encryptionHealth', () => ({
     startEncryptionHealthTracking: vi.fn(),
     stopEncryptionHealthTracking: vi.fn(),
 }));
+const clearBlackoutApiTokenMock = vi.fn();
+const revokeBlackoutApiTokenMock = vi.fn(async () => undefined);
 vi.mock('../../../src/client/blackoutApiSession', () => ({
-    clearBlackoutApiToken: vi.fn(),
+    clearBlackoutApiToken: () => clearBlackoutApiTokenMock(),
     exchangeMatrixForBlackoutToken: vi.fn(),
+    revokeBlackoutApiToken: () => revokeBlackoutApiTokenMock(),
 }));
 
 import {
@@ -104,6 +107,8 @@ describe('chat panel session end', () => {
         installFakeIndexedDb();
         fakeClient = makeClient();
         createClientMock.mockClear();
+        clearBlackoutApiTokenMock.mockClear();
+        revokeBlackoutApiTokenMock.mockClear();
         setStorageNamespaceForTests(true);
     });
 
@@ -131,6 +136,7 @@ describe('chat panel session end', () => {
         expect(store.get(authStateAtom)).toBe('logged_out');
         expect(store.get(panelSignedOutReasonAtom)).toBe('session_ended');
         expect(restoreActiveSession()).toBeNull();
+        expect(revokeBlackoutApiTokenMock).toHaveBeenCalledTimes(1);
         expect(deletedDbs).toEqual(
             expect.arrayContaining([
                 // The timeline cache, under the name matrix-js-sdk really uses.
@@ -285,6 +291,9 @@ describe('chat panel session end', () => {
         );
         expect(store.get(panelSignedOutReasonAtom)).toBe('signed_out');
         expect(restoreActiveSession()).toBeNull();
+        // The panel's API token is refused on the API, not just forgotten.
+        expect(revokeBlackoutApiTokenMock).toHaveBeenCalledTimes(1);
+        expect(clearBlackoutApiTokenMock).not.toHaveBeenCalled();
     });
 
     it('never signs out a newer session when an older one’s end is handled late', async () => {
@@ -306,9 +315,11 @@ describe('chat panel session end', () => {
         await endPanelSession(store, null, older, 'session_ended');
         fetchMock.mockRestore();
 
-        // The older device's local data goes; the newer session stays.
+        // The older device's local data goes; the newer session stays, and so
+        // does its API token.
         expect(deletedDbs).toContain(`blackout-embed-crypto-store:${USER}:OLDPANEL`);
         expect(restoreActiveSession()?.deviceId).toBe(DEVICE);
+        expect(revokeBlackoutApiTokenMock).not.toHaveBeenCalled();
         expect(store.get(authStateAtom)).toBe('logged_in');
         expect(store.get(panelSignedOutReasonAtom)).toBeNull();
     });
@@ -354,6 +365,8 @@ describe('the full app is unchanged', () => {
         installFakeIndexedDb();
         fakeClient = makeClient();
         createClientMock.mockClear();
+        clearBlackoutApiTokenMock.mockClear();
+        revokeBlackoutApiTokenMock.mockClear();
         setStorageNamespaceForTests(false);
     });
 
@@ -402,6 +415,8 @@ describe('the chat panel with the B3 client switch off', () => {
         installFakeIndexedDb();
         fakeClient = makeClient();
         createClientMock.mockClear();
+        clearBlackoutApiTokenMock.mockClear();
+        revokeBlackoutApiTokenMock.mockClear();
         window.history.replaceState(null, '', '/embed');
         setStorageNamespaceForTests(null);
     });
@@ -496,6 +511,9 @@ describe('the chat panel with the B3 client switch off', () => {
         expect(deletedDbs).toEqual([]);
         expect(store.get(panelSignedOutReasonAtom)).toBeNull();
         expect(store.get(authStateAtom)).toBe('logged_out');
+        // As before B3: the API token is forgotten here, nothing is sent.
+        expect(clearBlackoutApiTokenMock).toHaveBeenCalledTimes(1);
+        expect(revokeBlackoutApiTokenMock).not.toHaveBeenCalled();
         // As before B3, the dead session is dropped from storage.
         expect(restoreActiveSession()).toBeNull();
     });

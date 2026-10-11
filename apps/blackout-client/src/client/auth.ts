@@ -449,14 +449,22 @@ export const logout = async (store: AtomStore): Promise<void> => {
         clearSession();
     }
 
-    clearBlackoutApiToken();
+    if (panelSessionsActive()) {
+        // Chat panel (B3's client switch on): refuse its API token on the API
+        // too, including one an exchange minted while the device was being
+        // signed out. The local part is immediate; the request is not awaited.
+        void revokeBlackoutApiToken();
+    } else {
+        clearBlackoutApiToken();
+    }
     applyLoggedOutAtoms(store);
 };
 
 /**
  * The chat panel's Sign out (launch-plan B3): end the panel's Blackout API
- * token on the API as well, then sign the device out as `logout` does. The
- * full app keeps calling `logout` alone.
+ * token on the API first, then sign the device out as `logout` does (which, in
+ * the panel, refuses any API token minted in the meantime as well). The full
+ * app keeps calling `logout` alone.
  */
 export const signOutPanel = async (store: AtomStore): Promise<void> => {
     await revokeBlackoutApiToken();
