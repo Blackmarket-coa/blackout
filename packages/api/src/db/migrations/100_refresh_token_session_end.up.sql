@@ -1,0 +1,17 @@
+-- The end of a session whose length the server enforces.
+--
+-- Launch-plan step B3: someone signing in inside the Black Mask chat panel
+-- picks how long that sign-in lasts (1 hour, 1 day, 7 days, 30 days, or until
+-- they sign out), and the homeserver records it. When such a Matrix session is
+-- exchanged for a Blackout API session, the refresh-token family gets the same
+-- end here. Every rotated successor carries it unchanged, no token in the
+-- family is refreshed at or after it, and each token's own expires_at is never
+-- later than it — so a client that keeps a refresh token cannot outlive the
+-- length that was chosen.
+--
+-- NULL for every ordinary session, which is all of them unless the operator
+-- turns the feature on (BLACKOUT_SESSION_LENGTHS on this API and
+-- session_lengths_enabled on the homeserver module). Without this column the
+-- Postgres-backed store would silently drop the field on write (it writes only
+-- columns that exist), and a restart would lose the bound.
+ALTER TABLE refresh_tokens ADD COLUMN IF NOT EXISTS session_expires_at TIMESTAMPTZ;

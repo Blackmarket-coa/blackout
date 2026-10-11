@@ -11,6 +11,13 @@ export interface AuthTokenPayload {
     /** Domain capabilities granted to this session, e.g. `streaming.read`.
      *  Optional so tokens issued before capability minting still verify. */
     capabilities?: string[];
+    /**
+     * Session end (epoch seconds) for a session with a server-enforced length
+     * (the Black Mask panel's session-length choice, launch-plan B3). Present
+     * only on such sessions; `exp` is never later than it, and verification
+     * refuses the token from this second on.
+     */
+    sxp?: number;
 }
 
 const base64Url = (input: Buffer | string) => Buffer.from(input).toString('base64url');
@@ -209,15 +216,27 @@ export function signJwt(userId: string, username: string, ttlSeconds = 60 * 60 *
     return signJwtWithMeta(userId, username, ttlSeconds).token;
 }
 
+export interface SignJwtOptions {
+    /**
+     * End of a session with a server-enforced length, in epoch seconds. The
+     * token's `exp` is capped at it and it is carried as `sxp`. Callers must
+     * refuse to mint for a session that has already ended.
+     */
+    sessionExpiresAt?: number;
+}
+
 export function signJwtWithMeta(
     userId: string,
     username: string,
-    ttlSeconds = 60 * 60 * 24
+    ttlSeconds = 60 * 60 * 24,
+    options: SignJwtOptions = {}
 ): SignedJwt {
     const config = readAuthRuntimeConfig();
     const header = { alg: 'HS256', typ: 'JWT' };
     const iat = Math.floor(Date.now() / 1000);
-    const exp = iat + ttlSeconds;
+    const { sessionExpiresAt } = options;
+    const bounded = typeof sessionExpiresAt === 'number';
+    const exp = bounded ? Math.min(iat + ttlSeconds, sessionExpiresAt) : iat + ttlSeconds;
     const jti = randomBytes(16).toString('base64url');
     const payload: AuthTokenPayload = {
         sub: userId,
@@ -228,6 +247,7 @@ export function signJwtWithMeta(
         aud: config.audience,
         jti,
         capabilities: deriveUserCapabilities(),
+        ...(bounded ? { sxp: sessionExpiresAt } : {}),
     };
 
     const encodedHeader = base64Url(JSON.stringify(header));
@@ -286,6 +306,11 @@ export function verifyJwt(token: string): AuthTokenPayload | null {
     if (typeof decoded?.exp !== 'number' || typeof decoded?.iat !== 'number') return null;
     const now = Math.floor(Date.now() / 1000);
     if (decoded.exp < now) return null;
+    // A session with a server-enforced length ends at `sxp`, whatever `exp`
+    // says (it is minted no later, but the check must not depend on that).
+    if (decoded.sxp !== undefined && (typeof decoded.sxp !== 'number' || decoded.sxp <= now)) {
+        return null;
+    }
     if (decoded.iss !== config.issuer || decoded.aud !== config.audience) return null;
 
     return decoded;
