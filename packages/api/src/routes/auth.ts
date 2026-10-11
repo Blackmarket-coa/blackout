@@ -4,10 +4,12 @@ import { db } from '../db/store';
 import {
     MIN_PASSWORD_LENGTH,
     hashPassword,
+    hashPasswordAsync,
     isAcceptablePassword,
     signJwt,
     signJwtWithMeta,
     verifyPasswordConstantTime,
+    verifyPasswordConstantTimeAsync,
 } from '../services/auth';
 import { matrixClient } from '../integrations/matrix-client';
 import {
@@ -190,12 +192,17 @@ auth.post('/register', async (c) => {
         );
     }
 
+    // Hash first, off the event loop. The await yields, so it must come before
+    // the existence check: the check and createUser below have to run in one
+    // uninterrupted turn, or two concurrent registrations for the same name
+    // could both pass the check.
+    const passwordHash = await hashPasswordAsync(password);
+
     if (db.findUserByEmail(email) || db.findUserByUsername(username)) {
         return c.json({ code: 'user_exists', message: 'User already exists' }, 409);
     }
 
     const userId = crypto.randomUUID();
-    const passwordHash = hashPassword(password);
     const pubkeyEd25519 = crypto.randomUUID().replace(/-/g, '');
 
     const user = db.createUser({
@@ -474,19 +481,26 @@ auth.post('/login', async (c) => {
     const { email, password } = parsed;
 
     const user = db.findUserByEmail(email);
+    const checkedHash = user?.passwordHash;
 
     // Run scrypt even when the user is missing so the two 401 branches have
     // equivalent timing and cannot be used to enumerate registered emails.
-    if (!verifyPasswordConstantTime(password, user?.passwordHash)) {
+    const verified = await verifyPasswordConstantTimeAsync(password, checkedHash);
+    // The verify yields the event loop. Honour it only if the account still
+    // holds the hash that was checked: a password change (or deletion) landing
+    // mid-verify must not let the old password mint a session that postdates
+    // the change's revocation cutoff.
+    const current = user ? db.getUserById(user.id) : undefined;
+    if (!verified || !current || current.passwordHash !== checkedHash) {
         authFailuresTotal.inc({ reason: 'invalid_credentials' });
         return c.json({ code: 'invalid_credentials', message: 'Invalid credentials' }, 401);
     }
 
-    const session = issueSession(user!.id, user!.username, c.req.header('user-agent'));
+    const session = issueSession(current.id, current.username, c.req.header('user-agent'));
     return c.json({
         token: session.access.token,
         refreshToken: session.refresh.token,
-        userId: user!.id,
+        userId: current.id,
     });
 });
 
