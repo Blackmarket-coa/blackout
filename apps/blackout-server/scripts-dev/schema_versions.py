@@ -81,6 +81,8 @@ def get_schema_versions(tag: git.Tag) -> Tuple[Optional[int], Optional[int]]:
             # thing to do is exec the code. Luckily it has only ever existed in
             # a file which imports nothing else from Synapse.
             locals: Dict[str, Any] = {}
+            # The file is this repository's own source at a release tag.
+            # nosemgrep: python.lang.security.audit.exec-detected.exec-detected
             exec(schema_file.data_stream.read().decode("utf-8"), {}, locals)
             schema_version = locals["SCHEMA_VERSION"]
             schema_compat_version = locals.get("SCHEMA_COMPAT_VERSION")

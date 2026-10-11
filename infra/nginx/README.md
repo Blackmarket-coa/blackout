@@ -15,6 +15,10 @@ This deployment exposes the following hostnames over TLS:
 - `nginx.conf`: hardened global Nginx config (includes `merge_slashes off` for Matrix-safe URI handling).
 - `snippets/proxy-common.conf`: shared upstream proxy headers and timeout/body settings.
 - `snippets/security-headers.conf`: security headers for frontend hosts.
+- `snippets/hsts.conf`: HSTS for the Matrix host. The site config includes it
+  at server level and again in every block there that sets its own
+  `add_header`, because nginx drops inherited `add_header` directives in such a
+  block. `nginx -t` fails if this file is missing.
 - `sites-available/theblackout.app.conf`: host-based routing and upstream definitions.
 
 ## 1) DNS implementation
@@ -52,6 +56,7 @@ Install configs:
 sudo cp infra/nginx/nginx.conf /etc/nginx/nginx.conf
 sudo cp infra/nginx/snippets/proxy-common.conf /etc/nginx/snippets/proxy-common.conf
 sudo cp infra/nginx/snippets/security-headers.conf /etc/nginx/snippets/security-headers.conf
+sudo cp infra/nginx/snippets/hsts.conf /etc/nginx/snippets/hsts.conf
 sudo cp infra/nginx/sites-available/theblackout.app.conf /etc/nginx/sites-available/theblackout.app.conf
 sudo ln -sfn /etc/nginx/sites-available/theblackout.app.conf /etc/nginx/sites-enabled/theblackout.app.conf
 ```

@@ -45,6 +45,8 @@
 <tr class="notif_link">
     <td></td>
     <td>
+        {# notif.link is the configured client base URL (or matrix.to) + room and event IDs (Mailer._make_notif_link). #}
+        {# nosemgrep: generic.html-templates.security.var-in-href.var-in-href #}
         <a href="{{ notif.link }}">View {{ room.title }}</a>
     </td>
     <td></td>

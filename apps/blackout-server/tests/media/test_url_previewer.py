@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import datetime
+import io
 import os
 from asyncio import CancelledError
 from unittest import mock
@@ -156,6 +157,22 @@ class URLPreviewTests(unittest.HomeserverTestCase):
         exc = failure.value
         self.assertEqual(exc.code, 502)
         self.assertEqual(exc.errcode, Codes.TOO_LARGE)
+
+    def test_parse_data_url_refuses_other_schemes(self) -> None:
+        """_parse_data_url must never hand urlopen anything but a data: URL;
+        urlopen would read a file: URL straight from local disk."""
+        path = os.path.abspath(self.mktemp())
+        with open(path, "wb") as f:
+            f.write(b"local file contents")
+        output = io.BytesIO()
+
+        failure = self.get_failure(
+            self.url_previewer._parse_data_url("file://" + path, output),
+            SynapseError,
+        )
+
+        self.assertEqual(failure.value.code, 500)
+        self.assertEqual(output.getvalue(), b"")
 
     def test_handle_url_cleans_up_file_on_store_failure(self) -> None:
         def fail_store_local_media(**kwargs: object) -> object:

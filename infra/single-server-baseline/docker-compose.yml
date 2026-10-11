@@ -29,6 +29,8 @@ services:
             - ./nginx/sites-available/theblackout.app.conf:/etc/nginx/sites-enabled/theblackout.app.conf:ro
             - ./nginx/snippets/proxy-common.conf:/etc/nginx/snippets/proxy-common.conf:ro
             - ./nginx/snippets/security-headers.conf:/etc/nginx/snippets/security-headers.conf:ro
+            # Included by the site config; nginx will not start without it.
+            - ./nginx/snippets/hsts.conf:/etc/nginx/snippets/hsts.conf:ro
             - letsencrypt:/etc/letsencrypt
             - certbot-webroot:/var/www/certbot
         healthcheck:

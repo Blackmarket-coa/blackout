@@ -1,5 +1,14 @@
 # Semgrep triage — 2026-09-13
 
+> **Status, 2026-10-11:** superseded by
+> [semgrep-triage-2026-10-11.md](semgrep-triage-2026-10-11.md). That pass fixed
+> or explained, on the line, every finding below. Two conclusions here turned out
+> wrong. One of the 17 `var-in-href` findings (`sso_redirect_confirm.html`) was a
+> real `javascript:` injection that could leak a login token, not template shape.
+> And `react-dangerouslysetinnerhtml` _can_ be suppressed at the line: the rule
+> reports the `__html:` value, not the JSX attribute. The record below is left as
+> written.
+
 Every finding from the ruleset CI runs (`p/security-audit` + `p/secrets`, the
 config in `.github/workflows/security.yml`), classified, with the reasoning for
 each disposition. Written because the alternative on the table was a blanket

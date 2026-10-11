@@ -363,6 +363,9 @@ def _ordered_events(events: Iterable[EventBase]) -> List[EventBase]:
     def key_func(e: EventBase) -> Tuple[int, str]:
         # we have to use utf-8 rather than ascii here because it turns out we allow
         # people to send us events with non-ascii event IDs :/
+        # Room version 1 defines this tie-break as the SHA-1 of the event ID. It orders
+        # events and protects nothing; changing it would fork state resolution.
+        # nosemgrep: python.lang.security.insecure-hash-algorithms.insecure-hash-algorithm-sha1
         return -int(e.depth), hashlib.sha1(e.event_id.encode("utf-8")).hexdigest()
 
     return sorted(events, key=key_func)
