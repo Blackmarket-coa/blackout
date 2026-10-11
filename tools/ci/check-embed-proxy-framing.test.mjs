@@ -218,6 +218,29 @@ for (const stack of STACKS) {
         );
     });
 
+    test(`${stack.name}: fails when a web-host location includes only hsts.conf, which drops the inherited set`, () => {
+        expectFailure(
+            site((t) =>
+                replaceOnce(
+                    t,
+                    ROOT_LOCATION,
+                    '    location / {\n        proxy_pass http://blackout_web;\n        include /etc/nginx/snippets/hsts.conf;\n    }'
+                )
+            ),
+            /location \/ includes .*hsts\.conf .*without including .*security-headers\.conf/
+        );
+        expectFailure(
+            site((t) =>
+                replaceOnce(
+                    t,
+                    ROOT_LOCATION,
+                    '    location / {\n        proxy_pass http://blackout_web;\n        if ($request_method = POST) {\n            include /etc/nginx/snippets/hsts.conf;\n        }\n    }'
+                )
+            ),
+            /if .*includes .*hsts\.conf .*without including .*security-headers\.conf/
+        );
+    });
+
     test(`${stack.name}: fails when another location sets its own frame-ancestors`, () => {
         expectFailure(
             site((t) =>

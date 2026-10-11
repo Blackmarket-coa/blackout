@@ -6,8 +6,8 @@
  * at /embed may be framed, from BLACK_MASK_FRAME_ANCESTORS. The front proxies
  * in infra/nginx and infra/single-server-baseline add their own
  * X-Frame-Options: DENY and a CSP ending in frame-ancestors 'none'
- * (snippets/security-headers.conf) to every response of the server block for
- * theblackout.app and chat.theblackout.app. Browsers enforce every CSP a
+ * (snippets/security-headers.conf) to every response of the HTTPS server block
+ * for theblackout.app and chat.theblackout.app. Browsers enforce every CSP a
  * response carries, so on the two panel locations each proxy leaves out its
  * own framing headers, but only when the raw request URI is the panel's and
  * the client container's response carries a frame-ancestors list in the form
@@ -35,8 +35,9 @@
  *   - one of those five files includes a file other than the known ones (site
  *     file: security-headers.conf and hsts.conf; nginx.conf: mime.types,
  *     proxy-common.conf and sites-enabled/*.conf; the snippets: none);
- *   - a location in the web host's server block sets add_header without
- *     restoring security-headers.conf, or sets its own X-Frame-Options or CSP.
+ *   - a location in the web host's server block sets add_header, directly or
+ *     by including hsts.conf, without restoring security-headers.conf, or sets
+ *     its own X-Frame-Options or CSP.
  *
  * It does not run nginx, and it cannot see what a host adds outside the
  * repository: other files in sites-enabled/ or conf.d/, its mime.types, or
@@ -718,17 +719,25 @@ export function checkStack({ files, site, securityHeaders, hsts, others = [], cl
 
     // In the web host's block, a non-panel block that sets its own headers drops
     // the server-level set, X-Frame-Options and frame-ancestors 'none' included.
+    // Including hsts.conf sets one (its add_header lands in that block), so it
+    // counts the same as a literal add_header.
     const panelSet = new Set(panels);
     for (const { node } of walk(web.block)) {
         if (!node.block || panelSet.has(node)) continue;
         const own = addHeaders(node.block);
-        if (!own.length) continue;
+        const includesHsts = node.block.some(
+            (d) => d.name === 'include' && d.args[0] === HSTS_INCLUDE
+        );
+        if (!own.length && !includesHsts) continue;
         const where = `${node.name} ${node.args.join(' ')}`;
         if (!node.block.some((d) => d.name === 'include' && d.args[0] === SECURITY_INCLUDE)) {
+            const sets = own.length
+                ? 'sets add_header'
+                : `includes ${HSTS_INCLUDE} (an add_header)`;
             fail(
                 files.site,
                 node.line,
-                `${where} sets add_header without including ${SECURITY_INCLUDE}, so it loses X-Frame-Options and frame-ancestors 'none'`
+                `${where} ${sets} without including ${SECURITY_INCLUDE}, so it loses X-Frame-Options and frame-ancestors 'none'`
             );
         }
         for (const h of own) {
