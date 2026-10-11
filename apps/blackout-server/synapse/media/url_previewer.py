@@ -564,6 +564,10 @@ class UrlPreviewer:
                 the media type, the downloaded file name, the number of
                 milliseconds the result is valid for, the etag header.
         """
+        # urlopen also opens file: and ftp: URLs. The only caller checks for
+        # data: first; check again here so this can never read a local file.
+        if not url.startswith("data:"):
+            raise SynapseError(500, "Not a data: URL", Codes.UNKNOWN)
 
         try:
             logger.debug("Trying to parse data url '%s'", url)
@@ -571,6 +575,7 @@ class UrlPreviewer:
             # in-process without network I/O, so blocking the reactor is
             # negligible and avoids pulling in an async HTTP client dependency
             # for local-only parsing.
+            # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
             with urlopen(url) as url_info:
                 length = 0
                 while True:
