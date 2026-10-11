@@ -61,6 +61,8 @@
         "probe:calls:synthetic": "node tools/ci/synthetic-call-probe.mjs",
         "guard:auth-secrets": "node tools/ci/check-auth-secrets.mjs",
         "guard:sops-recipients": "node tools/ci/check-sops-recipients.mjs",
+        "guard:embed-proxy-framing": "node tools/ci/check-embed-proxy-framing.mjs",
+        "test:guard:embed-proxy-framing": "node --test tools/ci/check-embed-proxy-framing.test.mjs",
         "test:guard:deaddrop-parity": "node --import tsx --test tools/ci/deaddrop-envelope-parity.test.ts",
         "guard:cors-allowlist": "node tools/ci/check-cors-allowlist.mjs",
         "guard:room-encryption": "node tools/ci/check-room-encryption.mjs",
