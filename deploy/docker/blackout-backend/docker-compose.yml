@@ -971,6 +971,8 @@ services:
             - '443:443'
         volumes:
             - ./nginx/nginx.conf:/etc/nginx/templates/nginx.conf.template:ro
+            # Included by nginx.conf; nginx will not start without it.
+            - ./nginx/snippets/hsts.conf:/etc/nginx/snippets/hsts.conf:ro
             - ./well-known:/var/www/well-known:ro
         # W2: in MAS mode (SYNAPSE_AUTH_MODE=mas) the client well-known is rendered
         # from client.mas, which additionally advertises the OIDC issuer via
