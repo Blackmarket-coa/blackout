@@ -262,7 +262,7 @@ for (const stack of STACKS) {
             site((t) => {
                 const relaxedLine = t
                     .split('\n')
-                    .find((l) => l.trimStart().startsWith('11 "default-src'));
+                    .find((l) => l.trimStart().startsWith('111 "default-src'));
                 return replaceOnce(
                     t,
                     relaxedLine,
@@ -287,7 +287,7 @@ for (const stack of STACKS) {
             site((t) => {
                 const relaxedLine = t
                     .split('\n')
-                    .find((l) => l.trimStart().startsWith('11 "default-src'));
+                    .find((l) => l.trimStart().startsWith('111 "default-src'));
                 return replaceOnce(
                     t,
                     relaxedLine,
@@ -397,20 +397,35 @@ for (const stack of STACKS) {
         );
     });
 
-    test(`${stack.name}: fails when the relax condition stops requiring both tests`, () => {
+    test(`${stack.name}: fails when the relax condition stops requiring all three tests`, () => {
         expectFailure(
-            site((t) => replaceOnce(t, '    11 "";', '    11 "";\n    10 "";')),
+            site((t) => replaceOnce(t, '    111 "";', '    111 "";\n    101 "";')),
+            /X-Frame-Options stays/
+        );
+        // Relaxing on an incomplete upstream header block (F1 of the review).
+        expectFailure(
+            site((t) => replaceOnce(t, '    111 "";', '    111 "";\n    110 "";')),
             /X-Frame-Options stays/
         );
         expectFailure(
             site((t) =>
                 replaceOnce(
                     t,
-                    'map $black_mask_panel_uri$black_mask_panel_upstream_frames $black_mask_panel_x_frame_options',
+                    'map $black_mask_panel_uri$black_mask_panel_upstream_frames$black_mask_panel_upstream_complete $black_mask_panel_x_frame_options',
                     'map $black_mask_panel_upstream_frames $black_mask_panel_x_frame_options'
                 )
             ),
-            /must read \$black_mask_panel_uri\$black_mask_panel_upstream_frames/
+            /must read \$black_mask_panel_uri\$black_mask_panel_upstream_frames\$black_mask_panel_upstream_complete/
+        );
+        expectFailure(
+            site((t) =>
+                replaceOnce(
+                    t,
+                    'map $black_mask_panel_uri$black_mask_panel_upstream_frames$black_mask_panel_upstream_complete $black_mask_panel_csp',
+                    'map $black_mask_panel_uri$black_mask_panel_upstream_frames $black_mask_panel_csp'
+                )
+            ),
+            /must read \$black_mask_panel_uri\$black_mask_panel_upstream_frames\$black_mask_panel_upstream_complete/
         );
         expectFailure(
             site((t) =>
@@ -421,6 +436,42 @@ for (const stack of STACKS) {
                 )
             ),
             /must be \{default 0; <one regex> 1\}/
+        );
+    });
+
+    test(`${stack.name}: fails when the completeness test is removed or loosened`, () => {
+        const COMPLETE_MAP =
+            'map $upstream_header_time $black_mask_panel_upstream_complete {\n    default 0;\n    "~(^| )[0-9]+\\.[0-9]+$" 1;\n}\n\n';
+        expectFailure(
+            site((t) => replaceOnce(t, COMPLETE_MAP, '')),
+            /map \$black_mask_panel_upstream_complete is missing/
+        );
+        expectFailure(
+            site((t) =>
+                replaceOnce(t, COMPLETE_MAP, COMPLETE_MAP.replace('default 0;', 'default 1;'))
+            ),
+            /whole header block/
+        );
+        // "-" (an incomplete attempt) must not count as complete.
+        expectFailure(
+            site((t) =>
+                replaceOnce(
+                    t,
+                    COMPLETE_MAP,
+                    COMPLETE_MAP.replace('"~(^| )[0-9]+\\.[0-9]+$"', '"~."')
+                )
+            ),
+            /whole header block/
+        );
+        expectFailure(
+            site((t) =>
+                replaceOnce(
+                    t,
+                    COMPLETE_MAP,
+                    COMPLETE_MAP.replace('$upstream_header_time', '$upstream_response_time')
+                )
+            ),
+            /must read \$upstream_header_time/
         );
     });
 
@@ -465,11 +516,11 @@ for (const stack of STACKS) {
             site((t) =>
                 replaceOnce(
                     t,
-                    'map $black_mask_panel_uri$black_mask_panel_upstream_frames $black_mask_panel_frame_ancestors {\n    default "";',
-                    'map $black_mask_panel_uri$black_mask_panel_upstream_frames $black_mask_panel_frame_ancestors {\n    default $upstream_http_content_security_policy;'
+                    'map $black_mask_panel_uri$black_mask_panel_upstream_frames$black_mask_panel_upstream_complete $black_mask_panel_frame_ancestors {\n    default "";',
+                    'map $black_mask_panel_uri$black_mask_panel_upstream_frames$black_mask_panel_upstream_complete $black_mask_panel_frame_ancestors {\n    default $upstream_http_content_security_policy;'
                 )
             ),
-            /repeated only when both tests pass/
+            /repeated only when all three tests pass/
         );
     });
 

@@ -10,8 +10,8 @@
  * response carries, so on the two panel locations each proxy leaves out its
  * own framing headers, but only when the raw request URI is the panel's and
  * the client container's response carries a frame-ancestors list in the form
- * the image writes. Everywhere else, and in every failure case, the proxy
- * sends exactly the security-headers.conf set.
+ * the image writes, in a header block nginx read completely. Otherwise the
+ * proxy sends the security-headers.conf set.
  *
  * Nothing else checks that arrangement, and every way it can break fails
  * open. This guard fails when, in either proxy:
@@ -19,9 +19,10 @@
  *     differently from `location /`;
  *   - the raw-URI rule is missing or no longer the client image's;
  *   - the fail-safe is weakened: a map default no longer equals today's header,
- *     the relax condition stops requiring both the raw URI and the upstream's
- *     frame-ancestors, or the upstream test accepts anything beyond a single
- *     frame-ancestors list ('none' alone or plain origins);
+ *     the relax condition stops requiring all three of the raw URI, the
+ *     upstream's frame-ancestors and a complete upstream header block, or the
+ *     upstream test accepts anything beyond a single frame-ancestors list
+ *     ('none' alone or plain origins);
  *   - the relaxed CSP differs from security-headers.conf in anything except
  *     the frame-ancestors directive, or the panel's other headers differ from
  *     security-headers.conf / hsts.conf;
@@ -64,8 +65,17 @@ const UPSTREAM_VAR = '$black_mask_panel_upstream_frames';
 const XFO_VAR = '$black_mask_panel_x_frame_options';
 const CSP_VAR = '$black_mask_panel_csp';
 const ECHO_VAR = '$black_mask_panel_frame_ancestors';
-const DECISION_SOURCE = `${URI_VAR}${UPSTREAM_VAR}`;
+const COMPLETE_VAR = '$black_mask_panel_upstream_complete';
+const DECISION_SOURCE = `${URI_VAR}${UPSTREAM_VAR}${COMPLETE_VAR}`;
+const RELAX_KEY = '111';
 const UPSTREAM_CSP = '$upstream_http_content_security_policy';
+const HEADER_TIME = '$upstream_header_time';
+/*
+ * $upstream_header_time is "-" for an attempt whose header block nginx did not
+ * read completely, a time ("0.002") for one it did, and a list ("-, 0.002")
+ * when nginx tried several servers. Only the last attempt's entry counts.
+ */
+export const COMPLETE_KEY = '~(^| )[0-9]+\\.[0-9]+$';
 const HSTS_INCLUDE = '/etc/nginx/snippets/hsts.conf';
 const SECURITY_INCLUDE = '/etc/nginx/snippets/security-headers.conf';
 const WEB_HOSTS = ['theblackout.app', 'chat.theblackout.app'];
@@ -526,20 +536,30 @@ export function checkStack({ files, site, securityHeaders, hsts, others = [], cl
     }
 
     expectMap(
+        COMPLETE_VAR,
+        HEADER_TIME,
+        new Map([
+            ['default', '0'],
+            [COMPLETE_KEY, '1'],
+        ]),
+        "fail-safe: relax only after nginx read the upstream's whole header block (its last attempt)"
+    );
+
+    expectMap(
         XFO_VAR,
         DECISION_SOURCE,
         new Map([
             ['default', secXfo.value],
-            ['11', ''],
+            [RELAX_KEY, ''],
         ]),
-        'fail-safe: X-Frame-Options stays as security-headers.conf has it unless both tests pass'
+        'fail-safe: X-Frame-Options stays as security-headers.conf has it unless all three tests pass'
     );
     expectMap(
         CSP_VAR,
         DECISION_SOURCE,
         new Map([
             ['default', secCsp.value],
-            ['11', relaxedCsp],
+            [RELAX_KEY, relaxedCsp],
         ]),
         "fail-safe: the default is security-headers.conf's CSP, the relaxed value is that CSP without frame-ancestors"
     );
@@ -548,12 +568,12 @@ export function checkStack({ files, site, securityHeaders, hsts, others = [], cl
         DECISION_SOURCE,
         new Map([
             ['default', ''],
-            ['11', UPSTREAM_CSP],
+            [RELAX_KEY, UPSTREAM_CSP],
         ]),
-        "the upstream's frame-ancestors is repeated only when both tests pass"
+        "the upstream's frame-ancestors is repeated only when all three tests pass"
     );
     for (const out of maps.keys()) {
-        if (![URI_VAR, UPSTREAM_VAR, XFO_VAR, CSP_VAR, ECHO_VAR].includes(out)) {
+        if (![URI_VAR, UPSTREAM_VAR, COMPLETE_VAR, XFO_VAR, CSP_VAR, ECHO_VAR].includes(out)) {
             fail(files.site, maps.get(out).line, `unexpected map ${out}`);
         }
     }
@@ -744,8 +764,9 @@ function runCli() {
                 '',
                 'The front proxies may drop their own X-Frame-Options and frame-ancestors only on the',
                 "two Black Mask panel locations, only for the panel's raw URI, and only when the client",
-                "container's response carries a frame-ancestors list. Every other case must keep",
-                'security-headers.conf exactly. See docs/black-mask-chat-panel-and-account-link.md (step 2).',
+                "container's response carries a frame-ancestors list in a complete header block. Every",
+                'other case must keep security-headers.conf exactly.',
+                'See docs/black-mask-chat-panel-and-account-link.md (step 2).',
             ].join('\n')
         );
         process.exit(1);
