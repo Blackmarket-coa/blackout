@@ -2,7 +2,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { useStore } from 'jotai';
 import { Link, Outlet, useNavigate } from 'react-router';
 import { EMBED_PATH } from '../../pages/paths';
-import { logout } from '../../../client/auth';
+import { signOutPanel } from '../../../client/auth';
 import { restoreActiveSession } from '../../../client/sessionManager';
 import { EmbedLinkGuard } from './EmbedLinkGuard';
 import {
@@ -80,7 +80,7 @@ export const EmbedSessionBar = () => {
                 disabled={busy}
                 onClick={() => {
                     setBusy(true);
-                    void logout(store).finally(() => setBusy(false));
+                    void signOutPanel(store).finally(() => setBusy(false));
                 }}
                 style={{
                     ...linkStyle,

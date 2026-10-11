@@ -15,7 +15,7 @@ import {
     stopMatrixClient,
 } from './initMatrix';
 import { clearSession, getSessionForUser, saveSession, type StoredSession } from './sessionManager';
-import { clearBlackoutApiToken } from './blackoutApiSession';
+import { clearBlackoutApiToken, revokeBlackoutApiToken } from './blackoutApiSession';
 import {
     bindSessionLength,
     isTimedSessionLength,
@@ -435,6 +435,16 @@ export const logout = async (store: AtomStore): Promise<void> => {
 
     clearBlackoutApiToken();
     applyLoggedOutAtoms(store);
+};
+
+/**
+ * The chat panel's Sign out (launch-plan B3): end the panel's Blackout API
+ * token on the API as well, then sign the device out as `logout` does. The
+ * full app keeps calling `logout` alone.
+ */
+export const signOutPanel = async (store: AtomStore): Promise<void> => {
+    await revokeBlackoutApiToken();
+    await logout(store);
 };
 
 export const refreshSessionToken = async (store: AtomStore): Promise<StoredSession> => {

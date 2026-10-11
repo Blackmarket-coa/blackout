@@ -92,6 +92,38 @@ const writeToken = (token: string): void => {
     }
 };
 
+/**
+ * Chat panel Sign out (launch-plan B3): ask the API to refuse this page's
+ * Blackout API token from now on (`POST /v1/auth/sign-out` puts its jti on the
+ * denylist until it expires), then forget it locally. Best effort, and capped
+ * at 10 s so signing out never hangs: if the API cannot be reached, the
+ * token's own expiry still bounds it.
+ */
+export const revokeBlackoutApiToken = async (): Promise<void> => {
+    const token = readBlackoutApiToken();
+    if (token && !isBlackoutTokenExpired(token)) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 10_000);
+        try {
+            const client = createFetchApiClient({
+                baseUrl: API_BASE_URL,
+                defaultHeaders: { authorization: `Bearer ${token}` },
+            });
+            await client({
+                method: 'POST',
+                path: '/v1/auth/sign-out',
+                body: {},
+                signal: controller.signal,
+            });
+        } catch {
+            // Unreachable or refused: the local copy is dropped below anyway.
+        } finally {
+            clearTimeout(timer);
+        }
+    }
+    clearBlackoutApiToken();
+};
+
 export const clearBlackoutApiToken = (): void => {
     inFlightExchange = null;
     try {

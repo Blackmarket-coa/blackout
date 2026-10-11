@@ -45,9 +45,9 @@ vi.mock('../room/MessageComposer', () => ({
     ),
 }));
 
-const logoutMock = vi.fn(async () => undefined);
+const signOutPanelMock = vi.fn(async () => undefined);
 vi.mock('../../../client/auth', () => ({
-    logout: (...args: unknown[]) => logoutMock(...(args as [])),
+    signOutPanel: (...args: unknown[]) => signOutPanelMock(...(args as [])),
 }));
 
 import { embedRoutes } from './embedRoutes';
@@ -430,7 +430,7 @@ describe('chat panel session (launch-plan B3)', () => {
     afterEach(() => {
         window.localStorage.clear();
         setStorageNamespaceForTests(null);
-        logoutMock.mockClear();
+        signOutPanelMock.mockClear();
     });
 
     const renderSignedOut = async (reason: 'session_ended' | 'signed_out' | null) => {
@@ -485,7 +485,7 @@ describe('chat panel session (launch-plan B3)', () => {
         );
 
         await click($(container, '[data-testid="embed-sign-out"]'));
-        expect(logoutMock).toHaveBeenCalledTimes(1);
+        expect(signOutPanelMock).toHaveBeenCalledTimes(1);
     });
 
     it('says "until you sign out" for a session with no end', async () => {
