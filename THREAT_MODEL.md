@@ -236,7 +236,7 @@ panel's content (same-origin policy) and the panel sends it nothing (no
 
 Behind the `infra/nginx` or single-server-baseline proxy (2026-10-11), the
 proxy adds `X-Frame-Options: DENY` and `frame-ancestors 'none'` to every
-response for `theblackout.app` and `chat.theblackout.app`, except on those two
+HTTPS response for `theblackout.app` and `chat.theblackout.app`, except on those two
 panel locations when the container's complete response header block carries a
 `frame-ancestors` list in the form the image writes; there it leaves its own two
 out and repeats the container's list. So behind a proxy the container's list

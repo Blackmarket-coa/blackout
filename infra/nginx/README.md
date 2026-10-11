@@ -85,7 +85,7 @@ If your ports differ, update upstream blocks in `sites-available/theblackout.app
 The frontend container (the `apps/blackout-client` image) decides whether the chat panel at `/embed`
 may be framed, from `BLACK_MASK_FRAME_ANCESTORS` (`docs/black-mask-chat-panel-and-account-link.md`,
 step 2). This proxy adds `X-Frame-Options: DENY` and a CSP with `frame-ancestors 'none'` to every
-response for `theblackout.app` and `chat.theblackout.app`, except on `/embed` and `/embed/*` when the
+HTTPS response for `theblackout.app` and `chat.theblackout.app`, except on `/embed` and `/embed/*` when the
 container's complete response header block carries a `frame-ancestors` list in the form that image
 writes: there it leaves its own two out and repeats the container's list. The container being down or
 too slow, an incomplete or invalid header block, and frontend images from before the panel get the

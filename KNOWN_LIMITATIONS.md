@@ -119,8 +119,8 @@ For the source-of-truth triage with tier/owner detail see
     `BLACK_MASK_FRAME_ANCESTORS` is set on its container (and the container
     recreated), with or without the front proxies. Since 2026-10-11 the
     `infra/nginx` and single-server-baseline proxies pass that image's panel
-    policy through on `/embed` and keep blocking framing everywhere else on
-    the web client's host; neither proxy change is deployed. Other images and
+    policy through on `/embed` and keep blocking framing on every other HTTPS
+    response from the web client's host; neither proxy change is deployed. Other images and
     hosts do not implement the allow-list, and some leave the panel open: the
     `blackout-web` image sends no framing header on `/embed` (nor on `/` and
     `/index.html`), so any site can frame those pages there, and Railway,
