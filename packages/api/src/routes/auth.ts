@@ -592,6 +592,21 @@ auth.post('/matrix/exchange', async (c) => {
                         401
                     );
                 }
+                // The refresh-token family must keep this end across a restart
+                // (migration 100). Without that, refuse rather than issue a
+                // session that would lose its end.
+                if (!db.persistsRefreshTokenSessionEnds()) {
+                    log.warn('matrix_exchange.session_length_unavailable', {
+                        reason: 'session_end_storage_missing',
+                    });
+                    return c.json(
+                        {
+                            code: 'matrix_session_length_unavailable',
+                            message: 'Could not confirm how long this session lasts; try again',
+                        },
+                        503
+                    );
+                }
                 sessionExpiresAtMs = length.expiresAtMs;
             }
         } else if (length.reason === 'invalid_token') {
@@ -668,9 +683,24 @@ auth.post('/matrix/exchange', async (c) => {
  * this and the homeserver's `/_synapse/client/blackout/session/lengths`
  * answer, so it never promises an end that one side would not enforce. With
  * BLACKOUT_SESSION_LENGTHS off this is the same 404 as any unknown route.
+ * With it on but no place to keep a session's end across a restart (the
+ * Postgres store without migration 100), it says the lengths are not
+ * enforced, and the exchange refuses timed sessions to match.
  */
 auth.get('/session-lengths', (c) => {
     if (!sessionLengthsEnforced()) return c.notFound();
+    if (!db.persistsRefreshTokenSessionEnds()) {
+        log.warn('session_lengths.not_enforced', { reason: 'session_end_storage_missing' });
+        return c.json(
+            {
+                enforced: false,
+                code: 'session_end_storage_missing',
+                message:
+                    'Session lengths are not enforced: the refresh-token store has no session_expires_at column (API migration 100)',
+            },
+            503
+        );
+    }
     return c.json({ enforced: true, sessionLengths: [...SESSION_LENGTHS] });
 });
 

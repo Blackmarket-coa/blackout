@@ -360,6 +360,61 @@ test('flag on: when the session end cannot be confirmed, nothing is issued', asy
     });
 });
 
+// Without migration 100 the Postgres store drops a family's end on write, so
+// the end would be gone after a restart. The API must not claim, or issue, an
+// end it cannot keep.
+test('flag on, but nowhere to keep a session end: not enforced, and timed exchanges refused', async () => {
+    await withSessionLengths(async () => {
+        const storage = mock.method(db, 'persistsRefreshTokenSessionEnds', () => false);
+        try {
+            const lengths = await app.request('/v1/auth/session-lengths');
+            assert.equal(lengths.status, 503);
+            const lengthsBody = (await lengths.json()) as { enforced: unknown; code: string };
+            assert.equal(lengthsBody.enforced, false);
+            assert.equal(lengthsBody.code, 'session_end_storage_missing');
+
+            const localpart = uniqueLocalpart('nocol');
+            const timed = stubHomeserver(localpart, {
+                ok: true,
+                status: 200,
+                sessionLength: '1h',
+                expiresAtMs: Date.now() + HOUR_MS,
+            });
+            try {
+                const res = await exchange();
+                assert.equal(res.status, 503);
+                const body = (await res.json()) as { code: string; token?: string };
+                assert.equal(body.code, 'matrix_session_length_unavailable');
+                assert.equal(body.token, undefined);
+                assert.equal(db.findUserByUsername(localpart), undefined, 'no account row either');
+            } finally {
+                timed.restore();
+            }
+
+            // A session with no end needs nothing kept: issued as usual.
+            const open = stubHomeserver(uniqueLocalpart('nocol-open'), {
+                ok: true,
+                status: 200,
+                sessionLength: 'until_sign_out',
+                expiresAtMs: null,
+            });
+            try {
+                const res = await exchange();
+                assert.equal(res.status, 200);
+                const payload = verifyJwt(((await res.json()) as ExchangeBody).token);
+                assert.ok(payload);
+                assert.equal(payload.sxp, undefined);
+            } finally {
+                open.restore();
+            }
+        } finally {
+            storage.mock.restore();
+        }
+        // The in-memory store used here keeps whole records.
+        assert.equal(db.persistsRefreshTokenSessionEnds(), true);
+    });
+});
+
 test('verification refuses a token past its session end even if exp is later', () => {
     // Hand-sign a token whose exp is a day away but whose session ended a
     // second ago: verifyJwt must refuse on `sxp` alone.
@@ -515,4 +570,44 @@ test('the session end survives a restart of the Postgres-backed store', async ()
     // A NULL column comes back as an absent field, never as null.
     assert.equal('sessionExpiresAt' in reloadedOpen, false);
     await store2.drain();
+});
+
+test('the Postgres-backed store says whether it can keep session ends (migration 100)', async () => {
+    const { PostgresBackedDb } = await import('../src/db/store');
+    const { MIGRATIONS_DIR } = await import('../src/db/migrate');
+    const { PGlite } = await import('@electric-sql/pglite');
+    type AnyPg = {
+        query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }>;
+        exec: (sql: string) => Promise<unknown>;
+    };
+    const migrated = async (withoutSessionEnds: boolean) => {
+        const pg = new PGlite() as unknown as AnyPg;
+        const files = readdirSync(MIGRATIONS_DIR)
+            .filter((f) => f.endsWith('.sql') && !f.endsWith('.down.sql'))
+            .sort((a, b) => Number.parseInt(a, 10) - Number.parseInt(b, 10));
+        for (const f of files) await pg.exec(readFileSync(join(MIGRATIONS_DIR, f), 'utf8'));
+        if (withoutSessionEnds) {
+            await pg.exec(
+                readFileSync(join(MIGRATIONS_DIR, '100_refresh_token_session_end.down.sql'), 'utf8')
+            );
+        }
+        const client = {
+            query: (sql: string, params?: unknown[]) => pg.query(sql, params),
+            release: () => {},
+        };
+        return { connect: async () => client, end: async () => {} } as never;
+    };
+
+    const before = new PostgresBackedDb();
+    assert.equal(before.persistsRefreshTokenSessionEnds(), false, 'false until init');
+
+    const withColumn = new PostgresBackedDb();
+    await withColumn.init(await migrated(false));
+    assert.equal(withColumn.persistsRefreshTokenSessionEnds(), true);
+    await withColumn.drain();
+
+    const withoutColumn = new PostgresBackedDb();
+    await withoutColumn.init(await migrated(true));
+    assert.equal(withoutColumn.persistsRefreshTokenSessionEnds(), false);
+    await withoutColumn.drain();
 });
