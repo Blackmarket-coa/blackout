@@ -87,8 +87,9 @@ jobs:
 
             # The front proxies may drop their own framing headers only on the
             # Black Mask panel locations, and only when the client container
-            # sends its own frame-ancestors list; every way that can break
-            # fails open (docs/black-mask-chat-panel-and-account-link.md).
+            # sends its own frame-ancestors list in a complete header block;
+            # most ways that can break fail open. The guard checks the repo's
+            # proxy files only (docs/black-mask-chat-panel-and-account-link.md).
             - name: Panel proxy framing guard (guard:embed-proxy-framing)
               run: node tools/ci/check-embed-proxy-framing.mjs
 
