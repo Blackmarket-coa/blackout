@@ -72,31 +72,56 @@ const oneSyncHashMs = (): number => {
     return best;
 };
 
+// Both measurements are wall-clock time, so CPU contention from outside the
+// code under test stretches them. `test:integration` runs test files side by
+// side (in CI, three at once on four vCPUs); run that way on a busy machine,
+// one round of this test has stalled for 20-70 ms with the fix in place.
+// Hence several rounds; see the assertion.
+const ROUNDS = 5;
+
 test('register and login leave the event loop free while scrypt runs', async (t) => {
     // Warm up so first-request work (lazy imports, JIT) is not in the window.
     const warm = freshName();
     assert.equal((await register(warm)).status, 201);
     assert.equal((await login(`${warm}@example.com`)).status, 200);
 
-    const hashMs = oneSyncHashMs();
-    const names = [freshName(), freshName()];
-    const stall = await longestStall(async () => {
-        const created = await Promise.all(names.map((n) => register(n)));
-        assert.deepEqual(
-            created.map((r) => r.status),
-            [201, 201]
+    const hashes: number[] = [];
+    const stalls: number[] = [];
+    for (let round = 0; round < ROUNDS; round++) {
+        hashes.push(oneSyncHashMs());
+        const names = [freshName(), freshName()];
+        stalls.push(
+            await longestStall(async () => {
+                const created = await Promise.all(names.map((n) => register(n)));
+                assert.deepEqual(
+                    created.map((r) => r.status),
+                    [201, 201]
+                );
+                const signedIn = await Promise.all(names.map((n) => login(`${n}@example.com`)));
+                assert.deepEqual(
+                    signedIn.map((r) => r.status),
+                    [200, 200]
+                );
+            })
         );
-        const signedIn = await Promise.all(names.map((n) => login(`${n}@example.com`)));
-        assert.deepEqual(
-            signedIn.map((r) => r.status),
-            [200, 200]
-        );
-    });
-    t.diagnostic(`longest stall ${stall.toFixed(1)} ms; one sync scrypt ${hashMs.toFixed(1)} ms`);
-    // A hash run on the event loop stalls it for at least one full hash.
+    }
+    // The quietest calibration, so contention cannot inflate the bound.
+    const hashMs = Math.min(...hashes);
+    const stall = Math.min(...stalls);
+    t.diagnostic(
+        `longest stall by round ${stalls.map((s) => s.toFixed(1)).join(', ')} ms; ` +
+            `one sync scrypt ${hashMs.toFixed(1)} ms`
+    );
+    // A hash run on the event loop stalls it for at least one full hash, and
+    // does so in every round. Here it would be two or more, since each round's
+    // two concurrent requests would hash back to back (measured: about 2x for
+    // one route, over 4x for both). What else stretches a round (the scheduler,
+    // GC, a neighbouring test file) does not land in every round, so the best
+    // round speaks for the code.
     assert.ok(
         stall < hashMs / 2,
-        `event loop stalled ${stall.toFixed(1)} ms; one scrypt is ${hashMs.toFixed(1)} ms`
+        `event loop stalled ${stall.toFixed(1)} ms or more in every round; ` +
+            `one scrypt is ${hashMs.toFixed(1)} ms`
     );
 });
 
