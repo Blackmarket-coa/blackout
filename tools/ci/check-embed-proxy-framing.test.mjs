@@ -8,9 +8,14 @@ import { fileURLToPath } from 'node:url';
 
 import {
     CLIENT_CONF,
+    COMPLETE_KEY,
+    COMPLETE_MUST_MATCH,
+    COMPLETE_MUST_NOT_MATCH,
     STACKS,
+    UPSTREAM_KEY,
     UPSTREAM_MUST_MATCH,
     UPSTREAM_MUST_NOT_MATCH,
+    checkPinnedKeys,
     checkStack,
     loadStack,
     mapKeyRegex,
@@ -49,7 +54,7 @@ const ROOT_LOCATION = '    location / {\n        proxy_pass http://blackout_web;
 const PANEL_ECHO =
     '        add_header Content-Security-Policy $black_mask_panel_frame_ancestors always;';
 const PANEL_NOSNIFF = '        add_header X-Content-Type-Options "nosniff" always;';
-const UPSTREAM_KEY =
+const UPSTREAM_LINE =
     '"~^frame-ancestors (\'none\'|[a-z][a-z0-9+.-]*://[a-z0-9.-]+(:[0-9]+)?( [a-z][a-z0-9+.-]*://[a-z0-9.-]+(:[0-9]+)?)*)$" 1;';
 
 test('the committed proxies pass', () => {
@@ -196,7 +201,7 @@ for (const stack of STACKS) {
                     '    location / {\n        proxy_pass http://blackout_web;\n        add_header X-Frame-Options $black_mask_panel_x_frame_options always;\n        add_header Content-Security-Policy $black_mask_panel_csp always;\n    }'
                 )
             ),
-            /outside the two panel locations/
+            /mentions a black_mask_panel_ name/
         );
     });
 
@@ -240,7 +245,7 @@ for (const stack of STACKS) {
                     '    location / {\n        add_header X-Frame-Options $black_mask_panel_x_frame_options;\n        return 404;\n    }'
                 )
             ),
-            /outside the two panel locations/
+            /mentions a black_mask_panel_ name/
         );
         expectFailure(
             withField('securityHeaders', (t) =>
@@ -435,7 +440,7 @@ for (const stack of STACKS) {
                     'map $upstream_http_content_security_policy $black_mask_panel_upstream_frames {\n    default 1;'
                 )
             ),
-            /must be \{default 0; <one regex> 1\}/
+            /map \$black_mask_panel_upstream_frames must be exactly/
         );
     });
 
@@ -475,33 +480,25 @@ for (const stack of STACKS) {
         );
     });
 
-    test(`${stack.name}: fails when the upstream test accepts more than a plain frame-ancestors list`, () => {
-        expectFailure(
-            site((t) => replaceOnce(t, UPSTREAM_KEY, '"~frame-ancestors" 1;')),
-            /accepts "script-src https:\/\/frame-ancestors\.example"/
-        );
-        // The first version of this change used a token class that also
-        // accepted 'self', which the blackout-web image sends.
-        expectFailure(
-            site((t) => replaceOnce(t, UPSTREAM_KEY, `"~^frame-ancestors( [a-z0-9:/.'-]+)+$" 1;`)),
-            /accepts "frame-ancestors 'self'"/
-        );
-        expectFailure(
-            site((t) =>
-                replaceOnce(t, "frame-ancestors ('none'|", "frame-ancestors ('none'|'self'|")
-            ),
-            /accepts "frame-ancestors 'self'"/
-        );
-        expectFailure(
-            site((t) =>
-                replaceOnce(t, '://[a-z0-9.-]+(:[0-9]+)?( ', '://[a-z0-9.*-]+(:[0-9]+)?( ')
-            ),
-            /accepts "frame-ancestors https:\/\/\*\.example\.org"/
-        );
-        expectFailure(
-            site((t) => replaceOnce(t, UPSTREAM_KEY, `"~^frame-ancestors( [^;]+)+$" 1;`)),
-            /accepts "frame-ancestors https:\/\/a\.example, default-src 'self'"/
-        );
+    test(`${stack.name}: fails when the upstream test is changed in any way (pinned byte for byte)`, () => {
+        const pinned = /map \$black_mask_panel_upstream_frames must be exactly/;
+        const loosenings = [
+            // Any mention of frame-ancestors.
+            (t) => replaceOnce(t, UPSTREAM_LINE, '"~frame-ancestors" 1;'),
+            // The token class of this change's first draft, which accepted 'self'.
+            (t) => replaceOnce(t, UPSTREAM_LINE, `"~^frame-ancestors( [a-z0-9:/.'-]+)+$" 1;`),
+            (t) => replaceOnce(t, "frame-ancestors ('none'|", "frame-ancestors ('none'|'self'|"),
+            (t) => replaceOnce(t, '://[a-z0-9.-]+(:[0-9]+)?( ', '://[a-z0-9.*-]+(:[0-9]+)?( '),
+            (t) => replaceOnce(t, UPSTREAM_LINE, `"~^frame-ancestors( [^;]+)+$" 1;`),
+            // Review bypasses: a 'self' tail (claims D4), case-insensitive (~*),
+            // a host class with "_", and a PCRE-only \Q...\E alternative that a
+            // JS evaluation of the regex reads differently (security F2 d).
+            (t) => replaceOnce(t, '(:[0-9]+)?)*)$" 1;', `(:[0-9]+)?| 'self')*)$" 1;`),
+            (t) => replaceOnce(t, '"~^frame-ancestors (', '"~*^frame-ancestors ('),
+            (t) => replaceOnce(t, '://[a-z0-9.-]+(:[0-9]+)?)*)', '://[a-z0-9._-]+(:[0-9]+)?)*)'),
+            (t) => replaceOnce(t, ')*)$" 1;', `)*)$|^\\Qframe-ancestors 'self'\\E$" 1;`),
+        ];
+        for (const loosen of loosenings) expectFailure(site(loosen), pinned);
     });
 
     test(`${stack.name}: fails when the repeated upstream frame-ancestors is dropped or always sent`, () => {
@@ -521,6 +518,157 @@ for (const stack of STACKS) {
                 )
             ),
             /repeated only when all three tests pass/
+        );
+    });
+
+    // --- review bypasses (security F2): names are case-insensitive ---------
+
+    test(`${stack.name}: fails on a second map for a panel variable, in another case`, () => {
+        // (a) A later upper-case map replaces the upstream test with "always 1".
+        expectFailure(
+            site((t) =>
+                replaceOnce(
+                    t,
+                    'map $upstream_header_time',
+                    'map $upstream_http_content_security_policy $BLACK_MASK_PANEL_UPSTREAM_FRAMES {\n    default 1;\n}\n\nmap $upstream_header_time'
+                )
+            ),
+            /2 maps define \$black_mask_panel_upstream_frames/
+        );
+        // (b) An earlier one for the raw-URI flag: still two definitions.
+        expectFailure(
+            site((t) =>
+                replaceOnce(
+                    t,
+                    'map $request_uri $black_mask_panel_uri {',
+                    'map $request_uri $BLACK_MASK_PANEL_URI {\n    default 1;\n}\n\nmap $request_uri $black_mask_panel_uri {'
+                )
+            ),
+            /2 maps define \$black_mask_panel_uri/
+        );
+    });
+
+    test(`${stack.name}: fails when set, geo or a regex capture writes a panel variable`, () => {
+        const serverInclude = '    include /etc/nginx/snippets/security-headers.conf;\n';
+        expectFailure(
+            site((t) =>
+                replaceOnce(t, serverInclude, `${serverInclude}    set $BLACK_MASK_PANEL_URI 1;\n`)
+            ),
+            /set sets \$BLACK_MASK_PANEL_URI/
+        );
+        expectFailure(
+            site((t) =>
+                replaceOnce(t, serverInclude, `${serverInclude}    set $black_mask_panel_uri 1;\n`)
+            ),
+            /set sets \$black_mask_panel_uri/
+        );
+        expectFailure(
+            site((t) =>
+                replaceOnce(
+                    t,
+                    'map $request_uri $black_mask_panel_uri {',
+                    'geo $Black_Mask_Panel_Uri {\n    default 1;\n}\n\nmap $request_uri $black_mask_panel_uri {'
+                )
+            ),
+            /geo sets \$Black_Mask_Panel_Uri/
+        );
+        expectFailure(
+            site((t) =>
+                replaceOnce(
+                    t,
+                    ROOT_LOCATION,
+                    '    location ~ ^/(?<black_mask_panel_uri>embed)x/ {\n        proxy_pass http://blackout_web;\n    }\n\n' +
+                        ROOT_LOCATION
+                )
+            ),
+            /location mentions a black_mask_panel_ name/
+        );
+    });
+
+    test(`${stack.name}: fails on a panel variable in another case or as \${...}`, () => {
+        expectFailure(
+            site((t) =>
+                replaceOnce(
+                    t,
+                    '    location / {\n        return 404;\n    }',
+                    '    location / {\n        add_header X-Frame-Options ${black_mask_panel_x_frame_options};\n        return 404;\n    }'
+                )
+            ),
+            /add_header mentions a black_mask_panel_ name/
+        );
+        expectFailure(
+            site((t) =>
+                replaceOnce(
+                    t,
+                    '    location / {\n        return 404;\n    }',
+                    '    location / {\n        add_header X-Frame-Options $BLACK_MASK_PANEL_X_FRAME_OPTIONS;\n        return 404;\n    }'
+                )
+            ),
+            /add_header mentions a black_mask_panel_ name/
+        );
+        expectFailure(
+            {
+                ...base,
+                others: base.others.map((o, i) =>
+                    i === 0
+                        ? {
+                              ...o,
+                              text: replaceOnce(
+                                  o.text,
+                                  '    access_log /var/log/nginx/access.log blackout_main;',
+                                  "    log_format panel '${Black_Mask_Panel_Uri}';\n    access_log /var/log/nginx/access.log blackout_main;"
+                              ),
+                          }
+                        : o
+                ),
+            },
+            /log_format mentions a black_mask_panel_ name/
+        );
+    });
+
+    test(`${stack.name}: fails on an include the guard cannot see into`, () => {
+        // (c) The panel's headers moved into a new snippet included by location /.
+        expectFailure(
+            site((t) =>
+                replaceOnce(
+                    t,
+                    ROOT_LOCATION,
+                    '    location / {\n        proxy_pass http://blackout_web;\n        include /etc/nginx/snippets/panel-headers.conf;\n    }'
+                )
+            ),
+            /include \/etc\/nginx\/snippets\/panel-headers\.conf: this guard cannot see into that file/
+        );
+        expectFailure(
+            site((t) =>
+                replaceOnce(
+                    t,
+                    'map $request_uri $black_mask_panel_uri {',
+                    'include /etc/nginx/conf.d/*.conf;\n\nmap $request_uri $black_mask_panel_uri {'
+                )
+            ),
+            /this guard cannot see into that file/
+        );
+        expectFailure(
+            {
+                ...base,
+                others: base.others.map((o, i) =>
+                    i === 0
+                        ? {
+                              ...o,
+                              text: replaceOnce(
+                                  o.text,
+                                  '    include /etc/nginx/sites-enabled/*.conf;',
+                                  '    include /etc/nginx/conf.d/*.conf;\n    include /etc/nginx/sites-enabled/*.conf;'
+                              ),
+                          }
+                        : o
+                ),
+            },
+            /include \/etc\/nginx\/conf\.d\/\*\.conf: this guard cannot see into that file/
+        );
+        expectFailure(
+            withField('securityHeaders', (t) => `${t}include /etc/nginx/snippets/more.conf;\n`),
+            /this file may not include anything/
         );
     });
 
@@ -592,4 +740,32 @@ test('the committed upstream test accepts every form the client image writes and
             );
         }
     }
+});
+
+test('the pinned regexes pass their own samples, and loosened ones do not', () => {
+    assert.deepEqual(checkPinnedKeys(), []);
+    const failing = (keys, pattern) => {
+        const found = checkPinnedKeys(keys).map((f) => f.message);
+        assert.ok(
+            found.some((m) => pattern.test(m)),
+            `expected ${pattern}, got:\n${found.join('\n') || '(none)'}`
+        );
+    };
+    failing(
+        { upstreamKey: UPSTREAM_KEY.replace('(:[0-9]+)?)*)$', "(:[0-9]+)?| 'self')*)$") },
+        /accepts "frame-ancestors https:\/\/a\.example 'self'"/
+    );
+    failing(
+        { upstreamKey: UPSTREAM_KEY.replace('(:[0-9]+)?)*)$', '(:[0-9]+)?| \\*)*)$') },
+        /accepts "frame-ancestors https:\/\/a\.example \*"/
+    );
+    failing({ upstreamKey: `~*${UPSTREAM_KEY.slice(1)}` }, /must be a case-sensitive regex/);
+    failing(
+        { upstreamKey: `${UPSTREAM_KEY}|^\\Qframe-ancestors 'self'\\E$` },
+        /syntax JS and PCRE may read differently/
+    );
+    failing({ completeKey: '~.' }, /COMPLETE_KEY accepts "-"/);
+    failing({ completeKey: '~[0-9]' }, /COMPLETE_KEY accepts "0\.001, -"/);
+    assert.ok(COMPLETE_MUST_MATCH.length && COMPLETE_MUST_NOT_MATCH.length);
+    assert.ok(mapKeyRegex(COMPLETE_KEY).test('-, 0.001'));
 });
