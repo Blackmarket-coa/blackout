@@ -366,9 +366,14 @@ in to Blackout in a tab signs in again in the panel, as a separate device.
    and `curl https://<chat-host>/v1/auth/session-lengths` both answer 200.
 
 **Rollback:** unset both. A session already given an end keeps it: the token
-caps sit in Synapse's tables, and the API enforces stored ends whatever its
-flag says. With the module flag off the sweep stops, so the devices of ended
-sessions stay in the account's device list, unusable, until removed.
+caps sit in Synapse's tables, and the API enforces the ends already stored on
+its tokens whatever its flag says. What rollback loses: with the module flag
+off the sweep stops, so the devices of ended sessions stay in the account's
+device list, unusable, until removed; and with either flag off the API stops
+asking for the end, so a panel that exchanges its Matrix token again before
+the end gets an ordinary 24-hour API token, which can outlive the end by up
+to a day. The panel still signs itself out on that device at the end, but a
+copy of that API token taken before then stays valid until it expires.
 
 **Not enforced, stated plainly:**
 
