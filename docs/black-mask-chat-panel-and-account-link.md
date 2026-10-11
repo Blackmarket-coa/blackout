@@ -394,18 +394,29 @@ With the switch off the panel uses the full app's names, as before B3.
 
 **Rollback by switch.** Unset any of the three. Turning the client switch
 off sends the panel back to the full app's session and names, as before B3.
-What a panel session stored under the panel's own names stays in the browser
-until cleared (the panic wipe's prefixes cover its localStorage keys), and the
-servers still end that session on time. A session already given an end keeps
-it: the token caps sit in Synapse's tables, and the API enforces the ends
-already stored on its tokens whatever its flag says. What it loses: with the module flag off the sweep stops, so the devices of
-ended sessions stay in the account's device list until removed, and their
-tokens are still accepted by the few endpoints that take an expired token
-(below); and with either server flag off the API stops asking for the end, so
-a panel that exchanges its Matrix token again before the end gets an ordinary
-24-hour API token, which can outlive the end by up to a day. The panel still
-signs itself out on that device at the end, but a copy of that API token taken
-before then stays valid until it expires.
+The panel then no longer reads its own names, so it neither uses nor signs
+out a session stored under them, and it has no Sign out button. That
+session's tokens and stores stay in the browser until cleared (the panic
+wipe's prefixes cover its localStorage keys, not its IndexedDB stores), and
+clearing them does not sign the device out on the homeserver. The servers
+still end a timed session on time. An "Until I sign out" session has no end
+on either server, and the homeserver's default token settings never end it
+(no in-repo config sets `session_lifetime` or `refresh_token_lifetime`), so
+its device stays signed in until it is removed from the account's device
+list (Settings, Devices, in the full app). A session already given an end
+keeps it: the token caps sit in Synapse's tables, and the API enforces the
+ends already stored on its tokens whatever its flag says. What it loses:
+with the module flag off the sweep stops, so the devices of ended sessions
+stay in the account's device list until removed, and their tokens are still
+accepted by the few endpoints that take an expired token (below); and with
+either server flag off the API no longer learns the end (with the module
+flag off the homeserver answers 404, which the API reads as a session with
+no end), so a panel that exchanges its Matrix token again before the end
+gets an ordinary 24-hour API token, which can outlive the end by up to a
+day, and an ordinary 30-day refresh token with no end, which only a
+modified client keeps. The panel still signs itself out on that device at
+the end, but a copy of that API token taken before then stays valid until
+it expires.
 
 **Rollback by reverting the code** (redeploying a build without B3) loses
 more:
