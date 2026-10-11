@@ -112,23 +112,33 @@ For the source-of-truth triage with tier/owner detail see
     -   any check of external links (B6): links open in a new tab unchecked;
     -   single sign-on inside the panel (it would redirect the frame);
     -   voice, stage and forum dens (they open in a normal Blackout tab).
--   **Session length (B3) is off by default.** Signing in to the panel asks
-    how long the session lasts (1 hour, 1 day, 7 days, 30 days or until you
-    sign out; nothing preselected). The timed lengths are offered only when
-    the homeserver runs the `blackout_runtime` module with
-    `session_lengths_enabled: true` **and** the API has
-    `BLACKOUT_SESSION_LENGTHS=1`; no in-repo deployment sets either, so today
-    the panel offers only "Until I sign out". With both on, the servers end the
-    session at the chosen time even if the panel is closed. Not undone at the
-    end: what the session did while valid. Local stores are deleted when the
-    panel next runs, not while the browser is closed. Never offered under MAS
-    (MSC3861). Details: `docs/black-mask-chat-panel-and-account-link.md`
-    section 3.
--   **The panel has its own session.** It never reuses a Blackout tab's
-    session, so someone signed in to Blackout signs in again in the panel, as
-    a separate device; older encrypted messages may not be readable there
-    (BO-1). Signing out of Blackout in a tab does not sign the panel out; the
-    panel's own Sign out button does.
+-   **Session length (B3) is off by default, behind three switches.** In a
+    web client built with `VITE_BLACKOUT_PANEL_SESSION_LENGTHS` on, signing in
+    to the panel asks how long the session lasts (1 hour, 1 day, 7 days, 30
+    days or until you sign out; nothing preselected), and the panel gets a
+    Sign out button. No build in this repository sets it, so today the panel
+    signs in as before, with no choice and no Sign out button. The timed
+    lengths are offered only when, in addition, the homeserver runs the
+    `blackout_runtime` module with `session_lengths_enabled: true` **and** the
+    API has `BLACKOUT_SESSION_LENGTHS=1` with its migration 100; no in-repo
+    deployment sets either. With all three on, the servers end the session at
+    the chosen time even if the panel is closed. Not ended with it: a Matrix
+    OpenID token minted before the end (it lasts up to an hour, and
+    lk-jwt-service trades it for LiveKit tokens), an API refresh token that a
+    modified client kept, and what the session did while valid. Until the sweep
+    deletes the device (60 seconds by default), an ended token is still
+    accepted by Synapse's `/logout` and `/logout/all`, which signs out every
+    device of the account. Local stores are deleted when the panel next runs,
+    not while the browser is closed. Never offered under MAS (MSC3861).
+    Details: `docs/black-mask-chat-panel-and-account-link.md` section 3.
+-   **With that client switch on, the panel has its own session.** It never
+    reuses a Blackout tab's session, so someone signed in to Blackout signs in
+    again in the panel, as a separate device; older encrypted messages may not
+    be readable there (BO-1). Signing out of Blackout in a tab does not sign
+    the panel out; the panel's own Sign out button does. With the switch off
+    (the default) the panel uses the full app's storage names, as before B3,
+    so whether it shares a tab's session depends on the browser's storage
+    partitioning for extension frames, which has not been checked.
 -   **Only the `apps/blackout-client/Dockerfile` image can allow framing.**
     Behind the `infra/nginx` or single-server-baseline proxies, the panel stays
     unframeable until those proxies get an `/embed` location; the
@@ -138,9 +148,11 @@ For the source-of-truth triage with tier/owner detail see
     cannot name the Firefox extension.
 -   **Unverified:** the signed-in panel against a deployed homeserver, and the
     panel inside a real extension. Session lengths were run end to end only
-    against a homeserver started locally from this repository; the
-    homeserver's tests run locally only, because CI runs no
-    `apps/blackout-server` tests.
+    against a homeserver started locally from this repository, before the
+    client switch existed. The homeserver's tests
+    (`tests/blackout_runtime/test_session_length.py`) run only by hand: CI runs
+    no `apps/blackout-server` tests, so a regression in
+    `blackout_runtime/session_length.py` would merge green.
 
 ---
 
