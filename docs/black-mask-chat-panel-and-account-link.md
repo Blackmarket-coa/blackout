@@ -293,8 +293,10 @@ session: the panel is text only and never asks for one.
     homeserver reports the session over.
 
 **"Until I sign out"** adds no expiry: the session lasts until the device
-signs out (the panel now has a Sign out button) or the homeserver's own token
-settings end it.
+signs out or the homeserver's own token settings end it. The panel now has a
+Sign out button: it asks the API to refuse the panel's API token at once
+(`POST /v1/auth/sign-out`), then signs the device out on the homeserver and
+deletes its stores in the browser.
 
 **How the length gets onto the session.** The panel signs in with the
 ordinary `/login` or `/register`, so rate limits and flows are unchanged.
@@ -382,6 +384,11 @@ sessions stay in the account's device list, unusable, until removed.
 -   **Clocks:** the panel's own sign-out timer uses the device clock, counted
     from just before the length was bound; the servers use theirs. A wrong
     device clock changes when the panel notices, not when the servers refuse.
+-   **Sign out of an "Until I sign out" session** does not revoke an API
+    refresh token that a modified client kept from the exchange: the API never
+    hears about Matrix sign-outs (the full app's sign-out has the same gap).
+    Timed sessions are not affected; their refresh family ends at the session
+    end.
 -   **A device with no length:** if the panel is closed between sign-in and
     the bind, or the bind fails and signing the device out fails too, the new
     device keeps no length. The panel never stored its tokens, so nothing
