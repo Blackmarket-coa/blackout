@@ -250,3 +250,47 @@ upstream.
   `deploy/` and `infra/` have it) or every user shares one bucket.
 - Tests: `tests/media/test_media_storage.py` (`RemoteDownloadLimiterTestCase`,
   upstream 1.110 + 1.112).
+
+## 2026-10-11 Semgrep triage
+
+Edits outside `blackout_runtime/` from the Semgrep pass recorded in
+`docs/security/semgrep-triage-2026-10-11.md` (repository root). One behaviour
+change and one defensive check; everything else is comments. Re-check each
+during any reconciliation with upstream.
+
+### Behaviour
+
+- `synapse/handlers/auth.py` (`complete_sso_login`, new
+  `_url_scheme_as_browsers_read_it` and `_SCRIPT_CAPABLE_URL_SCHEMES`): a
+  client redirect URL whose scheme is `javascript:`, `vbscript:` or `data:`
+  (read the way a browser reads it) is refused with the SSO error page (400,
+  `invalid_request`) before a login token is minted. Otherwise the
+  confirmation page offered it as a link with the token appended, and one
+  click sent the token to whoever wrote the URL. **Not a port:** upstream
+  `element-hq/synapse` `develop` has the same gap as of 2026-10-11. Tests:
+  `tests/rest/client/test_login.py`
+  (`CASTestCase.test_cas_redirect_refuses_script_schemes`,
+  `test_cas_redirect_confirm_custom_scheme`).
+- `synapse/media/url_previewer.py` (`_parse_data_url`): raise unless the URL
+  starts with `data:`. Its only caller already checks; this keeps `urlopen`
+  from ever being handed a `file:` URL. Test:
+  `tests/media/test_url_previewer.py`
+  (`test_parse_data_url_refuses_other_schemes`).
+
+### Comment-only (`nosemgrep` with a justification line)
+
+- `synapse/res/templates/`: `add_threepid.html`, `notice_expiry.html`,
+  `notif.html`, `notif_mail.html`, `password_reset.html`, `registration.html`,
+  `room.html`, `sso_auth_confirm.html`, `sso_new_user_consent.html`,
+  `sso_redirect_confirm.html`, `terms.html`. These are Jinja `{# #}` comments,
+  so rendered output gains whitespace only.
+- `docs/website_files/theme/index.hbs`: Handlebars and JS comments.
+- `synapse/state/v1.py`, `contrib/graph/graph.py`,
+  `scripts-dev/check_pydantic_models.py`, `scripts-dev/check_schema_delta.py`,
+  `scripts-dev/schema_versions.py`, `scripts-dev/release.py`.
+- `synapse/util/managed_hosting.py`. This is a Blackout file that lives outside
+  `blackout_runtime/` and was not listed here before; it should be.
+- `debian/hash_password.ronn`: each annotation sits outside its example's code
+  block so that ronn does not render it. Each example now renders as two
+  adjacent blocks (command, then output). `debian/hash_password.1` was not
+  regenerated.
