@@ -482,6 +482,12 @@ more:
     as it is used within 30 days of the last rotation. The full app's sign-out
     has the same gap. (The refresh token of an exchange that finishes after
     the panel's session ended is refused along with its JWT.)
+-   **An API exchange made before the length is set is not bounded.** Until
+    the bind, the homeserver reports no length for the new device, so the API
+    issues its usual tokens to an exchange made before it: a 24-hour JWT and
+    a 30-day refresh token, neither tied to the session's end. When both
+    servers enforce lengths, the panel binds before it stores or uses any
+    token, so only a modified client could do this.
 -   **A device with no length:** if the panel is closed between sign-in and
     the bind, or the bind fails and signing the device out fails too, the new
     device keeps no length. The panel never stored its tokens, so nothing

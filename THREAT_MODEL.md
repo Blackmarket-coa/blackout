@@ -273,8 +273,11 @@ panel's content (same-origin policy) and the panel sends it nothing (no
     to an hour after it, device or not, and lk-jwt-service trades it for
     LiveKit tokens; until the sweep deletes the device, an ended token is still
     accepted by Synapse's `/logout` and `/logout/all` (the latter signs out
-    every device of the account); and an API refresh token that a modified
+    every device of the account); an API refresh token that a modified
     client kept still refreshes after the panel's Sign out, up to the session
+    end (for "Until I sign out", for as long as it is refreshed at least once
+    every 30 days); and API tokens that a modified client gets by exchanging
+    its Matrix token before the length is set are not tied to the session's
     end.
 -   **The panel picking up, or clobbering, the full app's session**: with the
     client switch on, the panel keeps its session, API token and IndexedDB

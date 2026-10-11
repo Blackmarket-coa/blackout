@@ -124,12 +124,17 @@ For the source-of-truth triage with tier/owner detail see
     deployment sets either. With all three on, the servers end the session at
     the chosen time even if the panel is closed. Not ended with it: a Matrix
     OpenID token minted before the end (it lasts up to an hour, and
-    lk-jwt-service trades it for LiveKit tokens), an API refresh token that a
-    modified client kept, and what the session did while valid. Until the sweep
-    deletes the device (60 seconds by default), an ended token is still
-    accepted by Synapse's `/logout` and `/logout/all`, which signs out every
-    device of the account. Local stores are deleted when the panel next runs,
-    not while the browser is closed. Never offered under MAS (MSC3861).
+    lk-jwt-service trades it for LiveKit tokens), API tokens that a modified
+    client got by exchanging its Matrix token before the length was set
+    (nothing ties them to the session's end), and what the session did while
+    valid. The panel's Sign out does not end an API refresh token that a
+    modified client kept from the exchange: it keeps working after Sign out,
+    up to the session end, or, for "Until I sign out", for as long as it is
+    refreshed at least once every 30 days. Until the sweep deletes the device
+    (60 seconds by default), an ended token is still accepted by Synapse's
+    `/logout` and `/logout/all`, which signs out every device of the account.
+    Local stores are deleted when the panel next runs, not while the browser
+    is closed. Never offered under MAS (MSC3861).
     Details: `docs/black-mask-chat-panel-and-account-link.md` section 3.
 -   **With that client switch on, the panel has its own session.** It never
     reuses a Blackout tab's session, so someone signed in to Blackout signs in
