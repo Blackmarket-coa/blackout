@@ -42,6 +42,11 @@ modules:
       proposal_rate_limit: 5
       proposal_rate_window_s: 3600
       attestation_cooldown_s: 600
+      # Black Mask chat panel session lengths (launch-plan B3). Off unless set
+      # to a literal true; pair it with BLACKOUT_SESSION_LENGTHS=1 on the API.
+      # See docs/black-mask-chat-panel-and-account-link.md section 3.
+      # session_lengths_enabled: true
+      # session_length_sweep_interval_s: 60
 
 # log rotation should be handled by systemd/journald or external logrotate
 log_config: /data/blackbox-log.config

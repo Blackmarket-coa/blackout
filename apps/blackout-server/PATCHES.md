@@ -250,3 +250,27 @@ upstream.
   `deploy/` and `infra/` have it) or every user shares one bucket.
 - Tests: `tests/media/test_media_storage.py` (`RemoteDownloadLimiterTestCase`,
   upstream 1.110 + 1.112).
+
+## 2026-10-11 Black Mask panel session lengths (launch-plan B3)
+
+No core Synapse source was edited: the feature lives in
+`blackout_runtime/session_length.py` (wired from `blackout_runtime/module.py`,
+off unless the module config sets `session_lengths_enabled: true`), with tests
+in `tests/blackout_runtime/test_session_length.py`. It does lean on upstream
+internals, which an upstream sync must re-check:
+
+- It writes `access_tokens.valid_until_ms`, `refresh_tokens.expiry_ts` and
+  `refresh_tokens.ultimate_session_expiry_ts` for one device, and relies on
+  upstream enforcing them: `Auth.get_user_by_access_token`
+  (`synapse/api/auth/internal.py`) and `AuthHandler.refresh_token`
+  (`synapse/handlers/auth.py`).
+- It invalidates `get_user_by_access_token` with the store's private
+  `_invalidate_cache_and_stream`, as `_set_device_for_access_token_txn` does.
+- It creates its own table, `blackout_session_lengths`, in Synapse's main
+  database (`CREATE TABLE IF NOT EXISTS`, outside Synapse's schema versions),
+  and reads `devices`.
+- It signs devices out with `DeviceHandler.delete_devices` from a looping call
+  that acts only on the main process, and registers an `on_logged_out`
+  password-auth-provider callback to forget a deleted device's length.
+- It stays off under MSC3861 (delegated auth), where these tables do not hold
+  the tokens.
