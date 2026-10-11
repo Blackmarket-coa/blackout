@@ -346,12 +346,22 @@ in to Blackout in a tab signs in again in the panel, as a separate device.
     ```
 
     No in-repo homeserver template loads `blackout_runtime` today (only
-    `apps/blackout-server/docs/homeserver.blackbox.yaml` does). Loading it also
+    `apps/blackout-server/docs/homeserver.blackbox.yaml` does), and no in-repo
+    Synapse image contains it: the fork's image
+    (`apps/blackout-server/docker/Dockerfile`, which
+    `infra/single-server-baseline` runs) installs only the `synapse` package,
+    and `deploy/docker/blackout-backend` runs upstream Synapse. The homeserver
+    needs `blackout_runtime` on its Python path first. Loading it also
     turns on the module's other behaviour — governance and reputation
     endpoints and its room and event rules — which needs its own review.
 
 2. Set `BLACKOUT_SESSION_LENGTHS=1` on the API and run its migrations
-   (100 adds `refresh_tokens.session_expires_at`).
+   (100 adds `refresh_tokens.session_expires_at`). The API applies pending
+   migrations when it starts unless `BLACKOUT_DB_MIGRATE_ON_START=0`. Never
+   turn the flag on without 100: the Postgres store silently skips a field
+   that has no column, so a refresh-token family's end would be lost at the
+   next API restart, and a refresh before the end would then mint a
+   successor with no end.
 3. Check that `curl https://<homeserver>/_synapse/client/blackout/session/lengths`
    and `curl https://<chat-host>/v1/auth/session-lengths` both answer 200.
 
@@ -396,13 +406,14 @@ sessions stay in the account's device list, unusable, until removed.
     removed.
 -   **Not verified against a deployed homeserver.** What was run: the
     homeserver tests in-process (trial, on SQLite and on Postgres 16), the API
-    tests in-process (including a Postgres-backed store restart), and one
-    end-to-end run of real processes in the build sandbox — this fork's
-    Synapse (SQLite) with the module on, the API with the flag on, and the
-    production client build, driven in Chromium: the choice, the bind, the
-    capped API token, Sign out, an ended session found at load, the flag-off
-    case, and the sweep deleting a device in the running homeserver (its end
-    moved into the past in the database rather than waiting an hour). Not run:
+    tests in-process (including a Postgres-backed store restart), and
+    end-to-end runs of real processes in the build sandbox — this fork's
+    Synapse (SQLite) with the module on, the API with the flag on and off, and
+    the production client build, driven in Chromium: the choice, the bind, the
+    capped API token, Sign out (the device and the panel's API token), an
+    ended session found at load, the flag-off case, and the sweep deleting a
+    device in the running homeserver (its end moved into the past in the
+    database rather than waiting an hour). Not run:
     a deployed homeserver behind the production proxies, a real extension
     frame, a running homeserver on Postgres. This repository's CI runs no
     `apps/blackout-server` tests at all, so the homeserver tests
