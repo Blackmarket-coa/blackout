@@ -326,14 +326,14 @@ export const ProfileModal = ({
                                      * `href` whose scheme is http, https,
                                      * mailto or mxc.
                                      *
-                                     * Semgrep still reports this line: a
-                                     * `nosemgrep` comment does not attach in
-                                     * JSX attribute position, in any of the
-                                     * three placements tried. Left visible and
-                                     * explained here rather than silenced by
-                                     * widening the ignore to the whole file.
+                                     * Semgrep's rule reports the `__html`
+                                     * value, not this attribute, so its
+                                     * `nosemgrep` sits on the line above that
+                                     * value. A comment here, in JSX attribute
+                                     * position, does not attach.
                                      */
                                     dangerouslySetInnerHTML={{
+                                        // nosemgrep: typescript.react.security.audit.react-dangerouslysetinnerhtml.react-dangerouslysetinnerhtml
                                         __html: toSafeHtml(profile.profile.bio),
                                     }}
                                 />

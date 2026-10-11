@@ -1,4 +1,4 @@
-import { createHmac, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
+import { createHmac, randomBytes, scrypt, scryptSync, timingSafeEqual } from 'node:crypto';
 
 export interface AuthTokenPayload {
     sub: string;
@@ -154,6 +154,46 @@ export function verifyPasswordConstantTime(
 ): boolean {
     const target = stored && stored.includes(':') ? stored : DUMMY_PASSWORD_HASH;
     const ok = verifyPassword(password, target);
+    return Boolean(stored) && ok;
+}
+
+// Async twins of the three helpers above: same scrypt parameters and the same
+// `salt:hash` format, so a hash from either side verifies on the other. The
+// difference is where the ~40 ms of scrypt work runs. The sync versions run it
+// on the event loop, stalling every in-flight request: under load/k6/auth.js a
+// token refresh, which does no hashing at all, waited ~0.6 s at p95 behind
+// other users' registrations. These run it on the libuv threadpool instead.
+//
+// Request handlers should use these. Because they yield, anything a handler
+// read before the await may have changed by the time it resumes: make state
+// checks after the await, or repeat them there (see /register and /login in
+// routes/auth.ts).
+const scryptAsync = (password: string, salt: string, keylen: number): Promise<Buffer> =>
+    new Promise((resolve, reject) => {
+        scrypt(password, salt, keylen, (err, key) => (err ? reject(err) : resolve(key)));
+    });
+
+export async function hashPasswordAsync(password: string): Promise<string> {
+    const salt = randomBytes(16).toString('hex');
+    const hash = (await scryptAsync(password, salt, 64)).toString('hex');
+    return `${salt}:${hash}`;
+}
+
+export async function verifyPasswordAsync(password: string, stored: string): Promise<boolean> {
+    const [salt, hashed] = stored.split(':');
+    if (!salt || !hashed) return false;
+
+    const candidate = await scryptAsync(password, salt, 64);
+    const target = Buffer.from(hashed, 'hex');
+    return candidate.length === target.length && timingSafeEqual(candidate, target);
+}
+
+export async function verifyPasswordConstantTimeAsync(
+    password: string,
+    stored: string | undefined | null
+): Promise<boolean> {
+    const target = stored && stored.includes(':') ? stored : DUMMY_PASSWORD_HASH;
+    const ok = await verifyPasswordAsync(password, target);
     return Boolean(stored) && ok;
 }
 

@@ -18,6 +18,8 @@
         {% endif %}
         <p>
             Please click the button below if you agree to the
+            {# terms_url is public_baseurl + _matrix/consent + the configured consent version. #}
+            {# nosemgrep: generic.html-templates.security.var-in-href.var-in-href #}
             <a href="{{ terms_url }}">privacy policy of this homeserver.</a>
         </p>
         <input type="hidden" name="session" value="{{ session }}" />

@@ -118,6 +118,8 @@ def make_graph(pdus: List[dict], filename_prefix: str) -> None:
 
 def get_pdus(host: str, room: str) -> List[dict]:
     transaction = json.loads(
+        # http:// is fixed by the f-string; host and room are this script's own arguments.
+        # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
         urllib.request.urlopen(
             f"http://{host}/_matrix/federation/v1/context/{room}/"
         ).read()

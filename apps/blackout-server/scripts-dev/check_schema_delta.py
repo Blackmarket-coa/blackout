@@ -37,6 +37,8 @@ def main(force_colors: bool) -> None:
     r = repo.git.show("origin/develop:synapse/storage/schema/__init__.py")
 
     locals: Dict[str, Any] = {}
+    # This repository's own schema module (origin/develop), run to read SCHEMA_VERSION.
+    # nosemgrep: python.lang.security.audit.exec-detected.exec-detected
     exec(r, locals)
     current_schema_version = locals["SCHEMA_VERSION"]
 
@@ -46,6 +48,8 @@ def main(force_colors: bool) -> None:
     with open("synapse/storage/schema/__init__.py") as file:
         local_schema = file.read()
     new_locals: Dict[str, Any] = {}
+    # The same module, from the working tree.
+    # nosemgrep: python.lang.security.audit.exec-detected.exec-detected
     exec(local_schema, new_locals)
     local_schema_version = new_locals["SCHEMA_VERSION"]
 

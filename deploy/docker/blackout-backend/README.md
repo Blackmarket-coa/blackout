@@ -82,6 +82,7 @@ Optional alternative homeservers (run instead of `synapse`, mutually exclusive):
 
 -   `docker-compose.yml`
 -   `nginx/nginx.conf`
+-   `nginx/snippets/hsts.conf` (included by `nginx.conf`; nginx will not start without it)
 -   `synapse/homeserver.yaml.template`
 -   `mas/config.yaml.template`
 -   `livekit/config.yaml`

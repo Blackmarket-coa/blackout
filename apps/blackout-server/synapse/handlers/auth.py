@@ -94,6 +94,29 @@ invalid_login_token_counter = Counter(
     ["reason"],
 )
 
+# Redirect URL schemes that run script (or render a document the URL itself
+# supplies) when the SSO confirmation page's "Continue" link is clicked. Native
+# clients use their own schemes, so this is a denylist, not an allowlist.
+_SCRIPT_CAPABLE_URL_SCHEMES = frozenset({"javascript", "vbscript", "data"})
+
+
+def _url_scheme_as_browsers_read_it(url: str) -> Optional[str]:
+    """Return the lower-cased scheme of `url` the way a browser would parse it.
+
+    The WHATWG URL parser strips leading and trailing C0 control characters and
+    spaces, and removes ASCII tab and newline anywhere, before it reads the
+    scheme, so " java\\tscript:" is a javascript: URL. Returns None if the URL
+    has no scheme (a relative URL).
+    """
+    cleaned = url.translate({ord("\t"): None, ord("\n"): None, ord("\r"): None})
+    cleaned = cleaned.strip("".join(chr(c) for c in range(0x21)))
+    scheme, sep, _ = cleaned.partition(":")
+    if not sep or not scheme or not scheme[0].isascii() or not scheme[0].isalpha():
+        return None
+    if not all(c.isascii() and (c.isalnum() or c in "+-.") for c in scheme):
+        return None
+    return scheme.lower()
+
 
 def convert_client_dict_legacy_fields_to_identifier(
     submission: JsonDict,
@@ -1750,6 +1773,25 @@ class AuthHandler:
                 registered.
             auth_provider_session_id: The session ID from the SSO IdP received during login.
         """
+        # The client chose this URL, and the login token is appended to it below.
+        # Offered as the confirmation page's link, a javascript: URL would run in
+        # this server's origin with the token in reach. Refuse it before a token
+        # exists. (Upstream Synapse has the same gap as of 2026-10.)
+        scheme = _url_scheme_as_browsers_read_it(client_redirect_url)
+        if scheme in _SCRIPT_CAPABLE_URL_SCHEMES:
+            logger.warning(
+                "Refusing SSO login for %s: redirect URL has a %s: scheme",
+                registered_user_id,
+                scheme,
+            )
+            self.hs.get_sso_handler().render_error(
+                request,
+                "invalid_request",
+                "The client asked to be sent back to an address this server will "
+                "not link to.",
+            )
+            return
+
         # If the account has been deactivated, do not proceed with the login.
         #
         # This gets checked again when the token is submitted but this lets us

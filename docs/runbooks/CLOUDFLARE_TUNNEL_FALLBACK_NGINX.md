@@ -85,9 +85,12 @@ in §2 is fast. They do not flip ingress; they make the flip possible.
       is rendered onto the host (`/etc/nginx/sites-available/theblackout.app.conf`
       under the standard nginx package, or the equivalent path inside the
       compose nginx container).
-- [ ] The proxy and security-headers snippets are at
-      `/etc/nginx/snippets/proxy-common.conf` and
-      `/etc/nginx/snippets/security-headers.conf`.
+- [ ] The proxy, security-headers and HSTS snippets are at
+      `/etc/nginx/snippets/proxy-common.conf`,
+      `/etc/nginx/snippets/security-headers.conf` and
+      `/etc/nginx/snippets/hsts.conf` (the site config includes `hsts.conf`
+      at server level and in every block that sets its own headers; nginx
+      will not start without it).
 - [ ] `nginx -t` passes.
 
 ### 1.2 Let's Encrypt certificates obtained

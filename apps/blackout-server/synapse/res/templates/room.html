@@ -21,6 +21,8 @@
         <tr>
             <td></td>
             <td>
+                {# room.link is the configured client base URL (or matrix.to) + a room ID (Mailer._make_room_link). #}
+                {# nosemgrep: generic.html-templates.security.var-in-href.var-in-href #}
                 <a href="{{ room.link }}">Join the conversation.</a>
             </td>
             <td></td>

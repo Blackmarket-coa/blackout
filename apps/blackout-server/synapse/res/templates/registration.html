@@ -4,6 +4,8 @@
 {% block body %}
 <p>You have asked us to register this email with a new Matrix account. If this was you, please click the link below to confirm your email address:</p>
 
+{# link is public_baseurl + a fixed path + a URL-encoded query (Mailer.send_registration_mail). #}
+{# nosemgrep: generic.html-templates.security.var-in-href.var-in-href #}
 <a href="{{ link }}">Verify Your Email Address</a>
 
 <p>If this was not you, you can safely disregard this email.</p>

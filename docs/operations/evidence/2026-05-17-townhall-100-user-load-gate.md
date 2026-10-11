@@ -46,3 +46,5 @@ replaced by:
 superseded by the three mechanisms above. No action required; future
 refreshes of this gate should point at `load.yml` runs and any
 `townhall-*` evidence files dated after 2026-03-16.
+
+> **Correction (2026-10-11).** The nightly k6 harness cited here never produced a passing run: none of its 157 scheduled runs from 2026-05-07 to 2026-10-10 passed, and the auth and rate-limit scripts never ran in CI at all (see L8 in `docs/audits/pre-launch-readiness-audit-2026-07.md`). The fix is in review; until a nightly passes, this harness is not evidence of load behaviour.

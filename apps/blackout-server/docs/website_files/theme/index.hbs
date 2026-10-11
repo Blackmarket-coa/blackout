@@ -57,7 +57,10 @@
     <body>
         <!-- Provide site root to javascript -->
         <script type="text/javascript">
+            // mdbook fills these from book.toml when the docs are built; no visitor input reaches them.
+            // nosemgrep: generic.html-templates.security.var-in-script-tag.var-in-script-tag
             var path_to_root = "{{ path_to_root }}";
+            // nosemgrep: generic.html-templates.security.var-in-script-tag.var-in-script-tag
             var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "{{ preferred_dark_theme }}" : "{{ default_theme }}";
         </script>
 
@@ -82,6 +85,8 @@
             if (theme === null || theme === undefined) { theme = default_theme; }
             var html = document.querySelector('html');
             html.classList.remove('no-js')
+            // default_theme is from book.toml, filled in when the docs are built.
+            // nosemgrep: generic.html-templates.security.var-in-script-tag.var-in-script-tag
             html.classList.remove('{{ default_theme }}')
             html.classList.add(theme);
             html.classList.add('js');
@@ -154,11 +159,15 @@
                         </a>
                         {{/if}}
                         {{#if git_repository_url}}
+                        {{!-- git_repository_url is set in book.toml. --}}
+                        {{!-- nosemgrep: generic.html-templates.security.var-in-href.var-in-href --}}
                         <a href="{{git_repository_url}}" title="Git repository" aria-label="Git repository">
                             <i id="git-repository-button" class="fa {{git_repository_icon}}"></i>
                         </a>
                         {{/if}}
                         {{#if git_repository_edit_url}}
+                        {{!-- git_repository_edit_url is set in book.toml. --}}
+                        {{!-- nosemgrep: generic.html-templates.security.var-in-href.var-in-href --}}
                         <a href="{{git_repository_edit_url}}" title="Suggest an edit" aria-label="Suggest an edit">
                             <i id="git-edit-button" class="fa fa-edit"></i>
                         </a>
@@ -202,12 +211,16 @@
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
                         {{#previous}}
+                            {{!-- path_to_root and link (a chapter path from SUMMARY.md) are filled in at build time. --}}
+                            {{!-- nosemgrep: generic.html-templates.security.var-in-href.var-in-href --}}
                             <a rel="prev" href="{{ path_to_root }}{{link}}" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
                         {{/previous}}
 
                         {{#next}}
+                            {{!-- path_to_root and link (a chapter path from SUMMARY.md) are filled in at build time. --}}
+                            {{!-- nosemgrep: generic.html-templates.security.var-in-href.var-in-href --}}
                             <a rel="next" href="{{ path_to_root }}{{link}}" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
@@ -220,12 +233,16 @@
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
                 {{#previous}}
+                    {{!-- path_to_root and link (a chapter path from SUMMARY.md) are filled in at build time. --}}
+                    {{!-- nosemgrep: generic.html-templates.security.var-in-href.var-in-href --}}
                     <a rel="prev" href="{{ path_to_root }}{{link}}" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
                 {{/previous}}
 
                 {{#next}}
+                    {{!-- path_to_root and link (a chapter path from SUMMARY.md) are filled in at build time. --}}
+                    {{!-- nosemgrep: generic.html-templates.security.var-in-href.var-in-href --}}
                     <a rel="next" href="{{ path_to_root }}{{link}}" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>

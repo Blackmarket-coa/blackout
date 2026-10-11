@@ -146,6 +146,9 @@ export const MiniProfile = ({
                         <div
                             style={{ fontSize: 13, color: dc.textSecondary, lineHeight: 1.45 }}
                             dangerouslySetInnerHTML={{
+                                // A user's bio, safe for the reasons given in ProfileModal.tsx:
+                                // mdToHtml escapes it before adding any tag; the sanitizer allow-lists.
+                                // nosemgrep: typescript.react.security.audit.react-dangerouslysetinnerhtml.react-dangerouslysetinnerhtml
                                 __html: sanitizeMatrixHtml(mdToHtml(preview)),
                             }}
                         />

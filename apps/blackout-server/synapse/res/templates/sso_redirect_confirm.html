@@ -32,6 +32,8 @@
 <main>
     {% include "sso_partial_profile.html" %}
     <p class="confirm-trust">Continuing will grant <strong>{{ display_url }}</strong> access to your account.</p>
+    {# redirect_url is client-supplied; AuthHandler.complete_sso_login refuses javascript:, vbscript: and data: before this renders. #}
+    {# nosemgrep: generic.html-templates.security.var-in-href.var-in-href #}
     <a href="{{ redirect_url }}" class="primary-button">Continue</a>
 </main>
 {% include "sso_footer.html" without context %}

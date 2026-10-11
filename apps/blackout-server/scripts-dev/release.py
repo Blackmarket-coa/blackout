@@ -479,6 +479,8 @@ def _upload(gh_token: Optional[str]) -> None:
             filename = path.join(tmpdir, name)
 
             click.echo(f"Downloading {name} into {filename}")
+            # A release asset URL returned by the GitHub API, in the maintainers' release script.
+            # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
             urllib.request.urlretrieve(asset_download_url, filename=filename)
 
         if click.confirm("Upload to PyPI?", default=True):
@@ -547,6 +549,8 @@ def _wait_for_actions(gh_token: Optional[str]) -> None:
     time.sleep(10 * 60)
     while True:
         time.sleep(5 * 60)
+        # req's URL is the fixed https://api.github.com address built above.
+        # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
         response = urllib.request.urlopen(req)
         resp = json.loads(response.read())
 

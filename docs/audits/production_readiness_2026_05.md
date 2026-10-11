@@ -266,7 +266,7 @@ commit; running it again would be ~3 min for no new signal.
 | BL-PR-05 — migrations + down.sql | Closed (real `migrate.ts`; `.down.sql` from 007 onward) |
 | BL-PR-06 — DR restore drill | Closed (real Postgres-in-CI + schema assertions) |
 | BL-PR-07 — e2e + coverage | Closed (chromium e2e job + smoke spec; coverage gates wired and enforced at 23/62/27/23; file-level quarantine 7→0; 7 in-test `it.skip`s remain tracked outside the audit) |
-| BL-PR-08 — load tests | Closed (`load/k6/*.js` + nightly `load.yml`) |
+| BL-PR-08 — load tests | Closed (`load/k6/*.js` + nightly `load.yml`). **Correction 2026-10-11:** the nightly never passed (0 of 157 runs); reopened as L8 in `docs/audits/pre-launch-readiness-audit-2026-07.md` until a nightly is green |
 | BL-PR-09 — Helm + canary | Closed (Helm chart + canary compose + post-deploy verify wired) |
 | BL-PR-10 — external-secrets + rotation runbook | Closed (`templates/external-secrets.yaml` + `runbooks/jwt_rotation.md`) |
 | BL-PR-11 — `.env.example` `JWT_SECRET=change-me` | Closed (placeholder cleared) |
