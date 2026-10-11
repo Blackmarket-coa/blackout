@@ -10,6 +10,8 @@ on:
             # they surfaced only on the push to develop.
             - 'infra/**'
             - 'deploy/**'
+            # So a change to the panel proxy framing guard alone runs it.
+            - 'tools/ci/check-embed-proxy-framing*'
             - 'pnpm-lock.yaml'
             - 'package.json'
             - '.github/workflows/security.yml'
@@ -82,6 +84,17 @@ jobs:
 
             - name: SOPS recipient guard (guard:sops-recipients)
               run: node tools/ci/check-sops-recipients.mjs
+
+            # The front proxies may drop their own framing headers only on the
+            # Black Mask panel locations, and only when the client container
+            # sends its own frame-ancestors list in a complete header block;
+            # most ways that can break fail open. The guard checks the repo's
+            # proxy files only (docs/black-mask-chat-panel-and-account-link.md).
+            - name: Panel proxy framing guard (guard:embed-proxy-framing)
+              run: node tools/ci/check-embed-proxy-framing.mjs
+
+            - name: Panel proxy framing guard self-test (test:guard:embed-proxy-framing)
+              run: node --test tools/ci/check-embed-proxy-framing.test.mjs
 
     semgrep:
         name: Semgrep SAST

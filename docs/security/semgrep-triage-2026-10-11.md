@@ -291,3 +291,14 @@ not the block re-includes the server-level headers, so it never told a fixed
 config from a broken one, and nothing machine-checks that class now (nothing
 did before either). The per-location response-header check used for this fix
 is the only evidence; see the open items.
+
+**Later the same day** (the Black Mask panel locations in both front proxies;
+[framing-headers-2026-10-09.md](framing-headers-2026-10-09.md), follow-up):
+those locations carry 24 more `nosemgrep` comments for the header-redefinition
+rule, 12 per site config, on lines that neither 1.36.0 nor 1.180.0 reports. They
+follow the convention above, so a rule or engine change that starts reporting
+them shows the reason next to them. `tools/ci/check-embed-proxy-framing.mjs` now
+machine-checks part of the inheritance class: in the `theblackout.app` server
+block of both proxies, a location that sets its own headers must include
+`security-headers.conf` again, and the panel locations must restate that set
+exactly. The other server blocks are still unchecked.

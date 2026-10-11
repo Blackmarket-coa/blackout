@@ -422,6 +422,10 @@ echo "TLS days remaining: $days_left"
 
 # 8) Secret age review evidence (example using file mtime)
 stat -c '%n %y' .env synapse/homeserver.yaml coturn/turnserver.conf
+
+# 9) Chat panel framing (docs/black-mask-chat-panel-and-account-link.md, step 2)
+curl -sI https://theblackout.app/embed | grep -iE '^(x-frame-options|content-security-policy)'
+curl -sI https://theblackout.app/ | grep -iE '^(x-frame-options|content-security-policy)'
 ```
 
 Expected outcomes:
@@ -430,6 +434,24 @@ Expected outcomes:
 -   Admin API returns `403`/`401` at edge (not open access).
 -   Burst login/registration tests produce `429` responses.
 -   TLS check reports >=21 days remaining (or triggers alert path).
+-   `/` carries `X-Frame-Options: DENY` and `frame-ancestors 'none'`. So does
+    `/embed` (one `X-Frame-Options`, from `frontend`, and `'none'` from both
+    `frontend` and `reverse-proxy`), unless `BLACK_MASK_FRAME_ANCESTORS` is
+    set on the `frontend` service, for example in the `environment:` of the
+    host's `docker-compose.override.yml`. With a valid list there, `/embed`
+    carries no `X-Frame-Options` and `frame-ancestors <the list>` twice: the
+    frontend sends it and `reverse-proxy` repeats it. `reverse-proxy` does
+    this only on `/embed` and `/embed/*`, only for the list the frontend image
+    writes, and only after reading the frontend's complete header block; when
+    `frontend` is down, too slow or sends a broken header block, it keeps its
+    usual headers.
+-   Setting, changing or removing `BLACK_MASK_FRAME_ANCESTORS` takes effect
+    only when the container is recreated: `docker compose up -d frontend`, or
+    `docker compose up -d --force-recreate frontend` as `deploy.sh` does.
+    `docker compose restart frontend` keeps the environment the container was
+    created with. After removing the variable, `/embed` must show
+    `X-Frame-Options: DENY` and `frame-ancestors 'none'` again; if it still
+    shows the list, the container was not recreated.
 
 ## 13) Capacity telemetry
 

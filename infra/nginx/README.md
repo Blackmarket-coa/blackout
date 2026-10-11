@@ -15,11 +15,14 @@ This deployment exposes the following hostnames over TLS:
 - `nginx.conf`: hardened global Nginx config (includes `merge_slashes off` for Matrix-safe URI handling).
 - `snippets/proxy-common.conf`: shared upstream proxy headers and timeout/body settings.
 - `snippets/security-headers.conf`: security headers for frontend hosts.
-- `snippets/hsts.conf`: HSTS for the Matrix host. The site config includes it
-  at server level and again in every block there that sets its own
-  `add_header`, because nginx drops inherited `add_header` directives in such a
-  block. `nginx -t` fails if this file is missing.
-- `sites-available/theblackout.app.conf`: host-based routing and upstream definitions.
+- `snippets/hsts.conf`: HSTS for the Matrix host, and for the two Black Mask panel locations, which
+  restate the `security-headers.conf` set instead of including it. The site config includes it at
+  the Matrix host's server level and again in every block there that sets its own `add_header`,
+  because nginx drops inherited `add_header` directives in such a block, and in both panel
+  locations. `nginx -t` fails if this file is missing.
+- `sites-available/theblackout.app.conf`: host-based routing and upstream definitions. It also holds the
+  Black Mask chat panel's two locations (`/embed`, `/embed/*`) and the `map` blocks that decide their
+  framing headers; see "Black Mask chat panel" below.
 
 ## 1) DNS implementation
 
@@ -76,6 +79,20 @@ sudo systemctl reload nginx
 - Optional coturn HTTPS status (`turn.theblackout.app/healthz`) at `127.0.0.1:9641`
 
 If your ports differ, update upstream blocks in `sites-available/theblackout.app.conf`.
+
+### Black Mask chat panel (`/embed`)
+
+The frontend container (the `apps/blackout-client` image) decides whether the chat panel at `/embed`
+may be framed, from `BLACK_MASK_FRAME_ANCESTORS` (`docs/black-mask-chat-panel-and-account-link.md`,
+step 2). This proxy adds `X-Frame-Options: DENY` and a CSP with `frame-ancestors 'none'` to every
+HTTPS response for `theblackout.app` and `chat.theblackout.app`, except on `/embed` and `/embed/*` when the
+container's complete response header block carries a `frame-ancestors` list in the form that image
+writes: there it leaves its own two out and repeats the container's list. The container being down or
+too slow, an incomplete or invalid header block, and frontend images from before the panel get the
+usual headers. With that image, nothing is frameable until the variable is set on the frontend
+container (and the container recreated: a restart keeps its old environment).
+`node tools/ci/check-embed-proxy-framing.mjs` compares the two locations and their `map` blocks with a
+pinned form and with `snippets/security-headers.conf`; it runs in CI and does not run nginx.
 
 ## 3) Synapse reverse proxy requirements
 
@@ -157,6 +174,20 @@ Expected: same IPv4 as apex.
 curl -I https://theblackout.app
 ```
 Expected: `HTTP/2 200` (or `304`), includes security headers like `strict-transport-security`, `content-security-policy`.
+
+```bash
+curl -sI https://theblackout.app/embed | grep -iE '^(x-frame-options|content-security-policy)'
+```
+Expected with `BLACK_MASK_FRAME_ANCESTORS` unset or invalid on the frontend: one
+`x-frame-options: DENY` (the frontend's) and three CSP lines: the frontend's `frame-ancestors 'none'`,
+this proxy's CSP without `frame-ancestors`, and this proxy's repeat of `frame-ancestors 'none'`. With a
+list set: no `x-frame-options`, this proxy's CSP without `frame-ancestors`, and
+`frame-ancestors <your list>` twice (the frontend's header and this proxy's copy).
+
+```bash
+curl -sI https://theblackout.app/ | grep -iE '^(x-frame-options|content-security-policy)'
+```
+Expected whatever the variable says: `x-frame-options: DENY` and a CSP with `frame-ancestors 'none'`.
 
 ```bash
 curl -I https://api.theblackout.app/health
