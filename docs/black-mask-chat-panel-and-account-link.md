@@ -505,9 +505,14 @@ more:
     and the panel's API token), an ended session found at load, the flag-off
     case, and the sweep deleting a device in the running homeserver (its end
     moved into the past in the database rather than waiting an hour). Those
-    browser runs predate the client switch. Not run: a deployed homeserver
-    behind the production proxies, a real extension frame, a running
-    homeserver on PostgreSQL.
+    runs predate the client switch. After it was added, both production builds
+    were loaded at `/embed` in Chromium with the homeserver stubbed: with the
+    switch off the panel showed the old sign-in, started a session stored
+    under the full app's key and made no session-length requests; with it on
+    it ignored that session, showed the choice (only "Until I sign out", the
+    stubbed servers answering 404) and asked both servers. Not run: a
+    deployed homeserver behind the production proxies, a real extension
+    frame, a running homeserver on PostgreSQL.
 
 ### 4. Optional account link
 
