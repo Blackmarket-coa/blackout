@@ -59,10 +59,6 @@
 /src/i18n/strings/en_EN.json                                            @Blackmarket-coa/blackout-maintainers
 /packages/shared-components/src/i18n/strings/en_EN.json                 @Blackmarket-coa/blackout-maintainers
 
-# Updated by Synapse / MAS image automation
-/playwright/testcontainers/synapse.ts
-/playwright/testcontainers/mas.ts
-
 # Public commitments. These are promises to users, not implementation detail:
 # the policy changelog is the audit trail for every privacy/monetization
 # commitment, and TRUST.md is the user-facing statement of them. Enforcement is
