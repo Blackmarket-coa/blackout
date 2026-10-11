@@ -94,8 +94,8 @@ What the panel is. Everything lives under `/embed` (constants in
     sign-on is not offered (it redirects the whole frame to the identity
     provider). The panel says so and offers to open Blackout in a tab instead.
     Today's Blackout homeserver offers password sign-in only, so this changes
-    nothing for it. There is **no session-length choice** (B3 is not built):
-    the panel signs in exactly as the full app does.
+    nothing for it. Since B3 the panel also asks how long the sign-in lasts
+    and keeps its own session, separate from the full app's (section 3).
 -   **How it mounts:** `main.tsx` decides "panel or full app" once, from the
     path the page loaded on, and renders `EmbedApp` instead of the full app's
     bootstrap: no AppShell, no main router, none of the app's hydrators. It is
@@ -226,13 +226,12 @@ was refused `/`; a page on any other origin was refused both.
     not implement the allow-list. On those the panel is never framed by
     Black Mask: `'self'` or `DENY` on the `blackout-web` image, no protection
     at all on the static hosts (as for the whole client there today).
--   **Storage partitioning, not verified:** whether a panel framed inside an
-    extension page shares the browser's normal Blackout session or gets its
-    own depends on the browser's storage partitioning for extension-embedded
-    frames. If it gets its own, it signs in as a new session, and older
-    encrypted messages may not be readable there (see BO-1). If it shares, the
-    panel and an open Blackout tab run two clients on one session; the client
-    has no cross-tab lock. B3 has to settle this.
+-   **Storage partitioning:** whether a browser partitions an
+    extension-embedded frame's storage is still not verified, but since B3 it
+    no longer matters to the session: the panel keeps its own session, API
+    token and stores either way, so it never shares the full app's session
+    (section 3). It signs in as a separate device, and older encrypted
+    messages may not be readable there (see BO-1).
 
 **Turning it on** (operator, after the panel is deployed): set
 `BLACK_MASK_FRAME_ANCESTORS` on the web client container to Black Mask's
@@ -244,9 +243,163 @@ reachable as a normal page, which is harmless.
 
 ### 3. Sign-in inside the sandbox
 
+**Status 2026-10-11: built, not deployed; off by default** (B3). Nothing has
+been set in any deployed environment.
+
 Blackout login happens inside the panel. The user picks the session length (a
 timeframe or indefinitely; nothing preselected). The chosen TTL is enforced
 server-side on the session, not only remembered by the client.
+
+**What "the session" is.** A panel sign-in holds these credentials:
+
+| Credential                      | Minted by                                                                                    | Lifetime before B3                                                                                                                                                                             | Renewed by                                                                     | Checked by                                                                                                 |
+| ------------------------------- | -------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| Matrix access token             | Synapse `POST /_matrix/client/v3/login` (password and account-number sign-in) or `/register` | No expiry. The client asks for a refresh token, but no in-repo homeserver template sets `refreshable_access_token_lifetime`, so Synapse issues a token that never expires and no refresh token | —                                                                              | Synapse, on every request (`valid_until_ms` in `synapse/api/auth/internal.py`)                             |
+| Matrix refresh token            | Same, only if the homeserver sets `refreshable_access_token_lifetime`                        | Whatever `refresh_token_lifetime` / `session_lifetime` say                                                                                                                                     | `POST /_matrix/client/v3/refresh`                                              | Synapse `AuthHandler.refresh_token` (`expiry_ts`, `ultimate_session_expiry_ts`)                            |
+| Blackout API access token (JWT) | API `POST /v1/auth/matrix/exchange`, given the Matrix token (checked with Synapse `whoami`)  | 24 hours                                                                                                                                                                                       | The client exchanges its Matrix token again when the JWT expires or gets a 401 | API `authMiddleware` → `verifyJwt` (signature, `exp`), the jti denylist and the per-user revocation cutoff |
+| Blackout API refresh token      | The same exchange response                                                                   | 30 days, reset to 30 days on every rotation                                                                                                                                                    | `POST /v1/auth/token/refresh`                                                  | API `rotateRefreshToken`                                                                                   |
+
+The client keeps the first three in localStorage. It discards the API refresh
+token, but the exchange returns it, so a modified client could keep and use it.
+The service worker gets no token from this sign-in (it reads legacy keys that
+this sign-in never writes). LiveKit voice tokens are not part of a panel
+session: the panel is text only and never asks for one.
+
+**How each is bounded now** (feature on, timed length):
+
+-   **Matrix access token:** the homeserver caps `valid_until_ms` on every
+    token of the panel's device at the session end. Synapse refuses the token
+    after that (401 `M_UNKNOWN_TOKEN`, `soft_logout: true`) on every endpoint
+    except logout.
+-   **Matrix refresh token** (if the homeserver issues one): `expiry_ts` and
+    `ultimate_session_expiry_ts` are capped at the end, so `/refresh` refuses
+    after it (403) and every access token it mints before then still expires
+    at the end. Upstream Synapse already enforces both columns; the module
+    only sets them per device.
+-   **The device:** a sweep on the main Synapse process deletes the device at
+    the end (every 60 seconds by default). That is Synapse's normal sign-out of
+    a device: its access and refresh tokens, its end-to-end encryption keys
+    and its pushers go. Until the sweep runs, the caps above already refuse
+    every request.
+-   **Blackout API access token:** `exp` is capped at the session end, and the
+    token carries the end as `sxp`, which verification refuses from that
+    second on.
+-   **Blackout API refresh token:** the refresh-token family carries the end
+    (`session_expires_at`, API migration 100); each token's own expiry is
+    capped at it, and a refresh at or after it is refused (401
+    `session_expired`) and revokes the family.
+-   **A fresh exchange after the end:** refused. The homeserver refuses the
+    Matrix token, and the API refuses (401 `matrix_session_expired`) if the
+    homeserver reports the session over.
+
+**"Until I sign out"** adds no expiry: the session lasts until the device
+signs out (the panel now has a Sign out button) or the homeserver's own token
+settings end it.
+
+**How the length gets onto the session.** The panel signs in with the
+ordinary `/login` or `/register`, so rate limits and flows are unchanged.
+Before it stores or uses the new tokens it calls
+`POST /_synapse/client/blackout/session/length` with the new access token and
+`{"session_length": "1h" | "1d" | "7d" | "30d" | "until_sign_out"}`
+(`apps/blackout-server/blackout_runtime/session_length.py`). The homeserver
+accepts exactly that body (another value, type, case or field: 400), records
+the length once (a device's length can never be replaced, extended or
+cleared: 409), and caps the device's tokens in the same database transaction.
+If the call fails, the panel signs the new device out again and keeps nothing.
+While signed in, the panel shows when the session ends and a Sign out button.
+
+The API never takes a length from the client. With `BLACKOUT_SESSION_LENGTHS`
+on, the exchange asks the homeserver when that Matrix session ends
+(`GET /_synapse/client/blackout/session/length`, with the user's own token)
+and refuses with 503 if it cannot find out. A homeserver without the feature
+(404) has no session with a length, so the exchange issues what it always did.
+
+**When it is offered.** Timed lengths are offered only when both the
+homeserver (`GET /_synapse/client/blackout/session/lengths`) and the API
+(`GET /v1/auth/session-lengths`) answer. Otherwise only "Until I sign out" can
+be chosen, and the panel says the server can't end panel sessions on a timer
+yet. Nothing is preselected, and Sign in / Create account stay disabled until
+a choice is made. The full app's sign-in is unchanged.
+
+**Panel and full app keep separate sessions.** The panel keeps its session, its
+API token and its IndexedDB stores under its own names
+(`apps/blackout-client/src/client/storageNamespace.ts`), whether or not the
+browser partitions an extension-framed panel's storage. It never runs on the
+full app's session (which has no chosen length), never overwrites it, and
+neither side's pruning of stale stores deletes the other's encryption keys.
+The panel's Rust crypto store is per device. The cost: someone already signed
+in to Blackout in a tab signs in again in the panel, as a separate device.
+
+**Turning it on** (operator; nothing has been set anywhere):
+
+1. Load the module with the flag in the homeserver config:
+
+    ```yaml
+    modules:
+        - module: blackout_runtime.module.BlackoutRuntimeModule
+          config:
+              persistence_path: /data/blackout_runtime.sqlite3
+              session_lengths_enabled: true
+              # session_length_sweep_interval_s: 60 # clamped to 5–3600
+    ```
+
+    No in-repo homeserver template loads `blackout_runtime` today (only
+    `apps/blackout-server/docs/homeserver.blackbox.yaml` does). Loading it also
+    turns on the module's other behaviour — governance and reputation
+    endpoints and its room and event rules — which needs its own review.
+
+2. Set `BLACKOUT_SESSION_LENGTHS=1` on the API and run its migrations
+   (100 adds `refresh_tokens.session_expires_at`).
+3. Check that `curl https://<homeserver>/_synapse/client/blackout/session/lengths`
+   and `curl https://<chat-host>/v1/auth/session-lengths` both answer 200.
+
+**Rollback:** unset both. A session already given an end keeps it: the token
+caps sit in Synapse's tables, and the API enforces stored ends whatever its
+flag says. With the module flag off the sweep stops, so the devices of ended
+sessions stay in the account's device list, unusable, until removed.
+
+**Not enforced, stated plainly:**
+
+-   **Under MAS** (`experimental_features.msc3861`), access tokens live in MAS,
+    not in Synapse's tables. The module does not switch itself on there, so
+    only "Until I sign out" is offered.
+-   **Between the end and the sweep** (up to the sweep interval) the device
+    still exists but its tokens are refused. A new token for the same device,
+    obtained by signing in again with its device ID (which needs the
+    password), is not capped until the sweep deletes the device.
+-   **What the session did while it was valid is not undone:** messages sent,
+    rooms joined, and anything it created through the API that is meant to
+    outlive a session (widget-alert tokens, outbound webhooks, OBS passwords
+    and similar), or a LiveKit voice token of up to 15 minutes that a modified
+    client asked for.
+-   **What stays in the browser:** at the end the panel deletes the device's
+    sync cache and encryption stores (and, if the device still exists, signs
+    it out on the server) — at once if it is open, otherwise the next time it
+    opens. If it is never opened again in that browser, those stores stay on
+    disk (the session itself is over on the servers). Drafts and settings the
+    composer keeps in localStorage are shared with the full app on the same
+    origin and are not deleted.
+-   **Clocks:** the panel's own sign-out timer uses the device clock, counted
+    from just before the length was bound; the servers use theirs. A wrong
+    device clock changes when the panel notices, not when the servers refuse.
+-   **A device with no length:** if the panel is closed between sign-in and
+    the bind, or the bind fails and signing the device out fails too, the new
+    device keeps no length. The panel never stored its tokens, so nothing
+    holds them, but the device shows in the account's device list until
+    removed.
+-   **Not verified against a deployed homeserver.** What was run: the
+    homeserver tests in-process (trial, on SQLite and on Postgres 16), the API
+    tests in-process (including a Postgres-backed store restart), and one
+    end-to-end run of real processes in the build sandbox — this fork's
+    Synapse (SQLite) with the module on, the API with the flag on, and the
+    production client build, driven in Chromium: the choice, the bind, the
+    capped API token, Sign out, an ended session found at load, the flag-off
+    case, and the sweep deleting a device in the running homeserver (its end
+    moved into the past in the database rather than waiting an hour). Not run:
+    a deployed homeserver behind the production proxies, a real extension
+    frame, a running homeserver on Postgres. This repository's CI runs no
+    `apps/blackout-server` tests at all, so the homeserver tests
+    (`tests/blackout_runtime/test_session_length.py`) were run locally only.
 
 ### 4. Optional account link
 

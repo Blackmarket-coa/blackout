@@ -223,7 +223,7 @@ immediate.
 
 **Asset**: a signed-in Blackout session rendered at `/embed` inside a frame on
 another origin (the Black Mask extension). Spec and status:
-`docs/black-mask-chat-panel-and-account-link.md` (steps 1 and 2).
+`docs/black-mask-chat-panel-and-account-link.md` (steps 1 to 3).
 
 **Who can frame it**: nobody by default. The web client's nginx image sends
 `frame-ancestors 'none'` and `X-Frame-Options: DENY` on every route. On `/embed`
@@ -255,12 +255,33 @@ panel's content (same-origin policy) and the panel sends it nothing (no
 -   **Phishing through links in messages**: **not mitigated by the panel.**
     Black Mask's link check (launch-plan B6) is not built; an external link
     opened from the panel is as safe as the same link opened from Blackout.
+-   **A panel session left behind, or its tokens copied** (A7: a shared or
+    borrowed device, a token lifted from browser storage): the person picks a
+    session length at sign-in (step 3). With the feature on (off by default:
+    `session_lengths_enabled` in the homeserver module and
+    `BLACKOUT_SESSION_LENGTHS` on the API), the servers end the session at
+    that time whatever the client does. The homeserver caps the device's
+    access and refresh tokens at the end and then deletes the device (tokens,
+    E2EE device keys, pushers); the API caps the JWT (`exp` and `sxp`) and the
+    refresh-token family at the same end, and takes the end from the
+    homeserver, never from the client. The length can be set once per device
+    and never extended. A timed length is never offered unless both servers
+    say they enforce it.
+-   **The panel picking up, or clobbering, the full app's session**: the panel
+    keeps its session, API token and IndexedDB stores under its own names, so
+    it never runs on the full app's session (which has no length), never
+    overwrites it and never prunes its encryption keys, partitioned storage or
+    not.
 
-**Residual risk**: whether a framed panel shares the browser's Blackout
-session or gets its own depends on the browser's storage partitioning for
-extension-embedded frames, and has not been checked. Firefox extension origins
-are per-install, so a fixed list cannot name the Firefox extension. Both are
-recorded as constraints, not solved.
+**Residual risk**: what a panel session did while it was valid is not undone
+when it ends (messages, joins, integration secrets created through the API,
+a voice token of up to 15 minutes); the panel deletes its local stores only
+when it next runs, so a browser that never opens it again keeps them on disk;
+a device whose length could not be bound, and whose sign-out then also
+failed, stays in the device list with tokens nothing holds; under MAS the
+feature is unavailable. Firefox extension origins are per-install, so a fixed
+list cannot name the Firefox extension. All are recorded as constraints, not
+solved.
 
 ## 7. Accepted residual risks
 

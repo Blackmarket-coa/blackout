@@ -108,12 +108,27 @@ For the source-of-truth triage with tier/owner detail see
     `BLACK_MASK_FRAME_ANCESTORS` on the web client container.
 -   **Not there yet:**
     -   push notifications;
-    -   a session-length choice at sign-in (B3);
     -   account linking (B4/B5);
     -   any check of external links (B6): links open in a new tab unchecked;
     -   single sign-on inside the panel (it would redirect the frame);
-    -   voice, stage and forum dens (they open in a normal Blackout tab);
-    -   a sign-out button.
+    -   voice, stage and forum dens (they open in a normal Blackout tab).
+-   **Session length (B3) is off by default.** Signing in to the panel asks
+    how long the session lasts (1 hour, 1 day, 7 days, 30 days or until you
+    sign out; nothing preselected). The timed lengths are offered only when
+    the homeserver runs the `blackout_runtime` module with
+    `session_lengths_enabled: true` **and** the API has
+    `BLACKOUT_SESSION_LENGTHS=1`; no in-repo deployment sets either, so today
+    the panel offers only "Until I sign out". With both on, the servers end the
+    session at the chosen time even if the panel is closed. Not undone at the
+    end: what the session did while valid. Local stores are deleted when the
+    panel next runs, not while the browser is closed. Never offered under MAS
+    (MSC3861). Details: `docs/black-mask-chat-panel-and-account-link.md`
+    section 3.
+-   **The panel has its own session.** It never reuses a Blackout tab's
+    session, so someone signed in to Blackout signs in again in the panel, as
+    a separate device; older encrypted messages may not be readable there
+    (BO-1). Signing out of Blackout in a tab does not sign the panel out; the
+    panel's own Sign out button does.
 -   **Only the `apps/blackout-client/Dockerfile` image can allow framing.**
     Behind the `infra/nginx` or single-server-baseline proxies, the panel stays
     unframeable until those proxies get an `/embed` location; the
@@ -121,10 +136,11 @@ For the source-of-truth triage with tier/owner detail see
     implement the allow-list.
 -   **Firefox:** extension origins are per-install, so a fixed allow-list
     cannot name the Firefox extension.
--   **Unverified:** the signed-in panel against a real homeserver, the panel
-    inside a real extension, and whether a framed panel shares the browser's
-    Blackout session or signs in separately. If it signs in separately, older
-    encrypted messages may not be readable in it (BO-1).
+-   **Unverified:** the signed-in panel against a deployed homeserver, and the
+    panel inside a real extension. Session lengths were run end to end only
+    against a homeserver started locally from this repository; the
+    homeserver's tests run locally only, because CI runs no
+    `apps/blackout-server` tests.
 
 ---
 
