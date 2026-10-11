@@ -5,6 +5,11 @@ on:
         paths:
             - 'apps/**'
             - 'packages/**'
+            # nginx and deploy configs: 59 of the 95 findings the 2026-10-11
+            # triage cleared sat here, in paths no PR scan ever ran on, so
+            # they surfaced only on the push to develop.
+            - 'infra/**'
+            - 'deploy/**'
             - 'pnpm-lock.yaml'
             - 'package.json'
             - '.github/workflows/security.yml'
