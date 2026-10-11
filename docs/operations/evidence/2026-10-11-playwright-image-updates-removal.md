@@ -16,8 +16,9 @@ and auto-approved.
 ## Findings
 
 1. **Inherited from upstream, not written for Blackout.** It was added to element-web by
-   `aec15a6ac1` (element-web #12571, 2024-05-30) to keep element-web's Testcontainers homeserver
-   pins up to date, and came into this repo with the imported element-web history.
+   `aec15a6ac1` (element-web #12571, 2024-05-30) to keep element-web's Playwright homeserver image
+   pins up to date (its Testcontainers and MAS targets came from later upstream commits), and came
+   into this repo with the imported element-web history.
 2. **The files it edits no longer exist.** `11bdc096d4` (2026-03-11, phase-1 monorepo scaffold)
    moved `playwright/testcontainers/` to `_port/playwright/testcontainers/`, and `204b6bacdf`
    (2026-05-05) deleted `_port/`. On `develop`, `git ls-files | grep testcontainers` returns nothing.
@@ -62,7 +63,10 @@ and auto-approved.
 ## Reproduction (local, on `develop` at `3fe2ec3`, before the change)
 
 Each step's `run:` block was copied out of the workflow exactly (`yaml.safe_load`) and run under
-`bash --noprofile --norc -eo pipefail`, which is the shell GitHub Actions uses:
+`bash --noprofile --norc -eo pipefail`. That is not exactly what GitHub Actions ran: for a step that
+sets no `shell:` (none did, and there is no `defaults.run.shell`) it runs `bash -e {0}`. The
+difference does not change this result, because the failing command is a lone `sed` that exits 2,
+and `-e` ends the step with that code either way:
 
 | Step                 | `docker pull` (succeeded)                                                    | Result                                                                                    |
 | -------------------- | ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
