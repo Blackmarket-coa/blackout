@@ -23,14 +23,27 @@ export interface SessionMap {
     sessions: Record<string, StoredSession>;
 }
 
-// The full app's key is 'blackout.matrix.sessions.v1'; the chat panel keeps
-// its sessions under its own key (see storageNamespace).
+// The full app's key is 'blackout.matrix.sessions.v1'; the chat panel with
+// B3's client switch on keeps its sessions under its own key (see
+// storageNamespace). With the switch off the panel uses the full app's key.
 const sessionStorageKey = (): string => storageNamespace().sessionMapKey;
 
 const createEmptySessionMap = (): SessionMap => ({
     activeUserId: null,
     sessions: {},
 });
+
+/**
+ * Chat panel with B3's client switch on: a garbled session length or end must
+ * not read as "no end", so such a session is dropped (the servers end it on
+ * time regardless). Elsewhere the fields are not read, and are not checked.
+ */
+const hasValidPanelFields = (candidate: Partial<StoredSession>): boolean =>
+    !storageNamespace().embed ||
+    ((candidate.sessionLength === undefined || isSessionLength(candidate.sessionLength)) &&
+        (candidate.sessionEndsAt === undefined ||
+            (typeof candidate.sessionEndsAt === 'number' &&
+                Number.isFinite(candidate.sessionEndsAt))));
 
 const isStoredSession = (value: unknown): value is StoredSession => {
     if (!value || typeof value !== 'object') return false;
@@ -40,12 +53,7 @@ const isStoredSession = (value: unknown): value is StoredSession => {
         typeof candidate.accessToken === 'string' &&
         typeof candidate.userId === 'string' &&
         typeof candidate.deviceId === 'string' &&
-        // A garbled session length or end must not read as "no end": drop the
-        // session instead (the servers end it on time regardless).
-        (candidate.sessionLength === undefined || isSessionLength(candidate.sessionLength)) &&
-        (candidate.sessionEndsAt === undefined ||
-            (typeof candidate.sessionEndsAt === 'number' &&
-                Number.isFinite(candidate.sessionEndsAt)))
+        hasValidPanelFields(candidate)
     );
 };
 

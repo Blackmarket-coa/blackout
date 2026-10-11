@@ -28,7 +28,7 @@ vi.mock('../../../src/client/initMatrix', async (importOriginal) => {
     };
 });
 
-import { loginWithPassword, registerUser } from '../../../src/client/auth';
+import { loginWithPassword, loginWithToken, registerUser } from '../../../src/client/auth';
 import { MatrixInitError } from '../../../src/client/initMatrix';
 import {
     bindSessionLength,
@@ -37,6 +37,7 @@ import {
     SessionLengthBindError,
 } from '../../../src/client/sessionLength';
 import { setStorageNamespaceForTests } from '../../../src/client/storageNamespace';
+import { authStateAtom } from '../../../src/app/state/auth';
 
 const HS = 'https://hs.example.test';
 const PANEL_KEY = 'blackout.matrix.sessions.embed.v1';
@@ -229,6 +230,62 @@ describe('panel sign-in with a session length', () => {
         expect(outcome.status).toBe('success');
         expect(storedPanelSession()?.sessionLength).toBe('1d');
     });
+
+    // The backstop behind the form's own guard: a panel sign-in that reaches
+    // the client with no length (a sign-in path that lost it) is refused, and
+    // the device the homeserver just created is signed out again.
+    const noChoice: Array<[string, () => Promise<unknown>]> = [
+        ['password (or account-number) sign-in', () => signIn()],
+        [
+            'sign-up',
+            () =>
+                registerUser(createStore(), {
+                    baseUrl: HS,
+                    username: 'alice',
+                    password: 'correct horse',
+                    auth: { type: 'm.login.dummy' },
+                }),
+        ],
+        ['login-token sign-in', () => loginWithToken(createStore(), { baseUrl: HS, token: 't' })],
+    ];
+    for (const [label, run] of noChoice) {
+        it(`refuses ${label} with no session length and signs the new device out`, async () => {
+            registerRequestMock.mockResolvedValue(LOGIN_RESPONSE);
+            const logout = vi.fn(() => json(200, {}));
+            routeFetch({
+                [`${HS}/_matrix/client/v3/logout`]: (init) => {
+                    expect((init?.headers as Record<string, string>).Authorization).toBe(
+                        'Bearer new-access-token'
+                    );
+                    return logout();
+                },
+            });
+            const error = await run().catch((e: unknown) => e);
+            expect(error).toBeInstanceOf(MatrixInitError);
+            expect((error as MatrixInitError).code).toBe('session_length_unavailable');
+            expect(logout).toHaveBeenCalledTimes(1);
+            expect(window.localStorage.getItem(PANEL_KEY)).toBeNull();
+            expect(window.localStorage.getItem(APP_KEY)).toBeNull();
+            expect(initMatrixFromStoredSessionMock).not.toHaveBeenCalled();
+        });
+    }
+
+    it('lands signed out when a sign-up’s length cannot be bound', async () => {
+        registerRequestMock.mockResolvedValue(LOGIN_RESPONSE);
+        routeFetch({
+            [`${HS}/_synapse/client/blackout/session/length`]: () => json(400, {}),
+            [`${HS}/_matrix/client/v3/logout`]: () => json(200, {}),
+        });
+        const store = createStore();
+        const error = await registerUser(store, {
+            baseUrl: HS,
+            username: 'alice',
+            password: 'correct horse',
+            sessionChoice: { length: '1h', enforcedByServer: true },
+        }).catch((e: unknown) => e);
+        expect((error as MatrixInitError).code).toBe('session_length_unavailable');
+        expect(store.get(authStateAtom)).toBe('logged_out');
+    });
 });
 
 describe('the full app’s sign-in', () => {
@@ -259,6 +316,57 @@ describe('the full app’s sign-in', () => {
             userId: '@alice:hs.example.test',
             deviceId: 'PANELDEV',
         });
+    });
+});
+
+// The chat panel with B3's client switch off (the default), loaded the way the
+// browser loads it: sign-in is exactly the full app's, as before B3.
+describe('panel sign-in with the B3 client switch off', () => {
+    beforeEach(() => {
+        window.localStorage.clear();
+        vi.clearAllMocks();
+        vi.restoreAllMocks();
+        window.history.replaceState(null, '', '/embed');
+        setStorageNamespaceForTests(null);
+        loginMock.mockResolvedValue(LOGIN_RESPONSE);
+        initMatrixFromStoredSessionMock.mockResolvedValue({ fake: 'client' });
+    });
+
+    afterEach(() => {
+        window.history.replaceState(null, '', '/');
+        setStorageNamespaceForTests(null);
+    });
+
+    it('binds nothing and stores the session under the full app’s key, with no length', async () => {
+        const fetchMock = routeFetch({});
+        await signIn();
+        expect(fetchMock).not.toHaveBeenCalled();
+        expect(window.localStorage.getItem(PANEL_KEY)).toBeNull();
+        const map = JSON.parse(window.localStorage.getItem(APP_KEY) ?? '{}') as {
+            sessions: Record<string, Record<string, unknown>>;
+        };
+        expect(map.sessions['@alice:hs.example.test']).toEqual({
+            baseUrl: HS,
+            accessToken: 'new-access-token',
+            userId: '@alice:hs.example.test',
+            deviceId: 'PANELDEV',
+        });
+        expect(initMatrixFromStoredSessionMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('passes a sign-up’s start-up error up untouched, as before B3', async () => {
+        registerRequestMock.mockResolvedValue(LOGIN_RESPONSE);
+        initMatrixFromStoredSessionMock.mockRejectedValue(new Error('crypto failed'));
+        const store = createStore();
+        const error = await registerUser(store, {
+            baseUrl: HS,
+            username: 'alice',
+            password: 'correct horse',
+        }).catch((e: unknown) => e);
+        expect((error as Error).message).toBe('crypto failed');
+        // registerUser set 'loading' and, as before B3, leaves the rest to
+        // initMatrixFromStoredSession (mocked here).
+        expect(store.get(authStateAtom)).toBe('loading');
     });
 });
 

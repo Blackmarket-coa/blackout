@@ -142,6 +142,47 @@ describe('chat panel session end', () => {
         );
     });
 
+    // A sign-in path that lost the length, or altered storage: the panel never
+    // runs a session with no chosen length, or a timed one with no end.
+    it.each([
+        ['no length at all', {}],
+        ['a timed length with no end', { sessionLength: '1d' }],
+    ])(
+        'never starts a stored panel session with %s; it ends it instead',
+        async (_label, fields) => {
+            saveSession({
+                baseUrl: 'https://hs.example.test',
+                accessToken: 'panel-token',
+                userId: USER,
+                deviceId: DEVICE,
+                ...(fields as object),
+            });
+            const store = createStore();
+            const fetchMock = vi
+                .spyOn(globalThis, 'fetch')
+                .mockResolvedValue(new Response('{}', { status: 200 }));
+
+            expect(await initMatrixFromStoredSession(store)).toBeNull();
+
+            expect(createClientMock).not.toHaveBeenCalled();
+            expect(fetchMock).toHaveBeenCalledTimes(1);
+            expect(String(fetchMock.mock.calls[0][0])).toBe(
+                'https://hs.example.test/_matrix/client/v3/logout'
+            );
+            fetchMock.mockRestore();
+            expect(store.get(authStateAtom)).toBe('logged_out');
+            expect(store.get(panelSignedOutReasonAtom)).toBe('signed_out');
+            expect(restoreActiveSession()).toBeNull();
+        }
+    );
+
+    it('starts a stored “Until I sign out” session, which has no end', async () => {
+        savePanelSession(undefined, 'until_sign_out');
+        const store = createStore();
+        expect(await initMatrixFromStoredSession(store)).toBe(fakeClient);
+        expect(store.get(authStateAtom)).toBe('logged_in');
+    });
+
     it('signs out when the chosen length runs out, ending the device on the server and wiping it here', async () => {
         vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
         savePanelSession(Date.now() + HOUR);
@@ -168,6 +209,34 @@ describe('chat panel session end', () => {
         expect(store.get(matrixClientAtom)).toBeNull();
         expect(store.get(panelSignedOutReasonAtom)).toBe('session_ended');
         expect(restoreActiveSession()).toBeNull();
+    });
+
+    it('keeps the chosen length and end when the access token is refreshed', async () => {
+        const endsAt = Date.now() + HOUR;
+        saveSession({
+            baseUrl: 'https://hs.example.test',
+            accessToken: 'panel-token',
+            refreshToken: 'panel-refresh',
+            userId: USER,
+            deviceId: DEVICE,
+            sessionLength: '1h',
+            sessionEndsAt: endsAt,
+        });
+        await initMatrixFromStoredSession(createStore());
+        const options = createClientMock.mock.calls[0][0] as unknown as {
+            tokenRefreshFunction: (token: string) => Promise<unknown>;
+        };
+        const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+            new Response(JSON.stringify({ access_token: 'fresh', refresh_token: 'r2' }), {
+                status: 200,
+            })
+        );
+        await options.tokenRefreshFunction('panel-refresh');
+        fetchMock.mockRestore();
+        const stored = restoreActiveSession();
+        expect(stored?.accessToken).toBe('fresh');
+        expect(stored?.sessionLength).toBe('1h');
+        expect(stored?.sessionEndsAt).toBe(endsAt);
     });
 
     it('keeps time for a 30-day session past setTimeout’s ~24.8-day limit', async () => {
@@ -319,5 +388,115 @@ describe('the full app is unchanged', () => {
         await settle();
         expect(fakeClient.clearStores).not.toHaveBeenCalled();
         expect(store.get(panelSignedOutReasonAtom)).toBeNull();
+    });
+});
+
+// The chat panel with B3's client switch off (the default), loaded the way the
+// browser loads it: it starts, keeps and drops its session exactly as before
+// B3, under the full app's names.
+describe('the chat panel with the B3 client switch off', () => {
+    beforeEach(() => {
+        window.localStorage.clear();
+        existingDbs = [];
+        deletedDbs = [];
+        installFakeIndexedDb();
+        fakeClient = makeClient();
+        createClientMock.mockClear();
+        window.history.replaceState(null, '', '/embed');
+        setStorageNamespaceForTests(null);
+    });
+
+    afterEach(() => {
+        window.history.replaceState(null, '', '/');
+        setStorageNamespaceForTests(null);
+    });
+
+    it('starts a session with no length, under the full app’s names', async () => {
+        const fetchMock = vi.spyOn(globalThis, 'fetch');
+        saveSession({
+            baseUrl: 'https://hs.example.test',
+            accessToken: 'app-token',
+            userId: USER,
+            deviceId: 'APPDEV',
+        });
+        expect(window.localStorage.getItem('blackout.matrix.sessions.v1')).toContain('app-token');
+        expect(window.localStorage.getItem('blackout.matrix.sessions.embed.v1')).toBeNull();
+        const store = createStore();
+
+        expect(await initMatrixFromStoredSession(store)).toBe(fakeClient);
+
+        expect(store.get(authStateAtom)).toBe('logged_in');
+        expect(fakeClient.initRustCrypto).toHaveBeenCalledWith();
+        expect(fetchMock).not.toHaveBeenCalled();
+        fetchMock.mockRestore();
+    });
+
+    it('never reads a session’s length or end: a stored end does not stop it', async () => {
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+        saveSession({
+            baseUrl: 'https://hs.example.test',
+            accessToken: 'app-token',
+            userId: USER,
+            deviceId: 'APPDEV',
+            sessionLength: '1h',
+            sessionEndsAt: Date.now() - 1000,
+        });
+        const store = createStore();
+        expect(await initMatrixFromStoredSession(store)).toBe(fakeClient);
+        await vi.advanceTimersByTimeAsync(2 * HOUR);
+        await settle();
+        expect(store.get(authStateAtom)).toBe('logged_in');
+        expect(fakeClient.logout).not.toHaveBeenCalled();
+        expect(store.get(panelSignedOutReasonAtom)).toBeNull();
+        vi.useRealTimers();
+    });
+
+    it('refreshes the access token as before B3', async () => {
+        saveSession({
+            baseUrl: 'https://hs.example.test',
+            accessToken: 'app-token',
+            refreshToken: 'app-refresh',
+            userId: USER,
+            deviceId: 'APPDEV',
+            sessionLength: '1h',
+        });
+        await initMatrixFromStoredSession(createStore());
+        const options = createClientMock.mock.calls[0][0] as unknown as {
+            tokenRefreshFunction: (token: string) => Promise<unknown>;
+        };
+        const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+            new Response(JSON.stringify({ access_token: 'fresh', refresh_token: 'r2' }), {
+                status: 200,
+            })
+        );
+        await options.tokenRefreshFunction('app-refresh');
+        fetchMock.mockRestore();
+        expect(restoreActiveSession()).toEqual({
+            baseUrl: 'https://hs.example.test',
+            accessToken: 'fresh',
+            refreshToken: 'r2',
+            userId: USER,
+            deviceId: 'APPDEV',
+        });
+    });
+
+    it('keeps its stores when the homeserver drops the session', async () => {
+        saveSession({
+            baseUrl: 'https://hs.example.test',
+            accessToken: 'app-token',
+            userId: USER,
+            deviceId: 'APPDEV',
+        });
+        const store = createStore();
+        store.set(matrixClientAtom, fakeClient as unknown as MatrixClient);
+        store.set(authStateAtom, 'logged_in');
+        handleSessionLoggedOut(store, fakeClient as unknown as MatrixClient);
+        await settle();
+        expect(fakeClient.clearStores).not.toHaveBeenCalled();
+        expect(deletedDbs).toEqual([]);
+        expect(store.get(panelSignedOutReasonAtom)).toBeNull();
+        expect(store.get(authStateAtom)).toBe('logged_out');
+        // As before B3, the dead session is dropped from storage.
+        expect(restoreActiveSession()).toBeNull();
     });
 });

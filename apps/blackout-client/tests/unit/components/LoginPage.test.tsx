@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
 import { act } from 'react-dom/test-utils';
 import ReactDOM from 'react-dom/client';
@@ -48,9 +48,22 @@ vi.mock('../../../src/client/sessionLength', async (importOriginal) => {
     };
 });
 
+import { accountNumberToLocalpart } from '@blackout/core';
 import { LoginPage } from '../../../src/app/components/bmc/auth/LoginPage';
+import { setStorageNamespaceForTests } from '../../../src/client/storageNamespace';
 
 const ALL_LENGTHS = ['1h', '1d', '7d', '30d', 'until_sign_out'];
+
+/**
+ * The page as the browser would load it: the chat panel's path, with B3's
+ * client switch (VITE_BLACKOUT_PANEL_SESSION_LENGTHS) on or off, read the way
+ * the page reads it at load.
+ */
+const loadPanel = (switchOn: boolean) => {
+    window.history.replaceState(null, '', '/embed');
+    if (switchOn) vi.stubEnv('VITE_BLACKOUT_PANEL_SESSION_LENGTHS', '1');
+    setStorageNamespaceForTests(null);
+};
 
 const flushAsync = async () => {
     await Promise.resolve();
@@ -194,12 +207,63 @@ const clickTab = async (container: HTMLElement, label: string) => {
     });
 };
 
-// Launch-plan step B3: in the chat panel the person picks how long the
-// sign-in lasts — nothing preselected, and no way to sign in until they do.
-describe('chat panel session length', () => {
+/** A well-formed account number (26 characters of a-z and 2-7). */
+const ACCOUNT_NUMBER = 'b7k2mqx4abcdefghijkmnpqrst';
+
+const accountNumberForm = (container: HTMLElement) =>
+    container.querySelector('form[aria-label="Sign in with account number"]') as HTMLFormElement;
+
+const accountNumberButton = (container: HTMLElement) =>
+    accountNumberForm(container).querySelector('button[type="submit"]') as HTMLButtonElement;
+
+const createAccountForm = (container: HTMLElement) =>
+    container.querySelector('form[aria-label="Create account"]') as HTMLFormElement;
+
+const createAccountButton = (container: HTMLElement) =>
+    createAccountForm(container).querySelector('button[type="submit"]') as HTMLButtonElement;
+
+const submit = async (form: HTMLFormElement) => {
+    await act(async () => {
+        form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+        await flushAsync();
+    });
+};
+
+/** Wait for real async work (the account number's SHA-256 runs off the microtask queue). */
+const waitFor = async (condition: () => boolean) => {
+    for (let i = 0; i < 100 && !condition(); i += 1) {
+        // eslint-disable-next-line no-await-in-loop
+        await act(async () => {
+            await new Promise((resolve) => setTimeout(resolve, 5));
+        });
+    }
+    expect(condition()).toBe(true);
+};
+
+const fillSignUp = async (container: HTMLElement) => {
+    const field = (name: string) =>
+        createAccountForm(container).querySelector(`input[name="${name}"]`) as HTMLInputElement;
+    await act(async () => {
+        setInputValue(field('username'), 'alice');
+        setInputValue(field('password'), 'correct horse battery');
+        setInputValue(field('confirmPassword'), 'correct horse battery');
+        await flushAsync();
+    });
+};
+
+// Launch-plan step B3, client switch on: in the chat panel the person picks
+// how long the sign-in lasts — nothing preselected, and no way to sign in
+// until they do.
+describe('chat panel session length (B3 client switch on)', () => {
+    afterEach(() => {
+        vi.unstubAllEnvs();
+        window.history.replaceState(null, '', '/');
+        setStorageNamespaceForTests(null);
+    });
+
     beforeEach(() => {
         document.body.innerHTML = '';
-        window.history.replaceState(null, '', '/embed');
+        loadPanel(true);
         vi.clearAllMocks();
         autoDiscoveryMock.mockResolvedValue([
             null,
@@ -349,6 +413,84 @@ describe('chat panel session length', () => {
         root.unmount();
     });
 
+    // Account-number sign-in is the panel's no-PII path: it must wait for a
+    // length like password sign-in, and hand the chosen one to the sign-in
+    // that binds it (`loginWithPassword` with the choice, through
+    // accountNumberAuth).
+    it('makes account-number sign-in wait for a length, then passes the chosen one on', async () => {
+        const { container, root } = await mountLoginPage({ embedded: true });
+        const numberInput = accountNumberForm(container).querySelector(
+            'input[name="account-number"]'
+        ) as HTMLInputElement;
+        await act(async () => {
+            setInputValue(numberInput, ACCOUNT_NUMBER);
+            await flushAsync();
+        });
+        expect(accountNumberButton(container).disabled).toBe(true);
+        expect(accountNumberButton(container).getAttribute('aria-describedby')).toBe(
+            'panel-session-choice-hint'
+        );
+        // Submitting anyway (Enter in the field) does nothing.
+        await submit(accountNumberForm(container));
+        await act(async () => {
+            await new Promise((resolve) => setTimeout(resolve, 20));
+        });
+        expect(loginWithPasswordMock).not.toHaveBeenCalled();
+
+        await act(async () => {
+            radios(container)[1].click();
+            await flushAsync();
+        });
+        expect(accountNumberButton(container).disabled).toBe(false);
+        await act(async () => {
+            accountNumberButton(container).click();
+            await flushAsync();
+        });
+        await waitFor(() => loginWithPasswordMock.mock.calls.length > 0);
+        expect(loginWithPasswordMock).toHaveBeenCalledTimes(1);
+        const [, input, choice] = loginWithPasswordMock.mock.calls[0];
+        expect(input).toEqual({
+            baseUrl: 'https://example.org',
+            identifier: { type: 'm.id.user', user: await accountNumberToLocalpart(ACCOUNT_NUMBER) },
+            password: ACCOUNT_NUMBER,
+        });
+        expect(choice).toEqual({ length: '1d', enforcedByServer: true });
+        root.unmount();
+    });
+
+    it('passes the chosen length on when creating an account', async () => {
+        registerUserMock.mockResolvedValue({ status: 'success', client: {} });
+        const { container, root } = await mountLoginPage({ embedded: true });
+        await clickTab(container, 'Create account');
+        await act(async () => {
+            await flushAsync();
+        });
+        await fillSignUp(container);
+        expect(createAccountButton(container).disabled).toBe(true);
+        await submit(createAccountForm(container));
+        expect(registerUserMock).not.toHaveBeenCalled();
+
+        await act(async () => {
+            radios(container)[2].click();
+            await flushAsync();
+        });
+        expect(createAccountButton(container).disabled).toBe(false);
+        await act(async () => {
+            createAccountButton(container).click();
+            await flushAsync();
+        });
+        await waitFor(() => registerUserMock.mock.calls.length > 0);
+        expect(registerUserMock).toHaveBeenCalledTimes(1);
+        expect(registerUserMock.mock.calls[0][1]).toEqual(
+            expect.objectContaining({
+                username: 'alice',
+                auth: expect.objectContaining({ type: 'm.login.dummy' }),
+                sessionChoice: { length: '7d', enforcedByServer: true },
+            })
+        );
+        root.unmount();
+    });
+
     it('does not show the choice on the reset-password tab', async () => {
         const { container, root } = await mountLoginPage({ embedded: true });
         await clickTab(container, 'Reset password');
@@ -357,7 +499,9 @@ describe('chat panel session length', () => {
     });
 
     it('leaves the full app’s sign-in exactly as it was', async () => {
+        // The full app's page, loaded with the switch on.
         window.history.replaceState(null, '', '/login');
+        setStorageNamespaceForTests(null);
         const { container, root } = await mountLoginPage();
         expect(container.querySelector('[data-testid="session-length-picker"]')).toBeNull();
         expect(container.querySelector('[data-testid="session-choice-hint"]')).toBeNull();
@@ -377,6 +521,108 @@ describe('chat panel session length', () => {
         });
         expect(loginWithPasswordMock).toHaveBeenCalledTimes(1);
         expect(loginWithPasswordMock.mock.calls[0][2]).toBeUndefined();
+        root.unmount();
+    });
+});
+
+// B3's client switch off (the default): the panel signs in exactly as it did
+// before B3. No length choice, no lookups of which lengths are enforced, and
+// nothing waits for a choice.
+describe('chat panel with the B3 client switch off (the default)', () => {
+    afterEach(() => {
+        vi.unstubAllEnvs();
+        window.history.replaceState(null, '', '/');
+        setStorageNamespaceForTests(null);
+    });
+
+    beforeEach(() => {
+        document.body.innerHTML = '';
+        loadPanel(false);
+        vi.clearAllMocks();
+        autoDiscoveryMock.mockResolvedValue([
+            null,
+            { 'm.homeserver': { base_url: 'https://example.org' } },
+        ]);
+        specVersionsMock.mockResolvedValue({});
+        loginFlowsMock.mockResolvedValue({ flows: [{ type: 'm.login.password' }] });
+        registerRequestMock.mockRejectedValue(
+            Object.assign(new Error('uia challenge'), {
+                httpStatus: 401,
+                data: { flows: [{ stages: ['m.login.dummy'] }] },
+            })
+        );
+        fetchEnforcedSessionLengthsMock.mockResolvedValue(new Set(ALL_LENGTHS));
+        loginWithPasswordMock.mockResolvedValue({});
+        registerUserMock.mockResolvedValue({ status: 'success', client: {} });
+    });
+
+    it('shows no length choice, looks nothing up, and signs in at once', async () => {
+        const { container, root } = await mountLoginPage({ embedded: true });
+        expect(container.querySelector('[data-testid="session-length-picker"]')).toBeNull();
+        expect(container.querySelector('[data-testid="session-choice-hint"]')).toBeNull();
+        expect(fetchEnforcedSessionLengthsMock).not.toHaveBeenCalled();
+        const button = signInButton(container);
+        expect(button?.disabled).toBe(false);
+        expect(button?.hasAttribute('aria-describedby')).toBe(false);
+
+        const username = container.querySelector('input[name="username"]') as HTMLInputElement;
+        const password = container.querySelector('input[name="password"]') as HTMLInputElement;
+        await act(async () => {
+            setInputValue(username, 'alice');
+            setInputValue(password, 'correct horse');
+            await flushAsync();
+        });
+        await act(async () => {
+            signInButton(container)?.click();
+            await flushAsync();
+        });
+        expect(loginWithPasswordMock).toHaveBeenCalledTimes(1);
+        expect(loginWithPasswordMock.mock.calls[0][1]).toEqual({
+            baseUrl: 'https://example.org',
+            identifier: { type: 'm.id.user', user: 'alice' },
+            password: 'correct horse',
+        });
+        expect(loginWithPasswordMock.mock.calls[0][2]).toBeUndefined();
+        expect(fetchEnforcedSessionLengthsMock).not.toHaveBeenCalled();
+        root.unmount();
+    });
+
+    it('signs in with an account number without a length, as before', async () => {
+        const { container, root } = await mountLoginPage({ embedded: true });
+        const numberInput = accountNumberForm(container).querySelector(
+            'input[name="account-number"]'
+        ) as HTMLInputElement;
+        await act(async () => {
+            setInputValue(numberInput, ACCOUNT_NUMBER);
+            await flushAsync();
+        });
+        expect(accountNumberButton(container).disabled).toBe(false);
+        await act(async () => {
+            accountNumberButton(container).click();
+            await flushAsync();
+        });
+        await waitFor(() => loginWithPasswordMock.mock.calls.length > 0);
+        expect(loginWithPasswordMock.mock.calls[0][2]).toBeUndefined();
+        root.unmount();
+    });
+
+    it('creates an account without a length, as before', async () => {
+        const { container, root } = await mountLoginPage({ embedded: true });
+        await clickTab(container, 'Create account');
+        await act(async () => {
+            await flushAsync();
+        });
+        expect(container.querySelector('[data-testid="session-length-picker"]')).toBeNull();
+        expect(container.querySelector('[data-testid="signup-session-choice-hint"]')).toBeNull();
+        await fillSignUp(container);
+        expect(createAccountButton(container).disabled).toBe(false);
+        await act(async () => {
+            createAccountButton(container).click();
+            await flushAsync();
+        });
+        await waitFor(() => registerUserMock.mock.calls.length > 0);
+        expect(registerUserMock.mock.calls[0][1]).not.toHaveProperty('sessionChoice');
+        expect(fetchEnforcedSessionLengthsMock).not.toHaveBeenCalled();
         root.unmount();
     });
 });

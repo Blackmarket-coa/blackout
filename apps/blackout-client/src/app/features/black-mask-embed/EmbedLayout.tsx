@@ -4,6 +4,7 @@ import { Link, Outlet, useNavigate } from 'react-router';
 import { EMBED_PATH } from '../../pages/paths';
 import { signOutPanel } from '../../../client/auth';
 import { restoreActiveSession } from '../../../client/sessionManager';
+import { panelSessionsActive } from '../../../client/storageNamespace';
 import { EmbedLinkGuard } from './EmbedLinkGuard';
 import {
     linkStyle,
@@ -25,7 +26,8 @@ export const EmbedLayout = () => {
         <EmbedLinkGuard onInPanel={onInPanel}>
             <div data-embed-root="" data-testid="embed-root" style={panelRootStyle}>
                 <EmbedHeader />
-                <EmbedSessionBar />
+                {/* B3: only when the panel keeps its own session (client switch on). */}
+                {panelSessionsActive() ? <EmbedSessionBar /> : null}
                 <main style={panelMainStyle}>
                     <Outlet />
                 </main>
@@ -43,10 +45,11 @@ const formatSessionEnd = (endsAt: number): string =>
     });
 
 /**
- * Signed-in panel only (launch-plan B3): when this panel's session ends, and
- * the way to end it now. The panel has its own session, separate from the
- * full app's, so signing out of Blackout in a tab does not sign it out — this
- * button does.
+ * Signed-in panel with B3's client switch on only: when this panel's session
+ * ends, and the way to end it now. The panel then has its own session,
+ * separate from the full app's, so signing out of Blackout in a tab does not
+ * sign it out — this button does. With the switch off the panel runs on the
+ * full app's session, as before B3, and this bar is not shown.
  */
 export const EmbedSessionBar = () => {
     const store = useStore();

@@ -53,9 +53,9 @@ const signedOutReasonText: Record<PanelSignedOutReason, string> = {
 
 /**
  * Signed-out (or still-starting) panel: the app's own sign-in, inside the
- * panel's frame, with no links out to the rest of the app. Signing in here
- * asks how long the session should last (launch-plan step B3); see
- * `LoginPage`'s `embedded` mode.
+ * panel's frame, with no links out to the rest of the app. With B3's client
+ * switch on, signing in here asks how long the session should last, and the
+ * panel says why its last session ended; see `LoginPage`'s `embedded` mode.
  */
 export const EmbedSignedOut = ({
     authState,

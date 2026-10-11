@@ -58,8 +58,8 @@ type RegisterFormProps = {
     onSwitchTab: (tab: 'login') => void;
     probe: RegistrationProbe;
     /**
-     * True inside the chat panel (launch-plan B3): signing up signs in, so it
-     * waits for a session length too (`sessionChoice`).
+     * True inside the chat panel with B3's client switch on: signing up signs
+     * in, so it waits for a session length too (`sessionChoice`).
      */
     requireSessionChoice?: boolean;
     sessionChoice?: PanelSessionChoice | null;
@@ -162,7 +162,7 @@ export const RegisterForm = ({
         }
         if (!stashed) return;
         setFields((prev) =>
-            prev.registrationToken ? prev : { ...prev, registrationToken: stashed! },
+            prev.registrationToken ? prev : { ...prev, registrationToken: stashed! }
         );
     }, []);
 
@@ -211,14 +211,16 @@ export const RegisterForm = ({
         let cancelled = false;
         const tryRender = () => {
             if (cancelled) return;
-            const grecaptcha = (window as unknown as {
-                grecaptcha?: {
-                    render: (
-                        container: HTMLElement,
-                        params: { sitekey: string; callback: (token: string) => void }
-                    ) => number;
-                };
-            }).grecaptcha;
+            const grecaptcha = (
+                window as unknown as {
+                    grecaptcha?: {
+                        render: (
+                            container: HTMLElement,
+                            params: { sitekey: string; callback: (token: string) => void }
+                        ) => number;
+                    };
+                }
+            ).grecaptcha;
             if (!grecaptcha?.render) {
                 window.setTimeout(tryRender, 250);
                 return;
@@ -426,8 +428,8 @@ export const RegisterForm = ({
                 err instanceof MatrixInitError
                     ? err.message
                     : err instanceof Error
-                      ? err.message
-                      : 'Registration failed.';
+                    ? err.message
+                    : 'Registration failed.';
             setError(message);
         } finally {
             setSubmitting(false);
@@ -528,7 +530,14 @@ export const RegisterForm = ({
                 </label>
             ) : null}
             {flowAvailability.requiresTerms ? (
-                <label style={{ ...fieldStyle, gridTemplateColumns: 'auto 1fr', alignItems: 'center', gap: 8 }}>
+                <label
+                    style={{
+                        ...fieldStyle,
+                        gridTemplateColumns: 'auto 1fr',
+                        alignItems: 'center',
+                        gap: 8,
+                    }}
+                >
                     <input
                         type="checkbox"
                         checked={fields.acceptTerms}
@@ -583,11 +592,7 @@ export const RegisterForm = ({
             </button>
             <p style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary, #94a3b8)' }}>
                 Already have an account?{' '}
-                <button
-                    type="button"
-                    onClick={() => onSwitchTab('login')}
-                    style={linkButtonStyle}
-                >
+                <button type="button" onClick={() => onSwitchTab('login')} style={linkButtonStyle}>
                     Sign in
                 </button>
             </p>

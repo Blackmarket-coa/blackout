@@ -318,16 +318,56 @@ describe('LoginForm', () => {
         root.unmount();
     });
 
-    // Launch-plan B3: the panel offers no SSO, so a login token in its URL is
-    // not one it asked for. Trading it would start a panel session with no
-    // chosen length (or sign the panel into someone else's account).
-    it('never trades a login token from the URL when allowSso is false (chat panel)', async () => {
+    // Launch-plan B3, client switch on (LoginPage then passes
+    // requireSessionChoice in the panel): the panel offers no SSO, so a login
+    // token in its URL is not one it asked for. Trading it would start a panel
+    // session with no chosen length (or sign the panel into someone else's
+    // account).
+    it('never trades a login token from the URL where a session length is required', async () => {
         loginFlowsMock.mockResolvedValueOnce({ flows: [{ type: 'm.login.password' }] });
         window.sessionStorage.setItem(
             'blackout.sso.pending',
             JSON.stringify({ baseUrl: 'https://sso.example.org' })
         );
         window.history.replaceState(null, '', '/embed?loginToken=planted');
+
+        const container = document.createElement('div');
+        document.body.appendChild(container);
+        const root = ReactDOM.createRoot(container);
+        await act(async () => {
+            root.render(
+                <Provider store={createStore()}>
+                    <LoginForm
+                        server={defaultServer}
+                        canRegister={true}
+                        onSwitchTab={vi.fn()}
+                        allowSso={false}
+                        requireSessionChoice={true}
+                        sessionChoice={null}
+                    />
+                </Provider>
+            );
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+
+        expect(loginWithTokenMock).not.toHaveBeenCalled();
+        expect(container.textContent).not.toContain('Completing SSO sign-in');
+        root.unmount();
+    });
+
+    // B3's client switch off (the default): the panel's sign-in is develop's,
+    // login-token handling included. (That handling is the same as the full
+    // app's, which trades the token whenever one is in the URL; that predates
+    // B3 and is not changed here.)
+    it('handles a login token in the panel as before B3 when no length is required', async () => {
+        loginFlowsMock.mockResolvedValueOnce({ flows: [{ type: 'm.login.password' }] });
+        loginWithTokenMock.mockResolvedValueOnce({});
+        window.sessionStorage.setItem(
+            'blackout.sso.pending',
+            JSON.stringify({ baseUrl: 'https://sso.example.org' })
+        );
+        window.history.replaceState(null, '', '/embed?loginToken=abc123');
 
         const container = document.createElement('div');
         document.body.appendChild(container);
@@ -347,8 +387,10 @@ describe('LoginForm', () => {
             await Promise.resolve();
         });
 
-        expect(loginWithTokenMock).not.toHaveBeenCalled();
-        expect(container.textContent).not.toContain('Completing SSO sign-in');
+        expect(loginWithTokenMock).toHaveBeenCalledWith(expect.anything(), {
+            baseUrl: 'https://sso.example.org',
+            token: 'abc123',
+        });
         root.unmount();
     });
 });

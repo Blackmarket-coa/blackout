@@ -504,3 +504,50 @@ describe('chat panel session (launch-plan B3)', () => {
         expect($(container, '[data-testid="embed-sign-out"]')?.textContent).toBe('Sign out');
     });
 });
+
+// The panel's frame, loaded the way the browser loads it, with B3's client
+// switch (VITE_BLACKOUT_PANEL_SESSION_LENGTHS) off (the default) and on.
+describe('chat panel frame and the B3 client switch', () => {
+    afterEach(() => {
+        vi.unstubAllEnvs();
+        window.localStorage.clear();
+        window.history.replaceState(null, '', '/');
+        setStorageNamespaceForTests(null);
+    });
+
+    const loadPanel = (switchOn: boolean) => {
+        window.history.replaceState(null, '', '/embed');
+        if (switchOn) vi.stubEnv('VITE_BLACKOUT_PANEL_SESSION_LENGTHS', '1');
+        setStorageNamespaceForTests(null);
+    };
+
+    it('switch off: no session bar and no Sign out button, as before B3', async () => {
+        loadPanel(false);
+        // A session in the full app's store, which the panel shares with the
+        // switch off.
+        saveSession({
+            baseUrl: 'https://hs.example.test',
+            accessToken: 'app-token',
+            userId: '@alice:hs.example.test',
+            deviceId: 'APPDEV',
+        });
+        const { container } = await renderPanel('/embed');
+        expect($(container, '[data-testid="embed-root"]')).not.toBeNull();
+        expect($(container, '[data-testid="embed-session-bar"]')).toBeNull();
+        expect($(container, '[data-testid="embed-sign-out"]')).toBeNull();
+    });
+
+    it('switch on: the session bar with its Sign out button', async () => {
+        loadPanel(true);
+        saveSession({
+            baseUrl: 'https://hs.example.test',
+            accessToken: 'panel-token',
+            userId: '@alice:hs.example.test',
+            deviceId: 'PANELDEV',
+            sessionLength: 'until_sign_out',
+        });
+        const { container } = await renderPanel('/embed');
+        expect($(container, '[data-testid="embed-session-bar"]')).not.toBeNull();
+        expect($(container, '[data-testid="embed-sign-out"]')?.textContent).toBe('Sign out');
+    });
+});

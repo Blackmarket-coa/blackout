@@ -25,7 +25,7 @@ import {
 } from './sessionManager';
 import { clearBlackoutApiToken, exchangeMatrixForBlackoutToken } from './blackoutApiSession';
 import { storageNamespace } from './storageNamespace';
-import { MAX_TIMER_DELAY_MS, signOutDeviceByToken } from './sessionLength';
+import { isTimedSessionLength, MAX_TIMER_DELAY_MS, signOutDeviceByToken } from './sessionLength';
 import { cryptoCallbacks } from './secretStorageKeys';
 import { startEncryptionHealthTracking, stopEncryptionHealthTracking } from './encryptionHealth';
 import { filteredMatrixLogger } from './matrixLogger';
@@ -250,10 +250,11 @@ const buildTokenRefreshFunction = (session: StoredSession): TokenRefreshFunction
             userId: session.userId,
             deviceId: session.deviceId,
             expiresAt,
-            // A chat panel session keeps its chosen length across refreshes.
-            ...(session.sessionLength === undefined
-                ? {}
-                : { sessionLength: session.sessionLength, sessionEndsAt: session.sessionEndsAt }),
+            // A chat panel session (B3's client switch on) keeps its chosen
+            // length across refreshes.
+            ...(storageNamespace().embed && session.sessionLength !== undefined
+                ? { sessionLength: session.sessionLength, sessionEndsAt: session.sessionEndsAt }
+                : {}),
         });
 
         return {
@@ -343,7 +344,8 @@ export const startSyncWithRetry = async (client: MatrixClient): Promise<void> =>
  * skips `client.logout()` (the token is already dead) and, in the full app,
  * `clearStores()` (keeping the IndexedDB crypto store preserves megolm keys
  * for the next login; stale stores are pruned by `cleanupStaleStoresForUser`
- * anyway). The chat panel does clear its stores (launch-plan B3; see below).
+ * anyway). The chat panel with B3's client switch on does clear its stores
+ * (see below); with the switch off it behaves as the full app.
  * Dropping the stored session means a reload lands on the sign-in card
  * instead of re-entering the zombie state.
  */
@@ -354,9 +356,10 @@ export const handleSessionLoggedOut = (store: AtomStore, client: MatrixClient): 
     clearSession(userId ?? undefined);
     applyAuthAtoms(store, null, 'logged_out');
     if (storageNamespace().embed) {
-        // The chat panel also deletes what the dead session stored in this
-        // browser: a panel sign-in may be on a shared or borrowed device, and
-        // the device is gone on the server, so nothing here is reusable.
+        // The chat panel (B3's client switch on) also deletes what the dead
+        // session stored in this browser: a panel sign-in may be on a shared or
+        // borrowed device, and the device is gone on the server, so nothing
+        // here is reusable.
         clearPanelSessionTimer();
         store.set(panelSignedOutReasonAtom, 'signed_out');
         const deviceId = client.getDeviceId();
@@ -457,6 +460,18 @@ const schedulePanelSessionEnd = (
 const hasEnded = (session: StoredSession): boolean =>
     session.sessionEndsAt !== undefined && session.sessionEndsAt <= Date.now();
 
+/**
+ * Chat panel (B3's client switch on): may this stored session run? Only with a
+ * chosen length, and, for a timed length, with the end the panel's own timer
+ * counts down to. Sign-in never stores anything else; a session found without
+ * them (a sign-in path that lost the length, or altered storage) is ended
+ * rather than run with no end.
+ */
+const hasUsablePanelLength = (session: StoredSession): boolean => {
+    if (session.sessionLength === undefined) return false;
+    return !isTimedSessionLength(session.sessionLength) || session.sessionEndsAt !== undefined;
+};
+
 export const initMatrixFromStoredSession = async (
     store: AtomStore
 ): Promise<MatrixClient | null> => {
@@ -468,10 +483,18 @@ export const initMatrixFromStoredSession = async (
         return null;
     }
 
-    // Only a chat panel session has an end. Past it, never start the session
-    // again from this browser: clean up and land on the signed-out panel.
-    if (hasEnded(session)) {
+    // Only the chat panel with B3's client switch on reads a session's length
+    // (the full app, and the panel with the switch off, start the session as
+    // before B3). Past its end, never start the session again from this
+    // browser: clean up and land on the signed-out panel. Without a usable
+    // length, end it the same way rather than run it with no end.
+    const panel = storageNamespace().embed;
+    if (panel && hasEnded(session)) {
         await endPanelSession(store, null, session, 'session_ended');
+        return null;
+    }
+    if (panel && !hasUsablePanelLength(session)) {
+        await endPanelSession(store, null, session, 'signed_out');
         return null;
     }
 
@@ -480,8 +503,12 @@ export const initMatrixFromStoredSession = async (
         client.once(HttpApiEvent.SessionLoggedOut, () => handleSessionLoggedOut(store, client));
         await startSyncWithRetry(client);
         applyAuthAtoms(store, client, 'logged_in');
-        if (storageNamespace().embed) store.set(panelSignedOutReasonAtom, null);
-        if (session.sessionEndsAt !== undefined) schedulePanelSessionEnd(store, client, session);
+        if (panel) {
+            store.set(panelSignedOutReasonAtom, null);
+            if (session.sessionEndsAt !== undefined) {
+                schedulePanelSessionEnd(store, client, session);
+            }
+        }
         // Bridge the Matrix session into a Blackout API JWT so /v1/* features
         // (invitations, entitlements, …) are authenticated. Fire-and-forget:
         // chat must not block on the API server being reachable.

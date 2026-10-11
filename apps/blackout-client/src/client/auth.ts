@@ -23,6 +23,7 @@ import {
     signOutDeviceByToken,
     type PanelSessionChoice,
 } from './sessionLength';
+import { panelSessionsActive } from './storageNamespace';
 
 type AtomStore = ReturnType<typeof createStore>;
 
@@ -155,6 +156,12 @@ const assertEnforceable = (choice: PanelSessionChoice | undefined): void => {
  * device. Until then the tokens exist only in this function: they are never
  * stored or used, and if the length cannot be bound the device is signed out
  * again and nothing is kept.
+ *
+ * With B3's client switch on, the chat panel never keeps a session that has
+ * no chosen length: a panel sign-in that arrives here without one (a sign-in
+ * path that lost it) signs the new device out again and fails, rather than
+ * quietly starting a session with no end. The full app, and the panel with the
+ * switch off, save and start the session exactly as before B3.
  */
 const establishSession = async (
     store: AtomStore,
@@ -163,6 +170,12 @@ const establishSession = async (
     choice: PanelSessionChoice | undefined
 ): Promise<MatrixClient | null> => {
     if (!choice) {
+        if (panelSessionsActive()) {
+            if (response.access_token) {
+                await signOutDeviceByToken(baseUrl, response.access_token);
+            }
+            throw new MatrixInitError('session_length_unavailable', SESSION_LENGTH_FAILED_MESSAGE);
+        }
         saveFromLoginResponse(baseUrl, response);
         return initMatrixFromStoredSession(store);
     }
@@ -252,8 +265,9 @@ export const loginWithToken = async (
             refresh_token: true,
         });
 
-        saveFromLoginResponse(input.baseUrl, result);
-        const initializedClient = await initMatrixFromStoredSession(store);
+        // No session length here: the full app saves and starts the session as
+        // before; the chat panel with B3's client switch on refuses it.
+        const initializedClient = await establishSession(store, input.baseUrl, result, undefined);
 
         if (!initializedClient) {
             throw new MatrixInitError(
@@ -324,7 +338,10 @@ export const registerUser = async (
             input.sessionChoice
         );
     } catch (error) {
-        applyLoggedOutAtoms(store);
+        // Chat panel (B3's client switch on): a length that could not be bound
+        // has already signed the new device out, so land signed out. Elsewhere
+        // the error goes up exactly as before B3.
+        if (panelSessionsActive()) applyLoggedOutAtoms(store);
         throw error;
     }
     if (!initializedClient) {
@@ -374,9 +391,7 @@ export interface CompletePasswordResetInput {
  * endpoint directly because matrix-js-sdk's setPassword wrapper requires an
  * authenticated client.
  */
-export const completePasswordReset = async (
-    input: CompletePasswordResetInput
-): Promise<void> => {
+export const completePasswordReset = async (input: CompletePasswordResetInput): Promise<void> => {
     const url = new URL('/_matrix/client/v3/account/password', input.baseUrl);
     const body = {
         new_password: input.newPassword,
@@ -400,7 +415,8 @@ export const completePasswordReset = async (
             const data = (await response.json()) as { error?: string; errcode?: string };
             if (data.error) message = data.error;
             if (data.errcode === 'M_THREEPID_AUTH_FAILED') {
-                message = 'Email verification not yet confirmed. Click the link in the email first.';
+                message =
+                    'Email verification not yet confirmed. Click the link in the email first.';
             }
         } catch {
             // ignore

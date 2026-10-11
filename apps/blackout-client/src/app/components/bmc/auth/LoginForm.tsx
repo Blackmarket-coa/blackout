@@ -88,8 +88,9 @@ type LoginFormProps = {
      */
     allowSso?: boolean;
     /**
-     * True inside the chat panel (launch-plan B3): no sign-in button works
-     * until a session length is chosen (`sessionChoice`).
+     * True inside the chat panel with B3's client switch on: no sign-in button
+     * works until a session length is chosen (`sessionChoice`), and a login
+     * token in the URL is never traded for a session.
      */
     requireSessionChoice?: boolean;
     sessionChoice?: PanelSessionChoice | null;
@@ -193,10 +194,12 @@ export const LoginForm = ({
     // Handle SSO callback: if we land here with ?loginToken=... and a stored
     // pending entry, trade the token for a session.
     useEffect(() => {
-        // Never in the chat panel: it offers no SSO, so a login token in its
-        // URL is not one it asked for, and trading it would start a session
-        // with no chosen length.
-        if (!allowSso) return;
+        // Never where a session length must be chosen first (the chat panel
+        // with B3's client switch on): the panel offers no SSO, so a login
+        // token in its URL is not one it asked for, and trading it would start
+        // a session with no chosen length. With the switch off the panel does
+        // what it did before B3.
+        if (requireSessionChoice) return;
         const url = new URL(window.location.href);
         const token = url.searchParams.get('loginToken');
         const errorCode = url.searchParams.get('error');
