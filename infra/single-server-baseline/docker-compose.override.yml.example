@@ -22,6 +22,9 @@ services:
 
   frontend:
     image: blackout-frontend:stable
+    # Black Mask panel framing, off when unset: docs/black-mask-chat-panel-and-account-link.md step 2
+    # environment:
+    #   BLACK_MASK_FRAME_ANCESTORS: "chrome-extension://<32 letters a-p> https://<host>"
 
   synapse:
     # Blackout Synapse fork (apps/blackout-server, 1.98.0+blackout.1), built by

@@ -135,16 +135,16 @@ middleware. It sets `frame-ancestors 'none'`, `frame-src 'none'` and
 `X-Frame-Options: DENY` on API responses only. The API never serves the web
 client, so it is unchanged and keeps `'none'` everywhere.
 
-| Deployment                                                                                                                     | Serves the client HTML                                                                                                                                               | Framing headers before this change                                                                                                                                                                                                                                                      |
-| ------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `chat.theblackout.app` (live)                                                                                                  | Appears to be the `apps/blackout-client/Dockerfile` image (`docker-nginx.conf`) behind Cloudflare: `/healthz` answers `ok`, `/health/ready` falls through to the SPA | **None at all.** `curl -I https://chat.theblackout.app/` on 2026-10-09 returned no `X-Frame-Options` and no CSP, so any site could frame the full client. This change makes that image send `DENY` / `frame-ancestors 'none'` on every route                                            |
-| `infra/single-server-baseline` (compose on one host)                                                                           | `reverse-proxy` nginx → `frontend` container built from `apps/blackout-client/Dockerfile`                                                                            | `snippets/security-headers.conf` at server level: `X-Frame-Options: DENY`, CSP with `frame-ancestors 'none'`                                                                                                                                                                            |
-| `infra/nginx` (host nginx)                                                                                                     | Proxies `/` to `127.0.0.1:8080`                                                                                                                                      | Same snippet, same values                                                                                                                                                                                                                                                               |
-| `deploy/docker/Dockerfile` and `Dockerfile.blackout` (`ghcr.io/blackmarket-coa/blackout-web`)                                  | nginx with `deploy/docker/nginx-templates/default.conf.template`                                                                                                     | Server level `SAMEORIGIN` / `frame-ancestors 'self'`, but `location = /`, `= /index.html`, `/home`, `/sites`, `/config`, `/i18n` and `= /version` set their own `add_header`, which drops both (nginx inheritance). Not changed here; see `docs/security/framing-headers-2026-10-09.md` |
-| `deploy/docker/blackout-backend` nginx                                                                                         | Proxies `/` to `blackout-app:80`                                                                                                                                     | HSTS only at its own level; whatever the upstream sends                                                                                                                                                                                                                                 |
-| Railway (`railway.json`, root `index.js`), Vercel (default of `deploy-web.yml`), Netlify (`apps/blackout-client/netlify.toml`) | Node static server / static hosts                                                                                                                                    | None. `deploy-web.yml` has never run (0 runs; it triggers on `main`, which does not exist)                                                                                                                                                                                              |
-| `.github/cfp_headers`                                                                                                          | Nothing uses it                                                                                                                                                      | Upstream leftover (`SAMEORIGIN` / `'self'`)                                                                                                                                                                                                                                             |
-| Desktop (Tauri), mobile (Capacitor)                                                                                            | The built client bundled into the app (`tauri://`, `https://localhost`)                                                                                              | Not served over the network; framing headers do not apply                                                                                                                                                                                                                               |
+| Deployment                                                                                                                     | Serves the client HTML                                                                                                                                               | Framing headers before this change                                                                                                                                                                                                                                                                                                                                              |
+| ------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `chat.theblackout.app` (live)                                                                                                  | Appears to be the `apps/blackout-client/Dockerfile` image (`docker-nginx.conf`) behind Cloudflare: `/healthz` answers `ok`, `/health/ready` falls through to the SPA | **None at all.** `curl -I https://chat.theblackout.app/` on 2026-10-09 returned no `X-Frame-Options` and no CSP, so any site could frame the full client. This change makes that image send `DENY` / `frame-ancestors 'none'` on every route                                                                                                                                    |
+| `infra/single-server-baseline` (compose on one host)                                                                           | `reverse-proxy` nginx → `frontend` container built from `apps/blackout-client/Dockerfile`                                                                            | `snippets/security-headers.conf` at server level: `X-Frame-Options: DENY`, CSP with `frame-ancestors 'none'`                                                                                                                                                                                                                                                                    |
+| `infra/nginx` (host nginx)                                                                                                     | Proxies `/` to `127.0.0.1:8080`                                                                                                                                      | Same snippet, same values                                                                                                                                                                                                                                                                                                                                                       |
+| `deploy/docker/Dockerfile` and `Dockerfile.blackout` (`ghcr.io/blackmarket-coa/blackout-web`)                                  | nginx with `deploy/docker/nginx-templates/default.conf.template`                                                                                                     | Server level `SAMEORIGIN` / `frame-ancestors 'self'`, but `location = /`, `= /index.html`, `/home`, `/sites`, `/config`, `/i18n` and `= /version` set their own `add_header`, which drops both (nginx inheritance); every path that falls back to `index.html`, `/embed` included, ends in `= /index.html`. Not changed here; see `docs/security/framing-headers-2026-10-09.md` |
+| `deploy/docker/blackout-backend` nginx                                                                                         | Proxies `/` to `blackout-app:80`                                                                                                                                     | HSTS only at its own level; whatever the upstream sends                                                                                                                                                                                                                                                                                                                         |
+| Railway (`railway.json`, root `index.js`), Vercel (default of `deploy-web.yml`), Netlify (`apps/blackout-client/netlify.toml`) | Node static server / static hosts                                                                                                                                    | None. `deploy-web.yml` has never run (0 runs; it triggers on `main`, which does not exist)                                                                                                                                                                                                                                                                                      |
+| `.github/cfp_headers`                                                                                                          | Nothing uses it                                                                                                                                                      | Upstream leftover (`SAMEORIGIN` / `'self'`)                                                                                                                                                                                                                                                                                                                                     |
+| Desktop (Tauri), mobile (Capacitor)                                                                                            | The built client bundled into the app (`tauri://`, `https://localhost`)                                                                                              | Not served over the network; framing headers do not apply                                                                                                                                                                                                                                                                                                                       |
 
 **What changed** (only the `apps/blackout-client/Dockerfile` image):
 
@@ -200,16 +200,17 @@ valid and invalid. `curl -I` on `/`, `/index.html`, `/home/`, `/coliseum`,
 Chromium, a page on an allow-listed origin rendered the panel in an iframe and
 was refused `/`; a page on any other origin was refused both.
 
-**Behind the front proxies (2026-10-11).** `infra/nginx` and
-`infra/single-server-baseline/nginx` add `X-Frame-Options: DENY` and a CSP
-ending in `frame-ancestors 'none'` to everything they serve
-(`snippets/security-headers.conf`). Browsers enforce every CSP a response
-carries, so until this change the panel could not be framed behind either
-proxy, whatever the container allowed. Each proxy now has the client image's
-two panel locations, `location = /embed` and `location ^~ /embed/`, proxied
-exactly as `location /`. On those two, and nowhere else, the proxy leaves out
-its own `X-Frame-Options` and the `frame-ancestors` directive of its own CSP
-when both of these hold:
+**Behind the front proxies (2026-10-11).** In the server block for
+`theblackout.app` and `chat.theblackout.app` (the web client's host),
+`infra/nginx` and `infra/single-server-baseline/nginx` add
+`X-Frame-Options: DENY` and a CSP ending in `frame-ancestors 'none'` to every
+response (`snippets/security-headers.conf`). Browsers enforce every CSP a
+response carries, so until this change the panel could not be framed behind
+either proxy, whatever the container allowed. Each proxy now has the client
+image's two panel locations, `location = /embed` and `location ^~ /embed/`,
+proxied exactly as `location /`. On those two, and nowhere else, the proxy
+leaves out its own `X-Frame-Options` and the `frame-ancestors` directive of
+its own CSP when all three of these hold:
 
 1. the raw request URI is the panel's, by the client image's own test
    (`/embed`, `/embed?…`, `/embed/…`; not `/%65mbed/`, `//embed/`, `/EMBED/`
@@ -217,46 +218,82 @@ when both of these hold:
 2. the container's `Content-Security-Policy`, as nginx reads it, is exactly
    one `frame-ancestors` list in the form the start-up script writes: `'none'`
    alone, or lower-case `scheme://host[:port]` origins. A `'self'`, a
-   wildcard, a path or another directive does not count, and on nginx 1.23 or
-   later neither does a second CSP header (older nginx reads only the first).
+   wildcard, a path, upper case or another directive does not count, and on
+   nginx 1.23 or later neither does a second CSP header (older nginx reads
+   only the first);
+3. nginx read the container's whole response header block. When that block
+   is cut off, carries an invalid line, is too large or does not finish within
+   the proxy's read timeout, nginx answers 502 or 504 itself, and that answer
+   keeps the proxy's usual headers.
 
-The proxy then repeats that list in a `Content-Security-Policy` header of its
-own, so the browser applies it even if the container's header were spelled in
-a way nginx accepts and browsers do not. In every other case (the container
-sends no CSP or one without `frame-ancestors`, the container is down or times
-out, nginx answers with its own error page, or the client image predates the
-panel) the two locations send exactly the proxy's usual headers. The proxy's
-other headers on the panel, including the rest of its CSP, are unchanged, so
-a framed panel runs under the same CSP as the full app behind that proxy.
-`tools/ci/check-embed-proxy-framing.mjs` (the Hardening guards job) fails if
-either proxy loses or loosens any of this. Design notes and version
-behaviour: [framing-headers-2026-10-09.md](security/framing-headers-2026-10-09.md),
+The proxy then repeats the container's list in a `Content-Security-Policy`
+header of its own. In every other case (the container sends no CSP or one
+without `frame-ancestors`, is down, does not answer in time or sends an
+incomplete header block, or the client image predates the panel) the two
+locations send exactly the proxy's usual headers. The proxy's other headers on
+the panel, including the rest of its CSP, are unchanged, so a framed panel
+runs under the same CSP as the full app behind that proxy.
+
+Two cases relax although the container's own CSP header does not carry the
+list to the browser, and both stay limited to the container's list:
+
+-   nginx's variable for that header also matches a header spelled
+    `Content_Security_Policy`, which browsers ignore. A container that sent its
+    list only under that spelling would still make the proxy relax. The
+    proxy's repeated header is then the only framing policy the browser
+    applies, so exactly the listed origins could frame the panel and no
+    others. nginx cannot tell the two spellings apart, so the only alternative
+    would be not to relax at all. The client image never sends that spelling
+    (its unit test pins the header lines it writes).
+-   After a complete header block that carries the list, a response nginx
+    makes itself because of that block (its 404 for an `X-Accel-Redirect` it
+    refuses, its 500 when one loops) also goes out under the list. The client
+    image sends no `X-Accel-Redirect`.
+
+`tools/ci/check-embed-proxy-framing.mjs` (the Hardening guards job) compares
+the six maps and the two panel locations with their pinned form, checks both
+CSP strings against `security-headers.conf`, and fails if a
+`black_mask_panel_` name appears anywhere else in either proxy's files (in any
+case) or if those files include a file it does not know. It does not run
+nginx, and it cannot see files a host adds outside the repository or anything
+in front of the proxy. Design notes and version behaviour:
+[framing-headers-2026-10-09.md](security/framing-headers-2026-10-09.md),
 "Follow-up 2026-10-11".
 
 What that means in practice:
 
 -   Deploying the proxy change makes nothing frameable on its own. With
-    `BLACK_MASK_FRAME_ANCESTORS` unset or invalid, the container itself sends
-    `X-Frame-Options: DENY` and `frame-ancestors 'none'` on the panel, and the
-    proxy passes them through.
+    `BLACK_MASK_FRAME_ANCESTORS` unset or invalid, the container sends
+    `X-Frame-Options: DENY` and `frame-ancestors 'none'` on the panel. That
+    `'none'` passes the proxy's test, so the proxy swaps its own two framing
+    headers for a repeat of `'none'`: through the proxy `/embed` carries one
+    `X-Frame-Options: DENY` (the container's) and three CSP headers (the
+    container's `'none'`, the proxy's CSP without `frame-ancestors`, and the
+    proxy's repeat of `'none'`). Nothing can frame it, but these are not the
+    same headers as before this change.
 -   With a valid list on the container, `/embed` and `/embed/*` can be framed
     through the proxy by exactly those origins. Every other path keeps `DENY`
     and `frame-ancestors 'none'`.
 -   Rolling the client image back to one without the framing policy leaves
-    every path unframeable behind the proxy.
+    every path unframeable behind the proxy: that image sends no CSP, so the
+    proxy keeps its own headers.
 
 Checked with local nginx 1.24.0, and with the proxy on `nginx:1.27-alpine`
-(the single-server image) and on `nginx:1.22.1-alpine` in front of the client
-config on `nginx:1.29.5-alpine` (the client image's base), against the real
-client-image config with its start-up script run (variable unset, a valid
-list, an invalid list), the client config from before the panel, and stub
-upstreams. GET and HEAD on every path listed above and on the API paths. In a
-real Chromium (145, HTTP/2 through each proxy), a page on an allow-listed
-origin rendered `/embed` and was refused `/`, a page on another origin was
-refused both, and with the variable unset or the older client config nothing
-rendered. **Not checked:** a deployed proxy, anything in front of it (the live
-host sits behind Cloudflare), and the panel inside a real Black Mask
-extension.
+(1.27.5, the single-server image) and on `nginx:1.22.1-alpine` in front of
+the client config on `nginx:1.29.5-alpine` (the client image's base): the
+real client-image config with its start-up script run (variable unset, a
+valid list, an invalid list), the client config from before the panel, and
+stub upstreams, including ones whose header block is cut off, invalid or too
+large after the list. GET and HEAD on `/`, `/embed`, `/embed/`, `/embed/x/y`,
+`/embed?x=1`, `/embedded`, `/embed.js`, `/%65mbed/`, `//embed/`, `/EMBED/`,
+`/embed/../`, `/embed/%2e%2e/`, `/embed%2F`, `/embed/%2e%2e/embed/`,
+`/v1/health`, `/i/x` and `/c/x` on the apex host and four of them on the chat
+host; the follow-up lists the rest. In a real Chromium (145, HTTP/2 through
+the proxy), a page on an allow-listed origin rendered `/embed` and was refused
+`/`, a page on another origin was refused both, and with the variable unset,
+the older client config or a cut-off header block nothing rendered. **Not
+checked:** a deployed proxy, anything in front of it (the live host sits
+behind Cloudflare), and the panel inside a real Black Mask extension.
 
 **Constraints, stated plainly:**
 
@@ -285,12 +322,18 @@ extension.
     headers there has not been checked.
 -   **Other images and hosts:** the `blackout-web` image, Railway, Vercel,
     Netlify and Cloudflare Pages (`.github/cfp_headers`, which nothing deploys
-    today) do not implement the allow-list. On those the panel is never framed
-    by Black Mask: `'self'` or `DENY` on the `blackout-web` image and in
-    `cfp_headers`, no protection at all on the other static hosts (as for the
-    whole client there today). The front proxies do not pass a `'self'`
-    through, so the `blackout-web` image behind them would not be framed by
-    Black Mask either.
+    today) do not implement the allow-list. On the `blackout-web` image,
+    `/embed` goes through `location /` to `location = /index.html`, whose own
+    `add_header` drops the server-level `SAMEORIGIN` and `'self'`, so the
+    panel there carries no framing header at all and any site can frame it,
+    as it can `/` and `/index.html` (checked 2026-10-11 with that template on
+    nginx 1.24.0: `/embed`, `/embed/`, `/embed?x=1` and `/embed/dms/x` sent
+    only `Cache-Control`; F2 in the
+    [framing triage](security/framing-headers-2026-10-09.md)). Railway, Vercel
+    and Netlify send no framing headers either (as for the whole client there
+    today), and `cfp_headers` would send `SAMEORIGIN` and `'self'`. Behind the
+    front proxies, the `blackout-web` image's `/embed` would be unframeable:
+    it sends no CSP there, so the proxy keeps its own headers.
 -   **Storage partitioning, not verified:** whether a panel framed inside an
     extension page shares the browser's normal Blackout session or gets its
     own depends on the browser's storage partitioning for extension-embedded
@@ -301,20 +344,28 @@ extension.
 
 **Turning it on** (operator, after the panel is deployed): set
 `BLACK_MASK_FRAME_ANCESTORS` on the web client container to Black Mask's
-origins, restart it, then check `curl -I https://<host>/embed` (expect
-`frame-ancestors <your list>` and no `X-Frame-Options`) and
-`curl -I https://<host>/` (expect `DENY` and `frame-ancestors 'none'`).
-Behind `infra/nginx` or the single-server proxy, deploy this repository's site
-config first (no new snippet; run `nginx -t` before reloading). Through the
-proxy, `/embed` then shows no `X-Frame-Options`, the proxy's CSP without
-`frame-ancestors`, and `frame-ancestors <your list>` twice (the container's
-header and the proxy's copy). `/` still shows `DENY` and `frame-ancestors
-'none'`. In the single-server stack the variable goes on the `frontend`
-service, for example through the `environment:` of the host's
-`docker-compose.override.yml`. **Rollback:** unset the variable and restart.
-The proxies need no change: they pass the container's `'none'` (and its
-`DENY`) through again. The panel route itself stays reachable as a normal
-page, which is harmless.
+origins and recreate the container. The variable is read when the container
+is created, so `docker restart` and `docker compose restart` keep the old
+value. In the single-server stack the variable goes on the `frontend`
+service, for example in the `environment:` of the host's
+`docker-compose.override.yml`, followed by `docker compose up -d frontend` (or
+`docker compose up -d --force-recreate frontend`, as `deploy.sh` does). Then
+check `curl -sI https://<host>/embed` (expect `frame-ancestors <your list>` and
+no `X-Frame-Options`) and `curl -sI https://<host>/` (expect `DENY` and
+`frame-ancestors 'none'`). Behind `infra/nginx` or the single-server proxy,
+deploy this repository's site config first (no new snippet; run `nginx -t`
+before reloading). Through the proxy, `/embed` then shows no
+`X-Frame-Options`, the proxy's CSP without `frame-ancestors`, and
+`frame-ancestors <your list>` twice (the container's header and the proxy's
+copy). `/` still shows `DENY` and `frame-ancestors 'none'`.
+
+**Rollback:** remove the variable and recreate the container the same way
+(`docker compose up -d frontend`); a restart keeps the list. Then run
+`curl -sI https://<host>/embed`: it must show `X-Frame-Options: DENY` and
+`frame-ancestors 'none'`. If it still shows your list, the container was not
+recreated. The proxies need no change: they pass the container's `'none'` and
+its `DENY` through. The panel route itself stays reachable as a normal page,
+which is harmless.
 
 ### 3. Sign-in inside the sandbox
 

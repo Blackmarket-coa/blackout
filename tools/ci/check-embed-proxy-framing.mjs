@@ -147,8 +147,9 @@ export const UPSTREAM_MUST_NOT_MATCH = [
     // Non-ASCII: CSP parsing skips the whole directive.
     'frame-ancestors https://exämple.org',
     // Outside what the client image writes and this design passes on:
-    // keywords other than a lone 'none' (the blackout-web image and
-    // .github/cfp_headers send 'self'), wildcards, paths, other directives,
+    // keywords other than a lone 'none' (.github/cfp_headers sends 'self' on
+    // every path, the blackout-web image on its static files), wildcards,
+    // paths, other directives,
     // several policies or headers (nginx 1.23+ joins repeated headers with ", ").
     "frame-ancestors 'self'",
     "frame-ancestors 'none' https://a.example",

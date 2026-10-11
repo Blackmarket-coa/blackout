@@ -235,8 +235,9 @@ panel's content (same-origin policy) and the panel sends it nothing (no
 `postMessage`, no unread counts).
 
 Behind the `infra/nginx` or single-server-baseline proxy (2026-10-11), the
-proxy adds `X-Frame-Options: DENY` and `frame-ancestors 'none'` everywhere,
-except on those two panel locations when the container's response carries a
+proxy adds `X-Frame-Options: DENY` and `frame-ancestors 'none'` to every
+response for `theblackout.app` and `chat.theblackout.app`, except on those two
+panel locations when the container's complete response header block carries a
 `frame-ancestors` list in the form the image writes; there it leaves its own two
 out and repeats the container's list. So behind a proxy the container's list
 is still the only way to allow framing, and the proxy trusts the container to
@@ -256,12 +257,18 @@ send the right list on `/embed`.
     `/embed` (encoded or doubled-slash variants it would otherwise normalise
     into the panel's locations).
 -   **A front proxy relaxing more than the panel**: the proxies apply the same
-    raw-URI test, relax only when the container sends a `frame-ancestors` list
-    (not `'self'`, a wildcard or another directive), and fall back to their
-    usual headers on upstream errors, so a client image from before the panel
-    leaves everything unframeable. `tools/ci/check-embed-proxy-framing.mjs`
-    fails CI if either proxy loses or loosens this. Checked against real nginx
-    and Chromium, not on a deployed host.
+    raw-URI test and relax only when the container sends a `frame-ancestors`
+    list (not `'self'`, a wildcard or another directive) in a header block
+    nginx read completely. When the container is down, too slow or sends a
+    broken header block, nginx's own 502 or 504 keeps the usual headers, and a
+    client image from before the panel leaves everything unframeable. Not
+    covered: after a complete header block with the list, nginx's own 404 or
+    500 for an `X-Accel-Redirect` goes out under that list; the client image
+    sends none. `tools/ci/check-embed-proxy-framing.mjs` compares the panel
+    maps and locations with a pinned form and fails if the panel's variables
+    are written or used anywhere else in the proxies' files; it does not run
+    nginx and cannot see files a host adds. Checked against real nginx and
+    Chromium, not on a deployed host.
 -   **The panel's frame navigating into the app**: every link click inside the
     panel is intercepted. Panel content stays in the panel, everything else
     opens a new top-level tab with `noopener,noreferrer`, and code-driven
