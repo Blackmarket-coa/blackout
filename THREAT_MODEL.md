@@ -234,6 +234,14 @@ the frame's size, position and what is drawn over it. It cannot read the
 panel's content (same-origin policy) and the panel sends it nothing (no
 `postMessage`, no unread counts).
 
+Behind the `infra/nginx` or single-server-baseline proxy (2026-10-11), the
+proxy adds `X-Frame-Options: DENY` and `frame-ancestors 'none'` everywhere,
+except on those two panel locations when the container's response carries a
+`frame-ancestors` list in the form the image writes; there it leaves its own two
+out and repeats the container's list. So behind a proxy the container's list
+is still the only way to allow framing, and the proxy trusts the container to
+send the right list on `/embed`.
+
 **Threats and mitigations**:
 
 -   **Clickjacking by an unlisted site**: refused by the browser. Checked in a
@@ -247,6 +255,13 @@ panel's content (same-origin policy) and the panel sends it nothing (no
     nginx refuses panel requests whose raw URI does not literally start with
     `/embed` (encoded or doubled-slash variants it would otherwise normalise
     into the panel's locations).
+-   **A front proxy relaxing more than the panel**: the proxies apply the same
+    raw-URI test, relax only when the container sends a `frame-ancestors` list
+    (not `'self'`, a wildcard or another directive), and fall back to their
+    usual headers on upstream errors, so a client image from before the panel
+    leaves everything unframeable. `tools/ci/check-embed-proxy-framing.mjs`
+    fails CI if either proxy loses or loosens this. Checked against real nginx
+    and Chromium, not on a deployed host.
 -   **The panel's frame navigating into the app**: every link click inside the
     panel is intercepted. Panel content stays in the panel, everything else
     opens a new top-level tab with `noopener,noreferrer`, and code-driven
@@ -260,7 +275,9 @@ panel's content (same-origin policy) and the panel sends it nothing (no
 session or gets its own depends on the browser's storage partitioning for
 extension-embedded frames, and has not been checked. Firefox extension origins
 are per-install, so a fixed list cannot name the Firefox extension. Both are
-recorded as constraints, not solved.
+recorded as constraints, not solved. Anything in front of the proxies (the
+live host sits behind Cloudflare) has not been checked for what it does with
+these headers.
 
 ## 7. Accepted residual risks
 

@@ -124,7 +124,10 @@ composer are the same components the full app uses.
 ### 2. Framing policy
 
 **Status 2026-10-09: built for the web client's nginx image; off by default**
-(B2). Nothing has been set in any deployed environment.
+(B2). Nothing has been set in any deployed environment. **2026-10-11:** the
+`infra/nginx` and single-server-baseline proxies now pass the panel's policy
+through instead of blocking it (see "Behind the front proxies" below). Nothing
+is deployed there either.
 
 **What actually serves the web client's HTML.** The anchor this step started
 from, `packages/api/src/middleware/security-headers.ts`, is the Hono API's
@@ -197,6 +200,64 @@ valid and invalid. `curl -I` on `/`, `/index.html`, `/home/`, `/coliseum`,
 Chromium, a page on an allow-listed origin rendered the panel in an iframe and
 was refused `/`; a page on any other origin was refused both.
 
+**Behind the front proxies (2026-10-11).** `infra/nginx` and
+`infra/single-server-baseline/nginx` add `X-Frame-Options: DENY` and a CSP
+ending in `frame-ancestors 'none'` to everything they serve
+(`snippets/security-headers.conf`). Browsers enforce every CSP a response
+carries, so until this change the panel could not be framed behind either
+proxy, whatever the container allowed. Each proxy now has the client image's
+two panel locations, `location = /embed` and `location ^~ /embed/`, proxied
+exactly as `location /`. On those two, and nowhere else, the proxy leaves out
+its own `X-Frame-Options` and the `frame-ancestors` directive of its own CSP
+when both of these hold:
+
+1. the raw request URI is the panel's, by the client image's own test
+   (`/embed`, `/embed?…`, `/embed/…`; not `/%65mbed/`, `//embed/`, `/EMBED/`
+   or `/embedded`);
+2. the container's `Content-Security-Policy`, as nginx reads it, is exactly
+   one `frame-ancestors` list in the form the start-up script writes: `'none'`
+   alone, or lower-case `scheme://host[:port]` origins. A `'self'`, a
+   wildcard, a path or another directive does not count, and on nginx 1.23 or
+   later neither does a second CSP header (older nginx reads only the first).
+
+The proxy then repeats that list in a `Content-Security-Policy` header of its
+own, so the browser applies it even if the container's header were spelled in
+a way nginx accepts and browsers do not. In every other case (the container
+sends no CSP or one without `frame-ancestors`, the container is down or times
+out, nginx answers with its own error page, or the client image predates the
+panel) the two locations send exactly the proxy's usual headers. The proxy's
+other headers on the panel, including the rest of its CSP, are unchanged, so
+a framed panel runs under the same CSP as the full app behind that proxy.
+`tools/ci/check-embed-proxy-framing.mjs` (the Hardening guards job) fails if
+either proxy loses or loosens any of this. Design notes and version
+behaviour: [framing-headers-2026-10-09.md](security/framing-headers-2026-10-09.md),
+"Follow-up 2026-10-11".
+
+What that means in practice:
+
+-   Deploying the proxy change makes nothing frameable on its own. With
+    `BLACK_MASK_FRAME_ANCESTORS` unset or invalid, the container itself sends
+    `X-Frame-Options: DENY` and `frame-ancestors 'none'` on the panel, and the
+    proxy passes them through.
+-   With a valid list on the container, `/embed` and `/embed/*` can be framed
+    through the proxy by exactly those origins. Every other path keeps `DENY`
+    and `frame-ancestors 'none'`.
+-   Rolling the client image back to one without the framing policy leaves
+    every path unframeable behind the proxy.
+
+Checked with local nginx 1.24.0, and with the proxy on `nginx:1.27-alpine`
+(the single-server image) and on `nginx:1.22.1-alpine` in front of the client
+config on `nginx:1.29.5-alpine` (the client image's base), against the real
+client-image config with its start-up script run (variable unset, a valid
+list, an invalid list), the client config from before the panel, and stub
+upstreams. GET and HEAD on every path listed above and on the API paths. In a
+real Chromium (145, HTTP/2 through each proxy), a page on an allow-listed
+origin rendered `/embed` and was refused `/`, a page on another origin was
+refused both, and with the variable unset or the older client config nothing
+rendered. **Not checked:** a deployed proxy, anything in front of it (the live
+host sits behind Cloudflare), and the panel inside a real Black Mask
+extension.
+
 **Constraints, stated plainly:**
 
 -   **Firefox:** a `moz-extension://` origin is a random UUID generated per
@@ -215,17 +276,21 @@ was refused `/`; a page on any other origin was refused both.
     needs listing. If it frames the panel inside its own web UI, that UI's
     origin must be listed, and an opaque origin (`file://`, `null`) cannot be.
 -   **Reverse proxies in front:** `infra/nginx` and
-    `infra/single-server-baseline/nginx` add `X-Frame-Options: DENY` and a CSP
-    with `frame-ancestors 'none'` to everything at server level. Browsers
-    enforce every CSP they receive, so behind either proxy the panel stays
-    unframeable even with the variable set. That fails closed, but turning the
-    panel on there needs an `/embed` location in the proxy that re-includes the
-    rest of its header set without those two. Not done here; it needs its own
-    `nginx -t` and `curl -I` per location on that proxy.
--   **Other images:** the `blackout-web` image, Railway, Vercel and Netlify do
-    not implement the allow-list. On those the panel is never framed by
-    Black Mask: `'self'` or `DENY` on the `blackout-web` image, no protection
-    at all on the static hosts (as for the whole client there today).
+    `infra/single-server-baseline/nginx` pass the panel's policy through since
+    2026-10-11 (above); the site config must be deployed for that, and until it
+    is, those proxies still block the panel. Any other proxy or CDN in front of
+    the client image must pass `Content-Security-Policy` through unchanged and
+    must not add its own `frame-ancestors` or `X-Frame-Options` on `/embed`.
+    The live host sits behind Cloudflare, and what Cloudflare does with these
+    headers there has not been checked.
+-   **Other images and hosts:** the `blackout-web` image, Railway, Vercel,
+    Netlify and Cloudflare Pages (`.github/cfp_headers`, which nothing deploys
+    today) do not implement the allow-list. On those the panel is never framed
+    by Black Mask: `'self'` or `DENY` on the `blackout-web` image and in
+    `cfp_headers`, no protection at all on the other static hosts (as for the
+    whole client there today). The front proxies do not pass a `'self'`
+    through, so the `blackout-web` image behind them would not be framed by
+    Black Mask either.
 -   **Storage partitioning, not verified:** whether a panel framed inside an
     extension page shares the browser's normal Blackout session or gets its
     own depends on the browser's storage partitioning for extension-embedded
@@ -239,8 +304,17 @@ was refused `/`; a page on any other origin was refused both.
 origins, restart it, then check `curl -I https://<host>/embed` (expect
 `frame-ancestors <your list>` and no `X-Frame-Options`) and
 `curl -I https://<host>/` (expect `DENY` and `frame-ancestors 'none'`).
-**Rollback:** unset the variable and restart. The panel route itself stays
-reachable as a normal page, which is harmless.
+Behind `infra/nginx` or the single-server proxy, deploy this repository's site
+config first (no new snippet; run `nginx -t` before reloading). Through the
+proxy, `/embed` then shows no `X-Frame-Options`, the proxy's CSP without
+`frame-ancestors`, and `frame-ancestors <your list>` twice (the container's
+header and the proxy's copy). `/` still shows `DENY` and `frame-ancestors
+'none'`. In the single-server stack the variable goes on the `frontend`
+service, for example through the `environment:` of the host's
+`docker-compose.override.yml`. **Rollback:** unset the variable and restart.
+The proxies need no change: they pass the container's `'none'` (and its
+`DENY`) through again. The panel route itself stays reachable as a normal
+page, which is harmless.
 
 ### 3. Sign-in inside the sandbox
 

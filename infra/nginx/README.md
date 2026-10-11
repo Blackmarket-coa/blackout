@@ -19,7 +19,9 @@ This deployment exposes the following hostnames over TLS:
   at server level and again in every block there that sets its own
   `add_header`, because nginx drops inherited `add_header` directives in such a
   block. `nginx -t` fails if this file is missing.
-- `sites-available/theblackout.app.conf`: host-based routing and upstream definitions.
+- `sites-available/theblackout.app.conf`: host-based routing and upstream definitions. It also holds the
+  Black Mask chat panel's two locations (`/embed`, `/embed/*`) and the `map` blocks that decide their
+  framing headers; see "Black Mask chat panel" below.
 
 ## 1) DNS implementation
 
@@ -76,6 +78,17 @@ sudo systemctl reload nginx
 - Optional coturn HTTPS status (`turn.theblackout.app/healthz`) at `127.0.0.1:9641`
 
 If your ports differ, update upstream blocks in `sites-available/theblackout.app.conf`.
+
+### Black Mask chat panel (`/embed`)
+
+The frontend container (the `apps/blackout-client` image) decides whether the chat panel at `/embed`
+may be framed, from `BLACK_MASK_FRAME_ANCESTORS` (`docs/black-mask-chat-panel-and-account-link.md`,
+step 2). This proxy adds `X-Frame-Options: DENY` and a CSP with `frame-ancestors 'none'` to everything,
+except on `/embed` and `/embed/*` when the container's response carries a `frame-ancestors` list in the
+form that image writes: there it leaves its own two out and repeats the container's list. Upstream
+errors and older frontend images get the usual headers. Nothing is frameable until the variable is set
+on the frontend container. `node tools/ci/check-embed-proxy-framing.mjs` checks the two locations
+against `snippets/security-headers.conf`; it runs in CI.
 
 ## 3) Synapse reverse proxy requirements
 
@@ -157,6 +170,18 @@ Expected: same IPv4 as apex.
 curl -I https://theblackout.app
 ```
 Expected: `HTTP/2 200` (or `304`), includes security headers like `strict-transport-security`, `content-security-policy`.
+
+```bash
+curl -sI https://theblackout.app/embed | grep -iE '^(x-frame-options|content-security-policy)'
+```
+Expected with `BLACK_MASK_FRAME_ANCESTORS` unset on the frontend: `x-frame-options: DENY` and
+`frame-ancestors 'none'`. With a list set: no `x-frame-options`, `frame-ancestors <your list>` twice
+(the frontend's header and this proxy's copy), and this proxy's CSP without `frame-ancestors`.
+
+```bash
+curl -sI https://theblackout.app/ | grep -iE '^(x-frame-options|content-security-policy)'
+```
+Expected whatever the variable says: `x-frame-options: DENY` and a CSP with `frame-ancestors 'none'`.
 
 ```bash
 curl -I https://api.theblackout.app/health

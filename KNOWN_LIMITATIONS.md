@@ -115,16 +115,20 @@ For the source-of-truth triage with tier/owner detail see
     -   voice, stage and forum dens (they open in a normal Blackout tab);
     -   a sign-out button.
 -   **Only the `apps/blackout-client/Dockerfile` image can allow framing.**
-    Behind the `infra/nginx` or single-server-baseline proxies, the panel stays
-    unframeable until those proxies get an `/embed` location; the
-    `blackout-web` image and the Railway, Vercel and Netlify paths do not
-    implement the allow-list.
+    Since 2026-10-11 the `infra/nginx` and single-server-baseline proxies pass
+    that image's panel policy through on `/embed` (and keep blocking framing
+    everywhere else); neither proxy change is deployed. The `blackout-web`
+    image and the Railway, Vercel, Netlify and Cloudflare Pages paths do not
+    implement the allow-list. Nothing can be framed until
+    `BLACK_MASK_FRAME_ANCESTORS` is set on the client container.
 -   **Firefox:** extension origins are per-install, so a fixed allow-list
     cannot name the Firefox extension.
 -   **Unverified:** the signed-in panel against a real homeserver, the panel
     inside a real extension, and whether a framed panel shares the browser's
     Blackout session or signs in separately. If it signs in separately, older
-    encrypted messages may not be readable in it (BO-1).
+    encrypted messages may not be readable in it (BO-1). Framing through the
+    front proxies was checked with local nginx and Chromium only, not on a
+    deployed host or through Cloudflare.
 
 ---
 
