@@ -8,10 +8,15 @@
 // The script discovers a feed item id from the public feed at startup so it
 // works regardless of seed data; if the feed is empty it exercises only the
 // public read paths and skips the authenticated writes.
+//
+// Each iteration stands for a different user (it registers one whenever there
+// is an item to engage with), so it presents its own client address (see
+// lib/client-address.js) instead of every VU sharing one rate-limit bucket.
 
 import http from 'k6/http';
 import { check, group, sleep } from 'k6';
 import { randomString } from 'https://jslib.k6.io/k6-utils/1.4.0/index.js';
+import { clientAddress } from './lib/client-address.js';
 
 export const options = {
     scenarios: {
@@ -36,15 +41,13 @@ export const options = {
 const BASE_URL = __ENV.BASE_URL || 'http://localhost:3000';
 const ORIGIN = __ENV.ORIGIN || 'http://localhost:5173';
 
-const jsonHeaders = {
-    'Content-Type': 'application/json',
-    Origin: ORIGIN,
-};
+const readHeaders = () => ({ Origin: ORIGIN, 'X-Forwarded-For': clientAddress() });
+const jsonHeaders = () => ({ ...readHeaders(), 'Content-Type': 'application/json' });
 
 // Discover a video feed item id once, shared across all VUs.
 export function setup() {
     const res = http.get(`${BASE_URL}/v1/coalition/feed?kind=video&limit=1`, {
-        headers: { Origin: ORIGIN },
+        headers: readHeaders(),
         tags: { path: 'coalition_feed', op: 'feed_list' },
     });
     let feedItemId = null;
@@ -64,7 +67,7 @@ function authToken() {
         password: `Pa55-feed-${suffix}-AbCxyz!`,
     });
     const res = http.post(`${BASE_URL}/v1/auth/register`, body, {
-        headers: jsonHeaders,
+        headers: jsonHeaders(),
         tags: { path: 'coalition_feed', op: 'register' },
     });
     return res.status === 201 ? res.json('token') : '';
@@ -75,7 +78,7 @@ export default function (data) {
 
     group('public feed read', () => {
         const res = http.get(`${BASE_URL}/v1/coalition/feed?kind=video&limit=20`, {
-            headers: { Origin: ORIGIN },
+            headers: readHeaders(),
             tags: { path: 'coalition_feed', op: 'feed_list' },
         });
         check(res, { 'feed 200': (r) => r.status === 200 });
@@ -91,13 +94,13 @@ export default function (data) {
 
     group('public engagement read', () => {
         const likes = http.get(likesPath, {
-            headers: { Origin: ORIGIN },
+            headers: readHeaders(),
             tags: { path: 'coalition_feed', op: 'likes_read' },
         });
         check(likes, { 'likes 200': (r) => r.status === 200 });
 
         const comments = http.get(commentsPath, {
-            headers: { Origin: ORIGIN },
+            headers: readHeaders(),
             tags: { path: 'coalition_feed', op: 'comments_read' },
         });
         check(comments, { 'comments 200': (r) => r.status === 200 });
@@ -108,7 +111,7 @@ export default function (data) {
         sleep(1);
         return;
     }
-    const authHeaders = { ...jsonHeaders, Authorization: `Bearer ${token}` };
+    const authHeaders = { ...jsonHeaders(), Authorization: `Bearer ${token}` };
 
     group('like toggle', () => {
         const on = http.post(likesPath, JSON.stringify({ active: true }), {

@@ -40,7 +40,7 @@ jobs:
             - uses: pnpm/action-setup@v5
               with:
                   version: 9.15.4
-            - uses: actions/setup-node@v4
+            - uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6
               with:
                   node-version: 22
                   cache: pnpm
@@ -83,6 +83,13 @@ jobs:
                   INTERNAL_METRICS_TOKEN: ${{ steps.synth.outputs.METRICS }}
                   # Required in production so pseudonymized log ids aren't guessable.
                   LOG_HASH_SALT: ${{ steps.synth.outputs.METRICS }}
+                  # Production refuses to boot without an explicit mail transport
+                  # (initMailerFromEnv, services/mailer.ts); for want of it every
+                  # nightly from 2026-07-28 on died at this step. `console` is that
+                  # guard's documented opt-in for staging shadows: register-flow
+                  # verification mail is logged (recipient + subject) to api.log,
+                  # never delivered.
+                  MAIL_PROVIDER: console
               run: |
                   # Capture boot output so a startup failure is diagnosable
                   # instead of k6 silently hammering a dead port (and reporting a
