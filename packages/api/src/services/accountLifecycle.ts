@@ -18,9 +18,10 @@ const ttlSeconds = (): number =>
 const hashOptional = (value?: string): string | undefined => (value ? sha256(value) : undefined);
 
 /**
- * GDPR / DSAR-style data export. Returns every record we hold that's keyed by
- * the user's id. Sensitive fields (password hash, encrypted access tokens)
- * are stripped — the export is meant to be portable, not a credential dump.
+ * GDPR / DSAR-style data export. Returns the user-keyed records listed in
+ * AccountExport; not every table is covered yet. Sensitive fields (password
+ * hash, encrypted access tokens) are stripped — the export is meant to be
+ * portable, not a credential dump.
  */
 export interface AccountExport {
     exportedAt: string;
@@ -44,6 +45,39 @@ export interface AccountExport {
         communityId: string;
         action: string;
         reason: string;
+        createdAt: string;
+    }>;
+    /**
+     * Messages scheduled through `POST /v1/scheduled-messages`. The API holds
+     * their text as plaintext until they are sent, cancelled or finally fail,
+     * then clears it, so only pending ones still carry a body.
+     */
+    scheduledMessages: Array<{
+        id: string;
+        matrixRoomId: string;
+        body: string;
+        formattedBody?: string;
+        deliverAt: string;
+        status: string;
+        lastError?: string;
+        createdAt: string;
+        deliveredAt?: string;
+    }>;
+    /**
+     * Dead-man switches this user owns. Recipients are other people's ids, so
+     * they are counted rather than listed.
+     */
+    deadmanSwitches: Array<{
+        id: string;
+        roomId: string;
+        status: string;
+        headline?: string;
+        checkInIntervalSeconds: number;
+        gracePeriodSeconds: number;
+        lastCheckInAt: string;
+        triggerAt: string;
+        releaseAt: string;
+        recipientCount: number;
         createdAt: string;
     }>;
     refreshTokensCount: number;
@@ -137,6 +171,36 @@ export const exportUserData = (userId: string): AccountExport | null => {
         }
     }
 
+    const scheduledMessages: AccountExport['scheduledMessages'] = db
+        .listScheduledMessagesForUser(userId)
+        .map((msg) => ({
+            id: msg.id,
+            matrixRoomId: msg.matrixRoomId,
+            body: msg.body,
+            formattedBody: msg.formattedBody,
+            deliverAt: msg.deliverAt,
+            status: msg.status,
+            lastError: msg.lastError,
+            createdAt: msg.createdAt,
+            deliveredAt: msg.deliveredAt,
+        }));
+
+    const deadmanSwitches: AccountExport['deadmanSwitches'] = db
+        .listDeadmanSwitchesForOwner(userId)
+        .map((sw) => ({
+            id: sw.id,
+            roomId: sw.roomId,
+            status: sw.status,
+            headline: sw.headline,
+            checkInIntervalSeconds: sw.checkInIntervalSeconds,
+            gracePeriodSeconds: sw.gracePeriodSeconds,
+            lastCheckInAt: sw.lastCheckInAt,
+            triggerAt: sw.triggerAt,
+            releaseAt: sw.releaseAt,
+            recipientCount: sw.recipients.length,
+            createdAt: sw.createdAt,
+        }));
+
     const refreshTokensCount = [...db.refreshTokens.values()].filter(
         (t) => t.userId === userId
     ).length;
@@ -158,6 +222,8 @@ export const exportUserData = (userId: string): AccountExport | null => {
         messages,
         deadDrops,
         moderationActions,
+        scheduledMessages,
+        deadmanSwitches,
         refreshTokensCount,
         passwordResetTokensCount,
         emailVerificationTokensCount,
