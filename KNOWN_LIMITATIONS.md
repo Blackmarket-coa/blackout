@@ -144,11 +144,17 @@ For the source-of-truth triage with tier/owner detail see
     (the default) the panel uses the full app's storage names, as before B3,
     so whether it shares a tab's session depends on the browser's storage
     partitioning for extension frames, which has not been checked.
--   **Only the `apps/blackout-client/Dockerfile` image can allow framing.**
-    Behind the `infra/nginx` or single-server-baseline proxies, the panel stays
-    unframeable until those proxies get an `/embed` location; the
-    `blackout-web` image and the Railway, Vercel and Netlify paths do not
-    implement the allow-list.
+-   **Only the `apps/blackout-client/Dockerfile` image implements the
+    allow-list.** On that image nothing can be framed until
+    `BLACK_MASK_FRAME_ANCESTORS` is set on its container (and the container
+    recreated), with or without the front proxies. Since 2026-10-11 the
+    `infra/nginx` and single-server-baseline proxies pass that image's panel
+    policy through on `/embed` and keep blocking framing on every other HTTPS
+    response from the web client's host; neither proxy change is deployed. Other images and
+    hosts do not implement the allow-list, and some leave the panel open: the
+    `blackout-web` image sends no framing header on `/embed` (nor on `/` and
+    `/index.html`), so any site can frame those pages there, and Railway,
+    Vercel and Netlify send no framing headers at all.
 -   **Firefox:** extension origins are per-install, so a fixed allow-list
     cannot name the Firefox extension.
 -   **Unverified:** the signed-in panel against a deployed homeserver, and the
@@ -158,6 +164,9 @@ For the source-of-truth triage with tier/owner detail see
     (`tests/blackout_runtime/test_session_length.py`) run only by hand: CI runs
     no `apps/blackout-server` tests, so a regression in
     `blackout_runtime/session_length.py` would merge green.
+    Framing through the front proxies was checked with nginx (1.24.0 locally,
+    1.27.5 and 1.22.1 in containers) and Chromium only, not on a deployed host
+    or through Cloudflare.
 
 ---
 
