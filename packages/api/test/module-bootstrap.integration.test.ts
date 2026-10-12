@@ -8,9 +8,10 @@ process.env.JWT_ISSUER = process.env.JWT_ISSUER ?? 'blackout-api-test';
 process.env.JWT_AUDIENCE = process.env.JWT_AUDIENCE ?? 'blackout-client-test';
 process.env.AUTH_RATE_LIMIT_MAX = process.env.AUTH_RATE_LIMIT_MAX ?? '1000';
 
-const [{ default: app }, { featureModules }] = await Promise.all([
+const [{ default: app }, { featureModules }, { appEvents }] = await Promise.all([
     import('../src/index'),
     import('../src/modules/index'),
+    import('@blackout/core'),
 ]);
 
 async function issueToken(): Promise<{ token: string; username: string }> {
@@ -56,8 +57,9 @@ test('feature module registry contains canonical frontend domains', () => {
 
 test('feature module routes bootstrap under /v1', async () => {
     const { token, username } = await issueToken();
-    // streaming/events is admin-only (the log spans every creator), so this
-    // bootstrap user must be on the admin allowlist for that route to mount-check.
+    // streaming/events and moderation/events are admin-only (each log spans
+    // every creator or community), so this bootstrap user must be on the admin
+    // allowlist for those routes to mount-check.
     const previousAdmins = process.env.BLACKOUT_ADMIN_USERS;
     process.env.BLACKOUT_ADMIN_USERS = username;
     try {
@@ -85,4 +87,18 @@ test('feature module routes bootstrap under /v1', async () => {
         if (previousAdmins === undefined) delete process.env.BLACKOUT_ADMIN_USERS;
         else process.env.BLACKOUT_ADMIN_USERS = previousAdmins;
     }
+});
+
+test('the discovery and apps /events routes return fixed data, not an activity log', async () => {
+    const { token } = await issueToken();
+    const headers = { authorization: `Bearer ${token}` };
+
+    const discovery = await app.request('/v1/discovery/events', { headers });
+    assert.equal(discovery.status, 200);
+    assert.deepEqual(await discovery.json(), { module: 'discovery', status: 'ok' });
+
+    // A catalog of event type names an app may subscribe to; nothing per user.
+    const apps = await app.request('/v1/apps/events', { headers });
+    assert.equal(apps.status, 200);
+    assert.deepEqual(await apps.json(), { events: [...appEvents] });
 });

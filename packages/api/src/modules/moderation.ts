@@ -4,6 +4,7 @@ import { db } from '../db/store';
 import { readJsonBody } from '../middleware/validate';
 import { emitDomainEvent, listDomainEvents } from './domain-events';
 import { requireAuthenticatedUser, requireDomainCapability } from './authz';
+import { isAdminUser } from '../services/auth';
 import type { FeatureModule } from './types';
 
 const moderationActionSchema = z.object({
@@ -72,6 +73,16 @@ function createModerationRouter() {
     moderation.get('/events', (c) => {
         const denied = requireDomainCapability(c, 'moderation', 'read');
         if (denied) return denied;
+
+        // The moderation event log spans every community and every stream:
+        // each action names its target, and stream chat updates carry the ban
+        // and filter counts that the stream owner's own read keeps private.
+        // Nothing scopes it to a community, so it stays admin-only, like the
+        // streaming-wide log.
+        const claims = c.get('user') as { sub?: string; username?: string } | null;
+        if (!claims?.sub || !isAdminUser(claims.sub, claims.username ?? '')) {
+            return c.json({ code: 'forbidden', message: 'Admin privileges required' }, 403);
+        }
 
         return c.json(listDomainEvents('moderation'));
     });
