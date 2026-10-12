@@ -22,6 +22,11 @@ export interface RotateOptions {
     /** Existing family id when rotating; omit to start a new family at login. */
     familyId?: string;
     userAgent?: string;
+    /**
+     * ISO end of a session with a server-enforced length. The token expires no
+     * later than this, and the family can never be refreshed past it.
+     */
+    sessionExpiresAt?: string;
 }
 
 const userAgentHash = (userAgent?: string): string | undefined =>
@@ -31,7 +36,15 @@ export const issueRefreshToken = (options: RotateOptions): IssuedRefreshToken =>
     const token = randomBytes(REFRESH_TOKEN_BYTES).toString('base64url');
     const id = randomUUID();
     const familyId = options.familyId ?? randomUUID();
-    const expiresAt = new Date(Date.now() + ttlSeconds() * 1000).toISOString();
+    const ttlEndMs = Date.now() + ttlSeconds() * 1000;
+    // `?? undefined`: a stored row reads a NULL column back as an absent field,
+    // but never let a stray null be mistaken for an end at the epoch.
+    const sessionExpiresAt = options.sessionExpiresAt ?? undefined;
+    const expiresAt = new Date(
+        sessionExpiresAt === undefined
+            ? ttlEndMs
+            : Math.min(ttlEndMs, new Date(sessionExpiresAt).getTime())
+    ).toISOString();
     const record = db.createRefreshToken({
         id,
         userId: options.userId,
@@ -39,8 +52,19 @@ export const issueRefreshToken = (options: RotateOptions): IssuedRefreshToken =>
         tokenHash: sha256(token),
         expiresAt,
         userAgentHash: userAgentHash(options.userAgent),
+        ...(sessionExpiresAt === undefined ? {} : { sessionExpiresAt }),
     });
     return { token, record };
+};
+
+/** True once a family with a server-enforced length has reached its end. */
+export const sessionHasEnded = (record: Pick<RefreshTokenRecord, 'sessionExpiresAt'>): boolean => {
+    const end = record.sessionExpiresAt ?? undefined;
+    if (end === undefined) return false;
+    const endMs = new Date(end).getTime();
+    // An unreadable end is treated as ended: a malformed bound must never
+    // turn into no bound.
+    return !Number.isFinite(endMs) || endMs <= Date.now();
 };
 
 export type RefreshOutcome =
@@ -48,6 +72,7 @@ export type RefreshOutcome =
     | { kind: 'invalid' }
     | { kind: 'expired' }
     | { kind: 'revoked' }
+    | { kind: 'session_expired' }
     | { kind: 'reuse_detected'; userId: string; familyId: string };
 
 export const rotateRefreshToken = (presentedToken: string, userAgent?: string): RefreshOutcome => {
@@ -68,6 +93,12 @@ export const rotateRefreshToken = (presentedToken: string, userAgent?: string): 
         return { kind: 'reuse_detected', userId: existing.userId, familyId: existing.familyId };
     }
     if (existing.revokedAt) return { kind: 'revoked' };
+    // A session with a server-enforced length ends for the whole family at
+    // once: burn it, so nothing in it can be presented again.
+    if (sessionHasEnded(existing)) {
+        db.revokeRefreshTokenFamily(existing.familyId, 'session_expired');
+        return { kind: 'session_expired' };
+    }
     if (new Date(existing.expiresAt).getTime() <= Date.now()) return { kind: 'expired' };
 
     // Mint the successor first so its row exists before the old token's
@@ -77,6 +108,7 @@ export const rotateRefreshToken = (presentedToken: string, userAgent?: string): 
         userId: existing.userId,
         familyId: existing.familyId,
         userAgent,
+        sessionExpiresAt: existing.sessionExpiresAt,
     });
     // Compare-and-swap: stamp replacedBy ONLY if the token is still live. Two
     // concurrent rotations of the same token cannot both win this within a

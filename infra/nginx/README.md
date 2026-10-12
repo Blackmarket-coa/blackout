@@ -2,46 +2,46 @@
 
 This deployment exposes the following hostnames over TLS:
 
-- `theblackout.app` (frontend)
-- `chat.theblackout.app` (frontend alias)
-- `api.theblackout.app` (backend API)
-- `matrix.theblackout.app` (Synapse)
-- `turn.theblackout.app` (TURN health/admin HTTPS endpoint)
+-   `theblackout.app` (frontend)
+-   `chat.theblackout.app` (frontend alias)
+-   `api.theblackout.app` (backend API)
+-   `matrix.theblackout.app` (Synapse)
+-   `turn.theblackout.app` (TURN health/admin HTTPS endpoint)
 
 > TURN media traffic itself (`3478/udp`, `3478/tcp`, `5349/tcp`, plus relay UDP range) is **not** proxied by HTTP Nginx and should terminate directly on coturn.
 
 ## Files in this folder
 
-- `nginx.conf`: hardened global Nginx config (includes `merge_slashes off` for Matrix-safe URI handling).
-- `snippets/proxy-common.conf`: shared upstream proxy headers and timeout/body settings.
-- `snippets/security-headers.conf`: security headers for frontend hosts.
-- `snippets/hsts.conf`: HSTS for the Matrix host, and for the two Black Mask panel locations, which
-  restate the `security-headers.conf` set instead of including it. The site config includes it at
-  the Matrix host's server level and again in every block there that sets its own `add_header`,
-  because nginx drops inherited `add_header` directives in such a block, and in both panel
-  locations. `nginx -t` fails if this file is missing.
-- `sites-available/theblackout.app.conf`: host-based routing and upstream definitions. It also holds the
-  Black Mask chat panel's two locations (`/embed`, `/embed/*`) and the `map` blocks that decide their
-  framing headers; see "Black Mask chat panel" below.
+-   `nginx.conf`: hardened global Nginx config (includes `merge_slashes off` for Matrix-safe URI handling).
+-   `snippets/proxy-common.conf`: shared upstream proxy headers and timeout/body settings.
+-   `snippets/security-headers.conf`: security headers for frontend hosts.
+-   `snippets/hsts.conf`: HSTS for the Matrix host, and for the two Black Mask panel locations, which
+    restate the `security-headers.conf` set instead of including it. The site config includes it at
+    the Matrix host's server level and again in every block there that sets its own `add_header`,
+    because nginx drops inherited `add_header` directives in such a block, and in both panel
+    locations. `nginx -t` fails if this file is missing.
+-   `sites-available/theblackout.app.conf`: host-based routing and upstream definitions. It also holds the
+    Black Mask chat panel's two locations (`/embed`, `/embed/*`) and the `map` blocks that decide their
+    framing headers; see "Black Mask chat panel" below.
 
 ## 1) DNS implementation
 
 Create the following records in your DNS provider:
 
-| Type | Name | Value | TTL | Purpose |
-|---|---|---|---|---|
-| A | `@` | `<PUBLIC_IPV4_OF_NGINX_HOST>` | 300 | apex frontend |
-| A | `chat` | `<PUBLIC_IPV4_OF_NGINX_HOST>` | 300 | chat frontend |
-| A | `api` | `<PUBLIC_IPV4_OF_NGINX_HOST>` | 300 | API |
-| A | `matrix` | `<PUBLIC_IPV4_OF_NGINX_HOST>` | 300 | Synapse endpoint |
-| A | `turn` | `<PUBLIC_IPV4_OF_NGINX_HOST>` | 300 | TURN DNS name |
-| AAAA (optional) | same five names | `<PUBLIC_IPV6_OF_NGINX_HOST>` | 300 | IPv6 |
+| Type            | Name            | Value                         | TTL | Purpose          |
+| --------------- | --------------- | ----------------------------- | --- | ---------------- |
+| A               | `@`             | `<PUBLIC_IPV4_OF_NGINX_HOST>` | 300 | apex frontend    |
+| A               | `chat`          | `<PUBLIC_IPV4_OF_NGINX_HOST>` | 300 | chat frontend    |
+| A               | `api`           | `<PUBLIC_IPV4_OF_NGINX_HOST>` | 300 | API              |
+| A               | `matrix`        | `<PUBLIC_IPV4_OF_NGINX_HOST>` | 300 | Synapse endpoint |
+| A               | `turn`          | `<PUBLIC_IPV4_OF_NGINX_HOST>` | 300 | TURN DNS name    |
+| AAAA (optional) | same five names | `<PUBLIC_IPV6_OF_NGINX_HOST>` | 300 | IPv6             |
 
 Optional (for legacy federation clients looking up `theblackout.app` directly):
 
-| Type | Name | Value |
-|---|---|---|
-| SRV | `_matrix._tcp.theblackout.app` | `10 0 443 matrix.theblackout.app.` |
+| Type | Name                           | Value                              |
+| ---- | ------------------------------ | ---------------------------------- |
+| SRV  | `_matrix._tcp.theblackout.app` | `10 0 443 matrix.theblackout.app.` |
 
 ## 2) Nginx deployment instructions
 
@@ -73,10 +73,10 @@ sudo systemctl reload nginx
 
 ### Upstream service expectations
 
-- Frontend (`theblackout.app`, `chat.theblackout.app`) at `127.0.0.1:8080`
-- API (`api.theblackout.app`) at `127.0.0.1:9000`
-- Synapse (`matrix.theblackout.app`) at `127.0.0.1:8008`
-- Optional coturn HTTPS status (`turn.theblackout.app/healthz`) at `127.0.0.1:9641`
+-   Frontend (`theblackout.app`, `chat.theblackout.app`) at `127.0.0.1:8080`
+-   API (`api.theblackout.app`) at `127.0.0.1:9000`
+-   Synapse (`matrix.theblackout.app`) at `127.0.0.1:8008`
+-   Optional coturn HTTPS status (`turn.theblackout.app/healthz`) at `127.0.0.1:9641`
 
 If your ports differ, update upstream blocks in `sites-available/theblackout.app.conf`.
 
@@ -104,18 +104,18 @@ x_forwarded: true
 
 This works with the Nginx-provided headers from `proxy-common.conf`:
 
-- `X-Forwarded-For`
-- `X-Forwarded-Proto`
-- `X-Forwarded-Host`
-- `X-Forwarded-Port`
+-   `X-Forwarded-For`
+-   `X-Forwarded-Proto`
+-   `X-Forwarded-Host`
+-   `X-Forwarded-Port`
 
 ### Matrix path semantics protection
 
 To avoid federation/client signature issues:
 
-- `merge_slashes off;` set globally.
-- No URI rewrite in Matrix location (`proxy_pass http://blackout_synapse;` with no URI suffix).
-- No normalization/canonicalization middleware in front of Nginx.
+-   `merge_slashes off;` set globally.
+-   No URI rewrite in Matrix location (`proxy_pass http://blackout_synapse;` with no URI suffix).
+-   No normalization/canonicalization middleware in front of Nginx.
 
 ## 4) TLS certificate automation + renewal
 
@@ -156,16 +156,19 @@ echo 'deploy_hook = systemctl reload nginx' | sudo tee -a /etc/letsencrypt/renew
 ```bash
 dig +short theblackout.app A
 ```
+
 Expected: your public IPv4.
 
 ```bash
 dig +short chat.theblackout.app A
 ```
+
 Expected: same IPv4 as apex.
 
 ```bash
 dig +short matrix.theblackout.app A
 ```
+
 Expected: same IPv4 as apex.
 
 ### TLS and host routing
@@ -173,11 +176,13 @@ Expected: same IPv4 as apex.
 ```bash
 curl -I https://theblackout.app
 ```
+
 Expected: `HTTP/2 200` (or `304`), includes security headers like `strict-transport-security`, `content-security-policy`.
 
 ```bash
 curl -sI https://theblackout.app/embed | grep -iE '^(x-frame-options|content-security-policy)'
 ```
+
 Expected with `BLACK_MASK_FRAME_ANCESTORS` unset or invalid on the frontend: one
 `x-frame-options: DENY` (the frontend's) and three CSP lines: the frontend's `frame-ancestors 'none'`,
 this proxy's CSP without `frame-ancestors`, and this proxy's repeat of `frame-ancestors 'none'`. With a
@@ -187,26 +192,31 @@ list set: no `x-frame-options`, this proxy's CSP without `frame-ancestors`, and
 ```bash
 curl -sI https://theblackout.app/ | grep -iE '^(x-frame-options|content-security-policy)'
 ```
+
 Expected whatever the variable says: `x-frame-options: DENY` and a CSP with `frame-ancestors 'none'`.
 
 ```bash
 curl -I https://api.theblackout.app/health
 ```
+
 Expected: `HTTP/2 200` from API health endpoint.
 
 ```bash
 curl -s https://matrix.theblackout.app/.well-known/matrix/client | jq
 ```
+
 Expected JSON includes `"base_url": "https://matrix.theblackout.app"`.
 
 ```bash
 curl -I https://matrix.theblackout.app/_matrix/client/versions
 ```
+
 Expected: `HTTP/2 200` from Synapse with Matrix version payload.
 
 ```bash
 curl -i https://turn.theblackout.app/healthz
 ```
+
 Expected: `HTTP/2 200` if TURN admin endpoint enabled; otherwise `404` (by current config).
 
 ### Nginx + certbot
@@ -214,9 +224,11 @@ Expected: `HTTP/2 200` if TURN admin endpoint enabled; otherwise `404` (by curre
 ```bash
 sudo nginx -t
 ```
+
 Expected: `syntax is ok` and `test is successful`.
 
 ```bash
 sudo certbot renew --dry-run
 ```
+
 Expected: dry-run renewal succeeds for `theblackout.app` certificate lineage.

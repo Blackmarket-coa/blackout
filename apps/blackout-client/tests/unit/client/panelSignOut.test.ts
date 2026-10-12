@@ -1,0 +1,278 @@
+// @vitest-environment jsdom
+/**
+ * The chat panel's Sign out ends its Blackout API token on the API too
+ * (launch-plan B3), so a copied token stops working at sign-out rather than
+ * at its own expiry.
+ */
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const requests: Array<{ headers?: Record<string, string>; request: unknown }> = [];
+let requestImpl: (request: { path?: string }) => Promise<unknown> = () =>
+    Promise.resolve({ ok: true });
+vi.mock('@blackout/sdk', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('@blackout/sdk')>();
+    return {
+        ...actual,
+        createFetchApiClient:
+            (options: { defaultHeaders?: Record<string, string> }) =>
+            async (request: { path?: string }) => {
+                requests.push({ headers: options.defaultHeaders, request });
+                return requestImpl(request);
+            },
+    };
+});
+
+vi.mock('@matrix-org/matrix-sdk-crypto-wasm', () => ({}));
+vi.mock('matrix-js-sdk', () => ({
+    createClient: vi.fn(),
+    HttpApiEvent: { SessionLoggedOut: 'Session.logged_out' },
+    IndexedDBCryptoStore: class {},
+    IndexedDBStore: class {},
+}));
+
+import { createStore } from 'jotai/vanilla';
+import type { MatrixClient } from 'matrix-js-sdk';
+import {
+    ensureBlackoutApiToken,
+    resetExchangeFailureCooldownForTests,
+    revokeBlackoutApiToken,
+} from '../../../src/client/blackoutApiSession';
+import { logout, signOutPanel } from '../../../src/client/auth';
+import { endPanelSession, handleSessionLoggedOut } from '../../../src/client/initMatrix';
+import { setStorageNamespaceForTests } from '../../../src/client/storageNamespace';
+import { authStateAtom, matrixClientAtom, userIdAtom } from '../../../src/app/state/auth';
+import type { StoredSession } from '../../../src/client/sessionManager';
+
+const jwt = (exp: number) => `h.${btoa(JSON.stringify({ exp })).replace(/=+$/, '')}.s`;
+
+describe('revokeBlackoutApiToken', () => {
+    beforeEach(() => {
+        window.localStorage.clear();
+        requests.length = 0;
+        requestImpl = () => Promise.resolve({ ok: true });
+        setStorageNamespaceForTests(true);
+    });
+
+    afterEach(() => {
+        setStorageNamespaceForTests(null);
+    });
+
+    it('asks the API to refuse the panel’s token, then forgets it', async () => {
+        const token = jwt(Math.floor(Date.now() / 1000) + 3600);
+        window.localStorage.setItem('blackout.api.token.embed', token);
+        window.localStorage.setItem('blackout.api.token', 'full-app-token');
+
+        await revokeBlackoutApiToken();
+
+        expect(requests).toHaveLength(1);
+        expect(requests[0].headers).toEqual({ authorization: `Bearer ${token}` });
+        expect(requests[0].request).toMatchObject({ method: 'POST', path: '/v1/auth/sign-out' });
+        expect(window.localStorage.getItem('blackout.api.token.embed')).toBeNull();
+        // The full app's token is not the panel's to revoke.
+        expect(window.localStorage.getItem('blackout.api.token')).toBe('full-app-token');
+    });
+
+    it('still forgets the token when the API cannot be reached', async () => {
+        window.localStorage.setItem(
+            'blackout.api.token.embed',
+            jwt(Math.floor(Date.now() / 1000) + 3600)
+        );
+        requestImpl = () => Promise.reject(new Error('offline'));
+        await revokeBlackoutApiToken();
+        expect(window.localStorage.getItem('blackout.api.token.embed')).toBeNull();
+    });
+
+    it('sends nothing for a token that has already expired', async () => {
+        window.localStorage.setItem('blackout.api.token.embed', jwt(1));
+        await revokeBlackoutApiToken();
+        expect(requests).toHaveLength(0);
+        expect(window.localStorage.getItem('blackout.api.token.embed')).toBeNull();
+    });
+});
+
+describe('signOutPanel', () => {
+    beforeEach(() => {
+        window.localStorage.clear();
+        requests.length = 0;
+        requestImpl = () => Promise.resolve({ ok: true });
+        setStorageNamespaceForTests(true);
+    });
+
+    afterEach(() => {
+        setStorageNamespaceForTests(null);
+    });
+
+    it('ends the API token on the API, then signs the device out', async () => {
+        const order: string[] = [];
+        requestImpl = () => {
+            order.push('api sign-out');
+            return Promise.resolve({ ok: true });
+        };
+        window.localStorage.setItem(
+            'blackout.api.token.embed',
+            jwt(Math.floor(Date.now() / 1000) + 3600)
+        );
+        const client = {
+            stopClient: vi.fn(),
+            logout: vi.fn(async () => {
+                order.push('device logout');
+            }),
+            clearStores: vi.fn(async () => undefined),
+            getUserId: () => '@alice:hs.example.test',
+            getDeviceId: () => 'PANELDEV',
+        };
+        const store = createStore();
+        store.set(matrixClientAtom, client as unknown as MatrixClient);
+        store.set(authStateAtom, 'logged_in');
+        store.set(userIdAtom, '@alice:hs.example.test');
+
+        await signOutPanel(store);
+
+        expect(order).toEqual(['api sign-out', 'device logout']);
+        expect(client.clearStores).toHaveBeenCalledWith({
+            cryptoDatabasePrefix: 'blackout-embed-rust:@alice:hs.example.test:PANELDEV',
+        });
+        expect(store.get(authStateAtom)).toBe('logged_out');
+        expect(window.localStorage.getItem('blackout.api.token.embed')).toBeNull();
+    });
+});
+
+// An exchange still running when the panel's session ends must not leave its
+// token behind: before this, a late result was written into panel storage
+// after Sign out and was never revoked.
+describe('an API exchange that outlives the panel’s session', () => {
+    const SESSION: StoredSession = {
+        baseUrl: 'https://hs.example.test',
+        accessToken: 'matrix-token',
+        userId: '@alice:hs.example.test',
+        deviceId: 'PANELDEV',
+        sessionLength: 'until_sign_out',
+    };
+    const LATE = jwt(Math.floor(Date.now() / 1000) + 3600);
+    let finishExchange: (body: unknown) => void = () => undefined;
+
+    const fakeClient = () => ({
+        stopClient: vi.fn(),
+        logout: vi.fn(async () => ({})),
+        clearStores: vi.fn(async () => undefined),
+        removeAllListeners: vi.fn(),
+        getUserId: () => SESSION.userId,
+        getDeviceId: () => SESSION.deviceId,
+    });
+
+    const signedInStore = () => {
+        const store = createStore();
+        store.set(matrixClientAtom, fakeClient() as unknown as MatrixClient);
+        store.set(authStateAtom, 'logged_in');
+        store.set(userIdAtom, SESSION.userId);
+        return store;
+    };
+
+    const signOutRequests = () =>
+        requests.filter((r) => (r.request as { path?: string }).path === '/v1/auth/sign-out');
+
+    const settle = async () => {
+        for (let i = 0; i < 10; i += 1) await Promise.resolve();
+    };
+
+    beforeEach(() => {
+        window.localStorage.clear();
+        requests.length = 0;
+        resetExchangeFailureCooldownForTests();
+        requestImpl = (request) =>
+            request.path === '/v1/auth/matrix/exchange'
+                ? new Promise((resolve) => {
+                      finishExchange = resolve;
+                  })
+                : Promise.resolve({ ok: true });
+        Object.defineProperty(window, 'indexedDB', {
+            configurable: true,
+            value: {
+                databases: async () => [],
+                deleteDatabase: () => {
+                    const req: { onsuccess?: () => void } = {};
+                    queueMicrotask(() => req.onsuccess?.());
+                    return req;
+                },
+            },
+        });
+        vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}', { status: 200 }));
+    });
+
+    afterEach(() => {
+        vi.restoreAllMocks();
+        window.history.replaceState(null, '', '/');
+        setStorageNamespaceForTests(null);
+    });
+
+    const expectLateTokenRefused = () => {
+        expect(window.localStorage.getItem('blackout.api.token.embed')).toBeNull();
+        const refused = signOutRequests().find(
+            (r) => r.headers?.authorization === `Bearer ${LATE}`
+        );
+        expect(refused).toBeDefined();
+        // Its refresh token is refused with it.
+        expect((refused?.request as { body?: unknown }).body).toEqual({
+            refreshToken: 'late-refresh',
+        });
+    };
+
+    const panelEnds: Array<[string, () => Promise<void>]> = [
+        ['Sign out', () => signOutPanel(signedInStore())],
+        ['the session’s end', () => endPanelSession(createStore(), null, SESSION, 'session_ended')],
+        [
+            'the homeserver dropping the session',
+            async () => {
+                handleSessionLoggedOut(signedInStore(), fakeClient() as unknown as MatrixClient);
+            },
+        ],
+    ];
+    for (const [label, end] of panelEnds) {
+        it(`panel: drops and refuses a token that arrives after ${label}`, async () => {
+            setStorageNamespaceForTests(true);
+            const pending = ensureBlackoutApiToken(SESSION);
+            await settle();
+            await end();
+            finishExchange({ token: LATE, refreshToken: 'late-refresh', userId: 'u1' });
+
+            expect(await pending).toBeNull();
+            await settle();
+            expectLateTokenRefused();
+        });
+    }
+
+    it('panel: refuses a token minted while the device was being signed out', async () => {
+        setStorageNamespaceForTests(true);
+        // Sign out has started (the API side first) ...
+        await revokeBlackoutApiToken();
+        // ... and a panel feature exchanges again before the device is signed out.
+        const minted = ensureBlackoutApiToken(SESSION);
+        await settle();
+        finishExchange({ token: LATE, refreshToken: 'late-refresh', userId: 'u1' });
+        expect(await minted).toBe(LATE);
+        expect(window.localStorage.getItem('blackout.api.token.embed')).toBe(LATE);
+
+        await logout(signedInStore());
+        await settle();
+
+        expect(window.localStorage.getItem('blackout.api.token.embed')).toBeNull();
+        expect(signOutRequests().map((r) => r.headers?.authorization)).toContain(`Bearer ${LATE}`);
+    });
+
+    // B3's client switch off (the default), loaded the way the browser loads
+    // /embed: sign-out and the exchange behave exactly as before B3 (the panel
+    // then runs on the full app's session and keys).
+    it('switch off: sign-out sends nothing to the API and leaves exchanges as before', async () => {
+        window.history.replaceState(null, '', '/embed');
+        setStorageNamespaceForTests(null);
+        const pending = ensureBlackoutApiToken(SESSION);
+        await settle();
+        await logout(signedInStore());
+        finishExchange({ token: LATE, refreshToken: 'late-refresh', userId: 'u1' });
+
+        // As before B3: the exchange's result is kept and nothing is refused.
+        expect(await pending).toBe(LATE);
+        expect(window.localStorage.getItem('blackout.api.token')).toBe(LATE);
+        expect(signOutRequests()).toEqual([]);
+    });
+});

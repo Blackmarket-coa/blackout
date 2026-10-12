@@ -7,9 +7,23 @@ import {
 } from 'matrix-js-sdk';
 import { createStore } from 'jotai/vanilla';
 import { authStateAtom, matrixClientAtom, userIdAtom } from '../app/state/auth';
-import { initMatrixFromStoredSession, MatrixInitError, stopMatrixClient } from './initMatrix';
+import {
+    clearClientStores,
+    clearPanelSessionTimer,
+    initMatrixFromStoredSession,
+    MatrixInitError,
+    stopMatrixClient,
+} from './initMatrix';
 import { clearSession, getSessionForUser, saveSession, type StoredSession } from './sessionManager';
-import { clearBlackoutApiToken } from './blackoutApiSession';
+import { clearBlackoutApiToken, revokeBlackoutApiToken } from './blackoutApiSession';
+import {
+    bindSessionLength,
+    isTimedSessionLength,
+    SESSION_LENGTH_MS,
+    signOutDeviceByToken,
+    type PanelSessionChoice,
+} from './sessionLength';
+import { panelSessionsActive } from './storageNamespace';
 
 type AtomStore = ReturnType<typeof createStore>;
 
@@ -45,6 +59,8 @@ export interface RegistrationInput {
     /** When the homeserver requires an email 3PID up-front. */
     threepidCreds?: { sid: string; clientSecret: string };
     inhibitLogin?: boolean;
+    /** Chat panel sign-up (launch-plan B3): the session length chosen before signing up. */
+    sessionChoice?: PanelSessionChoice;
 }
 
 /**
@@ -80,15 +96,20 @@ const applyLoggedOutAtoms = (store: AtomStore): void => {
     store.set(userIdAtom, null);
 };
 
+type LoginResponseFields = {
+    access_token?: string;
+    refresh_token?: string;
+    user_id?: string;
+    device_id?: string;
+    expires_in_ms?: number;
+};
+
+type PanelSessionFields = Pick<StoredSession, 'sessionLength' | 'sessionEndsAt'>;
+
 const saveFromLoginResponse = (
     baseUrl: string,
-    response: {
-        access_token?: string;
-        refresh_token?: string;
-        user_id?: string;
-        device_id?: string;
-        expires_in_ms?: number;
-    }
+    response: LoginResponseFields,
+    panel?: PanelSessionFields
 ): StoredSession => {
     if (!response.access_token || !response.user_id || !response.device_id) {
         throw new MatrixInitError(
@@ -106,16 +127,89 @@ const saveFromLoginResponse = (
         userId: response.user_id,
         deviceId: response.device_id,
         expiresAt,
+        ...(panel ?? {}),
     };
 
     saveSession(session);
     return session;
 };
 
+const SESSION_LENGTH_FAILED_MESSAGE =
+    'Blackout couldn’t confirm how long this session lasts, so you’re not signed in. Try again.';
+
+/**
+ * Chat panel (launch-plan B3): refuse a timed length the servers did not say
+ * they enforce, before anything reaches the homeserver.
+ */
+const assertEnforceable = (choice: PanelSessionChoice | undefined): void => {
+    if (choice && !choice.enforcedByServer && isTimedSessionLength(choice.length)) {
+        throw new MatrixInitError(
+            'session_length_unavailable',
+            'This server can’t end panel sessions on a timer, so choose “Until I sign out”.'
+        );
+    }
+};
+
+/**
+ * Keep a freshly minted session and start the client — for the chat panel,
+ * only once the homeserver has recorded the chosen length against the new
+ * device. Until then the tokens exist only in this function: they are never
+ * stored or used, and if the length cannot be bound the device is signed out
+ * again and nothing is kept.
+ *
+ * With B3's client switch on, the chat panel never keeps a session that has
+ * no chosen length: a panel sign-in that arrives here without one (a sign-in
+ * path that lost it) signs the new device out again and fails, rather than
+ * quietly starting a session with no end. The full app, and the panel with the
+ * switch off, save and start the session exactly as before B3.
+ */
+const establishSession = async (
+    store: AtomStore,
+    baseUrl: string,
+    response: LoginResponseFields,
+    choice: PanelSessionChoice | undefined
+): Promise<MatrixClient | null> => {
+    if (!choice) {
+        if (panelSessionsActive()) {
+            if (response.access_token) {
+                await signOutDeviceByToken(baseUrl, response.access_token);
+            }
+            throw new MatrixInitError('session_length_unavailable', SESSION_LENGTH_FAILED_MESSAGE);
+        }
+        saveFromLoginResponse(baseUrl, response);
+        return initMatrixFromStoredSession(store);
+    }
+    if (!response.access_token || !response.user_id || !response.device_id) {
+        throw new MatrixInitError(
+            'invalid_credentials',
+            'Login response did not include required session fields.'
+        );
+    }
+    let panel: PanelSessionFields = { sessionLength: choice.length };
+    if (choice.enforcedByServer) {
+        const startedAt = Date.now();
+        try {
+            await bindSessionLength(baseUrl, response.access_token, choice.length);
+        } catch {
+            await signOutDeviceByToken(baseUrl, response.access_token);
+            throw new MatrixInitError('session_length_unavailable', SESSION_LENGTH_FAILED_MESSAGE);
+        }
+        const lengthMs = SESSION_LENGTH_MS[choice.length];
+        // Counted from before the bind request on this device's clock, so the
+        // panel's own sign-out never comes later than the server's end.
+        if (lengthMs !== null) panel = { ...panel, sessionEndsAt: startedAt + lengthMs };
+    }
+    saveFromLoginResponse(baseUrl, response, panel);
+    return initMatrixFromStoredSession(store);
+};
+
 export const loginWithPassword = async (
     store: AtomStore,
-    input: PasswordLoginInput
+    input: PasswordLoginInput,
+    /** Chat panel only (launch-plan B3): the session length chosen before signing in. */
+    choice?: PanelSessionChoice
 ): Promise<MatrixClient> => {
+    assertEnforceable(choice);
     store.set(authStateAtom, 'loading');
 
     try {
@@ -131,8 +225,7 @@ export const loginWithPassword = async (
             refresh_token: true,
         });
 
-        saveFromLoginResponse(input.baseUrl, result);
-        const initializedClient = await initMatrixFromStoredSession(store);
+        const initializedClient = await establishSession(store, input.baseUrl, result, choice);
 
         if (!initializedClient) {
             throw new MatrixInitError(
@@ -172,8 +265,9 @@ export const loginWithToken = async (
             refresh_token: true,
         });
 
-        saveFromLoginResponse(input.baseUrl, result);
-        const initializedClient = await initMatrixFromStoredSession(store);
+        // No session length here: the full app saves and starts the session as
+        // before; the chat panel with B3's client switch on refuses it.
+        const initializedClient = await establishSession(store, input.baseUrl, result, undefined);
 
         if (!initializedClient) {
             throw new MatrixInitError(
@@ -201,6 +295,7 @@ export const registerUser = async (
     store: AtomStore,
     input: RegistrationInput
 ): Promise<RegistrationOutcome> => {
+    assertEnforceable(input.sessionChoice);
     if (!input.auth) {
         store.set(authStateAtom, 'loading');
     }
@@ -234,8 +329,21 @@ export const registerUser = async (
         );
     }
 
-    saveFromLoginResponse(input.baseUrl, response);
-    const initializedClient = await initMatrixFromStoredSession(store);
+    let initializedClient: MatrixClient | null;
+    try {
+        initializedClient = await establishSession(
+            store,
+            input.baseUrl,
+            response,
+            input.sessionChoice
+        );
+    } catch (error) {
+        // Chat panel (B3's client switch on): a length that could not be bound
+        // has already signed the new device out, so land signed out. Elsewhere
+        // the error goes up exactly as before B3.
+        if (panelSessionsActive()) applyLoggedOutAtoms(store);
+        throw error;
+    }
     if (!initializedClient) {
         applyLoggedOutAtoms(store);
         throw new MatrixInitError(
@@ -283,9 +391,7 @@ export interface CompletePasswordResetInput {
  * endpoint directly because matrix-js-sdk's setPassword wrapper requires an
  * authenticated client.
  */
-export const completePasswordReset = async (
-    input: CompletePasswordResetInput
-): Promise<void> => {
+export const completePasswordReset = async (input: CompletePasswordResetInput): Promise<void> => {
     const url = new URL('/_matrix/client/v3/account/password', input.baseUrl);
     const body = {
         new_password: input.newPassword,
@@ -309,7 +415,8 @@ export const completePasswordReset = async (
             const data = (await response.json()) as { error?: string; errcode?: string };
             if (data.error) message = data.error;
             if (data.errcode === 'M_THREEPID_AUTH_FAILED') {
-                message = 'Email verification not yet confirmed. Click the link in the email first.';
+                message =
+                    'Email verification not yet confirmed. Click the link in the email first.';
             }
         } catch {
             // ignore
@@ -322,6 +429,8 @@ export const logout = async (store: AtomStore): Promise<void> => {
     const client = store.get(matrixClientAtom);
     const userId = store.get(userIdAtom);
 
+    // A chat panel session's own end timer must not outlive the sign-out.
+    clearPanelSessionTimer();
     stopMatrixClient(client);
 
     if (client) {
@@ -331,7 +440,7 @@ export const logout = async (store: AtomStore): Promise<void> => {
             // ignore server-side logout failures; local cleanup still required
         }
 
-        await client.clearStores();
+        await clearClientStores(client);
     }
 
     if (userId) {
@@ -340,8 +449,26 @@ export const logout = async (store: AtomStore): Promise<void> => {
         clearSession();
     }
 
-    clearBlackoutApiToken();
+    if (panelSessionsActive()) {
+        // Chat panel (B3's client switch on): refuse its API token on the API
+        // too, including one an exchange minted while the device was being
+        // signed out. The local part is immediate; the request is not awaited.
+        void revokeBlackoutApiToken();
+    } else {
+        clearBlackoutApiToken();
+    }
     applyLoggedOutAtoms(store);
+};
+
+/**
+ * The chat panel's Sign out (launch-plan B3): end the panel's Blackout API
+ * token on the API first, then sign the device out as `logout` does (which, in
+ * the panel, refuses any API token minted in the meantime as well). The full
+ * app keeps calling `logout` alone.
+ */
+export const signOutPanel = async (store: AtomStore): Promise<void> => {
+    await revokeBlackoutApiToken();
+    await logout(store);
 };
 
 export const refreshSessionToken = async (store: AtomStore): Promise<StoredSession> => {

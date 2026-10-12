@@ -114,6 +114,12 @@ already round-trips through Matrix.
    `POST /_matrix/client/v3/login` with `(derived localpart, account number)`.
 3. The Matrix access token is exchanged at `POST /v1/auth/matrix/exchange`
    (whoami → localpart → `users.username`) for the local JWT + refresh pair.
+   With `BLACKOUT_SESSION_LENGTHS=1` the exchange also asks the homeserver
+   when that Matrix session ends (the Black Mask panel's session length,
+   `docs/black-mask-chat-panel-and-account-link.md` section 3) and caps the
+   pair at that end. After the flip to MAS the homeserver module does not
+   enforce session lengths (MAS holds the access tokens), so the panel offers
+   only "Until I sign out".
 
 **Flip day (Mode B):** the operator runs `syn2mas` (deploy README runbook),
 which moves users **including their password hashes** into MAS. MAS's

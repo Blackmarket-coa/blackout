@@ -2,14 +2,18 @@ import { createFetchApiClient } from '@blackout/sdk';
 import { API_BASE_URL } from '../app/sdk/apiBaseUrl';
 import { restoreActiveSession, type StoredSession } from './sessionManager';
 import { readBlackoutApiToken } from '../app/features/monetization/marketplace/useMarketplaceAuth';
+import { storageNamespace } from './storageNamespace';
 
 /**
- * localStorage key the Blackout API JWT lives under. Kept in sync with the
- * reader in
- * `app/features/monetization/marketplace/useMarketplaceAuth.ts` —
- * `readBlackoutApiToken()` reads this exact key.
+ * localStorage key the full app's Blackout API JWT lives under. The chat
+ * panel keeps its own under `storageNamespace().apiTokenKey`, so the two never
+ * share a token. `readBlackoutApiToken()` in
+ * `app/features/monetization/marketplace/useMarketplaceAuth.ts` reads the
+ * current namespace's key.
  */
 export const BLACKOUT_API_TOKEN_KEY = 'blackout.api.token';
+
+const apiTokenKey = (): string => storageNamespace().apiTokenKey;
 
 interface MatrixExchangeResponse {
     token: string;
@@ -81,17 +85,69 @@ export const isBlackoutTokenExpired = (token: string | null | undefined): boolea
 
 const writeToken = (token: string): void => {
     try {
-        window.localStorage.setItem(BLACKOUT_API_TOKEN_KEY, token);
+        window.localStorage.setItem(apiTokenKey(), token);
     } catch {
         // Storage can be unavailable (private mode / blocked); the API just
         // stays unauthenticated until the next successful exchange.
     }
 };
 
+/**
+ * Chat panel (B3's client switch on) only: bumped each time the panel's
+ * session ends in this page (`revokeBlackoutApiToken`). An exchange started
+ * before an end and finishing after it must not leave its token behind: its
+ * result is dropped and the API is asked to refuse it (see `runExchange`).
+ * Never bumped in the full app, so the full app's exchanges are unchanged.
+ */
+let panelSessionGeneration = 0;
+
+/**
+ * Ask the API to refuse `token` from now on (`POST /v1/auth/sign-out` puts its
+ * jti on the denylist until it expires) and, when given, the refresh-token
+ * family of `refreshToken`. Best effort, and capped at 10 s so it never hangs:
+ * if the API cannot be reached, the token's own expiry still bounds it.
+ */
+const signOutApiToken = async (token: string, refreshToken?: string): Promise<void> => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 10_000);
+    try {
+        const client = createFetchApiClient({
+            baseUrl: API_BASE_URL,
+            defaultHeaders: { authorization: `Bearer ${token}` },
+        });
+        await client({
+            method: 'POST',
+            path: '/v1/auth/sign-out',
+            body: refreshToken ? { refreshToken } : {},
+            signal: controller.signal,
+        });
+    } catch {
+        // Unreachable or refused: nothing more to do here.
+    } finally {
+        clearTimeout(timer);
+    }
+};
+
+/**
+ * Chat panel (launch-plan B3): the panel's session has ended in this page —
+ * its Sign out, its chosen length running out, or the homeserver dropping it.
+ * Forget the panel's Blackout API token here and ask the API to refuse it.
+ * An exchange still running at this point, or started before it and finishing
+ * later, never leaves its token behind either: its result is dropped and the
+ * API is asked to refuse that token too. The local part happens before the
+ * first `await`, so callers that do not wait still get it at once.
+ */
+export const revokeBlackoutApiToken = async (): Promise<void> => {
+    panelSessionGeneration += 1;
+    const token = readBlackoutApiToken();
+    clearBlackoutApiToken();
+    if (token && !isBlackoutTokenExpired(token)) await signOutApiToken(token);
+};
+
 export const clearBlackoutApiToken = (): void => {
     inFlightExchange = null;
     try {
-        window.localStorage.removeItem(BLACKOUT_API_TOKEN_KEY);
+        window.localStorage.removeItem(apiTokenKey());
     } catch {
         // ignore — nothing else to clean up
     }
@@ -105,6 +161,7 @@ export const clearBlackoutApiToken = (): void => {
  */
 const runExchange = async (session: StoredSession): Promise<string | null> => {
     if (!session.accessToken) return null;
+    const generation = panelSessionGeneration;
 
     try {
         const client = createFetchApiClient({
@@ -119,6 +176,14 @@ const runExchange = async (session: StoredSession): Promise<string | null> => {
         })) as MatrixExchangeResponse;
 
         if (result?.token) {
+            if (generation !== panelSessionGeneration) {
+                // The chat panel's session ended while this exchange was
+                // running (Sign out, its end, or the homeserver dropping it):
+                // never keep the token, and ask the API to refuse it and its
+                // refresh token.
+                void signOutApiToken(result.token, result.refreshToken);
+                return null;
+            }
             lastFailedExchange = null;
             writeToken(result.token);
             return result.token;

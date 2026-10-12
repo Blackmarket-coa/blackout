@@ -108,12 +108,42 @@ For the source-of-truth triage with tier/owner detail see
     `BLACK_MASK_FRAME_ANCESTORS` on the web client container.
 -   **Not there yet:**
     -   push notifications;
-    -   a session-length choice at sign-in (B3);
     -   account linking (B4/B5);
     -   any check of external links (B6): links open in a new tab unchecked;
     -   single sign-on inside the panel (it would redirect the frame);
-    -   voice, stage and forum dens (they open in a normal Blackout tab);
-    -   a sign-out button.
+    -   voice, stage and forum dens (they open in a normal Blackout tab).
+-   **Session length (B3) is off by default, behind three switches.** In a
+    web client built with `VITE_BLACKOUT_PANEL_SESSION_LENGTHS` on, signing in
+    to the panel asks how long the session lasts (1 hour, 1 day, 7 days, 30
+    days or until you sign out; nothing preselected), and the panel gets a
+    Sign out button. No build in this repository sets it, so today the panel
+    signs in as before, with no choice and no Sign out button. The timed
+    lengths are offered only when, in addition, the homeserver runs the
+    `blackout_runtime` module with `session_lengths_enabled: true` **and** the
+    API has `BLACKOUT_SESSION_LENGTHS=1` with its migration 100; no in-repo
+    deployment sets either. With all three on, the servers end the session at
+    the chosen time even if the panel is closed. Not ended with it: a Matrix
+    OpenID token minted before the end (it lasts up to an hour, and
+    lk-jwt-service trades it for LiveKit tokens), API tokens that a modified
+    client got by exchanging its Matrix token before the length was set
+    (nothing ties them to the session's end), and what the session did while
+    valid. The panel's Sign out does not end an API refresh token that a
+    modified client kept from the exchange: it keeps working after Sign out,
+    up to the session end, or, for "Until I sign out", for as long as it is
+    refreshed at least once every 30 days. Until the sweep deletes the device
+    (60 seconds by default), an ended token is still accepted by Synapse's
+    `/logout` and `/logout/all`, which signs out every device of the account.
+    Local stores are deleted when the panel next runs, not while the browser
+    is closed. Never offered under MAS (MSC3861).
+    Details: `docs/black-mask-chat-panel-and-account-link.md` section 3.
+-   **With that client switch on, the panel has its own session.** It never
+    reuses a Blackout tab's session, so someone signed in to Blackout signs in
+    again in the panel, as a separate device; older encrypted messages may not
+    be readable there (BO-1). Signing out of Blackout in a tab does not sign
+    the panel out; the panel's own Sign out button does. With the switch off
+    (the default) the panel uses the full app's storage names, as before B3,
+    so whether it shares a tab's session depends on the browser's storage
+    partitioning for extension frames, which has not been checked.
 -   **Only the `apps/blackout-client/Dockerfile` image implements the
     allow-list.** On that image nothing can be framed until
     `BLACK_MASK_FRAME_ANCESTORS` is set on its container (and the container
@@ -127,13 +157,16 @@ For the source-of-truth triage with tier/owner detail see
     Vercel and Netlify send no framing headers at all.
 -   **Firefox:** extension origins are per-install, so a fixed allow-list
     cannot name the Firefox extension.
--   **Unverified:** the signed-in panel against a real homeserver, the panel
-    inside a real extension, and whether a framed panel shares the browser's
-    Blackout session or signs in separately. If it signs in separately, older
-    encrypted messages may not be readable in it (BO-1). Framing through the
-    front proxies was checked with nginx (1.24.0 locally, 1.27.5 and 1.22.1 in
-    containers) and Chromium only, not on a deployed host or through
-    Cloudflare.
+-   **Unverified:** the signed-in panel against a deployed homeserver, and the
+    panel inside a real extension. Session lengths were run end to end only
+    against a homeserver started locally from this repository, before the
+    client switch existed. The homeserver's tests
+    (`tests/blackout_runtime/test_session_length.py`) run only by hand: CI runs
+    no `apps/blackout-server` tests, so a regression in
+    `blackout_runtime/session_length.py` would merge green.
+    Framing through the front proxies was checked with nginx (1.24.0 locally,
+    1.27.5 and 1.22.1 in containers) and Chromium only, not on a deployed host
+    or through Cloudflare.
 
 ---
 

@@ -985,6 +985,17 @@ class InMemoryDb {
 
     // --- refresh tokens ---
 
+    /**
+     * Whether this store keeps a refresh token's `sessionExpiresAt` (the end of
+     * a session whose length the server enforces, launch-plan B3) for as long as
+     * it keeps the token. The in-memory and file stores keep whole records, so
+     * always; the Postgres store only with migration 100's column (it overrides
+     * this). The exchange refuses to bound a session it could not keep bounded.
+     */
+    persistsRefreshTokenSessionEnds(): boolean {
+        return true;
+    }
+
     createRefreshToken(input: Omit<RefreshTokenRecord, 'createdAt'>): RefreshTokenRecord {
         const record: RefreshTokenRecord = { ...input, createdAt: nowIso() };
         this.refreshTokens.set(record.id, record);
@@ -8085,6 +8096,16 @@ export class PostgresBackedDb extends InMemoryDb {
                 client.release?.();
             }
         })();
+    }
+
+    /**
+     * The Postgres writer silently skips a record field that has no column, so
+     * `sessionExpiresAt` survives a restart only with migration 100's
+     * `refresh_tokens.session_expires_at`. Read from the columns found at
+     * `init`; false before it.
+     */
+    override persistsRefreshTokenSessionEnds(): boolean {
+        return this.plans.get('refreshTokens')?.columnNames.has('session_expires_at') ?? false;
     }
 
     /** Flush queued writes. Does NOT close the change subscription — safe to call

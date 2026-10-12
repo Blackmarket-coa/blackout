@@ -223,7 +223,7 @@ immediate.
 
 **Asset**: a signed-in Blackout session rendered at `/embed` inside a frame on
 another origin (the Black Mask extension). Spec and status:
-`docs/black-mask-chat-panel-and-account-link.md` (steps 1 and 2).
+`docs/black-mask-chat-panel-and-account-link.md` (steps 1 to 3).
 
 **Who can frame it**: nobody by default. The web client's nginx image sends
 `frame-ancestors 'none'` and `X-Frame-Options: DENY` on every route. On `/embed`
@@ -277,14 +277,51 @@ send the right list on `/embed`.
 -   **Phishing through links in messages**: **not mitigated by the panel.**
     Black Mask's link check (launch-plan B6) is not built; an external link
     opened from the panel is as safe as the same link opened from Blackout.
+-   **A panel session left behind, or its tokens copied** (A7: a shared or
+    borrowed device, a token lifted from browser storage): the person picks a
+    session length at sign-in (step 3). Off by default, behind three switches:
+    the web client's build-time `VITE_BLACKOUT_PANEL_SESSION_LENGTHS` (without
+    it the panel offers no choice), `session_lengths_enabled` in the homeserver
+    module and `BLACKOUT_SESSION_LENGTHS` on the API. With all three on, the
+    servers end the panel device's Matrix tokens, and the API tokens exchanged
+    for them, at that time without relying on the client. The homeserver caps the device's access and refresh tokens at the
+    end and then deletes the device (tokens, E2EE device keys, pushers); the
+    API caps the JWT (`exp` and `sxp`) and the refresh-token family at the
+    same end, takes the end from the homeserver, never from the client, and
+    refuses timed sessions when it has nowhere to keep the end. The length can
+    be set once per device and never extended. A timed length is never offered
+    unless both servers say they enforce it. Not covered (step 3, "Not
+    enforced"): a Matrix OpenID token minted before the end stays valid for up
+    to an hour after it, device or not, and lk-jwt-service trades it for
+    LiveKit tokens; until the sweep deletes the device, an ended token is still
+    accepted by Synapse's `/logout` and `/logout/all` (the latter signs out
+    every device of the account); an API refresh token that a modified
+    client kept still refreshes after the panel's Sign out, up to the session
+    end (for "Until I sign out", for as long as it is refreshed at least once
+    every 30 days); and API tokens that a modified client gets by exchanging
+    its Matrix token before the length is set are not tied to the session's
+    end.
+-   **The panel picking up, or clobbering, the full app's session**: with the
+    client switch on, the panel keeps its session, API token and IndexedDB
+    stores under its own names, so it never runs on the full app's session
+    (which has no length), never overwrites it and never prunes its encryption
+    keys, partitioned storage or not. With the switch off (the default) it uses
+    the full app's names, as before B3.
 
-**Residual risk**: whether a framed panel shares the browser's Blackout
-session or gets its own depends on the browser's storage partitioning for
-extension-embedded frames, and has not been checked. Firefox extension origins
-are per-install, so a fixed list cannot name the Firefox extension. Both are
-recorded as constraints, not solved. Anything in front of the proxies (the
-live host sits behind Cloudflare) has not been checked for what it does with
-these headers.
+**Residual risk**: what a panel session did while it was valid is not undone
+when it ends (messages, joins, integration secrets created through the API, a
+voice token of up to 15 minutes, an OpenID token of up to an hour); the panel
+deletes its local stores only when it next runs, so a browser that never opens
+it again keeps them on disk; a device whose length could not be bound, and
+whose sign-out then also failed, stays in the device list with tokens nothing
+holds; under MAS the feature is unavailable. The homeserver's enforcement is
+tested only by hand: CI runs no `apps/blackout-server` tests. With the client
+switch off, whether a framed panel shares the browser's Blackout session
+depends on the browser's storage partitioning for extension-embedded frames,
+and has not been checked. Firefox extension origins are per-install, so a
+fixed list cannot name the Firefox extension. Anything in front of the proxies
+(the live host sits behind Cloudflare) has not been checked for what it does
+with these headers. All are recorded as constraints, not solved.
 
 ## 7. Accepted residual risks
 

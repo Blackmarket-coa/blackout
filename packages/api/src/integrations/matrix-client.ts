@@ -175,6 +175,76 @@ export const matrixClient = {
         };
     },
 
+    /**
+     * Ask the homeserver when a *user-supplied* Matrix session ends, using that
+     * session's own token (launch-plan B3: the Black Mask panel's
+     * session-length choice, recorded by the blackout_runtime module at
+     * `/_synapse/client/blackout/session/length`).
+     *
+     * - `ok` with `expiresAtMs: null`: the session has no server-enforced end.
+     * - `unsupported`: the homeserver does not run the feature (404), so no
+     *   session there can have a chosen length.
+     * - anything else: the end is unknown, and the caller must fail closed.
+     */
+    async sessionLength(accessToken: string) {
+        const hs = homeserver();
+        if (!hs) {
+            return { ok: false as const, reason: 'matrix_not_configured' as const };
+        }
+        if (!accessToken) {
+            return { ok: false as const, reason: 'no_token' as const };
+        }
+
+        let response: Response;
+        try {
+            response = await fetch(`${hs}/_synapse/client/blackout/session/length`, {
+                headers: { Authorization: `Bearer ${accessToken}` },
+            });
+        } catch (error) {
+            return {
+                ok: false as const,
+                reason: 'network_error' as const,
+                detail: (error as Error).message,
+            };
+        }
+
+        if (response.status === 404) {
+            return { ok: false as const, status: 404, reason: 'unsupported' as const };
+        }
+        if (response.status === 401) {
+            return { ok: false as const, status: 401, reason: 'invalid_token' as const };
+        }
+        if (!response.ok) {
+            return {
+                ok: false as const,
+                status: response.status,
+                reason: 'upstream_error' as const,
+            };
+        }
+
+        let json: { session_length?: unknown; expires_at_ms?: unknown };
+        try {
+            json = (await response.json()) as typeof json;
+        } catch {
+            return { ok: false as const, status: response.status, reason: 'bad_response' as const };
+        }
+        const expiresAtMs = json.expires_at_ms;
+        const sessionLength = json.session_length;
+        const validEnd =
+            expiresAtMs === null ||
+            (typeof expiresAtMs === 'number' && Number.isFinite(expiresAtMs) && expiresAtMs > 0);
+        const validLength = sessionLength === null || typeof sessionLength === 'string';
+        if (!validEnd || !validLength) {
+            return { ok: false as const, status: response.status, reason: 'bad_response' as const };
+        }
+        return {
+            ok: true as const,
+            status: response.status,
+            sessionLength: sessionLength as string | null,
+            expiresAtMs: expiresAtMs as number | null,
+        };
+    },
+
     async sendMessage(roomId: string, content: string) {
         return matrixClient.sendEvent(roomId, { msgtype: 'm.text', body: content });
     },

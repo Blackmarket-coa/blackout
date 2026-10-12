@@ -28,9 +28,11 @@ import {
     inputStyle,
     linkButtonStyle,
     primaryButtonStyle,
+    awaitingChoiceButtonStyle,
 } from './styles';
 import type { ResolvedHomeserver } from './types';
 import type { RegistrationProbe } from './homeserver';
+import type { PanelSessionChoice } from '../../../../client/sessionLength';
 
 const SUPPORTED_REG_STAGES = [
     AuthType.Dummy,
@@ -55,7 +57,15 @@ type RegisterFormProps = {
     server: ResolvedHomeserver;
     onSwitchTab: (tab: 'login') => void;
     probe: RegistrationProbe;
+    /**
+     * True inside the chat panel with B3's client switch on: signing up signs
+     * in, so it waits for a session length too (`sessionChoice`).
+     */
+    requireSessionChoice?: boolean;
+    sessionChoice?: PanelSessionChoice | null;
 };
+
+const SIGNUP_SESSION_CHOICE_HINT_ID = 'panel-signup-session-choice-hint';
 
 type FormFields = {
     username: string;
@@ -113,8 +123,16 @@ const evaluateFlows = (data: IAuthData | null, error?: string): RegistrationFlow
     };
 };
 
-export const RegisterForm = ({ server, onSwitchTab, probe }: RegisterFormProps) => {
+export const RegisterForm = ({
+    server,
+    onSwitchTab,
+    probe,
+    requireSessionChoice = false,
+    sessionChoice = null,
+}: RegisterFormProps) => {
     const store = useStore();
+    const awaitingSessionChoice = requireSessionChoice && !sessionChoice;
+    const choice = requireSessionChoice ? sessionChoice ?? undefined : undefined;
     const [fields, setFields] = useState<FormFields>(initialFields);
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(probe.errorMessage);
@@ -144,7 +162,7 @@ export const RegisterForm = ({ server, onSwitchTab, probe }: RegisterFormProps) 
         }
         if (!stashed) return;
         setFields((prev) =>
-            prev.registrationToken ? prev : { ...prev, registrationToken: stashed! },
+            prev.registrationToken ? prev : { ...prev, registrationToken: stashed! }
         );
     }, []);
 
@@ -193,14 +211,16 @@ export const RegisterForm = ({ server, onSwitchTab, probe }: RegisterFormProps) 
         let cancelled = false;
         const tryRender = () => {
             if (cancelled) return;
-            const grecaptcha = (window as unknown as {
-                grecaptcha?: {
-                    render: (
-                        container: HTMLElement,
-                        params: { sitekey: string; callback: (token: string) => void }
-                    ) => number;
-                };
-            }).grecaptcha;
+            const grecaptcha = (
+                window as unknown as {
+                    grecaptcha?: {
+                        render: (
+                            container: HTMLElement,
+                            params: { sitekey: string; callback: (token: string) => void }
+                        ) => number;
+                    };
+                }
+            ).grecaptcha;
             if (!grecaptcha?.render) {
                 window.setTimeout(tryRender, 250);
                 return;
@@ -313,6 +333,7 @@ export const RegisterForm = ({ server, onSwitchTab, probe }: RegisterFormProps) 
 
     const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
+        if (awaitingSessionChoice) return;
         setError(null);
         const validationError = validate();
         if (validationError) {
@@ -355,6 +376,7 @@ export const RegisterForm = ({ server, onSwitchTab, probe }: RegisterFormProps) 
                     username: fields.username,
                     password: fields.password,
                     auth: authDict,
+                    ...(choice ? { sessionChoice: choice } : {}),
                 });
 
                 if (outcome.status === 'success') {
@@ -406,8 +428,8 @@ export const RegisterForm = ({ server, onSwitchTab, probe }: RegisterFormProps) 
                 err instanceof MatrixInitError
                     ? err.message
                     : err instanceof Error
-                      ? err.message
-                      : 'Registration failed.';
+                    ? err.message
+                    : 'Registration failed.';
             setError(message);
         } finally {
             setSubmitting(false);
@@ -508,7 +530,14 @@ export const RegisterForm = ({ server, onSwitchTab, probe }: RegisterFormProps) 
                 </label>
             ) : null}
             {flowAvailability.requiresTerms ? (
-                <label style={{ ...fieldStyle, gridTemplateColumns: 'auto 1fr', alignItems: 'center', gap: 8 }}>
+                <label
+                    style={{
+                        ...fieldStyle,
+                        gridTemplateColumns: 'auto 1fr',
+                        alignItems: 'center',
+                        gap: 8,
+                    }}
+                >
                     <input
                         type="checkbox"
                         checked={fields.acceptTerms}
@@ -540,16 +569,30 @@ export const RegisterForm = ({ server, onSwitchTab, probe }: RegisterFormProps) 
                     {error}
                 </p>
             ) : null}
-            <button type="submit" disabled={submitting} style={primaryButtonStyle}>
+            {awaitingSessionChoice ? (
+                <p
+                    id={SIGNUP_SESSION_CHOICE_HINT_ID}
+                    data-testid="signup-session-choice-hint"
+                    style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary, #94a3b8)' }}
+                >
+                    Choose how long to stay signed in first.
+                </p>
+            ) : null}
+            <button
+                type="submit"
+                disabled={submitting || awaitingSessionChoice}
+                aria-describedby={awaitingSessionChoice ? SIGNUP_SESSION_CHOICE_HINT_ID : undefined}
+                style={
+                    awaitingSessionChoice
+                        ? { ...primaryButtonStyle, ...awaitingChoiceButtonStyle }
+                        : primaryButtonStyle
+                }
+            >
                 {submitting ? 'Creating account…' : 'Create account'}
             </button>
             <p style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary, #94a3b8)' }}>
                 Already have an account?{' '}
-                <button
-                    type="button"
-                    onClick={() => onSwitchTab('login')}
-                    style={linkButtonStyle}
-                >
+                <button type="button" onClick={() => onSwitchTab('login')} style={linkButtonStyle}>
                     Sign in
                 </button>
             </p>

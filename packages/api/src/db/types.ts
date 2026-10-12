@@ -237,6 +237,13 @@ export interface RefreshTokenRecord {
     revokedReason?: string;
     createdAt: string;
     userAgentHash?: string;
+    /**
+     * End of the whole session (ISO) when it has a server-enforced length (the
+     * Black Mask panel, launch-plan B3). Carried unchanged to every rotated
+     * successor; no token in the family is refreshed at or after it, and
+     * `expiresAt` is never later than it. Absent for ordinary sessions.
+     */
+    sessionExpiresAt?: string;
 }
 
 export interface RevokedSessionRecord {

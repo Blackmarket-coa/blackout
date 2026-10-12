@@ -9,14 +9,27 @@ import {
 } from 'matrix-js-sdk';
 import { type AccessTokens, type TokenRefreshFunction } from 'matrix-js-sdk/lib/http-api';
 import { createStore } from 'jotai/vanilla';
-import { authStateAtom, matrixClientAtom, userIdAtom, type AuthState } from '../app/state/auth';
+import {
+    authStateAtom,
+    matrixClientAtom,
+    panelSignedOutReasonAtom,
+    userIdAtom,
+    type AuthState,
+    type PanelSignedOutReason,
+} from '../app/state/auth';
 import {
     clearSession,
     restoreActiveSession,
     saveSession,
     type StoredSession,
 } from './sessionManager';
-import { clearBlackoutApiToken, exchangeMatrixForBlackoutToken } from './blackoutApiSession';
+import {
+    clearBlackoutApiToken,
+    exchangeMatrixForBlackoutToken,
+    revokeBlackoutApiToken,
+} from './blackoutApiSession';
+import { storageNamespace } from './storageNamespace';
+import { isTimedSessionLength, MAX_TIMER_DELAY_MS, signOutDeviceByToken } from './sessionLength';
 import { cryptoCallbacks } from './secretStorageKeys';
 import { startEncryptionHealthTracking, stopEncryptionHealthTracking } from './encryptionHealth';
 import { filteredMatrixLogger } from './matrixLogger';
@@ -32,6 +45,7 @@ export type MatrixInitErrorCode =
     | 'invalid_credentials'
     | 'rate_limited'
     | 'captcha_required'
+    | 'session_length_unavailable'
     | 'unknown';
 
 export class MatrixInitError extends Error {
@@ -89,14 +103,44 @@ const applyAuthAtoms = (store: AtomStore, client: MatrixClient | null, authState
     store.set(userIdAtom, client?.getUserId() ?? null);
 };
 
-const SYNC_STORE_PREFIX = 'blackout-sync-store:';
-const CRYPTO_STORE_PREFIX = 'blackout-crypto-store:';
+// 'blackout-sync-store:' / 'blackout-crypto-store:' in the full app; the chat
+// panel uses its own names (see storageNamespace).
+const syncStorePrefix = (): string => storageNamespace().syncStorePrefix;
+const cryptoStorePrefix = (): string => storageNamespace().cryptoStorePrefix;
 
 const cryptoStoreDbName = (userId: string, deviceId: string): string =>
-    `${CRYPTO_STORE_PREFIX}${userId}:${deviceId}`;
+    `${cryptoStorePrefix()}${userId}:${deviceId}`;
 
 const syncStoreDbName = (userId: string, deviceId: string): string =>
-    `${SYNC_STORE_PREFIX}${userId}:${deviceId}`;
+    `${syncStorePrefix()}${userId}:${deviceId}`;
+
+/**
+ * matrix-js-sdk's IndexedDBStore opens `matrix-js-sdk:<dbName>`, not `<dbName>`
+ * (`lib/store/indexeddb-local-backend.js`), so the sync store's real database
+ * carries this prefix.
+ */
+const SDK_SYNC_DB_PREFIX = 'matrix-js-sdk:';
+
+/** The Rust crypto store's two IndexedDB databases for a prefix (the SDK's naming). */
+const rustCryptoDbNames = (prefix: string): string[] => [
+    `${prefix}::matrix-sdk-crypto`,
+    `${prefix}::matrix-sdk-crypto-meta`,
+];
+
+/**
+ * `client.clearStores()` with the Rust crypto store name this page uses: the
+ * SDK default in the full app (so the call is unchanged there), the
+ * per-device name in the chat panel.
+ */
+export const clearClientStores = async (client: MatrixClient): Promise<void> => {
+    const userId = client.getUserId();
+    const deviceId = client.getDeviceId();
+    const prefix =
+        userId && deviceId ? storageNamespace().rustCryptoPrefix(userId, deviceId) : undefined;
+    await (prefix === undefined
+        ? client.clearStores()
+        : client.clearStores({ cryptoDatabasePrefix: prefix }));
+};
 
 const deleteIndexedDb = (name: string): Promise<void> =>
     new Promise<void>((resolve) => {
@@ -124,7 +168,10 @@ const cleanupStaleStoresForUser = async (userId: string, activeDeviceId: string)
     const targetSyncDb = syncStoreDbName(userId, activeDeviceId);
 
     // Always remove the legacy un-suffixed databases from earlier builds.
-    const legacyDbs = [`${CRYPTO_STORE_PREFIX}${userId}`, `${SYNC_STORE_PREFIX}${userId}`];
+    const legacyDbs = [`${cryptoStorePrefix()}${userId}`, `${syncStorePrefix()}${userId}`];
+    // The chat panel's Rust crypto stores are per device; prune other devices'.
+    const rustUserPrefix = storageNamespace().rustCryptoUserPrefix(userId);
+    const activeRustPrefix = storageNamespace().rustCryptoPrefix(userId, activeDeviceId);
 
     let staleDbs: string[] = [];
 
@@ -139,9 +186,24 @@ const cleanupStaleStoresForUser = async (userId: string, activeDeviceId: string)
                 .filter((name): name is string => typeof name === 'string')
                 .filter(
                     (name) =>
-                        (name.startsWith(`${CRYPTO_STORE_PREFIX}${userId}:`) &&
+                        (name.startsWith(`${cryptoStorePrefix()}${userId}:`) &&
                             name !== targetCryptoDb) ||
-                        (name.startsWith(`${SYNC_STORE_PREFIX}${userId}:`) && name !== targetSyncDb)
+                        (name.startsWith(`${syncStorePrefix()}${userId}:`) &&
+                            name !== targetSyncDb) ||
+                        (rustUserPrefix !== undefined &&
+                            name.startsWith(rustUserPrefix) &&
+                            !(
+                                activeRustPrefix !== undefined &&
+                                name.startsWith(`${activeRustPrefix}::`)
+                            )) ||
+                        // The panel also prunes its sync stores under the
+                        // name the SDK really gives them. (The full app's
+                        // filter above never matches that name; unchanged here.)
+                        (storageNamespace().embed &&
+                            name.startsWith(
+                                `${SDK_SYNC_DB_PREFIX}${syncStorePrefix()}${userId}:`
+                            ) &&
+                            name !== `${SDK_SYNC_DB_PREFIX}${targetSyncDb}`)
                 );
         } catch {
             // indexedDB.databases() can throw in some browsers; fall through.
@@ -192,6 +254,11 @@ const buildTokenRefreshFunction = (session: StoredSession): TokenRefreshFunction
             userId: session.userId,
             deviceId: session.deviceId,
             expiresAt,
+            // A chat panel session (B3's client switch on) keeps its chosen
+            // length across refreshes.
+            ...(storageNamespace().embed && session.sessionLength !== undefined
+                ? { sessionLength: session.sessionLength, sessionEndsAt: session.sessionEndsAt }
+                : {}),
         });
 
         return {
@@ -236,7 +303,10 @@ const initClientForSession = async (session: StoredSession): Promise<MatrixClien
     });
 
     await syncStore.startup();
-    await client.initRustCrypto();
+    const rustCryptoPrefix = storageNamespace().rustCryptoPrefix(session.userId, session.deviceId);
+    await (rustCryptoPrefix === undefined
+        ? client.initRustCrypto()
+        : client.initRustCrypto({ cryptoDatabasePrefix: rustCryptoPrefix }));
     client.setMaxListeners(100);
 
     // BO-1: keep the key-backup / cross-signing posture readable by the
@@ -275,18 +345,141 @@ export const startSyncWithRetry = async (client: MatrixClient): Promise<void> =>
  * request (homeserver + `/v1/*` via the Matrix→Blackout exchange) 401s.
  *
  * Mirrors the local-cleanup half of `auth.ts`'s `logout()` — but deliberately
- * skips `client.logout()` (the token is already dead) and `clearStores()`
- * (keeping the IndexedDB crypto store preserves megolm keys for the next
- * login; stale stores are pruned by `cleanupStaleStoresForUser` anyway).
+ * skips `client.logout()` (the token is already dead) and, in the full app,
+ * `clearStores()` (keeping the IndexedDB crypto store preserves megolm keys
+ * for the next login; stale stores are pruned by `cleanupStaleStoresForUser`
+ * anyway). The chat panel with B3's client switch on does clear its stores
+ * (see below); with the switch off it behaves as the full app.
  * Dropping the stored session means a reload lands on the sign-in card
  * instead of re-entering the zombie state.
  */
 export const handleSessionLoggedOut = (store: AtomStore, client: MatrixClient): void => {
     stopMatrixClient(client);
-    clearBlackoutApiToken();
+    // The chat panel (B3's client switch on) also asks the API to refuse its
+    // API token, and drops one an exchange still running would mint; the
+    // local part is immediate, the request is not awaited.
+    if (storageNamespace().embed) void revokeBlackoutApiToken();
+    else clearBlackoutApiToken();
     const userId = client.getUserId();
     clearSession(userId ?? undefined);
     applyAuthAtoms(store, null, 'logged_out');
+    if (storageNamespace().embed) {
+        // The chat panel (B3's client switch on) also deletes what the dead
+        // session stored in this browser: a panel sign-in may be on a shared or
+        // borrowed device, and the device is gone on the server, so nothing
+        // here is reusable.
+        clearPanelSessionTimer();
+        store.set(panelSignedOutReasonAtom, 'signed_out');
+        const deviceId = client.getDeviceId();
+        void clearClientStores(client).catch(() => undefined);
+        if (userId && deviceId) void deletePanelSessionData(userId, deviceId);
+    }
+};
+
+/** Delete one device's IndexedDB stores, including the panel's per-device Rust crypto store. */
+const deletePanelSessionData = async (userId: string, deviceId: string): Promise<void> => {
+    const rustPrefix = storageNamespace().rustCryptoPrefix(userId, deviceId);
+    await Promise.all([
+        deleteIndexedDb(cryptoStoreDbName(userId, deviceId)),
+        deleteIndexedDb(syncStoreDbName(userId, deviceId)),
+        // The sync store's real database (the timeline cache).
+        deleteIndexedDb(`${SDK_SYNC_DB_PREFIX}${syncStoreDbName(userId, deviceId)}`),
+        ...(rustPrefix === undefined ? [] : rustCryptoDbNames(rustPrefix).map(deleteIndexedDb)),
+    ]);
+};
+
+let panelSessionTimer: number | undefined;
+
+/** Stop the chat panel's own end-of-session timer (on sign-out, or a new session). */
+export const clearPanelSessionTimer = (): void => {
+    if (panelSessionTimer !== undefined) window.clearTimeout(panelSessionTimer);
+    panelSessionTimer = undefined;
+};
+
+/**
+ * Chat panel only (launch-plan B3): sign this device out because its session
+ * is over. The servers enforce the end on their own — the homeserver refuses
+ * the device's tokens from the end on and deletes the device, and the
+ * Blackout API refuses its tokens too — so this is the panel catching up:
+ * stop syncing, end the device on the server now if it is still there (logout
+ * is accepted with an expired token), delete what the session stored in this
+ * browser, and say why.
+ */
+export const endPanelSession = async (
+    store: AtomStore,
+    client: MatrixClient | null,
+    session: StoredSession,
+    reason: PanelSignedOutReason
+): Promise<void> => {
+    clearPanelSessionTimer();
+    if (client) {
+        client.removeAllListeners(HttpApiEvent.SessionLoggedOut);
+        stopMatrixClient(client);
+        try {
+            await client.logout();
+        } catch {
+            // Already gone on the server (refused or swept): nothing to end.
+        }
+        try {
+            await clearClientStores(client);
+        } catch {
+            // Deleted below by name as well.
+        }
+    } else {
+        // Found already past its end (the panel was closed when it came): end
+        // the device on the server now rather than leaving it for the sweep.
+        // Not awaited: the signed-out panel must not wait on the network.
+        void signOutDeviceByToken(session.baseUrl, session.accessToken);
+    }
+    await deletePanelSessionData(session.userId, session.deviceId);
+    // Only touch the stored session and the screen if this is still the
+    // session on show; never sign out a newer one.
+    const stored = restoreActiveSession();
+    if (stored && (stored.userId !== session.userId || stored.deviceId !== session.deviceId)) {
+        return;
+    }
+    clearSession(session.userId);
+    // Refuse the panel's API token on the API too (not awaited), and drop one
+    // an exchange still running would mint.
+    void revokeBlackoutApiToken();
+    store.set(panelSignedOutReasonAtom, reason);
+    applyAuthAtoms(store, null, 'logged_out');
+};
+
+/** Re-arm in steps no longer than `setTimeout` allows (30-day sessions exceed it). */
+const schedulePanelSessionEnd = (
+    store: AtomStore,
+    client: MatrixClient,
+    session: StoredSession
+): void => {
+    clearPanelSessionTimer();
+    const endsAt = session.sessionEndsAt;
+    if (endsAt === undefined) return;
+    const tick = (): void => {
+        const remaining = endsAt - Date.now();
+        if (remaining <= 0) {
+            panelSessionTimer = undefined;
+            void endPanelSession(store, client, session, 'session_ended');
+            return;
+        }
+        panelSessionTimer = window.setTimeout(tick, Math.min(remaining, MAX_TIMER_DELAY_MS));
+    };
+    tick();
+};
+
+const hasEnded = (session: StoredSession): boolean =>
+    session.sessionEndsAt !== undefined && session.sessionEndsAt <= Date.now();
+
+/**
+ * Chat panel (B3's client switch on): may this stored session run? Only with a
+ * chosen length, and, for a timed length, with the end the panel's own timer
+ * counts down to. Sign-in never stores anything else; a session found without
+ * them (a sign-in path that lost the length, or altered storage) is ended
+ * rather than run with no end.
+ */
+const hasUsablePanelLength = (session: StoredSession): boolean => {
+    if (session.sessionLength === undefined) return false;
+    return !isTimedSessionLength(session.sessionLength) || session.sessionEndsAt !== undefined;
 };
 
 export const initMatrixFromStoredSession = async (
@@ -300,11 +493,32 @@ export const initMatrixFromStoredSession = async (
         return null;
     }
 
+    // Only the chat panel with B3's client switch on reads a session's length
+    // (the full app, and the panel with the switch off, start the session as
+    // before B3). Past its end, never start the session again from this
+    // browser: clean up and land on the signed-out panel. Without a usable
+    // length, end it the same way rather than run it with no end.
+    const panel = storageNamespace().embed;
+    if (panel && hasEnded(session)) {
+        await endPanelSession(store, null, session, 'session_ended');
+        return null;
+    }
+    if (panel && !hasUsablePanelLength(session)) {
+        await endPanelSession(store, null, session, 'signed_out');
+        return null;
+    }
+
     try {
         const client = await initClientForSession(session);
         client.once(HttpApiEvent.SessionLoggedOut, () => handleSessionLoggedOut(store, client));
         await startSyncWithRetry(client);
         applyAuthAtoms(store, client, 'logged_in');
+        if (panel) {
+            store.set(panelSignedOutReasonAtom, null);
+            if (session.sessionEndsAt !== undefined) {
+                schedulePanelSessionEnd(store, client, session);
+            }
+        }
         // Bridge the Matrix session into a Blackout API JWT so /v1/* features
         // (invitations, entitlements, …) are authenticated. Fire-and-forget:
         // chat must not block on the API server being reachable.
@@ -363,7 +577,7 @@ export const logoutClient = async (client: MatrixClient): Promise<void> => {
         // ignore server-side logout failures; local cleanup still needs to finish
     }
 
-    await client.clearStores();
+    await clearClientStores(client);
     const userId = client.getUserId();
     const deviceId = client.getDeviceId();
     if (userId) {
@@ -374,8 +588,8 @@ export const logoutClient = async (client: MatrixClient): Promise<void> => {
                       deleteIndexedDb(syncStoreDbName(userId, deviceId)),
                   ]
                 : []),
-            deleteIndexedDb(`${CRYPTO_STORE_PREFIX}${userId}`),
-            deleteIndexedDb(`${SYNC_STORE_PREFIX}${userId}`),
+            deleteIndexedDb(`${cryptoStorePrefix()}${userId}`),
+            deleteIndexedDb(`${syncStorePrefix()}${userId}`),
         ]);
     }
     clearSession(userId ?? undefined);
@@ -383,6 +597,6 @@ export const logoutClient = async (client: MatrixClient): Promise<void> => {
 
 export const clearCacheAndReload = async (client: MatrixClient): Promise<void> => {
     stopMatrixClient(client);
-    await client.clearStores();
+    await clearClientStores(client);
     window.location.reload();
 };

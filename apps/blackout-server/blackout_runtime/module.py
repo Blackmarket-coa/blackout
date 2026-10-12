@@ -51,6 +51,7 @@ from .server_semantics import (
     BlackoutServerSemantics,
     MIGRATION_BLOCKED_EVENT_TYPES,
 )
+from .session_length import SessionLengthService, SessionRootResource
 
 BLACKOUT_PRESENCE_ACCOUNT_DATA_TYPE = "m.blackout.presence"
 DEAD_DROP_CHANNEL_TYPE = "blackout_dead_drop_room"
@@ -523,6 +524,12 @@ class BlackoutRootResource(Resource):
         )
         self.putChild(b"governance", governance_resource)
         self.putChild(b"reputation", ReputationRootResource(module_api, module))
+        # Panel session lengths (launch-plan B3): mounted only when enabled, so
+        # with the feature off these paths stay the 404s they always were.
+        if module._session_lengths is not None:
+            self.putChild(
+                b"session", SessionRootResource(module_api, module._session_lengths)
+            )
 
 
 class BlackoutRuntimeModule:
@@ -634,6 +641,13 @@ class BlackoutRuntimeModule:
         self._decisions = GovernanceDecisionStore(self._conn)
         self._proposals = GovernanceProposalStore(self._conn)
         self._reputation = ReputationStore(self._conn)
+
+        # Off unless `session_lengths_enabled: true`; see session_length.py.
+        self._session_lengths = SessionLengthService.from_config(
+            config, self._module_api
+        )
+        if self._session_lengths is not None:
+            self._session_lengths.register()
 
         self._module_api.register_third_party_rules_callbacks(
             on_create_room=self.on_create_room,

@@ -27,6 +27,11 @@ import {
     revokeAllForUser,
     rotateRefreshToken,
 } from '../services/refreshToken';
+import {
+    SESSION_LENGTHS,
+    sessionEndSeconds,
+    sessionLengthsEnforced,
+} from '../services/sessionLength';
 import { consumePasswordResetToken, issuePasswordResetToken } from '../services/passwordReset';
 import {
     consumeEmailVerificationToken,
@@ -161,9 +166,26 @@ const loginSchema = z.object({
     password: z.string().min(1),
 });
 
-export const issueSession = (userId: string, username: string, userAgent?: string) => {
-    const access = signJwtWithMeta(userId, username);
-    const refresh = issueRefreshToken({ userId, userAgent });
+export const issueSession = (
+    userId: string,
+    username: string,
+    userAgent?: string,
+    /** End (epoch ms) of a session with a server-enforced length; see services/sessionLength. */
+    sessionExpiresAtMs?: number
+) => {
+    if (sessionExpiresAtMs === undefined) {
+        const access = signJwtWithMeta(userId, username);
+        const refresh = issueRefreshToken({ userId, userAgent });
+        return { access, refresh };
+    }
+    const access = signJwtWithMeta(userId, username, undefined, {
+        sessionExpiresAt: sessionEndSeconds(sessionExpiresAtMs),
+    });
+    const refresh = issueRefreshToken({
+        userId,
+        userAgent,
+        sessionExpiresAt: new Date(sessionExpiresAtMs).toISOString(),
+    });
     return { access, refresh };
 };
 
@@ -569,6 +591,58 @@ auth.post('/matrix/exchange', async (c) => {
         return c.json({ code: 'matrix_user_invalid', message: 'Unsupported Matrix user id' }, 400);
     }
 
+    // Launch-plan B3: a Matrix session whose length the homeserver enforces
+    // (a Black Mask panel sign-in) must not yield a Blackout session that
+    // outlives it. The end comes from the homeserver, never from the client.
+    let sessionExpiresAtMs: number | undefined;
+    if (sessionLengthsEnforced()) {
+        const length = await matrixClient.sessionLength(matrixToken);
+        if (length.ok) {
+            if (length.expiresAtMs !== null) {
+                if (length.expiresAtMs <= Date.now()) {
+                    authFailuresTotal.inc({ reason: 'matrix_session_expired' });
+                    return c.json(
+                        { code: 'matrix_session_expired', message: 'This session has ended' },
+                        401
+                    );
+                }
+                // The refresh-token family must keep this end across a restart
+                // (migration 100). Without that, refuse rather than issue a
+                // session that would lose its end.
+                if (!db.persistsRefreshTokenSessionEnds()) {
+                    log.warn('matrix_exchange.session_length_unavailable', {
+                        reason: 'session_end_storage_missing',
+                    });
+                    return c.json(
+                        {
+                            code: 'matrix_session_length_unavailable',
+                            message: 'Could not confirm how long this session lasts; try again',
+                        },
+                        503
+                    );
+                }
+                sessionExpiresAtMs = length.expiresAtMs;
+            }
+        } else if (length.reason === 'invalid_token') {
+            authFailuresTotal.inc({ reason: 'matrix_token_invalid' });
+            return c.json(
+                { code: 'matrix_token_invalid', message: 'Matrix access token is not valid' },
+                401
+            );
+        } else if (length.reason !== 'unsupported') {
+            // The session may have a chosen end that we cannot see; issuing an
+            // unbounded session here could outlive it. Fail closed.
+            log.warn('matrix_exchange.session_length_unavailable', { reason: length.reason });
+            return c.json(
+                {
+                    code: 'matrix_session_length_unavailable',
+                    message: 'Could not confirm how long this session lasts; try again',
+                },
+                503
+            );
+        }
+    }
+
     let user = db.findUserByUsername(localpart);
     if (!user) {
         // A whoami-valid token proves a live Matrix session, but NOT that the
@@ -604,12 +678,44 @@ auth.post('/matrix/exchange', async (c) => {
         });
     }
 
-    const session = issueSession(user.id, user.username, c.req.header('user-agent'));
+    const session = issueSession(
+        user.id,
+        user.username,
+        c.req.header('user-agent'),
+        sessionExpiresAtMs
+    );
     return c.json({
         token: session.access.token,
         refreshToken: session.refresh.token,
         userId: user.id,
     });
+});
+
+/**
+ * Whether this API bounds exchanged sessions by the homeserver's session end
+ * (launch-plan B3). The panel offers a timed session length only when both
+ * this and the homeserver's `/_synapse/client/blackout/session/lengths`
+ * answer, so it never promises an end that one side would not enforce. With
+ * BLACKOUT_SESSION_LENGTHS off this is the same 404 as any unknown route.
+ * With it on but no place to keep a session's end across a restart (the
+ * Postgres store without migration 100), it says the lengths are not
+ * enforced, and the exchange refuses timed sessions to match.
+ */
+auth.get('/session-lengths', (c) => {
+    if (!sessionLengthsEnforced()) return c.notFound();
+    if (!db.persistsRefreshTokenSessionEnds()) {
+        log.warn('session_lengths.not_enforced', { reason: 'session_end_storage_missing' });
+        return c.json(
+            {
+                enforced: false,
+                code: 'session_end_storage_missing',
+                message:
+                    'Session lengths are not enforced: the refresh-token store has no session_expires_at column (API migration 100)',
+            },
+            503
+        );
+    }
+    return c.json({ enforced: true, sessionLengths: [...SESSION_LENGTHS] });
 });
 
 const refreshSchema = z.object({ refreshToken: z.string().min(1) });
@@ -628,7 +734,13 @@ auth.post('/token/refresh', async (c) => {
                     401
                 );
             }
-            const access = signJwtWithMeta(user.id, user.username);
+            const sessionExpiresAt = outcome.record.sessionExpiresAt ?? undefined;
+            const access =
+                sessionExpiresAt === undefined
+                    ? signJwtWithMeta(user.id, user.username)
+                    : signJwtWithMeta(user.id, user.username, undefined, {
+                          sessionExpiresAt: sessionEndSeconds(new Date(sessionExpiresAt).getTime()),
+                      });
             return c.json({
                 token: access.token,
                 refreshToken: outcome.rotated.token,
@@ -651,6 +763,8 @@ auth.post('/token/refresh', async (c) => {
         }
         case 'expired':
             return c.json({ code: 'refresh_token_expired', message: 'Refresh token expired' }, 401);
+        case 'session_expired':
+            return c.json({ code: 'session_expired', message: 'This session has ended' }, 401);
         case 'revoked':
             return c.json({ code: 'refresh_token_revoked', message: 'Refresh token revoked' }, 401);
         case 'invalid':
