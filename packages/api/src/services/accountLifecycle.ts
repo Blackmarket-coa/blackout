@@ -214,6 +214,11 @@ export const confirmAccountDeletion = (
 
     // Mark the token consumed before purging so a partial failure can't double-delete.
     db.consumeAccountDeletionToken(record.id);
+    // Scheduled messages: remove their text and author link, and cancel the
+    // pending ones, so nothing is posted for this account after it is gone.
+    for (const msg of db.listScheduledMessagesForUser(record.userId)) {
+        db.eraseScheduledMessage(msg.id);
+    }
     db.purgeUserAuthArtifacts(record.userId);
     db.deleteUser(record.userId);
     return { kind: 'ok', userId: record.userId };

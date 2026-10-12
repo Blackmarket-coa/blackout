@@ -2,6 +2,11 @@ import { formatFederatedMessage } from '@blackout/core';
 import { db } from '../db/store';
 import { matrixClient } from '../integrations/matrix-client';
 import { log } from '../telemetry/logger';
+import {
+    checkBotMayPostAs,
+    RETRYABLE_BOT_POST_REFUSALS,
+    type BotPostVerdict,
+} from './botPostingGate';
 
 /**
  * Background dispatcher that delivers due scheduled messages into their Matrix
@@ -19,6 +24,14 @@ import { log } from '../telemetry/logger';
  * name via `formatFederatedMessage`, exactly like the synchronous send path in
  * `routes/messages.ts`. Sending *as* the author would require wiring the Matrix
  * appservice token + user impersonation, which is a larger change.
+ *
+ * Every send first passes `checkBotMayPostAs` again, right before it happens:
+ * the author must still exist, still be a joined member who may post, the room
+ * must still be unencrypted and the bot still in it. The POST route checked the
+ * same things, but they can change in the hours between, and rows stored before
+ * that check existed were never checked at all. A refusal ends the message with
+ * `refused_<reason>` and no send; only a failed check (an outage) is retried.
+ * The event carries no Blackout user id.
  */
 
 export const DEFAULT_INTERVAL_MS = 30 * 1000; // 30 seconds
@@ -43,6 +56,8 @@ export interface DispatchResult {
     failed: number;
     /** Failed this tick but left pending for a later retry. */
     retried: number;
+    /** Refused by the bot-posting gate and ended without a send. */
+    refused: number;
 }
 
 /**
@@ -51,17 +66,81 @@ export interface DispatchResult {
  */
 export const runScheduledMessageDispatch = async (): Promise<DispatchResult> => {
     const due = db.listDueScheduledMessages();
-    const result: DispatchResult = { due: due.length, delivered: 0, failed: 0, retried: 0 };
+    const result: DispatchResult = {
+        due: due.length,
+        delivered: 0,
+        failed: 0,
+        retried: 0,
+        refused: 0,
+    };
 
-    for (const msg of due) {
+    for (const dueMsg of due) {
+        const terminalOnFailure = dueMsg.attempts + 1 >= MAX_ATTEMPTS;
+
+        let verdict: BotPostVerdict;
+        try {
+            verdict = await checkBotMayPostAs(dueMsg.userId, dueMsg.matrixRoomId);
+        } catch (err) {
+            log.warn('scheduled_message_room_check_threw', {
+                scheduledMessageId: dueMsg.id,
+                error: String(err),
+            });
+            verdict = { ok: false, reason: 'room_check_unavailable' };
+        }
+
+        // The check waited on the homeserver. Meanwhile the author may have
+        // cancelled the message or deleted their account (which erases it), so
+        // act only on the row as it is now, and only while it is still pending
+        // for the same author.
+        const msg = db.getScheduledMessage(dueMsg.id);
+        if (!msg || msg.status !== 'pending' || !msg.userId || msg.userId !== dueMsg.userId) {
+            continue;
+        }
+
+        if (!verdict.ok) {
+            if (RETRYABLE_BOT_POST_REFUSALS.has(verdict.reason)) {
+                db.markScheduledMessageFailed(msg.id, verdict.reason, {
+                    terminal: terminalOnFailure,
+                });
+                if (terminalOnFailure) {
+                    result.failed += 1;
+                    log.warn('scheduled_message_failed_permanently', {
+                        scheduledMessageId: msg.id,
+                        reason: verdict.reason,
+                    });
+                } else {
+                    result.retried += 1;
+                }
+            } else {
+                db.markScheduledMessageFailed(msg.id, `refused_${verdict.reason}`, {
+                    terminal: true,
+                });
+                result.refused += 1;
+                log.warn('scheduled_message_refused', {
+                    scheduledMessageId: msg.id,
+                    reason: verdict.reason,
+                });
+            }
+            continue;
+        }
+
+        // Never post for a missing author, and never fall back to the raw id.
         const sender = db.getUserById(msg.userId);
-        const attribution = sender?.username ?? msg.userId;
+        if (!sender) {
+            db.markScheduledMessageFailed(msg.id, 'refused_author_unknown', { terminal: true });
+            result.refused += 1;
+            log.warn('scheduled_message_refused', {
+                scheduledMessageId: msg.id,
+                reason: 'author_unknown',
+            });
+            continue;
+        }
+        const attribution = sender.username;
         const content: Record<string, unknown> = {
             msgtype: 'm.text',
             body: formatFederatedMessage(attribution, msg.body),
             'co.blackout.scheduled': {
                 scheduled_message_id: msg.id,
-                sender_user_id: msg.userId,
                 deliver_at: msg.deliverAt,
             },
         };
@@ -72,7 +151,6 @@ export const runScheduledMessageDispatch = async (): Promise<DispatchResult> => 
             }`;
         }
 
-        const terminalOnFailure = msg.attempts + 1 >= MAX_ATTEMPTS;
         try {
             const sent = await matrixClient.sendEvent(msg.matrixRoomId, content, {
                 txnId: `sched-${msg.id}`,
