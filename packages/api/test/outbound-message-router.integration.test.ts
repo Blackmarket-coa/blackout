@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { generateTestJwtSecret } from './_fixtures/secrets';
+import { createMatrixStub, memberEvent } from './_fixtures/matrixStub';
 
 const KEY_V1 = randomBytes(32).toString('base64');
 
@@ -17,6 +18,26 @@ process.env.TWITCH_OAUTH_REDIRECT_URI = 'http://localhost/cb';
 process.env.YOUTUBE_CLIENT_ID = 'test';
 process.env.YOUTUBE_CLIENT_SECRET = 'test';
 process.env.YOUTUBE_OAUTH_REDIRECT_URI = 'http://localhost/cb';
+// `POST /v1/messages` checks the named room through the Synapse admin API
+// before it posts or fans out, so these tests run against a stub homeserver.
+process.env.MATRIX_HOMESERVER = 'https://matrix.test.local';
+process.env.MATRIX_BOT_TOKEN = 'syt_test_admin_token';
+process.env.MATRIX_HOMESERVER_DOMAIN = 'test.local';
+const matrix = createMatrixStub({ domain: 'test.local', fallback: globalThis.fetch });
+globalThis.fetch = matrix.fetch;
+
+/** `!den:srv` with `username` and the bot joined, unencrypted. */
+const seedJoinedDen = (username: string) => {
+    matrix.rooms.set('!den:srv', [
+        memberEvent(matrix.mxid(username)),
+        memberEvent(matrix.botUserId),
+    ]);
+};
+
+const bearerFor = async (user: { id: string; username: string }) => {
+    const auth = await import('../src/services/auth');
+    return `Bearer ${auth.signJwt(user.id, user.username, 600)}`;
+};
 
 const loadModules = async () => {
     const router = await import('../src/services/outboundMessageRouter');
@@ -231,14 +252,16 @@ test('messages POST: sends to Matrix AND fans out to bridged Twitch via the outb
     fake.emitMessage(':streamerbob!streamerbob@streamerbob.tmi.twitch.tv JOIN #streamer\r\n');
     fake.sentLines.length = 0;
 
-    // Post a Blackout-side message scoped to the bridged Matrix room.
-    // We expect: the message persists, Matrix gets sendMessage'd (which
-    // fails harmlessly with matrix_not_configured in tests — that's OK),
-    // and the outbound router writes a PRIVMSG into the Twitch IRC stub.
+    // Post a Blackout-side message scoped to the bridged Matrix room, as a
+    // signed-in member of it. We expect: the message persists, the bot posts it
+    // into the room once, and the outbound router writes a PRIVMSG into the
+    // Twitch IRC stub.
+    seedJoinedDen(user.username);
+    matrix.clearCalls();
     const { default: app } = await import('../src/index');
     const res = await app.request('/v1/messages/general', {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { authorization: await bearerFor(user), 'content-type': 'application/json' },
         body: JSON.stringify({
             content: 'mirror me to twitch',
             userId: user.id,
@@ -246,6 +269,7 @@ test('messages POST: sends to Matrix AND fans out to bridged Twitch via the outb
         }),
     });
     assert.equal(res.status, 201);
+    assert.equal(matrix.sendsTo('!den:srv').length, 1);
     const body = (await res.json()) as {
         outboundFanout: {
             delivered: number;
@@ -288,10 +312,11 @@ test('messages POST: encrypted-tier (stegoTier > 1) skips the outbound fanout (T
     fake.emitMessage(':streamerbob!streamerbob@streamerbob.tmi.twitch.tv JOIN #streamer\r\n');
     fake.sentLines.length = 0;
 
+    seedJoinedDen(user.username);
     const { default: app } = await import('../src/index');
     const res = await app.request('/v1/messages/general', {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { authorization: await bearerFor(user), 'content-type': 'application/json' },
         body: JSON.stringify({
             content: 'secret',
             userId: user.id,
@@ -303,4 +328,50 @@ test('messages POST: encrypted-tier (stegoTier > 1) skips the outbound fanout (T
     const body = (await res.json()) as { outboundFanout: unknown };
     assert.equal(body.outboundFanout, null, 'encrypted messages stay Blackout-internal');
     assert.deepEqual(fake.sentLines, [], 'no Twitch IRC traffic from an encrypted post');
+});
+
+test('messages POST: a caller who is not in the bridged room is refused, and nothing reaches Twitch', async () => {
+    const { db, chatIngress } = await loadModules();
+    const owner = await seedUser(db);
+    const outsider = await seedUser(db);
+    const linkedAccounts = await import('../src/services/linkedAccounts');
+    linkedAccounts.upsertLinkedAccount({
+        blackoutUserId: owner.id,
+        provider: 'twitch',
+        providerUserId: '99',
+        providerUsername: 'streamer',
+        tokens: { accessToken: 'a', refreshToken: 'r', expiresInSeconds: 3600, scopes: [] },
+    });
+    db.createTwitchChatBridge({
+        id: randomUUID(),
+        blackoutUserId: owner.id,
+        twitchChannel: 'streamer',
+        matrixRoomId: '!den:srv',
+        isActive: true,
+    });
+    const fake = buildFakeSocket();
+    await chatIngress.startChatIngress({
+        blackoutUserId: owner.id,
+        twitchChannel: 'streamer',
+        onMessage: () => {},
+        socketFactory: fake.factory,
+    });
+    fake.emitOpen();
+    fake.emitMessage(':tmi.twitch.tv 001 streamerbob :Welcome\r\n');
+    fake.emitMessage(':streamerbob!streamerbob@streamerbob.tmi.twitch.tv JOIN #streamer\r\n');
+    fake.sentLines.length = 0;
+
+    // Only the bridge owner is in the den; the outsider is signed in but not a member.
+    seedJoinedDen(owner.username);
+    matrix.clearCalls();
+    const { default: app } = await import('../src/index');
+    const res = await app.request('/v1/messages/general', {
+        method: 'POST',
+        headers: { authorization: await bearerFor(outsider), 'content-type': 'application/json' },
+        body: JSON.stringify({ content: 'spam the stream chat', matrixRoomId: '!den:srv' }),
+    });
+    assert.equal(res.status, 403);
+    assert.equal(((await res.json()) as { code: string }).code, 'not_room_member');
+    assert.deepEqual(fake.sentLines, [], 'no PRIVMSG into the bridged Twitch chat');
+    assert.equal(matrix.sendsTo('!den:srv').length, 0, 'no bot post into the den');
 });

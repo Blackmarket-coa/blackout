@@ -109,7 +109,11 @@ export default function ChatScreen() {
         if (opts?.before) url.searchParams.set('before', opts.before);
         if (opts?.since) url.searchParams.set('since', opts.since);
 
-        const response = await fetch(url.toString());
+        // Reading a channel needs a session, like sending to one.
+        const { token } = getSession();
+        const response = await fetch(url.toString(), {
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}`);
         }
