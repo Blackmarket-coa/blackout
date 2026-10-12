@@ -153,6 +153,12 @@ test('process-overdue advances grace and triggered transitions', async () => {
         headers,
     });
     assert.equal(afterTrigger.status, 409);
+    // Triggering only changes the status; the server sends nothing to anyone,
+    // so the refusal must not claim that anything went out.
+    const refusal = (await afterTrigger.json()) as { code: string; message: string };
+    assert.equal(refusal.code, 'switch_triggered');
+    assert.equal(refusal.message, 'Switch already triggered');
+    assert.doesNotMatch(refusal.message, /ship|publish|deliver|release|sent/i);
 });
 
 test('switches list scopes results by owner vs recipient', async () => {
@@ -245,4 +251,160 @@ test('autonomous sweep fires an overdue switch without the owner present', async
     const again = sweepOverdueDeadmanSwitches(new Date(Date.now() + 400 * 1000));
     assert.ok(!Number.isNaN(again));
     assert.equal(await statusOf(), 'triggered');
+});
+
+// A default session token: what every signed-in account holds (deadman.read),
+// with no capability header.
+const defaultTokenHeaders = (userId: string) => ({
+    authorization: `Bearer ${signJwt(userId, userId, 600)}`,
+});
+
+type FeedEvent = { type: string; payload: Record<string, unknown> };
+
+test('the event feed shows each caller only the events of switches they own', async () => {
+    const stamp = `${Date.now()}-feed`;
+    const owner = `owner-${stamp}`;
+    const recipient = `recipient-${stamp}`;
+    const stranger = `stranger-${stamp}`;
+    const roomId = `!private-${stamp}:example.org`;
+    const ownerHeaders = headersFor(owner);
+
+    const armed = await app.request('/v1/deadman/switches', {
+        method: 'POST',
+        headers: ownerHeaders,
+        body: JSON.stringify(
+            armBody({
+                roomId,
+                recipients: [recipient],
+                checkInIntervalSeconds: 60,
+                gracePeriodSeconds: 60,
+            })
+        ),
+    });
+    assert.equal(armed.status, 201);
+    const switchId = ((await armed.json()) as { payload: { switchId: string } }).payload.switchId;
+
+    // The background sweep drives it to grace, then triggered: those are the
+    // events that also carry the recipient list.
+    sweepOverdueDeadmanSwitches(new Date(Date.now() + 65 * 1000));
+    sweepOverdueDeadmanSwitches(new Date(Date.now() + 200 * 1000));
+
+    for (const outsider of [stranger, recipient]) {
+        const feed = await app.request('/v1/deadman/events', {
+            headers: defaultTokenHeaders(outsider),
+        });
+        assert.equal(feed.status, 200);
+        const text = await feed.text();
+        for (const secret of [switchId, owner, roomId, recipient]) {
+            assert.ok(
+                !text.includes(secret),
+                `${
+                    outsider === stranger ? 'a stranger' : 'a recipient'
+                } must not see ${secret} in the feed`
+            );
+        }
+    }
+
+    const ownerFeed = await app.request('/v1/deadman/events', {
+        headers: defaultTokenHeaders(owner),
+    });
+    assert.equal(ownerFeed.status, 200);
+    const ownerEvents = (await ownerFeed.json()) as FeedEvent[];
+    assert.deepEqual(
+        ownerEvents.filter((event) => event.payload.switchId === switchId).map((e) => e.type),
+        ['deadman.switch.armed', 'deadman.switch.grace', 'deadman.switch.triggered']
+    );
+    assert.ok(ownerEvents.every((event) => event.payload.ownerId === owner));
+});
+
+test('a recipient gets the encrypted payload only after the switch triggers, never after a cancel', async () => {
+    const stamp = `${Date.now()}-release`;
+    const owner = `owner-${stamp}`;
+    const recipient = `recipient-${stamp}`;
+    const ownerHeaders = headersFor(owner);
+    const recipientHeaders = defaultTokenHeaders(recipient);
+
+    const readAs = async (headers: Record<string, string>, switchId: string) => {
+        const single = await app.request(`/v1/deadman/switches/${switchId}`, { headers });
+        assert.equal(single.status, 200);
+        return (await single.json()) as { status: string; encryptedPayload?: string };
+    };
+    const recipientListEntry = async (switchId: string) => {
+        const list = await app.request('/v1/deadman/switches?scope=recipient', {
+            headers: recipientHeaders,
+        });
+        assert.equal(list.status, 200);
+        const body = (await list.json()) as {
+            switches: { switchId: string; encryptedPayload?: string }[];
+        };
+        const entry = body.switches.find((candidate) => candidate.switchId === switchId);
+        assert.ok(entry, 'the recipient should see the switch in their recipient list');
+        return entry;
+    };
+
+    const armed = await app.request('/v1/deadman/switches', {
+        method: 'POST',
+        headers: ownerHeaders,
+        body: JSON.stringify(
+            armBody({
+                recipients: [recipient],
+                checkInIntervalSeconds: 60,
+                gracePeriodSeconds: 60,
+                encryptedPayload: `sealed-fires-${stamp}`,
+            })
+        ),
+    });
+    assert.equal(armed.status, 201);
+    const fires = ((await armed.json()) as { payload: { switchId: string } }).payload.switchId;
+
+    // Armed: the recipient sees the switch but not its payload; the owner does.
+    assert.equal((await readAs(recipientHeaders, fires)).encryptedPayload, undefined);
+    assert.equal((await recipientListEntry(fires)).encryptedPayload, undefined);
+    assert.equal((await readAs(ownerHeaders, fires)).encryptedPayload, `sealed-fires-${stamp}`);
+
+    // Grace window: still nothing for the recipient.
+    sweepOverdueDeadmanSwitches(new Date(Date.now() + 65 * 1000));
+    const inGrace = await readAs(recipientHeaders, fires);
+    assert.equal(inGrace.status, 'grace');
+    assert.equal(inGrace.encryptedPayload, undefined);
+    assert.equal((await recipientListEntry(fires)).encryptedPayload, undefined);
+
+    // Triggered: now the recipient can read it, in both views.
+    sweepOverdueDeadmanSwitches(new Date(Date.now() + 200 * 1000));
+    const released = await readAs(recipientHeaders, fires);
+    assert.equal(released.status, 'triggered');
+    assert.equal(released.encryptedPayload, `sealed-fires-${stamp}`);
+    assert.equal((await recipientListEntry(fires)).encryptedPayload, `sealed-fires-${stamp}`);
+
+    // A cancelled switch never releases its payload to a recipient.
+    const second = await app.request('/v1/deadman/switches', {
+        method: 'POST',
+        headers: ownerHeaders,
+        body: JSON.stringify(
+            armBody({ recipients: [recipient], encryptedPayload: `sealed-cancelled-${stamp}` })
+        ),
+    });
+    assert.equal(second.status, 201);
+    const cancelledId = ((await second.json()) as { payload: { switchId: string } }).payload
+        .switchId;
+    assert.equal((await readAs(recipientHeaders, cancelledId)).encryptedPayload, undefined);
+
+    const cancel = await app.request(`/v1/deadman/switches/${cancelledId}/cancel`, {
+        method: 'POST',
+        headers: ownerHeaders,
+    });
+    assert.equal(cancel.status, 200);
+    // The owner's own envelope is unchanged and still carries the payload.
+    const cancelEnvelope = (await cancel.json()) as { payload: { encryptedPayload?: string } };
+    assert.equal(cancelEnvelope.payload.encryptedPayload, `sealed-cancelled-${stamp}`);
+
+    sweepOverdueDeadmanSwitches(new Date(Date.now() + 30 * 24 * 3600 * 1000));
+    const afterCancel = await readAs(recipientHeaders, cancelledId);
+    assert.equal(afterCancel.status, 'cancelled');
+    assert.equal(afterCancel.encryptedPayload, undefined);
+    assert.equal((await recipientListEntry(cancelledId)).encryptedPayload, undefined);
+    const recipientList = await app.request('/v1/deadman/switches?scope=recipient', {
+        headers: recipientHeaders,
+    });
+    assert.ok(!(await recipientList.text()).includes(`sealed-cancelled-${stamp}`));
 });
