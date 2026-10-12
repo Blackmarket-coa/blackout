@@ -189,9 +189,7 @@ describe('MessageComposer', () => {
             },
         ] as never);
 
-        expect(html).toBe(
-            '<p>hey <a href="https://matrix.to/#/@bob:server">bob</a> welcome</p>'
-        );
+        expect(html).toBe('<p>hey <a href="https://matrix.to/#/@bob:server">bob</a> welcome</p>');
     });
 
     it('serializes a link nested inside a paragraph without throwing', () => {
@@ -209,9 +207,7 @@ describe('MessageComposer', () => {
             },
         ] as never);
 
-        expect(html).toBe(
-            '<p>see <a href="https://example.com">https://example.com</a></p>'
-        );
+        expect(html).toBe('<p>see <a href="https://example.com">https://example.com</a></p>');
     });
 
     it('persists a draft to localStorage as the user composes', async () => {

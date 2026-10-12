@@ -23,12 +23,7 @@ import { Editable, ReactEditor, Slate, useSlate, withReact } from 'slate-react';
 import { useAtom } from 'jotai';
 // @blackout/ui v1 primitives (Workstream B1 dogfood). Consumed from source so
 // the client's vanilla-extract plugin compiles their `.css.ts`.
-import {
-    Badge,
-    Button,
-    IconButton,
-    Stack,
-} from '@blackout/ui/primitives';
+import { Badge, Button, IconButton, Stack } from '@blackout/ui/primitives';
 import { useLegacyRoomMembersAdapter as useRoomMembers } from '../../plugins/matrix-adapters/hooks/useLegacyRoomAdapter';
 import { useNavigationSpaceTree } from '../../plugins/navigation';
 import {
@@ -51,11 +46,7 @@ import { EmojiPicker } from './EmojiPicker';
 import { createScheduledMessage } from './scheduledMessagesClient';
 import { sanitizeFormattedBody, sanitizeUrlsInText } from '../../utils/sanitizeUrl';
 import { stripImageMetadata } from '../../utils/stripImageMetadata';
-import {
-    SLOWMODE_STATE_EVENT_TYPE,
-    evaluateSlowmode,
-    parseSlowmodeConfig,
-} from './slowmode';
+import { SLOWMODE_STATE_EVENT_TYPE, evaluateSlowmode, parseSlowmodeConfig } from './slowmode';
 import {
     VERIFICATION_GATE_STATE_EVENT_TYPE,
     evaluateVerificationGate,
@@ -63,11 +54,7 @@ import {
     parseVerificationGateConfig,
 } from './verificationGate';
 import { useVoiceRecorder } from '../../hooks/useVoiceRecorder';
-import {
-    analyzeVoiceNote,
-    buildVoiceMessageContent,
-    type VoiceNoteMetadata,
-} from './voiceMessage';
+import { analyzeVoiceNote, buildVoiceMessageContent, type VoiceNoteMetadata } from './voiceMessage';
 import { buildAttachmentContent, measureImageAttachment } from './attachmentContent';
 
 const MAX_SUGGESTIONS = 8;
@@ -906,7 +893,9 @@ export const MessageComposer = ({
             });
             if (!gateVerdict.allowed) {
                 setSlowmodeNotice(
-                    `This den requires a short membership period before posting — try again in ${formatGateWait(gateVerdict.retryAfterMs)}.`
+                    `This den requires a short membership period before posting — try again in ${formatGateWait(
+                        gateVerdict.retryAfterMs
+                    )}.`
                 );
                 return;
             }
@@ -922,12 +911,13 @@ export const MessageComposer = ({
                 config: parseSlowmodeConfig(slowmodeContent),
                 lastSentTs: lastSentTsRef.current,
                 now: Date.now(),
-                userPowerLevel:
-                    room.getMember(matrixClient.getUserId() ?? '')?.powerLevel ?? 0,
+                userPowerLevel: room.getMember(matrixClient.getUserId() ?? '')?.powerLevel ?? 0,
             });
             if (!verdict.allowed) {
                 setSlowmodeNotice(
-                    `Slow mode is on — wait ${Math.ceil(verdict.retryAfterMs / 1000)}s before sending again.`
+                    `Slow mode is on — wait ${Math.ceil(
+                        verdict.retryAfterMs / 1000
+                    )}s before sending again.`
                 );
                 return;
             }
@@ -945,7 +935,7 @@ export const MessageComposer = ({
                     : plainBody;
             // Link sanitization is native — always strip tracking params before send.
             const bodyToSend = sanitizeUrlsInText(
-                `${commandProcessedBody}${signatureSuffix}`.trim(),
+                `${commandProcessedBody}${signatureSuffix}`.trim()
             );
             const formattedBody = sanitizeFormattedBody(htmlBody);
 
