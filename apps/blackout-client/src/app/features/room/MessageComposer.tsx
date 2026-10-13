@@ -5,6 +5,7 @@ import {
     type ReactNode,
     useCallback,
     useEffect,
+    useId,
     useMemo,
     useRef,
     useState,
@@ -21,6 +22,7 @@ import {
 import { withHistory } from 'slate-history';
 import { Editable, ReactEditor, Slate, useSlate, withReact } from 'slate-react';
 import { useAtom } from 'jotai';
+import { BlackoutSdkError } from '@blackout/sdk';
 // @blackout/ui v1 primitives (Workstream B1 dogfood). Consumed from source so
 // the client's vanilla-extract plugin compiles their `.css.ts`.
 import { Badge, Button, IconButton, Stack } from '@blackout/ui/primitives';
@@ -60,6 +62,25 @@ import { buildAttachmentContent, measureImageAttachment } from './attachmentCont
 const MAX_SUGGESTIONS = 8;
 const MAX_MESSAGE_LENGTH = 8000;
 const DRAFT_STORAGE_PREFIX = 'blackout.draft.';
+
+// Scheduled messages are posted later by the Blackout bot, which has no Megolm
+// and cannot encrypt. In an encrypted room that would put plaintext in front of
+// the server under a composer that says "not even the server can" read it, so
+// scheduling is not offered there. The API refuses too (409); this is the
+// client-side half, so nothing leaves this client for scheduling at all.
+const SCHEDULE_ENCRYPTED_REASON =
+    'Not available in encrypted rooms. The Blackout bot sends scheduled messages and cannot encrypt them.';
+
+/** What to tell the user when the API refuses or fails to schedule. */
+const scheduleFailureNotice = (err: unknown): string => {
+    const status = err instanceof BlackoutSdkError ? err.status : undefined;
+    if (status === 409) {
+        return "Scheduling isn't available in this room. It is encrypted, or the Blackout bot isn't in it.";
+    }
+    if (status === 403) return "You can't post in this room.";
+    if (status === 503) return "Couldn't check the room. Try again.";
+    return "Couldn't schedule the message. Try again.";
+};
 
 const loadDraft = (roomId: string): string => {
     try {
@@ -622,6 +643,8 @@ export const MessageComposer = ({
     const [ephemeralEnabled, setEphemeralEnabled] = useState(false);
     const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
     const [slowmodeNotice, setSlowmodeNotice] = useState<string | null>(null);
+    const [scheduleNotice, setScheduleNotice] = useState<string | null>(null);
+    const scheduleUnavailableId = useId();
     const lastSentTsRef = useRef<number | null>(null);
     const [commandPayload, setCommandPayload] = useAtom(composerCommandPayloadAtom);
 
@@ -641,6 +664,8 @@ export const MessageComposer = ({
     const editMessage = useEditMessage(roomId);
     const matrixClient = useMatrixClient();
     const room = useMemo(() => matrixClient.getRoom?.(roomId) ?? undefined, [matrixClient, roomId]);
+    // Read on every render (opening the menu re-renders), and again at send time.
+    const roomEncrypted = room?.hasEncryptionStateEvent() ?? false;
 
     const draftRoomRef = useRef(roomId);
 
@@ -964,17 +989,31 @@ export const MessageComposer = ({
                     !voiceAttachment &&
                     !stegoAttachment
                 ) {
-                    // Hand the message to the server, which persists it and
-                    // delivers it at deliverAt even if this client is closed.
+                    // The room may have become encrypted since scheduling was
+                    // switched on. Neither schedule nor send now; keep the draft.
+                    if (room?.hasEncryptionStateEvent()) {
+                        setScheduleNotice(SCHEDULE_ENCRYPTED_REASON);
+                        return;
+                    }
+                    // Hand the message to the server, which persists it and has
+                    // the Blackout bot post it, unencrypted, at deliverAt even if
+                    // this client is closed.
                     const deliverAt = new Date(
                         Date.now() + scheduleDelayHours * 60 * 60 * 1000
                     ).toISOString();
-                    await createScheduledMessage({
-                        matrixRoomId: roomId,
-                        body: bodyToSend,
-                        formattedBody,
-                        deliverAt,
-                    });
+                    try {
+                        await createScheduledMessage({
+                            matrixRoomId: roomId,
+                            body: bodyToSend,
+                            formattedBody,
+                            deliverAt,
+                        });
+                    } catch (err) {
+                        // Keep the draft so nothing typed is lost.
+                        setScheduleNotice(scheduleFailureNotice(err));
+                        return;
+                    }
+                    setScheduleNotice(null);
                     clearComposer();
                     setAttachments([]);
                     setVoiceAttachment(null);
@@ -1169,6 +1208,12 @@ export const MessageComposer = ({
                 // Scheduled delivery is server-side and text-only; attachments
                 // would be sent immediately, so don't offer it alongside them.
                 if (attachments.length > 0 || voiceAttachment || stegoAttachment) return;
+                if (room?.hasEncryptionStateEvent()) {
+                    setScheduledEnabled(false);
+                    setScheduleNotice(SCHEDULE_ENCRYPTED_REASON);
+                    return;
+                }
+                setScheduleNotice(null);
                 setScheduledEnabled((active) => !active);
                 return;
             }
@@ -1183,6 +1228,7 @@ export const MessageComposer = ({
             attachPhoto,
             attachments,
             recordRecentAction,
+            room,
             selectedCommand,
             startVoiceRecording,
             stegoAttachment,
@@ -1454,10 +1500,23 @@ export const MessageComposer = ({
                                 </button>
                                 <button
                                     type="button"
+                                    disabled={roomEncrypted}
+                                    title={roomEncrypted ? SCHEDULE_ENCRYPTED_REASON : undefined}
+                                    aria-describedby={
+                                        roomEncrypted ? scheduleUnavailableId : undefined
+                                    }
                                     onClick={() => applyFeatureAction('Scheduled send preset')}
                                 >
                                     Scheduled send preset
                                 </button>
+                                {roomEncrypted ? (
+                                    <small
+                                        id={scheduleUnavailableId}
+                                        style={{ color: 'var(--text-secondary)', fontSize: 12 }}
+                                    >
+                                        {SCHEDULE_ENCRYPTED_REASON}
+                                    </small>
+                                ) : null}
                                 <button
                                     type="button"
                                     onClick={() => applyFeatureAction('Encryption preset')}
@@ -1807,7 +1866,8 @@ export const MessageComposer = ({
                                     alignItems: 'center',
                                 }}
                             >
-                                Schedule: +{scheduleDelayHours}h
+                                Schedule: +{scheduleDelayHours}h · sent unencrypted by the Blackout
+                                bot
                                 <button
                                     type="button"
                                     onClick={() =>
@@ -1866,7 +1926,7 @@ export const MessageComposer = ({
                     </div>
                 ) : null}
 
-                {slowmodeNotice ? (
+                {slowmodeNotice || scheduleNotice ? (
                     <div
                         role="status"
                         style={{
@@ -1875,7 +1935,8 @@ export const MessageComposer = ({
                             color: 'var(--color-danger, #e5484d)',
                         }}
                     >
-                        {slowmodeNotice}
+                        {slowmodeNotice ? <div>{slowmodeNotice}</div> : null}
+                        {scheduleNotice ? <div>{scheduleNotice}</div> : null}
                     </div>
                 ) : null}
 
