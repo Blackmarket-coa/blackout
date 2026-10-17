@@ -291,26 +291,35 @@ _Prepared as an independent pre-launch readiness audit. Evidence for every Criti
 
 Fixes landed on branch `claude/pre-launch-app-audit-mp0yvg` (PR #857) after the audit. Each was verified before commit (`@blackout/api` typecheck clean; API suite **1321/1321**; `pnpm build` green; `pnpm audit --prod` clean with documented ignores; migration round-trip via `verify-migrations-ephemeral`).
 
-| ID        | Finding                                      | Status                                                                                                                               |
-| --------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| C1        | Dead-man's switch never fires autonomously   | ✅ Fixed — server-side sweep loop (`deadmanSweepScheduler`, on by default) + test                                                    |
-| H1        | WS shims outside middleware / DoS            | ✅ Fixed — frame caps + unauthenticated idle timeout on Twitch/OBS shims                                                             |
-| H2        | Graceful shutdown only in postgres mode      | ✅ Fixed — unconditional shutdown; closes HTTP server + drains                                                                       |
-| H4        | Background-loop double-processing at scale   | ✅ Fixed — Postgres advisory-lock leader election (fails safe)                                                                       |
-| H5        | Rate limiter fails open                      | ✅ Fixed — auth bucket fails closed on store error                                                                                   |
-| H6        | Default `file` DB mode in production         | ✅ Fixed — production refuses to boot unless `BLACKOUT_DB_MODE=postgres`                                                             |
-| H7        | Security CI lane cannot fail a build         | ✅ Fixed — pnpm audit + Trivy blocking; documented, time-boxed ignores                                                               |
-| H8        | High-sev dependency advisories               | ✅ Fixed — postcss/tar/brace-expansion patched (react-router: see below)                                                             |
-| H9        | Access-token revocation incomplete           | ✅ Fixed — per-user revocation cutoff on revoke-all / password change / reuse                                                        |
-| H10       | Rotted deploy entry points                   | ✅ Fixed — `index.js`, `Dockerfile.blackout`, CI web image repaired                                                                  |
-| H11       | No Privacy Policy / ToS                      | ⚠️ Drafted — templates under `docs/legal/`, **counsel review required**                                                              |
-| H3        | Write-behind loses committed writes silently | ✅ Fixed — failure metric + depth gauge; `flushRuntimeStoreWrites()` durability barrier on the marketplace webhook money path + test |
-| M1/M2     | Coalition needs/resources BOLA               | ✅ Fixed — ownership checks + regression tests                                                                                       |
-| M3        | Coalition _task_ BOLA                        | ✅ Fixed — `createdBy` field (migration 073) + creator/assignee gate + test                                                          |
-| M7/M9/M10 | onError, /health disclosure, log salt        | ✅ Fixed                                                                                                                             |
-| M15       | 9 workflows over-scoped                      | ✅ Fixed — least-privilege `permissions:`                                                                                            |
-| L8        | Nightly k6 can't produce a valid signal      | ⚠️ Overstated — never got past boot; fix in review, closed only by a green nightly (see the L8 note below)                           |
-| (deps)    | Pillow / rustls-webpki high-sev advisories   | ✅ Fixed — perturbation sidecar pillow → 12.3.0; desktop rustls-webpki → 0.103.13                                                    |
+| ID        | Finding                                      | Status                                                                                                                                    |
+| --------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| C1        | Dead-man's switch never fires autonomously   | ⚠️ Partly fixed — the sweep moves overdue switches to `triggered`; triggering sends nothing to anyone (re-checked 2026-10-12, note below) |
+| H1        | WS shims outside middleware / DoS            | ✅ Fixed — frame caps + unauthenticated idle timeout on Twitch/OBS shims                                                                  |
+| H2        | Graceful shutdown only in postgres mode      | ✅ Fixed — unconditional shutdown; closes HTTP server + drains                                                                            |
+| H4        | Background-loop double-processing at scale   | ✅ Fixed — Postgres advisory-lock leader election (fails safe)                                                                            |
+| H5        | Rate limiter fails open                      | ✅ Fixed — auth bucket fails closed on store error                                                                                        |
+| H6        | Default `file` DB mode in production         | ✅ Fixed — production refuses to boot unless `BLACKOUT_DB_MODE=postgres`                                                                  |
+| H7        | Security CI lane cannot fail a build         | ✅ Fixed — pnpm audit + Trivy blocking; documented, time-boxed ignores                                                                    |
+| H8        | High-sev dependency advisories               | ✅ Fixed — postcss/tar/brace-expansion patched (react-router: see below)                                                                  |
+| H9        | Access-token revocation incomplete           | ✅ Fixed — per-user revocation cutoff on revoke-all / password change / reuse                                                             |
+| H10       | Rotted deploy entry points                   | ✅ Fixed — `index.js`, `Dockerfile.blackout`, CI web image repaired                                                                       |
+| H11       | No Privacy Policy / ToS                      | ⚠️ Drafted — templates under `docs/legal/`, **counsel review required**                                                                   |
+| H3        | Write-behind loses committed writes silently | ✅ Fixed — failure metric + depth gauge; `flushRuntimeStoreWrites()` durability barrier on the marketplace webhook money path + test      |
+| M1/M2     | Coalition needs/resources BOLA               | ✅ Fixed — ownership checks + regression tests                                                                                            |
+| M3        | Coalition _task_ BOLA                        | ✅ Fixed — `createdBy` field (migration 073) + creator/assignee gate + test                                                               |
+| M7/M9/M10 | onError, /health disclosure, log salt        | ✅ Fixed                                                                                                                                  |
+| M15       | 9 workflows over-scoped                      | ✅ Fixed — least-privilege `permissions:`                                                                                                 |
+| L8        | Nightly k6 can't produce a valid signal      | ⚠️ Overstated — never got past boot; fix in review, closed only by a green nightly (see the L8 note below)                                |
+| (deps)    | Pillow / rustls-webpki high-sev advisories   | ✅ Fixed — perturbation sidecar pillow → 12.3.0; desktop rustls-webpki → 0.103.13                                                         |
+
+**C1, re-checked 2026-10-12.** The sweep (`deadmanSweepScheduler`, calling
+`sweepOverdueDeadmanSwitches` in `packages/api/src/modules/deadman.ts`) does
+move overdue switches to `triggered`, but triggering sends nothing to anyone:
+it changes the status and records an in-process event. In
+`deploy/docker/production` the sweep runs in the `worker` service, which did
+not load the store at `1555912` (`packages/api/src/worker.ts` starts the loops
+without `initRuntimeStore`; only `src/index.ts` loads it), so there it fired
+nothing at all. See `docs/security/deadman-and-feeds-triage-2026-10-12.md`.
 
 **L8 correction (2026-10-11).** The ✅ above overstated it. That change made a boot failure visible (fail-fast, `api.log` artifact) and pointed the API at postgres, but production also refuses to boot without `MAIL_PROVIDER` (`initMailerFromEnv`, there since 2026-05-12). So from 2026-07-28, when the change reached `develop`, every nightly stopped at "Start API in background"; before that, `k6 — health` failed first and the later scripts were skipped. None of the 157 scheduled runs from 2026-05-07 to 2026-10-10 passed, and the auth, rate-limit and coalition-feed scripts never ran in CI at all. Replayed locally against a booted API, all four scripts then failed their thresholds on 429s. Every VU shared one per-address rate-limit bucket (`global:local`, 120 req/min; the auth bucket allows 10). And `rate-limit.js` scored `eventually_429` over the ten attempts where 401 is the right answer, which capped a correct limiter at 50% against `rate>0.90`; it also counted every 401/429 as a failed request. Fixed alongside this note:
 
