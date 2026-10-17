@@ -10,7 +10,8 @@ encryption, X25519 + ML-KEM-768; regular Matrix rooms use standard Matrix
 E2EE). Voice and video are LiveKit-based and only work on deployments where
 LiveKit is configured (`LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`
 on the API server). It also ships OPSEC tooling (panic button, burner
-identities, dead-man's switch), a creator economy (live streaming, tips,
+identities, dead-man's switch (experimental; see
+[`KNOWN_LIMITATIONS.md`](KNOWN_LIMITATIONS.md))), a creator economy (live streaming, tips,
 subscriptions, marketplace), Twitch and YouTube account linking and chat
 bridges (Kick account linking is not yet available), Discord bridging that
 requires a separately deployed mautrix-discord bridge (not part of the
@@ -49,7 +50,8 @@ Capacitor mobile, a Synapse-derived homeserver, and a Node/Hono API server.
 ## What this repo contains
 
 For the full map of implemented features — core comms, safety/OPSEC tooling
-(panic button, burner identities, dead-man's switch, canary tripwires),
+(panic button, burner identities, dead-man's switch (experimental; see
+[`KNOWN_LIMITATIONS.md`](KNOWN_LIMITATIONS.md)), canary tripwires),
 governance and coalitions, the creator economy (streaming, tips,
 subscriptions, marketplace), Twitch/YouTube bridges (Kick linking not yet
 available; Discord bridging needs mautrix-discord deployed), and the
