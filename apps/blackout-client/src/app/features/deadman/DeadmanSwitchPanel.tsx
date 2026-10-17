@@ -1,8 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
-import {
-    type DeadmanSwitchPayload,
-    type DeadmanSwitchStatus,
-} from '@blackout/protocol';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { type DeadmanSwitchPayload, type DeadmanSwitchStatus } from '@blackout/protocol';
 import {
     applyDeadmanSwitchUpdate,
     canCheckIn,
@@ -37,15 +34,16 @@ const formatStatus = (status: DeadmanSwitchStatus): string => {
  * cancelling. Arming flow is intentionally narrow — payload encryption
  * is the caller's responsibility, so this panel only wires the API.
  */
-export const DeadmanSwitchPanel = ({
-    apiClient,
-    roomId,
-}: DeadmanSwitchPanelProps) => {
+export const DeadmanSwitchPanel = ({ apiClient, roomId }: DeadmanSwitchPanelProps) => {
     const [switches, setSwitches] = useState<DeadmanSwitchPayload[]>([]);
     const [error, setError] = useState<string | null>(null);
     const [busySwitchId, setBusySwitchId] = useState<string | null>(null);
 
-    const actions = createDeadmanActions(apiClient);
+    // Memoized on the injected client. A new actions object on every render
+    // gave `refresh` a new identity each time, so the mount effect re-ran after
+    // every fetch: a request loop that used up the API rate limit in seconds
+    // and cleared any error alert as soon as it appeared.
+    const actions = useMemo(() => createDeadmanActions(apiClient), [apiClient]);
 
     const refresh = useCallback(async () => {
         try {
@@ -66,9 +64,7 @@ export const DeadmanSwitchPanel = ({
             setBusySwitchId(switchId);
             try {
                 const envelope = await actions.checkIn(switchId);
-                setSwitches((current) =>
-                    applyDeadmanSwitchUpdate(current, envelope.payload)
-                );
+                setSwitches((current) => applyDeadmanSwitchUpdate(current, envelope.payload));
             } catch (cause) {
                 setError(cause instanceof Error ? cause.message : 'Check-in failed');
             } finally {
@@ -83,9 +79,7 @@ export const DeadmanSwitchPanel = ({
             setBusySwitchId(switchId);
             try {
                 const envelope = await actions.cancelSwitch(switchId);
-                setSwitches((current) =>
-                    applyDeadmanSwitchUpdate(current, envelope.payload)
-                );
+                setSwitches((current) => applyDeadmanSwitchUpdate(current, envelope.payload));
             } catch (cause) {
                 setError(cause instanceof Error ? cause.message : 'Cancel failed');
             } finally {
@@ -103,9 +97,7 @@ export const DeadmanSwitchPanel = ({
                     ...input,
                     roomId,
                 });
-                setSwitches((current) =>
-                    applyDeadmanSwitchUpdate(current, envelope.payload)
-                );
+                setSwitches((current) => applyDeadmanSwitchUpdate(current, envelope.payload));
             } catch (cause) {
                 setError(cause instanceof Error ? cause.message : 'Arming failed');
             }
@@ -115,7 +107,9 @@ export const DeadmanSwitchPanel = ({
 
     return (
         <section style={{ padding: 12 }}>
-            <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <header
+                style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+            >
                 <h2 style={{ margin: 0 }}>Deadman switches</h2>
                 <button type="button" onClick={() => void refresh()}>
                     Refresh
@@ -154,14 +148,18 @@ export const DeadmanSwitchPanel = ({
                             <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
                                 <button
                                     type="button"
-                                    disabled={!canCheckIn(entry.status) || busySwitchId === entry.switchId}
+                                    disabled={
+                                        !canCheckIn(entry.status) || busySwitchId === entry.switchId
+                                    }
                                     onClick={() => void handleCheckIn(entry.switchId)}
                                 >
                                     Check in
                                 </button>
                                 <button
                                     type="button"
-                                    disabled={!canCheckIn(entry.status) || busySwitchId === entry.switchId}
+                                    disabled={
+                                        !canCheckIn(entry.status) || busySwitchId === entry.switchId
+                                    }
                                     onClick={() => void handleCancel(entry.switchId)}
                                 >
                                     Cancel
@@ -195,9 +193,9 @@ const DeadmanArmingHint = ({
         <details style={{ marginTop: 12 }} aria-disabled={disabled}>
             <summary>About arming</summary>
             <p style={{ opacity: 0.7 }}>
-                The arming form lives in feature integrations that own payload
-                encryption. This panel exposes the management surface only so the
-                shell stays free of cryptographic decisions.
+                The arming form lives in feature integrations that own payload encryption. This
+                panel exposes the management surface only so the shell stays free of cryptographic
+                decisions.
             </p>
         </details>
     );
