@@ -168,6 +168,36 @@ For the source-of-truth triage with tier/owner detail see
     1.27.5 and 1.22.1 in containers) and Chromium only, not on a deployed host
     or through Cloudflare.
 
+### Scheduled messages
+
+-   **Where:** the composer's "Scheduled send preset"
+    (`apps/blackout-client/src/app/features/room/MessageComposer.tsx`) and
+    `POST /v1/scheduled-messages` (`packages/api/src/routes/scheduledMessages.ts`).
+-   **State:** A scheduled message is sent later by the Blackout bot, which
+    cannot encrypt. The API stores the text as plaintext until it is sent, then
+    clears it. Scheduling is refused in encrypted rooms, in rooms you are not in
+    or may not post in, and in rooms the bot is not in; the bot checks the same
+    things again right before sending (`packages/api/src/services/botPostingGate.ts`).
+    Most private dens are encrypted, and the bot joins canopies rather than
+    dens, so scheduling is not available in most dens.
+-   **Not there yet:** you cannot see or cancel a scheduled message in the app.
+    A message that cannot be delivered is dropped after 5 attempts without
+    notice, and one refused at send time (you left the room, or it became
+    encrypted) is dropped without notice too. Nothing is sent where the API's
+    background loops do not run against the loaded store: in
+    `deploy/docker/production` the worker does not load the store at this
+    commit, so scheduled messages are stored there but never posted.
+
+### Deleting your account
+
+-   **Where:** Settings → Privacy & data → Delete your account
+    (`apps/blackout-client/src/app/features/settings/DataRetentionSection.tsx`);
+    `POST /v1/auth/account/delete/request` and `/confirm`.
+-   **State:** Deleting your Blackout account removes the account, its sessions
+    and linked services, and cancels and erases your unsent scheduled messages.
+    It does not yet deactivate your Matrix account, and your messages stay in
+    rooms.
+
 ---
 
 ## Deferred multi-week workstreams

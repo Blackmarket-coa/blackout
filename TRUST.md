@@ -64,10 +64,21 @@ Encryption claims are only worth something with the exceptions attached.
     private.
 -   **Service rooms the Blackout bot posts into** — marketplace vendor, order,
     inventory and ledger rooms, `#bugs`, and the standing public rooms. The bot is
-    a plain HTTP client with no Megolm implementation: it _cannot_ post into an
-    encrypted room. Encrypting these would not make them private, it would break
-    them. Giving the bot real crypto is on the roadmap; until it lands, this list
-    stands and stays here.
+    a plain HTTP client with no Megolm implementation, so it cannot encrypt:
+    anything it posts is plaintext, even in an encrypted room. In the encrypted
+    rooms it creates, it posts only non-secret status — dispute status as room
+    state, and a delivery notice in dead-drop delivery rooms. Encrypting the
+    service rooms would not make them private, it would break them. Giving the
+    bot real crypto is on the roadmap; until it lands, this list stands and stays
+    here.
+-   **Scheduled messages.** When you schedule a message, you hand its text to the
+    Blackout API. The API stores it as plaintext until it is sent, then clears it,
+    and the bot posts it unencrypted under your name. The API refuses to schedule
+    into an encrypted room, into a room you are not in or may not post in, and
+    into a room the bot is not in, and it checks again right before sending.
+-   **The API message endpoint** (`POST /v1/messages/…`, used by the Expo mobile
+    scaffold in `packages/mobile`) stores the text readable on the server, and if
+    you name a room, the bot posts it there unencrypted after the same room check.
 -   **Spaces**, which hold hierarchy state and never messages.
 -   **Calls and townhall media** use a _different_ mechanism from messages:
     per-call media encryption is negotiated by default
@@ -101,8 +112,9 @@ is advertising.
 
 ## 2. Your data, portable, free
 
-**Every user can download everything the server holds about them, on any tier,
-in one click.**
+**Every user can download their account data — profile, linked accounts, social
+graph, ledger records, scheduled messages and dead-man switches — on any tier,
+in one click.** It does not yet include every record the server keeps.
 
 In the app: **Settings → Privacy & data → Download your data**. Or over HTTP:
 
@@ -123,7 +135,9 @@ always true.
 guarantee working.** The server holds ciphertext and no keys, so it cannot put
 your messages in a file it generates. If a server-side export _did_ contain your
 message history, section 1 of this page would be false. Export encrypted history
-from a signed-in client, which has your keys.
+from a signed-in client, which has your keys. Scheduled messages are the one
+kind of message text the file does hold, because the API keeps that text until
+the bot sends it.
 
 **What we deliberately leave out:** credentials (password hash, integration OAuth
 tokens, vault keys — a portability feature must not become a credential dump),
