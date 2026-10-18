@@ -100,6 +100,10 @@ describe('runDiscordImport', () => {
 
     it('creates canopy → uncategorized dens → category → its dens, in order', async () => {
         const calls: string[] = [];
+        const sentByName = new Map<
+            string,
+            { initial_state?: Array<{ type: string; content: unknown }> }
+        >();
         const mx = {
             createRoom: vi.fn(async () => {
                 calls.push('canopy');
@@ -111,12 +115,17 @@ describe('runDiscordImport', () => {
             getDomain: () => 's',
             // The just-created canopy has not synced into this client yet.
             getRoom: () => null,
+            getCapabilities: async () => ({ 'm.room_versions': { default: '10', available: {} } }),
         } as never;
 
         // createCategoryInCanopy + createDenInCanopy both call mx.createRoom too,
         // so distinguish by creation_content.type via the mock implementation.
         (mx as { createRoom: ReturnType<typeof vi.fn> }).createRoom = vi.fn(
-            async (opts: { creation_content?: { type?: string }; name?: string }) => {
+            async (opts: {
+                creation_content?: { type?: string };
+                name?: string;
+                initial_state?: Array<{ type: string; content: unknown }>;
+            }) => {
                 if (opts?.creation_content?.type === 'm.space' && opts?.name === 'Imported') {
                     calls.push('canopy:Imported');
                 } else if (opts?.creation_content?.type === 'm.space') {
@@ -124,6 +133,7 @@ describe('runDiscordImport', () => {
                 } else {
                     calls.push(`den:${opts?.name}`);
                 }
+                if (opts?.name) sentByName.set(opts.name, opts);
                 return { room_id: `!room-${calls.length}:s` };
             }
         );
@@ -140,6 +150,26 @@ describe('runDiscordImport', () => {
             'den:planning',
             'den:voice',
         ]);
+
+        // Nothing made here has synced back, so the den helpers cannot read
+        // the canopy's kind (it is private anyway) and the dens are restricted
+        // to it; a den in a category admits the category and the canopy, so
+        // canopy members and invite redemption (which joins the den's
+        // immediate parent) both work.
+        const joinRule = (name: string) =>
+            sentByName.get(name)?.initial_state?.find((e) => e.type === 'm.room.join_rules')
+                ?.content;
+        expect(joinRule('lobby')).toEqual({
+            join_rule: 'restricted',
+            allow: [{ type: 'm.room_membership', room_id: '!room-1:s' }],
+        });
+        expect(joinRule('planning')).toEqual({
+            join_rule: 'restricted',
+            allow: [
+                { type: 'm.room_membership', room_id: '!room-3:s' },
+                { type: 'm.room_membership', room_id: '!room-1:s' },
+            ],
+        });
     });
 
     it('continues past a den failure and reports it', async () => {

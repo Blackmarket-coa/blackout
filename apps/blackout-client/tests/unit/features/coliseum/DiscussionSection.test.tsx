@@ -134,9 +134,15 @@ describe('DiscussionSection — the den is created lazily', () => {
             expect.anything(),
             expect.objectContaining({ canopyId: '!canopy:server', purpose: 'topics' })
         );
+        // The category may have been created just now and not synced yet, so
+        // the canopy is named too: it decides the den's access.
         expect(createDenInCanopy).toHaveBeenCalledWith(
             expect.anything(),
-            expect.objectContaining({ canopyId: '!topics-category:server', kind: 'forum' })
+            expect.objectContaining({
+                canopyId: '!topics-category:server',
+                rootCanopyId: '!canopy:server',
+                kind: 'forum',
+            })
         );
         expect(linkColiseumTopicDen).toHaveBeenCalledWith('topic-1', '!new-den:server');
         expect(

@@ -384,6 +384,62 @@ describe('createDenInCanopy: join rule and encryption by canopy kind', () => {
         });
     });
 
+    it('placed in a category this client has not synced yet, follows the hinted canopy and admits both', async () => {
+        // `useDiscussionDen` and the Discord import create a category and then
+        // its dens before the sync brings the category back, so the walk from
+        // the category cannot start; the caller names the canopy instead.
+        setNewRoomSurfaceForTests('app');
+        const publicCase = makeMx({ '!canopy:server': space('!canopy:server', 'public') });
+        await createDenInCanopy(publicCase.mx, {
+            canopyId: '!cat:server',
+            rootCanopyId: '!canopy:server',
+            name: 'topic',
+        });
+        expect(sent(publicCase.createRoom)).toEqual({
+            joinRule: { join_rule: 'public' },
+            encrypted: false,
+        });
+
+        const privateCase = makeMx({ '!canopy:server': space('!canopy:server', 'invite') });
+        await createDenInCanopy(privateCase.mx, {
+            canopyId: '!cat:server',
+            rootCanopyId: '!canopy:server',
+            name: 'topic',
+        });
+        expect(sent(privateCase.createRoom)).toEqual({
+            joinRule: {
+                join_rule: 'restricted',
+                allow: allow('!cat:server', '!canopy:server'),
+            },
+            encrypted: true,
+        });
+
+        // Neither loaded (the Discord import right after making its canopy):
+        // non-public, restricted to category and canopy.
+        const neither = makeMx({});
+        await createDenInCanopy(neither.mx, {
+            canopyId: '!cat:server',
+            rootCanopyId: '!canopy:server',
+            name: 'topic',
+        });
+        expect(sent(neither.createRoom).joinRule).toEqual({
+            join_rule: 'restricted',
+            allow: allow('!cat:server', '!canopy:server'),
+        });
+
+        // A hint the walk already reached changes nothing.
+        const reached = makeMx({
+            '!canopy:server': space('!canopy:server', 'public'),
+            '!cat:server': space('!cat:server', 'invite', [{ id: '!canopy:server' }]),
+        });
+        await createDenInCanopy(reached.mx, {
+            canopyId: '!cat:server',
+            rootCanopyId: '!canopy:server',
+            name: 'topic',
+        });
+        expect(sent(reached.createRoom).joinRule).toEqual({ join_rule: 'public' });
+    });
+
     it('still writes the den kind and the parent/child edges', async () => {
         setNewRoomSurfaceForTests('app');
         const { mx } = makeMx({ '!canopy:server': space('!canopy:server', 'public') });

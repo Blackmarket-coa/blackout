@@ -119,12 +119,20 @@ const MAX_PARENT_WALK = 8;
  * invite redemption in `packages/api/src/services/invitations.ts`, which
  * admits the redeemer to the den's immediate parent, keeps working for dens in
  * categories, and ordinary canopy members are not kept out by a category
- * nobody joins. When the canopy is not loaded here (just created, not yet
- * synced) its kind is read as non-public, the private side.
+ * nobody joins.
+ *
+ * A room this client has not loaded cannot be walked from or through. A
+ * category created a moment ago is the common case (`useDiscussionDen` and
+ * the Discord import make the category and then its dens before the sync
+ * brings either back), so a caller that knows the canopy names it as
+ * `rootCanopyId`: it is admitted too, and its join rule decides when the walk
+ * did not reach it. With no hint and no loaded canopy the kind is read as
+ * non-public, the private side.
  */
 const resolveCanopy = (
     mx: MatrixClient,
-    canopyId: string
+    canopyId: string,
+    rootCanopyId?: string
 ): { parentKind: NewRoomParentKind; allowRoomIds: string[] } => {
     const allowRoomIds = [canopyId];
     let current: Room | null | undefined = mx.getRoom(canopyId);
@@ -137,6 +145,11 @@ const resolveCanopy = (
         if (!next || next.getType?.() !== 'm.space') break;
         allowRoomIds.push(next.roomId);
         current = next;
+    }
+    if (rootCanopyId && !allowRoomIds.includes(rootCanopyId)) {
+        allowRoomIds.push(rootCanopyId);
+        const root = mx.getRoom(rootCanopyId);
+        if (root) current = root;
     }
     return {
         parentKind: current ? parentKindOfJoinRule(current.getJoinRule()) : 'non-public',
@@ -173,10 +186,24 @@ export const createDenInCanopy = async (
     mx: MatrixClient,
     {
         canopyId,
+        rootCanopyId,
         name,
         kind = 'text',
         topic,
-    }: { canopyId: string; name: string; kind?: DenKind; topic?: string }
+    }: {
+        /** The space the den is placed in: the canopy, or a category inside it. */
+        canopyId: string;
+        /**
+         * When `canopyId` is a category, the canopy it sits in. Needed when the
+         * category was created a moment ago and this client has not synced it
+         * yet, so the den's default access can still follow the canopy and
+         * admit its members (see `resolveCanopy`).
+         */
+        rootCanopyId?: string;
+        name: string;
+        kind?: DenKind;
+        topic?: string;
+    }
 ): Promise<string> => {
     const via = localDomain(mx);
     // Access and encryption come from the one table in `newRoomDefaults.ts`:
@@ -190,7 +217,7 @@ export const createDenInCanopy = async (
     // the den exists unencrypted. Until 2026-10 this call sent no join rule,
     // so dens were invite-only by homeserver preset while the invitations
     // service believed them restricted.
-    const { parentKind, allowRoomIds } = resolveCanopy(mx, canopyId);
+    const { parentKind, allowRoomIds } = resolveCanopy(mx, canopyId, rootCanopyId);
     const { kind: accessKind, encrypted } = newDenDefaults({
         parentKind,
         restrictedSupported: restrictedSupported(await resolveDefaultRoomVersion(mx)),

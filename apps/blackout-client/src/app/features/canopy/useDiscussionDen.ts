@@ -94,6 +94,9 @@ export const useDiscussionDen = ({
                 });
                 created = await createDenInCanopy(mx, {
                     canopyId: categoryId,
+                    // The category may have been created just now and not
+                    // synced yet; the canopy decides the den's access.
+                    rootCanopyId: canopyId,
                     name,
                     kind: 'forum',
                 });
