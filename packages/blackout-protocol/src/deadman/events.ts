@@ -55,7 +55,7 @@ export interface DeadmanSwitchPayload {
      * owner. For a recipient, present only after the switch triggers.
      */
     encryptedPayload?: string;
-    /** Optional human-friendly headline shown in UI before release. */
+    /** Optional human-friendly headline shown in UI before the switch triggers. */
     headline?: string;
     /** ISO-8601 creation timestamp. */
     createdAt: string;
