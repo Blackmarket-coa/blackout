@@ -93,6 +93,8 @@ test('the account export lists the caller’s scheduled messages, with their tex
     const other = seedUser();
     const mine = await scheduleInJoinedRoom(user, 'see you at noon');
     const theirs = await scheduleInJoinedRoom(other, 'not yours');
+    const done = await scheduleInJoinedRoom(user, 'changed my mind');
+    assert.ok(db.cancelScheduledMessage(done.id, user.id), 'the message was cancelled');
 
     const res = await app.request('/v1/auth/account/export', { headers: auth(user) });
     assert.equal(res.status, 200);
@@ -103,6 +105,12 @@ test('the account export lists the caller’s scheduled messages, with their tex
     assert.equal(entry?.matrixRoomId, mine.roomId);
     assert.equal(entry?.status, 'pending');
     assert.ok(!body.scheduledMessages.some((m) => m.id === theirs.id), "no one else's messages");
+
+    // Finished messages are listed too, with their status and no text.
+    const cancelled = body.scheduledMessages.find((m) => m.id === done.id);
+    assert.ok(cancelled, 'a cancelled message is exported, not only pending ones');
+    assert.equal(cancelled?.status, 'cancelled');
+    assert.equal(cancelled?.body, '', 'a cancelled message keeps no text');
 });
 
 test('the self-service export carries them under account and no longer claims all messages are E2EE (X-2)', async () => {

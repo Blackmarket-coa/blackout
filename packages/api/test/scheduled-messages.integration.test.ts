@@ -168,6 +168,15 @@ test('a non-member learns "not a member" even when the room is encrypted (T2)', 
     assert.equal(await codeOf(res), 'not_room_member');
 });
 
+test('a non-member learns "not a member" even when the bot is not in the room either (T2b)', async () => {
+    const user = seedUser();
+    const roomId = seedRoom('notmember-nobot', []);
+    const res = await schedule(user, roomId, 'probe');
+    assert.equal(res.status, 403, 'the author is checked before the bot');
+    assert.equal(await codeOf(res), 'not_room_member');
+    assert.equal(rowsForRoom(roomId).length, 0);
+});
+
 test('an unknown room answers exactly like a room the author is not in', async () => {
     const user = seedUser();
     const res = await schedule(user, newRoomId('unknown'), 'probe');
@@ -184,6 +193,18 @@ test('a member who has left the room is refused (T3)', async () => {
     const res = await schedule(user, roomId, 'still here?');
     assert.equal(res.status, 403);
     assert.equal(await codeOf(res), 'not_room_member');
+
+    // Only `join` counts: an invited, banned or knocking member is not in the room.
+    for (const membership of ['invite', 'ban', 'knock']) {
+        const other = seedRoom(`not-joined-${membership}`, [
+            memberEvent(matrix.mxid(user.username), membership),
+            memberEvent(matrix.botUserId),
+        ]);
+        const refused = await schedule(user, other, 'still here?');
+        assert.equal(refused.status, 403, `membership "${membership}" is refused`);
+        assert.equal(await codeOf(refused), 'not_room_member');
+        assert.equal(rowsForRoom(other).length, 0);
+    }
 });
 
 test('a member without power to post is refused (T4)', async () => {
