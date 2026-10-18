@@ -2196,12 +2196,27 @@ class InMemoryDb {
             .sort((a, b) => (a.deliverAt < b.deliverAt ? -1 : 1));
     }
 
+    /** Every scheduled message of a user, in any status (export, erasure). */
+    listScheduledMessagesForUser(userId: string): ScheduledMessageRecord[] {
+        if (!userId) return [];
+        return [...this.scheduledMessages.values()]
+            .filter((msg) => msg.userId === userId)
+            .sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1));
+    }
+
     /** Pending messages whose deliverAt is at or before `asOf` (defaults to now). */
     listDueScheduledMessages(asOf: string = nowIso()): ScheduledMessageRecord[] {
         return [...this.scheduledMessages.values()]
             .filter((msg) => msg.status === 'pending' && msg.deliverAt <= asOf)
             .sort((a, b) => (a.deliverAt < b.deliverAt ? -1 : 1));
     }
+
+    // Message text is kept only while a row is pending. Delivered, cancelled
+    // and terminally failed rows clear `body` and `formattedBody`: nothing reads
+    // them afterwards, and the API should not hold plaintext it no longer needs.
+    // `formattedBody: undefined` stays an own property on purpose, so the
+    // Postgres write-through (which writes only the fields a record has) sets
+    // the column to NULL instead of leaving the old text in place.
 
     markScheduledMessageDelivered(id: string): ScheduledMessageRecord | undefined {
         const record = this.scheduledMessages.get(id);
@@ -2212,6 +2227,8 @@ class InMemoryDb {
             attempts: record.attempts + 1,
             deliveredAt: nowIso(),
             lastError: undefined,
+            body: '',
+            formattedBody: undefined,
         };
         this.scheduledMessages.set(id, updated);
         return updated;
@@ -2219,7 +2236,8 @@ class InMemoryDb {
 
     /**
      * Record a failed delivery attempt. Stays `pending` (so the dispatcher
-     * retries on a later tick) unless `terminal` is set, which marks it `failed`.
+     * retries on a later tick) unless `terminal` is set, which marks it `failed`
+     * and clears its text.
      */
     markScheduledMessageFailed(
         id: string,
@@ -2233,16 +2251,47 @@ class InMemoryDb {
             status: options.terminal ? 'failed' : 'pending',
             attempts: record.attempts + 1,
             lastError: error,
+            ...(options.terminal ? { body: '', formattedBody: undefined } : {}),
         };
         this.scheduledMessages.set(id, updated);
         return updated;
     }
 
-    /** Cancel a still-pending scheduled message owned by `userId`. */
+    /** Cancel a still-pending scheduled message owned by `userId`, clearing its text. */
     cancelScheduledMessage(id: string, userId: string): ScheduledMessageRecord | undefined {
         const record = this.scheduledMessages.get(id);
         if (!record || record.userId !== userId || record.status !== 'pending') return undefined;
-        const updated: ScheduledMessageRecord = { ...record, status: 'cancelled' };
+        const updated: ScheduledMessageRecord = {
+            ...record,
+            status: 'cancelled',
+            body: '',
+            formattedBody: undefined,
+        };
+        this.scheduledMessages.set(id, updated);
+        return updated;
+    }
+
+    /**
+     * Account deletion: remove a scheduled message's text and every link to its
+     * author and room. A pending row is cancelled, so nothing is ever posted
+     * for a deleted account. The row itself stays (status and timestamps only)
+     * because this is a targeted upsert, not a resync: on a multi-replica
+     * Postgres deployment a resync can delete rows another replica just wrote,
+     * or write back stale copies.
+     */
+    eraseScheduledMessage(id: string): ScheduledMessageRecord | undefined {
+        const record = this.scheduledMessages.get(id);
+        if (!record) return undefined;
+        const updated: ScheduledMessageRecord = {
+            ...record,
+            userId: '',
+            matrixRoomId: '',
+            body: '',
+            formattedBody: undefined,
+            ...(record.status === 'pending'
+                ? { status: 'cancelled' as const, lastError: 'author_deleted' }
+                : {}),
+        };
         this.scheduledMessages.set(id, updated);
         return updated;
     }
@@ -6217,6 +6266,12 @@ export class FileBackedDb extends InMemoryDb {
         userId: string
     ): ScheduledMessageRecord | undefined {
         const updated = super.cancelScheduledMessage(id, userId);
+        if (updated) this.persist();
+        return updated;
+    }
+
+    override eraseScheduledMessage(id: string): ScheduledMessageRecord | undefined {
+        const updated = super.eraseScheduledMessage(id);
         if (updated) this.persist();
         return updated;
     }

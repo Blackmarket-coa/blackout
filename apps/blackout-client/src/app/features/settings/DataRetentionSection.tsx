@@ -206,10 +206,11 @@ export const DataRetentionSection: React.FC = () => {
             <div style={{ display: 'grid', gap: 8 }}>
                 <h4 style={{ margin: 0 }}>Download your data</h4>
                 <small>
-                    Exports a JSON file with everything the server holds about you: your profile and
-                    linked accounts, your social graph, and your ledger records. Free on every tier.
-                    The contents of your encrypted rooms are not included — the server cannot read
-                    them — and the file tells you how to export those from this client instead.
+                    Exports a JSON file with your account data: profile and linked accounts, social
+                    graph, ledger records, scheduled messages and dead-man switches. It does not yet
+                    include every record the server keeps. Free on every tier. The contents of your
+                    encrypted rooms are not included — the server cannot read them — and the file
+                    tells you how to export those from this client instead.
                 </small>
                 <div>
                     <button
@@ -235,8 +236,9 @@ export const DataRetentionSection: React.FC = () => {
             <div style={{ display: 'grid', gap: 8 }}>
                 <h4 style={{ margin: 0 }}>Delete your account</h4>
                 <small>
-                    Permanently removes your account, sessions, and linked services. Posts and
-                    messages remain visible to communities you participated in.
+                    Removes your Blackout account, sessions and linked services. It does not yet
+                    deactivate your Matrix account. Posts and messages remain visible to communities
+                    you participated in. Scheduled messages you have not sent yet are cancelled.
                 </small>
                 {deleteStage === 'idle' && (
                     <div>

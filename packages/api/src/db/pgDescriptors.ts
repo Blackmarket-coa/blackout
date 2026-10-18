@@ -573,6 +573,8 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
     markScheduledMessageDelivered: upsert('scheduledMessages'),
     markScheduledMessageFailed: upsert('scheduledMessages'),
     cancelScheduledMessage: upsert('scheduledMessages'),
+    // Account deletion. A targeted upsert, not a resync: see the store method.
+    eraseScheduledMessage: upsert('scheduledMessages'),
     createPasswordResetToken: upsert('passwordResetTokens'),
     consumePasswordResetToken: resync('passwordResetTokens'),
     createEmailVerificationToken: upsert('emailVerificationTokens'),

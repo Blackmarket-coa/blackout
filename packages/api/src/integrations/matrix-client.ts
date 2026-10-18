@@ -12,6 +12,13 @@ const homeserverDomain = () =>
  */
 export const MEGOLM_ALGORITHM = 'm.megolm.v1.aes-sha2';
 
+/** One event of a room's current state, as the Synapse admin state endpoint returns it. */
+export interface RoomStateEvent {
+    type: string;
+    state_key?: string;
+    content?: Record<string, unknown>;
+}
+
 // Cache the bot's resolved MXID across calls — `whoami` is a network round-trip
 // and the identity never changes for a given token.
 let botUserIdCache: string | undefined;
@@ -307,8 +314,10 @@ export const matrixClient = {
      *
      * Pass `false` only for rooms this bot must post readable content into. The
      * bot is a plain HTTP client with no Olm/Megolm implementation, so it cannot
-     * send into an encrypted room; those rooms are disclosed as server-visible in
-     * TRUST.md rather than being quietly encrypted and broken.
+     * encrypt: anything it sends is plaintext, even into an encrypted room.
+     * Those rooms are disclosed as server-visible in TRUST.md rather than being
+     * quietly encrypted. Paths that post on a user's behalf must go through
+     * `services/botPostingGate.ts`, which refuses encrypted rooms.
      */
     async createRoom(input: {
         aliasLocalpart?: string;
@@ -736,6 +745,60 @@ export const matrixClient = {
                 ((e.content as { via?: unknown[] }).via?.length ?? 0) > 0
         );
         return { ok: true as const, canopyId: parent?.state_key };
+    },
+
+    /**
+     * Read a room's full current state through the Synapse *admin* state
+     * endpoint (`GET /_synapse/admin/v1/rooms/{roomId}/state`). It works
+     * whether or not the bot is in the room, and one call returns the member
+     * events, `m.room.power_levels` and `m.room.encryption`, which is what the
+     * bot-posting gate (`services/botPostingGate.ts`) needs.
+     *
+     * Fails closed: a missing or malformed `state` array is a failure, never
+     * an empty room.
+     */
+    async getRoomStateAdmin(roomId: string) {
+        const hs = homeserver();
+        const token = botToken();
+        if (!hs || !token) {
+            return { ok: false as const, reason: 'matrix_not_configured' as const };
+        }
+        let response: Response;
+        try {
+            response = await fetch(
+                `${hs}/_synapse/admin/v1/rooms/${encodeURIComponent(roomId)}/state`,
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
+        } catch (error) {
+            return {
+                ok: false as const,
+                reason: 'network_error' as const,
+                detail: (error as Error).message,
+            };
+        }
+        if (!response.ok) {
+            return {
+                ok: false as const,
+                status: response.status,
+                reason: 'synapse_rejected' as const,
+            };
+        }
+        let body: { state?: unknown };
+        try {
+            body = (await response.json()) as { state?: unknown };
+        } catch {
+            return { ok: false as const, status: response.status, reason: 'bad_response' as const };
+        }
+        if (!Array.isArray(body?.state)) {
+            return { ok: false as const, status: response.status, reason: 'bad_response' as const };
+        }
+        const state = body.state.filter(
+            (e): e is RoomStateEvent =>
+                typeof e === 'object' &&
+                e !== null &&
+                typeof (e as RoomStateEvent).type === 'string'
+        );
+        return { ok: true as const, status: response.status, state };
     },
 
     /**

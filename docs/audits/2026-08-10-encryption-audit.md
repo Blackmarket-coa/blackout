@@ -101,6 +101,15 @@ bodies plaintext at rest (`db/types.ts:716-731`). Those are unencrypted rooms �
 nothing is being decrypted — but "the server never holds plaintext" would be a
 false statement. "The server cannot read your encrypted rooms" is the true one.
 
+**Correction (2026-10-12).** "Those are unencrypted rooms" was an assumption,
+not a check. Neither path looked at the room's encryption state. A run on
+2026-10-12 showed the scheduled-message dispatcher posting a plaintext
+`m.room.message` into a room whose state includes `m.room.encryption`, for an
+author who was not in the room. Both paths now refuse encrypted rooms and
+non-members before storing anything
+(`packages/api/src/services/botPostingGate.ts`). See
+[docs/security/scheduled-messages-triage-2026-10-12.md](../security/scheduled-messages-triage-2026-10-12.md).
+
 ### 1.3 No log path captures message content
 
 Confirmed by search across `packages/` and `apps/` (excluding the vendored
@@ -390,7 +399,8 @@ consequences — existing rooms are untouched.
    `m.room.encryption` is present in initial state.
 2. Confirm the bot still posts to `#bugs`, FBM order rooms, and scheduled-message
    targets — these are the rooms deliberately left plaintext, and they are the
-   ones a mistake here would break.
+   ones a mistake here would break. (Correction 2026-10-12: scheduled-message
+   targets were never limited to plaintext rooms; see §1.2.)
 3. Deploy the Synapse template change with the app change, not before it.
 4. **Rollback caveat, state it explicitly:** reverting restores the old defaults
    for _future_ rooms. Rooms created while the change was live remain encrypted.

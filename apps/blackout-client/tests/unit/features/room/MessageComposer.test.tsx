@@ -4,6 +4,7 @@ import ReactDOM from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import { Provider, createStore } from 'jotai';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { BlackoutSdkError } from '@blackout/sdk';
 
 const sendRichText = vi.fn().mockResolvedValue(undefined);
 const sendMedia = vi.fn().mockResolvedValue(undefined);
@@ -26,8 +27,21 @@ vi.mock('../../../../src/app/plugins/matrix-adapters/hooks/useLegacyRoomAdapter'
 vi.mock('../../../../src/app/plugins/navigation', () => ({
     useNavigationSpaceTree: () => ({ data: [] }),
 }));
+// Per-test room. Undefined (no room loaded) unless a test sets it; the client
+// object itself stays stable so the composer's room memo behaves as in the app.
+let currentRoom: ReturnType<typeof makeRoom> | undefined;
+const fakeMatrixClient = {
+    getRoom: () => currentRoom,
+    getUserId: () => '@me:test',
+};
 vi.mock('../../../../src/app/hooks/useMatrixClient', () => ({
-    useMatrixClient: () => ({}),
+    useMatrixClient: () => fakeMatrixClient,
+}));
+// The encryption indicator reads the m.room.encryption state event through this
+// hook; answer from the same per-test room.
+vi.mock('../../../../src/app/hooks/useStateEvent', () => ({
+    useStateEvent: () =>
+        currentRoom?.hasEncryptionStateEvent() ? { getContent: () => ({}) } : undefined,
 }));
 vi.mock('../../../../src/app/features/room/attachments/useAttachPhoto', () => ({
     useAttachPhoto: () => vi.fn(),
@@ -37,6 +51,21 @@ vi.mock('../../../../src/app/features/room/scheduledMessagesClient', () => ({
 }));
 
 import { MessageComposer, toHtml } from '../../../../src/app/features/room/MessageComposer';
+
+/** A minimal room: just what the composer reads. `encrypted` can flip mid-test. */
+function makeRoom(encrypted: boolean) {
+    const room = {
+        roomId: '!room:test',
+        encrypted,
+        hasEncryptionStateEvent: () => room.encrypted,
+        getMember: () => null,
+        currentState: { getStateEvents: () => null },
+    };
+    return room;
+}
+
+const ENCRYPTED_REASON =
+    'Not available in encrypted rooms. The Blackout bot sends scheduled messages and cannot encrypt them.';
 
 // Track every root we mount so afterEach can unmount them. Without unmounting,
 // slate-react's <Editable> never runs its effect cleanup, leaving a debounced
@@ -82,6 +111,7 @@ const click = async (el: Element | undefined) => {
 
 beforeEach(() => {
     vi.clearAllMocks();
+    currentRoom = undefined;
     window.localStorage.clear();
     document.body.innerHTML = '';
     window.matchMedia =
@@ -98,6 +128,16 @@ beforeEach(() => {
                 dispatchEvent: () => false,
             } as unknown as MediaQueryList));
 });
+
+const statusText = (container: HTMLElement) =>
+    [...container.querySelectorAll('[role="status"]')].map((el) => el.textContent).join(' ');
+
+// Let a rejected API call and the state updates after it settle.
+const settle = async () => {
+    await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+};
 
 afterEach(async () => {
     // Unmount inside act so slate-react flushes its effect cleanup synchronously,
@@ -167,6 +207,107 @@ describe('MessageComposer', () => {
         expect(sendRichText).not.toHaveBeenCalled();
     });
 
+    it('C-1: in an encrypted room the scheduled-send preset is disabled, with the reason shown', async () => {
+        currentRoom = makeRoom(true);
+        const { container } = await mountComposer({ initialMarkdown: 'secret plans' });
+
+        await click(findByLabel(container, 'Open composer features'));
+        const preset = findButton(container, 'Scheduled send preset');
+        expect(preset).toBeTruthy();
+        expect(preset?.disabled).toBe(true);
+        expect(container.textContent).toContain(ENCRYPTED_REASON);
+
+        await click(preset);
+        expect(container.textContent).not.toContain('Schedule: +');
+
+        await click(findButton(container, 'Send'));
+        expect(createScheduledMessage).not.toHaveBeenCalled();
+        expect(sendRichText).toHaveBeenCalledTimes(1);
+    });
+
+    it('C-2: a room that became encrypted after scheduling was turned on gets neither a schedule nor a send', async () => {
+        currentRoom = makeRoom(false);
+        const { container } = await mountComposer({
+            roomId: '!room:test',
+            initialMarkdown: 'later message',
+        });
+
+        await click(findByLabel(container, 'Open composer features'));
+        await click(findButton(container, 'Scheduled send preset'));
+        expect(container.textContent).toContain('Schedule: +1h');
+
+        currentRoom.encrypted = true;
+        await click(findButton(container, 'Send'));
+        await settle();
+
+        expect(createScheduledMessage).not.toHaveBeenCalled();
+        expect(sendRichText).not.toHaveBeenCalled();
+        expect(statusText(container)).toContain(ENCRYPTED_REASON);
+        expect(window.localStorage.getItem('blackout.draft.!room:test')).toContain('later message');
+    });
+
+    it('C-3: an API refusal keeps the draft and says why', async () => {
+        currentRoom = makeRoom(false);
+        createScheduledMessage.mockRejectedValueOnce(
+            new BlackoutSdkError('HTTP_REQUEST_FAILED', 'Request failed (409)', 'fatal', 409)
+        );
+        const { container } = await mountComposer({
+            roomId: '!room:test',
+            initialMarkdown: 'later message',
+        });
+
+        await click(findByLabel(container, 'Open composer features'));
+        await click(findButton(container, 'Scheduled send preset'));
+        await click(findButton(container, 'Send'));
+        await settle();
+
+        expect(createScheduledMessage).toHaveBeenCalledTimes(1);
+        expect(sendRichText).not.toHaveBeenCalled();
+        expect(statusText(container)).toContain(
+            "Scheduling isn't available in this room. It is encrypted, or the Blackout bot isn't in it."
+        );
+        expect(window.localStorage.getItem('blackout.draft.!room:test')).toContain('later message');
+    });
+
+    it('C-3: a failed room check asks to try again, and a refusal to post says so', async () => {
+        currentRoom = makeRoom(false);
+        createScheduledMessage
+            .mockRejectedValueOnce(
+                new BlackoutSdkError(
+                    'HTTP_REQUEST_FAILED',
+                    'Request failed (503)',
+                    'retryable',
+                    503
+                )
+            )
+            .mockRejectedValueOnce(
+                new BlackoutSdkError('HTTP_REQUEST_FAILED', 'Request failed (403)', 'fatal', 403)
+            );
+        const { container } = await mountComposer({ initialMarkdown: 'later message' });
+
+        await click(findByLabel(container, 'Open composer features'));
+        await click(findButton(container, 'Scheduled send preset'));
+        await click(findButton(container, 'Send'));
+        await settle();
+        expect(statusText(container)).toContain("Couldn't check the room. Try again.");
+
+        await click(findButton(container, 'Send'));
+        await settle();
+        expect(statusText(container)).toContain("You can't post in this room.");
+        expect(sendRichText).not.toHaveBeenCalled();
+    });
+
+    it('C-4: in an unencrypted room the schedule chip says the bot sends it unencrypted', async () => {
+        currentRoom = makeRoom(false);
+        const { container } = await mountComposer({ initialMarkdown: 'later message' });
+
+        await click(findByLabel(container, 'Open composer features'));
+        const preset = findButton(container, 'Scheduled send preset');
+        expect(preset?.disabled).toBe(false);
+        await click(preset);
+        expect(container.textContent).toContain('sent unencrypted by the Blackout bot');
+    });
+
     // Mentions and links are inline element nodes nested inside a paragraph's
     // children. Serializing them used to call the text-leaf path on those nodes,
     // reading `.text` off undefined and throwing in escapeHtml — which crashed
@@ -189,9 +330,7 @@ describe('MessageComposer', () => {
             },
         ] as never);
 
-        expect(html).toBe(
-            '<p>hey <a href="https://matrix.to/#/@bob:server">bob</a> welcome</p>'
-        );
+        expect(html).toBe('<p>hey <a href="https://matrix.to/#/@bob:server">bob</a> welcome</p>');
     });
 
     it('serializes a link nested inside a paragraph without throwing', () => {
@@ -209,9 +348,7 @@ describe('MessageComposer', () => {
             },
         ] as never);
 
-        expect(html).toBe(
-            '<p>see <a href="https://example.com">https://example.com</a></p>'
-        );
+        expect(html).toBe('<p>see <a href="https://example.com">https://example.com</a></p>');
     });
 
     it('persists a draft to localStorage as the user composes', async () => {

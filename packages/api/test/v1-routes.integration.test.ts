@@ -132,17 +132,21 @@ test('v1 auth middleware rejects expired JWTs', async () => {
 });
 
 test('v1 messages post/list works', async () => {
+    // Both directions need a session: the author is the caller, never a body field.
+    const { token, userId } = await registerUser();
     const create = await app.request('/v1/messages/general', {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ content: 'hello', userId: 'demo-user' }),
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ content: 'hello', userId }),
     });
     assert.equal(create.status, 201);
 
-    const list = await app.request('/v1/messages/general');
+    const list = await app.request('/v1/messages/general', {
+        headers: { authorization: `Bearer ${token}` },
+    });
     assert.equal(list.status, 200);
-    const body = (await list.json()) as Array<{ content: string }>;
-    assert.ok(body.some((msg) => msg.content));
+    const body = (await list.json()) as Array<{ content: string; userId: string }>;
+    assert.ok(body.some((msg) => msg.content === 'hello' && msg.userId === userId));
 });
 
 test('v1 governance proposal create/get works', async () => {

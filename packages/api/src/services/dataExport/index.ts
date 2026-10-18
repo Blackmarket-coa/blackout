@@ -1,11 +1,12 @@
 /**
  * Self-service data export.
  *
- * One request returns everything the server holds for the calling user, in
- * portable JSON, free at every tier. It exists because Blackout intends to make
- * a public data-portability claim, and the only export that existed
- * (`GET /v1/transparency/audit-export`) returned HTTP 402 below the Coalition
- * tier — a paywalled export cannot back that claim.
+ * One request returns the calling user's account data, in portable JSON, free
+ * at every tier: the user-keyed records listed in AccountExport plus the social
+ * graph and ledger sections; not every table is covered yet. It exists because
+ * Blackout intends to make a public data-portability claim, and the only export
+ * that existed (`GET /v1/transparency/audit-export`) returned HTTP 402 below the
+ * Coalition tier — a paywalled export cannot back that claim.
  *
  * ## Three domains, kept separate
  *
@@ -25,6 +26,11 @@
  * cannot read them — it holds ciphertext and no keys, which is the whole point
  * of the encryption claim. An export produced server-side that *did* contain
  * your message history would be evidence against that claim.
+ *
+ * Unencrypted rooms are readable on the homeserver, but their history is not in
+ * this file either. Scheduled messages are the exception that is: the API holds
+ * their text as plaintext until they are sent, so `account.scheduledMessages`
+ * lists them.
  *
  * Matrix history export belongs in the client, which has the keys. Synapse's own
  * `admin_cmd export-data` is vendored in `apps/blackout-server` but is an
@@ -79,7 +85,7 @@ export interface DataExport {
 }
 
 const MATRIX_HISTORY_REASON =
-    'Your messages are end-to-end encrypted. The server stores them as ciphertext and does not hold the keys, so it cannot include their contents in an export it generates. That is the encryption guarantee working as intended — a server-side export containing your message history would mean the server could read it.';
+    'This file does not include your Matrix room history. For end-to-end encrypted rooms the server holds only ciphertext and no keys, so it could not include their contents. Rooms that are not encrypted are stored readable on the homeserver, and this file does not include them either. Scheduled messages, which the API stores as plaintext until they are sent, are listed under account.scheduledMessages.';
 
 const MATRIX_HISTORY_HOW =
     "Export encrypted room history from a signed-in client, which holds your keys: Settings → Encryption → Export room keys, or use your client's room-export feature.";

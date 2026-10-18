@@ -143,17 +143,24 @@ test('LS-AUTH-05: refresh-token rotation issues a new access token', async () =>
 
 test('LS-MSG-01: room message send + list round-trip preserves order', async () => {
     const sender = await registerUser();
+    const reader = await registerUser();
     const channelId = `room-${++userSeed}`;
     const send = await app.request(`/v1/messages/${channelId}`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: {
+            authorization: `Bearer ${sender.token}`,
+            'content-type': 'application/json',
+        },
         body: JSON.stringify({ content: 'hello room', userId: sender.userId }),
     });
     assert.equal(send.status, 201);
     const sendBody = (await send.json()) as { message: { id: string; content: string } };
     assert.ok(sendBody.message.id);
 
-    const list = await app.request(`/v1/messages/${channelId}`);
+    // The other member observes it; reading needs a session too.
+    const list = await app.request(`/v1/messages/${channelId}`, {
+        headers: { authorization: `Bearer ${reader.token}` },
+    });
     assert.equal(list.status, 200);
     const messages = (await list.json()) as Array<{ id: string; content: string }>;
     assert.ok(
@@ -169,21 +176,35 @@ test('LS-MSG-02: DM-shaped channel send + list works for both participants', asy
     for (const sender of [a, b]) {
         const res = await app.request(`/v1/messages/${dmChannelId}`, {
             method: 'POST',
-            headers: { 'content-type': 'application/json' },
+            headers: {
+                authorization: `Bearer ${sender.token}`,
+                'content-type': 'application/json',
+            },
             body: JSON.stringify({ content: `hi from ${sender.username}`, userId: sender.userId }),
         });
         assert.equal(res.status, 201);
     }
-    const list = await app.request(`/v1/messages/${dmChannelId}`);
-    const body = (await list.json()) as Array<{ userId: string; content: string }>;
-    assert.ok(
-        body.some((m) => m.userId === a.userId),
-        'A message missing'
-    );
-    assert.ok(
-        body.some((m) => m.userId === b.userId),
-        'B message missing'
-    );
+    for (const participant of [a, b]) {
+        const list = await app.request(`/v1/messages/${dmChannelId}`, {
+            headers: { authorization: `Bearer ${participant.token}` },
+        });
+        assert.equal(list.status, 200);
+        const body = (await list.json()) as Array<{ userId: string; content: string }>;
+        assert.ok(
+            body.some((m) => m.userId === a.userId),
+            'A message missing'
+        );
+        assert.ok(
+            body.some((m) => m.userId === b.userId),
+            'B message missing'
+        );
+    }
+    // Nobody else can read the DM.
+    const stranger = await registerUser();
+    const denied = await app.request(`/v1/messages/${dmChannelId}`, {
+        headers: { authorization: `Bearer ${stranger.token}` },
+    });
+    assert.equal(denied.status, 403);
 });
 
 test('LS-MSG-03: mention is preserved in the channel timeline for the recipient', async () => {
@@ -192,7 +213,10 @@ test('LS-MSG-03: mention is preserved in the channel timeline for the recipient'
     const channelId = `mention-${++userSeed}`;
     const send = await app.request(`/v1/messages/${channelId}`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: {
+            authorization: `Bearer ${sender.token}`,
+            'content-type': 'application/json',
+        },
         body: JSON.stringify({
             content: `@${recipient.username} please review`,
             userId: sender.userId,
@@ -200,7 +224,9 @@ test('LS-MSG-03: mention is preserved in the channel timeline for the recipient'
     });
     assert.equal(send.status, 201);
 
-    const list = await app.request(`/v1/messages/${channelId}`);
+    const list = await app.request(`/v1/messages/${channelId}`, {
+        headers: { authorization: `Bearer ${recipient.token}` },
+    });
     const body = (await list.json()) as Array<{ content: string }>;
     const mention = body.find((m) => m.content.includes(`@${recipient.username}`));
     assert.ok(mention, 'mention not found in channel timeline');
@@ -219,7 +245,10 @@ test('LS-MEDIA-03: empty / invalid message content is rejected at the API gate',
     const channelId = `media-${++userSeed}`;
     const res = await app.request(`/v1/messages/${channelId}`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: {
+            authorization: `Bearer ${sender.token}`,
+            'content-type': 'application/json',
+        },
         body: JSON.stringify({ content: '', userId: sender.userId }),
     });
     assert.equal(res.status, 400);

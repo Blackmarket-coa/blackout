@@ -1,7 +1,9 @@
 # Data export
 
-Every Blackout user can download everything the server holds about them, in one
-click, in JSON, on any tier including Free.
+Every Blackout user can download their account data — profile, linked accounts,
+social graph, ledger records, scheduled messages and dead-man switches — in one
+click, in JSON, on any tier including Free. It does not yet include every record
+the server keeps.
 
 From the app: **Settings → Privacy & data → Download your data**
 (`DataRetentionSection.tsx`, testid `feature-toggle-data-export`). That button
@@ -48,7 +50,7 @@ path consults an entitlement, and nothing should start to.
         "excluded": ["Password hash…", "OAuth tokens…"]
     },
     "account": {
-        /* profile, linked accounts, votes, posts, dead drops, … */
+        /* profile, linked accounts, votes, posts, dead drops, scheduled messages, dead-man switches, … */
     },
     "socialGraph": {
         /* follows, profile, invitations, ring memberships */
@@ -81,6 +83,12 @@ Settings → Encryption → Export room keys, or your client's room-export featu
 
 Synapse's own `admin_cmd export-data` is vendored in `apps/blackout-server`, but
 it is an operator CLI and for encrypted rooms it would only ever emit ciphertext.
+
+Rooms that are not encrypted are stored readable on the homeserver, and their
+history is not in the export either. Scheduled messages are the exception: the
+API holds their text as plaintext until the bot sends them, so
+`account.scheduledMessages` lists them (with text for pending ones only; sent,
+cancelled and failed ones keep no text).
 
 The `manifest.matrixHistory` field says all of this inside the payload, so an
 export read on its own is not mistaken for data loss.
