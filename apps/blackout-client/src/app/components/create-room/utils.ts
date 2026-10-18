@@ -7,7 +7,7 @@ import {
     Room,
 } from 'matrix-js-sdk';
 import { RoomJoinRulesEventContent } from 'matrix-js-sdk/lib/types';
-import { CreateRoomKind } from './CreateRoomKindSelector';
+import { CreateRoomKind } from './kind';
 import { RoomType, StateEvent } from '../../../types/matrix/room';
 import { getViaServers } from '../../plugins/via-servers';
 import { getMxIdServer } from '../../utils/matrix';
@@ -32,9 +32,14 @@ export const createRoomCreationContent = (
     return content;
 };
 
-export const createRoomJoinRulesState = (
+/**
+ * The `m.room.join_rules` initial-state event for a kind. `Restricted` names
+ * every room in `allowRoomIds` (membership in any one of them admits), and
+ * falls back to invite when there is nothing to restrict to.
+ */
+export const createJoinRulesState = (
     kind: CreateRoomKind,
-    parent: Room | undefined,
+    allowRoomIds: readonly string[],
     knock: boolean
 ) => {
     let content: RoomJoinRulesEventContent = {
@@ -47,15 +52,13 @@ export const createRoomJoinRulesState = (
         };
     }
 
-    if (kind === CreateRoomKind.Restricted && parent) {
+    if (kind === CreateRoomKind.Restricted && allowRoomIds.length > 0) {
         content = {
             join_rule: knock ? ('knock_restricted' as JoinRule) : JoinRule.Restricted,
-            allow: [
-                {
-                    type: RestrictedAllowType.RoomMembership,
-                    room_id: parent.roomId,
-                },
-            ],
+            allow: allowRoomIds.map((roomId) => ({
+                type: RestrictedAllowType.RoomMembership,
+                room_id: roomId,
+            })),
         };
     }
 
@@ -65,6 +68,12 @@ export const createRoomJoinRulesState = (
         content,
     };
 };
+
+export const createRoomJoinRulesState = (
+    kind: CreateRoomKind,
+    parent: Pick<Room, 'roomId'> | undefined,
+    knock: boolean
+) => createJoinRulesState(kind, parent ? [parent.roomId] : [], knock);
 
 export const createRoomParentState = (parent: Room) => ({
     type: StateEvent.SpaceParent,
