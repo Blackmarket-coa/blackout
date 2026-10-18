@@ -3,6 +3,14 @@ import { useAtomValue } from 'jotai';
 import type { MatrixClient, Room } from 'matrix-js-sdk';
 import { joinedRoomsAtom } from '../../state/rooms';
 import { createRoomEncryptionState } from '../../utils/matrix-crypto';
+import { restrictedSupported } from '../../utils/matrix';
+import { createJoinRulesState } from '../../components/create-room/utils';
+import {
+    newCategoryDefaults,
+    newDenDefaults,
+    parentKindOfJoinRule,
+    type NewRoomParentKind,
+} from '../../components/create-room/newRoomDefaults';
 
 /**
  * Channel-kind marker for a den. Kept deliberately separate from the den
@@ -79,6 +87,63 @@ const localDomain = (mx: MatrixClient): string[] => {
     return domain ? [domain] : [];
 };
 
+const FALLBACK_ROOM_VERSION = '1';
+
+/**
+ * The room version a `createRoom` without `room_version` gets, from the
+ * homeserver's capabilities. Unknown (no capabilities, or a client that cannot
+ * fetch them) is read as version 1, which does not support `restricted`, so
+ * the den falls back to invite rather than sending a rule the server would
+ * refuse.
+ */
+const resolveDefaultRoomVersion = async (mx: MatrixClient): Promise<string> => {
+    try {
+        const capabilities = await mx.getCapabilities();
+        return capabilities?.['m.room_versions']?.default ?? FALLBACK_ROOM_VERSION;
+    } catch {
+        return FALLBACK_ROOM_VERSION;
+    }
+};
+
+const MAX_PARENT_WALK = 8;
+
+/**
+ * The canopy that decides a new den's or category's default access, and the
+ * rooms a restricted den admits members of.
+ *
+ * `canopyId` may be a category (a sub-space): `useDiscussionDen` and "add
+ * channel" from a category menu pass the category's id. The default follows
+ * the top-level canopy's join rule, found by walking canonical `m.space.parent`
+ * edges through spaces this client has loaded. A restricted den names both the
+ * room it is placed in and that canopy: members of either can join, so the
+ * invite redemption in `packages/api/src/services/invitations.ts`, which
+ * admits the redeemer to the den's immediate parent, keeps working for dens in
+ * categories, and ordinary canopy members are not kept out by a category
+ * nobody joins. When the canopy is not loaded here (just created, not yet
+ * synced) its kind is read as non-public, the private side.
+ */
+const resolveCanopy = (
+    mx: MatrixClient,
+    canopyId: string
+): { parentKind: NewRoomParentKind; allowRoomIds: string[] } => {
+    const allowRoomIds = [canopyId];
+    let current: Room | null | undefined = mx.getRoom(canopyId);
+    for (let depth = 0; current && depth < MAX_PARENT_WALK; depth += 1) {
+        const parents: string[] = (current.currentState?.getStateEvents('m.space.parent') ?? [])
+            .filter((event) => event.getContent<{ canonical?: boolean }>()?.canonical === true)
+            .map((event) => event.getStateKey())
+            .filter((id): id is string => Boolean(id) && !allowRoomIds.includes(id as string));
+        const next: Room | null | undefined = parents.length ? mx.getRoom(parents[0]) : null;
+        if (!next || next.getType?.() !== 'm.space') break;
+        allowRoomIds.push(next.roomId);
+        current = next;
+    }
+    return {
+        parentKind: current ? parentKindOfJoinRule(current.getJoinRule()) : 'non-public',
+        allowRoomIds,
+    };
+};
+
 // Forum settings event read by `features/forum/ForumView` — a forum den is
 // inert (renders "Forum mode is not enabled") until this exists with
 // `enabled: true`, so we stamp sane defaults at creation. Kept as a local
@@ -114,6 +179,26 @@ export const createDenInCanopy = async (
     }: { canopyId: string; name: string; kind?: DenKind; topic?: string }
 ): Promise<string> => {
     const via = localDomain(mx);
+    // Access and encryption come from the one table in `newRoomDefaults.ts`:
+    // inside a public canopy the den is public and plaintext in the Blackout
+    // app (restricted to the canopy and encrypted in the Black Mask panel);
+    // inside any other canopy it is restricted to the canopy when the room
+    // version allows, else invite-only, and encrypted. Encryption goes in
+    // `initial_state`, not in a later event: this is the main channel-creation
+    // path in the app and it created every den in plaintext until the
+    // 2026-08-10 encryption audit; a follow-up event would leave a window where
+    // the den exists unencrypted. Until 2026-10 this call sent no join rule,
+    // so dens were invite-only by homeserver preset while the invitations
+    // service believed them restricted.
+    const { parentKind, allowRoomIds } = resolveCanopy(mx, canopyId);
+    const { kind: accessKind, encrypted } = newDenDefaults({
+        parentKind,
+        restrictedSupported: restrictedSupported(await resolveDefaultRoomVersion(mx)),
+    });
+    const initialState = [
+        ...(encrypted ? [createRoomEncryptionState()] : []),
+        createJoinRulesState(accessKind, allowRoomIds, false),
+    ];
     const { room_id: roomId } = await mx.createRoom({
         name,
         topic,
@@ -121,13 +206,7 @@ export const createDenInCanopy = async (
         // Announcement dens are read-only for non-moderators: posting any
         // message event requires power 50, enforced by the homeserver.
         power_level_content_override: kind === 'announcement' ? { events_default: 50 } : undefined,
-        // Dens are invite-only rooms inside a canopy (no directory visibility),
-        // so they are private conversations and get Megolm. This is the main
-        // channel-creation path in the app and it previously created every den
-        // in plaintext, which is the single largest gap the 2026-08-10
-        // encryption audit found. The trade-off is deliberate: members who join
-        // later cannot read earlier messages, which is inherent to E2EE.
-        initial_state: [createRoomEncryptionState()],
+        initial_state: initialState,
     });
 
     // Custom + space state-event types aren't in matrix-js-sdk's typed
@@ -185,11 +264,22 @@ export const createCategoryInCanopy = async (
     }: { canopyId: string; name: string; purpose?: CategoryPurpose; order?: string }
 ): Promise<string> => {
     const via = localDomain(mx);
+    // A category follows its canopy's kind (`newRoomDefaults.ts`): public in a
+    // public canopy, else restricted to the canopy when the room version
+    // allows, else invite-only. Spaces hold hierarchy state, never messages,
+    // so no encryption. Until 2026-10 this sent no join rule and every
+    // category was invite-only by homeserver preset.
+    const { parentKind, allowRoomIds } = resolveCanopy(mx, canopyId);
+    const { kind } = newCategoryDefaults({
+        parentKind,
+        restrictedSupported: restrictedSupported(await resolveDefaultRoomVersion(mx)),
+    });
     const { room_id: roomId } = await mx.createRoom({
         name,
         creation_content: { type: 'm.space' },
         // Match the canopy's own space convention: only moderators add channels.
         power_level_content_override: { events_default: 50 },
+        initial_state: [createJoinRulesState(kind, allowRoomIds, false)],
     });
     if (purpose) {
         await mx.sendStateEvent(roomId, CATEGORY_STATE_EVENT_TYPE as any, { purpose }, '');

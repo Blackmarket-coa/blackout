@@ -109,6 +109,8 @@ describe('runDiscordImport', () => {
             // stub the whole surface they touch.
             sendStateEvent: vi.fn(async () => ({})),
             getDomain: () => 's',
+            // The just-created canopy has not synced into this client yet.
+            getRoom: () => null,
         } as never;
 
         // createCategoryInCanopy + createDenInCanopy both call mx.createRoom too,
@@ -152,6 +154,8 @@ describe('runDiscordImport', () => {
             ),
             sendStateEvent: vi.fn(async () => ({})),
             getDomain: () => 's',
+            // The just-created canopy has not synced into this client yet.
+            getRoom: () => null,
         } as never;
 
         const report = await runDiscordImport(mx, plan);

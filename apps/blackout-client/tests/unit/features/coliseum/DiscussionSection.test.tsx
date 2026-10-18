@@ -5,6 +5,7 @@ import { act } from 'react-dom/test-utils';
 import ReactDOM from 'react-dom/client';
 import type { ColiseumTopic } from '@blackout/core';
 import { DiscussionSection } from '../../../../src/app/features/coliseum/sections/DiscussionSection';
+import { setNewRoomSurfaceForTests } from '../../../../src/app/components/create-room/newRoomDefaults';
 
 const linkColiseumTopicDen = vi.fn();
 const createDenInCanopy = vi.fn();
@@ -106,6 +107,7 @@ afterEach(() => {
     });
     document.body.innerHTML = '';
     vi.clearAllMocks();
+    setNewRoomSurfaceForTests(null);
 });
 
 describe('DiscussionSection — the den is created lazily', () => {
@@ -191,6 +193,48 @@ describe('DiscussionSection — the den is created lazily', () => {
             container.querySelector('[data-testid="stub-forum"]')?.getAttribute('data-room-id')
         ).toBe('!existing:server');
         expect(createDenInCanopy).not.toHaveBeenCalled();
+    });
+
+    /**
+     * A loose discussion den takes the "den with no canopy" row of the
+     * defaults table: public and plaintext in the Blackout app, private and
+     * encrypted in the Black Mask panel. Until 2026-10 it was private and
+     * encrypted on both surfaces.
+     */
+    it('a standalone den is public and unencrypted in the app', async () => {
+        setNewRoomSurfaceForTests('app');
+        linkColiseumTopicDen.mockResolvedValue({
+            topic: { ...TOPIC, discussionDenId: '!standalone-den:server' },
+            created: true,
+        });
+        const container = render(TOPIC);
+        await clickStart(container);
+
+        const [opts] = createRoom.mock.calls[0] as [
+            { initial_state: Array<{ type: string; content: Record<string, unknown> }> }
+        ];
+        expect(opts.initial_state.find((e) => e.type === 'm.room.join_rules')?.content).toEqual({
+            join_rule: 'public',
+        });
+        expect(opts.initial_state.some((e) => e.type === 'm.room.encryption')).toBe(false);
+    });
+
+    it('a standalone den is private and encrypted in the panel', async () => {
+        setNewRoomSurfaceForTests('panel');
+        linkColiseumTopicDen.mockResolvedValue({
+            topic: { ...TOPIC, discussionDenId: '!standalone-den:server' },
+            created: true,
+        });
+        const container = render(TOPIC);
+        await clickStart(container);
+
+        const [opts] = createRoom.mock.calls[0] as [
+            { initial_state: Array<{ type: string; content: Record<string, unknown> }> }
+        ];
+        expect(opts.initial_state.find((e) => e.type === 'm.room.join_rules')?.content).toEqual({
+            join_rule: 'invite',
+        });
+        expect(opts.initial_state.some((e) => e.type === 'm.room.encryption')).toBe(true);
     });
 
     it('keeps the rest of the topic usable when den creation fails', async () => {
