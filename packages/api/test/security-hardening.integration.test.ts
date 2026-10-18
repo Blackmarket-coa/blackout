@@ -418,14 +418,15 @@ test('FEED-5: the moderation event log is admin-only, like the streaming-wide lo
         });
         assert.equal(allowed.status, 200);
         const events = (await allowed.json()) as DomainEventRow[];
-        assert.ok(
-            events.some(
-                (event) =>
-                    event.type === 'moderation.action.taken' &&
-                    event.payload.actionId === actionId &&
-                    event.payload.targetId === targetId
-            )
+        const actionRow = events.find(
+            (event) =>
+                event.type === 'moderation.action.taken' && event.payload.actionId === actionId
         );
+        assert.ok(actionRow, 'the admin reads the action row');
+        assert.equal(actionRow.payload.targetId, targetId);
+        // The row carries the action id, the target and the action: no
+        // community, actor or reason. The triage record describes it that way.
+        assert.deepEqual(Object.keys(actionRow.payload).sort(), ['action', 'actionId', 'targetId']);
         assert.ok(
             events.some(
                 (event) =>
@@ -438,6 +439,37 @@ test('FEED-5: the moderation event log is admin-only, like the streaming-wide lo
         if (previousAdmins === undefined) delete process.env.BLACKOUT_ADMIN_USERS;
         else process.env.BLACKOUT_ADMIN_USERS = previousAdmins;
     }
+});
+
+test("FEED-6: GET /moderation/actions hands a community's actions, target and actor included, to any token that names the community", async () => {
+    // Pins what the admin-only feed does not change, the open item in
+    // docs/security/deadman-and-feeds-triage-2026-10-12.md: the module's own
+    // per-community read needs only moderation.read, which every session token
+    // carries. Closing it waits on a community membership/role model, the
+    // follow-up already noted in modules/moderation.ts. When that lands,
+    // update the record together with this test.
+    const stamp = Date.now();
+    const communityId = `open-community-${stamp}`;
+    const moderatorId = `open-moderator-${stamp}`;
+    const targetId = `open-target-${stamp}`;
+
+    const taken = await app.request('/v1/moderation/actions', {
+        method: 'POST',
+        headers: headersFor(moderatorId, ['moderation.write']),
+        body: JSON.stringify({ communityId, targetId, action: 'mute', reason: 'open read check' }),
+    });
+    assert.equal(taken.status, 201);
+    const { id: actionId } = (await taken.json()) as { id: string };
+
+    const listed = await app.request(`/v1/moderation/actions?communityId=${communityId}`, {
+        headers: defaultToken(`open-stranger-${stamp}`),
+    });
+    assert.equal(listed.status, 200);
+    const rows = (await listed.json()) as Array<Record<string, unknown>>;
+    const row = rows.find((candidate) => candidate.id === actionId);
+    assert.ok(row, 'a default token that names the community reads its actions');
+    assert.equal(row.targetId, targetId);
+    assert.equal(row.actorId, moderatorId);
 });
 
 // ---------------------------------------------------------------------------
@@ -499,4 +531,16 @@ test('C7: GET /streams/:id/goal is owner-only, like /revenue', async () => {
     assert.equal(progress.streamId, streamId);
     assert.equal(progress.targetCents, 1);
     assert.equal(progress.achievedCents, 2500);
+
+    // requireStreamOwner looks the stream up first, so an unknown id is 404,
+    // as at /revenue. Before the owner check the route answered 200 with a
+    // zero figure for any id.
+    const unknown = await app.request(
+        `/v1/streaming/streams/no-such-stream-${stamp}/goal?targetCents=1`,
+        { headers: defaultToken(ownerId) }
+    );
+    assert.equal(unknown.status, 404);
+    const unknownBody = (await unknown.json()) as Record<string, unknown>;
+    assert.equal(unknownBody.code, 'stream_not_found');
+    assert.equal(unknownBody.achievedCents, undefined);
 });
