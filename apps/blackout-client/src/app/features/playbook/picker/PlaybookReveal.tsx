@@ -21,7 +21,7 @@ import { useAlive } from '../../../hooks/useAlive';
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
 import { useCapabilities } from '../../../hooks/useCapabilities';
 import { restrictedSupported } from '../../../utils/matrix';
-import { CreateRoomKind, createRoom } from '../../../components/create-room';
+import { createRoom, newDenDefaults, parentKindOf } from '../../../components/create-room';
 import { BLACKOUT_TERMS } from '../../../lib/blackoutTerminology';
 import { useSetAnyPlaybook } from '../usePlaybook';
 import { useUpsertAnyDocument } from '../../documents/useDenDocuments';
@@ -44,11 +44,6 @@ export interface PlaybookRevealProps {
     onCreate: (roomId: string) => void;
     onBack: () => void;
     onCustom: () => void;
-}
-
-function deriveCreateKind(space: Room | undefined, version: string): CreateRoomKind {
-    if (space && restrictedSupported(version)) return CreateRoomKind.Restricted;
-    return CreateRoomKind.Private;
 }
 
 export function PlaybookReveal({
@@ -76,8 +71,18 @@ export function PlaybookReveal({
         const cleanedName = editedName.trim() || entry.name;
         const cleanedDomain = editedDomain.trim();
 
-        const kind = deriveCreateKind(space, defaultVersion);
-        const encryption = entry.features.governanceActive;
+        // Access and encryption come from the one table in `newRoomDefaults.ts`:
+        // public and plaintext in the Blackout app unless the den sits in a
+        // canopy that is not public; private (or restricted to the canopy) and
+        // encrypted in the Black Mask panel. This screen offers no chooser, so
+        // these are what the den gets. Encryption used to follow the playbook's
+        // `governanceActive` flag, which left a "Hearth" den private and
+        // plaintext, against TRUST.md's claim; now every non-public den is
+        // encrypted and a public den never is.
+        const { kind, encrypted } = newDenDefaults({
+            parentKind: parentKindOf(space),
+            restrictedSupported: restrictedSupported(defaultVersion),
+        });
 
         const roomId = await createRoom(mx, {
             version: defaultVersion,
@@ -85,7 +90,7 @@ export function PlaybookReveal({
             kind,
             name: cleanedName,
             topic: cleanedDomain || undefined,
-            encryption,
+            encryption: encrypted,
             knock: false,
             allowFederation: true,
         });
@@ -123,7 +128,6 @@ export function PlaybookReveal({
         editedName,
         editedDomain,
         entry.name,
-        entry.features.governanceActive,
         entry.features.documents,
         space,
         defaultVersion,
