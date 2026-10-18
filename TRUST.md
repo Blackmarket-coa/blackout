@@ -66,11 +66,11 @@ Encryption claims are only worth something with the exceptions attached.
     inventory and ledger rooms, `#bugs`, and the standing public rooms. The bot is
     a plain HTTP client with no Megolm implementation, so it cannot encrypt:
     anything it posts is plaintext, even in an encrypted room. In the encrypted
-    rooms it creates, it posts only non-secret status — dispute status as room
-    state, and a delivery notice in dead-drop delivery rooms. Encrypting the
-    service rooms would not make them private, it would break them. Giving the
-    bot real crypto is on the roadmap; until it lands, this list stands and stays
-    here.
+    rooms it creates, it posts only room state — den classification, room type
+    and dispute status, which Matrix never encrypts — and, in dead-drop delivery
+    rooms, a delivery notice. Encrypting the service rooms would not make them
+    private, it would break them. Giving the bot real crypto is on the roadmap;
+    until it lands, this list stands and stays here.
 -   **Scheduled messages.** When you schedule a message, you hand its text to the
     Blackout API. The API stores it as plaintext until it is sent, then clears it,
     and the bot posts it unencrypted under your name. The API refuses to schedule
