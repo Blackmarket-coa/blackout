@@ -3,6 +3,8 @@ import { useMatrixClientOrNull } from '../../hooks/useMatrixClient';
 import { joinDenWithCanopy } from '../room/joinDenWithCanopy';
 import { createDenInCanopy, DEN_KIND_STATE_EVENT_TYPE, findOrCreateCategory } from './denKind';
 import { createRoomEncryptionState } from '../../utils/matrix-crypto';
+import { createJoinRulesState, createRoomPreset } from '../../components/create-room/utils';
+import { newDenDefaults } from '../../components/create-room/newRoomDefaults';
 
 export interface UseDiscussionDenOptions {
     /** The den already linked to this thing, if one has been created. */
@@ -64,8 +66,11 @@ export const useDiscussionDen = ({
             return null;
         }
         if (resolved) {
-            // Dens are `restricted` to their canopy, so the canopy join is what
-            // unlocks the den; both are no-ops when already a member.
+            // A den inside a canopy that is not public is `restricted` to it,
+            // so the canopy join is what unlocks the den (a den in a public
+            // canopy is public by default in the Blackout app, and dens made
+            // before 2026-10 are invite-only); both joins are no-ops when
+            // already a member.
             await joinDenWithCanopy(mx, resolved, canopyId).catch(() => undefined);
             return resolved;
         }
@@ -90,17 +95,33 @@ export const useDiscussionDen = ({
                 });
                 created = await createDenInCanopy(mx, {
                     canopyId: categoryId,
+                    // The category may have been created just now and not
+                    // synced yet; the canopy decides the den's access.
+                    rootCanopyId: canopyId,
                     name,
                     kind: 'forum',
                 });
             } else {
-                // Encrypted like every other den. This fallback path creates a
-                // loose discussion den when there is no canopy to place it in;
-                // it is no less private for being unparented.
+                // A loose den, with no canopy to place it in: it gets the
+                // "den with no canopy" row of `newRoomDefaults.ts` (public and
+                // plaintext in the Blackout app, private and encrypted in the
+                // Black Mask panel). It was private and encrypted on both
+                // surfaces until 2026-10.
+                const { kind, encrypted } = newDenDefaults({
+                    parentKind: 'none',
+                    restrictedSupported: false,
+                });
+                const initialState = [
+                    ...(encrypted ? [createRoomEncryptionState()] : []),
+                    createJoinRulesState(kind, [], false),
+                ];
                 created = (
                     await mx.createRoom({
                         name,
-                        initial_state: [createRoomEncryptionState()],
+                        // See `createRoomPreset`: a public den must say
+                        // `public_chat` or the homeserver encrypts it anyway.
+                        preset: createRoomPreset(kind),
+                        initial_state: initialState,
                     })
                 ).room_id;
                 // Custom state-event types aren't in matrix-js-sdk's typed

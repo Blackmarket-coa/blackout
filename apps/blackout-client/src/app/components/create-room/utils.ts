@@ -3,11 +3,12 @@ import {
     ICreateRoomStateEvent,
     JoinRule,
     MatrixClient,
+    Preset,
     RestrictedAllowType,
     Room,
 } from 'matrix-js-sdk';
 import { RoomJoinRulesEventContent } from 'matrix-js-sdk/lib/types';
-import { CreateRoomKind } from './CreateRoomKindSelector';
+import { CreateRoomKind } from './kind';
 import { RoomType, StateEvent } from '../../../types/matrix/room';
 import { getViaServers } from '../../plugins/via-servers';
 import { getMxIdServer } from '../../utils/matrix';
@@ -32,9 +33,14 @@ export const createRoomCreationContent = (
     return content;
 };
 
-export const createRoomJoinRulesState = (
+/**
+ * The `m.room.join_rules` initial-state event for a kind. `Restricted` names
+ * every room in `allowRoomIds` (membership in any one of them admits), and
+ * falls back to invite when there is nothing to restrict to.
+ */
+export const createJoinRulesState = (
     kind: CreateRoomKind,
-    parent: Room | undefined,
+    allowRoomIds: readonly string[],
     knock: boolean
 ) => {
     let content: RoomJoinRulesEventContent = {
@@ -47,15 +53,13 @@ export const createRoomJoinRulesState = (
         };
     }
 
-    if (kind === CreateRoomKind.Restricted && parent) {
+    if (kind === CreateRoomKind.Restricted && allowRoomIds.length > 0) {
         content = {
             join_rule: knock ? ('knock_restricted' as JoinRule) : JoinRule.Restricted,
-            allow: [
-                {
-                    type: RestrictedAllowType.RoomMembership,
-                    room_id: parent.roomId,
-                },
-            ],
+            allow: allowRoomIds.map((roomId) => ({
+                type: RestrictedAllowType.RoomMembership,
+                room_id: roomId,
+            })),
         };
     }
 
@@ -65,6 +69,30 @@ export const createRoomJoinRulesState = (
         content,
     };
 };
+
+export const createRoomJoinRulesState = (
+    kind: CreateRoomKind,
+    parent: Pick<Room, 'roomId'> | undefined,
+    knock: boolean
+) => createJoinRulesState(kind, parent ? [parent.roomId] : [], knock);
+
+/**
+ * The `/createRoom` preset for a kind. A request that names no preset gets
+ * `private_chat`: Synapse derives it from `visibility`, which defaults to
+ * `private` (`handlers/room.py`, `_room_preset_config`). Under
+ * `encryption_enabled_by_default_for_room_type: invite`, which both in-repo
+ * homeserver templates set, the server then appends `m.room.encryption` to
+ * every `private_chat` room after the client's `initial_state`, whatever that
+ * state said. A Public room therefore has to name `public_chat`, or the
+ * homeserver encrypts it behind the client's back and the chooser's "not
+ * end-to-end encrypted" is false. Private and Restricted rooms name
+ * `private_chat`, which is what they always got. The join rule the client puts
+ * in `initial_state` wins over the preset's either way. `public_chat` also
+ * means no guest access and the default invite power level (50) rather than
+ * `private_chat`'s 0, the standard shape of a room anyone can join.
+ */
+export const createRoomPreset = (kind: CreateRoomKind): Preset =>
+    kind === CreateRoomKind.Public ? Preset.PublicChat : Preset.PrivateChat;
 
 export const createRoomParentState = (parent: Room) => ({
     type: StateEvent.SpaceParent,
@@ -109,6 +137,7 @@ export const createRoom = async (mx: MatrixClient, data: CreateRoomData): Promis
 
     const options: ICreateRoomOpts = {
         room_version: data.version,
+        preset: createRoomPreset(data.kind),
         name: data.name,
         topic: data.topic,
         room_alias_name: data.aliasLocalPart,

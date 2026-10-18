@@ -128,6 +128,9 @@ export const runDiscordImport = async (
         try {
             const denId = await createDenInCanopy(mx, {
                 canopyId: parentId,
+                // Nothing made here has synced back yet; the canopy decides
+                // the den's access and is admitted alongside its category.
+                rootCanopyId: canopyId,
                 name: den.name,
                 kind: den.kind,
                 topic: den.topic,

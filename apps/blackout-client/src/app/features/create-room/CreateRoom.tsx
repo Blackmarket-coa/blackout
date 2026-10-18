@@ -35,6 +35,8 @@ import {
     CreateRoomData,
     CreateRoomKind,
     CreateRoomKindSelector,
+    newDenDefaults,
+    parentKindOf,
     RoomVersionSelector,
     useAdditionalCreators,
 } from '../../components/create-room';
@@ -65,9 +67,16 @@ export function CreateRoomForm({ defaultKind, space, onCreate }: CreateRoomFormP
 
     const allowRestricted = space && restrictedSupported(selectedRoomVersion);
 
-    const [kind, setKind] = useState(
-        defaultKind ?? allowRestricted ? CreateRoomKind.Restricted : CreateRoomKind.Private
-    );
+    // The default access comes from the one table in `newRoomDefaults.ts`
+    // (public in the Blackout app, private in the Black Mask panel, restricted
+    // inside a canopy that is not public), unless the caller passes one. The
+    // `??` is parenthesised on purpose: `a ?? b ? c : d` parses as
+    // `(a ?? b) ? c : d`, which made any passed `defaultKind` yield Restricted.
+    const defaults = newDenDefaults({
+        parentKind: parentKindOf(space),
+        restrictedSupported: Boolean(allowRestricted),
+    });
+    const [kind, setKind] = useState(defaultKind ?? defaults.kind);
     const allowAdditionalCreators = creatorsSupported(selectedRoomVersion);
     const { additionalCreators, addAdditionalCreator, removeAdditionalCreator } =
         useAdditionalCreators();
@@ -142,6 +151,21 @@ export function CreateRoomForm({ defaultKind, space, onCreate }: CreateRoomFormP
 
     return (
         <Box as="form" onSubmit={handleSubmit} grow="Yes" direction="Column" gap="500">
+            {/* Always visible, on both surfaces: the access choice decides who can
+                join and whether messages are encrypted, so it is not an advanced
+                option (it was, until 2026-10). */}
+            <Box direction="Column" gap="100">
+                <Text size="L400">Access</Text>
+                <CreateRoomKindSelector
+                    value={kind}
+                    onSelect={setKind}
+                    canRestrict={allowRestricted}
+                    disabled={disabled}
+                    getIcon={getCreateRoomKindToIcon}
+                    targetLabel={BLACKOUT_TERMS.den.singular}
+                    encryptionApplies
+                />
+            </Box>
             <Box shrink="No" direction="Column" gap="100">
                 <Text size="L400">Name</Text>
                 <Input
@@ -170,19 +194,6 @@ export function CreateRoomForm({ defaultKind, space, onCreate }: CreateRoomFormP
                 </Chip>
             </Box>
 
-            {advance && (
-                <Box direction="Column" gap="100">
-                    <Text size="L400">Access</Text>
-                    <CreateRoomKindSelector
-                        value={kind}
-                        onSelect={setKind}
-                        canRestrict={allowRestricted}
-                        disabled={disabled}
-                        getIcon={getCreateRoomKindToIcon}
-                        targetLabel={BLACKOUT_TERMS.den.singular}
-                    />
-                </Box>
-            )}
             {advance && (
                 <Box shrink="No" direction="Column" gap="100">
                     <Text size="L400">Topic (Optional)</Text>

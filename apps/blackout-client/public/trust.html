@@ -101,7 +101,7 @@
     <h1 id="trust">Trust</h1>
     <p>What Blackout promises, and how to check each promise yourself without taking our word for it.</p>
     <p>Every claim below links to the code that makes it true. If a link ever stops supporting the claim next to it, the claim is wrong and we want to know — see <a href="https://github.com/Blackmarket-coa/blackout/blob/develop/SECURITY.md" rel="noopener noreferrer">SECURITY.md</a>.</p>
-    <p>Last reviewed: <strong>2026-08-10</strong>. Changes to anything here are recorded in the <a href="https://github.com/Blackmarket-coa/blackout/blob/develop/docs/legal/CHANGELOG.md" rel="noopener noreferrer">policy changelog</a>.</p>
+    <p>Last reviewed: <strong>2026-08-10</strong>; section 1 updated 2026-10-18 with the defaults for new canopies and dens. Changes to anything here are recorded in the <a href="https://github.com/Blackmarket-coa/blackout/blob/develop/docs/legal/CHANGELOG.md" rel="noopener noreferrer">policy changelog</a>.</p>
     <hr />
     <h2 id="1-encryption-never-behind-a-paywall">1. Encryption, never behind a paywall</h2>
     <p><strong>End-to-end encryption is free, on every tier, and there is no mechanism by which it could be sold.</strong></p>
@@ -113,6 +113,13 @@
       <li>The homeserver backstops it with <code>encryption_enabled_by_default_for_room_type: invite</code>.</li>
       <li>CI fails the build if any of that regresses: <a href="https://github.com/Blackmarket-coa/blackout/blob/develop/tools/ci/check-room-encryption.mjs" rel="noopener noreferrer"><code>check-room-encryption.mjs</code></a>.</li>
     </ul>
+    <p><strong>What a new room is before you choose.</strong> The access chooser sits at the top of the New canopy and New den forms, and what it starts on depends on where you are:</p>
+    <ul>
+      <li>In the Blackout app, a new canopy or den is <strong>public and not end-to-end encrypted</strong> unless you choose otherwise. A den created inside a canopy that is not public starts restricted to that canopy&#39;s members and encrypted.</li>
+      <li>In the Black Mask chat panel (<code>/embed</code>), a new canopy or den starts <strong>private</strong> (or, inside a canopy, restricted to that canopy&#39;s members), and a den is encrypted. The panel does not offer creation yet; these are the defaults it will use.</li>
+      <li>An operator can make the app start private everywhere by building the client with <code>VITE_BLACKOUT_NEW_ROOM_DEFAULT=private</code> (<a href="https://github.com/Blackmarket-coa/blackout/blob/develop/apps/blackout-client/src/app/components/create-room/newRoomDefaults.ts" rel="noopener noreferrer"><code>newRoomDefaults.ts</code></a> holds the whole table).</li>
+    </ul>
+    <p>A public canopy is listed in the Blackout canopy directory; any other canopy is listed only if you turn &quot;List in the Blackout directory&quot; on when creating it. These are the client&#39;s defaults, not a server rule: the homeserver accepts whatever access a client asks for, and the directory accepts a listing from any signed-in account. Encryption is decided when a room is created; changing who can join later does not add or remove it.</p>
     <p>This was <strong>not</strong> true before 2026-08-10. Thirteen server paths and five client paths created plaintext rooms, and the homeserver was not compensating. We found it by auditing our own claim before publishing it, and the full write-up — including what was broken and for how long — is public: <a href="https://github.com/Blackmarket-coa/blackout/blob/develop/docs/audits/2026-08-10-encryption-audit.md" rel="noopener noreferrer">2026-08-10 encryption audit</a>.</p>
     <p><strong>No bot or moderation tool can read your encrypted messages.</strong> The server bot has no timeline-read capability at all — not restricted, absent. It can create rooms, invite, and moderate membership; it has no code path that fetches message events.</p>
     <p><strong>Nothing logs your messages.</strong> No log line, error report, or analytics event carries message content. There is no PostHog, no Segment, no session replay in the product. The redactor treats content-shaped fields as secrets (<a href="https://github.com/Blackmarket-coa/blackout/blob/develop/packages/core/src/redaction/patterns.ts" rel="noopener noreferrer"><code>patterns.ts</code></a>) so this holds even if someone later adds a well-meaning debug line.</p>
