@@ -198,6 +198,25 @@ For the source-of-truth triage with tier/owner detail see
     It does not yet deactivate your Matrix account, and your messages stay in
     rooms.
 
+### Dead-man's switch (experimental)
+
+-   **Where:** the Deadman Switch panel at `/deadman`
+    (`apps/blackout-client/src/app/features/deadman/`) and the API's
+    `/v1/deadman` routes (`packages/api/src/modules/deadman.ts`). The panel
+    is shown to every account by default (client flag `deadman`).
+-   **State:** the app can show your switches but cannot arm one. Check-in
+    and cancel from the app are refused for every account, because the
+    session token never carries `deadman.write`. When a switch fires,
+    Blackout does not notify anyone or post anything: the switch only changes
+    status to `triggered`. Do not rely on it for your safety.
+-   Recipients named by Blackout account id can read the encrypted payload
+    through the API only after it fires. Giving them the key is up to you:
+    the server never decrypts the payload and never delivers it. A recipient
+    named by Matrix id or room id never matches anyone.
+-   What a switch should release, and to whom, is an open product decision
+    (N2 in
+    [`docs/security/deadman-and-feeds-triage-2026-10-12.md`](docs/security/deadman-and-feeds-triage-2026-10-12.md)).
+
 ---
 
 ## Deferred multi-week workstreams

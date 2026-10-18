@@ -3,20 +3,21 @@ import type { EventEnvelope } from '../common/types';
 /**
  * Deadman switch contracts.
  *
- * A deadman switch arms a payload that fires automatically when its owner
- * stops checking in. The pattern mirrors well-known open source projects
- * (storopoli/dead-man-switch, killcord, ether-dms): a heartbeat resets a
- * trigger countdown; missing the countdown moves the switch into a grace
- * window; missing the grace window publishes the encrypted payload to the
- * configured recipients.
+ * A deadman switch holds an encrypted payload and fires (moves to
+ * `triggered`) automatically when its owner stops checking in. The pattern
+ * mirrors well-known open source projects (storopoli/dead-man-switch,
+ * killcord, ether-dms): a heartbeat resets a trigger countdown; missing the
+ * countdown moves the switch into a grace window; missing the grace window
+ * moves the switch to `triggered`. The server does not publish or deliver
+ * the payload.
  *
  * Status lifecycle:
  *   armed -> grace -> triggered
  *           ^----- (cancelled at any time before triggered)
  *
- * Servers own the canonical clock and emit envelopes; Matrix-side state
- * events (`co.bmc.deadman.*`) mirror the configuration into rooms so
- * clients can render switch status without polling the API.
+ * Servers own the canonical clock and emit envelopes. Matrix-side state
+ * events (`co.bmc.deadman.*`) are defined for mirroring the configuration
+ * into rooms; the API does not send them today.
  */
 
 export const DEADMAN_EVENT_TYPE = 'co.bmc.deadman';
@@ -42,13 +43,19 @@ export interface DeadmanSwitchPayload {
     lastCheckInAt: string;
     /** ISO-8601 deadline; missing it moves the switch into `grace`. */
     triggerAt: string;
-    /** ISO-8601 deadline for the grace window; missing it triggers release. */
+    /** ISO-8601 deadline for the grace window; missing it moves the switch to `triggered`. */
     releaseAt: string;
-    /** Recipients (room ids or user ids) that receive the payload on release. */
+    /**
+     * Recipients, as Blackout account ids. Matrix ids and room ids are
+     * accepted but never match a reader.
+     */
     recipients: string[];
-    /** Opaque encrypted payload; the server never decrypts it. */
-    encryptedPayload: string;
-    /** Optional human-friendly headline shown in UI before release. */
+    /**
+     * Opaque encrypted payload; the server never decrypts it. Present for the
+     * owner. For a recipient, present only after the switch triggers.
+     */
+    encryptedPayload?: string;
+    /** Optional human-friendly headline shown in UI before the switch triggers. */
     headline?: string;
     /** ISO-8601 creation timestamp. */
     createdAt: string;
@@ -89,8 +96,7 @@ export const DEADMAN_EVENT_NAMES = {
     cancelled: 'blackout.deadman.switch.cancelled',
 } as const;
 
-export type DeadmanEventName =
-    (typeof DEADMAN_EVENT_NAMES)[keyof typeof DEADMAN_EVENT_NAMES];
+export type DeadmanEventName = typeof DEADMAN_EVENT_NAMES[keyof typeof DEADMAN_EVENT_NAMES];
 
 const DEADMAN_STATUSES: readonly DeadmanSwitchStatus[] = [
     'armed',
@@ -101,7 +107,13 @@ const DEADMAN_STATUSES: readonly DeadmanSwitchStatus[] = [
 
 const isDeadmanEnvelope = (
     value: unknown
-): value is { roomId: string; senderId: string; occurredAt: string; event: string; payload: unknown } => {
+): value is {
+    roomId: string;
+    senderId: string;
+    occurredAt: string;
+    event: string;
+    payload: unknown;
+} => {
     if (!value || typeof value !== 'object') return false;
     const candidate = value as Partial<{
         roomId: string;
@@ -129,7 +141,8 @@ const isDeadmanPayload = (payload: unknown): payload is DeadmanSwitchPayload => 
         typeof candidate.lastCheckInAt === 'string' &&
         typeof candidate.triggerAt === 'string' &&
         typeof candidate.releaseAt === 'string' &&
-        typeof candidate.encryptedPayload === 'string' &&
+        (candidate.encryptedPayload === undefined ||
+            typeof candidate.encryptedPayload === 'string') &&
         Array.isArray(candidate.recipients) &&
         candidate.recipients.every((entry) => typeof entry === 'string') &&
         DEADMAN_STATUSES.includes(candidate.status as DeadmanSwitchStatus)
@@ -148,20 +161,14 @@ const isDeadmanEventOfType = <TName extends DeadmanEventName>(
 export const isDeadmanSwitchArmed = (value: unknown): value is DeadmanSwitchArmedEvent =>
     isDeadmanEventOfType(value, DEADMAN_EVENT_NAMES.armed);
 
-export const isDeadmanSwitchCheckedIn = (
-    value: unknown
-): value is DeadmanSwitchCheckedInEvent =>
+export const isDeadmanSwitchCheckedIn = (value: unknown): value is DeadmanSwitchCheckedInEvent =>
     isDeadmanEventOfType(value, DEADMAN_EVENT_NAMES.checkedIn);
 
 export const isDeadmanSwitchGrace = (value: unknown): value is DeadmanSwitchGraceEvent =>
     isDeadmanEventOfType(value, DEADMAN_EVENT_NAMES.grace);
 
-export const isDeadmanSwitchTriggered = (
-    value: unknown
-): value is DeadmanSwitchTriggeredEvent =>
+export const isDeadmanSwitchTriggered = (value: unknown): value is DeadmanSwitchTriggeredEvent =>
     isDeadmanEventOfType(value, DEADMAN_EVENT_NAMES.triggered);
 
-export const isDeadmanSwitchCancelled = (
-    value: unknown
-): value is DeadmanSwitchCancelledEvent =>
+export const isDeadmanSwitchCancelled = (value: unknown): value is DeadmanSwitchCancelledEvent =>
     isDeadmanEventOfType(value, DEADMAN_EVENT_NAMES.cancelled);

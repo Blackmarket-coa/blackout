@@ -50,7 +50,7 @@ export const createDeadmanActions = (client: ApiClient) => ({
         }),
     /**
      * Permanently cancel an armed or grace-window switch. Triggered
-     * switches cannot be cancelled (the payload has already shipped).
+     * switches cannot be cancelled.
      */
     cancelSwitch: (switchId: string) =>
         client<DeadmanSwitchCancelledEvent>({
