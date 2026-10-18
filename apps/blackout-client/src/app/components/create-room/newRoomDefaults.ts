@@ -25,7 +25,11 @@
  * history from later joiners without protecting anything (the rule
  * `CreateRoomForm` already applied). Every other den kind is encrypted.
  * Spaces (canopies and categories) hold hierarchy state, never messages, and
- * are never encrypted.
+ * are never encrypted. Every creation path also names the `/createRoom`
+ * preset for its kind (`createRoomPreset` in `./utils.ts`): the homeserver
+ * encrypts every `private_chat` room on its own, and a request without a
+ * preset is `private_chat`, so a Public room must say `public_chat` for
+ * "not encrypted" to be true on the server as well as in the client.
  *
  * Listing: a canopy is registered in the Blackout canopy directory only when
  * its kind is Public or the "List in the Blackout directory" toggle is on;

@@ -262,11 +262,41 @@ describe('createDenInCanopy: join rule and encryption by canopy kind', () => {
         };
     };
 
+    const presetSent = (createRoom: ReturnType<typeof vi.fn>): unknown =>
+        createRoom.mock.calls[0][0].preset;
+
     const allow = (...roomIds: string[]) =>
         roomIds.map((roomId) => ({ type: 'm.room_membership', room_id: roomId }));
 
     afterEach(() => {
         setNewRoomSurfaceForTests(null);
+    });
+
+    it('names the public_chat preset for a public den and private_chat for every other, so the homeserver backstop leaves a public den plaintext', async () => {
+        // Synapse adds `m.room.encryption` to every `private_chat` room under
+        // `encryption_enabled_by_default_for_room_type: invite`, and a request
+        // with no preset is `private_chat`; `public_chat` is how a public den
+        // stays what the chooser says it is.
+        setNewRoomSurfaceForTests('app');
+        const pub = makeMx({ '!canopy:server': space('!canopy:server', 'public') });
+        await createDenInCanopy(pub.mx, { canopyId: '!canopy:server', name: 'general' });
+        expect(presetSent(pub.createRoom)).toBe('public_chat');
+
+        const priv = makeMx({ '!canopy:server': space('!canopy:server', 'invite') });
+        await createDenInCanopy(priv.mx, { canopyId: '!canopy:server', name: 'general' });
+        expect(presetSent(priv.createRoom)).toBe('private_chat');
+
+        const fallback = makeMx(
+            { '!canopy:server': space('!canopy:server', 'invite') },
+            UNSUPPORTED
+        );
+        await createDenInCanopy(fallback.mx, { canopyId: '!canopy:server', name: 'general' });
+        expect(presetSent(fallback.createRoom)).toBe('private_chat');
+
+        setNewRoomSurfaceForTests('panel');
+        const panel = makeMx({ '!canopy:server': space('!canopy:server', 'public') });
+        await createDenInCanopy(panel.mx, { canopyId: '!canopy:server', name: 'general' });
+        expect(presetSent(panel.createRoom)).toBe('private_chat');
     });
 
     it('in the app, a den in a public canopy is public and not encrypted', async () => {
@@ -418,6 +448,9 @@ describe('createCategoryInCanopy: join rule by canopy kind', () => {
                 join_rule: 'public',
             });
             expect(state.some((e) => e.type === 'm.room.encryption')).toBe(false);
+            // And the preset says so too, so the homeserver's backstop (which
+            // encrypts every `private_chat` room) does not apply.
+            expect(createRoom.mock.calls[0][0].preset).toBe('public_chat');
         }
     });
 
@@ -431,6 +464,8 @@ describe('createCategoryInCanopy: join rule by canopy kind', () => {
             join_rule: 'restricted',
             allow: [{ type: 'm.room_membership', room_id: '!canopy:server' }],
         });
+
+        expect(restricted.createRoom.mock.calls[0][0].preset).toBe('private_chat');
 
         const invite = makeMx(canopy('invite'), '1');
         await createCategoryInCanopy(invite.mx, { canopyId: '!canopy:server', name: 'Ops' });

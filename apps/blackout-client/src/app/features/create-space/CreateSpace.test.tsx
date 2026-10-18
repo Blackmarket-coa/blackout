@@ -131,6 +131,9 @@ const joinRuleSent = (createRoom: ReturnType<typeof vi.fn>) => {
     return opts.initial_state?.find((event) => event.type === 'm.room.join_rules')?.content;
 };
 
+const presetSent = (createRoom: ReturnType<typeof vi.fn>): unknown =>
+    (createRoom.mock.calls[0] as unknown as [{ preset?: string }])[0].preset;
+
 const listToggle = (container: HTMLElement) =>
     container.querySelector('[data-testid="create-space-list-in-directory"]');
 
@@ -160,6 +163,8 @@ describe('CreateSpaceForm in the Blackout app', () => {
         await submit(container);
         expect(createRoom).toHaveBeenCalledTimes(1);
         expect(joinRuleSent(createRoom)).toEqual({ join_rule: 'public' });
+        // A public space names `public_chat` (see `createRoomPreset`).
+        expect(presetSent(createRoom)).toBe('public_chat');
         expect(indexCanopyMock).toHaveBeenCalledTimes(1);
         expect(indexCanopyMock).toHaveBeenCalledWith({
             canopyId: '!new:server',
@@ -194,6 +199,7 @@ describe('CreateSpaceForm in the Blackout app', () => {
         expect(listToggle(container)?.getAttribute('aria-checked')).toBe('false');
         await submit(container);
         expect(joinRuleSent(createRoom)).toEqual({ join_rule: 'invite' });
+        expect(presetSent(createRoom)).toBe('private_chat');
         expect(indexCanopyMock).not.toHaveBeenCalled();
     });
 

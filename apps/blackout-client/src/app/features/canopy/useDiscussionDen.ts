@@ -3,7 +3,7 @@ import { useMatrixClientOrNull } from '../../hooks/useMatrixClient';
 import { joinDenWithCanopy } from '../room/joinDenWithCanopy';
 import { createDenInCanopy, DEN_KIND_STATE_EVENT_TYPE, findOrCreateCategory } from './denKind';
 import { createRoomEncryptionState } from '../../utils/matrix-crypto';
-import { createJoinRulesState } from '../../components/create-room/utils';
+import { createJoinRulesState, createRoomPreset } from '../../components/create-room/utils';
 import { newDenDefaults } from '../../components/create-room/newRoomDefaults';
 
 export interface UseDiscussionDenOptions {
@@ -114,6 +114,9 @@ export const useDiscussionDen = ({
                 created = (
                     await mx.createRoom({
                         name,
+                        // See `createRoomPreset`: a public den must say
+                        // `public_chat` or the homeserver encrypts it anyway.
+                        preset: createRoomPreset(kind),
                         initial_state: initialState,
                     })
                 ).room_id;

@@ -3,6 +3,7 @@ import {
     ICreateRoomStateEvent,
     JoinRule,
     MatrixClient,
+    Preset,
     RestrictedAllowType,
     Room,
 } from 'matrix-js-sdk';
@@ -75,6 +76,24 @@ export const createRoomJoinRulesState = (
     knock: boolean
 ) => createJoinRulesState(kind, parent ? [parent.roomId] : [], knock);
 
+/**
+ * The `/createRoom` preset for a kind. A request that names no preset gets
+ * `private_chat`: Synapse derives it from `visibility`, which defaults to
+ * `private` (`handlers/room.py`, `_room_preset_config`). Under
+ * `encryption_enabled_by_default_for_room_type: invite`, which both in-repo
+ * homeserver templates set, the server then appends `m.room.encryption` to
+ * every `private_chat` room after the client's `initial_state`, whatever that
+ * state said. A Public room therefore has to name `public_chat`, or the
+ * homeserver encrypts it behind the client's back and the chooser's "not
+ * end-to-end encrypted" is false. Private and Restricted rooms name
+ * `private_chat`, which is what they always got. The join rule the client puts
+ * in `initial_state` wins over the preset's either way. `public_chat` also
+ * means no guest access and the default invite power level (50) rather than
+ * `private_chat`'s 0, the standard shape of a room anyone can join.
+ */
+export const createRoomPreset = (kind: CreateRoomKind): Preset =>
+    kind === CreateRoomKind.Public ? Preset.PublicChat : Preset.PrivateChat;
+
 export const createRoomParentState = (parent: Room) => ({
     type: StateEvent.SpaceParent,
     state_key: parent.roomId,
@@ -118,6 +137,7 @@ export const createRoom = async (mx: MatrixClient, data: CreateRoomData): Promis
 
     const options: ICreateRoomOpts = {
         room_version: data.version,
+        preset: createRoomPreset(data.kind),
         name: data.name,
         topic: data.topic,
         room_alias_name: data.aliasLocalPart,

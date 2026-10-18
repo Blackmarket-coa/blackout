@@ -4,7 +4,7 @@ import type { MatrixClient, Room } from 'matrix-js-sdk';
 import { joinedRoomsAtom } from '../../state/rooms';
 import { createRoomEncryptionState } from '../../utils/matrix-crypto';
 import { restrictedSupported } from '../../utils/matrix';
-import { createJoinRulesState } from '../../components/create-room/utils';
+import { createJoinRulesState, createRoomPreset } from '../../components/create-room/utils';
 import {
     newCategoryDefaults,
     newDenDefaults,
@@ -203,6 +203,10 @@ export const createDenInCanopy = async (
         name,
         topic,
         visibility: undefined,
+        // `public_chat` for a public den, else `private_chat`: the homeserver
+        // adds encryption to every `private_chat` room, so a public den must
+        // say which it is (`createRoomPreset`).
+        preset: createRoomPreset(accessKind),
         // Announcement dens are read-only for non-moderators: posting any
         // message event requires power 50, enforced by the homeserver.
         power_level_content_override: kind === 'announcement' ? { events_default: 50 } : undefined,
@@ -277,6 +281,7 @@ export const createCategoryInCanopy = async (
     const { room_id: roomId } = await mx.createRoom({
         name,
         creation_content: { type: 'm.space' },
+        preset: createRoomPreset(kind),
         // Match the canopy's own space convention: only moderators add channels.
         power_level_content_override: { events_default: 50 },
         initial_state: [createJoinRulesState(kind, allowRoomIds, false)],

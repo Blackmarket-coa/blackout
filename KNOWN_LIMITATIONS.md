@@ -124,6 +124,17 @@ For the source-of-truth triage with tier/owner detail see
     built: a canopy created private and later made public stays unlisted
     until someone lists it, and one created public stays listed after being
     made private.
+-   **The homeserver's encryption backstop keys on the preset, not on the
+    join rule.** `encryption_enabled_by_default_for_room_type: invite` (both
+    in-repo homeserver templates) makes Synapse add `m.room.encryption` to
+    every room created with the `private_chat` preset, after whatever
+    `initial_state` the client sent, and a request that names no preset is
+    `private_chat`. So the client names `public_chat` for a Public canopy,
+    den or category and `private_chat` for the rest
+    (`createRoomPreset` in `components/create-room/utils.ts`); without that,
+    a Public den would be encrypted on those homeservers while the chooser
+    said it was not. Rooms created before 2026-10-18 named no preset, so a
+    Public den made then may carry a server-added encryption event.
 -   **An unlisted canopy loses canopy-scoped features.** The API gates voice
     rooms (`routes/voice.ts`) and app installs (`services/apps.ts`) on the
     directory entry (`hasCanopy`), so a private canopy created with the toggle

@@ -211,12 +211,18 @@ describe('DiscussionSection — the den is created lazily', () => {
         await clickStart(container);
 
         const [opts] = createRoom.mock.calls[0] as [
-            { initial_state: Array<{ type: string; content: Record<string, unknown> }> }
+            {
+                preset?: string;
+                initial_state: Array<{ type: string; content: Record<string, unknown> }>;
+            }
         ];
         expect(opts.initial_state.find((e) => e.type === 'm.room.join_rules')?.content).toEqual({
             join_rule: 'public',
         });
         expect(opts.initial_state.some((e) => e.type === 'm.room.encryption')).toBe(false);
+        // `public_chat`: the homeserver encrypts every `private_chat` room,
+        // which is what a request without a preset is.
+        expect(opts.preset).toBe('public_chat');
     });
 
     it('a standalone den is private and encrypted in the panel', async () => {
@@ -229,12 +235,16 @@ describe('DiscussionSection — the den is created lazily', () => {
         await clickStart(container);
 
         const [opts] = createRoom.mock.calls[0] as [
-            { initial_state: Array<{ type: string; content: Record<string, unknown> }> }
+            {
+                preset?: string;
+                initial_state: Array<{ type: string; content: Record<string, unknown> }>;
+            }
         ];
         expect(opts.initial_state.find((e) => e.type === 'm.room.join_rules')?.content).toEqual({
             join_rule: 'invite',
         });
         expect(opts.initial_state.some((e) => e.type === 'm.room.encryption')).toBe(true);
+        expect(opts.preset).toBe('private_chat');
     });
 
     it('keeps the rest of the topic usable when den creation fails', async () => {

@@ -114,6 +114,9 @@ const initialStateSent = (createRoom: ReturnType<typeof vi.fn>) => {
     return opts.initial_state ?? [];
 };
 
+const presetSent = (createRoom: ReturnType<typeof vi.fn>): unknown =>
+    (createRoom.mock.calls[0] as unknown as [{ preset?: string }])[0].preset;
+
 afterEach(() => {
     for (const { root, container } of mounted.splice(0)) {
         act(() => root.unmount());
@@ -154,6 +157,9 @@ describe('CreateRoomForm', () => {
             join_rule: 'public',
         });
         expect(state.some((e) => e.type === 'm.room.encryption')).toBe(false);
+        // `public_chat`, or the homeserver (which encrypts every `private_chat`
+        // room, the preset a request without one gets) would encrypt it anyway.
+        expect(presetSent(createRoom)).toBe('public_chat');
     });
 
     it('in the panel, a den with no canopy defaults to Private and is created encrypted', async () => {
@@ -165,6 +171,7 @@ describe('CreateRoomForm', () => {
             join_rule: 'invite',
         });
         expect(state.some((e) => e.type === 'm.room.encryption')).toBe(true);
+        expect(presetSent(createRoom)).toBe('private_chat');
     });
 
     it('inside a public canopy: Public in the app, Restricted in the panel', async () => {
