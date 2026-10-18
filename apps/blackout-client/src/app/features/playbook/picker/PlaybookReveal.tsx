@@ -21,7 +21,12 @@ import { useAlive } from '../../../hooks/useAlive';
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
 import { useCapabilities } from '../../../hooks/useCapabilities';
 import { restrictedSupported } from '../../../utils/matrix';
-import { createRoom, newDenDefaults, parentKindOf } from '../../../components/create-room';
+import {
+    CreateRoomKind,
+    createRoom,
+    newDenDefaults,
+    parentKindOf,
+} from '../../../components/create-room';
 import { BLACKOUT_TERMS } from '../../../lib/blackoutTerminology';
 import { useSetAnyPlaybook } from '../usePlaybook';
 import { useUpsertAnyDocument } from '../../documents/useDenDocuments';
@@ -67,30 +72,56 @@ export function PlaybookReveal({
     const setPlaybook = useSetAnyPlaybook();
     const upsertDocument = useUpsertAnyDocument();
 
+    // Access and encryption come from the one table in `newRoomDefaults.ts`:
+    // public and plaintext in the Blackout app unless the den sits in a canopy
+    // that is not public; private (or restricted to the canopy) and encrypted
+    // in the Black Mask panel. This screen offers no chooser, so these are what
+    // the den gets, and the sentence below says so from this same result (the
+    // chooser is one step away, behind "Custom / Advanced"). Encryption used to
+    // follow the playbook's `governanceActive` flag, which left a "Hearth" den
+    // private and plaintext, against TRUST.md's claim; now every non-public den
+    // is encrypted and a public den never is.
+    const denDefaults = useMemo(
+        () =>
+            newDenDefaults({
+                parentKind: parentKindOf(space),
+                restrictedSupported: restrictedSupported(defaultVersion),
+            }),
+        [space, defaultVersion]
+    );
+
+    /**
+     * What the plant will make, in one sentence, derived from `denDefaults` so
+     * it cannot say one thing while the request says another. A room anyone
+     * can join is not end-to-end encrypted; the copy must say so plainly.
+     */
+    const accessSentence = useMemo(() => {
+        const den = BLACKOUT_TERMS.den.singular;
+        const encryption = denDefaults.encrypted
+            ? 'messages are end-to-end encrypted'
+            : 'messages are not end-to-end encrypted';
+        const change = ` Choose ${BLACKOUT_TERMS.plant.custom} to change that.`;
+        if (denDefaults.kind === CreateRoomKind.Public) {
+            return `This ${den} will be public: anyone can join, and ${encryption}.${change}`;
+        }
+        if (denDefaults.kind === CreateRoomKind.Restricted) {
+            const canopyName = space?.name?.trim() || `this ${BLACKOUT_TERMS.canopy.singular}`;
+            return `This ${den} will be restricted to members of ${canopyName}, and ${encryption}.${change}`;
+        }
+        return `This ${den} will be private: invite only, and ${encryption}.${change}`;
+    }, [denDefaults, space]);
+
     const plantBody = useCallback(async () => {
         const cleanedName = editedName.trim() || entry.name;
         const cleanedDomain = editedDomain.trim();
 
-        // Access and encryption come from the one table in `newRoomDefaults.ts`:
-        // public and plaintext in the Blackout app unless the den sits in a
-        // canopy that is not public; private (or restricted to the canopy) and
-        // encrypted in the Black Mask panel. This screen offers no chooser, so
-        // these are what the den gets. Encryption used to follow the playbook's
-        // `governanceActive` flag, which left a "Hearth" den private and
-        // plaintext, against TRUST.md's claim; now every non-public den is
-        // encrypted and a public den never is.
-        const { kind, encrypted } = newDenDefaults({
-            parentKind: parentKindOf(space),
-            restrictedSupported: restrictedSupported(defaultVersion),
-        });
-
         const roomId = await createRoom(mx, {
             version: defaultVersion,
             parent: space,
-            kind,
+            kind: denDefaults.kind,
             name: cleanedName,
             topic: cleanedDomain || undefined,
-            encryption: encrypted,
+            encryption: denDefaults.encrypted,
             knock: false,
             allowFederation: true,
         });
@@ -131,6 +162,7 @@ export function PlaybookReveal({
         entry.features.documents,
         space,
         defaultVersion,
+        denDefaults,
         mx,
         playbookId,
         setPlaybook,
@@ -200,6 +232,9 @@ export function PlaybookReveal({
                 <Text size="T200" priority="300">
                     Every {BLACKOUT_TERMS.den.singular} starts as a 14-day try — you can commit,
                     switch playbook, or revert anytime in that window.
+                </Text>
+                <Text size="T200" priority="300" data-testid="den-access">
+                    {accessSentence}
                 </Text>
             </Box>
 
