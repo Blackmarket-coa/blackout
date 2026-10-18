@@ -1128,6 +1128,11 @@ function createStreamingRouter() {
     streaming.get('/streams/:streamId/goal', (c) => {
         const denied = requireDomainCapability(c, 'streaming', 'read');
         if (denied) return denied;
+        // Progress is the stream's captured gross tip revenue, the figure
+        // /revenue keeps owner-only, and each new target can fire a
+        // streamgoal.reached webhook to the creator. Owner only, like /revenue.
+        const ownerDenied = requireStreamOwner(c, c.req.param('streamId'));
+        if (ownerDenied) return ownerDenied;
         const targetCentsRaw = c.req.query('targetCents');
         const currency = c.req.query('currency') ?? 'USD';
         const targetCents = targetCentsRaw ? Number(targetCentsRaw) : NaN;

@@ -67,8 +67,12 @@ real adversaries.
     active-defense settings (`panic`, `activedefense.ts`).
 -   **Burner identities** — disposable identities with a burner-mode indicator
     (`burner-identity`, `identities.ts`).
--   **Dead-man's switch** — timed check-in with configurable consequences
-    (`deadman`, `modules/deadman`).
+-   **Dead-man's switch (experimental)** — timed check-in. When a switch
+    fires, Blackout sends nothing, and there are no configurable
+    consequences. Recipients named by Blackout account id can read the
+    encrypted payload through the API only after it fires. See
+    [`KNOWN_LIMITATIONS.md`](../../KNOWN_LIMITATIONS.md) (`deadman`,
+    `modules/deadman`).
 -   **Canary tripwire & transparency** — warrant-canary tripwires, key
     transparency, and data-transparency surfaces (`canaryTripwire.ts`,
     `keyTransparency.ts`, `transparency.ts`, `data-transparency`).

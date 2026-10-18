@@ -278,7 +278,23 @@ function createGovernanceRouter() {
         const denied = requireDomainCapability(c, 'governance', 'read');
         if (denied) return denied;
 
-        return c.json(listDomainEvents('governance'));
+        const subject = requireAuthenticatedUser(c);
+        if (!subject) {
+            return c.json({ code: 'unauthorized', message: 'Unauthorized' }, 401);
+        }
+
+        // Every token can read this process-wide feed. A ballot event names the
+        // voter and their choice, and nothing else in the API ties a choice to
+        // a voter (proposal reads return the tally only), so each ballot is
+        // shown to its own voter only. The other events repeat what the open
+        // proposal, meeting and treasury reads already return.
+        return c.json(
+            listDomainEvents('governance').filter(
+                (event) =>
+                    event.type !== 'governance.vote.cast' ||
+                    (event.payload as { userId?: unknown } | null)?.userId === subject
+            )
+        );
     });
 
     governance.get('/meetings', (c) => {

@@ -39,29 +39,45 @@ const armSchema = z.object({
 
 const processOverdueSchema = z.object({ now: z.string().datetime().optional() }).partial();
 
-export const recordToPayload = (record: DeadmanSwitchRecord): DeadmanSwitchPayload => ({
-    switchId: record.id,
-    ownerId: record.ownerId,
-    roomId: record.roomId,
-    status: record.status,
-    checkInIntervalSeconds: record.checkInIntervalSeconds,
-    gracePeriodSeconds: record.gracePeriodSeconds,
-    lastCheckInAt: record.lastCheckInAt,
-    triggerAt: record.triggerAt,
-    releaseAt: record.releaseAt,
-    recipients: record.recipients,
-    encryptedPayload: record.encryptedPayload,
-    headline: record.headline,
-    createdAt: record.createdAt,
-    updatedAt: record.updatedAt,
-});
+/**
+ * The switch as `viewerId` may see it. The owner always gets the encrypted
+ * payload. Anyone else (a recipient) gets it only once the switch has
+ * triggered: never while it is armed or in grace, and never after a cancel.
+ * Every caller names the viewer so no route can hand out the payload by default.
+ */
+export const recordToPayload = (
+    record: DeadmanSwitchRecord,
+    viewerId: string
+): DeadmanSwitchPayload => {
+    const payload: DeadmanSwitchPayload = {
+        switchId: record.id,
+        ownerId: record.ownerId,
+        roomId: record.roomId,
+        status: record.status,
+        checkInIntervalSeconds: record.checkInIntervalSeconds,
+        gracePeriodSeconds: record.gracePeriodSeconds,
+        lastCheckInAt: record.lastCheckInAt,
+        triggerAt: record.triggerAt,
+        releaseAt: record.releaseAt,
+        recipients: record.recipients,
+        headline: record.headline,
+        createdAt: record.createdAt,
+        updatedAt: record.updatedAt,
+    };
+    if (viewerId === record.ownerId || record.status === 'triggered') {
+        payload.encryptedPayload = record.encryptedPayload;
+    }
+    return payload;
+};
 
+// Envelopes are only ever returned to the owner (every route that builds one
+// checks ownership first), so the owner is the viewer.
 const envelope = (event: string, record: DeadmanSwitchRecord, senderId: string) => ({
     event,
     roomId: record.roomId,
     senderId,
     occurredAt: new Date().toISOString(),
-    payload: recordToPayload(record),
+    payload: recordToPayload(record, record.ownerId),
 });
 
 /**
@@ -188,13 +204,9 @@ function createDeadmanRouter() {
             );
         }
         if (existing.status === 'triggered') {
-            return c.json(
-                {
-                    code: 'switch_triggered',
-                    message: 'Switch already triggered; payload has shipped',
-                },
-                409
-            );
+            // Triggering only changes the switch's status: the server sends
+            // the payload to no one, so the message must not say it shipped.
+            return c.json({ code: 'switch_triggered', message: 'Switch already triggered' }, 409);
         }
         if (existing.status === 'cancelled') {
             return c.json({ code: 'switch_cancelled', message: 'Switch has been cancelled' }, 409);
@@ -276,7 +288,7 @@ function createDeadmanRouter() {
                 ? db.listDeadmanSwitchesForRecipient(subject)
                 : db.listDeadmanSwitchesForOwner(subject);
 
-        return c.json({ switches: records.map(recordToPayload) });
+        return c.json({ switches: records.map((record) => recordToPayload(record, subject)) });
     });
 
     deadman.get('/switches/:id', (c) => {
@@ -299,7 +311,7 @@ function createDeadmanRouter() {
                 403
             );
         }
-        return c.json(recordToPayload(existing));
+        return c.json(recordToPayload(existing, subject));
     });
 
     deadman.post('/process-overdue', async (c) => {
@@ -350,7 +362,7 @@ function createDeadmanRouter() {
                 },
             });
 
-            processed.push(recordToPayload(updated));
+            processed.push(recordToPayload(updated, subject));
             void eventName;
         }
 
@@ -360,7 +372,20 @@ function createDeadmanRouter() {
     deadman.get('/events', (c) => {
         const denied = requireDomainCapability(c, 'deadman', 'read');
         if (denied) return denied;
-        return c.json(listDomainEvents('deadman'));
+
+        const subject = requireAuthenticatedUser(c);
+        if (!subject) {
+            return c.json({ code: 'unauthorized', message: 'Unauthorized' }, 401);
+        }
+
+        // The event log is process-wide: it holds every user's switch events
+        // (owner, room, recipients, and when an owner went quiet). Every token
+        // can read this route, so it returns only the caller's own switches.
+        return c.json(
+            listDomainEvents('deadman').filter(
+                (event) => (event.payload as { ownerId?: unknown } | null)?.ownerId === subject
+            )
+        );
     });
 
     return deadman;
