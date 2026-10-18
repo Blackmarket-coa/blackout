@@ -68,8 +68,9 @@ export const useDiscussionDen = ({
         if (resolved) {
             // A den inside a canopy that is not public is `restricted` to it,
             // so the canopy join is what unlocks the den (a den in a public
-            // canopy is public, and dens made before 2026-10 are invite-only);
-            // both joins are no-ops when already a member.
+            // canopy is public by default in the Blackout app, and dens made
+            // before 2026-10 are invite-only); both joins are no-ops when
+            // already a member.
             await joinDenWithCanopy(mx, resolved, canopyId).catch(() => undefined);
             return resolved;
         }

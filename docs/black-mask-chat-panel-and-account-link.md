@@ -136,7 +136,7 @@ load like `main.tsx`'s "panel or full app"):
 | den with no canopy         | Public; not end-to-end encrypted                                         | Private; encrypted                                                                    |
 | den in a public canopy     | Public; not encrypted                                                    | Restricted to the canopy (Private if the room version cannot); encrypted              |
 | den in a non-public canopy | Restricted to the canopy (Private if the room version cannot); encrypted | same                                                                                  |
-| category (sub-space)       | follows the canopy's kind; never encrypted                               | same                                                                                  |
+| category (sub-space)       | follows the canopy's kind; the client asks for no encryption             | same                                                                                  |
 
 The access chooser stays at the top of both forms on both surfaces, and its
 copy says what each choice means (a Public den is not end-to-end encrypted; a

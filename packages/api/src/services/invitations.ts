@@ -101,8 +101,9 @@ export const createInvitation = async (
         });
         // For a room-scoped invite, ensure the bot is a member of the CANOPY (the
         // den's parent space). A den created inside a canopy that is not public is
-        // `restricted` to it (a den in a public canopy is public, and dens made
-        // before 2026-10 are invite-only), so a bot must belong to the canopy to
+        // `restricted` to it (a den in a public canopy is public by default in the
+        // Blackout app, and dens made before 2026-10 are invite-only), so a bot
+        // must belong to the canopy to
         // admit redeemers to a restricted den — putting it in the den alone
         // doesn't satisfy the restricted rule. The creator's client invites
         // the bot to the canopy before calling this (only the creator has power);
@@ -233,8 +234,9 @@ export const redeemInvitation = async (
         // Resolve the canopy (parent space) FIRST: a den created inside a canopy
         // that is not public is `restricted` to it (the client's
         // `createDenInCanopy` and `CreateRoomForm` write that rule; a den in a
-        // public canopy is public, and dens made before 2026-10 are invite-only),
-        // so the redeemer must be admitted to the CANOPY before such a den is
+        // public canopy is public by default in the Blackout app, and dens made
+        // before 2026-10 are invite-only), so the redeemer must be admitted to
+        // the CANOPY before such a den is
         // joinable. A Synapse admin-join does NOT bypass the restricted rule —
         // membership in the canopy is what unlocks the den.
         const parent = await matrixClient.getRoomParentSpace(updated.matrixRoomId);

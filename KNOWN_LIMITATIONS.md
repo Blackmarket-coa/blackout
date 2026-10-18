@@ -112,9 +112,11 @@ For the source-of-truth triage with tier/owner detail see
     and encrypted; a public canopy is listed in the Blackout canopy directory
     and any other canopy only when "List in the Blackout directory" is turned
     on (off by default). The Black Mask chat panel starts everything private
-    (dens encrypted). `VITE_BLACKOUT_NEW_ROOM_DEFAULT=private` at build time
-    makes the app start private too. The access chooser is at the top of both
-    forms and says what each choice means.
+    (or, inside a canopy, restricted to that canopy's members; dens
+    encrypted). `VITE_BLACKOUT_NEW_ROOM_DEFAULT=private` at build time makes
+    the app start private too. The access chooser is at the top of both forms
+    and says what each choice means; the playbook reveal, which has no
+    chooser, says in one sentence what it is about to plant.
 -   **Not enforced anywhere but the client.** The homeserver accepts whatever
     join rule a client sends, and `POST /v1/discovery/index/canopies` accepts
     a listing for any canopy from any signed-in account without checking the
@@ -133,8 +135,16 @@ For the source-of-truth triage with tier/owner detail see
     den or category and `private_chat` for the rest
     (`createRoomPreset` in `components/create-room/utils.ts`); without that,
     a Public den would be encrypted on those homeservers while the chooser
-    said it was not. Rooms created before 2026-10-18 named no preset, so a
-    Public den made then may carry a server-added encryption event.
+    said it was not. `public_chat` also changes two things, both the standard
+    shape of a Matrix room anyone can join: the room gets no
+    `m.room.guest_access: can_join` event, and the power level needed to
+    invite stays at the default 50 (`private_chat` sets it to 0), so an
+    ordinary member of a Public canopy or den cannot send invites; the
+    creator and moderators can. Rooms created before 2026-10-18 named no
+    preset, so a Public den made then may carry a server-added encryption
+    event; a canopy or category created `private_chat` gets one too (the
+    client never asks for encryption on a space, but the backstop has no
+    space exemption; harmless, nothing is ever sent in a space).
 -   **An unlisted canopy loses canopy-scoped features.** The API gates voice
     rooms (`routes/voice.ts`) and app installs (`services/apps.ts`) on the
     directory entry (`hasCanopy`), so a private canopy created with the toggle
