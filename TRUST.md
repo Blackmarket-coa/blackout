@@ -7,7 +7,8 @@ Every claim below links to the code that makes it true. If a link ever stops
 supporting the claim next to it, the claim is wrong and we want to know — see
 [SECURITY.md](SECURITY.md).
 
-Last reviewed: **2026-08-10**. Changes to anything here are recorded in the
+Last reviewed: **2026-08-10**; section 1 updated 2026-10-18 with the defaults
+for new canopies and dens. Changes to anything here are recorded in the
 [policy changelog](docs/legal/CHANGELOG.md).
 
 ---
@@ -37,6 +38,30 @@ one, in a diff, in public.
     `encryption_enabled_by_default_for_room_type: invite`.
 -   CI fails the build if any of that regresses:
     [`check-room-encryption.mjs`](tools/ci/check-room-encryption.mjs).
+
+**What a new room is before you choose.** The access chooser sits at the top
+of the New canopy and New den forms, and what it starts on depends on where
+you are:
+
+-   In the Blackout app, a new canopy or den is **public and not end-to-end
+    encrypted** unless you choose otherwise. A den created inside a canopy
+    that is not public starts restricted to that canopy's members and
+    encrypted.
+-   In the Black Mask chat panel (`/embed`), a new canopy or den starts
+    **private** (or, inside a canopy, restricted to that canopy's members),
+    and a den is encrypted. The panel does not offer creation yet; these are
+    the defaults it will use.
+-   An operator can make the app start private everywhere by building the
+    client with `VITE_BLACKOUT_NEW_ROOM_DEFAULT=private`
+    ([`newRoomDefaults.ts`](apps/blackout-client/src/app/components/create-room/newRoomDefaults.ts)
+    holds the whole table).
+
+A public canopy is listed in the Blackout canopy directory; any other canopy
+is listed only if you turn "List in the Blackout directory" on when creating
+it. These are the client's defaults, not a server rule: the homeserver accepts
+whatever access a client asks for, and the directory accepts a listing from
+any signed-in account. Encryption is decided when a room is created; changing
+who can join later does not add or remove it.
 
 This was **not** true before 2026-08-10. Thirteen server paths and five client
 paths created plaintext rooms, and the homeserver was not compensating. We found
