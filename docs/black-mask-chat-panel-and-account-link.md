@@ -122,6 +122,37 @@ nginx image, signed out. **Not verified:** the signed-in panel against a real
 homeserver (none was reachable from the build sandbox). The timeline and
 composer are the same components the full app uses.
 
+**Defaults for canopies and dens made from the panel (operator, 2026-10-17;
+built 2026-10-18).** The panel has no control to create a canopy or a den yet.
+The forms it will reuse from the full app (`CreateSpaceForm`,
+`CreateRoomForm`, the playbook reveal and `createDenInCanopy`) already ask one
+table, `apps/blackout-client/src/app/components/create-room/newRoomDefaults.ts`,
+which knows the surface the page booted as (a `/embed` path, decided once at
+load like `main.tsx`'s "panel or full app"):
+
+| New…                       | Blackout app                                                             | Black Mask panel                                                                      |
+| -------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------- |
+| canopy                     | Public; listed in the Blackout canopy directory                          | Private (invite-only); not listed; "List in the Blackout directory" toggle shown, off |
+| den with no canopy         | Public; not end-to-end encrypted                                         | Private; encrypted                                                                    |
+| den in a public canopy     | Public; not encrypted                                                    | Restricted to the canopy (Private if the room version cannot); encrypted              |
+| den in a non-public canopy | Restricted to the canopy (Private if the room version cannot); encrypted | same                                                                                  |
+| category (sub-space)       | follows the canopy's kind; never encrypted                               | same                                                                                  |
+
+The access chooser stays at the top of both forms on both surfaces, and its
+copy says what each choice means (a Public den is not end-to-end encrypted; a
+Private or Restricted den is, by default). A public canopy is listed in the
+directory without asking; any other canopy only when the toggle is on (the
+toggle also says that voice rooms and app installs need the listing).
+Building the client with `VITE_BLACKOUT_NEW_ROOM_DEFAULT=private`
+(`apps/blackout-client/.env.example`) makes the app use the panel column; the
+panel column never changes. Paths with their own explicit choice keep it: Form
+a party (restricted, encrypted), streaming kits (per kit), the Discord import's
+canopy (private) and DMs. Nothing enforces any of this on a server: the
+homeserver accepts the join rule it is sent and the API accepts a listing from
+any signed-in account (`KNOWN_LIMITATIONS.md`, "New canopy and den defaults").
+The panel's "Not shown" list above still holds; a New control and the routes
+behind it are a separate step.
+
 ### 2. Framing policy
 
 **Status 2026-10-09: built for the web client's nginx image; off by default**

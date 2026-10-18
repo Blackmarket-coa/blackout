@@ -99,6 +99,46 @@ For the source-of-truth triage with tier/owner detail see
     arrive with `room_id` only and fall back to room-level routing. Manual
     reports welcome.
 
+### New canopy and den defaults (2026-10-18)
+
+-   **Where:** the one table in
+    `apps/blackout-client/src/app/components/create-room/newRoomDefaults.ts`,
+    asked by the New canopy form, the New den form, the playbook reveal,
+    `createDenInCanopy` (voice, forum, stage, announcement and
+    category-menu dens), categories and Coliseum discussion dens.
+-   **State:** in the Blackout app a new canopy, a den with no canopy and a
+    den inside a public canopy start **public and not end-to-end encrypted**;
+    a den inside a canopy that is not public starts restricted to that canopy
+    and encrypted; a public canopy is listed in the Blackout canopy directory
+    and any other canopy only when "List in the Blackout directory" is turned
+    on (off by default). The Black Mask chat panel starts everything private
+    (dens encrypted). `VITE_BLACKOUT_NEW_ROOM_DEFAULT=private` at build time
+    makes the app start private too. The access chooser is at the top of both
+    forms and says what each choice means.
+-   **Not enforced anywhere but the client.** The homeserver accepts whatever
+    join rule a client sends, and `POST /v1/discovery/index/canopies` accepts
+    a listing for any canopy from any signed-in account without checking the
+    canopy's join rule; a modified client can list a private canopy or make a
+    public one. A listing toggle for an existing canopy (space settings), and
+    re-listing or un-listing when a canopy's join rule changes later, are not
+    built: a canopy created private and later made public stays unlisted
+    until someone lists it, and one created public stays listed after being
+    made private.
+-   **An unlisted canopy loses canopy-scoped features.** The API gates voice
+    rooms (`routes/voice.ts`) and app installs (`services/apps.ts`) on the
+    directory entry (`hasCanopy`), so a private canopy created with the toggle
+    off cannot have them until it is listed; the toggle says so.
+-   **Dens made before 2026-10-18** by the voice/forum/stage/announcement
+    controls, the category menu, the Discord import or the Coliseum were
+    invite-only by homeserver preset, not restricted to their canopy as the
+    invitations service's comments assumed; categories were invite-only too.
+    They keep those rules. Invite redemption admits the redeemer to the den's
+    immediate parent and then to the den, which works for restricted dens and
+    is unchanged for invite-only ones.
+-   **Playbook dens:** the "Hearth" playbook (no governance features) used to
+    plant a private, plaintext den; it now follows the table like every other
+    playbook (encrypted whenever the den is not public).
+
 ### Black Mask chat panel (`/embed`)
 
 -   **Where:** `apps/blackout-client/src/app/features/black-mask-embed/`;
@@ -107,6 +147,9 @@ For the source-of-truth triage with tier/owner detail see
     unread indicators (on by default). Framing is off unless the operator sets
     `BLACK_MASK_FRAME_ANCESTORS` on the web client container.
 -   **Not there yet:**
+    -   creating a canopy or a den from the panel (the defaults it will use
+        are private and, for dens, encrypted; see "New canopy and den
+        defaults" above);
     -   push notifications;
     -   account linking (B4/B5);
     -   any check of external links (B6): links open in a new tab unchecked;
