@@ -143,9 +143,16 @@ For the source-of-truth triage with tier/owner detail see
     controls, the category menu, the Discord import or the Coliseum were
     invite-only by homeserver preset, not restricted to their canopy as the
     invitations service's comments assumed; categories were invite-only too.
-    They keep those rules. Invite redemption admits the redeemer to the den's
-    immediate parent and then to the den, which works for restricted dens and
-    is unchanged for invite-only ones.
+    They keep those rules, and those rules count for what is made inside
+    them: a den made by those controls follows the most private space between
+    it and the top of its canopy (`resolveCanopy` in
+    `features/canopy/denKind.ts`), so a new den inside one of those older
+    invite-only categories in a public canopy starts restricted to the
+    category and the canopy, and encrypted, rather than public. Making the
+    category public (its join rule) makes new dens in it public again. Invite
+    redemption admits the redeemer to the den's immediate parent and then to
+    the den, which works for restricted dens and is unchanged for invite-only
+    ones.
 -   **Playbook dens:** the "Hearth" playbook (no governance features) used to
     plant a private, plaintext den; it now follows the table like every other
     playbook (encrypted whenever the den is not public).

@@ -241,14 +241,15 @@ describe('createDenInCanopy: join rule and encryption by canopy kind', () => {
     const makeMx = (rooms: Record<string, Room>, capabilities: unknown = SUPPORTED) => {
         const sendStateEvent = vi.fn().mockResolvedValue(undefined);
         const createRoom = vi.fn().mockResolvedValue({ room_id: '!new:server' });
+        const getCapabilities = vi.fn(async () => capabilities);
         const mx = {
             getDomain: () => 'server',
             createRoom,
             sendStateEvent,
             getRoom: (id: string) => rooms[id] ?? null,
-            getCapabilities: async () => capabilities,
+            getCapabilities,
         } as unknown as MatrixClient;
-        return { mx, createRoom };
+        return { mx, createRoom, getCapabilities };
     };
 
     const sent = (createRoom: ReturnType<typeof vi.fn>) => {
@@ -362,18 +363,34 @@ describe('createDenInCanopy: join rule and encryption by canopy kind', () => {
         expect(sent(createRoom)).toEqual({ joinRule: { join_rule: 'invite' }, encrypted: true });
     });
 
-    it('placed in a category, follows the canopy above it and admits members of either', async () => {
+    it('placed in a category, admits members of the category and the canopy, and is public only when both are', async () => {
         setNewRoomSurfaceForTests('app');
         const canopy = space('!canopy:server', 'public');
-        const category = space('!cat:server', 'invite', [{ id: '!canopy:server' }]);
-        const publicCase = makeMx({ '!canopy:server': canopy, '!cat:server': category });
+        const publicCategory = space('!cat:server', 'public', [{ id: '!canopy:server' }]);
+        const publicCase = makeMx({ '!canopy:server': canopy, '!cat:server': publicCategory });
         await createDenInCanopy(publicCase.mx, { canopyId: '!cat:server', name: 'topic' });
-        // The canopy is public, so the den is public even though the (older,
-        // invite-only) category is not.
-        expect(sent(publicCase.createRoom).joinRule).toEqual({ join_rule: 'public' });
+        expect(sent(publicCase.createRoom)).toEqual({
+            joinRule: { join_rule: 'public' },
+            encrypted: false,
+        });
+
+        // An older, invite-only category (every category made before 2026-10
+        // was) inside a public canopy: the most private space on the chain
+        // decides, so the den is restricted to category and canopy, and
+        // encrypted, rather than public.
+        const oldCategory = space('!cat:server', 'invite', [{ id: '!canopy:server' }]);
+        const oldCase = makeMx({ '!canopy:server': canopy, '!cat:server': oldCategory });
+        await createDenInCanopy(oldCase.mx, { canopyId: '!cat:server', name: 'topic' });
+        expect(sent(oldCase.createRoom)).toEqual({
+            joinRule: {
+                join_rule: 'restricted',
+                allow: allow('!cat:server', '!canopy:server'),
+            },
+            encrypted: true,
+        });
 
         const privateCanopy = space('!canopy:server', 'invite');
-        const privateCase = makeMx({ '!canopy:server': privateCanopy, '!cat:server': category });
+        const privateCase = makeMx({ '!canopy:server': privateCanopy, '!cat:server': oldCategory });
         await createDenInCanopy(privateCase.mx, { canopyId: '!cat:server', name: 'topic' });
         expect(sent(privateCase.createRoom)).toEqual({
             joinRule: {
@@ -381,6 +398,48 @@ describe('createDenInCanopy: join rule and encryption by canopy kind', () => {
                 allow: allow('!cat:server', '!canopy:server'),
             },
             encrypted: true,
+        });
+    });
+
+    it('placed directly in a private sub-canopy nested under a public canopy, is restricted and encrypted (the most private space on the chain decides)', async () => {
+        // The voice/forum/stage/announcement controls are the only way to make
+        // those den kinds and offer no chooser, so this path must land where
+        // the forms opened in the same sub-canopy land: restricted + encrypted,
+        // not the public canopy's public + plaintext.
+        setNewRoomSurfaceForTests('app');
+        const top = space('!top:server', 'public');
+        const privateSub = space('!sub:server', 'invite', [{ id: '!top:server' }]);
+        const nested = makeMx({ '!top:server': top, '!sub:server': privateSub });
+        await createDenInCanopy(nested.mx, { canopyId: '!sub:server', name: 'ops', kind: 'voice' });
+        expect(sent(nested.createRoom)).toEqual({
+            joinRule: {
+                join_rule: 'restricted',
+                allow: allow('!sub:server', '!top:server'),
+            },
+            encrypted: true,
+        });
+        expect(nested.createRoom.mock.calls[0][0].preset).toBe('private_chat');
+
+        // The mirror: a public sub-canopy under a private canopy is not public
+        // either; a private space anywhere on the chain makes the den non-public.
+        const privateTop = space('!top:server', 'invite');
+        const publicSub = space('!sub:server', 'public', [{ id: '!top:server' }]);
+        const mirror = makeMx({ '!top:server': privateTop, '!sub:server': publicSub });
+        await createDenInCanopy(mirror.mx, { canopyId: '!sub:server', name: 'ops' });
+        expect(sent(mirror.createRoom)).toEqual({
+            joinRule: {
+                join_rule: 'restricted',
+                allow: allow('!sub:server', '!top:server'),
+            },
+            encrypted: true,
+        });
+
+        // Every space on the chain public: public and plaintext.
+        const allPublic = makeMx({ '!top:server': top, '!sub:server': publicSub });
+        await createDenInCanopy(allPublic.mx, { canopyId: '!sub:server', name: 'ops' });
+        expect(sent(allPublic.createRoom)).toEqual({
+            joinRule: { join_rule: 'public' },
+            encrypted: false,
         });
     });
 
@@ -430,7 +489,7 @@ describe('createDenInCanopy: join rule and encryption by canopy kind', () => {
         // A hint the walk already reached changes nothing.
         const reached = makeMx({
             '!canopy:server': space('!canopy:server', 'public'),
-            '!cat:server': space('!cat:server', 'invite', [{ id: '!canopy:server' }]),
+            '!cat:server': space('!cat:server', 'public', [{ id: '!canopy:server' }]),
         });
         await createDenInCanopy(reached.mx, {
             canopyId: '!cat:server',
@@ -438,6 +497,94 @@ describe('createDenInCanopy: join rule and encryption by canopy kind', () => {
             name: 'topic',
         });
         expect(sent(reached.createRoom).joinRule).toEqual({ join_rule: 'public' });
+
+        // The placement room is loaded but the space above it is not: the
+        // walk did not get past the placement room, so the hint still counts
+        // and joins the chain.
+        const parentUnloaded = makeMx({
+            '!canopy:server': space('!canopy:server', 'invite'),
+            '!cat:server': space('!cat:server', 'public', [{ id: '!canopy:server' }]),
+        });
+        await createDenInCanopy(parentUnloaded.mx, {
+            canopyId: '!cat:server',
+            rootCanopyId: '!canopy:server',
+            name: 'topic',
+        });
+        expect(sent(parentUnloaded.createRoom)).toEqual({
+            joinRule: {
+                join_rule: 'restricted',
+                allow: allow('!cat:server', '!canopy:server'),
+            },
+            encrypted: true,
+        });
+
+        // And the hint joins the chain rather than replacing it: a loaded,
+        // invite-only placement room with no parent edge yet plus a public
+        // hint is still non-public.
+        const placementPrivate = makeMx({
+            '!canopy:server': space('!canopy:server', 'public'),
+            '!cat:server': space('!cat:server', 'invite'),
+        });
+        await createDenInCanopy(placementPrivate.mx, {
+            canopyId: '!cat:server',
+            rootCanopyId: '!canopy:server',
+            name: 'topic',
+        });
+        expect(sent(placementPrivate.createRoom)).toEqual({
+            joinRule: {
+                join_rule: 'restricted',
+                allow: allow('!cat:server', '!canopy:server'),
+            },
+            encrypted: true,
+        });
+    });
+
+    it('ignores the rootCanopyId hint once the walk has reached a parent, even a different canopy', async () => {
+        // The hint exists for a placement room the walk cannot start from. When
+        // the walk did reach a loaded parent, that parent is the truth about
+        // where the den sits; a hint naming a different (public) canopy must
+        // neither decide the kind nor be admitted to the den.
+        setNewRoomSurfaceForTests('app');
+        const { mx, createRoom } = makeMx({
+            '!q:server': space('!q:server', 'invite'),
+            '!p:server': space('!p:server', 'public'),
+            '!cat:server': space('!cat:server', 'invite', [{ id: '!q:server' }]),
+        });
+        await createDenInCanopy(mx, {
+            canopyId: '!cat:server',
+            rootCanopyId: '!p:server',
+            name: 'topic',
+        });
+        expect(sent(createRoom)).toEqual({
+            joinRule: {
+                join_rule: 'restricted',
+                allow: allow('!cat:server', '!q:server'),
+            },
+            encrypted: true,
+        });
+    });
+
+    it('fetches the default room version only when the den could be restricted', async () => {
+        // A public den does not depend on the room version, so no
+        // getCapabilities round-trip; a den in a non-public canopy does.
+        setNewRoomSurfaceForTests('app');
+        const pub = makeMx({ '!canopy:server': space('!canopy:server', 'public') });
+        await createDenInCanopy(pub.mx, { canopyId: '!canopy:server', name: 'general' });
+        expect(sent(pub.createRoom).joinRule).toEqual({ join_rule: 'public' });
+        expect(pub.getCapabilities).not.toHaveBeenCalled();
+
+        const priv = makeMx({ '!canopy:server': space('!canopy:server', 'invite') });
+        await createDenInCanopy(priv.mx, { canopyId: '!canopy:server', name: 'general' });
+        expect(sent(priv.createRoom).joinRule.join_rule).toBe('restricted');
+        expect(priv.getCapabilities).toHaveBeenCalledTimes(1);
+
+        // In the panel a den in a public canopy is restricted, so the version
+        // is needed there.
+        setNewRoomSurfaceForTests('panel');
+        const panel = makeMx({ '!canopy:server': space('!canopy:server', 'public') });
+        await createDenInCanopy(panel.mx, { canopyId: '!canopy:server', name: 'general' });
+        expect(sent(panel.createRoom).joinRule.join_rule).toBe('restricted');
+        expect(panel.getCapabilities).toHaveBeenCalledTimes(1);
     });
 
     it('still writes the den kind and the parent/child edges', async () => {
