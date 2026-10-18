@@ -18,10 +18,18 @@ type CreateRoomKindSelectorProps = {
     /**
      * True when the thing being created holds messages (a den), so each choice
      * can say what it means for end-to-end encryption. Leave it off for spaces
-     * (canopies, categories): they hold hierarchy state, never messages, and
-     * must not carry an encryption claim either way.
+     * (canopies, categories): they hold hierarchy state, never messages, the
+     * client never asks for encryption on one, and the chooser must not carry
+     * an encryption claim for them either way.
      */
     encryptionApplies?: boolean;
+    /**
+     * True when a Public choice also lists the thing somewhere people browse
+     * (a Public canopy goes into the Blackout canopy directory), so the copy
+     * can say "find and join". A den is listed nowhere: anyone with its
+     * address can join it, but nobody can find it, so its copy says "join".
+     */
+    listedWhenPublic?: boolean;
 };
 export function CreateRoomKindSelector({
     value,
@@ -31,12 +39,14 @@ export function CreateRoomKindSelector({
     getIcon,
     targetLabel = 'conversation',
     encryptionApplies = false,
+    listedWhenPublic = false,
 }: CreateRoomKindSelectorProps) {
     // Encryption is on by default for a Private or Restricted den and can be
     // turned off in the form's advanced options, so "by default" is the true
     // claim. A Public den is never encrypted: the form forces it off.
     const encryptedNote = encryptionApplies ? ' Messages are end-to-end encrypted by default.' : '';
     const plaintextNote = encryptionApplies ? ' Messages are not end-to-end encrypted.' : '';
+    const publicVerb = listedWhenPublic ? 'find and join' : 'join';
     return (
         <Box shrink="No" direction="Column" gap="100">
             {canRestrict && (
@@ -101,7 +111,7 @@ export function CreateRoomKindSelector({
                 >
                     <Text size="H6">Public</Text>
                     <Text size="T300" priority="300">
-                        Anyone can find and join this {targetLabel}.{plaintextNote}
+                        Anyone can {publicVerb} this {targetLabel}.{plaintextNote}
                     </Text>
                 </SettingTile>
             </SequenceCard>

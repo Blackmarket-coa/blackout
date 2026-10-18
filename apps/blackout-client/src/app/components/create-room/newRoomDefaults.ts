@@ -6,8 +6,9 @@
  * Two inputs decide the column:
  *
  * - **Surface.** `'panel'` when the client booted on a Black Mask chat panel
- *   path (`/embed`, decided once at load from the page's path, exactly as
- *   `main.tsx` decides "panel or full app"), else `'app'`.
+ *   path (`/embed`, the same `isEmbedPath` test of the page's path that
+ *   `main.tsx` uses to decide "panel or full app"; see `detectSurface` below
+ *   for when it runs), else `'app'`.
  * - **The build-time switch** `VITE_BLACKOUT_NEW_ROOM_DEFAULT`. Set to
  *   `private` it makes the app surface use the panel column, for an operator
  *   who wants private-by-default everywhere. Unset, `public`, or anything else
@@ -19,17 +20,19 @@
  * | den with no canopy            | Public; not encrypted                 | Private; encrypted                                |
  * | den in a public canopy        | Public; not encrypted                 | Restricted to the canopy if supported, else Private; encrypted |
  * | den in a non-public canopy    | Restricted if supported, else Private; encrypted | same                                   |
- * | category (sub-space)          | follows the canopy's kind; never encrypted | same                                         |
+ * | category (sub-space)          | follows the canopy's kind; no encryption asked | same                                     |
  *
  * A Public room is never encrypted: encrypting a room anyone can join hides
  * history from later joiners without protecting anything (the rule
  * `CreateRoomForm` already applied). Every other den kind is encrypted.
- * Spaces (canopies and categories) hold hierarchy state, never messages, and
- * are never encrypted. Every creation path also names the `/createRoom`
- * preset for its kind (`createRoomPreset` in `./utils.ts`): the homeserver
- * encrypts every `private_chat` room on its own, and a request without a
- * preset is `private_chat`, so a Public room must say `public_chat` for
- * "not encrypted" to be true on the server as well as in the client.
+ * Spaces (canopies and categories) hold hierarchy state, never messages, so
+ * the client never asks for encryption on a space (the in-repo homeservers
+ * still add `m.room.encryption` to a `private_chat` space on their own;
+ * harmless, nothing is ever sent in one). Every creation path also names the
+ * `/createRoom` preset for its kind (`createRoomPreset` in `./utils.ts`): the
+ * homeserver encrypts every `private_chat` room on its own, and a request
+ * without a preset is `private_chat`, so a Public room must say `public_chat`
+ * for "not encrypted" to be true on the server as well as in the client.
  *
  * Listing: a canopy is registered in the Blackout canopy directory only when
  * its kind is Public or the "List in the Blackout directory" toggle is on;
@@ -103,9 +106,14 @@ const detectSurface = (): NewRoomSurface => {
     }
 };
 
-// Decided once, from the path the page loaded on, so nothing that happens
-// later in the page (a navigation inside the panel, a rewritten URL) can move
-// a creation from one column to the other.
+// Decided once, when this module is first evaluated, and never re-read, so
+// nothing that happens later in the page (a navigation inside the panel, a
+// rewritten URL) can move a creation from one column to the other. That is
+// the boot path in practice, which is what makes it the same decision as
+// `main.tsx`'s: no full-app route lives under `/embed` and no panel route
+// leaves it, so whichever chunk first imports this module does so on a path
+// of the same kind the page loaded on. If a route ever crosses that line,
+// export the boot decision from `main.tsx` and import it here instead.
 let currentSurface: NewRoomSurface = detectSurface();
 
 /** The surface this page booted as. */
@@ -174,7 +182,7 @@ export const newRoomDefaultsFor = (
 
     return {
         kind,
-        // Spaces never; a Public room never; every other den kind.
+        // Never asked for a space; never for a Public room; every other den kind.
         encrypted: target === 'den' && kind !== CreateRoomKind.Public,
         listed: target === 'canopy' && kind === CreateRoomKind.Public,
     };

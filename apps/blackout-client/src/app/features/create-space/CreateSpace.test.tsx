@@ -154,6 +154,11 @@ describe('CreateSpaceForm in the Blackout app', () => {
     it('defaults to Public, shows that a public canopy is listed, and offers no toggle', async () => {
         const { container } = await renderForm({ surface: 'app' });
         expect(kindButton(container, 'Public').getAttribute('aria-pressed')).toBe('true');
+        // A Public canopy is listed, so "find and join" is true of it (a den's
+        // chooser says only "join"); a canopy's chooser makes no encryption claim.
+        expect(kindButton(container, 'Public').textContent).toBe(
+            'PublicAnyone can find and join this canopy.'
+        );
         expect(container.querySelector('[data-testid="create-space-listed-note"]')).not.toBeNull();
         expect(listToggle(container)).toBeNull();
     });

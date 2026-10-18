@@ -135,7 +135,8 @@ describe('CreateRoomForm', () => {
         const choices = Array.from(container.querySelectorAll('button[aria-pressed]'));
         expect(choices.map((el) => el.textContent)).toEqual([
             'PrivateOnly invited people can join this den. Messages are end-to-end encrypted by default.',
-            'PublicAnyone can find and join this den. Messages are not end-to-end encrypted.',
+            // "join", not "find and join": a den is listed nowhere.
+            'PublicAnyone can join this den. Messages are not end-to-end encrypted.',
         ]);
         const form = container.querySelector('form') as HTMLFormElement;
         const nameInput = form.querySelector('input[name="nameInput"]') as HTMLInputElement;

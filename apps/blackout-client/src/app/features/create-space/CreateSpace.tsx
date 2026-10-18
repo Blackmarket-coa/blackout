@@ -176,6 +176,7 @@ export function CreateSpaceForm({ defaultKind, space, onCreate }: CreateSpaceFor
                     disabled={disabled}
                     getIcon={getCreateSpaceKindToIcon}
                     targetLabel={BLACKOUT_TERMS.canopy.singular}
+                    listedWhenPublic
                 />
                 {kind === CreateRoomKind.Public && (
                     <Text size="T200" priority="300" data-testid="create-space-listed-note">
