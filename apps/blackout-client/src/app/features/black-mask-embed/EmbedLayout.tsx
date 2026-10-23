@@ -6,6 +6,7 @@ import { signOutPanel } from '../../../client/auth';
 import { restoreActiveSession } from '../../../client/sessionManager';
 import { panelSessionsActive } from '../../../client/storageNamespace';
 import { EmbedLinkGuard } from './EmbedLinkGuard';
+import { EmbedNewMenu } from './EmbedNew';
 import {
     linkStyle,
     mutedTextStyle,
@@ -25,7 +26,7 @@ export const EmbedLayout = () => {
     return (
         <EmbedLinkGuard onInPanel={onInPanel}>
             <div data-embed-root="" data-testid="embed-root" style={panelRootStyle}>
-                <EmbedHeader />
+                <EmbedHeader actions={<EmbedNewMenu />} />
                 {/* B3: only when the panel keeps its own session (client switch on). */}
                 {panelSessionsActive() ? <EmbedSessionBar /> : null}
                 <main style={panelMainStyle}>
@@ -99,7 +100,14 @@ export const EmbedSessionBar = () => {
     );
 };
 
-export const EmbedHeader = ({ signedIn = true }: { signedIn?: boolean }) => (
+export const EmbedHeader = ({
+    signedIn = true,
+    actions,
+}: {
+    signedIn?: boolean;
+    /** Signed in only: controls shown before "Open Blackout" (the New menu). */
+    actions?: React.ReactNode;
+}) => (
     <header style={panelHeaderStyle}>
         {signedIn ? (
             <Link
@@ -111,20 +119,23 @@ export const EmbedHeader = ({ signedIn = true }: { signedIn?: boolean }) => (
         ) : (
             <strong>Blackout chat</strong>
         )}
-        {/*
-         * target/rel are a fallback for when the link guard is not in play:
-         * even then this opens a new top-level tab instead of navigating the
-         * panel's frame.
-         */}
-        <a
-            href="/"
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{ ...linkStyle, fontSize: 13 }}
-            data-testid="embed-open-blackout"
-        >
-            Open Blackout
-        </a>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            {actions}
+            {/*
+             * target/rel are a fallback for when the link guard is not in play:
+             * even then this opens a new top-level tab instead of navigating the
+             * panel's frame.
+             */}
+            <a
+                href="/"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ ...linkStyle, fontSize: 13 }}
+                data-testid="embed-open-blackout"
+            >
+                Open Blackout
+            </a>
+        </div>
     </header>
 );
 
