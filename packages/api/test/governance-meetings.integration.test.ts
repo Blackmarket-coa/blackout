@@ -101,7 +101,7 @@ test('meetings PUT rejects endsAt <= startsAt', async () => {
                 meetingId: 'meet-bad',
                 startsAt: '2026-06-01T16:00:00.000Z',
                 endsAt: '2026-06-01T15:00:00.000Z',
-            }),
+            })
         ),
     });
     assert.equal(response.status, 400);

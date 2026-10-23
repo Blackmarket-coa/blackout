@@ -65,7 +65,7 @@ test('publish → latest → list newest first', async () => {
     const listBody = (await list.json()) as { items: Array<{ snapshotId: string }> };
     assert.deepEqual(
         listBody.items.map((entry) => entry.snapshotId),
-        ['snap-new', 'snap-old'],
+        ['snap-new', 'snap-old']
     );
 });
 
@@ -91,8 +91,10 @@ test('treasury list paginates with cursor + limit', async () => {
     assert.ok(page1Body.nextCursor);
 
     const page2 = await app.request(
-        `/v1/governance/treasury/snapshots?limit=2&cursor=${encodeURIComponent(page1Body.nextCursor!)}`,
-        { headers },
+        `/v1/governance/treasury/snapshots?limit=2&cursor=${encodeURIComponent(
+            page1Body.nextCursor!
+        )}`,
+        { headers }
     );
     const page2Body = (await page2.json()) as {
         items: Array<{ snapshotId: string }>;
