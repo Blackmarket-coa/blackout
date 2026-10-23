@@ -145,6 +145,18 @@ describe('the table, panel surface', () => {
         );
     });
 
+    it('a canopy created inside another is private whatever its parent (L6)', () => {
+        for (const parentKind of ['public', 'non-public'] as const) {
+            for (const supported of [true, false]) {
+                expect(row('panel', 'public', 'canopy', parentKind, supported)).toEqual({
+                    kind: Private,
+                    encrypted: false,
+                    listed: false,
+                });
+            }
+        }
+    });
+
     it('a category still follows its canopy: public in a public canopy', () => {
         expect(row('panel', 'public', 'category', 'public').kind).toBe(Public);
         expect(row('panel', 'public', 'category', 'non-public').kind).toBe(Restricted);
@@ -178,6 +190,8 @@ describe('the build-time switch', () => {
         // The rows that actually differ between the columns.
         expect(row('app', 'private', 'canopy', 'none').kind).toBe(Private);
         expect(row('app', 'private', 'canopy', 'none').listed).toBe(false);
+        expect(row('app', 'private', 'canopy', 'public').kind).toBe(Private);
+        expect(row('app', 'private', 'canopy', 'non-public').kind).toBe(Private);
         expect(row('app', 'private', 'den', 'none')).toEqual({
             kind: Private,
             encrypted: true,

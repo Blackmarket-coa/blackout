@@ -20,6 +20,7 @@
  * | den with no canopy            | Public; not encrypted                 | Private; encrypted                                |
  * | den in a public canopy        | Public; not encrypted                 | Restricted to the canopy if supported, else Private; encrypted |
  * | den in a non-public canopy    | Restricted if supported, else Private; encrypted | same                                   |
+ * | canopy inside a canopy        | as a den there: Public in a public canopy, else Restricted if supported, else Private | Private, whatever the canopy (L6) |
  * | category (sub-space)          | follows the canopy's kind; no encryption asked | same                                     |
  *
  * A Public room is never encrypted: encrypting a room anyone can join hides
@@ -166,7 +167,13 @@ export const newRoomDefaultsFor = (
         input.surface === 'panel' || input.setting === 'private' ? 'panel' : 'app';
 
     let kind: CreateRoomKind;
-    if (parentKind === 'non-public') {
+    if (target === 'canopy' && column === 'panel') {
+        // A canopy made in the panel column is invite-only, top level or
+        // inside another canopy of any kind (operator, 2026-10-23, L6): the
+        // panel row for canopies says Private, and Restricted to a public
+        // parent would let anyone who joins the parent in.
+        kind = CreateRoomKind.Private;
+    } else if (parentKind === 'non-public') {
         // Inside a canopy that is not public, on either surface.
         kind = restrictedOrPrivate(restrictedSupported);
     } else if (parentKind === 'public' && target === 'category') {

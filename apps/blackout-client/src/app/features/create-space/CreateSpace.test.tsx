@@ -244,6 +244,26 @@ describe('CreateSpaceForm in the Black Mask panel', () => {
         expect(indexCanopyMock).toHaveBeenCalledTimes(1);
     });
 
+    it('a canopy inside a public or non-public canopy starts Private, Restricted still offered (L6)', async () => {
+        for (const joinRule of ['public', 'invite']) {
+            const { container, createRoom } = await renderForm({
+                surface: 'panel',
+                space: fakeCanopy(joinRule),
+            });
+            expect(kindButton(container, 'Private').getAttribute('aria-pressed')).toBe('true');
+            expectOnePressed(container);
+            expect(kindButton(container, 'Restricted').disabled).toBe(false);
+            await submit(container);
+            expect(joinRuleSent(createRoom)).toEqual({ join_rule: 'invite' });
+            expect(presetSent(createRoom)).toBe('private_chat');
+            for (const { root, container: used } of mounted.splice(0)) {
+                act(() => root.unmount());
+                used.remove();
+            }
+        }
+        expect(indexCanopyMock).not.toHaveBeenCalled();
+    });
+
     it('a passed defaultKind wins (the `??` / `?:` precedence fix)', async () => {
         // Before the fix `defaultKind ?? allowRestricted ? Restricted : Private`
         // parsed as `(defaultKind ?? allowRestricted) ? Restricted : Private`,
