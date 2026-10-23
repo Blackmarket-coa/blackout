@@ -2,6 +2,7 @@ import { formatFederatedMessage } from '@blackout/core';
 import { db } from '../db/store';
 import { matrixClient } from '../integrations/matrix-client';
 import { log } from '../telemetry/logger';
+import { backlogToleranceMs } from './backlogTolerance';
 import {
     checkBotMayPostAs,
     RETRYABLE_BOT_POST_REFUSALS,
@@ -32,10 +33,19 @@ import {
  * that check existed were never checked at all. A refusal ends the message with
  * `refused_<reason>` and no send; only a failed check (an outage) is retried.
  * The event carries no Blackout user id.
+ *
+ * A message is not sent late. One the dispatcher reaches more than the backlog
+ * tolerance after its `deliverAt` (fifteen minutes at the default cadence; see
+ * backlogTolerance.ts) waited out an outage or a dispatcher switched off, and
+ * its author picked the moment it was meant for. It expires instead: no room
+ * check, no send, and it ends as a terminal failure with `lastError`
+ * `expired_overdue`, so its text is cleared like any other finished row's.
  */
 
 export const DEFAULT_INTERVAL_MS = 30 * 1000; // 30 seconds
 const MAX_ATTEMPTS = 5;
+/** `lastError` of a message that expired unsent (see above). */
+export const SCHEDULED_MESSAGE_EXPIRED_REASON = 'expired_overdue';
 
 let timer: ReturnType<typeof setInterval> | null = null;
 
@@ -58,13 +68,24 @@ export interface DispatchResult {
     retried: number;
     /** Refused by the bot-posting gate and ended without a send. */
     refused: number;
+    /** Reached later than the backlog tolerance and ended without a send. */
+    expired: number;
+}
+
+export interface DispatchOptions {
+    /** How late a message may be reached and still be sent (see backlogTolerance.ts). */
+    overdueToleranceMs?: number;
 }
 
 /**
  * Deliver every due scheduled message. Per-message failures are isolated — one
  * bad message never blocks the rest — and surface in the structured log.
  */
-export const runScheduledMessageDispatch = async (): Promise<DispatchResult> => {
+export const runScheduledMessageDispatch = async (
+    options: DispatchOptions = {}
+): Promise<DispatchResult> => {
+    const overdueToleranceMs =
+        options.overdueToleranceMs ?? backlogToleranceMs(DEFAULT_INTERVAL_MS);
     const due = db.listDueScheduledMessages();
     const result: DispatchResult = {
         due: due.length,
@@ -72,9 +93,24 @@ export const runScheduledMessageDispatch = async (): Promise<DispatchResult> => 
         failed: 0,
         retried: 0,
         refused: 0,
+        expired: 0,
     };
 
     for (const dueMsg of due) {
+        // Too late to send. Measured when this message's turn comes, since an
+        // earlier send in the same tick may have waited on the homeserver; and
+        // only a row still pending is ended, since its author may have
+        // cancelled it meanwhile.
+        if (Date.now() - Date.parse(dueMsg.deliverAt) > overdueToleranceMs) {
+            if (db.getScheduledMessage(dueMsg.id)?.status === 'pending') {
+                db.markScheduledMessageFailed(dueMsg.id, SCHEDULED_MESSAGE_EXPIRED_REASON, {
+                    terminal: true,
+                });
+                result.expired += 1;
+            }
+            continue;
+        }
+
         const terminalOnFailure = dueMsg.attempts + 1 >= MAX_ATTEMPTS;
 
         let verdict: BotPostVerdict;
@@ -187,6 +223,13 @@ export const runScheduledMessageDispatch = async (): Promise<DispatchResult> => 
         }
     }
 
+    if (result.expired > 0) {
+        // Counts only: an outage can expire many messages at once.
+        log.warn('scheduled_messages_expired_overdue', {
+            expired: result.expired,
+            overdueToleranceMs,
+        });
+    }
     return result;
 };
 
@@ -198,8 +241,9 @@ export const startScheduledMessageDispatcher = (
     intervalMs: number = DEFAULT_INTERVAL_MS
 ): { stop: () => void } => {
     if (timer) return { stop: stopScheduledMessageDispatcher };
+    const overdueToleranceMs = backlogToleranceMs(intervalMs);
     timer = setInterval(() => {
-        void runScheduledMessageDispatch().catch((err) => {
+        void runScheduledMessageDispatch({ overdueToleranceMs }).catch((err) => {
             log.warn('scheduled_message_dispatch_tick_threw', { error: String(err) });
         });
     }, intervalMs);

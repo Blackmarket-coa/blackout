@@ -28,7 +28,10 @@ globalThis.fetch = matrix.fetch;
 const { default: app } = await import('../src/index');
 const { signJwt, hashPassword } = await import('../src/services/auth');
 const { db } = await import('../src/db/store');
-const { runScheduledMessageDispatch } = await import('../src/services/scheduledMessageDispatcher');
+const { runScheduledMessageDispatch, SCHEDULED_MESSAGE_EXPIRED_REASON } = await import(
+    '../src/services/scheduledMessageDispatcher'
+);
+const { backlogToleranceMs } = await import('../src/services/backlogTolerance');
 const mailerModule = await import('../src/services/mailer');
 
 class InMemoryMailer {
@@ -521,4 +524,74 @@ test('deleting an account erases its scheduled messages and nothing is posted (D
     assert.equal(after?.lastError, 'author_deleted');
     assert.equal(after?.matrixRoomId, '');
     assert.equal(db.getScheduledMessage(old.id)?.userId, '');
+});
+
+const MINUTE = 60 * 1000;
+
+test('a message the dispatcher reaches more than 15 minutes late expires: no room check, no send, no text (B-1)', async () => {
+    matrix.sendStatus = 200;
+    const user = seedUser();
+    const roomId = joinedRoom('overdue', user.username);
+    const record = db.createScheduledMessage({
+        id: randomUUID(),
+        userId: user.id,
+        matrixRoomId: roomId,
+        body: 'the meeting starts now',
+        formattedBody: '<b>the meeting starts now</b>',
+        deliverAt: futureIso(-20 * MINUTE),
+    });
+    matrix.clearCalls();
+
+    const result = await runScheduledMessageDispatch();
+    assert.ok(result.expired >= 1);
+    assert.equal(matrix.sendsTo(roomId).length, 0, 'not sent late');
+    assert.ok(!matrix.stateReads.includes(roomId), 'expired before any homeserver call');
+
+    const row = db.getScheduledMessage(record.id);
+    assert.equal(row?.status, 'failed');
+    assert.equal(row?.lastError, SCHEDULED_MESSAGE_EXPIRED_REASON);
+    assert.equal(SCHEDULED_MESSAGE_EXPIRED_REASON, 'expired_overdue');
+    assert.equal(row?.body, '', 'an expired message keeps no text');
+    assert.equal(row?.formattedBody, undefined);
+    assert.equal(row?.deliveredAt, undefined);
+
+    // Finished: a later tick leaves it alone.
+    await runScheduledMessageDispatch();
+    assert.equal(matrix.sendsTo(roomId).length, 0);
+    assert.equal(db.getScheduledMessage(record.id)?.attempts, row?.attempts);
+});
+
+test('a message reached late but inside the tolerance is still sent (B-2)', async () => {
+    matrix.sendStatus = 200;
+    const user = seedUser();
+    const roomId = joinedRoom('late-but-sent', user.username);
+    const record = db.createScheduledMessage({
+        id: randomUUID(),
+        userId: user.id,
+        matrixRoomId: roomId,
+        body: 'ten minutes late',
+        deliverAt: futureIso(-10 * MINUTE),
+    });
+    await runScheduledMessageDispatch();
+    assert.equal(matrix.sendsTo(roomId).length, 1);
+    assert.equal(db.getScheduledMessage(record.id)?.status, 'delivered');
+});
+
+test('the tolerance is 15 minutes, or ten dispatch intervals when that is longer (B-3)', async () => {
+    assert.equal(backlogToleranceMs(30 * 1000), 15 * MINUTE);
+    assert.equal(backlogToleranceMs(5 * MINUTE), 50 * MINUTE);
+
+    // Twenty minutes late, from a dispatcher on a five-minute cadence: sent.
+    matrix.sendStatus = 200;
+    const user = seedUser();
+    const roomId = joinedRoom('slow-cadence', user.username);
+    const record = db.createScheduledMessage({
+        id: randomUUID(),
+        userId: user.id,
+        matrixRoomId: roomId,
+        body: 'on a slow dispatcher',
+        deliverAt: futureIso(-20 * MINUTE),
+    });
+    await runScheduledMessageDispatch({ overdueToleranceMs: backlogToleranceMs(5 * MINUTE) });
+    assert.equal(db.getScheduledMessage(record.id)?.status, 'delivered');
 });
