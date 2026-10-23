@@ -106,19 +106,21 @@ governance and moderation feeds scoped, the others left open with the reason.
 -   **Backlog window (operator decision, 2026-10-23):** a switch the sweep
     reaches more than the backlog tolerance after it was due (15 minutes, or
     ten sweep intervals when a custom cadence makes that longer) is not
-    acted on late: it goes to grace with at least 72 hours left from then,
-    recorded in `backlog_grace_started_at` (migration 102). Once per missed
-    check-in: a switch that had its window fires when it ends, however late
-    the sweep is, and the owner's check-in clears the record. The window
-    protects owners from a release the server caused by not watching, since
-    a triggered switch's payload is readable by its recipients (D3); the
-    cost is that whoever can stop the sweep across a deadline delays that
-    release by the outage plus up to 72 hours (`THREAT_MODEL.md` R10). It
-    applies to every outage, not only the first working deploy, because the
-    reason is the same each time. The sweep's grace and triggered events
-    stay in the memory of the process that ran it, so with a separate worker
-    `GET /v1/deadman/events` on the app replicas does not list them; the
-    switch's status and release time do show them. Tests:
+    acted on late: it goes to grace with its release moved to 72 hours from
+    then, recorded in `backlog_grace_started_at` (migration 102), unless it
+    already had that much grace left, in which case it goes to grace as it
+    normally would. Once per missed check-in: a switch that had its window
+    fires when it ends, however late the sweep is, and the owner's check-in
+    clears the record. The window protects owners from a release the server
+    caused by not watching, since a triggered switch's payload is readable
+    by its recipients (D3); the cost is that whoever can stop the sweep
+    across a deadline delays that release by the outage plus up to 72 hours
+    (`THREAT_MODEL.md` R10). It applies to every outage, not only the first
+    working deploy, because the reason is the same each time. The sweep's
+    grace and triggered events stay in the memory of the process that ran
+    it, so with a separate worker `GET /v1/deadman/events` on the app
+    replicas does not list them; the switch's status and release time do
+    show them. Tests:
     `test/deadman-scheduler.integration.test.ts`,
     `test/deadman-routes.integration.test.ts` and
     `test/deadman-backlog-postgres.integration.test.ts`.
