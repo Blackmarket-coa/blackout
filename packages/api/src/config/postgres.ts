@@ -33,3 +33,11 @@ export function getExistingPgPool(): PgPool | null {
 export function clearSharedPgPool(): void {
     cachedPool = null;
 }
+
+/**
+ * For tests: make `pool` the shared pool, as if getSharedPgPool had created
+ * it, so a boot runs its real code against an in-process database.
+ */
+export function setSharedPgPoolForTests(pool: PgPool): void {
+    cachedPool = pool;
+}

@@ -70,7 +70,9 @@ services:
             CACHE_PORT: 6379
             CACHE_PASSWORD_FILE: /run/secrets/cache_password
             REDIS_URL: ${REDIS_URL:-redis://cache:6379}
-        command: ['/bin/sh', '-lc', './bin/start-worker']
+        # Exec form, no wrapper shell: start-worker execs node, so the worker
+        # itself is PID 1 and receives the SIGTERM it drains on.
+        command: ['./bin/start-worker']
         secrets:
             - db_password
             - cache_password

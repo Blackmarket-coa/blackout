@@ -1,44 +1,38 @@
 /**
  * Dedicated background-worker entrypoint.
  *
- * Runs the same periodic job loops the API serves in-process (see
+ * Runs the same periodic job loops the API can run in-process (see
  * backgroundLoops.ts) but without the HTTP server, so the production `worker`
- * service owns scheduled-message delivery, the FBM sweepers and the ACL
- * reconcile loop while the `app` + `app_canary` replicas (started with
- * BLACKOUT_BACKGROUND_WORKERS_DISABLED=1) handle requests only.
+ * service owns scheduled-message delivery, the dead-man sweep, the retention
+ * sweeps, the FBM sweepers and the ACL reconcile loop while the `app` +
+ * `app_canary` replicas (started with BLACKOUT_BACKGROUND_WORKERS_DISABLED=1)
+ * handle requests only. backgroundWorker.ts loads the store before any loop
+ * starts, takes the background-leader lock, and drains on SIGTERM/SIGINT.
  *
- * Liveness: a heartbeat file is rewritten on an interval; bin/worker-healthcheck
- * fails the container healthcheck if the heartbeat goes missing or stale.
+ * Liveness: once the store is loaded, a heartbeat file is rewritten on an
+ * interval; bin/worker-healthcheck fails the container healthcheck if the
+ * heartbeat goes missing or stale.
  */
-import { writeFileSync } from 'node:fs';
-
-import { startBackgroundLoops } from './backgroundLoops';
+import { createBackgroundWorker } from './backgroundWorker';
 import { log } from './telemetry/logger';
 
-const HEARTBEAT_PATH = process.env.WORKER_HEARTBEAT_PATH ?? '/tmp/blackout-worker.heartbeat';
-const HEARTBEAT_INTERVAL_MS = 15_000;
+const shutdownTimeoutMs = Number.parseInt(process.env.SHUTDOWN_TIMEOUT_MS ?? '', 10);
 
-function writeHeartbeat(): void {
-  try {
-    writeFileSync(HEARTBEAT_PATH, `${Date.now()}\n`);
-  } catch (err) {
-    log.warn('worker_heartbeat_write_failed', { error: String(err), path: HEARTBEAT_PATH });
-  }
-}
+const worker = createBackgroundWorker({
+    heartbeatPath: process.env.WORKER_HEARTBEAT_PATH ?? '/tmp/blackout-worker.heartbeat',
+    shutdownTimeoutMs:
+        Number.isFinite(shutdownTimeoutMs) && shutdownTimeoutMs > 0 ? shutdownTimeoutMs : undefined,
+});
 
-startBackgroundLoops();
-writeHeartbeat();
-// The heartbeat interval also keeps the event loop alive even when every loop
-// is configured off, so the worker container stays up (and reports healthy)
-// instead of exiting and crash-looping.
-const heartbeat = setInterval(writeHeartbeat, HEARTBEAT_INTERVAL_MS);
-log.info('blackout_worker_started', { heartbeatPath: HEARTBEAT_PATH });
+// Registered before the boot, so a signal that arrives while the store is
+// still loading is handled the same way: nothing starts, the worker drains
+// and exits.
+process.once('SIGTERM', () => void worker.shutdown('SIGTERM'));
+process.once('SIGINT', () => void worker.shutdown('SIGINT'));
 
-function shutdown(signal: string): void {
-  clearInterval(heartbeat);
-  log.info('blackout_worker_stopping', { signal });
-  process.exit(0);
-}
-
-process.once('SIGTERM', () => shutdown('SIGTERM'));
-process.once('SIGINT', () => shutdown('SIGINT'));
+worker.start().catch((err) => {
+    log.error('blackout_worker_boot_failed', {
+        error: err instanceof Error ? err.message : String(err),
+    });
+    void worker.shutdown('boot_failed', 1);
+});
