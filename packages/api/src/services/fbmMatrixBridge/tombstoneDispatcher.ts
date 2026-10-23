@@ -55,15 +55,19 @@ export async function runFbmTombstoneSweep(
     }
 
     if (result.deaddropsTombstoned > 0 || result.disputesPurged > 0) {
-        incrementCounter('fbm_matrix_tombstone_swept_total', {}, result.deaddropsTombstoned + result.disputesPurged);
+        incrementCounter(
+            'fbm_matrix_tombstone_swept_total',
+            {},
+            result.deaddropsTombstoned + result.disputesPurged
+        );
         logEvent('marketplace.fbm_bridge.tombstone_swept', { ...result });
     }
     return result;
 }
 
-export function startFbmTombstoneDispatcher(
-    intervalMs: number = DEFAULT_SWEEP_INTERVAL_MS
-): { stop: () => void } {
+export function startFbmTombstoneDispatcher(intervalMs: number = DEFAULT_SWEEP_INTERVAL_MS): {
+    stop: () => void;
+} {
     if (timer) return { stop: stopFbmTombstoneDispatcher };
     timer = setInterval(() => {
         void runFbmTombstoneSweep().catch((err) => {

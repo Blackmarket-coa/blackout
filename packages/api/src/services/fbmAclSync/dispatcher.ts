@@ -11,9 +11,9 @@ export const DEFAULT_RECONCILE_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
 
 let timer: ReturnType<typeof setInterval> | null = null;
 
-export function startFbmAclReconcileLoop(
-    intervalMs: number = DEFAULT_RECONCILE_INTERVAL_MS
-): { stop: () => void } {
+export function startFbmAclReconcileLoop(intervalMs: number = DEFAULT_RECONCILE_INTERVAL_MS): {
+    stop: () => void;
+} {
     if (timer) return { stop: stopFbmAclReconcileLoop };
     timer = setInterval(() => {
         void reconcileAllAcls().catch((err) => {
