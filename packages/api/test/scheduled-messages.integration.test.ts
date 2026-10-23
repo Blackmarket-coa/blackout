@@ -28,10 +28,16 @@ globalThis.fetch = matrix.fetch;
 const { default: app } = await import('../src/index');
 const { signJwt, hashPassword } = await import('../src/services/auth');
 const { db } = await import('../src/db/store');
-const { runScheduledMessageDispatch, SCHEDULED_MESSAGE_EXPIRED_REASON } = await import(
-    '../src/services/scheduledMessageDispatcher'
-);
+const {
+    runScheduledMessageDispatch,
+    SCHEDULED_MESSAGE_EXPIRED_REASON,
+    startScheduledMessageDispatcher,
+    stopScheduledMessageDispatcher,
+} = await import('../src/services/scheduledMessageDispatcher');
 const { backlogToleranceMs } = await import('../src/services/backlogTolerance');
+const { backgroundTicksInFlight, waitForBackgroundTicks } = await import(
+    '../src/services/backgroundTicks'
+);
 const mailerModule = await import('../src/services/mailer');
 
 class InMemoryMailer {
@@ -594,4 +600,76 @@ test('the tolerance is 15 minutes, or ten dispatch intervals when that is longer
     });
     await runScheduledMessageDispatch({ overdueToleranceMs: backlogToleranceMs(5 * MINUTE) });
     assert.equal(db.getScheduledMessage(record.id)?.status, 'delivered');
+});
+
+test('a dispatcher stopped mid-tick finishes the message in hand and leaves the rest pending (B-4)', async () => {
+    matrix.sendStatus = 200;
+    const user = seedUser();
+    const roomId = joinedRoom('stop-mid-tick', user.username);
+    const make = (body: string, msAgo: number) =>
+        db.createScheduledMessage({
+            id: randomUUID(),
+            userId: user.id,
+            matrixRoomId: roomId,
+            body,
+            deliverAt: futureIso(-msAgo),
+        });
+    const first = make('in hand', 2000);
+    const second = make('still waiting', 1000);
+    // The worker shuts down while the first message's room check is out.
+    matrix.onStateRead = (room) => {
+        if (room !== roomId) return;
+        matrix.onStateRead = null;
+        stopScheduledMessageDispatcher();
+    };
+
+    await runScheduledMessageDispatch();
+    assert.equal(db.getScheduledMessage(first.id)?.status, 'delivered');
+    assert.equal(db.getScheduledMessage(second.id)?.status, 'pending', 'left for the next leader');
+    assert.equal(db.getScheduledMessage(second.id)?.attempts, 0);
+    assert.equal(matrix.sendsTo(roomId).length, 1);
+
+    // A later tick, after the stop, picks it up as usual.
+    await runScheduledMessageDispatch();
+    assert.equal(db.getScheduledMessage(second.id)?.status, 'delivered');
+});
+
+test('the running dispatcher registers its tick, so a shutdown can wait for it to finish (B-5)', async () => {
+    matrix.sendStatus = 200;
+    const user = seedUser();
+    const roomId = joinedRoom('tracked-tick', user.username);
+    const record = db.createScheduledMessage({
+        id: randomUUID(),
+        userId: user.id,
+        matrixRoomId: roomId,
+        body: 'mid-flight',
+        deliverAt: futureIso(-1000),
+    });
+    // Hold every homeserver answer until the test lets go.
+    let letGo!: () => void;
+    const held = new Promise<void>((resolve) => {
+        letGo = resolve;
+    });
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        await held;
+        return matrix.fetch(input, init);
+    }) as typeof fetch;
+    try {
+        startScheduledMessageDispatcher(10);
+        const deadline = Date.now() + 3000;
+        while (backgroundTicksInFlight() === 0) {
+            assert.ok(Date.now() < deadline, 'a tick started');
+            await new Promise((resolve) => setTimeout(resolve, 5));
+        }
+        stopScheduledMessageDispatcher();
+        assert.equal(await waitForBackgroundTicks(50), false, 'still waiting on the homeserver');
+        letGo();
+        assert.equal(await waitForBackgroundTicks(5000), true, 'the tick finished');
+    } finally {
+        stopScheduledMessageDispatcher();
+        globalThis.fetch = realFetch;
+    }
+    assert.equal(db.getScheduledMessage(record.id)?.status, 'delivered');
+    assert.equal(matrix.sendsTo(roomId).length, 1, 'sent once');
 });

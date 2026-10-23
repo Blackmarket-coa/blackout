@@ -1,4 +1,5 @@
 import { db } from '../db/store';
+import { trackBackgroundTick } from './backgroundTicks';
 import { syncBridge, type BridgeServiceOptions } from './youtubeChatBridge';
 import { log } from '../telemetry/logger';
 
@@ -142,7 +143,7 @@ export const startYoutubeChatScheduler = (
             return;
         }
         polling = true;
-        void runYoutubePoll()
+        void trackBackgroundTick(runYoutubePoll())
             .catch((err) => {
                 log.warn('youtube_chat_scheduler_tick_threw', { error: String(err) });
             })

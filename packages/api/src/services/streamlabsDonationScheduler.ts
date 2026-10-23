@@ -1,4 +1,5 @@
 import { db } from '../db/store';
+import { trackBackgroundTick } from './backgroundTicks';
 import { syncStreamlabsDonationsForUser, type SyncOutcome } from './streamlabsDonationSync';
 import { log } from '../telemetry/logger';
 
@@ -117,7 +118,7 @@ export const startStreamlabsScheduler = (
 ): { stop: () => void } => {
     if (timer) return { stop: stopStreamlabsScheduler };
     timer = setInterval(() => {
-        void runStreamlabsPoll().catch((err) => {
+        void trackBackgroundTick(runStreamlabsPoll()).catch((err) => {
             log.warn('streamlabs_scheduler_tick_threw', { error: String(err) });
         });
     }, intervalMs);

@@ -16,6 +16,7 @@
  * limited.
  */
 import { sweepAutoCrossposts } from './coalitionAutoCrosspost';
+import { trackBackgroundTick } from './backgroundTicks';
 import { log } from '../telemetry/logger';
 
 export const DEFAULT_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
@@ -31,7 +32,7 @@ export const startCoalitionAutoCrosspostScheduler = (
         // A pass makes real network calls, so it can outlive its interval.
         if (running) return;
         running = true;
-        void sweepAutoCrossposts()
+        void trackBackgroundTick(sweepAutoCrossposts())
             .catch((err) => {
                 log.warn('coalition_autopost_sweep_threw', { error: String(err) });
             })

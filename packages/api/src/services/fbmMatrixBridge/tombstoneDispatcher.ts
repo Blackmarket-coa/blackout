@@ -1,10 +1,12 @@
 // Background sweeper for the FBM → Matrix bridge. Purges expired dead-drop rooms
 // (past TTL or already downloaded) and resolved dispute rooms whose retention
 // window has elapsed. Mirrors scheduledMessageDispatcher: a single-process
-// interval timer, `.unref()`'d, idempotent start. A multi-replica deployment
-// would need a Postgres advisory lock to avoid two replicas double-purging.
+// interval timer, `.unref()`'d, idempotent start. In postgres mode the
+// background-leader lock (../backgroundLeader.ts) keeps it to one process, so
+// two replicas do not double-purge.
 
 import { db } from '../../db/store';
+import { trackBackgroundTick } from '../backgroundTicks';
 import { incrementCounter, logEvent } from '../marketplaceObservability';
 import { defaultMatrixClient, type FbmBridgeMatrixClient } from './client';
 
@@ -70,7 +72,7 @@ export function startFbmTombstoneDispatcher(intervalMs: number = DEFAULT_SWEEP_I
 } {
     if (timer) return { stop: stopFbmTombstoneDispatcher };
     timer = setInterval(() => {
-        void runFbmTombstoneSweep().catch((err) => {
+        void trackBackgroundTick(runFbmTombstoneSweep()).catch((err) => {
             logEvent('marketplace.fbm_bridge.tombstone_tick_threw', {
                 error: err instanceof Error ? err.message : String(err),
             });

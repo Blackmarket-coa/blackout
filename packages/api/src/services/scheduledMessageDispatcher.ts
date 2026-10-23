@@ -3,6 +3,7 @@ import { db } from '../db/store';
 import { matrixClient } from '../integrations/matrix-client';
 import { log } from '../telemetry/logger';
 import { backlogToleranceMs } from './backlogTolerance';
+import { trackBackgroundTick } from './backgroundTicks';
 import {
     checkBotMayPostAs,
     RETRYABLE_BOT_POST_REFUSALS,
@@ -15,11 +16,12 @@ import {
  * picks it up once `deliverAt` passes and sends it server-side, so delivery
  * happens even when the author's client is closed.
  *
- * Single-process by design (mirrors the Streamlabs/YouTube schedulers) — a
- * multi-replica deployment would need a postgres advisory lock to avoid two
- * replicas double-sending. The Matrix transaction id is derived from the
+ * Single-process by design (mirrors the Streamlabs/YouTube schedulers): in
+ * postgres mode the background-leader lock (backgroundLeader.ts) keeps it to
+ * one process. The Matrix transaction id is derived from the
  * scheduled-message id, so the homeserver dedupes a re-sent message within its
- * txn window even if a crash happened between send and status update.
+ * txn window even if a crash happened between send and status update. A stop
+ * (a worker shutting down) ends a running tick after the message in hand.
  *
  * Delivery is bot-attributed: the message body is prefixed with the author's
  * name via `formatFederatedMessage`, exactly like the synchronous send path in
@@ -48,6 +50,8 @@ const MAX_ATTEMPTS = 5;
 export const SCHEDULED_MESSAGE_EXPIRED_REASON = 'expired_overdue';
 
 let timer: ReturnType<typeof setInterval> | null = null;
+/** Bumped by every stop, so a tick in flight knows to leave the rest pending. */
+let stopGeneration = 0;
 
 const escapeHtml = (value: string): string =>
     value
@@ -86,6 +90,7 @@ export const runScheduledMessageDispatch = async (
 ): Promise<DispatchResult> => {
     const overdueToleranceMs =
         options.overdueToleranceMs ?? backlogToleranceMs(DEFAULT_INTERVAL_MS);
+    const generation = stopGeneration;
     const due = db.listDueScheduledMessages();
     const result: DispatchResult = {
         due: due.length,
@@ -97,6 +102,9 @@ export const runScheduledMessageDispatch = async (
     };
 
     for (const dueMsg of due) {
+        // Stopped mid-tick: the rest stays pending for whichever process leads next.
+        if (generation !== stopGeneration) break;
+
         // Too late to send. Measured when this message's turn comes, since an
         // earlier send in the same tick may have waited on the homeserver; and
         // only a row still pending is ended, since its author may have
@@ -243,15 +251,18 @@ export const startScheduledMessageDispatcher = (
     if (timer) return { stop: stopScheduledMessageDispatcher };
     const overdueToleranceMs = backlogToleranceMs(intervalMs);
     timer = setInterval(() => {
-        void runScheduledMessageDispatch({ overdueToleranceMs }).catch((err) => {
-            log.warn('scheduled_message_dispatch_tick_threw', { error: String(err) });
-        });
+        void trackBackgroundTick(runScheduledMessageDispatch({ overdueToleranceMs })).catch(
+            (err) => {
+                log.warn('scheduled_message_dispatch_tick_threw', { error: String(err) });
+            }
+        );
     }, intervalMs);
     if (typeof timer.unref === 'function') timer.unref();
     return { stop: stopScheduledMessageDispatcher };
 };
 
 export const stopScheduledMessageDispatcher = (): void => {
+    stopGeneration += 1;
     if (timer) {
         clearInterval(timer);
         timer = null;
