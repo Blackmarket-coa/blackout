@@ -869,6 +869,14 @@ export interface DeadmanSwitchRecord {
     recipients: string[];
     encryptedPayload: string;
     headline?: string;
+    /**
+     * When the autonomous sweep gave this switch its one backlog grace window:
+     * it reached the switch long after it should have acted, so instead of
+     * firing it the sweep moved `releaseAt` to 72 hours later (see
+     * `evaluateSweepTransition`). Cleared by the next check-in. Persisted by
+     * migration 102.
+     */
+    backlogGraceStartedAt?: string;
     createdAt: string;
     updatedAt: string;
 }

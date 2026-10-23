@@ -77,9 +77,63 @@ export const evaluateTransition = (record: DeadmanSwitchRecord, now: Date): Dead
     };
 };
 
+/** How long the one backlog grace window lasts. */
+export const DEADMAN_BACKLOG_GRACE_SECONDS = 72 * 60 * 60;
+
+export type DeadmanSweepTransition =
+    | DeadmanTransition
+    | { kind: 'backlog_grace'; record: DeadmanSwitchRecord };
+
+/**
+ * The autonomous sweep's decision for one switch: `evaluateTransition`, except
+ * after the sweep was not running.
+ *
+ * The sweep acts on a switch at its check-in deadline (`triggerAt`, for an
+ * armed switch) or at its release (`releaseAt`, in grace). Reaching it more
+ * than `toleranceMs` after that moment means no sweep ran then, so the owner
+ * never saw the switch go to grace in time, and a triggered switch makes its
+ * payload readable to its recipients. Such a switch is not acted on late: it
+ * goes to (or stays in) grace with its release moved to
+ * `DEADMAN_BACKLOG_GRACE_SECONDS` from now, recorded in
+ * `backlogGraceStartedAt`. Unless it already has that much grace left, in
+ * which case the normal transition stands.
+ *
+ * Once per missed check-in: a switch that had its window follows
+ * `evaluateTransition` however late the sweep is, and fires when the window
+ * ends; `applyCheckIn` clears the record, so a later lapse gets its own.
+ */
+export const evaluateSweepTransition = (
+    record: DeadmanSwitchRecord,
+    now: Date,
+    toleranceMs: number
+): DeadmanSweepTransition => {
+    const transition = evaluateTransition(record, now);
+    if (transition.kind === 'none' || record.backlogGraceStartedAt) return transition;
+
+    const nowMs = now.getTime();
+    const dueAtMs = new Date(
+        record.status === 'armed' ? record.triggerAt : record.releaseAt
+    ).getTime();
+    if (nowMs - dueAtMs <= toleranceMs) return transition;
+
+    const windowEndMs = nowMs + DEADMAN_BACKLOG_GRACE_SECONDS * 1000;
+    if (new Date(record.releaseAt).getTime() >= windowEndMs) return transition;
+    return {
+        kind: 'backlog_grace',
+        record: {
+            ...record,
+            status: 'grace' satisfies DeadmanSwitchStatus,
+            releaseAt: new Date(windowEndMs).toISOString(),
+            backlogGraceStartedAt: now.toISOString(),
+        },
+    };
+};
+
 /**
  * Apply a fresh check-in at `now`. Resets the deadlines and returns the
- * switch in `armed` status. Throws if the switch is terminal.
+ * switch in `armed` status, with any backlog window ended (the property stays,
+ * as undefined, so the Postgres write-through clears the column). Throws if
+ * the switch is terminal.
  */
 export const applyCheckIn = (record: DeadmanSwitchRecord, now: Date): DeadmanSwitchRecord => {
     if (record.status === 'triggered') {
@@ -100,6 +154,7 @@ export const applyCheckIn = (record: DeadmanSwitchRecord, now: Date): DeadmanSwi
         lastCheckInAt,
         triggerAt,
         releaseAt,
+        backlogGraceStartedAt: undefined,
     };
 };
 
