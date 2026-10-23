@@ -30,13 +30,13 @@ Precedence is `environment:` > `.env.production` > `.env`.
 
 Every runtime service has a healthcheck:
 
--   `app`: `/healthz` endpoint.
--   `worker`: `./bin/worker-healthcheck` command.
+-   `app`: `/health` endpoint (the API's unauthenticated readiness probe).
+-   `worker`: `./bin/worker-healthcheck` command (a heartbeat the worker writes once it has loaded the store).
 -   `db`: `pg_isready`.
 -   `cache`: `redis-cli PING` with password.
 -   `reverse-proxy`: Caddy admin API probe.
 
-Compose startup and restarts rely on `condition: service_healthy`.
+Compose startup and restarts rely on `condition: service_healthy`. Caddy also runs its own active health check of `app` (`health_uri` in `Caddyfile`), on the same `/health`, and sends no traffic to an `app` that fails it.
 
 ## 3) Startup ordering
 
@@ -48,6 +48,15 @@ Ordering is explicit via `depends_on`:
 -   `backup` waits for `db` healthy.
 
 `app` also runs migrations in its start command before booting traffic handlers.
+
+### The worker
+
+`worker` runs the API's periodic loops (`packages/api/src/backgroundLoops.ts`), so the `app` replicas, started with `BLACKOUT_BACKGROUND_WORKERS_DISABLED=1`, only serve requests.
+
+-   It loads the store before any loop starts, through the API's own boot (`packages/api/src/db/runtimeStoreBoot.ts`: pending migrations under the migration lock, the migration checksum audit, hydration). In production it refuses to start unless `BLACKOUT_DB_MODE=postgres` and `LOG_HASH_SALT` are set, and it refuses `BLACKOUT_DB_PG_NOTIFY=0`.
+-   Only the holder of the background-leader lock, a Postgres advisory lock that the API also takes when it runs the loops itself, runs the loops. Another worker stands by and retries every 15 s. A worker that loses the lock stops its loops and exits 1, and `restart: unless-stopped` boots it again.
+-   On SIGTERM (`docker compose stop`, or a redeploy) it starts no new work, waits up to half of `SHUTDOWN_TIMEOUT_MS` (default 10 s, Docker's default stop grace period) for running ticks, flushes the store, releases the lock and exits 0. The compose command is exec form and `bin/start-worker` execs node, so the worker is the process that receives the signal.
+-   Due work it reaches more than 15 minutes late (after an outage, say; ten loop intervals if a custom cadence makes that longer) is not done late: a scheduled message expires unsent, and a dead-man switch gets one 72-hour grace window instead of firing (see `KNOWN_LIMITATIONS.md`).
 
 ## 4) Persistent volumes
 
