@@ -1,9 +1,14 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { readJsonBody } from '../middleware/validate';
-import { requireAdminDomainCapability, requireDomainCapability } from './authz';
+import {
+    requireAdminDomainCapability,
+    requireAuthenticatedUser,
+    requireDomainCapability,
+} from './authz';
 import { discoveryService } from '../services/discovery';
 import { listCanopies, upsertCanopy, type CanopyFederationTier } from '../services/canopyDirectory';
+import { canopyListingRefusalResponse, checkMayListCanopy } from '../services/canopyListingGate';
 import type { FeatureModule } from './types';
 
 const profileSchema = z.object({
@@ -200,6 +205,13 @@ function createDiscoveryRouter() {
         if (denied) return denied;
         const parsed = await readJsonBody(c, canopyIndexSchema);
         if (parsed instanceof Response) return parsed;
+        // Listing a canopy, or changing its entry, takes being its admin on the
+        // homeserver (`services/canopyListingGate.ts`).
+        const verdict = await checkMayListCanopy(requireAuthenticatedUser(c)!, parsed.canopyId);
+        if (!verdict.ok) {
+            const refusal = canopyListingRefusalResponse(verdict.reason);
+            return c.json(refusal.body, refusal.status);
+        }
         const entry = upsertCanopy({
             canopyId: parsed.canopyId,
             name: parsed.name,
