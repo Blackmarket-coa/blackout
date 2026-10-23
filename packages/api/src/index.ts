@@ -108,14 +108,8 @@ import { runSecurityPreflight } from './config/security';
 import { initMailerFromEnv } from './services/mailer';
 import { registerFeatureModules } from './modules';
 import { matrixClient } from './integrations/matrix-client';
-import { drainRuntimeStore, initRuntimeStore, RUNTIME_DB_MODE } from './db/store';
-import {
-    formatChecksumVerificationFailure,
-    migrateUp,
-    MIGRATIONS_DIR,
-    verifyMigrationChecksums,
-} from './db/migrate';
-import { getSharedPgPool } from './config/postgres';
+import { drainRuntimeStore, RUNTIME_DB_MODE } from './db/store';
+import { bootPostgresRuntimeStore } from './db/runtimeStoreBoot';
 import { assertEnvAtBoot } from './config/env';
 
 // Central boot-time env validation (M6): aggregate every critical-config
@@ -403,42 +397,18 @@ if (shouldListen && process.env.NODE_ENV === 'production') {
     }
 }
 
-// Postgres runtime store: run migrations then hydrate the in-memory mirror
-// BEFORE serving or starting any store-reading background loops. Top-level
+// Postgres runtime store: run migrations, audit their checksums, then hydrate
+// the in-memory mirror BEFORE serving or starting any store-reading background
+// loops (db/runtimeStoreBoot.ts, shared with the background worker). Top-level
 // await pauses module evaluation until the store is ready. Skipped under test
 // (shouldListen=false) and in memory/file modes.
 if (shouldListen && RUNTIME_DB_MODE === 'postgres') {
-    const pool = await getSharedPgPool();
-    if (process.env.BLACKOUT_DB_MIGRATE_ON_START !== '0') {
-        const applied = await migrateUp({ pool, migrationsDir: MIGRATIONS_DIR });
-        log.info('db_migrations_applied_on_start', { count: applied.length });
-    }
-    // Boot-time migration checksum audit (M12): re-hash every APPLIED
-    // migration against the files on disk. This runs even when migrateUp just
-    // ran (BLACKOUT_DB_MIGRATE_ON_START=1): migrateUp's own drift assert does
-    // not flag applied-but-missing-on-disk migrations, and with
-    // BLACKOUT_DB_MIGRATE_ON_START=0 nothing else checks drift at all.
-    // Severity mirrors assertEnvAtBoot (config/env.ts): fail the boot in a
-    // real production listen, log a loud warning everywhere else.
-    if (process.env.BLACKOUT_DB_VERIFY_CHECKSUMS !== '0') {
-        const verification = await verifyMigrationChecksums(pool, MIGRATIONS_DIR);
-        if (!verification.ok) {
-            const detail = formatChecksumVerificationFailure(verification);
-            const failFast =
-                process.env.NODE_ENV === 'production' &&
-                process.env.BLACKOUT_API_SKIP_LISTEN !== '1';
-            if (failFast) throw new Error(detail);
-            log.warn('db_migration_checksum_drift', {
-                mismatches: verification.mismatches.map((m) => m.id),
-                missingOnDisk: verification.missingOnDisk,
-                detail,
-            });
-        } else {
-            log.info('db_migration_checksums_verified');
-        }
-    }
-    await initRuntimeStore(pool);
-    log.info('postgres_store_hydrated');
+    // Checksum drift fails the boot in a real production listen and is logged
+    // as a loud warning everywhere else.
+    await bootPostgresRuntimeStore({
+        failOnChecksumDrift:
+            process.env.NODE_ENV === 'production' && process.env.BLACKOUT_API_SKIP_LISTEN !== '1',
+    });
 }
 
 if (shouldListen) {
