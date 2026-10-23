@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { readJsonBody } from '../middleware/validate';
-import { requireDomainCapability } from './authz';
+import { requireAdminDomainCapability, requireDomainCapability } from './authz';
 import { discoveryService } from '../services/discovery';
 import { listCanopies, upsertCanopy, type CanopyFederationTier } from '../services/canopyDirectory';
 import type { FeatureModule } from './types';
@@ -41,8 +41,12 @@ const canopyIndexSchema = z.object({
 function createDiscoveryRouter() {
     const discovery = new Hono();
 
+    // Indexing profiles and activity, running index jobs and recording funnel
+    // events change what everyone browsing sees and check no ownership. Every
+    // session token carries `discovery.write` (for canopy listing, which checks
+    // ownership), so these also take an allowlisted admin.
     discovery.post('/index/profiles', async (c) => {
-        const denied = requireDomainCapability(c, 'discovery', 'write');
+        const denied = requireAdminDomainCapability(c, 'discovery', 'write');
         if (denied) return denied;
 
         const parsed = await readJsonBody(c, profileSchema);
@@ -67,7 +71,7 @@ function createDiscoveryRouter() {
     });
 
     discovery.post('/index/activity', async (c) => {
-        const denied = requireDomainCapability(c, 'discovery', 'write');
+        const denied = requireAdminDomainCapability(c, 'discovery', 'write');
         if (denied) return denied;
 
         const parsed = await readJsonBody(c, activitySchema);
@@ -80,14 +84,14 @@ function createDiscoveryRouter() {
     });
 
     discovery.post('/index/jobs/full', (c) => {
-        const denied = requireDomainCapability(c, 'discovery', 'write');
+        const denied = requireAdminDomainCapability(c, 'discovery', 'write');
         if (denied) return denied;
 
         return c.json(discoveryService.runFullIndex());
     });
 
     discovery.post('/index/jobs/incremental', (c) => {
-        const denied = requireDomainCapability(c, 'discovery', 'write');
+        const denied = requireAdminDomainCapability(c, 'discovery', 'write');
         if (denied) return denied;
 
         return c.json(discoveryService.runIncrementalIndex());
@@ -158,7 +162,7 @@ function createDiscoveryRouter() {
     });
 
     discovery.post('/analytics/events', async (c) => {
-        const denied = requireDomainCapability(c, 'discovery', 'write');
+        const denied = requireAdminDomainCapability(c, 'discovery', 'write');
         if (denied) return denied;
 
         const parsed = await readJsonBody(c, funnelEventSchema);

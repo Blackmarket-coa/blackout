@@ -10,7 +10,7 @@
  * Each `test` block names the LS-* ID it covers in the title so a CI run
  * surfaces "LS-AUTH-01" / "LS-MSG-02" etc. directly in the test report.
  */
-import test from 'node:test';
+import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 
 process.env.NODE_ENV = process.env.NODE_ENV ?? 'test';
@@ -46,6 +46,18 @@ async function registerCanopy(canopyId: string, token: string) {
         method: 'POST',
         headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
         body: JSON.stringify({ canopyId, name: canopyId }),
+    });
+}
+
+// Until the API has a community role model, moderation actions, proposals and
+// votes are for accounts on the admin allowlist (KNOWN_LIMITATIONS.md,
+// "Admin-only API writes").
+function allowlistAdmins(t: TestContext, ...usernames: string[]) {
+    const previous = process.env.BLACKOUT_ADMIN_USERS;
+    process.env.BLACKOUT_ADMIN_USERS = usernames.join(',');
+    t.after(() => {
+        if (previous === undefined) delete process.env.BLACKOUT_ADMIN_USERS;
+        else process.env.BLACKOUT_ADMIN_USERS = previous;
     });
 }
 
@@ -258,12 +270,12 @@ test('LS-MEDIA-03: empty / invalid message content is rejected at the API gate',
 // 4) Moderation
 // ----------------------------------------------------------------------
 
-test('LS-MOD-01: moderator can record a remove_content action', async () => {
+test('LS-MOD-01: moderator can record a remove_content action', async (t) => {
     const mod = await registerUser();
     const target = await registerUser();
+    allowlistAdmins(t, mod.username);
     const headers = {
         authorization: `Bearer ${mod.token}`,
-        'x-blackout-capabilities': 'moderation.read,moderation.write',
         'content-type': 'application/json',
     };
     const res = await app.request('/v1/moderation/actions', {
@@ -308,11 +320,11 @@ test('LS-MOD-03: non-moderator cannot record a moderation action', async () => {
 // 5) Governance
 // ----------------------------------------------------------------------
 
-test('LS-GOV-01: governance proposal create is visible to eligible voters', async () => {
+test('LS-GOV-01: governance proposal create is visible to eligible voters', async (t) => {
     const proposer = await registerUser();
+    allowlistAdmins(t, proposer.username);
     const headers = {
         authorization: `Bearer ${proposer.token}`,
-        'x-blackout-capabilities': 'governance.read,governance.write',
         'content-type': 'application/json',
     };
     const create = await app.request('/v1/governance/proposals', {
@@ -332,12 +344,12 @@ test('LS-GOV-01: governance proposal create is visible to eligible voters', asyn
     assert.equal(get.status, 200);
 });
 
-test('LS-GOV-02: vote is accepted and tally reflects it', async () => {
+test('LS-GOV-02: vote is accepted and tally reflects it', async (t) => {
     const proposer = await registerUser();
     const voter = await registerUser();
+    allowlistAdmins(t, proposer.username, voter.username);
     const headers = (token: string) => ({
         authorization: `Bearer ${token}`,
-        'x-blackout-capabilities': 'governance.read,governance.write',
         'content-type': 'application/json',
     });
     const create = await app.request('/v1/governance/proposals', {

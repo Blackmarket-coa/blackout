@@ -11,8 +11,9 @@ process.env.AUTH_RATE_LIMIT_MAX = '10000';
 process.env.BLACKOUT_DB_MODE = 'memory';
 
 const { default: app } = await import('../src/index');
-const { signJwt, hashPassword } = await import('../src/services/auth');
+const { hashPassword } = await import('../src/services/auth');
 const { db } = await import('../src/db/store');
+const { signJwtWithScopes } = await import('./_fixtures/capabilityToken');
 
 const seedUser = (username: string) => {
     const id = randomUUID();
@@ -28,10 +29,12 @@ const seedUser = (username: string) => {
     return db.getUserById(id)!;
 };
 
+// No session token carries moderation.* (only an allowlisted admin holds
+// moderation.write, and the header can only narrow), so these tests sign a
+// token that does.
 const modHeaders = (userId: string, username: string) => ({
-    authorization: `Bearer ${signJwt(userId, username, 600)}`,
+    authorization: `Bearer ${signJwtWithScopes(userId, username, ['moderation.*'])}`,
     'content-type': 'application/json',
-    'x-blackout-capabilities': 'moderation.*',
 });
 
 test('POST /v1/moderation/actions persists optional metadata and returns it', async () => {

@@ -29,9 +29,10 @@ const seedUser = () => {
     return { id, username };
 };
 
+// Every session token carries streaming.read and streaming.write, so no
+// capability header is needed.
 const writeHeaders = (id: string, username: string) => ({
     authorization: `Bearer ${signJwt(id, username, 600)}`,
-    'x-blackout-capabilities': 'streaming.read streaming.write',
     'content-type': 'application/json',
 });
 

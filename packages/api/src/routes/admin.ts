@@ -31,7 +31,7 @@ const admin = new Hono();
  * Server-side admin gate. The client `platform-ops.admin` capability controls
  * UI visibility only — it is NOT authorization. Admin operations are gated here
  * against the `BLACKOUT_ADMIN_USERS` allowlist (comma-separated usernames or
- * full user ids), shared with capability minting via `isAdminUser`. Layered on
+ * full user ids), shared with the admin-only capability scopes via `isAdminUser`. Layered on
  * top of `requireUser`, so an unauthenticated caller gets 401 and a non-admin
  * gets 403.
  */

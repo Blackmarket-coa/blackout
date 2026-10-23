@@ -1,4 +1,4 @@
-import test from 'node:test';
+import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 
 process.env.NODE_ENV = process.env.NODE_ENV ?? 'test';
@@ -10,13 +10,14 @@ process.env.AUTH_RATE_LIMIT_MAX = process.env.AUTH_RATE_LIMIT_MAX ?? '1000';
 
 const { default: app } = await import('../src/index');
 
-async function issueToken(): Promise<string> {
+async function issueAccount(): Promise<{ token: string; username: string }> {
     const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const username = `discovery-user-${suffix}`;
     const response = await app.request('/v1/auth/register', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
-            username: `discovery-user-${suffix}`,
+            username,
             email: `discovery-user-${suffix}@example.com`,
             password: 'test-password',
         }),
@@ -24,11 +25,24 @@ async function issueToken(): Promise<string> {
 
     assert.equal(response.status, 201);
     const body = (await response.json()) as { token: string };
-    return body.token;
+    return { token: body.token, username };
 }
 
-test('discovery index jobs, trust filters, browse surfaces, and analytics funnel', async () => {
-    const token = await issueToken();
+// The discovery index writes (profiles, activity, jobs, funnel events) check no
+// ownership, so they are for allowlisted admins; allowlist the account that
+// seeds the index for the test.
+const allowlistAdmin = (t: TestContext, username: string) => {
+    const previous = process.env.BLACKOUT_ADMIN_USERS;
+    process.env.BLACKOUT_ADMIN_USERS = username;
+    t.after(() => {
+        if (previous === undefined) delete process.env.BLACKOUT_ADMIN_USERS;
+        else process.env.BLACKOUT_ADMIN_USERS = previous;
+    });
+};
+
+test('discovery index jobs, trust filters, browse surfaces, and analytics funnel', async (t) => {
+    const { token, username } = await issueAccount();
+    allowlistAdmin(t, username);
     const headers = {
         authorization: `Bearer ${token}`,
         'content-type': 'application/json',

@@ -364,9 +364,8 @@ coalitions.get('/:id/connections', (c) => {
 });
 
 /**
- * Platform authority. Deliberately NOT `requireDomainCapability`, which merges
- * capabilities asserted in a request header — any concrete scope there is
- * self-assertable, so it gates nothing an attacker cares about.
+ * Platform authority: the operator's admin allowlist (`isAdminUser`), checked
+ * directly rather than through a domain scope.
  */
 const requireModerator = (c: Context) => {
     const user = requireUser(c, 'Sign in required');
