@@ -13,12 +13,15 @@ const { default: app } = await import('../src/index');
 const { signJwt } = await import('../src/services/auth');
 const { sweepOverdueDeadmanSwitches } = await import('../src/modules/deadman');
 const { db } = await import('../src/db/store');
+const { signJwtWithScopes } = await import('./_fixtures/capabilityToken');
 
+// No session token carries deadman.write (decision N2; the header can only
+// narrow what a token grants), so these tests sign a token whose claims
+// carry the scopes they need.
 function headersFor(userId: string, capabilities: string[] = ['deadman.read', 'deadman.write']) {
     return {
-        authorization: `Bearer ${signJwt(userId, userId, 600)}`,
+        authorization: `Bearer ${signJwtWithScopes(userId, userId, capabilities)}`,
         'content-type': 'application/json',
-        'x-blackout-capabilities': capabilities.join(','),
     };
 }
 

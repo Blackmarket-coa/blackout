@@ -9,14 +9,15 @@ process.env.JWT_AUDIENCE = process.env.JWT_AUDIENCE ?? 'blackout-client-test';
 process.env.AUTH_RATE_LIMIT_MAX = process.env.AUTH_RATE_LIMIT_MAX ?? '1000';
 
 const { default: app } = await import('../src/index');
-const { signJwt } = await import('../src/services/auth');
+const { signJwtWithScopes } = await import('./_fixtures/capabilityToken');
 const { __resetGovernanceStoreForTests } = await import('../src/services/governanceStore');
 
+// No session token carries governance.write (the header can only narrow what a
+// token grants), so these tests sign a token whose claims carry it.
 function authHeaders(capabilities = ['governance.read', 'governance.write']) {
     return {
-        authorization: `Bearer ${signJwt('treasury-user', 'treasury', 600)}`,
+        authorization: `Bearer ${signJwtWithScopes('treasury-user', 'treasury', capabilities)}`,
         'content-type': 'application/json',
-        'x-blackout-capabilities': capabilities.join(','),
     };
 }
 
@@ -65,7 +66,7 @@ test('publish → latest → list newest first', async () => {
     const listBody = (await list.json()) as { items: Array<{ snapshotId: string }> };
     assert.deepEqual(
         listBody.items.map((entry) => entry.snapshotId),
-        ['snap-new', 'snap-old'],
+        ['snap-new', 'snap-old']
     );
 });
 
@@ -91,8 +92,10 @@ test('treasury list paginates with cursor + limit', async () => {
     assert.ok(page1Body.nextCursor);
 
     const page2 = await app.request(
-        `/v1/governance/treasury/snapshots?limit=2&cursor=${encodeURIComponent(page1Body.nextCursor!)}`,
-        { headers },
+        `/v1/governance/treasury/snapshots?limit=2&cursor=${encodeURIComponent(
+            page1Body.nextCursor!
+        )}`,
+        { headers }
     );
     const page2Body = (await page2.json()) as {
         items: Array<{ snapshotId: string }>;

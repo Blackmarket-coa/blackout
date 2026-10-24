@@ -105,27 +105,32 @@ For the source-of-truth triage with tier/owner detail see
     `apps/blackout-client/src/app/components/create-room/newRoomDefaults.ts`,
     asked by the New canopy form, the New den form, the playbook reveal,
     `createDenInCanopy` (voice, forum, stage, announcement and
-    category-menu dens), categories and Coliseum discussion dens.
+    category-menu dens), categories and Coliseum discussion dens. The Black
+    Mask chat panel's New screens (2026-10-23) use the same two forms.
 -   **State:** in the Blackout app a new canopy, a den with no canopy and a
     den inside a public canopy start **public and not end-to-end encrypted**;
     a den inside a canopy that is not public starts restricted to that canopy
     and encrypted; a public canopy is listed in the Blackout canopy directory
     and any other canopy only when "List in the Blackout directory" is turned
-    on (off by default). The Black Mask chat panel starts everything private
-    (or, inside a canopy, restricted to that canopy's members; dens
-    encrypted). `VITE_BLACKOUT_NEW_ROOM_DEFAULT=private` at build time makes
-    the app start private too. The access chooser is at the top of both forms
+    on (off by default). The Black Mask chat panel starts a canopy private
+    wherever it is made, inside another canopy too, and a den private or,
+    inside a canopy, restricted to that canopy's members, and encrypted.
+    `VITE_BLACKOUT_NEW_ROOM_DEFAULT=private` at build time makes the app
+    start private too. The access chooser is at the top of both forms
     and says what each choice means; the playbook reveal, which has no
     chooser, says in one sentence what it is about to plant.
 -   **Not enforced anywhere but the client.** The homeserver accepts whatever
     join rule a client sends, and `POST /v1/discovery/index/canopies` accepts
-    a listing for any canopy from any signed-in account without checking the
-    canopy's join rule; a modified client can list a private canopy or make a
-    public one. A listing toggle for an existing canopy (space settings), and
-    re-listing or un-listing when a canopy's join rule changes later, are not
-    built: a canopy created private and later made public stays unlisted
-    until someone lists it, and one created public stays listed after being
-    made private.
+    a listing from any admin of the canopy (the power level needed to change
+    its power levels, read from the homeserver) without checking the canopy's
+    join rule; a modified client can list a private canopy its account
+    administers, or make a public one. If the API cannot check the canopy on
+    the homeserver, the listing is refused and the app says the canopy was
+    created but not listed. A listing toggle for an existing canopy (space
+    settings), and re-listing or un-listing when a canopy's join rule changes
+    later, are not built: a canopy created private and later made public stays
+    unlisted until one of its admins lists it, and one created public stays
+    listed after being made private.
 -   **The homeserver's encryption backstop keys on the preset, not on the
     join rule.** `encryption_enabled_by_default_for_room_type: invite` (both
     in-repo homeserver templates) makes Synapse add `m.room.encryption` to
@@ -149,6 +154,13 @@ For the source-of-truth triage with tier/owner detail see
     rooms (`routes/voice.ts`) and app installs (`services/apps.ts`) on the
     directory entry (`hasCanopy`), so a private canopy created with the toggle
     off cannot have them until it is listed; the toggle says so.
+-   **The panel makes rooms it cannot invite to.** The panel has New canopy
+    and New den screens but no invite screen, so people join a private
+    canopy or den made there by invitation, sent from Blackout; the screens
+    say so. The panel offers a den or canopy inside a canopy only when the
+    canopy's power levels let the signed-in user add rooms to it, the rule
+    the homeserver enforces; that check is the client's reading of the
+    room's state, and the homeserver's refusal remains the backstop.
 -   **Dens made before 2026-10-18** by the voice/forum/stage/announcement
     controls, the category menu, the Discord import or the Coliseum were
     invite-only by homeserver preset, not restricted to their canopy as the
@@ -299,6 +311,33 @@ For the source-of-truth triage with tier/owner detail see
 -   What a switch should release, and to whom, is an open product decision
     (N2 in
     [`docs/security/deadman-and-feeds-triage-2026-10-12.md`](docs/security/deadman-and-feeds-triage-2026-10-12.md)).
+
+### Admin-only API writes (2026-10-23)
+
+-   **Where:** the API's write routes under `/v1/governance`,
+    `/v1/moderation` (including `/v1/moderation/mjolnir`), `/v1/forum`,
+    `/v1/channels`, `/v1/growth` and `/v1/deaddrop`, the channel list, and the
+    discovery index other than canopy listing.
+-   **State:** only accounts on the operator's admin allowlist
+    (`BLACKOUT_ADMIN_USERS`) can use them. Each scope behind them covers a
+    route that changes shared state with no ownership or role check: the API
+    has no community membership or role model yet, so it cannot tell a
+    community's members or moderators from anyone else, and a dead drop can be
+    addressed to any account. Every other account gets 403. Before 2026-10-23
+    any signed-in account could use them by naming the scope in the
+    `x-blackout-capabilities` request header; that header can now only narrow
+    what the session token carries.
+-   **In the apps:** the Expo governance tab
+    (`packages/mobile/app/(tabs)/governance.tsx`) still lists proposals and
+    shows their tallies, but creating a proposal and voting are refused for an
+    account that is not on the allowlist. In the web app, scheduling or
+    cancelling a governance meeting, publishing a treasury snapshot or setting
+    a milestone, the Mjolnir ban-list and protection settings, and the growth
+    actions (referrals, ambassador applications, quests, migration credits)
+    were refused for every account before and still are for anyone not on the
+    allowlist.
+-   **Next:** a role model built from Matrix power levels
+    ([`docs/security/capability-header-triage-2026-10-23.md`](docs/security/capability-header-triage-2026-10-23.md)).
 
 ---
 

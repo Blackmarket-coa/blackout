@@ -11,13 +11,14 @@ process.env.JWT_AUDIENCE = process.env.JWT_AUDIENCE ?? 'blackout-client-test';
 process.env.AUTH_RATE_LIMIT_MAX = process.env.AUTH_RATE_LIMIT_MAX ?? '1000';
 
 const { default: app } = await import('../src/index');
-const { signJwt } = await import('../src/services/auth');
+const { signJwtWithScopes } = await import('./_fixtures/capabilityToken');
 const { db } = await import('../src/db/store');
 
+// No session token carries governance.write (the header can only narrow what a
+// token grants), so these tests sign a token whose claims carry it.
 const headers = (user = 'gov-user') => ({
-    authorization: `Bearer ${signJwt(user, 'govuser', 600)}`,
+    authorization: `Bearer ${signJwtWithScopes(user, 'govuser', ['governance.write'])}`,
     'content-type': 'application/json',
-    'x-blackout-capabilities': 'governance.read,governance.write',
 });
 
 const COMMUNITY = randomUUID();

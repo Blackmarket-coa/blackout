@@ -9,14 +9,16 @@ process.env.JWT_AUDIENCE = process.env.JWT_AUDIENCE ?? 'blackout-client-test';
 process.env.AUTH_RATE_LIMIT_MAX = process.env.AUTH_RATE_LIMIT_MAX ?? '1000';
 
 const { default: app } = await import('../src/index');
-const { signJwt } = await import('../src/services/auth');
+const { signJwtWithScopes } = await import('./_fixtures/capabilityToken');
 const { __resetMjolnirStoreForTests } = await import('../src/modules/moderationMjolnir');
 
+// No session token carries moderation.write (the header can only narrow what a
+// token grants), so these tests sign a token whose claims carry it.
 function authHeaders(userId: string) {
+    const username = userId.replace(/[^a-z0-9]/gi, '') || 'mod';
     return {
-        authorization: `Bearer ${signJwt(userId, userId.replace(/[^a-z0-9]/gi, '') || 'mod', 600)}`,
+        authorization: `Bearer ${signJwtWithScopes(userId, username, ['moderation.write'])}`,
         'content-type': 'application/json',
-        'x-blackout-capabilities': 'moderation.read,moderation.write',
     };
 }
 

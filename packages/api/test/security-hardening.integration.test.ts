@@ -13,8 +13,20 @@ const { default: app } = await import('../src/index');
 const { signJwt } = await import('../src/services/auth');
 const { isBlockedHost } = await import('../src/services/outboundEventWebhooks');
 const { db } = await import('../src/db/store');
+const { signJwtWithScopes } = await import('./_fixtures/capabilityToken');
 
+// A token whose claims carry `capabilities` on top of what every session token
+// carries. The header can only narrow what a token grants, so it cannot stand
+// in for a scope no session token carries (governance.write, deaddrop.write, ...).
 function headersFor(userId: string, capabilities: string[]) {
+    return {
+        authorization: `Bearer ${signJwtWithScopes(userId, userId, capabilities)}`,
+        'content-type': 'application/json',
+    };
+}
+
+// A default session token that names `capabilities` in the header.
+function headerAskingFor(userId: string, capabilities: string[]) {
     return {
         authorization: `Bearer ${signJwt(userId, userId, 600)}`,
         'content-type': 'application/json',
@@ -23,25 +35,25 @@ function headersFor(userId: string, capabilities: string[]) {
 }
 
 // ---------------------------------------------------------------------------
-// SEC-1 — the request header may not self-grant admin.* / cross-domain wildcards
+// SEC-1 — the request header cannot grant a scope the session token lacks
 // ---------------------------------------------------------------------------
 
 test('SEC-1: x-blackout-capabilities: admin.* does NOT grant a domain write', async () => {
     const res = await app.request('/v1/governance/proposals', {
         method: 'POST',
-        headers: headersFor('attacker-admin', ['admin.*']),
+        headers: headerAskingFor('attacker-admin', ['admin.*']),
         body: JSON.stringify({ communityId: 'community-1', title: 'Should be denied' }),
     });
     assert.equal(res.status, 403, 'admin.* asserted via header must not confer governance.write');
 });
 
-test('SEC-1: a concrete per-domain header capability still works', async () => {
+test('SEC-1: a concrete per-domain scope in the header does not grant it either', async () => {
     const res = await app.request('/v1/governance/proposals', {
         method: 'POST',
-        headers: headersFor('legit-proposer', ['governance.write']),
-        body: JSON.stringify({ communityId: 'community-1', title: 'Allowed' }),
+        headers: headerAskingFor('self-granted-proposer', ['governance.write']),
+        body: JSON.stringify({ communityId: 'community-1', title: 'Should be denied' }),
     });
-    assert.equal(res.status, 201);
+    assert.equal(res.status, 403, 'a header must not confer governance.write');
 });
 
 // ---------------------------------------------------------------------------

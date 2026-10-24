@@ -9,14 +9,15 @@ process.env.JWT_AUDIENCE = process.env.JWT_AUDIENCE ?? 'blackout-client-test';
 process.env.AUTH_RATE_LIMIT_MAX = process.env.AUTH_RATE_LIMIT_MAX ?? '1000';
 
 const { default: app } = await import('../src/index');
-const { signJwt } = await import('../src/services/auth');
+const { signJwtWithScopes } = await import('./_fixtures/capabilityToken');
 const { __resetGovernanceStoreForTests } = await import('../src/services/governanceStore');
 
+// No session token carries governance.write (the header can only narrow what a
+// token grants), so these tests sign a token whose claims carry it.
 function authHeaders(capabilities = ['governance.read', 'governance.write']) {
     return {
-        authorization: `Bearer ${signJwt('treasury-user', 'treasury', 600)}`,
+        authorization: `Bearer ${signJwtWithScopes('treasury-user', 'treasury', capabilities)}`,
         'content-type': 'application/json',
-        'x-blackout-capabilities': capabilities.join(','),
     };
 }
 
@@ -46,7 +47,7 @@ test('create → list returns the milestone', async () => {
     const body = (await list.json()) as { items: Array<{ milestoneId: string }> };
     assert.deepEqual(
         body.items.map((entry) => entry.milestoneId),
-        ['m1'],
+        ['m1']
     );
 });
 
@@ -63,7 +64,7 @@ test('archived milestones are excluded unless requested', async () => {
         method: 'POST',
         headers,
         body: JSON.stringify(
-            milestone('archived-1', { status: 'archived', createdAt: '2026-06-01T00:00:00.000Z' }),
+            milestone('archived-1', { status: 'archived', createdAt: '2026-06-01T00:00:00.000Z' })
         ),
     });
 
@@ -71,15 +72,17 @@ test('archived milestones are excluded unless requested', async () => {
     const defBody = (await def.json()) as { items: Array<{ milestoneId: string }> };
     assert.deepEqual(
         defBody.items.map((entry) => entry.milestoneId),
-        ['active-1'],
+        ['active-1']
     );
 
-    const all = await app.request('/v1/governance/treasury/milestones?includeArchived=1', { headers });
+    const all = await app.request('/v1/governance/treasury/milestones?includeArchived=1', {
+        headers,
+    });
     const allBody = (await all.json()) as { items: Array<{ milestoneId: string }> };
     // Newest-first by createdAt.
     assert.deepEqual(
         allBody.items.map((entry) => entry.milestoneId),
-        ['active-1', 'archived-1'],
+        ['active-1', 'archived-1']
     );
 });
 

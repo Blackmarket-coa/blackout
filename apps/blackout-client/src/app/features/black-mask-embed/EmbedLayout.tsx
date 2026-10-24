@@ -2,10 +2,13 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { useStore } from 'jotai';
 import { Link, Outlet, useNavigate } from 'react-router';
 import { EMBED_PATH } from '../../pages/paths';
+import { ToastOutlet } from '../../components/toast/ToastOutlet';
+import { useActiveTheme } from '../../hooks/useTheme';
 import { signOutPanel } from '../../../client/auth';
 import { restoreActiveSession } from '../../../client/sessionManager';
 import { panelSessionsActive } from '../../../client/storageNamespace';
 import { EmbedLinkGuard } from './EmbedLinkGuard';
+import { EmbedNewMenu } from './EmbedNew';
 import {
     linkStyle,
     mutedTextStyle,
@@ -21,16 +24,24 @@ import {
  */
 export const EmbedLayout = () => {
     const navigate = useNavigate();
+    const theme = useActiveTheme();
     const onInPanel = useCallback((path: string) => navigate(path), [navigate]);
     return (
         <EmbedLinkGuard onInPanel={onInPanel}>
             <div data-embed-root="" data-testid="embed-root" style={panelRootStyle}>
-                <EmbedHeader />
+                <EmbedHeader actions={<EmbedNewMenu />} />
                 {/* B3: only when the panel keeps its own session (client switch on). */}
                 {panelSessionsActive() ? <EmbedSessionBar /> : null}
                 <main style={panelMainStyle}>
                     <Outlet />
                 </main>
+                {/* The app's toasts, which ClientLayout shows and the panel does not
+                    render: a canopy made here that could not be listed says so in
+                    one. The theme classes give it its folds colours, which nothing
+                    else sets in the panel. */}
+                <div className={theme.classNames.join(' ')}>
+                    <ToastOutlet />
+                </div>
             </div>
         </EmbedLinkGuard>
     );
@@ -99,7 +110,14 @@ export const EmbedSessionBar = () => {
     );
 };
 
-export const EmbedHeader = ({ signedIn = true }: { signedIn?: boolean }) => (
+export const EmbedHeader = ({
+    signedIn = true,
+    actions,
+}: {
+    signedIn?: boolean;
+    /** Signed in only: controls shown before "Open Blackout" (the New menu). */
+    actions?: React.ReactNode;
+}) => (
     <header style={panelHeaderStyle}>
         {signedIn ? (
             <Link
@@ -111,20 +129,23 @@ export const EmbedHeader = ({ signedIn = true }: { signedIn?: boolean }) => (
         ) : (
             <strong>Blackout chat</strong>
         )}
-        {/*
-         * target/rel are a fallback for when the link guard is not in play:
-         * even then this opens a new top-level tab instead of navigating the
-         * panel's frame.
-         */}
-        <a
-            href="/"
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{ ...linkStyle, fontSize: 13 }}
-            data-testid="embed-open-blackout"
-        >
-            Open Blackout
-        </a>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            {actions}
+            {/*
+             * target/rel are a fallback for when the link guard is not in play:
+             * even then this opens a new top-level tab instead of navigating the
+             * panel's frame.
+             */}
+            <a
+                href="/"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ ...linkStyle, fontSize: 13 }}
+                data-testid="embed-open-blackout"
+            >
+                Open Blackout
+            </a>
+        </div>
     </header>
 );
 

@@ -47,10 +47,12 @@ you are:
     encrypted** unless you choose otherwise. A den created inside a canopy
     that is not public starts restricted to that canopy's members and
     encrypted.
--   In the Black Mask chat panel (`/embed`), a new canopy or den starts
-    **private** (or, inside a canopy, restricted to that canopy's members),
-    and a den is encrypted. The panel does not offer creation yet; these are
-    the defaults it will use.
+-   In the Black Mask chat panel (`/embed`), a new canopy starts **private**
+    (invite-only) wherever you make it, and a new den starts **private** or,
+    inside a canopy, restricted to that canopy's members; a den is
+    encrypted. The panel's New canopy and New den screens use these
+    defaults. The panel has no invite screen: you invite people from
+    Blackout.
 -   An operator can make the app start private everywhere by building the
     client with `VITE_BLACKOUT_NEW_ROOM_DEFAULT=private`
     ([`newRoomDefaults.ts`](apps/blackout-client/src/app/components/create-room/newRoomDefaults.ts)
@@ -60,8 +62,8 @@ A public canopy is listed in the Blackout canopy directory; any other canopy
 is listed only if you turn "List in the Blackout directory" on when creating
 it. These are the client's defaults, not a server rule: the homeserver accepts
 whatever access a client asks for, and the directory accepts a listing from
-any signed-in account. Encryption is decided when a room is created; changing
-who can join later does not add or remove it.
+any of the canopy's admins, whatever its join rule. Encryption is decided when
+a room is created; changing who can join later does not add or remove it.
 
 This was **not** true before 2026-08-10. Thirteen server paths and five client
 paths created plaintext rooms, and the homeserver was not compensating. We found

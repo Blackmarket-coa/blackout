@@ -10,6 +10,7 @@ process.env.AUTH_RATE_LIMIT_MAX = process.env.AUTH_RATE_LIMIT_MAX ?? '1000';
 
 const { default: app } = await import('../src/index');
 const { resetGrowthForTest } = await import('../src/services/growth');
+const { signJwtWithScopes } = await import('./_fixtures/capabilityToken');
 
 async function issueToken(): Promise<{ token: string; sub: string }> {
     const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -25,7 +26,10 @@ async function issueToken(): Promise<{ token: string; sub: string }> {
     });
     assert.equal(response.status, 201);
     const body = (await response.json()) as { token: string; userId: string };
-    return { token: body.token, sub: body.userId };
+    // No session token carries growth.write (an allowlisted admin holds it
+    // until a role model exists, and the header can only narrow), so the
+    // tests of the growth write routes use a token whose claims carry it.
+    return { token: signJwtWithScopes(body.userId, username, ['growth.write']), sub: body.userId };
 }
 
 const buildHeaders = (token: string, capabilities: string[]) => ({
@@ -81,7 +85,9 @@ test('migration credits: list mine + redeem flips redeemedAt', async () => {
             valueCents: 500,
         }),
     });
-    const { credit } = (await issued.json()) as { credit: { id: string; redeemedAt: string | null } };
+    const { credit } = (await issued.json()) as {
+        credit: { id: string; redeemedAt: string | null };
+    };
     assert.equal(credit.redeemedAt, null);
 
     const list = await app.request('/v1/growth/migration-credits/me', { headers });
@@ -89,19 +95,19 @@ test('migration credits: list mine + redeem flips redeemedAt', async () => {
     const listBody = (await list.json()) as { items: { id: string }[] };
     assert.equal(listBody.items.length, 1);
 
-    const redeemed = await app.request(
-        `/v1/growth/migration-credits/${credit.id}/redeem`,
-        { method: 'POST', headers },
-    );
+    const redeemed = await app.request(`/v1/growth/migration-credits/${credit.id}/redeem`, {
+        method: 'POST',
+        headers,
+    });
     assert.equal(redeemed.status, 200);
     const redeemedBody = (await redeemed.json()) as { credit: { redeemedAt: string | null } };
     assert.ok(redeemedBody.credit.redeemedAt);
 
     // Re-redeem returns the same record (idempotent).
-    const recheck = await app.request(
-        `/v1/growth/migration-credits/${credit.id}/redeem`,
-        { method: 'POST', headers },
-    );
+    const recheck = await app.request(`/v1/growth/migration-credits/${credit.id}/redeem`, {
+        method: 'POST',
+        headers,
+    });
     assert.equal(recheck.status, 200);
 });
 
@@ -119,10 +125,10 @@ test('migration credits: redeem rejects another user', async () => {
     });
     const { credit } = (await issued.json()) as { credit: { id: string } };
 
-    const stolen = await app.request(
-        `/v1/growth/migration-credits/${credit.id}/redeem`,
-        { method: 'POST', headers: intruderHeaders },
-    );
+    const stolen = await app.request(`/v1/growth/migration-credits/${credit.id}/redeem`, {
+        method: 'POST',
+        headers: intruderHeaders,
+    });
     assert.equal(stolen.status, 404);
 });
 

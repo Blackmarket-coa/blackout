@@ -199,7 +199,8 @@ export async function verifyPasswordConstantTimeAsync(
 
 /**
  * Comma-separated allowlist of admin usernames or full user ids. Shared by
- * the admin route gate and capability minting so "who is an admin" has a
+ * the admin route gates and the admin-only capability scopes
+ * (`ADMIN_ONLY_SCOPES` in `modules/authz.ts`) so "who is an admin" has a
  * single source of truth.
  */
 export const adminAllowlist = (): Set<string> =>
@@ -217,19 +218,24 @@ export const isAdminUser = (userId: string, username: string): boolean => {
 
 /**
  * Capabilities embedded in a freshly minted session token. Every authenticated
- * user gets read access to all guarded feature domains, plus write only where
- * the owning module enforces per-resource ownership: `streaming.write` (the
- * streaming module checks per-creator ownership) and `profile.write` (the
- * profile module checks `subject === userId`). Domains whose write path is
- * gated solely by the capability (e.g. governance, moderation) are kept
- * read-only here so a normal token can't moderate or govern.
+ * user gets read access to every guarded feature domain except `channels`,
+ * plus write only where every route behind the scope checks per-resource
+ * ownership or also takes an admin: `streaming.write` (per creator),
+ * `profile.write` (`subject === userId`), `stego.write` (each account's own
+ * channels) and `discovery.write` (listing a canopy takes being its admin on
+ * the homeserver; the other discovery index writes also take an allowlisted
+ * admin).
+ *
+ * Not minted: the write scopes whose routes change shared state with no
+ * ownership or role check (governance, moderation, forum, channels, growth,
+ * and dead drops, which can be addressed to any account), which only an
+ * allowlisted admin holds (`ADMIN_ONLY_SCOPES` in `modules/authz.ts`), and
+ * `deadman.write`, held back until it is decided whether the app may arm a
+ * dead-man switch (N2 in
+ * `docs/security/deadman-and-feeds-triage-2026-10-12.md`). The
+ * `x-blackout-capabilities` header can only narrow this set.
  */
 export function deriveUserCapabilities(): string[] {
-    // Read access to every guarded feature domain is granted to all users.
-    // Write is granted only where the module enforces per-resource ownership
-    // (streaming: per-creator; profile: subject === userId). Domains that gate
-    // mutations solely on the capability (governance, moderation, etc.) are
-    // intentionally read-only here to avoid universal write access.
     return [
         'streaming.read',
         'streaming.write',
@@ -241,7 +247,9 @@ export function deriveUserCapabilities(): string[] {
         'deadman.read',
         'moderation.read',
         'discovery.read',
+        'discovery.write',
         'stego.read',
+        'stego.write',
         'growth.read',
     ];
 }

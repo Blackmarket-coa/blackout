@@ -26,9 +26,11 @@ export interface CanopyDirectoryEntry {
  *
  * Without this, a freshly created canopy is invisible to browse/search and —
  * because `hasCanopy` gates them server-side — its voice rooms and app installs
- * can't be created. The server requires the `discovery.write` capability,
- * asserted via the `x-blackout-capabilities` header (see
- * `packages/api/src/modules/authz.ts`).
+ * can't be created. The session token carries the `discovery.write`
+ * capability, and the server also requires the caller to be an admin of the
+ * canopy on the homeserver (`packages/api/src/services/canopyListingGate.ts`).
+ * The `x-blackout-capabilities` header can only narrow what the token grants
+ * (`packages/api/src/modules/authz.ts`); it names the one scope this call uses.
  *
  * Resolves the Blackout API JWT lazily via `ensureBlackoutApiToken()` so it
  * works even when called right after space creation (before a passed-in token

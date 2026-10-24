@@ -11,6 +11,7 @@ process.env.BLACKOUT_DB_MODE = process.env.BLACKOUT_DB_MODE ?? 'memory';
 
 const { default: app } = await import('../src/index');
 const { questsService } = await import('../src/services/growth');
+const { signJwtWithScopes } = await import('./_fixtures/capabilityToken');
 
 async function issueToken(): Promise<{ token: string; userId: string }> {
     const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -24,7 +25,11 @@ async function issueToken(): Promise<{ token: string; userId: string }> {
         }),
     });
     assert.equal(response.status, 201);
-    return (await response.json()) as { token: string; userId: string };
+    const { userId } = (await response.json()) as { userId: string };
+    // No session token carries growth.write (an allowlisted admin holds it
+    // until a role model exists, and the header can only narrow), so the
+    // tests of the growth write routes use a token whose claims carry it.
+    return { token: signJwtWithScopes(userId, `quests-user-${suffix}`, ['growth.write']), userId };
 }
 
 const headersFor = (token: string) => ({
