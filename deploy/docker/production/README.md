@@ -49,6 +49,15 @@ Ordering is explicit via `depends_on`:
 
 `app` also runs migrations in its start command before booting traffic handlers.
 
+### Stopping `app`
+
+`docker compose stop`, a restart or a redeploy sends SIGTERM to the container's PID 1, and SIGKILL once `stop_grace_period` has passed: 20 s for `app` and `app_canary`, twice the API's `SHUTDOWN_TIMEOUT_MS` default (10 s, which is also Docker's default grace).
+
+-   The API is PID 1, so it receives the signal itself. The `app` command runs `./bin/migrate`, then `exec`s `bin/start-app`, which execs node. `app_canary` runs the image's `CMD`, `./bin/start-app`. While the migrations run, the shell is PID 1 and ignores SIGTERM, so a stop then waits out the grace period.
+-   On SIGTERM the API stops accepting connections. Once every connection has closed, it flushes the write-behind store and exits 0. The store acknowledges a write once its in-memory mirror has it, and writes it to Postgres just after (`packages/api/src/db/writeBehindQueue.ts`). The flush is what keeps a stop from losing the writes still queued.
+-   If a connection is still open after `SHUTDOWN_TIMEOUT_MS`, the API exits 0 without the flush. An SSE stream or a WebSocket client, such as an OBS overlay, stays open until its client leaves, so while one is connected every stop takes this path. When Postgres keeps up, the queue has usually emptied by then; any write still queued at that point is lost.
+-   Requests the API had not started handling when it stopped accepting are reset, not answered.
+
 ### The worker
 
 `worker` runs the API's periodic loops (`packages/api/src/backgroundLoops.ts`), so the `app` replicas, started with `BLACKOUT_BACKGROUND_WORKERS_DISABLED=1`, only serve requests.
