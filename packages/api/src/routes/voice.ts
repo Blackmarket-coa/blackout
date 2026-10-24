@@ -38,6 +38,8 @@ const moderationSchema = roomCoordsSchema.extend({
     locked: z.boolean().optional(),
 });
 
+const MODERATION_ACTIONS: ReadonlySet<string> = new Set(['lock', 'mute', 'remove']);
+
 function canModerate(role: VoiceRole): boolean {
     return role === 'admin' || role === 'moderator';
 }
@@ -309,6 +311,13 @@ voice.post('/rooms/moderation/:action', async (c) => {
     if (user instanceof Response) return user;
 
     const action = c.req.param('action');
+    // Anything else used to be logged as a `remove` that removed nobody.
+    if (!MODERATION_ACTIONS.has(action)) {
+        return c.json(
+            { code: 'unknown_action', message: 'Moderation actions are lock, mute and remove' },
+            404
+        );
+    }
     const parsed = await readJsonBody(c, moderationSchema);
     if (parsed instanceof Response) return parsed;
     const { canopyId, channelId } = parsed;
@@ -365,7 +374,13 @@ voice.post('/rooms/moderation/:action', async (c) => {
     return c.json({ ok: true, action, targetUserId });
 });
 
+// Who is in the room and its join, leave and moderation history: not for
+// anonymous callers. Which signed-in callers may read it is still open (V2 in
+// docs/security/capability-header-triage-2026-10-23.md).
 voice.get('/rooms/:canopyId/:channelId/events', (c) => {
+    const user = requireUser(c);
+    if (user instanceof Response) return user;
+
     const canopyId = c.req.param('canopyId');
     const channelId = c.req.param('channelId');
 

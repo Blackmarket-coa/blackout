@@ -764,3 +764,54 @@ test('V-9: a room locked while the homeserver is being asked still refuses a mem
     }
     assert.deepEqual(activeIds(roomId), []);
 });
+
+test("V-10: a voice room's event feed needs a signed-in caller", async () => {
+    const { canopyId, member } = seedCanopy();
+    const { channelId } = seedRoom(canopyId);
+    await joinAs(member, canopyId, channelId);
+    const path = `/v1/voice/rooms/${encodeURIComponent(canopyId)}/${encodeURIComponent(
+        channelId
+    )}/events`;
+
+    // It lists who is in the room and the room's join, leave and moderation history.
+    assert.deepEqual(await refusal(await app.request(path)), {
+        status: 401,
+        code: 'unauthorized',
+    });
+
+    const signedIn = await app.request(path, {
+        headers: {
+            authorization: `Bearer ${signJwt(member.id, member.username, 600)}`,
+            'x-forwarded-for': addressOf(member.id),
+        },
+    });
+    assert.equal(signedIn.status, 200);
+    const body = (await signedIn.json()) as { activeParticipants: Array<{ userId: string }> };
+    assert.deepEqual(
+        body.activeParticipants.map((p) => p.userId),
+        [member.id]
+    );
+});
+
+test('V-11: an unknown moderation action is refused and records nothing', async () => {
+    const { canopyId, moderator, member } = seedCanopy();
+    const { channelId, roomId } = seedRoom(canopyId);
+    await joinAs(member, canopyId, channelId);
+
+    matrix.clearCalls();
+    assert.deepEqual(
+        await refusal(
+            await post('/rooms/moderation/kick', moderator, {
+                canopyId,
+                channelId,
+                targetUserId: member.id,
+            })
+        ),
+        { status: 404, code: 'unknown_action' }
+    );
+    // Refused before the homeserver is asked; no "remove" is logged for a removal
+    // that never happened, and the member is still in the room.
+    assert.deepEqual(matrix.stateReads, []);
+    assert.deepEqual(moderationLog(roomId), []);
+    assert.deepEqual(activeIds(roomId), [member.id]);
+});
