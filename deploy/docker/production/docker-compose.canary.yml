@@ -35,6 +35,11 @@ services:
             CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
             CORS_ALLOW_CREDENTIALS: ${CORS_ALLOW_CREDENTIALS:-true}
             CANARY: '1'
+        # No command: the image's CMD, ./bin/start-app, execs node, so the API is
+        # PID 1 and receives the SIGTERM it drains on. Its drain budget is
+        # SHUTDOWN_TIMEOUT_MS (10 s by default), Docker's default grace; twice
+        # that lets it finish before the SIGKILL.
+        stop_grace_period: 20s
         secrets:
             - db_password
             - cache_password

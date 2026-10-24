@@ -35,7 +35,17 @@ services:
             REDIS_URL: ${REDIS_URL:-redis://cache:6379}
             CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
             CORS_ALLOW_CREDENTIALS: ${CORS_ALLOW_CREDENTIALS:-true}
-        command: ['/bin/sh', '-lc', './bin/migrate && ./bin/start-app']
+        # Migrations run first, under the shell. `exec` then replaces the shell
+        # with start-app, which execs node, so the API is PID 1 and receives the
+        # SIGTERM it drains on, whichever shell /bin/sh is: busybox ash (the
+        # image's) already execs a last command, dash does not. Until then the
+        # shell is PID 1 and ignores SIGTERM, so a stop during the migrations
+        # still waits out the grace period.
+        command: ['/bin/sh', '-lc', './bin/migrate && exec ./bin/start-app']
+        # The API gives its drain SHUTDOWN_TIMEOUT_MS (10 s by default) and
+        # exits on its own by then; Docker's default grace is also 10 s, so a
+        # slow drain would race the SIGKILL. Twice the budget lets it finish.
+        stop_grace_period: 20s
         secrets:
             - db_password
             - cache_password
