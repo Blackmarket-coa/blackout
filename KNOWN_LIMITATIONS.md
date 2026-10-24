@@ -254,10 +254,13 @@ For the source-of-truth triage with tier/owner detail see
 -   **Not there yet:** you cannot see or cancel a scheduled message in the app.
     A message that cannot be delivered is dropped after 5 attempts without
     notice, and one refused at send time (you left the room, or it became
-    encrypted) is dropped without notice too. Nothing is sent where the API's
-    background loops do not run against the loaded store: in
-    `deploy/docker/production` the worker does not load the store at this
-    commit, so scheduled messages are stored there but never posted.
+    encrypted) is dropped without notice too. A message the server reaches
+    more than 15 minutes (by default) after its time, after an outage for
+    example, is not sent late: it ends as failed (`expired_overdue`) with its
+    text cleared, also without notice, and only your data export shows it.
+    Messages are sent by the one server process that runs the API's
+    background loops (in `deploy/docker/production`, the `worker` service);
+    while none runs, nothing is sent.
 
 ### Deleting your account
 
@@ -284,6 +287,15 @@ For the source-of-truth triage with tier/owner detail see
     through the API only after it fires. Giving them the key is up to you:
     the server never decrypts the payload and never delivers it. A recipient
     named by Matrix id or room id never matches anyone.
+-   If the server reaches your switch more than 15 minutes (by default) after
+    it was due, because its background loops were down, it does not fire the
+    switch then: the switch goes to grace with at least 72 hours left from
+    that moment, once per missed check-in, and a check-in ends that as usual.
+    So an outage can delay a release by its own length plus up to 72 hours.
+    The grace and triggered events the sweep records stay in the memory of
+    the process that ran it, so where that is a separate worker
+    (`deploy/docker/production`) the event feed does not list them; the
+    switch's status and release time do show them.
 -   What a switch should release, and to whom, is an open product decision
     (N2 in
     [`docs/security/deadman-and-feeds-triage-2026-10-12.md`](docs/security/deadman-and-feeds-triage-2026-10-12.md)).

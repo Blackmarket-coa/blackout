@@ -65,8 +65,16 @@ homeserver (`packages/api/test/_fixtures/matrixStub.ts`), so CI's
     DM-shaped ones writable, by any signed-in account.
 -   **Where delivery runs.** The dispatcher posts only where the background loops
     run against the loaded store. In `deploy/docker/production` the loops run in
-    the worker, which does not load the store at `1555912`; scheduled messages are
-    stored there and never posted. That is a separate change, not part of this one.
+    the worker, which did not load the store at `1555912`; scheduled messages were
+    stored there and never posted. Fixed in a separate change on 2026-10-23: the
+    worker loads the store through the API's own boot before any loop starts
+    (`packages/api/src/backgroundWorker.ts`). With it, a message the dispatcher
+    reaches more than the backlog tolerance after its time (15 minutes at the
+    default cadence) expires unsent: it ends `failed` with `lastError`
+    `expired_overdue` and its text cleared, the retention every finished row
+    gets (P1). So the first working start posts none of the backlog, and the
+    authors are not told (S4/E3). Tests B-1 to B-5 in
+    `test/scheduled-messages.integration.test.ts`.
 
 Not in this record: findings from the same investigation about other features
 are triaged with their own fixes.
