@@ -61,7 +61,7 @@
  *
  * Nothing here is enforced by a server: the homeserver accepts whatever join
  * rule the client sends, and the API accepts a listing request from any
- * signed-in caller. This table is the client's default, not a guarantee.
+ * admin of the canopy. This table is the client's default, not a guarantee.
  */
 import { isEmbedPath } from '../../features/black-mask-embed/embedPaths';
 import { CreateRoomKind } from './kind';

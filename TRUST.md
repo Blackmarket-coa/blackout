@@ -60,8 +60,8 @@ A public canopy is listed in the Blackout canopy directory; any other canopy
 is listed only if you turn "List in the Blackout directory" on when creating
 it. These are the client's defaults, not a server rule: the homeserver accepts
 whatever access a client asks for, and the directory accepts a listing from
-any signed-in account. Encryption is decided when a room is created; changing
-who can join later does not add or remove it.
+any of the canopy's admins, whatever its join rule. Encryption is decided when
+a room is created; changing who can join later does not add or remove it.
 
 This was **not** true before 2026-08-10. Thirteen server paths and five client
 paths created plaintext rooms, and the homeserver was not compensating. We found

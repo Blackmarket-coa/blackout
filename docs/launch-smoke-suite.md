@@ -20,6 +20,11 @@ This suite defines launch-blocking smoke coverage for:
     -   `smoke_member_a`
     -   `smoke_member_b`
     -   `smoke_moderator` (moderation privileges)
+-   Until the API has a community role model, it accepts moderation actions,
+    proposals and votes only from accounts on `BLACKOUT_ADMIN_USERS`
+    (`docs/security/capability-header-triage-2026-10-23.md`): `smoke_owner`,
+    `smoke_member_a` and `smoke_moderator` must be on it for LS-MOD-01,
+    LS-GOV-01 and LS-GOV-02.
 -   Seeded artifacts:
     -   One room for messaging and moderation (`#smoke-launch`).
     -   DM capability enabled between `smoke_member_a` and `smoke_member_b`.

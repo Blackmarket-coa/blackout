@@ -149,7 +149,7 @@ panel column never changes. Paths with their own explicit choice keep it: Form
 a party (restricted, encrypted), streaming kits (per kit), the Discord import's
 canopy (private) and DMs. Nothing enforces any of this on a server: the
 homeserver accepts the join rule it is sent and the API accepts a listing from
-any signed-in account (`KNOWN_LIMITATIONS.md`, "New canopy and den defaults").
+any admin of the canopy (`KNOWN_LIMITATIONS.md`, "New canopy and den defaults").
 The panel's "Not shown" list above still holds; a New control and the routes
 behind it are a separate step.
 
