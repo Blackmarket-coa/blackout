@@ -32,7 +32,9 @@ the bumps:
     sanitizer options.
 -   **Eight more advisories landed while this was in progress** (2026-10-23,
     21:36–22:09 UTC), in fast-uri, nodemailer and serialize-javascript. They are
-    fixed in separate commits.
+    fixed in separate commits. CI's dependency audit now reports them on any
+    branch with develop's lockfile (PR #966: 25 advisories in 9 packages); this
+    branch clears all 25.
 
 One ignore was deleted because GitHub withdrew its advisory. Nothing was added
 to `osv-scanner.toml`, `.trivyignore` or `pnpm.auditConfig.ignoreGhsas`.
@@ -520,16 +522,61 @@ them; only the any-severity audit did.
         -   So a crafted registered address can have mail delivered to a domain other
             than the one it names. Whether anything trusts a verified address's
             domain was not assessed.
-    -   **Outcome:**
-        -   The override `nodemailer` and `packages/api`'s range both move from
-            `^10.0.9` to `^10.1.4`. The lockfile resolves 10.1.4, the smallest fix;
-            10.2.1 is the latest.
-        -   10.0.14–10.1.4 are hardening releases (addressparser, SMTP timeouts and
-            421 handling, error codes).
-        -   The API's smtp-mailer, failover-mailer, resend-mailer and
-            email-verification suites pass 22/22 on 10.1.4. These include the retry
-            and error-classification cases that read nodemailer's error codes. The
-            full API suites pass too (see [Verification](#verification)).
+    -   **Outcome:** the override `nodemailer` and `packages/api`'s range both
+        move from `^10.0.9` to `^10.1.4`. The lockfile resolves 10.1.4, the
+        smallest fix; 10.2.1 is the latest.
+    -   **What else changed from 10.0.13 to 10.1.4**, from the changelog,
+        checked in the tarball diff. `integrations/smtp.ts` calls
+        `createTransport({ host, port, secure, auth })` and sends `from`, `to`,
+        `subject`, `text`, `html` and one header. The changes that bear on
+        that:
+        -   addressparser: the three fixes above, further parsing fixes in
+            10.0.14, 10.0.16 and 10.1.4, and group nesting capped at 10 levels
+            (was 50).
+        -   SMTP connection: the session ends on any 421 reply; the wait for the
+            greeting counts against `connectionTimeout`; Nagle is off; TCP
+            keepalive starts after 30 s idle; a second `connect()` is refused.
+            The default timeouts are unchanged (connection 2 min, greeting 30 s,
+            socket 10 min).
+        -   New limits: 100,000 recipients per message (`EMAXRECIPIENTS`);
+            domains longer than DNS allows (253, or a 63-character label) are no
+            longer handed to the IDN encoder; nodemailer's own fetch, used only
+            for content given as a URL, gets a 2-minute `maxTime`. The API sends
+            one recipient and no URL content.
+        -   Errors: `NodemailerError` takes its `code` from the underlying Node
+            error (10.0.15). The Ethereal test-account settings and the network
+            interface table are read on first use, not at import.
+        -   Still no dependencies; `engines` is still `node >=20`.
+    -   **The API's mail tests do not run nodemailer.** The eight suites that
+        touch mail (smtp-mailer, failover-mailer, resend-mailer,
+        email-verification, auth-lifecycle, deploy-critical-smoke,
+        emailless-auth, scheduled-messages) inject a scripted `transport` or an
+        in-memory mailer, and the errors they classify are built by hand. They
+        pass 68/68 on this branch. That shows the API's own retry and failover
+        logic is unchanged, and nothing about nodemailer.
+    -   **So nodemailer was run against a local SMTP server.** A scratch harness
+        (not committed) drove `createSmtpMailer` against a scripted SMTP server
+        three ways: with a transport from nodemailer 10.0.13; with one from
+        10.1.4 (both from registry tarballs checked against their `sha512`); and
+        with no injected transport, so that `smtp.ts`'s own `createTransport`
+        ran on the installed 10.1.4.
+        -   **Cases:** the verification email as `routes/auth.ts` composes it; a
+            text and HTML message with a non-ASCII subject, display name and
+            body; `AUTH PLAIN` accepted; 535 on AUTH; 550 and 451 on RCPT; 421 on
+            MAIL FROM; a 421 greeting; 554 after DATA; a refused connection.
+        -   **Result:** in all ten, the versions agree on the outcome, the
+            error's `code`, `responseCode` and `command`, the attempts and
+            connections, every SMTP command, and the message bytes (Message-ID,
+            Date and the MIME boundary masked). The API's classification holds
+            on 10.1.4: EAUTH/535, EENVELOPE/550 and EMESSAGE/554 fail at once;
+            EENVELOPE/451, EENVELOPE/421, EPROTOCOL/421 (greeting) and ESOCKET
+            are retried to the three-attempt limit.
+        -   **The fix, through the same path:** with each advisory's PoC as
+            `to`, 10.0.13 sent `RCPT TO:<"\"a"@evil.com>`, `<evil@evil.com>` and
+            `<evil@evil.com>`; 10.1.4 sent `<"a@evil.com "@good.com>`,
+            `<v@victim.com>` and `<v@victim.com>`. The first lands on the domain
+            the header names but is not the RFC 5322 mailbox
+            (`"a@evil.com>"@good.com`): 10.1.4 writes the quoted `>` as a space.
 -   **fast-uri 3.1.8 → 3.1.9** (GHSA-333x-w4r6-6crp Low, GHSA-w74x-v6f9-j3xg
     Moderate, GHSA-wjr9-j795-jxcr Moderate, GHSA-xhq7-xmqj-769h Low).
     -   **What:** scheme injection and spoofing, host confusion, and path
@@ -551,7 +598,8 @@ them; only the any-severity audit did.
     -   **Outcome:** override `serialize-javascript@6.0.2` `^7.0.5` → `^7.1.3`.
         7.1.4 exists, with tighter function-classification regexes and no advisory.
 -   **Source:** OSV and GitHub advisory files; npm registry; nodemailer 10.1.4
-    `CHANGELOG.md`; serialize-javascript 7.1.3 / 7.1.4 tarball diff.
+    `CHANGELOG.md` and the 10.0.13 → 10.1.4 tarball diff; serialize-javascript
+    7.1.3 / 7.1.4 tarball diff.
 
 ---
 
@@ -604,6 +652,11 @@ them; only the any-severity audit did.
    earlier re-baselines compared against.
 8. **Only the e2e smoke job sees a client that does not boot.** The build and
    bundle-size jobs both passed on a bundle that never mounted.
+9. **No test runs nodemailer.** Every API mail test replaces the transport or
+   the mailer. A nodemailer upgrade, or a change to how `smtp.ts` calls it,
+   passes every gate without nodemailer having run. A test against a local SMTP
+   server, like the harness in the nodemailer section, would cover it. Not
+   added here.
 
 ## Verification
 
@@ -619,8 +672,21 @@ is this document. Commands are as in `ci.yml`. Node 22.22.0 and pnpm 9.15.4
 | Trivy v0.69.3 (`security.yml` flags), `git archive` export | exit 1: pnpm-lock 1 (vite CVE-2026-112942), requirements.txt 27 (4 C / 23 H) | exit 0: 0 / 0 / 0, with the DB the "before" run used (2026-10-23T19:15Z) and with a fresh one (2026-10-24T01:18Z) |
 | `pnpm audit --prod --audit-level high`                     | not run                                                                      | exit 0: "3 high (3 ignored)" (image-size ×2, react-router)                                                        |
 
-develop's audit was measured before the eight overnight advisories existed;
-run today it would also report them.
+develop's audit in that table was measured before the eight overnight
+advisories existed.
+
+**Re-run before hand-off** (2026-10-24, 02:53 UTC, at `407922f`, whose lockfile
+and code are those of `5324597`):
+
+-   **This branch:** osv-scanner v2.3.3 exits 0, "No issues found", 3 filtered.
+-   **develop's `pnpm-lock.yaml` and `osv-scanner.toml`:** exit 1, "Total 9
+    packages affected by 25 known vulnerabilities (0 Critical, 3 High, 16
+    Medium, 6 Low, 0 Unknown)", plus the GHSA-vfj7 unused-ignore line.
+-   **CI:** CI's "Dependency audit" job for PR #966 (job 120757709026, 02:46
+    UTC, head `7e66a6a`) reported the same 25 rows: ID, package, version and
+    fixed version, compared row by row. That head's `pnpm-lock.yaml` and
+    `osv-scanner.toml` are the same blobs as develop's. The 25 are the 17
+    above plus the eight published overnight.
 
 In both Trivy runs `.trivyignore` suppressed the same three as before:
 GHSA-qwww-vcr4-c8h2 and image-size's CVE-2025-71329 / CVE-2025-71330.
@@ -643,6 +709,8 @@ GHSA-qwww-vcr4-c8h2 and image-size's CVE-2025-71329 / CVE-2025-71330.
 | API, PR gate           | `BLACKOUT_DB_MODE=memory BLACKOUT_API_SKIP_LISTEN=1 NODE_ENV=test pnpm --filter @blackout/api test:integration` | 1788 / 1788, 0 skipped                                                                                                                          |
 | API, launch smoke      | same env, `test:launch-smoke`                                                                                   | 14 / 14                                                                                                                                         |
 | API, post-merge        | `cd packages/api && npx tsx --test --test-force-exit --test-concurrency=1 test/**/*.test.ts`, no `BLACKOUT_*`   | 1904 / 1904, 0 skipped (all 245 files: bash passes the glob through and Node expands it)                                                        |
+| API mail suites        | same env, `npx tsx --test --test-force-exit --test-concurrency=1` on the eight mail test files                  | 68 / 68, at `407922f` (none of them runs nodemailer; see the nodemailer section)                                                                |
+| nodemailer over SMTP   | scratch harness: `createSmtpMailer` against a scripted local SMTP server, 10.0.13 vs 10.1.4                     | at `407922f`: 10 / 10 cases identical; the three advisory PoCs now go to the named domain                                                       |
 | mobile                 | `pnpm --filter blackout-mobile run preflight`, `typecheck`, `test`, `build`                                     | pass; tests 18 / 18; `build` (the client build via `build:web`) passes                                                                          |
 | room encryption        | `node tools/ci/check-room-encryption.mjs`; `node --test tools/ci/check-room-encryption.test.mjs`                | OK (10 call sites); 12 / 12                                                                                                                     |
 | prettier               | `npx prettier --check --ignore-unknown` on every changed file                                                   | pass (`legacy/` and the lockfile are prettier-ignored; the `.toml` and `.txt` have no parser; this file is formatted by the commit hook)        |
@@ -653,4 +721,7 @@ GHSA-qwww-vcr4-c8h2 and image-size's CVE-2025-71329 / CVE-2025-71330.
     was exercised in Python 3.11.17 venvs built from `requirements.txt`.
 -   No Synapse (Python) tests were run. Nothing under `apps/blackout-server` was
     changed.
+-   nodemailer ran against a scripted local server, not a real MTA, and
+    without TLS (STARTTLS, or implicit TLS on 465), a proxy, or a slow server.
+    The changed greeting-timeout accounting was not exercised.
 -   The reachability statements marked "not assessed" above.
