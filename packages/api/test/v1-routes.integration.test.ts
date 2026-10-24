@@ -17,6 +17,7 @@ const { default: app } = await import('../src/index');
 const { signJwt } = await import('../src/services/auth');
 const { applySubscriptionWebhookEvent } = await import('../src/services/subscriptions');
 const { upsertCanopy } = await import('../src/services/canopyDirectory');
+const { db } = await import('../src/db/store');
 const { signJwtWithScopes } = await import('./_fixtures/capabilityToken');
 
 // W1b: the Lago/Stripe webhook endpoints are gone — Canopy state changes are
@@ -368,9 +369,22 @@ function registerTestCanopy(canopyId: string): void {
     upsertCanopy({ canopyId, name: canopyId });
 }
 
+// A voice room as a canopy moderator leaves it. Creating one through the API
+// takes being a moderator of the canopy on the homeserver, which this file does
+// not stub either (test/voice-roles.integration.test.ts covers it).
+function registerTestVoiceRoom(canopyId: string, channelId: string): void {
+    db.createOrUpdateVoiceRoom({
+        canopyId,
+        channelId,
+        createdBy: 'test-moderator',
+        livekitRoomName: `canopy-${canopyId}-channel-${channelId}`,
+    });
+}
+
 test('v1 voice join is gated by backend subscription entitlement', async () => {
     const { token, userId } = await registerUser();
     registerTestCanopy('canopy-1');
+    registerTestVoiceRoom('canopy-1', 'chan-1');
 
     const denied = await app.request('/v1/voice/rooms/join', {
         method: 'POST',
@@ -378,7 +392,7 @@ test('v1 voice join is gated by backend subscription entitlement', async () => {
             authorization: `Bearer ${token}`,
             'content-type': 'application/json',
         },
-        body: JSON.stringify({ canopyId: 'canopy-1', channelId: 'chan-1', role: 'member' }),
+        body: JSON.stringify({ canopyId: 'canopy-1', channelId: 'chan-1' }),
     });
     assert.equal(denied.status, 402);
 
@@ -390,7 +404,7 @@ test('v1 voice join is gated by backend subscription entitlement', async () => {
             authorization: `Bearer ${token}`,
             'content-type': 'application/json',
         },
-        body: JSON.stringify({ canopyId: 'canopy-1', channelId: 'chan-1', role: 'member' }),
+        body: JSON.stringify({ canopyId: 'canopy-1', channelId: 'chan-1' }),
     });
     assert.equal(allowed.status, 200);
 });

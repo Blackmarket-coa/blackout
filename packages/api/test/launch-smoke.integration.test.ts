@@ -25,6 +25,7 @@ process.env.LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET ?? 'lk_test_secr
 
 const { default: app } = await import('../src/index');
 const { applySubscriptionWebhookEvent } = await import('../src/services/subscriptions');
+const { db } = await import('../src/db/store');
 
 let userSeed = Date.now();
 async function registerUser(password = 'Smoke-Pass-9876!') {
@@ -41,11 +42,16 @@ async function registerUser(password = 'Smoke-Pass-9876!') {
     return { ...body, username, email, password };
 }
 
-async function registerCanopy(canopyId: string, token: string) {
-    await app.request('/v1/discovery/index/canopies', {
-        method: 'POST',
-        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-        body: JSON.stringify({ canopyId, name: canopyId }),
+// A voice room as a canopy moderator leaves it. Creating one through the API
+// takes being a moderator of a listed canopy on the homeserver, which this
+// suite does not stub (test/voice-roles.integration.test.ts covers it), so the
+// room is seeded directly.
+function seedVoiceRoom(canopyId: string, channelId: string) {
+    db.createOrUpdateVoiceRoom({
+        canopyId,
+        channelId,
+        createdBy: 'smoke-moderator',
+        livekitRoomName: `canopy-${canopyId}-channel-${channelId}`,
     });
 }
 
@@ -388,17 +394,21 @@ test('LS-GOV-02: vote is accepted and tally reflects it', async (t) => {
 test('LS-CALL-01: entitled user joining a voice room receives a LiveKit token', async () => {
     const user = await registerUser();
     const canopyId = `canopy-call-${++userSeed}`;
-    await registerCanopy(canopyId, user.token);
+    seedVoiceRoom(canopyId, 'main');
     await entitleUser(user.userId);
     const res = await app.request('/v1/voice/rooms/join', {
         method: 'POST',
         headers: { authorization: `Bearer ${user.token}`, 'content-type': 'application/json' },
-        body: JSON.stringify({ canopyId, channelId: 'main', role: 'member' }),
+        body: JSON.stringify({ canopyId, channelId: 'main' }),
     });
     assert.equal(res.status, 200);
     const body = (await res.json()) as {
+        permissions?: { role?: string };
         livekit?: { token?: string; url?: string; expiresAt?: string };
     };
+    // No homeserver is configured here, so nobody has an elevated role; an
+    // ordinary join of an unlocked room still goes ahead.
+    assert.equal(body.permissions?.role, 'member');
     assert.ok(body.livekit?.token, 'missing LiveKit token');
     assert.ok(body.livekit?.url, 'missing LiveKit URL');
     assert.ok(body.livekit?.expiresAt, 'missing LiveKit expiry');
@@ -408,7 +418,7 @@ test('LS-CALL-03: voice-rooms endpoints reject unauthenticated callers', async (
     const res = await app.request('/v1/voice/rooms/join', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ canopyId: 'x', channelId: 'y', role: 'member' }),
+        body: JSON.stringify({ canopyId: 'x', channelId: 'y' }),
     });
     assert.equal(res.status, 401);
 });
