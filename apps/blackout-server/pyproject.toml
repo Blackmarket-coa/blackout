@@ -184,7 +184,18 @@ pyasn1-modules = ">=0.0.7"
 bcrypt = ">=3.1.7"
 # 10.0.1 minimum is mandatory here because of libwebp CVE-2023-4863.
 # Packagers that already took care of libwebp can lower that down to 5.4.0.
-Pillow = ">=10.0.1"
+#
+# On Python >= 3.11 the minimum is 13.0.0: the thumbnailer decodes
+# attacker-supplied images, and 13.0.0 is the first release that fixes every
+# advisory OSV lists against 10.1.0. Pillow 13 requires Python >= 3.11, and no
+# release that runs on 3.8-3.10 fixes them all, so those interpreters keep the
+# old bound and stay on the 10.1.0 lock entry. synapse/util/check_dependencies.py
+# must evaluate python_version markers for this to start on 3.8-3.10. See
+# docs/security/synapse-dependencies-triage-2026-10-24.md (repository root).
+Pillow = [
+    { version = ">=13.0.0", python = ">=3.11" },
+    { version = ">=10.0.1", python = "<3.11" },
+]
 # We use SortedDict.peekitem(), which was added in sortedcontainers 1.5.2.
 sortedcontainers = ">=1.5.2"
 pymacaroons = ">=0.13.0"
