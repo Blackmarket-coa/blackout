@@ -321,6 +321,30 @@ not load the store at `1555912` (`packages/api/src/worker.ts` starts the loops
 without `initRuntimeStore`; only `src/index.ts` loads it), so there it fired
 nothing at all. See `docs/security/deadman-and-feeds-triage-2026-10-12.md`.
 
+**Worker correction, 2026-10-23.** H4's leader election and the C1 sweep held
+for the API, not for `deploy/docker/production`. There the loops ran in the
+`worker` service, which never loaded the store, took no leader lock and exited
+on SIGTERM without draining, so no loop that depends on the store, which is
+every loop but the opt-in Owncast poller, had done any work in that
+deployment: no scheduled message posted, no switch moved, no retention purge.
+Nor could that stack, as committed, serve traffic at all. The `app` healthcheck
+probed `/healthz`, which the API does not serve, so `docker compose up -d` could
+not start the services that wait for `app` to be healthy (`worker`,
+`reverse-proxy`, and through it the prod-tunnel overlay's `cloudflared`); and
+Caddy's own health check of `app` asked for `/healthz` too, so with `app` up it
+would have answered every request with a 503. A host that serves traffic with
+this stack is not running it as committed. Fixed: the worker boots through the
+API's store boot (`packages/api/src/db/runtimeStoreBoot.ts`: migrations,
+checksum audit, hydration) before any loop starts, holds the background-leader
+lock (and exits 1 if it loses it), drains on SIGTERM, and `bin/start-worker`
+execs node so the signal reaches it; the compose healthcheck and Caddy's
+`health_uri` ask for `/health`. The first working start acts on everything that
+piled up: overdue scheduled messages expire unsent, lapsed dead-man switches get
+one 72-hour grace window (operator decision; `THREAT_MODEL.md` R10), and the
+retention sweeps purge whatever is already past its window. Checked against
+Postgres 16, not against a deployment; the Caddy behaviour is as Caddy
+documents it, not run.
+
 **L8 correction (2026-10-11).** The ✅ above overstated it. That change made a boot failure visible (fail-fast, `api.log` artifact) and pointed the API at postgres, but production also refuses to boot without `MAIL_PROVIDER` (`initMailerFromEnv`, there since 2026-05-12). So from 2026-07-28, when the change reached `develop`, every nightly stopped at "Start API in background"; before that, `k6 — health` failed first and the later scripts were skipped. None of the 157 scheduled runs from 2026-05-07 to 2026-10-10 passed, and the auth, rate-limit and coalition-feed scripts never ran in CI at all. Replayed locally against a booted API, all four scripts then failed their thresholds on 429s. Every VU shared one per-address rate-limit bucket (`global:local`, 120 req/min; the auth bucket allows 10). And `rate-limit.js` scored `eventually_429` over the ten attempts where 401 is the right answer, which capped a correct limiter at 50% against `rate>0.90`; it also counted every 401/429 as a failed request. Fixed alongside this note:
 
 -   The job sets `MAIL_PROVIDER=console`, the guard's documented staging-shadow opt-in.

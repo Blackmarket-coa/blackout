@@ -28,7 +28,16 @@ globalThis.fetch = matrix.fetch;
 const { default: app } = await import('../src/index');
 const { signJwt, hashPassword } = await import('../src/services/auth');
 const { db } = await import('../src/db/store');
-const { runScheduledMessageDispatch } = await import('../src/services/scheduledMessageDispatcher');
+const {
+    runScheduledMessageDispatch,
+    SCHEDULED_MESSAGE_EXPIRED_REASON,
+    startScheduledMessageDispatcher,
+    stopScheduledMessageDispatcher,
+} = await import('../src/services/scheduledMessageDispatcher');
+const { backlogToleranceMs } = await import('../src/services/backlogTolerance');
+const { backgroundTicksInFlight, waitForBackgroundTicks } = await import(
+    '../src/services/backgroundTicks'
+);
 const mailerModule = await import('../src/services/mailer');
 
 class InMemoryMailer {
@@ -521,4 +530,146 @@ test('deleting an account erases its scheduled messages and nothing is posted (D
     assert.equal(after?.lastError, 'author_deleted');
     assert.equal(after?.matrixRoomId, '');
     assert.equal(db.getScheduledMessage(old.id)?.userId, '');
+});
+
+const MINUTE = 60 * 1000;
+
+test('a message the dispatcher reaches more than 15 minutes late expires: no room check, no send, no text (B-1)', async () => {
+    matrix.sendStatus = 200;
+    const user = seedUser();
+    const roomId = joinedRoom('overdue', user.username);
+    const record = db.createScheduledMessage({
+        id: randomUUID(),
+        userId: user.id,
+        matrixRoomId: roomId,
+        body: 'the meeting starts now',
+        formattedBody: '<b>the meeting starts now</b>',
+        deliverAt: futureIso(-20 * MINUTE),
+    });
+    matrix.clearCalls();
+
+    const result = await runScheduledMessageDispatch();
+    assert.ok(result.expired >= 1);
+    assert.equal(matrix.sendsTo(roomId).length, 0, 'not sent late');
+    assert.ok(!matrix.stateReads.includes(roomId), 'expired before any homeserver call');
+
+    const row = db.getScheduledMessage(record.id);
+    assert.equal(row?.status, 'failed');
+    assert.equal(row?.lastError, SCHEDULED_MESSAGE_EXPIRED_REASON);
+    assert.equal(SCHEDULED_MESSAGE_EXPIRED_REASON, 'expired_overdue');
+    assert.equal(row?.body, '', 'an expired message keeps no text');
+    assert.equal(row?.formattedBody, undefined);
+    assert.equal(row?.deliveredAt, undefined);
+
+    // Finished: a later tick leaves it alone.
+    await runScheduledMessageDispatch();
+    assert.equal(matrix.sendsTo(roomId).length, 0);
+    assert.equal(db.getScheduledMessage(record.id)?.attempts, row?.attempts);
+});
+
+test('a message reached late but inside the tolerance is still sent (B-2)', async () => {
+    matrix.sendStatus = 200;
+    const user = seedUser();
+    const roomId = joinedRoom('late-but-sent', user.username);
+    const record = db.createScheduledMessage({
+        id: randomUUID(),
+        userId: user.id,
+        matrixRoomId: roomId,
+        body: 'ten minutes late',
+        deliverAt: futureIso(-10 * MINUTE),
+    });
+    await runScheduledMessageDispatch();
+    assert.equal(matrix.sendsTo(roomId).length, 1);
+    assert.equal(db.getScheduledMessage(record.id)?.status, 'delivered');
+});
+
+test('the tolerance is 15 minutes, or ten dispatch intervals when that is longer (B-3)', async () => {
+    assert.equal(backlogToleranceMs(30 * 1000), 15 * MINUTE);
+    assert.equal(backlogToleranceMs(5 * MINUTE), 50 * MINUTE);
+
+    // Twenty minutes late, from a dispatcher on a five-minute cadence: sent.
+    matrix.sendStatus = 200;
+    const user = seedUser();
+    const roomId = joinedRoom('slow-cadence', user.username);
+    const record = db.createScheduledMessage({
+        id: randomUUID(),
+        userId: user.id,
+        matrixRoomId: roomId,
+        body: 'on a slow dispatcher',
+        deliverAt: futureIso(-20 * MINUTE),
+    });
+    await runScheduledMessageDispatch({ overdueToleranceMs: backlogToleranceMs(5 * MINUTE) });
+    assert.equal(db.getScheduledMessage(record.id)?.status, 'delivered');
+});
+
+test('a dispatcher stopped mid-tick finishes the message in hand and leaves the rest pending (B-4)', async () => {
+    matrix.sendStatus = 200;
+    const user = seedUser();
+    const roomId = joinedRoom('stop-mid-tick', user.username);
+    const make = (body: string, msAgo: number) =>
+        db.createScheduledMessage({
+            id: randomUUID(),
+            userId: user.id,
+            matrixRoomId: roomId,
+            body,
+            deliverAt: futureIso(-msAgo),
+        });
+    const first = make('in hand', 2000);
+    const second = make('still waiting', 1000);
+    // The worker shuts down while the first message's room check is out.
+    matrix.onStateRead = (room) => {
+        if (room !== roomId) return;
+        matrix.onStateRead = null;
+        stopScheduledMessageDispatcher();
+    };
+
+    await runScheduledMessageDispatch();
+    assert.equal(db.getScheduledMessage(first.id)?.status, 'delivered');
+    assert.equal(db.getScheduledMessage(second.id)?.status, 'pending', 'left for the next leader');
+    assert.equal(db.getScheduledMessage(second.id)?.attempts, 0);
+    assert.equal(matrix.sendsTo(roomId).length, 1);
+
+    // A later tick, after the stop, picks it up as usual.
+    await runScheduledMessageDispatch();
+    assert.equal(db.getScheduledMessage(second.id)?.status, 'delivered');
+});
+
+test('the running dispatcher registers its tick, so a shutdown can wait for it to finish (B-5)', async () => {
+    matrix.sendStatus = 200;
+    const user = seedUser();
+    const roomId = joinedRoom('tracked-tick', user.username);
+    const record = db.createScheduledMessage({
+        id: randomUUID(),
+        userId: user.id,
+        matrixRoomId: roomId,
+        body: 'mid-flight',
+        deliverAt: futureIso(-1000),
+    });
+    // Hold every homeserver answer until the test lets go.
+    let letGo!: () => void;
+    const held = new Promise<void>((resolve) => {
+        letGo = resolve;
+    });
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        await held;
+        return matrix.fetch(input, init);
+    }) as typeof fetch;
+    try {
+        startScheduledMessageDispatcher(10);
+        const deadline = Date.now() + 3000;
+        while (backgroundTicksInFlight() === 0) {
+            assert.ok(Date.now() < deadline, 'a tick started');
+            await new Promise((resolve) => setTimeout(resolve, 5));
+        }
+        stopScheduledMessageDispatcher();
+        assert.equal(await waitForBackgroundTicks(50), false, 'still waiting on the homeserver');
+        letGo();
+        assert.equal(await waitForBackgroundTicks(5000), true, 'the tick finished');
+    } finally {
+        stopScheduledMessageDispatcher();
+        globalThis.fetch = realFetch;
+    }
+    assert.equal(db.getScheduledMessage(record.id)?.status, 'delivered');
+    assert.equal(matrix.sendsTo(roomId).length, 1, 'sent once');
 });

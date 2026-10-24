@@ -93,9 +93,37 @@ governance and moderation feeds scoped, the others left open with the reason.
     visible and the limitations are documented.
 -   **Deployment note:** in `deploy/docker/production` the sweep runs in the
     `worker` service, which at `1555912` did not load the store
-    (`packages/api/src/worker.ts` starts the loops without
-    `initRuntimeStore`; only `src/index.ts` loads it), so there a switch
-    never fired at all. The audit ledger carries that correction.
+    (`packages/api/src/worker.ts` started the loops without
+    `initRuntimeStore`; only `src/index.ts` loaded it), so there a switch
+    never fired at all. The audit ledger carries that correction. Fixed on
+    2026-10-23: the worker boots through the API's own store boot
+    (`packages/api/src/db/runtimeStoreBoot.ts`) before any loop starts,
+    holds the background-leader lock, and drains on SIGTERM
+    (`packages/api/src/backgroundWorker.ts`). Checked against Postgres 16,
+    not against a deployment. Since no sweep had run there, its first
+    working start reaches every switch whose deadline passed in the
+    meantime; the backlog window below decides what happens to them.
+-   **Backlog window (operator decision, 2026-10-23):** a switch the sweep
+    reaches more than the backlog tolerance after it was due (15 minutes, or
+    ten sweep intervals when a custom cadence makes that longer) is not
+    acted on late: it goes to grace with its release moved to 72 hours from
+    then, recorded in `backlog_grace_started_at` (migration 102), unless it
+    already had that much grace left, in which case it goes to grace as it
+    normally would. Once per missed check-in: a switch that had its window
+    fires when it ends, however late the sweep is, and the owner's check-in
+    clears the record. The window protects owners from a release the server
+    caused by not watching, since a triggered switch's payload is readable
+    by its recipients (D3); the cost is that whoever can stop the sweep
+    across a deadline delays that release by the outage plus up to 72 hours
+    (`THREAT_MODEL.md` R10). It applies to every outage, not only the first
+    working deploy, because the reason is the same each time. The sweep's
+    grace and triggered events stay in the memory of the process that ran
+    it, so with a separate worker `GET /v1/deadman/events` on the app
+    replicas does not list them; the switch's status and release time do
+    show them. Tests:
+    `test/deadman-scheduler.integration.test.ts`,
+    `test/deadman-routes.integration.test.ts` and
+    `test/deadman-backlog-postgres.integration.test.ts`.
 
 ## D3 — recipients could read the payload at any time — fixed
 
@@ -116,9 +144,12 @@ governance and moderation feeds scoped, the others left open with the reason.
     either view; the payload once triggered; never for a cancelled switch,
     while the owner's own cancel envelope still carries it.
 -   **Notes:** release needs the sweep to run against the loaded store; where
-    it does not (see D2), a recipient gets nothing, which is the fail-closed
-    direction. Recipients are matched by Blackout account id; a recipient
-    named by Matrix id or room id never matches a reader. That is part of N2.
+    it does not, a recipient gets nothing, which is the fail-closed
+    direction. `deploy/docker/production` did not until 2026-10-23 (D2).
+    After a sweep outage a lapsed switch gets the backlog window before it
+    can release (D2). Recipients are matched by Blackout account id; a
+    recipient named by Matrix id or room id never matches a reader. That is
+    part of N2.
 
 ## D4 — check-in and cancel from the app are refused; the app cannot arm — open
 

@@ -1,0 +1,15 @@
+-- When a dead-man switch had its one backlog grace window.
+--
+-- The autonomous sweep acts on a switch at its check-in deadline and at its
+-- release. When it reaches a switch more than the backlog tolerance (15
+-- minutes at the default cadence) after that moment, no sweep was running
+-- then: the owner never saw the switch go to grace in time, and firing it
+-- would make its payload readable to its recipients. So the sweep gives it 72
+-- hours of grace from that moment instead, once per missed check-in, and
+-- records the moment here. The owner's next check-in clears it. See
+-- evaluateSweepTransition in packages/api/src/services/deadmanScheduler.ts.
+--
+-- Without this column the Postgres-backed store would silently drop the field
+-- on write (it writes only columns that exist), so a restart would forget the
+-- window and a later sweep could give the same lapse a second one.
+ALTER TABLE deadman_switches ADD COLUMN IF NOT EXISTS backlog_grace_started_at TIMESTAMPTZ;

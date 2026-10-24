@@ -1,197 +1,207 @@
 name: blackout-prod
 
 x-common-env: &common-env
-  env_file:
-    - ./.env
-    - ./.env.production
+    env_file:
+        - ./.env
+        - ./.env.production
 
 x-common-logging: &common-logging
-  logging:
-    driver: json-file
-    options:
-      max-size: "10m"
-      max-file: "5"
+    logging:
+        driver: json-file
+        options:
+            max-size: '10m'
+            max-file: '5'
 
 services:
-  app:
-    image: ghcr.io/blackmarket-coa/blackout:${APP_IMAGE_TAG:-stable}
-    restart: unless-stopped
-    <<: [*common-env, *common-logging]
-    environment:
-      APP_ENV: production
-      NODE_ENV: production
-      APP_PORT: 3000
-      # Background job loops run in the dedicated `worker` service; disable them
-      # here so app + canary replicas don't double-process scheduled jobs.
-      BLACKOUT_BACKGROUND_WORKERS_DISABLED: "1"
-      DB_HOST: db
-      DB_PORT: 5432
-      DB_NAME: ${DB_NAME}
-      DB_USER: ${DB_USER}
-      DB_PASSWORD_FILE: /run/secrets/db_password
-      CACHE_HOST: cache
-      CACHE_PORT: 6379
-      CACHE_PASSWORD_FILE: /run/secrets/cache_password
-      REDIS_URL: ${REDIS_URL:-redis://cache:6379}
-      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
-      CORS_ALLOW_CREDENTIALS: ${CORS_ALLOW_CREDENTIALS:-true}
-    command: ["/bin/sh", "-lc", "./bin/migrate && ./bin/start-app"]
-    secrets:
-      - db_password
-      - cache_password
-    depends_on:
-      db:
-        condition: service_healthy
-      cache:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:3000/healthz || exit 1"]
-      interval: 15s
-      timeout: 5s
-      retries: 10
-      start_period: 30s
-    networks:
-      - private
-      - edge
+    app:
+        image: ghcr.io/blackmarket-coa/blackout:${APP_IMAGE_TAG:-stable}
+        restart: unless-stopped
+        <<: [*common-env, *common-logging]
+        environment:
+            APP_ENV: production
+            NODE_ENV: production
+            APP_PORT: 3000
+            # Background job loops run in the dedicated `worker` service; disable them
+            # here so app + canary replicas don't double-process scheduled jobs.
+            BLACKOUT_BACKGROUND_WORKERS_DISABLED: '1'
+            DB_HOST: db
+            DB_PORT: 5432
+            DB_NAME: ${DB_NAME}
+            DB_USER: ${DB_USER}
+            DB_PASSWORD_FILE: /run/secrets/db_password
+            CACHE_HOST: cache
+            CACHE_PORT: 6379
+            CACHE_PASSWORD_FILE: /run/secrets/cache_password
+            REDIS_URL: ${REDIS_URL:-redis://cache:6379}
+            CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
+            CORS_ALLOW_CREDENTIALS: ${CORS_ALLOW_CREDENTIALS:-true}
+        command: ['/bin/sh', '-lc', './bin/migrate && ./bin/start-app']
+        secrets:
+            - db_password
+            - cache_password
+        depends_on:
+            db:
+                condition: service_healthy
+            cache:
+                condition: service_healthy
+        healthcheck:
+            test: ['CMD-SHELL', 'wget -q -O- http://127.0.0.1:3000/health || exit 1']
+            interval: 15s
+            timeout: 5s
+            retries: 10
+            start_period: 30s
+        networks:
+            - private
+            - edge
 
-  worker:
-    image: ghcr.io/blackmarket-coa/blackout:${APP_IMAGE_TAG:-stable}
-    restart: unless-stopped
-    <<: [*common-env, *common-logging]
-    environment:
-      APP_ENV: production
-      NODE_ENV: production
-      DB_HOST: db
-      DB_PORT: 5432
-      DB_NAME: ${DB_NAME}
-      DB_USER: ${DB_USER}
-      DB_PASSWORD_FILE: /run/secrets/db_password
-      CACHE_HOST: cache
-      CACHE_PORT: 6379
-      CACHE_PASSWORD_FILE: /run/secrets/cache_password
-      REDIS_URL: ${REDIS_URL:-redis://cache:6379}
-    command: ["/bin/sh", "-lc", "./bin/start-worker"]
-    secrets:
-      - db_password
-      - cache_password
-    depends_on:
-      db:
-        condition: service_healthy
-      cache:
-        condition: service_healthy
-      app:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "./bin/worker-healthcheck"]
-      interval: 20s
-      timeout: 5s
-      retries: 10
-      start_period: 30s
-    networks:
-      - private
+    worker:
+        image: ghcr.io/blackmarket-coa/blackout:${APP_IMAGE_TAG:-stable}
+        restart: unless-stopped
+        <<: [*common-env, *common-logging]
+        environment:
+            APP_ENV: production
+            NODE_ENV: production
+            DB_HOST: db
+            DB_PORT: 5432
+            DB_NAME: ${DB_NAME}
+            DB_USER: ${DB_USER}
+            DB_PASSWORD_FILE: /run/secrets/db_password
+            CACHE_HOST: cache
+            CACHE_PORT: 6379
+            CACHE_PASSWORD_FILE: /run/secrets/cache_password
+            REDIS_URL: ${REDIS_URL:-redis://cache:6379}
+        # Exec form, no wrapper shell: start-worker execs node, so the worker
+        # itself is PID 1 and receives the SIGTERM it drains on.
+        command: ['./bin/start-worker']
+        # The worker gives its drain SHUTDOWN_TIMEOUT_MS (10 s by default) and
+        # exits on its own by then; Docker's default grace is also 10 s, so a
+        # slow drain would race the SIGKILL. Twice the budget lets it finish.
+        stop_grace_period: 20s
+        secrets:
+            - db_password
+            - cache_password
+        depends_on:
+            db:
+                condition: service_healthy
+            cache:
+                condition: service_healthy
+            app:
+                condition: service_healthy
+        healthcheck:
+            test: ['CMD-SHELL', './bin/worker-healthcheck']
+            interval: 20s
+            timeout: 5s
+            retries: 10
+            start_period: 30s
+        networks:
+            - private
 
-  db:
-    image: postgres:16-alpine
-    restart: unless-stopped
-    <<: *common-logging
-    environment:
-      POSTGRES_DB: ${DB_NAME}
-      POSTGRES_USER: ${DB_USER}
-      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
-    secrets:
-      - db_password
-    volumes:
-      - db_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 20s
-    networks:
-      - private
+    db:
+        image: postgres:16-alpine
+        restart: unless-stopped
+        <<: *common-logging
+        environment:
+            POSTGRES_DB: ${DB_NAME}
+            POSTGRES_USER: ${DB_USER}
+            POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+        secrets:
+            - db_password
+        volumes:
+            - db_data:/var/lib/postgresql/data
+        healthcheck:
+            test: ['CMD-SHELL', 'pg_isready -U ${DB_USER} -d ${DB_NAME}']
+            interval: 10s
+            timeout: 5s
+            retries: 10
+            start_period: 20s
+        networks:
+            - private
 
-  cache:
-    image: redis:7-alpine
-    restart: unless-stopped
-    <<: *common-logging
-    command: >-
-      /bin/sh -c "exec redis-server --appendonly yes --maxmemory ${CACHE_MAX_MEMORY:-512mb}
-      --maxmemory-policy allkeys-lru --requirepass \"$$(cat /run/secrets/cache_password)\""
-    secrets:
-      - cache_password
-    volumes:
-      - cache_data:/data
-    healthcheck:
-      test: ["CMD-SHELL", "redis-cli -a \"$$(cat /run/secrets/cache_password)\" PING | grep -q PONG"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 20s
-    networks:
-      - private
+    cache:
+        image: redis:7-alpine
+        restart: unless-stopped
+        <<: *common-logging
+        command: >-
+            /bin/sh -c "exec redis-server --appendonly yes --maxmemory ${CACHE_MAX_MEMORY:-512mb}
+            --maxmemory-policy allkeys-lru --requirepass \"$$(cat /run/secrets/cache_password)\""
+        secrets:
+            - cache_password
+        volumes:
+            - cache_data:/data
+        healthcheck:
+            test:
+                [
+                    'CMD-SHELL',
+                    'redis-cli -a "$$(cat /run/secrets/cache_password)" PING | grep -q PONG',
+                ]
+            interval: 10s
+            timeout: 5s
+            retries: 10
+            start_period: 20s
+        networks:
+            - private
 
-  reverse-proxy:
-    image: caddy:2.9-alpine
-    restart: unless-stopped
-    <<: [*common-env, *common-logging]
-    depends_on:
-      app:
-        condition: service_healthy
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - proxy_data:/data
-      - proxy_config:/config
-    healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:2019/config/"]
-      interval: 30s
-      timeout: 5s
-      retries: 5
-    networks:
-      - edge
-      - private
+    reverse-proxy:
+        image: caddy:2.9-alpine
+        restart: unless-stopped
+        <<: [*common-env, *common-logging]
+        depends_on:
+            app:
+                condition: service_healthy
+        ports:
+            - '80:80'
+            - '443:443'
+        volumes:
+            - ./Caddyfile:/etc/caddy/Caddyfile:ro
+            - proxy_data:/data
+            - proxy_config:/config
+        healthcheck:
+            test: ['CMD', 'wget', '-q', '--spider', 'http://127.0.0.1:2019/config/']
+            interval: 30s
+            timeout: 5s
+            retries: 5
+        networks:
+            - edge
+            - private
 
-  backup:
-    image: ghcr.io/prodrigestivill/postgres-backup-local:16
-    restart: unless-stopped
-    <<: *common-logging
-    profiles: ["ops"]
-    environment:
-      POSTGRES_HOST: db
-      POSTGRES_DB: ${DB_NAME}
-      POSTGRES_USER: ${DB_USER}
-      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
-      SCHEDULE: "@daily"
-      BACKUP_KEEP_DAYS: 7
-      BACKUP_KEEP_WEEKS: 4
-      BACKUP_KEEP_MONTHS: 6
-    secrets:
-      - db_password
-    volumes:
-      - db_backups:/backups
-    depends_on:
-      db:
-        condition: service_healthy
-    networks:
-      - private
+    backup:
+        image: ghcr.io/prodrigestivill/postgres-backup-local:16
+        restart: unless-stopped
+        <<: *common-logging
+        profiles: ['ops']
+        environment:
+            POSTGRES_HOST: db
+            POSTGRES_DB: ${DB_NAME}
+            POSTGRES_USER: ${DB_USER}
+            POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+            SCHEDULE: '@daily'
+            BACKUP_KEEP_DAYS: 7
+            BACKUP_KEEP_WEEKS: 4
+            BACKUP_KEEP_MONTHS: 6
+        secrets:
+            - db_password
+        volumes:
+            - db_backups:/backups
+        depends_on:
+            db:
+                condition: service_healthy
+        networks:
+            - private
 
 networks:
-  edge:
-  private:
-    internal: true
+    edge:
+    private:
+        internal: true
 
 volumes:
-  db_data:
-  cache_data:
-  db_backups:
-  proxy_data:
-  proxy_config:
+    db_data:
+    cache_data:
+    db_backups:
+    proxy_data:
+    proxy_config:
 
 secrets:
-  db_password:
-    file: ./.secrets/db_password.txt
-  cache_password:
-    file: ./.secrets/cache_password.txt
+    db_password:
+        file: ./.secrets/db_password.txt
+    cache_password:
+        file: ./.secrets/cache_password.txt
