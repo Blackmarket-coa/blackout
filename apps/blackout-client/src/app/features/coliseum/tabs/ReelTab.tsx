@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useAtom } from 'jotai';
 import { useColiseumReel, useColiseumTopic, useColiseumVerdict } from '../hooks/useColiseumTopics';
 import {
@@ -25,12 +25,23 @@ const defaultClient: ReelTabClient = {
 /** Shared flash + fire-and-forget vote handling for both reel modes. */
 function useReelVote(client: ReelTabClient, onAfter: () => void) {
     const [flashes, setFlashes] = useState<Record<string, 'up' | 'down' | null>>({});
+    // Pending flash resets, cleared on unmount so none runs after the reel is gone.
+    const flashTimers = useRef(new Set<number>());
+    useEffect(() => {
+        const timers = flashTimers.current;
+        return () => {
+            timers.forEach((timer) => window.clearTimeout(timer));
+            timers.clear();
+        };
+    }, []);
     const onVote = useCallback(
         (argumentId: string, direction: 'up' | 'down') => {
             setFlashes((prev) => ({ ...prev, [argumentId]: direction }));
-            window.setTimeout(() => {
+            const timer = window.setTimeout(() => {
+                flashTimers.current.delete(timer);
                 setFlashes((prev) => ({ ...prev, [argumentId]: null }));
             }, 450);
+            flashTimers.current.add(timer);
             void (async () => {
                 try {
                     await client.castColiseumVote({ argumentId, direction });
