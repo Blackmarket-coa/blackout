@@ -18,6 +18,10 @@ process.env.LINKED_ACCOUNT_ENCRYPTION_KEYS =
 
 const PATREON_SECRET = 'patreon-test-secret';
 const { buildPatreonWebhookRoute } = await import('../src/routes/patreonWebhook');
+// Part B's full app, imported before the first test(). A top-level await after
+// a test() call ends the file early under --test-force-exit: the tests below it
+// are never registered, and the run reports two tests instead of four.
+const { default: fullApp } = await import('../src/index');
 const patreonSign = (b: string) => createHmac('md5', PATREON_SECRET).update(b).digest('hex');
 const patreonApp = () => {
     const a = new Hono();
@@ -60,8 +64,6 @@ test('webhook cap: a normal signed body is not blocked (not 413)', async () => {
 // ---------------------------------------------------------------------------
 // Part B — global cap (full app, unauthenticated /bug-report path)
 // ---------------------------------------------------------------------------
-
-const { default: fullApp } = await import('../src/index');
 
 test('global cap: > 16 MiB body → 413 (before auth/handler)', async () => {
     const huge = 'y'.repeat(16 * 1024 * 1024 + 4096);
