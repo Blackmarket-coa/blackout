@@ -41,8 +41,19 @@ jobs:
                   ssh-private-key: ${{ secrets.PROD_SSH_KEY }}
 
             - name: Sync compose bundle
+              # The stack directory on the host also holds what git does not:
+              # the env files, the secrets, the tunnel credentials, the
+              # on-demand backups (scripts/backup.sh) and the release evidence
+              # (ops/evidence). `--delete` removes every file the bundle lacks,
+              # so without these excludes the first sync deletes all of them.
+              # rsync never deletes an excluded path (no --delete-excluded),
+              # and never syncs one either: keep tracked files out of these.
               run: |
-                  rsync -az --delete deploy/docker/production/ "${{ secrets.PROD_SSH_USER }}@${{ secrets.PROD_SSH_HOST }}:${{ secrets.PROD_STACK_DIR }}/"
+                  rsync -az --delete \
+                      --exclude '/.env' --exclude '/.env.production' \
+                      --exclude '/.secrets/' --exclude '/.cloudflared/' \
+                      --exclude '/backups/' --exclude '/ops/' \
+                      deploy/docker/production/ "${{ secrets.PROD_SSH_USER }}@${{ secrets.PROD_SSH_HOST }}:${{ secrets.PROD_STACK_DIR }}/"
 
             - name: Deploy canary (one replica side-by-side)
               run: |
@@ -158,8 +169,19 @@ jobs:
                   ssh-private-key: ${{ secrets.PROD_SSH_KEY }}
 
             - name: Sync compose bundle
+              # The stack directory on the host also holds what git does not:
+              # the env files, the secrets, the tunnel credentials, the
+              # on-demand backups (scripts/backup.sh) and the release evidence
+              # (ops/evidence). `--delete` removes every file the bundle lacks,
+              # so without these excludes the first sync deletes all of them.
+              # rsync never deletes an excluded path (no --delete-excluded),
+              # and never syncs one either: keep tracked files out of these.
               run: |
-                  rsync -az --delete deploy/docker/production/ "${{ secrets.PROD_SSH_USER }}@${{ secrets.PROD_SSH_HOST }}:${{ secrets.PROD_STACK_DIR }}/"
+                  rsync -az --delete \
+                      --exclude '/.env' --exclude '/.env.production' \
+                      --exclude '/.secrets/' --exclude '/.cloudflared/' \
+                      --exclude '/backups/' --exclude '/ops/' \
+                      deploy/docker/production/ "${{ secrets.PROD_SSH_USER }}@${{ secrets.PROD_SSH_HOST }}:${{ secrets.PROD_STACK_DIR }}/"
 
             - name: Deploy stack (no canary)
               run: |
