@@ -77,7 +77,7 @@ test('a dropped lock connection is reported once, destroyed, and leaves no leade
     const client = new FakeLeaderClient();
     assert.equal(await acquireBackgroundLeaderLock(poolOf(client)), true);
     assert.equal(isBackgroundLeader(), true);
-    assert.deepEqual(client.released, [], 'the lock connection stays checked out');
+    assert.equal(client.released.length, 0, 'the lock connection stays checked out');
 
     const losses: string[] = [];
     watchBackgroundLeadership((reason) => losses.push(reason), { checkIntervalMs: 60_000 });
