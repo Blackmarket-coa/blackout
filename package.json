@@ -138,7 +138,7 @@
             "esbuild": "^0.28.1",
             "fast-uri@3": "^3.1.8",
             "handlebars": "^4.7.10",
-            "hono": "^4.13.5",
+            "hono": "^4.13.11",
             "i18next-http-backend@2.5.2": "^4.0.2",
             "colord": "^2.9.4",
             "js-yaml": "^4.3.2",
