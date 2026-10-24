@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
+import { getDefaultStore } from 'jotai';
 import type { Capabilities, MatrixClient, Room } from 'matrix-js-sdk';
 
 const indexCanopyMock = vi.fn(async () => ({}));
@@ -24,6 +25,7 @@ import {
     setNewRoomSurfaceForTests,
     type NewRoomSurface,
 } from '../../components/create-room';
+import { toastQueueAtom } from '../../state/notifications/toast';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -139,6 +141,7 @@ const listToggle = (container: HTMLElement) =>
 
 beforeEach(() => {
     indexCanopyMock.mockClear();
+    getDefaultStore().set(toastQueueAtom, []);
 });
 
 afterEach(() => {
@@ -176,6 +179,26 @@ describe('CreateSpaceForm in the Blackout app', () => {
             name: 'Garden Co-op',
             summary: undefined,
         });
+        expect(getDefaultStore().get(toastQueueAtom)).toEqual([]);
+    });
+
+    it('a listing that fails is reported in a toast; the canopy is still created', async () => {
+        // The API refuses a listing it cannot check on the homeserver, or from
+        // someone who is not the canopy's admin.
+        indexCanopyMock.mockRejectedValueOnce(new Error('Request failed (503)'));
+        const { container, onCreate } = await renderForm({ surface: 'app' });
+        await submit(container);
+        await act(async () => {
+            await new Promise((resolve) => setTimeout(resolve, 0));
+        });
+        expect(indexCanopyMock).toHaveBeenCalledTimes(1);
+        expect(onCreate).toHaveBeenCalledWith('!new:server');
+        const toasts = getDefaultStore().get(toastQueueAtom);
+        expect(toasts).toHaveLength(1);
+        expect(toasts[0].variant).toBe('Critical');
+        expect(toasts[0].message).toContain(
+            'Garden Co-op was created, but it could not be listed in the Blackout directory.'
+        );
     });
 
     it('inside a public canopy the new sub-canopy is Public too', async () => {

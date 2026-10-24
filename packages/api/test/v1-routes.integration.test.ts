@@ -16,6 +16,8 @@ process.env.FREEBLACKMARKET_STUB = process.env.FREEBLACKMARKET_STUB ?? '1';
 const { default: app } = await import('../src/index');
 const { signJwt } = await import('../src/services/auth');
 const { applySubscriptionWebhookEvent } = await import('../src/services/subscriptions');
+const { upsertCanopy } = await import('../src/services/canopyDirectory');
+const { signJwtWithScopes } = await import('./_fixtures/capabilityToken');
 
 // W1b: the Lago/Stripe webhook endpoints are gone — Canopy state changes are
 // driven by the FBM marketplace webhook, which loops through
@@ -37,12 +39,13 @@ async function json(res: Response) {
 let registerSeed = Date.now();
 async function registerUser(password = 'test-password') {
     const seed = ++registerSeed;
+    const username = `user-${seed}`;
     const email = `user-${seed}@example.com`;
     const response = await app.request('/v1/auth/register', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
-            username: `user-${seed}`,
+            username,
             email,
             password,
         }),
@@ -50,7 +53,7 @@ async function registerUser(password = 'test-password') {
 
     assert.equal(response.status, 201);
     const body = (await response.json()) as { token: string; userId: string };
-    return { ...body, email, password };
+    return { ...body, username, email, password };
 }
 
 test('v1 auth register works', async () => {
@@ -150,10 +153,11 @@ test('v1 messages post/list works', async () => {
 });
 
 test('v1 governance proposal create/get works', async () => {
-    const { token, userId } = await registerUser();
+    const { userId, username } = await registerUser();
+    // No session token carries governance.write (an allowlisted admin holds it,
+    // and the header can only narrow), so this signs one whose claims do.
     const headers = {
-        authorization: `Bearer ${token}`,
-        'x-blackout-capabilities': 'governance.read,governance.write',
+        authorization: `Bearer ${signJwtWithScopes(userId, username, ['governance.write'])}`,
         'content-type': 'application/json',
     };
 
@@ -356,21 +360,17 @@ test('v1 subscriptions checkout delegates to FBM + entitlement state works end-t
     assert.equal(duplicateAgain.processed, false);
 });
 
-async function registerTestCanopy(canopyId: string, token: string): Promise<void> {
-    await app.request('/v1/discovery/index/canopies', {
-        method: 'POST',
-        headers: {
-            authorization: `Bearer ${token}`,
-            'content-type': 'application/json',
-            'x-blackout-capabilities': 'discovery.write',
-        },
-        body: JSON.stringify({ canopyId, name: canopyId }),
-    });
+// A listed canopy, as the New canopy form leaves it. Listing through the API
+// takes being the canopy's admin on the homeserver, which this file does not
+// stub (test/canopy-directory.integration.test.ts covers it), so the entry is
+// seeded directly.
+function registerTestCanopy(canopyId: string): void {
+    upsertCanopy({ canopyId, name: canopyId });
 }
 
 test('v1 voice join is gated by backend subscription entitlement', async () => {
     const { token, userId } = await registerUser();
-    await registerTestCanopy('canopy-1', token);
+    registerTestCanopy('canopy-1');
 
     const denied = await app.request('/v1/voice/rooms/join', {
         method: 'POST',
@@ -586,8 +586,8 @@ test('v1 apps contract, events, and actions are exposed', async () => {
 });
 
 test('v1 app directory install review and revoke flow works', async () => {
-    const { token } = await registerUser();
-    await registerTestCanopy('main', token);
+    await registerUser();
+    registerTestCanopy('main');
 
     const directory = await app.request('/v1/apps/directory?canopyId=main');
     assert.equal(directory.status, 200);

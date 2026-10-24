@@ -379,6 +379,29 @@ describe('a new canopy from the panel', () => {
         );
     });
 
+    it('says so in the panel when the canopy was made but could not be listed', async () => {
+        indexCanopyMock.mockRejectedValueOnce(new Error('not_canopy_admin'));
+        const { container } = await renderPanel('/embed/new/canopy');
+        const listToggle = $(container, '[data-testid="create-space-list-in-directory"]');
+        await click(listToggle);
+        expect(listToggle?.getAttribute('aria-checked')).toBe('true');
+
+        await submit(container, 'Night Market');
+        await flush();
+        expect(indexCanopyMock).toHaveBeenCalledTimes(1);
+        // The app shows its toasts from ClientLayout, which the panel does not
+        // render; the panel's own outlet has to show this one. ("Opening…" is a
+        // status too.)
+        const statuses = Array.from(
+            container.querySelectorAll('[data-testid="embed-root"] [role="status"]')
+        ).map((el) => el.textContent ?? '');
+        expect(statuses).toContainEqual(
+            expect.stringContaining(
+                'Night Market was created, but it could not be listed in the Blackout directory.'
+            )
+        );
+    });
+
     it('inside a public canopy it still starts Private (L6), placed in that canopy', async () => {
         const { container, createRoom, sendStateEvent } = await renderPanel(
             `/embed/canopies/${enc(GARDEN)}/new/canopy`

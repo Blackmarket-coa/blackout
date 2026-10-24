@@ -2,6 +2,8 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { useStore } from 'jotai';
 import { Link, Outlet, useNavigate } from 'react-router';
 import { EMBED_PATH } from '../../pages/paths';
+import { ToastOutlet } from '../../components/toast/ToastOutlet';
+import { useActiveTheme } from '../../hooks/useTheme';
 import { signOutPanel } from '../../../client/auth';
 import { restoreActiveSession } from '../../../client/sessionManager';
 import { panelSessionsActive } from '../../../client/storageNamespace';
@@ -22,6 +24,7 @@ import {
  */
 export const EmbedLayout = () => {
     const navigate = useNavigate();
+    const theme = useActiveTheme();
     const onInPanel = useCallback((path: string) => navigate(path), [navigate]);
     return (
         <EmbedLinkGuard onInPanel={onInPanel}>
@@ -32,6 +35,13 @@ export const EmbedLayout = () => {
                 <main style={panelMainStyle}>
                     <Outlet />
                 </main>
+                {/* The app's toasts, which ClientLayout shows and the panel does not
+                    render: a canopy made here that could not be listed says so in
+                    one. The theme classes give it its folds colours, which nothing
+                    else sets in the panel. */}
+                <div className={theme.classNames.join(' ')}>
+                    <ToastOutlet />
+                </div>
             </div>
         </EmbedLinkGuard>
     );

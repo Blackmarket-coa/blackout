@@ -43,6 +43,7 @@ import {
 } from '../../components/create-room';
 import { RoomType } from '../../../types/matrix/room';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
+import { useToast } from '../../state/notifications/toast';
 import { indexCanopy } from '../discovery/discoveryClient';
 
 const getCreateSpaceKindToIcon = (kind: CreateRoomKind) => {
@@ -59,6 +60,7 @@ type CreateSpaceFormProps = {
 export function CreateSpaceForm({ defaultKind, space, onCreate }: CreateSpaceFormProps) {
     const mx = useMatrixClient();
     const alive = useAlive();
+    const { showToast } = useToast();
 
     const capabilities = useCapabilities();
     const roomVersions = capabilities['m.room_versions'];
@@ -151,13 +153,19 @@ export function CreateSpaceForm({ defaultKind, space, onCreate }: CreateSpaceFor
             // Public or the person asked for it: a canopy that is not public is
             // not listed unless they turn the toggle on (operator decision,
             // 2026-10-17). Best-effort: the canopy already exists in Matrix
-            // regardless, so a failed/blocked index must not break creation.
+            // regardless, so a failed/blocked index must not break creation,
+            // but the form said it would be listed, so a failure is reported.
             if (listCanopy) {
                 void indexCanopy({
                     canopyId: roomId,
                     name: roomName,
                     summary: roomTopic || undefined,
-                }).catch(() => undefined);
+                }).catch(() => {
+                    showToast(
+                        `${roomName} was created, but it could not be listed in the Blackout directory. Voice rooms and app installs need the listing.`,
+                        { variant: 'Critical' }
+                    );
+                });
             }
             if (alive()) {
                 onCreate?.(roomId);

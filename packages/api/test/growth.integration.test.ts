@@ -10,6 +10,7 @@ process.env.AUTH_RATE_LIMIT_MAX = process.env.AUTH_RATE_LIMIT_MAX ?? '1000';
 
 const { default: app } = await import('../src/index');
 const { resetGrowthForTest } = await import('../src/services/growth');
+const { signJwtWithScopes } = await import('./_fixtures/capabilityToken');
 
 async function issueToken(): Promise<{ token: string; sub: string }> {
     const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -25,7 +26,10 @@ async function issueToken(): Promise<{ token: string; sub: string }> {
     });
     assert.equal(response.status, 201);
     const body = (await response.json()) as { token: string; userId: string };
-    return { token: body.token, sub: body.userId };
+    // No session token carries growth.write (an allowlisted admin holds it
+    // until a role model exists, and the header can only narrow), so the
+    // tests of the growth write routes use a token whose claims carry it.
+    return { token: signJwtWithScopes(body.userId, username, ['growth.write']), sub: body.userId };
 }
 
 const buildHeaders = (token: string, capabilities: string[]) => ({

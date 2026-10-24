@@ -35,6 +35,8 @@
  * `users[mxid] ?? users_default ?? 0` must reach
  * `events['m.room.message'] ?? events_default ?? 0`; with no power-levels
  * event anyone may post. A level that is present but not an integer refuses.
+ * The membership and power-level readers are exported for the canopy listing
+ * check (`canopyListingGate.ts`), so the two read a room's state the same way.
  */
 import { matrixClient, type RoomStateEvent } from '../integrations/matrix-client';
 import { matrixUserIdFor } from './userIdentity';
@@ -62,7 +64,7 @@ export const RETRYABLE_BOT_POST_REFUSALS: ReadonlySet<BotPostRefusal> = new Set(
 
 const refuse = (reason: BotPostRefusal): BotPostVerdict => ({ ok: false, reason });
 
-const membershipOf = (state: RoomStateEvent[], mxid: string): unknown =>
+export const membershipOf = (state: RoomStateEvent[], mxid: string): unknown =>
     state.find((e) => e.type === 'm.room.member' && e.state_key === mxid)?.content?.membership;
 
 /**
@@ -91,14 +93,39 @@ const firstLevel = (...candidates: Array<number | null | undefined>): number | n
     return 0;
 };
 
-const mayPostMessage = (state: RoomStateEvent[], mxid: string): boolean => {
+/** The content of the room's `m.room.power_levels` event; `undefined` when it has none. */
+export const powerLevelsContent = (
+    state: RoomStateEvent[]
+): Record<string, unknown> | undefined => {
     const powerLevels = state.find((e) => e.type === 'm.room.power_levels' && !e.state_key);
-    if (!powerLevels) return true;
-    const content = asRecord(powerLevels.content);
-    const users = asRecord(content.users);
+    return powerLevels ? asRecord(powerLevels.content) : undefined;
+};
+
+/** `users[mxid] ?? users_default ?? 0`; `null` when the level present is unusable. */
+export const userPowerLevel = (content: Record<string, unknown>, mxid: string): number | null =>
+    firstLevel(asLevel(asRecord(content.users)[mxid]), asLevel(content.users_default));
+
+/**
+ * The level needed to send `eventType`: `events[eventType]`, else
+ * `state_default ?? 50` for a state event and `events_default ?? 0` for any
+ * other (the spec's defaults); `null` when the level present is unusable.
+ */
+export const requiredPowerLevel = (
+    content: Record<string, unknown>,
+    eventType: string,
+    kind: 'state' | 'message'
+): number | null => {
     const events = asRecord(content.events);
-    const userLevel = firstLevel(asLevel(users[mxid]), asLevel(content.users_default));
-    const required = firstLevel(asLevel(events['m.room.message']), asLevel(content.events_default));
+    return kind === 'state'
+        ? firstLevel(asLevel(events[eventType]), asLevel(content.state_default), 50)
+        : firstLevel(asLevel(events[eventType]), asLevel(content.events_default));
+};
+
+const mayPostMessage = (state: RoomStateEvent[], mxid: string): boolean => {
+    const content = powerLevelsContent(state);
+    if (!content) return true;
+    const userLevel = userPowerLevel(content, mxid);
+    const required = requiredPowerLevel(content, 'm.room.message', 'message');
     if (userLevel === null || required === null) return false;
     return userLevel >= required;
 };

@@ -11,73 +11,79 @@ process.env.AUTH_RATE_LIMIT_MAX = '10000';
 process.env.BLACKOUT_DB_MODE = 'memory';
 
 const { default: app } = await import('../src/index');
-const { signJwt, hashPassword } = await import('../src/services/auth');
+const { hashPassword } = await import('../src/services/auth');
 const { db } = await import('../src/db/store');
+const { signJwtWithScopes } = await import('./_fixtures/capabilityToken');
 
 const seedUser = (username: string) => {
-  const id = randomUUID();
-  db.createUser({
-    id,
-    username,
-    email: `${username}@example.com`,
-    passwordHash: hashPassword('Original-Pass-1234!'),
-    reputationScore: 0,
-    reputationTier: 'member',
-    pubkeyEd25519: 'pk',
-  });
-  return db.getUserById(id)!;
+    const id = randomUUID();
+    db.createUser({
+        id,
+        username,
+        email: `${username}@example.com`,
+        passwordHash: hashPassword('Original-Pass-1234!'),
+        reputationScore: 0,
+        reputationTier: 'member',
+        pubkeyEd25519: 'pk',
+    });
+    return db.getUserById(id)!;
 };
 
+// No session token carries moderation.* (only an allowlisted admin holds
+// moderation.write, and the header can only narrow), so these tests sign a
+// token that does.
 const modHeaders = (userId: string, username: string) => ({
-  authorization: `Bearer ${signJwt(userId, username, 600)}`,
-  'content-type': 'application/json',
-  'x-blackout-capabilities': 'moderation.*',
+    authorization: `Bearer ${signJwtWithScopes(userId, username, ['moderation.*'])}`,
+    'content-type': 'application/json',
 });
 
 test('POST /v1/moderation/actions persists optional metadata and returns it', async () => {
-  const mod = seedUser(`mod-${randomUUID().slice(0, 6)}`);
-  const communityId = randomUUID();
+    const mod = seedUser(`mod-${randomUUID().slice(0, 6)}`);
+    const communityId = randomUUID();
 
-  const res = await app.request('/v1/moderation/actions', {
-    method: 'POST',
-    headers: modHeaders(mod.id, mod.username),
-    body: JSON.stringify({
-      communityId,
-      actorId: mod.id,
-      targetId: randomUUID(),
-      action: 'timeout',
-      reason: 'spam',
-      metadata: { durationMs: 300000, source: 'composer' },
-    }),
-  });
+    const res = await app.request('/v1/moderation/actions', {
+        method: 'POST',
+        headers: modHeaders(mod.id, mod.username),
+        body: JSON.stringify({
+            communityId,
+            actorId: mod.id,
+            targetId: randomUUID(),
+            action: 'timeout',
+            reason: 'spam',
+            metadata: { durationMs: 300000, source: 'composer' },
+        }),
+    });
 
-  assert.equal(res.status, 201);
-  const created = (await res.json()) as { id: string; metadata?: Record<string, unknown> };
-  assert.deepEqual(created.metadata, { durationMs: 300000, source: 'composer' });
+    assert.equal(res.status, 201);
+    const created = (await res.json()) as { id: string; metadata?: Record<string, unknown> };
+    assert.deepEqual(created.metadata, { durationMs: 300000, source: 'composer' });
 
-  const list = await app.request(`/v1/moderation/actions?communityId=${communityId}`, {
-    method: 'GET',
-    headers: modHeaders(mod.id, mod.username),
-  });
-  assert.equal(list.status, 200);
-  const actions = (await list.json()) as Array<{ id: string; metadata?: Record<string, unknown> }>;
-  const stored = actions.find((a) => a.id === created.id);
-  assert.ok(stored);
-  assert.deepEqual(stored!.metadata, { durationMs: 300000, source: 'composer' });
+    const list = await app.request(`/v1/moderation/actions?communityId=${communityId}`, {
+        method: 'GET',
+        headers: modHeaders(mod.id, mod.username),
+    });
+    assert.equal(list.status, 200);
+    const actions = (await list.json()) as Array<{
+        id: string;
+        metadata?: Record<string, unknown>;
+    }>;
+    const stored = actions.find((a) => a.id === created.id);
+    assert.ok(stored);
+    assert.deepEqual(stored!.metadata, { durationMs: 300000, source: 'composer' });
 });
 
 test('POST /v1/moderation/actions accepts the new timeout/slowmode action types', async () => {
-  const mod = seedUser(`mod-${randomUUID().slice(0, 6)}`);
-  const res = await app.request('/v1/moderation/actions', {
-    method: 'POST',
-    headers: modHeaders(mod.id, mod.username),
-    body: JSON.stringify({
-      communityId: randomUUID(),
-      actorId: mod.id,
-      targetId: randomUUID(),
-      action: 'slowmode',
-      reason: 'raid mitigation',
-    }),
-  });
-  assert.equal(res.status, 201);
+    const mod = seedUser(`mod-${randomUUID().slice(0, 6)}`);
+    const res = await app.request('/v1/moderation/actions', {
+        method: 'POST',
+        headers: modHeaders(mod.id, mod.username),
+        body: JSON.stringify({
+            communityId: randomUUID(),
+            actorId: mod.id,
+            targetId: randomUUID(),
+            action: 'slowmode',
+            reason: 'raid mitigation',
+        }),
+    });
+    assert.equal(res.status, 201);
 });

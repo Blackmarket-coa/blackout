@@ -110,12 +110,16 @@ test('profile PUT rejects edits to other users', async () => {
 test('profile PUT to own profile is granted by default (profile.write)', async () => {
     __resetProfileStoreForTests();
     // profile.write is part of every user's token capabilities, so editing
-    // one's own profile succeeds even without an explicit write header. The
-    // meaningful gate is ownership (subject === userId), covered by the
-    // "rejects edits to other users" test above.
+    // one's own profile succeeds with no capability header at all (a header
+    // can only narrow, and one listing just profile.read would remove the
+    // write). The meaningful gate is ownership (subject === userId), covered
+    // by the "rejects edits to other users" test above.
     const response = await app.request('/v1/profile/profile-user-e', {
         method: 'PUT',
-        headers: authHeaders('profile-user-e', ['profile.read']),
+        headers: {
+            authorization: `Bearer ${signJwt('profile-user-e', 'profileusere', 600)}`,
+            'content-type': 'application/json',
+        },
         body: JSON.stringify({ displayName: 'Self edit' }),
     });
     assert.equal(response.status, 200);

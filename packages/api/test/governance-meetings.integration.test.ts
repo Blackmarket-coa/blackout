@@ -9,14 +9,15 @@ process.env.JWT_AUDIENCE = process.env.JWT_AUDIENCE ?? 'blackout-client-test';
 process.env.AUTH_RATE_LIMIT_MAX = process.env.AUTH_RATE_LIMIT_MAX ?? '1000';
 
 const { default: app } = await import('../src/index');
-const { signJwt } = await import('../src/services/auth');
+const { signJwtWithScopes } = await import('./_fixtures/capabilityToken');
 const { __resetGovernanceStoreForTests } = await import('../src/services/governanceStore');
 
+// No session token carries governance.write (the header can only narrow what a
+// token grants), so these tests sign a token whose claims carry it.
 function authHeaders(capabilities = ['governance.read', 'governance.write']) {
     return {
-        authorization: `Bearer ${signJwt('gov-user', 'govuser', 600)}`,
+        authorization: `Bearer ${signJwtWithScopes('gov-user', 'govuser', capabilities)}`,
         'content-type': 'application/json',
-        'x-blackout-capabilities': capabilities.join(','),
     };
 }
 
@@ -101,7 +102,7 @@ test('meetings PUT rejects endsAt <= startsAt', async () => {
                 meetingId: 'meet-bad',
                 startsAt: '2026-06-01T16:00:00.000Z',
                 endsAt: '2026-06-01T15:00:00.000Z',
-            }),
+            })
         ),
     });
     assert.equal(response.status, 400);
