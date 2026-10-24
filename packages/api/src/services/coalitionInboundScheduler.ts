@@ -11,6 +11,7 @@
  * is a confusing thing to find in a log.
  */
 import { sweepInboundActivity } from './coalitionInboundSync';
+import { trackBackgroundTick } from './backgroundTicks';
 import { log } from '../telemetry/logger';
 
 export const DEFAULT_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
@@ -25,7 +26,7 @@ export const startCoalitionInboundScheduler = (
     timer = setInterval(() => {
         if (running) return;
         running = true;
-        void sweepInboundActivity()
+        void trackBackgroundTick(sweepInboundActivity())
             .catch((err) => {
                 log.warn('coalition_inbound_sweep_threw', { error: String(err) });
             })

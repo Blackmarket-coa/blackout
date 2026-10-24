@@ -12,6 +12,7 @@ process.env.BLACKOUT_DB_MODE = 'memory';
 const { default: app } = await import('../src/index');
 const { signJwt } = await import('../src/services/auth');
 const { sweepOverdueDeadmanSwitches } = await import('../src/modules/deadman');
+const { db } = await import('../src/db/store');
 const { signJwtWithScopes } = await import('./_fixtures/capabilityToken');
 
 // No session token carries deadman.write (decision N2; the header can only
@@ -62,6 +63,12 @@ test('arming, checking in, and cancelling a switch produces protocol envelopes',
     assert.equal(armedPayload.roomId, '!room:example.org');
     const switchId = armedPayload.switchId as string;
     assert.ok(switchId);
+
+    // Arming and checking in each stamp lastCheckInAt with the current
+    // millisecond; both can land in the same one, and then the comparison below
+    // fails on a correct check-in. Let the clock move on first.
+    const armedAt = Date.parse(armedPayload.lastCheckInAt as string);
+    while (Date.now() <= armedAt) await new Promise((resolve) => setTimeout(resolve, 1));
 
     const checkedIn = await app.request(`/v1/deadman/switches/${switchId}/check-in`, {
         method: 'POST',
@@ -410,4 +417,98 @@ test('a recipient gets the encrypted payload only after the switch triggers, nev
         headers: recipientHeaders,
     });
     assert.ok(!(await recipientList.text()).includes(`sealed-cancelled-${stamp}`));
+});
+
+const HOUR_MS = 60 * 60 * 1000;
+
+test('a switch the sweep reaches hours late gets one 72-hour grace window, and its recipient reads nothing until it ends', async () => {
+    const stamp = `${Date.now()}-backlog`;
+    const owner = `owner-${stamp}`;
+    const recipient = `recipient-${stamp}`;
+    const ownerHeaders = headersFor(owner);
+    const armed = await app.request('/v1/deadman/switches', {
+        method: 'POST',
+        headers: ownerHeaders,
+        body: JSON.stringify(
+            armBody({
+                recipients: [recipient],
+                checkInIntervalSeconds: 60,
+                gracePeriodSeconds: 60,
+                encryptedPayload: `sealed-backlog-${stamp}`,
+            })
+        ),
+    });
+    assert.equal(armed.status, 201);
+    const switchId = ((await armed.json()) as { payload: { switchId: string } }).payload.switchId;
+    const readAsRecipient = async () => {
+        const res = await app.request(`/v1/deadman/switches/${switchId}`, {
+            headers: defaultTokenHeaders(recipient),
+        });
+        assert.equal(res.status, 200);
+        return (await res.json()) as {
+            status: string;
+            releaseAt: string;
+            encryptedPayload?: string;
+        };
+    };
+
+    // The sweep comes back two hours after the release: nobody was watching.
+    const back = new Date(Date.now() + 2 * HOUR_MS);
+    sweepOverdueDeadmanSwitches(back);
+    const inWindow = await readAsRecipient();
+    assert.equal(inWindow.status, 'grace', 'not fired on the first sweep back');
+    assert.equal(inWindow.encryptedPayload, undefined);
+    assert.equal(inWindow.releaseAt, new Date(back.getTime() + 72 * HOUR_MS).toISOString());
+    assert.equal(db.getDeadmanSwitch(switchId)?.backlogGraceStartedAt, back.toISOString());
+
+    // Sweeps inside the window leave it alone.
+    sweepOverdueDeadmanSwitches(new Date(back.getTime() + 71 * HOUR_MS));
+    assert.equal((await readAsRecipient()).status, 'grace');
+
+    // When the window ends it fires, and the recipient can read the payload.
+    sweepOverdueDeadmanSwitches(new Date(back.getTime() + 72 * HOUR_MS + 1000));
+    const fired = await readAsRecipient();
+    assert.equal(fired.status, 'triggered');
+    assert.equal(fired.encryptedPayload, `sealed-backlog-${stamp}`);
+
+    // The owner's feed records the window as a grace event that says so.
+    const feed = await app.request('/v1/deadman/events', { headers: defaultTokenHeaders(owner) });
+    const events = ((await feed.json()) as FeedEvent[]).filter(
+        (event) => event.payload.switchId === switchId
+    );
+    assert.deepEqual(
+        events.map((event) => event.type),
+        ['deadman.switch.armed', 'deadman.switch.grace', 'deadman.switch.triggered']
+    );
+    assert.equal(events[1].payload.backlogWindow, true);
+});
+
+test('a check-in ends the backlog window, so the next missed check-in gets its own', async () => {
+    const owner = `owner-${Date.now()}-backlog-checkin`;
+    const ownerHeaders = headersFor(owner);
+    const armed = await app.request('/v1/deadman/switches', {
+        method: 'POST',
+        headers: ownerHeaders,
+        body: JSON.stringify(armBody({ checkInIntervalSeconds: 60, gracePeriodSeconds: 60 })),
+    });
+    assert.equal(armed.status, 201);
+    const switchId = ((await armed.json()) as { payload: { switchId: string } }).payload.switchId;
+
+    sweepOverdueDeadmanSwitches(new Date(Date.now() + 2 * HOUR_MS));
+    assert.equal(db.getDeadmanSwitch(switchId)?.status, 'grace');
+    assert.ok(db.getDeadmanSwitch(switchId)?.backlogGraceStartedAt);
+
+    const checkedIn = await app.request(`/v1/deadman/switches/${switchId}/check-in`, {
+        method: 'POST',
+        headers: ownerHeaders,
+    });
+    assert.equal(checkedIn.status, 200);
+    const afterCheckIn = db.getDeadmanSwitch(switchId);
+    assert.equal(afterCheckIn?.status, 'armed');
+    assert.equal(afterCheckIn?.backlogGraceStartedAt, undefined);
+
+    // A second outage: the switch gets a window again rather than firing.
+    sweepOverdueDeadmanSwitches(new Date(Date.now() + 3 * HOUR_MS));
+    assert.equal(db.getDeadmanSwitch(switchId)?.status, 'grace');
+    assert.ok(db.getDeadmanSwitch(switchId)?.backlogGraceStartedAt);
 });

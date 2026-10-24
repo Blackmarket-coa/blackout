@@ -1,5 +1,6 @@
 import { log } from '../telemetry/logger';
 import { sweepOverdueDeadmanSwitches } from '../modules/deadman';
+import { BACKLOG_TOLERANCE_FLOOR_MS, backlogToleranceMs } from './backlogTolerance';
 
 /**
  * Autonomous dead-man's-switch sweep loop.
@@ -12,10 +13,13 @@ import { sweepOverdueDeadmanSwitches } from '../modules/deadman';
  * On by default (BLACKOUT_DEADMAN_SWEEP !== '0'), like the scheduled-message
  * dispatcher, because it backs a first-party safety feature rather than an
  * optional integration. Single-process by design (mirrors the other
- * schedulers): a multi-replica deployment should run background loops on a
- * single owner replica (BLACKOUT_BACKGROUND_WORKERS_DISABLED=1 elsewhere) or
- * add a postgres advisory lock. `evaluateTransition` is idempotent for
- * already-fired switches, so an occasional overlap re-emits nothing.
+ * schedulers): in postgres mode the background-leader advisory lock
+ * (services/backgroundLeader.ts) keeps the loops to one process.
+ * `evaluateTransition` is idempotent for already-fired switches, so an
+ * occasional overlap re-emits nothing.
+ *
+ * Its backlog tolerance follows its cadence (backlogTolerance.ts): a switch it
+ * reaches later than that gets a backlog grace window instead of firing.
  */
 
 export const DEFAULT_INTERVAL_MS = 30 * 1000; // 30 seconds
@@ -23,8 +27,11 @@ export const DEFAULT_INTERVAL_MS = 30 * 1000; // 30 seconds
 let timer: ReturnType<typeof setInterval> | null = null;
 
 /** Run one sweep pass. Returns the number of switches whose status advanced. */
-export const runDeadmanSweep = (now: Date = new Date()): number => {
-    const processed = sweepOverdueDeadmanSwitches(now);
+export const runDeadmanSweep = (
+    now: Date = new Date(),
+    toleranceMs: number = BACKLOG_TOLERANCE_FLOOR_MS
+): number => {
+    const processed = sweepOverdueDeadmanSwitches(now, toleranceMs);
     if (processed > 0) log.info('deadman_sweep_processed', { processed });
     return processed;
 };
@@ -37,9 +44,10 @@ export const startDeadmanSweepScheduler = (
     intervalMs: number = DEFAULT_INTERVAL_MS
 ): { stop: () => void } => {
     if (timer) return { stop: stopDeadmanSweepScheduler };
+    const toleranceMs = backlogToleranceMs(intervalMs);
     timer = setInterval(() => {
         try {
-            runDeadmanSweep();
+            runDeadmanSweep(new Date(), toleranceMs);
         } catch (err) {
             log.warn('deadman_sweep_tick_threw', { error: String(err) });
         }

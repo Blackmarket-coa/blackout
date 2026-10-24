@@ -7,29 +7,37 @@ import type { PgPool } from '../db/migrate';
 let cachedPool: PgPool | null = null;
 
 export function readDatabaseUrl(): string | null {
-  const url = process.env.DATABASE_URL?.trim();
-  return url && url.length > 0 ? url : null;
+    const url = process.env.DATABASE_URL?.trim();
+    return url && url.length > 0 ? url : null;
 }
 
 /** Create (once) and return the shared pg pool. Throws if DATABASE_URL is unset. */
 export async function getSharedPgPool(): Promise<PgPool> {
-  if (cachedPool) return cachedPool;
-  const url = readDatabaseUrl();
-  if (!url) {
-    throw new Error('DATABASE_URL is required when BLACKOUT_DB_MODE=postgres.');
-  }
-  const { default: pg } = (await import('pg')) as {
-    default: { Pool: new (cfg: { connectionString: string }) => PgPool };
-  };
-  cachedPool = new pg.Pool({ connectionString: url });
-  return cachedPool;
+    if (cachedPool) return cachedPool;
+    const url = readDatabaseUrl();
+    if (!url) {
+        throw new Error('DATABASE_URL is required when BLACKOUT_DB_MODE=postgres.');
+    }
+    const { default: pg } = (await import('pg')) as {
+        default: { Pool: new (cfg: { connectionString: string }) => PgPool };
+    };
+    cachedPool = new pg.Pool({ connectionString: url });
+    return cachedPool;
 }
 
 export function getExistingPgPool(): PgPool | null {
-  return cachedPool;
+    return cachedPool;
 }
 
 /** For tests / shutdown: drop the cached pool so a fresh one is created next time. */
 export function clearSharedPgPool(): void {
-  cachedPool = null;
+    cachedPool = null;
+}
+
+/**
+ * For tests: make `pool` the shared pool, as if getSharedPgPool had created
+ * it, so a boot runs its real code against an in-process database.
+ */
+export function setSharedPgPoolForTests(pool: PgPool): void {
+    cachedPool = pool;
 }

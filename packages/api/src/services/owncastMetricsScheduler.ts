@@ -1,5 +1,6 @@
 import { getOwncastOriginConfig } from '../integrations/owncast';
 import { insertAnalyticsEvents } from './analyticsEvents';
+import { trackBackgroundTick } from './backgroundTicks';
 import { log } from '../telemetry/logger';
 
 /**
@@ -74,7 +75,7 @@ export const startOwncastMetricsScheduler = (
 ): { stop: () => void } => {
     if (timer) return { stop: stopOwncastMetricsScheduler };
     timer = setInterval(() => {
-        void runOwncastMetricsPoll().catch((err) => {
+        void trackBackgroundTick(runOwncastMetricsPoll()).catch((err) => {
             log.warn('owncast_metrics_tick_threw', { error: String(err) });
         });
     }, intervalMs);

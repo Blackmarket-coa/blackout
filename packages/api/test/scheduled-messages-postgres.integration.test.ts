@@ -173,7 +173,12 @@ test('migration 101 clears text left on finished rows by earlier versions (R-4)'
         };
         for (const [status, id] of Object.entries(ids)) await insert(id, status);
 
-        const applied = await migrateUp({ pool: pool as never, migrationsDir: MIGRATIONS_DIR });
+        // Up to 101 only, so later migrations do not change what this applies.
+        const applied = await migrateUp({
+            pool: pool as never,
+            migrationsDir: MIGRATIONS_DIR,
+            targetOrdinal: 101,
+        });
         assert.deepEqual(
             applied.map((m) => m.id),
             ['101_scheduled_message_body_retention']

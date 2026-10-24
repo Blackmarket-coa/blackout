@@ -4,6 +4,8 @@ import { DEADMAN_EVENT_NAMES, type DeadmanSwitchPayload } from '@blackout/protoc
 import { db } from '../db/store';
 import type { DeadmanSwitchRecord } from '../db/types';
 import { readJsonBody } from '../middleware/validate';
+import { BACKLOG_TOLERANCE_FLOOR_MS } from '../services/backlogTolerance';
+import { log } from '../telemetry/logger';
 import { requireAuthenticatedUser, requireDomainCapability } from './authz';
 import { emitDomainEvent, listDomainEvents } from './domain-events';
 import {
@@ -14,6 +16,7 @@ import {
     MIN_GRACE_PERIOD_SECONDS,
     applyCheckIn,
     computeDeadlines,
+    evaluateSweepTransition,
     evaluateTransition,
     validateArmInput,
 } from '../services/deadmanScheduler';
@@ -90,28 +93,58 @@ const envelope = (event: string, record: DeadmanSwitchRecord, senderId: string) 
  * so a switch fires exactly when its owner has gone dark, which is the entire
  * point of the feature. `evaluateTransition` is idempotent for already
  * triggered/cancelled switches, so repeated ticks never re-emit. Returns the
- * number of switches whose status advanced this pass.
+ * number of switches whose status advanced this pass, backlog windows included.
+ *
+ * A switch the sweep reaches more than `toleranceMs` after it should have acted
+ * (the sweep was not running) gets one 72-hour backlog grace window instead of
+ * firing: see `evaluateSweepTransition`. The owner-scoped route keeps
+ * `evaluateTransition`, since its caller is the owner, present.
  */
-export function sweepOverdueDeadmanSwitches(now: Date = new Date()): number {
+export function sweepOverdueDeadmanSwitches(
+    now: Date = new Date(),
+    toleranceMs: number = BACKLOG_TOLERANCE_FLOOR_MS
+): number {
     let processed = 0;
+    let backlogWindows = 0;
     for (const record of db.listAllDeadmanSwitches()) {
-        const transition = evaluateTransition(record, now);
+        const transition = evaluateSweepTransition(record, now, toleranceMs);
         if (transition.kind === 'none') continue;
 
-        const updated = db.setDeadmanSwitchStatus(record.id, transition.record.status);
+        const updated =
+            transition.kind === 'backlog_grace'
+                ? db.updateDeadmanSwitch(record.id, {
+                      status: transition.record.status,
+                      releaseAt: transition.record.releaseAt,
+                      backlogGraceStartedAt: transition.record.backlogGraceStartedAt,
+                  })
+                : db.setDeadmanSwitchStatus(record.id, transition.record.status);
         if (!updated) continue;
 
         emitDomainEvent({
             module: 'deadman',
-            type: transition.kind === 'grace' ? 'deadman.switch.grace' : 'deadman.switch.triggered',
+            type:
+                transition.kind === 'triggered'
+                    ? 'deadman.switch.triggered'
+                    : 'deadman.switch.grace',
             payload: {
                 switchId: updated.id,
                 ownerId: updated.ownerId,
                 roomId: updated.roomId,
                 recipients: updated.recipients,
+                ...(transition.kind === 'backlog_grace'
+                    ? { backlogWindow: true, releaseAt: updated.releaseAt }
+                    : {}),
             },
         });
         processed += 1;
+        if (transition.kind === 'backlog_grace') backlogWindows += 1;
+    }
+    if (backlogWindows > 0) {
+        // Counts only, like the rest of the sweep's logging.
+        log.warn('deadman_backlog_grace_windows_started', {
+            switches: backlogWindows,
+            toleranceMs,
+        });
     }
     return processed;
 }
@@ -218,6 +251,8 @@ function createDeadmanRouter() {
             lastCheckInAt: refreshed.lastCheckInAt,
             triggerAt: refreshed.triggerAt,
             releaseAt: refreshed.releaseAt,
+            // Ends a backlog window, so the next missed check-in can have one.
+            backlogGraceStartedAt: refreshed.backlogGraceStartedAt,
         });
         if (!updated) {
             return c.json({ code: 'switch_not_found', message: 'Switch not found' }, 404);
