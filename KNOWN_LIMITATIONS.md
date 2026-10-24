@@ -105,16 +105,18 @@ For the source-of-truth triage with tier/owner detail see
     `apps/blackout-client/src/app/components/create-room/newRoomDefaults.ts`,
     asked by the New canopy form, the New den form, the playbook reveal,
     `createDenInCanopy` (voice, forum, stage, announcement and
-    category-menu dens), categories and Coliseum discussion dens.
+    category-menu dens), categories and Coliseum discussion dens. The Black
+    Mask chat panel's New screens (2026-10-23) use the same two forms.
 -   **State:** in the Blackout app a new canopy, a den with no canopy and a
     den inside a public canopy start **public and not end-to-end encrypted**;
     a den inside a canopy that is not public starts restricted to that canopy
     and encrypted; a public canopy is listed in the Blackout canopy directory
     and any other canopy only when "List in the Blackout directory" is turned
-    on (off by default). The Black Mask chat panel starts everything private
-    (or, inside a canopy, restricted to that canopy's members; dens
-    encrypted). `VITE_BLACKOUT_NEW_ROOM_DEFAULT=private` at build time makes
-    the app start private too. The access chooser is at the top of both forms
+    on (off by default). The Black Mask chat panel starts a canopy private
+    wherever it is made, inside another canopy too, and a den private or,
+    inside a canopy, restricted to that canopy's members, and encrypted.
+    `VITE_BLACKOUT_NEW_ROOM_DEFAULT=private` at build time makes the app
+    start private too. The access chooser is at the top of both forms
     and says what each choice means; the playbook reveal, which has no
     chooser, says in one sentence what it is about to plant.
 -   **Not enforced anywhere but the client.** The homeserver accepts whatever
@@ -149,6 +151,13 @@ For the source-of-truth triage with tier/owner detail see
     rooms (`routes/voice.ts`) and app installs (`services/apps.ts`) on the
     directory entry (`hasCanopy`), so a private canopy created with the toggle
     off cannot have them until it is listed; the toggle says so.
+-   **The panel makes rooms it cannot invite to.** The panel has New canopy
+    and New den screens but no invite screen, so people join a private
+    canopy or den made there by invitation, sent from Blackout; the screens
+    say so. The panel offers a den or canopy inside a canopy only when the
+    canopy's power levels let the signed-in user add rooms to it, the rule
+    the homeserver enforces; that check is the client's reading of the
+    room's state, and the homeserver's refusal remains the backstop.
 -   **Dens made before 2026-10-18** by the voice/forum/stage/announcement
     controls, the category menu, the Discord import or the Coliseum were
     invite-only by homeserver preset, not restricted to their canopy as the

@@ -33,6 +33,16 @@ export const buildEmbedDenPath = (canopyId: string | null, denId: string): strin
 
 export const buildEmbedDmPath = (roomId: string): string => `${EMBED_PATH}/dms/${enc(roomId)}`;
 
+/** The New canopy form: top level, or inside `parentCanopyId`. */
+export const buildEmbedNewCanopyPath = (parentCanopyId: string | null): string =>
+    parentCanopyId
+        ? `${EMBED_PATH}/canopies/${enc(parentCanopyId)}/new/canopy`
+        : `${EMBED_PATH}/new/canopy`;
+
+/** The New den form inside `canopyId`. */
+export const buildEmbedNewDenPath = (canopyId: string): string =>
+    `${EMBED_PATH}/canopies/${enc(canopyId)}/new/den`;
+
 export const buildEmbedElsewherePath = (target: string): string =>
     `${EMBED_ELSEWHERE_PATH}?to=${enc(target)}`;
 

@@ -99,6 +99,12 @@ export const EMBED_CANOPY_DEN_PATH = '/embed/canopies/:canopyId/dens/:denId';
 /** A den with no parent canopy. */
 export const EMBED_DEN_PATH = '/embed/dens/:denId';
 export const EMBED_DM_PATH = '/embed/dms/:roomId';
+/** New top-level canopy, made from the panel. */
+export const EMBED_NEW_CANOPY_PATH = '/embed/new/canopy';
+/** New canopy inside a canopy. */
+export const EMBED_CANOPY_NEW_CANOPY_PATH = '/embed/canopies/:canopyId/new/canopy';
+/** New den inside a canopy. */
+export const EMBED_CANOPY_NEW_DEN_PATH = '/embed/canopies/:canopyId/new/den';
 /**
  * Where the panel parks a navigation to something it does not show
  * (`?to=<same-origin path>`), so the frame's own URL never leaves the prefix.

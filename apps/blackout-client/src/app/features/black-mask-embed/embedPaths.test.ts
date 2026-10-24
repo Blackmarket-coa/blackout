@@ -1,9 +1,17 @@
 import { describe, expect, it } from 'vitest';
+import { matchPath } from 'react-router';
+import {
+    EMBED_CANOPY_NEW_CANOPY_PATH,
+    EMBED_CANOPY_NEW_DEN_PATH,
+    EMBED_NEW_CANOPY_PATH,
+} from '../../pages/paths';
 import {
     buildEmbedCanopyPath,
     buildEmbedDenPath,
     buildEmbedDmPath,
     buildEmbedElsewherePath,
+    buildEmbedNewCanopyPath,
+    buildEmbedNewDenPath,
     canonicalDenPath,
     isEmbedPath,
     mapToEmbedPath,
@@ -37,6 +45,24 @@ describe('panel path builders', () => {
         expect(buildEmbedElsewherePath('/coliseum?x=1')).toBe(
             '/embed/elsewhere?to=%2Fcoliseum%3Fx%3D1'
         );
+    });
+
+    it('builds the New forms on the routes the panel registers', () => {
+        expect(buildEmbedNewCanopyPath(null)).toBe('/embed/new/canopy');
+        expect(buildEmbedNewCanopyPath('!c:s')).toBe('/embed/canopies/!c%3As/new/canopy');
+        expect(buildEmbedNewDenPath('!c:s')).toBe('/embed/canopies/!c%3As/new/den');
+        expect(matchPath(EMBED_NEW_CANOPY_PATH, buildEmbedNewCanopyPath(null))).not.toBeNull();
+        // `matchPath` hands the segment back still encoded; the pages decode it.
+        expect(
+            matchPath(EMBED_CANOPY_NEW_CANOPY_PATH, buildEmbedNewCanopyPath('!c:s'))?.params
+                .canopyId
+        ).toBe('!c%3As');
+        expect(
+            matchPath(EMBED_CANOPY_NEW_DEN_PATH, buildEmbedNewDenPath('!c:s'))?.params.canopyId
+        ).toBe('!c%3As');
+        for (const path of [buildEmbedNewCanopyPath(null), buildEmbedNewDenPath('!c:s')]) {
+            expect(isEmbedPath(path)).toBe(true);
+        }
     });
 
     it('builds the canonical den path with the no-canopy sentinel', () => {

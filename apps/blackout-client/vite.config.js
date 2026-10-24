@@ -4,7 +4,6 @@ import { wasm } from '@rollup/plugin-wasm';
 import { viteStaticCopy } from 'vite-plugin-static-copy';
 import { vanillaExtractPlugin } from '@vanilla-extract/vite-plugin';
 import inject from '@rollup/plugin-inject';
-import topLevelAwait from 'vite-plugin-top-level-await';
 import { VitePWA } from 'vite-plugin-pwa';
 import fs from 'fs';
 import path from 'path';
@@ -119,12 +118,6 @@ export default defineConfig({
     },
     plugins: [
         serverMatrixSdkCryptoWasm('/node_modules/.vite/deps/pkg/matrix_sdk_crypto_wasm_bg.wasm'),
-        topLevelAwait({
-            // The export name of top-level await promise for each chunk module
-            promiseExportName: '__tla',
-            // The function to generate import names of top-level await promise in each chunk module
-            promiseImportName: (i) => `__tla_${i}`,
-        }),
         viteStaticCopy(copyFiles),
         vanillaExtractPlugin(),
         wasm(),
@@ -155,9 +148,12 @@ export default defineConfig({
         outDir: 'dist',
         sourcemap: true,
         copyPublicDir: false,
-        // The app relies on top-level await (es2022). Pin the build target to
-        // es2022 so esbuild 0.28 doesn't try (and fail) to lower destructuring in
-        // the top-level-await wrapper down to the legacy default target.
+        // es2022 browsers run top-level await natively. No wrapper plugin: the
+        // bundle contains no top-level await, and vite-plugin-top-level-await's
+        // wrappers left statically imported chunks reading exports that were
+        // still unassigned (the client failed to boot under vite 8.1+), while
+        // its re-print undid minification and broke the source maps. See
+        // docs/security/dependency-advisories-2026-10-23.md.
         target: 'es2022',
         // matrix-sdk (~1.1MB) and react-vendor (~210KB) are split out below for
         // caching across deploys. The app's main bundle is what's needed for
