@@ -44,11 +44,9 @@ minted (O6).
     `*`-prefixed entries from the header. Session tokens deliberately carry
     write only for `streaming` and `profile` (`deriveUserCapabilities` in
     `packages/api/src/services/auth.ts`, "to avoid universal write access"),
-    and the header undid that: a default token plus
-    `x-blackout-capabilities: governance.write` could create proposals, vote,
-    resolve proposals and publish treasury snapshots; the same for
-    `moderation.write`, `forum.write`, `channels.*`, `growth.write`,
-    `deadman.write` and every other domain.
+    and the header undid that: any signed-in account could hold a scope its
+    token left out by naming it there, so the governance, moderation, forum,
+    channels, growth and dead-man writes were open to every account.
 -   **Verified:** read on `develop`; 26 API test files sent the header (47
     times), most of them to obtain a scope the token lacked. The shipped
     senders were
