@@ -73,6 +73,10 @@ services:
         # Exec form, no wrapper shell: start-worker execs node, so the worker
         # itself is PID 1 and receives the SIGTERM it drains on.
         command: ['./bin/start-worker']
+        # The worker gives its drain SHUTDOWN_TIMEOUT_MS (10 s by default) and
+        # exits on its own by then; Docker's default grace is also 10 s, so a
+        # slow drain would race the SIGKILL. Twice the budget lets it finish.
+        stop_grace_period: 20s
         secrets:
             - db_password
             - cache_password
