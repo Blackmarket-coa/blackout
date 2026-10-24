@@ -14,8 +14,10 @@
 
 from contextlib import contextmanager
 from os import PathLike
-from typing import Generator, Optional, Union
+from typing import Dict, Generator, Optional, Union, cast
 from unittest.mock import patch
+
+from packaging.markers import default_environment as packaging_default_environment
 
 from synapse.util.check_dependencies import (
     DependencyException,
@@ -71,6 +73,22 @@ class TestDependencyChecker(TestCase):
         with patch(
             "synapse.util.check_dependencies.metadata.distribution",
             mock_distribution,
+        ):
+            yield
+
+    @contextmanager
+    def mock_python_version(self, version: str) -> Generator[None, None, None]:
+        """Override the marker environment to report the supplied `python_version`."""
+
+        def fake_default_environment() -> Dict[str, str]:
+            env = cast(Dict[str, str], dict(packaging_default_environment()))
+            env["python_version"] = version
+            env["python_full_version"] = f"{version}.0"
+            return env
+
+        with patch(
+            "synapse.util.check_dependencies.default_environment",
+            side_effect=fake_default_environment,
         ):
             yield
 
@@ -179,3 +197,68 @@ class TestDependencyChecker(TestCase):
             with self.mock_installed_package(old):
                 # We also ignore old versions of setuptools_rust
                 check_requirements()
+
+    def test_python_version_markers_respected(self) -> None:
+        """
+        Tests that python_version markers are properly respected.
+
+        Specifically that older versions of dependencies can be installed in
+        environments with older Python versions.
+        """
+        requirements = [
+            "pydantic ~= 2.8; python_version < '3.14'",
+            "pydantic ~= 2.12; python_version >= '3.14'",
+        ]
+
+        with patch(
+            "synapse.util.check_dependencies.metadata.requires",
+            return_value=requirements,
+        ):
+            with self.mock_python_version("3.9"):
+                with self.mock_installed_package(DummyDistribution("2.12.3")):
+                    check_requirements()
+                with self.mock_installed_package(DummyDistribution("2.8.1")):
+                    check_requirements()
+                with self.mock_installed_package(DummyDistribution("2.7.0")):
+                    self.assertRaises(DependencyException, check_requirements)
+
+            with self.mock_python_version("3.14"):
+                with self.mock_installed_package(DummyDistribution("2.12.3")):
+                    check_requirements()
+                with self.mock_installed_package(DummyDistribution("2.8.1")):
+                    self.assertRaises(DependencyException, check_requirements)
+                with self.mock_installed_package(DummyDistribution("2.7.0")):
+                    self.assertRaises(DependencyException, check_requirements)
+
+    def test_pillow_python_version_split(self) -> None:
+        """
+        The Pillow requirement in pyproject.toml has one bound per Python range
+        (docs/security/synapse-dependencies-triage-2026-10-24.md). Only the bound
+        for the running interpreter applies: 3.8-3.10 must still start on Pillow
+        10.x, and 3.11+ must refuse anything older than 13.0.0.
+        """
+        # As poetry-core writes them into the wheel's Requires-Dist.
+        requirements = [
+            'Pillow (>=13.0.0) ; python_version >= "3.11"',
+            'Pillow (>=10.0.1) ; python_version < "3.11"',
+        ]
+
+        with patch(
+            "synapse.util.check_dependencies.metadata.requires",
+            return_value=requirements,
+        ):
+            with self.mock_python_version("3.10"):
+                with self.mock_installed_package(DummyDistribution("10.1.0")):
+                    check_requirements()
+                with self.mock_installed_package(DummyDistribution("10.0.0")):
+                    self.assertRaises(DependencyException, check_requirements)
+                with self.mock_installed_package(None):
+                    self.assertRaises(DependencyException, check_requirements)
+
+            with self.mock_python_version("3.11"):
+                with self.mock_installed_package(DummyDistribution("13.0.0")):
+                    check_requirements()
+                with self.mock_installed_package(DummyDistribution("10.1.0")):
+                    self.assertRaises(DependencyException, check_requirements)
+                with self.mock_installed_package(None):
+                    self.assertRaises(DependencyException, check_requirements)
