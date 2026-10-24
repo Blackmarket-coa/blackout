@@ -61,6 +61,12 @@ test('arming, checking in, and cancelling a switch produces protocol envelopes',
     const switchId = armedPayload.switchId as string;
     assert.ok(switchId);
 
+    // Arming and checking in each stamp lastCheckInAt with the current
+    // millisecond; both can land in the same one, and then the comparison below
+    // fails on a correct check-in. Let the clock move on first.
+    const armedAt = Date.parse(armedPayload.lastCheckInAt as string);
+    while (Date.now() <= armedAt) await new Promise((resolve) => setTimeout(resolve, 1));
+
     const checkedIn = await app.request(`/v1/deadman/switches/${switchId}/check-in`, {
         method: 'POST',
         headers,
