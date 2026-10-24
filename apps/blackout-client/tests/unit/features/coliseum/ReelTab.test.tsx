@@ -146,6 +146,36 @@ describe('ReelTab (global For You reel)', () => {
         expect(container.querySelector('[data-testid="coliseum-reel-flash-up"]')).toBeTruthy();
     });
 
+    it('cancels a pending vote flash when the reel unmounts', () => {
+        const setTimeoutSpy = vi.spyOn(window, 'setTimeout');
+        const clearTimeoutSpy = vi.spyOn(window, 'clearTimeout');
+        try {
+            const { container } = renderReel();
+            act(() => {
+                (
+                    container.querySelector(
+                        '[data-testid="coliseum-reel-vote-up-a"]'
+                    ) as HTMLButtonElement
+                ).click();
+            });
+            // The vote schedules its flash reset 450 ms out.
+            const flashCall = setTimeoutSpy.mock.calls.findIndex(
+                (call: unknown[]) => call[1] === 450
+            );
+            expect(flashCall).toBeGreaterThanOrEqual(0);
+            const flashTimer = setTimeoutSpy.mock.results[flashCall].value;
+            act(() => {
+                mountedRoots.splice(0).forEach((root) => root.unmount());
+            });
+            // Left pending, it would run after the reel is gone, and in a test
+            // after the jsdom window is torn down ("window is not defined").
+            expect(clearTimeoutSpy).toHaveBeenCalledWith(flashTimer);
+        } finally {
+            setTimeoutSpy.mockRestore();
+            clearTimeoutSpy.mockRestore();
+        }
+    });
+
     it('registers agree on double-tap of the media layer', () => {
         const client = { castColiseumVote: vi.fn(async () => ({})) };
         const { container } = renderReel(client);
