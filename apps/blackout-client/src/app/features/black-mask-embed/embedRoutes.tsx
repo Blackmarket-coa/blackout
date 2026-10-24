@@ -2,10 +2,13 @@ import React from 'react';
 import { Navigate, useLocation, useSearchParams, type RouteObject } from 'react-router';
 import {
     EMBED_CANOPY_DEN_PATH,
+    EMBED_CANOPY_NEW_CANOPY_PATH,
+    EMBED_CANOPY_NEW_DEN_PATH,
     EMBED_CANOPY_PATH,
     EMBED_DEN_PATH,
     EMBED_DM_PATH,
     EMBED_ELSEWHERE_PATH,
+    EMBED_NEW_CANOPY_PATH,
     EMBED_PATH,
 } from '../../pages/paths';
 import {
@@ -18,6 +21,7 @@ import { EmbedLayout } from './EmbedLayout';
 import { EmbedHome } from './EmbedHome';
 import { EmbedCanopy } from './EmbedCanopy';
 import { EmbedRoomRoute } from './EmbedRoom';
+import { EmbedNewCanopy, EmbedNewDen } from './EmbedNew';
 import { EmbedNotShown } from './EmbedNotShown';
 
 /** The "not part of the panel" card for `/embed/elsewhere?to=<path>`. */
@@ -57,7 +61,8 @@ export const EmbedRouteError = () => (
 
 /**
  * The panel's entire route table. There are no routes for Town Square,
- * Coliseum, Market, feeds or settings: the panel cannot render them.
+ * Coliseum, Market, feeds or settings: the panel cannot render them. The
+ * `new` routes are the panel's own New canopy and New den forms.
  */
 export const embedRoutes: RouteObject[] = [
     {
@@ -69,6 +74,9 @@ export const embedRoutes: RouteObject[] = [
             { path: EMBED_CANOPY_DEN_PATH, element: <EmbedRoomRoute kind="den" /> },
             { path: EMBED_DEN_PATH, element: <EmbedRoomRoute kind="den" /> },
             { path: EMBED_DM_PATH, element: <EmbedRoomRoute kind="dm" /> },
+            { path: EMBED_NEW_CANOPY_PATH, element: <EmbedNewCanopy /> },
+            { path: EMBED_CANOPY_NEW_CANOPY_PATH, element: <EmbedNewCanopy /> },
+            { path: EMBED_CANOPY_NEW_DEN_PATH, element: <EmbedNewDen /> },
             { path: EMBED_ELSEWHERE_PATH, element: <EmbedElsewhere /> },
             { path: '*', element: <EmbedCatchAll /> },
         ],

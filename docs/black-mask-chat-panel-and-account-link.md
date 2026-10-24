@@ -62,12 +62,30 @@ What the panel is. Everything lives under `/embed` (constants in
 | `/embed/canopies/:canopyId/dens/:denId` | One den: its timeline and composer, nothing else                                               |
 | `/embed/dens/:denId`                    | A den with no parent canopy                                                                    |
 | `/embed/dms/:roomId`                    | One direct message                                                                             |
+| `/embed/new/canopy`                     | The New canopy form                                                                            |
+| `/embed/canopies/:canopyId/new/canopy`  | The New canopy form, for a canopy inside that one                                              |
+| `/embed/canopies/:canopyId/new/den`     | The New den form, for a den inside that canopy                                                 |
 | `/embed/elsewhere?to=<path>`            | "That part of Blackout isn't shown in the chat panel", with an "Open in Blackout" button       |
 
 -   **Shown:** joined canopies (Matrix spaces), joined `text` and
     `announcement` dens, joined DMs (`m.direct`). One rule decides this,
     `classifyEmbedRoom` in `embedScope.ts`, and it is applied both to the lists
     and again on each room page, since a panel URL can name any room id.
+-   **New canopy and New den (2026-10-23).** A "+ New" control in the
+    panel's header offers a new canopy from anywhere in the panel, and,
+    under a canopy the signed-in user may add rooms to, a den or a canopy
+    inside it (`EmbedNew.tsx`). "May add rooms" is read from the canopy's
+    power levels for `m.space.child`, the rule the homeserver applies when
+    the form adds the new room to the canopy; in a canopy where the user may
+    not, the control and the form's own page say so instead. The forms are
+    the full app's `CreateSpaceForm` and `CreateRoomForm`, so the access
+    chooser and its copy are the app's, with the panel's defaults (below).
+    The panel reads the homeserver's room versions before showing a form
+    (the full app loads them at boot and the panel does not) and offers no
+    form when it cannot read them. Once the room exists the form is
+    replaced by "Opening…" and the panel opens the room when it arrives
+    from sync. There is still no invite screen: people join a private canopy
+    or den made in the panel by invitation, sent from Blackout.
 -   **Not shown:** Town Square, Coliseum, Market, feeds, Explore, settings and
     every other app surface (the panel has no route for them); voice, stage
     and forum dens (listed on the canopy page under "Open in Blackout" with
@@ -119,14 +137,30 @@ Verified: unit tests for the scoping rule, the link rule and the routes (with
 the timeline and composer stubbed), deliberately broken once each to confirm
 they fail; and a real Chromium loading the production build through the
 nginx image, signed out. **Not verified:** the signed-in panel against a real
-homeserver (none was reachable from the build sandbox). The timeline and
-composer are the same components the full app uses.
+homeserver (none was reachable from the build sandbox; the New screens' check
+below later signed in against a local one). The timeline and composer are the
+same components the full app uses.
+
+Verified for the New screens (2026-10-23): unit tests through the panel's real
+route table with the full app's real forms (`EmbedNew.test.tsx`), each guard
+broken once to confirm a test fails; and the production build in a real
+Chromium, signed in inside `/embed` against a local upstream Synapse 1.163.2
+set up like the in-repo templates (`encryption_enabled_by_default_for_room_type:
+invite`), each room's state then read back from the homeserver. A canopy made
+from the panel home came out an invite-only space; a den made in it came out
+restricted to that canopy and encrypted, with its `m.space.parent` and the
+canopy's `m.space.child`; a canopy made in it came out invite-only; a den
+switched to Public came out public with no encryption event; an ordinary
+member of the canopy was offered neither in it and was refused at the form's
+own address; the den page rendered its timeline and composer. **Not
+verified:** the panel framed inside the real Black Mask extension, this
+repository's own Synapse fork (upstream was run), and sending a message.
 
 **Defaults for canopies and dens made from the panel (operator, 2026-10-17;
-built 2026-10-18).** The panel has no control to create a canopy or a den yet.
-The forms it will reuse from the full app (`CreateSpaceForm`,
-`CreateRoomForm`, the playbook reveal and `createDenInCanopy`) already ask one
-table, `apps/blackout-client/src/app/components/create-room/newRoomDefaults.ts`,
+built 2026-10-18; the panel's New screens 2026-10-23).** The panel's New
+screens reuse the full app's `CreateSpaceForm` and `CreateRoomForm`, which,
+like the playbook reveal and `createDenInCanopy`, ask one table,
+`apps/blackout-client/src/app/components/create-room/newRoomDefaults.ts`,
 which knows the surface the page booted as (a `/embed` path, decided once at
 load like `main.tsx`'s "panel or full app"):
 
@@ -136,6 +170,7 @@ load like `main.tsx`'s "panel or full app"):
 | den with no canopy         | Public; not end-to-end encrypted                                         | Private; encrypted                                                                    |
 | den in a public canopy     | Public; not encrypted                                                    | Restricted to the canopy (Private if the room version cannot); encrypted              |
 | den in a non-public canopy | Restricted to the canopy (Private if the room version cannot); encrypted | same                                                                                  |
+| canopy inside a canopy     | as a den there, but never encrypted (a space)                            | Private (invite-only), whatever the canopy it is made in (operator, 2026-10-23)       |
 | category (sub-space)       | follows the canopy's kind; the client asks for no encryption             | same                                                                                  |
 
 The access chooser stays at the top of both forms on both surfaces, and its
@@ -150,8 +185,8 @@ a party (restricted, encrypted), streaming kits (per kit), the Discord import's
 canopy (private) and DMs. Nothing enforces any of this on a server: the
 homeserver accepts the join rule it is sent and the API accepts a listing from
 any admin of the canopy (`KNOWN_LIMITATIONS.md`, "New canopy and den defaults").
-The panel's "Not shown" list above still holds; a New control and the routes
-behind it are a separate step.
+The panel's New screens are described under "Shown" above; its "Not shown"
+list still holds.
 
 ### 2. Framing policy
 

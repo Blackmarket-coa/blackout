@@ -9,10 +9,13 @@ import { cardStyle, linkStyle, mutedTextStyle } from './embedStyles';
  */
 export const EmbedNotShown = ({
     reason,
+    note = 'The chat panel shows canopies, dens and direct messages only.',
     openUrl,
     openPath,
 }: {
     reason: string;
+    /** The muted second line; defaults to what the panel shows. */
+    note?: string;
     /** Absolute same-origin URL to open in Blackout. */
     openUrl?: string;
     /** Same-origin path to open in Blackout (used when `openUrl` is absent). */
@@ -20,7 +23,7 @@ export const EmbedNotShown = ({
 }) => (
     <div style={cardStyle} data-testid="embed-not-shown" role="status">
         <p style={{ margin: 0 }}>{reason}</p>
-        <p style={mutedTextStyle}>The chat panel shows canopies, dens and direct messages only.</p>
+        <p style={mutedTextStyle}>{note}</p>
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
             <a
                 href={openUrl ?? openPath ?? '/'}
