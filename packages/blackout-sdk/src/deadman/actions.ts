@@ -1,4 +1,5 @@
 import type {
+    DeadmanReleasedSwitch,
     DeadmanSwitchArmedEvent,
     DeadmanSwitchCancelledEvent,
     DeadmanSwitchCheckedInEvent,
@@ -8,6 +9,12 @@ import type {
 } from '@blackout/protocol';
 import type { ApiClient } from '../client/types';
 
+/**
+ * The body `POST /v1/deadman/switches` took while arming was open. The route
+ * now answers 409 `arming_unavailable` to every call, whatever the body, and
+ * the format changes when arming reopens with the release
+ * (`docs/security/deadman-release-design-2026-10-24.md` §8, PR 3).
+ */
 export type ArmDeadmanSwitchInput = {
     roomId: string;
     /**
@@ -22,14 +29,21 @@ export type ArmDeadmanSwitchInput = {
     headline?: string;
 };
 
+/** The owner's switches. */
 export type DeadmanSwitchListResponse = {
     switches: DeadmanSwitchPayload[];
 };
 
+/** The switches released to the caller as a recipient: triggered ones only. */
+export type DeadmanReleasedListResponse = {
+    switches: DeadmanReleasedSwitch[];
+};
+
 export const createDeadmanActions = (client: ApiClient) => ({
     /**
-     * Arm a new deadman switch. Server emits a
-     * `blackout.deadman.switch.armed` envelope.
+     * Arm a new switch. Refused with 409 `arming_unavailable` until the API
+     * can release a message to the people the owner names; the body is not
+     * read. Kept so the refusal can be shown, not because it arms anything.
      */
     armSwitch: (input: ArmDeadmanSwitchInput) =>
         client<DeadmanSwitchArmedEvent>({
@@ -41,7 +55,8 @@ export const createDeadmanActions = (client: ApiClient) => ({
      * Reset the trigger countdown. The status moves back to `armed` and
      * the server emits a `blackout.deadman.switch.checked_in` envelope.
      * `armed` and `grace` switches are both eligible for check-in, so a
-     * late check-in can rescue a switch from the grace window.
+     * late check-in can rescue a switch from the grace window. Owner only:
+     * anyone else gets 404, whether or not the switch exists.
      */
     checkIn: (switchId: string) =>
         client<DeadmanSwitchCheckedInEvent>({
@@ -49,8 +64,11 @@ export const createDeadmanActions = (client: ApiClient) => ({
             path: `/v1/deadman/switches/${encodeURIComponent(switchId)}/check-in`,
         }),
     /**
-     * Permanently cancel an armed or grace-window switch. Triggered
-     * switches cannot be cancelled.
+     * Cancel an armed or grace-window switch. The server clears its payload,
+     * so the envelope carries none. Cancelling a cancelled switch clears a
+     * payload it still holds (one cancelled before cancel cleared payloads).
+     * Triggered switches cannot be cancelled. Owner only: anyone else gets
+     * 404, whether or not the switch exists.
      */
     cancelSwitch: (switchId: string) =>
         client<DeadmanSwitchCancelledEvent>({
@@ -58,32 +76,32 @@ export const createDeadmanActions = (client: ApiClient) => ({
             path: `/v1/deadman/switches/${encodeURIComponent(switchId)}/cancel`,
         }),
     /**
-     * Fetch the switches owned by the calling subject (or visible to them
-     * as a recipient when `scope=recipient`).
+     * The switches owned by the calling subject.
      */
-    listSwitches: (scope: 'owner' | 'recipient' = 'owner') =>
+    listSwitches: () =>
         client<DeadmanSwitchListResponse>({
             method: 'GET',
-            path: `/v1/deadman/switches?scope=${encodeURIComponent(scope)}`,
+            path: '/v1/deadman/switches?scope=owner',
         }),
     /**
-     * Read a single switch by id.
+     * The switches released to the calling subject as a recipient: triggered
+     * ones only, each as a `DeadmanReleasedSwitch`. A switch that has not
+     * triggered is absent, exactly as it is for someone it does not name.
+     */
+    listReleasedToMe: () =>
+        client<DeadmanReleasedListResponse>({
+            method: 'GET',
+            path: '/v1/deadman/switches?scope=recipient',
+        }),
+    /**
+     * Read a single switch by id: the owner's view for its owner, the
+     * released view for a recipient once it has triggered, and 404 for
+     * everyone else, whether or not the switch exists.
      */
     getSwitch: (switchId: string) =>
-        client<DeadmanSwitchPayload>({
+        client<DeadmanSwitchPayload | DeadmanReleasedSwitch>({
             method: 'GET',
             path: `/v1/deadman/switches/${encodeURIComponent(switchId)}`,
-        }),
-    /**
-     * Manually advance overdue switches. Intended for cron/CLI callers
-     * (the server also runs an internal scheduler). Returns the switches
-     * whose status changed.
-     */
-    processOverdue: (now?: string) =>
-        client<{ processed: DeadmanSwitchPayload[]; evaluatedAt: string }>({
-            method: 'POST',
-            path: '/v1/deadman/process-overdue',
-            body: now ? { now } : {},
         }),
 });
 
@@ -97,6 +115,8 @@ export const canCheckIn = (status: DeadmanSwitchStatus): boolean =>
 /**
  * Pure helper: applies a switch envelope payload onto a local snapshot.
  * Inserts when unknown; replaces fields otherwise. Returns a new array.
+ * Fields the envelope leaves out keep the snapshot's value, so after a
+ * cancel, which drops `encryptedPayload`, replace the entry instead.
  */
 export const applyDeadmanSwitchUpdate = (
     switches: readonly DeadmanSwitchPayload[],
@@ -110,6 +130,7 @@ export const applyDeadmanSwitchUpdate = (
 };
 
 export type {
+    DeadmanReleasedSwitch,
     DeadmanSwitchArmedEvent,
     DeadmanSwitchCancelledEvent,
     DeadmanSwitchCheckedInEvent,
