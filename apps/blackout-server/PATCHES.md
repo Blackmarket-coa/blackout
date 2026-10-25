@@ -366,3 +366,35 @@ Re-check each during any reconciliation with upstream.
   `getexif()` in #19098.
 - When the fork's Python floor is raised to 3.11, the `Pillow` constraint
   collapses to `>=13.0.0` and the 10.1.0 lock entry goes away.
+
+## 2026-10-25 upstream security fix ports (second pass)
+
+Hand-ported fixes from upstream Synapse releases 1.130.0 to 1.161.0, found by
+re-checking upstream's `CHANGES.md` and OSV against this **1.98.0**-based tree
+after the 2026-10-09 pass. Triage, per-fix evidence and what was left alone
+are in `docs/security/synapse-upstream-advisories-triage-2026-10-25.md`
+(repository root). The source of truth for "what upstream changed" is the
+`element-hq/synapse` git history (`develop` at `8d60450b3`, release-v1.164
+merged), read, not run; the release and PR are named per entry.
+
+Each file below is a direct edit to core Synapse source outside
+`blackout_runtime/` and must be re-checked during any reconciliation with
+upstream.
+
+### Banned server signing key (upstream 1.147.1, #19459)
+
+- `synapse/crypto/keyring.py`: new module constant `BANNED_SERVER_SIGNING_KEYS`,
+  a tuple of unpadded-base64 verify keys, holding the ESS Community Helm chart
+  key from ELEMENTSEC-2025-1670 / CVE-2026-24044 (GHSA-qwcj-h6m8-vp6q). In
+  `Keyring.process_request`, a fetched key that is in the tuple is refused with 401
+  `M_UNAUTHORIZED` before it is used, so both federation request authentication
+  (`verify_json_for_server`) and event signature checks
+  (`_check_sigs_and_hash`) reject anything signed with it. Same tuple contents
+  and same check as upstream; `_process_json` keeps this tree's name (upstream
+  renamed it `process_json`). On a sync, take upstream's tuple: it is the list
+  upstream extends when another key is burned.
+- Tests: `tests/crypto/test_keyring.py`
+  (`test_verify_json_for_server_using_banned_key`) and
+  `tests/federation/test_federation_base.py` (new file), both upstream's.
+  `patch.object` is given a 1-tuple here where upstream passes a bare string
+  and relies on substring `in`.
