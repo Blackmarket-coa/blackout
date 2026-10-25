@@ -427,3 +427,20 @@ upstream.
 - Test: `tests/handlers/test_oidc.py`
   `test_redirect_request_session_cookies_are_secure` (new; upstream shipped
   none).
+
+### Repair of `topological_ordering` after GHSA-v56r-hwv5-mxg6 (upstream 1.130.0, #18447)
+
+- `synapse/storage/databases/main/events_bg_updates.py`: new background update
+  `fixup_max_depth_cap` (`fixup_max_depth_cap_bg_update`) that walks the
+  `rooms` table in batches and, in room versions with strict canonical JSON,
+  caps `events.topological_ordering` at `MAX_DEPTH`. The 2026-10-09 GHSA-v56r
+  port stops new out-of-range depths; this repairs the `/messages` ordering of
+  events persisted before it in rooms an attacker had already hit.
+  `Tuple`/`List`/`Optional` for Python 3.8.
+- `synapse/storage/schema/main/delta/84/04_fixup_max_depth_cap.sql`: schedules
+  it (ordering 8404). Upstream's is `delta/92/05` (ordering 9205); this tree is
+  at `SCHEMA_VERSION = 84`. On a sync keep one of the two, not both.
+- Test: `tests/storage/test_events_bg_updates.py`
+  (`TestFixupMaxDepthCapBgUpdate`, upstream's; the last assertion builds its
+  dict explicitly for this tree's `simple_select_list` typing). Exercised on
+  SQLite only.
