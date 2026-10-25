@@ -331,3 +331,38 @@ internals, which an upstream sync must re-check:
   `apps/blackout-server` tests, so it has to be run by hand.
 - It stays off under MSC3861 (delegated auth), where these tables do not hold
   the tokens.
+
+## 2026-10-24 Pillow 13.0.0 on Python 3.11+, and the dependency check
+
+Edits outside `blackout_runtime/` for the Pillow advisories recorded in
+`docs/security/synapse-dependencies-triage-2026-10-24.md` (repository root).
+Re-check each during any reconciliation with upstream.
+
+- `pyproject.toml`: `Pillow` is now one constraint per Python range:
+  `>=13.0.0` on Python >= 3.11 and the old `>=10.0.1` below that. The lock had
+  10.1.0, which OSV lists 51 GitHub advisories against. 13.0.0 is the first
+  release that fixes them all, and it requires Python 3.11. So 3.8-3.10 keep
+  the 10.1.0 lock entry and all 51 advisories; no Pillow release they can run
+  fixes them. The Docker image builds on 3.11 and gets 13.0.0. Upstream made
+  the same split in 1.163.2 (#20398).
+- `poetry.lock`: regenerated with `poetry lock --no-update` under poetry 1.3.2,
+  the version `docker/Dockerfile` installs. It adds the `pillow` 13.0.0 entry
+  and a new `content-hash`, and swaps the order of astroid's two `wrapt`
+  constraints. Nothing else moved.
+- `synapse/util/check_dependencies.py`: port of upstream #19110 (Synapse
+  1.142.0), so `check_requirements()` skips a requirement whose markers do not
+  apply to this interpreter, and stops treating a bare `python_version` marker
+  as a dev dependency. Without it, the Pillow split stops Synapse starting on
+  3.8-3.10 ("needs Pillow>=13.0.0; python_version >= "3.11", but got
+  Pillow==10.1.0"), and 3.11 never checks the 13.0.0 floor. `dict[...]` and
+  `set[...]` are spelled `typing.Dict` and `typing.Set` for Python 3.8. On a
+  sync, take upstream's file, but keep this tree's `DISTRIBUTION_NAME`
+  (`blackout-server`) and its source-tree fallback for missing metadata.
+- `tests/util/test_check_dependencies.py`: upstream's
+  `test_python_version_markers_respected`, plus `test_pillow_python_version_split`
+  for the Pillow requirement as poetry-core writes it.
+- `synapse/media/thumbnailer.py` needed no change for Pillow 13. It still calls
+  the private `Image._getexif()`, which 13.0.0 keeps; upstream moved to
+  `getexif()` in #19098.
+- When the fork's Python floor is raised to 3.11, the `Pillow` constraint
+  collapses to `>=13.0.0` and the 10.1.0 lock entry goes away.
