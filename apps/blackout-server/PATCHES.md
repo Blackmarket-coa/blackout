@@ -414,3 +414,16 @@ upstream.
 - Test: `tests/handlers/test_appservice.py`
   `test_application_services_receive_private_read_receipts_of_namespaced_users_only`
   (upstream's, unchanged).
+
+### OIDC session cookie `Secure` attribute (upstream 1.142.0, #19079)
+
+- `synapse/handlers/oidc.py`: in `_SESSION_COOKIES`, `oidc_session_no_samesite`
+  now carries `HttpOnly; Secure` like its `oidc_session` twin; the only
+  remaining difference is `SameSite=None`, as the cookie names say. Without
+  `Secure` a browser also sends the session macaroon (`state`, `nonce`,
+  `code_verifier`, `client_redirect_url`) over plain HTTP to the host. Both
+  production templates serve over HTTPS (`public_baseurl`); classic
+  `oidc_providers` is configured in `infra/single-server-baseline`.
+- Test: `tests/handlers/test_oidc.py`
+  `test_redirect_request_session_cookies_are_secure` (new; upstream shipped
+  none).
