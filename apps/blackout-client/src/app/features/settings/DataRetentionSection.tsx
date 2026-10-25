@@ -239,6 +239,8 @@ export const DataRetentionSection: React.FC = () => {
                     Removes your Blackout account, sessions and linked services. It does not yet
                     deactivate your Matrix account. Posts and messages remain visible to communities
                     you participated in. Scheduled messages you have not sent yet are cancelled.
+                    Dead-man switches you own are cancelled, and what you put in them is removed
+                    from Blackout&apos;s database.
                 </small>
                 {deleteStage === 'idle' && (
                     <div>
