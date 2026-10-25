@@ -58,8 +58,8 @@ use anyhow::{Context, Error};
 use log::warn;
 use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
-use pyo3::types::{PyBool, PyList, PyLong, PyString};
-use pythonize::{depythonize, pythonize};
+use pyo3::types::{PyBool, PyInt, PyList, PyString};
+use pythonize::{depythonize, pythonize, PythonizeError};
 use serde::de::Error as _;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -71,7 +71,7 @@ pub mod evaluator;
 pub mod utils;
 
 /// Called when registering modules with python.
-pub fn register_module(py: Python<'_>, m: &PyModule) -> PyResult<()> {
+pub fn register_module(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     let child_module = PyModule::new(py, "push")?;
     child_module.add_class::<PushRule>()?;
     child_module.add_class::<PushRules>()?;
@@ -79,7 +79,7 @@ pub fn register_module(py: Python<'_>, m: &PyModule) -> PyResult<()> {
     child_module.add_class::<PushRuleEvaluator>()?;
     child_module.add_function(wrap_pyfunction!(get_base_rule_ids, m)?)?;
 
-    m.add_submodule(child_module)?;
+    m.add_submodule(&child_module)?;
 
     // We need to manually add the module to sys.modules to make `from
     // synapse.synapse_rust import push` work.
@@ -97,7 +97,7 @@ fn get_base_rule_ids() -> HashSet<&'static str> {
 
 /// A single push rule for a user.
 #[derive(Debug, Clone)]
-#[pyclass(frozen)]
+#[pyclass(frozen, from_py_object)]
 pub struct PushRule {
     /// A unique ID for this rule
     pub rule_id: Cow<'static, str>,
@@ -175,12 +175,16 @@ pub enum Action {
     Unknown(Value),
 }
 
-impl IntoPy<PyObject> for Action {
-    fn into_py(self, py: Python<'_>) -> PyObject {
+impl<'py> IntoPyObject<'py> for Action {
+    type Target = PyAny;
+    type Output = Bound<'py, Self::Target>;
+    type Error = PythonizeError;
+
+    fn into_pyobject(self, py: Python<'py>) -> Result<Self::Output, Self::Error> {
         // When we pass the `Action` struct to Python we want it to be converted
         // to a dict. We use `pythonize`, which converts the struct using the
         // `serde` serialization.
-        pythonize(py, &self).expect("valid action")
+        pythonize(py, &self)
     }
 }
 
@@ -262,14 +266,16 @@ pub enum SimpleJsonValue {
     Null,
 }
 
-impl<'source> FromPyObject<'source> for SimpleJsonValue {
-    fn extract(ob: &'source PyAny) -> PyResult<Self> {
-        if let Ok(s) = <PyString as pyo3::PyTryFrom>::try_from(ob) {
+impl<'source> FromPyObject<'_, 'source> for SimpleJsonValue {
+    type Error = PyErr;
+
+    fn extract(ob: Borrowed<'_, 'source, PyAny>) -> Result<Self, Self::Error> {
+        if let Ok(s) = ob.cast::<PyString>() {
             Ok(SimpleJsonValue::Str(Cow::Owned(s.to_string())))
         // A bool *is* an int, ensure we try bool first.
-        } else if let Ok(b) = <PyBool as pyo3::PyTryFrom>::try_from(ob) {
+        } else if let Ok(b) = ob.cast::<PyBool>() {
             Ok(SimpleJsonValue::Bool(b.extract()?))
-        } else if let Ok(i) = <PyLong as pyo3::PyTryFrom>::try_from(ob) {
+        } else if let Ok(i) = ob.cast::<PyInt>() {
             Ok(SimpleJsonValue::Int(i.extract()?))
         } else if ob.is_none() {
             Ok(SimpleJsonValue::Null)
@@ -290,10 +296,16 @@ pub enum JsonValue {
     Value(SimpleJsonValue),
 }
 
-impl<'source> FromPyObject<'source> for JsonValue {
-    fn extract(ob: &'source PyAny) -> PyResult<Self> {
-        if let Ok(l) = <PyList as pyo3::PyTryFrom>::try_from(ob) {
-            match l.iter().map(SimpleJsonValue::extract).collect() {
+impl<'source> FromPyObject<'_, 'source> for JsonValue {
+    type Error = PyErr;
+
+    fn extract(ob: Borrowed<'_, 'source, PyAny>) -> Result<Self, Self::Error> {
+        if let Ok(l) = ob.cast::<PyList>() {
+            match l
+                .iter()
+                .map(|it| SimpleJsonValue::extract(it.as_borrowed()))
+                .collect()
+            {
                 Ok(a) => Ok(JsonValue::Array(a)),
                 Err(e) => Err(PyTypeError::new_err(format!(
                     "Can't convert to JsonValue::Array: {e}"
@@ -356,15 +368,21 @@ pub enum KnownCondition {
     },
 }
 
-impl IntoPy<PyObject> for Condition {
-    fn into_py(self, py: Python<'_>) -> PyObject {
-        pythonize(py, &self).expect("valid condition")
+impl<'py> IntoPyObject<'py> for Condition {
+    type Target = PyAny;
+    type Output = Bound<'py, Self::Target>;
+    type Error = PythonizeError;
+
+    fn into_pyobject(self, py: Python<'py>) -> Result<Self::Output, Self::Error> {
+        pythonize(py, &self)
     }
 }
 
-impl<'source> FromPyObject<'source> for Condition {
-    fn extract(ob: &'source PyAny) -> PyResult<Self> {
-        Ok(depythonize(ob)?)
+impl<'source> FromPyObject<'_, 'source> for Condition {
+    type Error = PyErr;
+
+    fn extract(ob: Borrowed<'_, 'source, PyAny>) -> Result<Self, Self::Error> {
+        Ok(depythonize(&ob)?)
     }
 }
 
@@ -433,7 +451,7 @@ pub struct RelatedEventMatchTypeCondition {
 
 /// The collection of push rules for a user.
 #[derive(Debug, Clone, Default)]
-#[pyclass(frozen)]
+#[pyclass(frozen, from_py_object)]
 pub struct PushRules {
     /// Custom push rules that override a base rule.
     overridden_base_rules: HashMap<Cow<'static, str>, PushRule>,
@@ -519,7 +537,7 @@ impl PushRules {
 /// A wrapper around `PushRules` that checks the enabled state of rules and
 /// filters out disabled experimental rules.
 #[derive(Debug, Clone, Default)]
-#[pyclass(frozen)]
+#[pyclass(frozen, skip_from_py_object)]
 pub struct FilteredPushRules {
     push_rules: PushRules,
     enabled_map: BTreeMap<String, bool>,
