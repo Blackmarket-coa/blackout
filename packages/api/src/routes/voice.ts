@@ -574,18 +574,39 @@ voice.post('/rooms/moderation/:action', async (c) => {
     });
 });
 
-// Who is in the room and its join, leave and moderation history: not for
-// anonymous callers. Which signed-in callers may read it is still open (V2 in
-// docs/security/capability-header-triage-2026-10-23.md).
-voice.get('/rooms/:canopyId/:channelId/events', (c) => {
+/**
+ * The feed's one refusal: a room that does not exist and a room the caller may
+ * not read get the same status and body, so the feed does not tell an
+ * outsider which rooms a canopy has.
+ */
+const feedRefusal = (c: Context): Response =>
+    c.json(
+        {
+            code: 'forbidden',
+            message: 'This room does not exist, or you are not a member of its canopy.',
+        },
+        403
+    );
+
+// Who is in the room, its join, leave and moderation history, and the mutes
+// and removals that stand: for joined members of the canopy (V2 in
+// docs/security/capability-header-triage-2026-10-23.md). Until 2026-10-25 any
+// signed-in account could read any room's feed, a locked room's included. The
+// membership is read before the room is looked up, and when the homeserver
+// cannot say, nothing is served: other people's data is not shown on a guess.
+voice.get('/rooms/:canopyId/:channelId/events', async (c) => {
     const user = requireUser(c);
     if (user instanceof Response) return user;
 
     const canopyId = c.req.param('canopyId');
     const channelId = c.req.param('channelId');
 
+    const verdict = await readVoiceRole(user.sub, canopyId);
+    if (!verdict.ok) return refuse(c, verdict.reason);
+    if (verdict.membership !== 'join') return feedRefusal(c);
+
     const room = db.getVoiceRoom(canopyId, channelId);
-    if (!room) return c.json({ code: 'room_not_found', message: 'Room not found' }, 404);
+    if (!room) return feedRefusal(c);
 
     return c.json({
         events: db.listVoiceRoomEvents(room.id),

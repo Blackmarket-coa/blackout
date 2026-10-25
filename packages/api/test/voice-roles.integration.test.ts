@@ -1479,3 +1479,107 @@ test('V-17: mute, remove and readmit need the moderator above the target, as a k
         ['mute', 'remove', 'readmit', 'remove', 'remove']
     );
 });
+
+test("V-18: a voice room's event feed is for joined members of the canopy, and tells outsiders nothing about which rooms exist", async () => {
+    const { canopyId, admin, member } = seedCanopy();
+    const { channelId, roomId } = seedRoom(canopyId);
+    await joinAs(member, canopyId, channelId);
+    const stranger = seedUser();
+    const departed = seedUser();
+    const invited = seedUser();
+    const banned = seedUser();
+    matrix.rooms.set(canopyId, [
+        ...(matrix.rooms.get(canopyId) as StubStateEvent[]),
+        memberEvent(departed.mxid, 'leave'),
+        memberEvent(invited.mxid, 'invite'),
+        memberEvent(banned.mxid, 'ban'),
+    ]);
+    const feed = (caller: Caller, canopy = canopyId, channel = channelId) =>
+        app.request(
+            `/v1/voice/rooms/${encodeURIComponent(canopy)}/${encodeURIComponent(channel)}/events`,
+            {
+                headers: {
+                    authorization: `Bearer ${signJwt(caller.id, caller.username, 600)}`,
+                    'x-forwarded-for': addressOf(caller.id),
+                },
+            }
+        );
+
+    // Joined members read it: who is in the room, the history, and the mutes
+    // and removals that stand.
+    assert.equal(
+        (
+            await post('/rooms/moderation/mute', admin, {
+                canopyId,
+                channelId,
+                targetUserId: member.id,
+            })
+        ).status,
+        200
+    );
+    for (const reader of [member, admin]) {
+        const res = await feed(reader);
+        assert.equal(res.status, 200);
+        const body = (await res.json()) as {
+            events: Array<{ eventType: string }>;
+            activeParticipants: Array<{ userId: string }>;
+            sanctions: Array<{ kind: string; userId: string }>;
+        };
+        assert.deepEqual(
+            body.activeParticipants.map((p) => p.userId),
+            [member.id]
+        );
+        assert.deepEqual(
+            body.events.map((e) => e.eventType),
+            ['join', 'mute']
+        );
+        assert.deepEqual(
+            body.sanctions.map((s) => [s.kind, s.userId]),
+            [['mute', member.id]]
+        );
+    }
+
+    // Everyone else gets one answer, after the homeserver was asked, and the
+    // same answer for a room that does not exist, for a channel that does not
+    // exist in a canopy they are in, and for a canopy the homeserver does not
+    // know: the feed is not a way to find out which rooms exist.
+    const forbidden = { status: 403, code: 'forbidden' };
+    const bodies = new Set<string>();
+    for (const [label, caller] of Object.entries({ stranger, departed, invited, banned })) {
+        matrix.clearCalls();
+        const res = await feed(caller);
+        assert.equal(res.status, 403, label);
+        bodies.add(await res.text());
+        assert.deepEqual(matrix.stateReads, [canopyId], label);
+        assert.deepEqual(
+            await refusal(await feed(caller, canopyId, 'no-such-channel')),
+            forbidden,
+            label
+        );
+    }
+    const missingForMember = await feed(member, canopyId, 'no-such-channel');
+    assert.equal(missingForMember.status, 403);
+    bodies.add(await missingForMember.text());
+    const unknownCanopy = await feed(stranger, newCanopyId(), 'main');
+    assert.equal(unknownCanopy.status, 403);
+    bodies.add(await unknownCanopy.text());
+    assert.equal(bodies.size, 1, 'one body for every refusal');
+    assert.deepEqual(activeIds(roomId), [member.id]);
+
+    // When the homeserver cannot say, nothing is served.
+    matrix.rooms.set(canopyId, 500);
+    assert.deepEqual(await refusal(await feed(member)), {
+        status: 503,
+        code: 'canopy_check_unavailable',
+    });
+    const botToken = process.env.MATRIX_BOT_TOKEN;
+    delete process.env.MATRIX_BOT_TOKEN;
+    try {
+        assert.deepEqual(await refusal(await feed(member)), {
+            status: 503,
+            code: 'matrix_not_configured',
+        });
+    } finally {
+        process.env.MATRIX_BOT_TOKEN = botToken;
+    }
+});
