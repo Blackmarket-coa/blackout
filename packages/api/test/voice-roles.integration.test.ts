@@ -8,8 +8,9 @@
  * else, and no elevated role when the homeserver cannot say. The homeserver is
  * a stub (`_fixtures/matrixStub.ts`) answering the Synapse admin room-state
  * read the check makes; the tests that expect the check to run assert that the
- * read reached it.
- * Record: O4 in `docs/security/capability-header-triage-2026-10-23.md`.
+ * read reached it. LiveKit's room service, which mute and remove act through,
+ * is a fake (`_fixtures/livekitStub.ts`) that records the calls.
+ * Record: O4 and V1 to V7 in `docs/security/capability-header-triage-2026-10-23.md`.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -20,6 +21,7 @@ import {
     powerLevelsEvent,
     type StubStateEvent,
 } from './_fixtures/matrixStub';
+import { createLiveKitStub } from './_fixtures/livekitStub';
 import { generateTestJwtSecret } from './_fixtures/secrets';
 
 process.env.NODE_ENV = 'test';
@@ -43,6 +45,11 @@ const { signJwt } = await import('../src/services/auth');
 const { db } = await import('../src/db/store');
 const { upsertCanopy } = await import('../src/services/canopyDirectory');
 const { applySubscriptionWebhookEvent } = await import('../src/services/subscriptions');
+const { setRoomServiceClientFactory } = await import('../src/services/livekitAdmin');
+const { LIVEKIT_TOKEN_TTL_SECONDS } = await import('../src/services/livekit');
+
+const livekit = createLiveKitStub();
+setRoomServiceClientFactory(() => livekit.client);
 
 type Caller = { id: string; username: string; mxid: string };
 
@@ -153,13 +160,23 @@ const refusal = async (res: Response) => ({
     code: ((await res.json()) as { code?: string }).code,
 });
 
-/** The role a LiveKit token carries in its `metadata` claim. */
-const tokenRole = (token: string): string => {
+/** What a LiveKit token grants: the role in its `metadata` claim, the video grant, and its lifetime. */
+const tokenClaims = (token: string) => {
     const payload = JSON.parse(Buffer.from(token.split('.')[1]!, 'base64url').toString('utf8')) as {
         metadata: string;
+        video: { canPublish: boolean; canSubscribe: boolean; room: string };
+        iat: number;
+        exp: number;
     };
-    return (JSON.parse(payload.metadata) as { role: string }).role;
+    return {
+        role: (JSON.parse(payload.metadata) as { role: string }).role,
+        canPublish: payload.video.canPublish,
+        canSubscribe: payload.video.canSubscribe,
+        room: payload.video.room,
+        ttlSeconds: payload.exp - payload.iat,
+    };
 };
+const tokenRole = (token: string): string => tokenClaims(token).role;
 
 /** Join, expect it to succeed, and return the permissions (the token carries the same role). */
 const joinAs = async (caller: Caller, canopyId: string, channelId: string, extra: object = {}) => {
@@ -178,6 +195,23 @@ const tokenAs = async (caller: Caller, canopyId: string, channelId: string, extr
     assert.equal(res.status, 200);
     return tokenRole(((await res.json()) as { token: string }).token);
 };
+
+/** Get a token, expect it, and return what it grants. */
+const tokenGrantsAs = async (
+    caller: Caller,
+    canopyId: string,
+    channelId: string,
+    extra: object = {}
+) => {
+    const res = await post('/token', caller, { canopyId, channelId, ...extra });
+    assert.equal(res.status, 200);
+    return tokenClaims(((await res.json()) as { token: string }).token);
+};
+
+const livekitRoomName = (canopyId: string, channelId: string) =>
+    `canopy-${canopyId}-channel-${channelId}`;
+const activeSanctions = (roomId: string) =>
+    db.listActiveVoiceRoomSanctions(roomId).map((s) => [s.kind, s.userId, s.actorId]);
 
 const isLocked = (canopyId: string, channelId: string) =>
     db.getVoiceRoom(canopyId, channelId)?.isLocked;
@@ -247,7 +281,7 @@ test('V-3: a member cannot create, moderate or enter a locked room; a moderator 
         { status: 403, code: 'not_canopy_moderator' }
     );
     assert.equal(db.getVoiceRoom(canopyId, otherChannel), undefined);
-    for (const action of ['lock', 'mute', 'remove']) {
+    for (const action of ['lock', 'mute', 'remove', 'readmit']) {
         assert.deepEqual(
             await refusal(await post(`/rooms/moderation/${action}`, member, target)),
             { status: 403, code: 'not_canopy_moderator' },
@@ -261,6 +295,15 @@ test('V-3: a member cannot create, moderate or enter a locked room; a moderator 
     assert.equal((await post('/rooms/moderation/mute', moderator, target)).status, 200);
     assert.equal((await post('/rooms/moderation/remove', moderator, target)).status, 200);
     assert.deepEqual(activeIds(roomId), []);
+    // Removed: no join and no token for this room until readmitted (V-13).
+    for (const path of ['/rooms/join', '/token']) {
+        assert.deepEqual(
+            await refusal(await post(path, member, { canopyId, channelId })),
+            { status: 403, code: 'removed_from_room' },
+            path
+        );
+    }
+    assert.equal((await post('/rooms/moderation/readmit', moderator, target)).status, 200);
     assert.equal(
         (await post('/rooms/moderation/lock', moderator, { canopyId, channelId })).status,
         200
@@ -269,6 +312,7 @@ test('V-3: a member cannot create, moderate or enter a locked room; a moderator 
     assert.deepEqual(moderationLog(roomId), [
         ['mute', moderator.id, 'moderator'],
         ['remove', moderator.id, 'moderator'],
+        ['readmit', moderator.id, 'moderator'],
         ['lock', moderator.id, 'moderator'],
     ]);
 
@@ -376,7 +420,7 @@ test('V-5: a role named in the request grants nothing, and is not refused', asyn
                 { status: 403, code: 'not_canopy_moderator' },
                 label
             );
-            for (const action of ['lock', 'mute', 'remove']) {
+            for (const action of ['lock', 'mute', 'remove', 'readmit']) {
                 assert.deepEqual(
                     await refusal(
                         await post(`/rooms/moderation/${action}`, caller, {
@@ -814,4 +858,360 @@ test('V-11: an unknown moderation action is refused and records nothing', async 
     assert.deepEqual(matrix.stateReads, []);
     assert.deepEqual(moderationLog(roomId), []);
     assert.deepEqual(activeIds(roomId), [member.id]);
+});
+
+test('V-12: a mute mutes the published audio tracks and takes publishing away in LiveKit, and outlasts the connection', async () => {
+    const { canopyId, moderator, member } = seedCanopy();
+    const { channelId, roomId } = seedRoom(canopyId);
+    const roomName = livekitRoomName(canopyId, channelId);
+    await joinAs(member, canopyId, channelId);
+    // Connected with a microphone, a second audio track (a shared tab's sound) and a camera.
+    livekit.connect(roomName, member.id, [
+        { sid: 'TR_mic', kind: 'audio' },
+        { sid: 'TR_tab', kind: 'audio' },
+        { sid: 'TR_cam', kind: 'video' },
+    ]);
+    const target = { canopyId, channelId, targetUserId: member.id };
+
+    livekit.clearCalls();
+    matrix.clearCalls();
+    const muted = await post('/rooms/moderation/mute', moderator, target);
+    assert.equal(muted.status, 200);
+    assert.deepEqual(await muted.json(), {
+        ok: true,
+        action: 'mute',
+        targetUserId: member.id,
+        muted: true,
+        livekit: { connected: true, mutedTrackSids: ['TR_mic', 'TR_tab'] },
+    });
+    assert.deepEqual(matrix.stateReads, [canopyId]);
+    // Every audio track, by its id; the camera is left alone; then publishing is
+    // taken away, with the other grants kept as they were.
+    assert.deepEqual(livekit.calls, [
+        { method: 'listParticipants', room: roomName },
+        {
+            method: 'mutePublishedTrack',
+            room: roomName,
+            identity: member.id,
+            trackSid: 'TR_mic',
+            muted: true,
+        },
+        {
+            method: 'mutePublishedTrack',
+            room: roomName,
+            identity: member.id,
+            trackSid: 'TR_tab',
+            muted: true,
+        },
+        {
+            method: 'updateParticipant',
+            room: roomName,
+            identity: member.id,
+            permission: { canPublish: false, canSubscribe: true, canPublishData: true },
+        },
+    ]);
+    const connected = livekit.participant(roomName, member.id)!;
+    assert.deepEqual(
+        connected.tracks.map((t) => [t.sid, t.muted]),
+        [
+            ['TR_mic', true],
+            ['TR_tab', true],
+            ['TR_cam', false],
+        ]
+    );
+    assert.equal(connected.permission?.canPublish, false);
+    assert.deepEqual(activeSanctions(roomId), [['mute', member.id, moderator.id]]);
+
+    // The mute is the room's answer, not the connection's: a new token cannot
+    // publish however it is asked for, on a join and on its own.
+    assert.deepEqual(await joinAs(member, canopyId, channelId, { canPublish: true }), {
+        role: 'member',
+        canPublish: false,
+        canSubscribe: true,
+    });
+    assert.equal(
+        (await tokenGrantsAs(member, canopyId, channelId, { canPublish: true })).canPublish,
+        false
+    );
+
+    // Unmute: publishing back first, then the tracks.
+    livekit.clearCalls();
+    const unmuted = await post('/rooms/moderation/mute', moderator, { ...target, muted: false });
+    assert.equal(unmuted.status, 200);
+    assert.deepEqual(await unmuted.json(), {
+        ok: true,
+        action: 'mute',
+        targetUserId: member.id,
+        muted: false,
+        livekit: { connected: true, mutedTrackSids: ['TR_mic', 'TR_tab'] },
+    });
+    assert.deepEqual(livekit.calls, [
+        { method: 'listParticipants', room: roomName },
+        {
+            method: 'updateParticipant',
+            room: roomName,
+            identity: member.id,
+            permission: { canPublish: true, canSubscribe: true, canPublishData: true },
+        },
+        {
+            method: 'mutePublishedTrack',
+            room: roomName,
+            identity: member.id,
+            trackSid: 'TR_mic',
+            muted: false,
+        },
+        {
+            method: 'mutePublishedTrack',
+            room: roomName,
+            identity: member.id,
+            trackSid: 'TR_tab',
+            muted: false,
+        },
+    ]);
+    assert.deepEqual(activeSanctions(roomId), []);
+    assert.equal((await tokenGrantsAs(member, canopyId, channelId)).canPublish, true);
+    assert.deepEqual(moderationLog(roomId), [
+        ['mute', moderator.id, 'moderator'],
+        ['unmute', moderator.id, 'moderator'],
+    ]);
+
+    // Muting someone who is not connected records the mute all the same.
+    const absent = seedUser();
+    matrix.rooms.set(canopyId, [
+        ...(matrix.rooms.get(canopyId) as StubStateEvent[]),
+        memberEvent(absent.mxid),
+    ]);
+    livekit.clearCalls();
+    const res = await post('/rooms/moderation/mute', moderator, {
+        canopyId,
+        channelId,
+        targetUserId: absent.id,
+    });
+    assert.equal(res.status, 200);
+    assert.deepEqual(await res.json(), {
+        ok: true,
+        action: 'mute',
+        targetUserId: absent.id,
+        muted: true,
+        livekit: { connected: false },
+    });
+    assert.deepEqual(livekit.calls, [{ method: 'listParticipants', room: roomName }]);
+    assert.equal((await joinAs(absent, canopyId, channelId)).canPublish, false);
+});
+
+test('V-13: a removal disconnects the participant in LiveKit and keeps the account out until it is readmitted', async () => {
+    const { canopyId, admin, moderator, member } = seedCanopy();
+    const { channelId, roomId } = seedRoom(canopyId);
+    const roomName = livekitRoomName(canopyId, channelId);
+    await joinAs(member, canopyId, channelId);
+    livekit.connect(roomName, member.id, [{ sid: 'TR_mic', kind: 'audio' }]);
+    const target = { canopyId, channelId, targetUserId: member.id };
+
+    livekit.clearCalls();
+    const removed = await post('/rooms/moderation/remove', moderator, target);
+    assert.equal(removed.status, 200);
+    assert.deepEqual(await removed.json(), {
+        ok: true,
+        action: 'remove',
+        targetUserId: member.id,
+        livekit: { disconnected: true },
+    });
+    assert.deepEqual(livekit.calls, [
+        { method: 'removeParticipant', room: roomName, identity: member.id },
+    ]);
+    assert.equal(livekit.participant(roomName, member.id), undefined);
+    assert.deepEqual(activeIds(roomId), []);
+    assert.deepEqual(activeSanctions(roomId), [['remove', member.id, moderator.id]]);
+
+    // No new token for this room, and no join, locked or not; everyone else is unaffected.
+    for (const path of ['/rooms/join', '/token']) {
+        assert.deepEqual(
+            await refusal(await post(path, member, { canopyId, channelId })),
+            {
+                status: 403,
+                code: 'removed_from_room',
+            },
+            path
+        );
+    }
+    assert.equal(
+        (await post('/rooms/moderation/lock', moderator, { canopyId, channelId })).status,
+        200
+    );
+    assert.deepEqual(await refusal(await post('/rooms/join', member, { canopyId, channelId })), {
+        status: 403,
+        code: 'removed_from_room',
+    });
+    assert.equal(
+        (await post('/rooms/moderation/lock', moderator, { canopyId, channelId, locked: false }))
+            .status,
+        200
+    );
+    assert.equal((await joinAs(admin, canopyId, channelId)).role, 'admin');
+    assert.deepEqual(activeIds(roomId), [admin.id]);
+
+    // Removing again, with nobody to disconnect, keeps the one record.
+    livekit.clearCalls();
+    const again = await post('/rooms/moderation/remove', moderator, target);
+    assert.equal(again.status, 200);
+    assert.deepEqual(await again.json(), {
+        ok: true,
+        action: 'remove',
+        targetUserId: member.id,
+        livekit: { disconnected: false },
+    });
+    assert.deepEqual(livekit.calls, [
+        { method: 'removeParticipant', room: roomName, identity: member.id },
+    ]);
+    assert.deepEqual(activeSanctions(roomId), [['remove', member.id, moderator.id]]);
+
+    // Readmitted: the room is open to them again. Readmitting twice changes nothing.
+    const readmitted = await post('/rooms/moderation/readmit', moderator, target);
+    assert.equal(readmitted.status, 200);
+    assert.deepEqual(await readmitted.json(), {
+        ok: true,
+        action: 'readmit',
+        targetUserId: member.id,
+        readmitted: true,
+    });
+    assert.deepEqual(activeSanctions(roomId), []);
+    assert.equal((await joinAs(member, canopyId, channelId)).role, 'member');
+    const twice = await post('/rooms/moderation/readmit', moderator, target);
+    assert.deepEqual(await twice.json(), {
+        ok: true,
+        action: 'readmit',
+        targetUserId: member.id,
+        readmitted: false,
+    });
+    assert.deepEqual(moderationLog(roomId), [
+        ['remove', moderator.id, 'moderator'],
+        ['lock', moderator.id, 'moderator'],
+        ['unlock', moderator.id, 'moderator'],
+        ['remove', moderator.id, 'moderator'],
+        ['readmit', moderator.id, 'moderator'],
+    ]);
+    // The record lives in the store's persisted collection, not only in memory.
+    assert.equal(db.voiceRoomSanctions.size >= 1, true);
+    assert.ok(
+        [...db.voiceRoomSanctions.values()].some(
+            (s) =>
+                s.roomId === roomId &&
+                s.kind === 'remove' &&
+                s.liftedAt &&
+                s.liftedBy === moderator.id
+        )
+    );
+});
+
+test('V-14: without LiveKit, mute and remove do nothing and say so; when LiveKit fails, the record stands and the answer says so', async () => {
+    const { canopyId, moderator, member } = seedCanopy();
+    const { channelId, roomId } = seedRoom(canopyId);
+    const roomName = livekitRoomName(canopyId, channelId);
+    await joinAs(member, canopyId, channelId);
+    livekit.connect(roomName, member.id, [{ sid: 'TR_mic', kind: 'audio' }]);
+    const target = { canopyId, channelId, targetUserId: member.id };
+
+    const url = process.env.LIVEKIT_URL;
+    delete process.env.LIVEKIT_URL;
+    livekit.clearCalls();
+    try {
+        for (const action of ['mute', 'remove']) {
+            assert.deepEqual(
+                await refusal(await post(`/rooms/moderation/${action}`, moderator, target)),
+                { status: 503, code: 'livekit_not_configured' },
+                action
+            );
+        }
+    } finally {
+        process.env.LIVEKIT_URL = url;
+    }
+    // Nothing done, nothing recorded, nobody asked.
+    assert.deepEqual(livekit.calls, []);
+    assert.deepEqual(activeSanctions(roomId), []);
+    assert.deepEqual(moderationLog(roomId), []);
+    assert.deepEqual(activeIds(roomId), [member.id]);
+    assert.ok(livekit.participant(roomName, member.id));
+
+    // LiveKit is down: the record is written first and stands; the answer is 502 and says so.
+    livekit.failure = new Error('connect ECONNREFUSED');
+    try {
+        const mute = await post('/rooms/moderation/mute', moderator, target);
+        assert.equal(mute.status, 502);
+        const muteBody = (await mute.json()) as { code: string; message: string };
+        assert.equal(muteBody.code, 'livekit_unavailable');
+        assert.match(muteBody.message, /mute is recorded/);
+        assert.deepEqual(activeSanctions(roomId), [['mute', member.id, moderator.id]]);
+        assert.equal((await tokenGrantsAs(member, canopyId, channelId)).canPublish, false);
+
+        const remove = await post('/rooms/moderation/remove', moderator, target);
+        assert.equal(remove.status, 502);
+        const removeBody = (await remove.json()) as { code: string; message: string };
+        assert.equal(removeBody.code, 'livekit_unavailable');
+        assert.match(removeBody.message, /removal is recorded/);
+        assert.deepEqual(activeSanctions(roomId), [
+            ['mute', member.id, moderator.id],
+            ['remove', member.id, moderator.id],
+        ]);
+        assert.deepEqual(activeIds(roomId), []);
+    } finally {
+        livekit.failure = null;
+    }
+    // Still connected in LiveKit (nothing reached it), and still kept out once it is back.
+    assert.ok(livekit.participant(roomName, member.id));
+    assert.deepEqual(await refusal(await post('/rooms/join', member, { canopyId, channelId })), {
+        status: 403,
+        code: 'removed_from_room',
+    });
+    assert.deepEqual(moderationLog(roomId), [
+        ['mute', moderator.id, 'moderator'],
+        ['remove', moderator.id, 'moderator'],
+    ]);
+    assert.deepEqual(
+        db
+            .listVoiceRoomEvents(roomId)
+            .filter((e) => e.eventType !== 'join')
+            .map((e) => e.metadata?.livekit),
+        ['livekit_unavailable', 'livekit_unavailable']
+    );
+    // Retried once LiveKit is back, the removal disconnects them.
+    livekit.clearCalls();
+    const retried = await post('/rooms/moderation/remove', moderator, target);
+    assert.equal(retried.status, 200);
+    assert.deepEqual(await retried.json(), {
+        ok: true,
+        action: 'remove',
+        targetUserId: member.id,
+        livekit: { disconnected: true },
+    });
+    assert.equal(livekit.participant(roomName, member.id), undefined);
+});
+
+test('V-15: a LiveKit token lives two minutes, and neither the request nor the environment lengthens it', async () => {
+    const { canopyId, member } = seedCanopy();
+    const { channelId } = seedRoom(canopyId);
+    assert.equal(LIVEKIT_TOKEN_TTL_SECONDS, 120);
+
+    const config = (await (await app.request('/v1/voice/config')).json()) as {
+        tokenTtlSeconds: number;
+    };
+    assert.equal(config.tokenTtlSeconds, 120);
+
+    const joined = await post('/rooms/join', member, { canopyId, channelId });
+    assert.equal(joined.status, 200);
+    const body = (await joined.json()) as { livekit: { token: string; expiresAt: string } };
+    assert.equal(tokenClaims(body.livekit.token).ttlSeconds, 120);
+    assert.ok(Date.parse(body.livekit.expiresAt) - Date.now() <= 120_000);
+
+    // `ttlSeconds` in the request is dropped like any unknown key, and the old
+    // environment setting is not read.
+    assert.equal(
+        (await tokenGrantsAs(member, canopyId, channelId, { ttlSeconds: 900 })).ttlSeconds,
+        120
+    );
+    process.env.LIVEKIT_TOKEN_TTL_SECONDS = '900';
+    try {
+        assert.equal((await tokenGrantsAs(member, canopyId, channelId)).ttlSeconds, 120);
+    } finally {
+        delete process.env.LIVEKIT_TOKEN_TTL_SECONDS;
+    }
 });

@@ -1,11 +1,22 @@
 import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import { db } from '../db/store';
+import type { VoiceRoomEventRecord } from '../db/types';
 import { requireUser } from '../middleware/require-user';
 import { readJsonBody } from '../middleware/validate';
-import { createLiveKitAccessToken, getLiveKitConfig, type VoiceRole } from '../services/livekit';
+import {
+    createLiveKitAccessToken,
+    getLiveKitConfig,
+    isLiveKitConfigured,
+    type VoiceRole,
+} from '../services/livekit';
 import { hasPremiumCanopyEntitlement } from '../services/subscriptions';
 import { hasCanopy } from '../services/canopyDirectory';
+import {
+    muteParticipantInLiveKit,
+    removeParticipantFromLiveKit,
+    type LiveKitModerationFailure,
+} from '../services/voiceModeration';
 import {
     readVoiceRole,
     voiceRoleRefusalResponse,
@@ -17,6 +28,9 @@ import {
 // (`services/voiceRoleGate.ts`), never from the request. A `role` in the body
 // is not read: these schemas drop it like any other unknown key, so a client
 // that still sends one is not refused, and gets the role the homeserver gives.
+// The same goes for `ttlSeconds` on `/token`: a token lives
+// `LIVEKIT_TOKEN_TTL_SECONDS` (`services/livekit.ts`), and the request cannot
+// lengthen it.
 const roomCoordsSchema = z.object({
     canopyId: z.string().trim().min(1),
     channelId: z.string().trim().min(1),
@@ -27,18 +41,16 @@ const joinRoomSchema = roomCoordsSchema.extend({
     canSubscribe: z.boolean().optional(),
 });
 
-const tokenSchema = roomCoordsSchema.extend({
-    canPublish: z.boolean().optional(),
-    canSubscribe: z.boolean().optional(),
-    ttlSeconds: z.number().optional(),
-});
+const tokenSchema = joinRoomSchema;
 
 const moderationSchema = roomCoordsSchema.extend({
     targetUserId: z.string().trim().optional(),
     locked: z.boolean().optional(),
+    /** For `mute`: `false` unmutes. Defaults to `true`. */
+    muted: z.boolean().optional(),
 });
 
-const MODERATION_ACTIONS: ReadonlySet<string> = new Set(['lock', 'mute', 'remove']);
+const MODERATION_ACTIONS: ReadonlySet<string> = new Set(['lock', 'mute', 'remove', 'readmit']);
 
 function canModerate(role: VoiceRole): boolean {
     return role === 'admin' || role === 'moderator';
@@ -65,6 +77,45 @@ const lockedRoomRefusal = (c: Context, verdict: VoiceRoleVerdict): Response =>
     verdict.ok
         ? c.json({ code: 'room_locked', message: 'Room is locked' }, 423)
         : refuse(c, verdict.reason);
+
+/**
+ * An account a moderator removed from the room gets no token for it and does
+ * not join it until a moderator readmits it (or the room ends: the record is
+ * keyed by the room). Checked before the lock, so the answer does not change
+ * with the lock, and for every role: the removal was made by someone above.
+ */
+const removalRefusal = (c: Context, roomId: string, userId: string): Response | null =>
+    db.getActiveVoiceRoomSanction(roomId, userId, 'remove')
+        ? c.json(
+              { code: 'removed_from_room', message: 'A moderator removed you from this room.' },
+              403
+          )
+        : null;
+
+/**
+ * Mute and remove act in LiveKit. Without LiveKit configured nothing is done
+ * and the route says so (503). When LiveKit is configured but did not carry
+ * out the action (down, or it refused), the record the route wrote first
+ * stands, and the body says what that means (502).
+ */
+const livekitRefusal = (
+    c: Context,
+    reason: LiveKitModerationFailure,
+    whatStands: string
+): Response =>
+    reason === 'livekit_not_configured'
+        ? c.json(
+              {
+                  code: reason,
+                  message:
+                      'LiveKit is not configured on this server, so nobody can be muted or removed.',
+              },
+              503
+          )
+        : c.json(
+              { code: reason, message: `LiveKit did not carry out the action. ${whatStands}` },
+              502
+          );
 
 function roomName(canopyId: string, channelId: string): string {
     return `canopy-${canopyId}-channel-${channelId}`;
@@ -181,6 +232,8 @@ voice.post('/rooms/join', async (c) => {
     // Read again after the homeserver call: the room may have been locked since.
     const current = db.getVoiceRoom(canopyId, channelId);
     if (!current) return c.json({ code: 'room_not_found', message: 'Room not found' }, 404);
+    const removed = removalRefusal(c, current.id, user.sub);
+    if (removed) return removed;
     if (current.isLocked && !canModerate(role)) return lockedRoomRefusal(c, verdict);
 
     // Refreshes the room's `updatedAt`, as joining always has: the OBS mute
@@ -192,7 +245,11 @@ voice.post('/rooms/join', async (c) => {
         livekitRoomName: roomName(canopyId, channelId),
     });
 
-    const canPublish = canModerate(role) ? true : requestedCanPublish;
+    // A mute a moderator imposed outlasts the connection it was imposed on: the
+    // token cannot publish until the mute is lifted, whatever the caller asked
+    // for or their role would give them.
+    const muted = Boolean(db.getActiveVoiceRoomSanction(room.id, user.sub, 'mute'));
+    const canPublish = muted ? false : canModerate(role) ? true : requestedCanPublish;
     const canSubscribe = canModerate(role) ? true : requestedCanSubscribe;
 
     db.joinVoiceRoom({
@@ -286,16 +343,18 @@ voice.post('/token', async (c) => {
     // Read again after the homeserver call: the room may have been locked since.
     const room = db.getVoiceRoom(canopyId, channelId);
     if (!room) return c.json({ code: 'room_not_found', message: 'Room not found' }, 404);
+    const removed = removalRefusal(c, room.id, user.sub);
+    if (removed) return removed;
     if (room.isLocked && !canModerate(role)) return lockedRoomRefusal(c, verdict);
 
+    const muted = Boolean(db.getActiveVoiceRoomSanction(room.id, user.sub, 'mute'));
     const token = createLiveKitAccessToken({
         identity: user.sub,
         name: user.username ?? user.sub,
         roomName: room.livekitRoomName,
         role,
-        canPublish: parsed.canPublish ?? true,
+        canPublish: muted ? false : parsed.canPublish ?? true,
         canSubscribe: parsed.canSubscribe ?? true,
-        ttlSeconds: parsed.ttlSeconds,
     });
 
     return c.json({
@@ -314,7 +373,10 @@ voice.post('/rooms/moderation/:action', async (c) => {
     // Anything else used to be logged as a `remove` that removed nobody.
     if (!MODERATION_ACTIONS.has(action)) {
         return c.json(
-            { code: 'unknown_action', message: 'Moderation actions are lock, mute and remove' },
+            {
+                code: 'unknown_action',
+                message: 'Moderation actions are lock, mute, remove and readmit',
+            },
             404
         );
     }
@@ -350,28 +412,116 @@ voice.post('/rooms/moderation/:action', async (c) => {
         return c.json(
             {
                 code: 'invalid_request',
-                message: 'targetUserId is required for mute/remove actions',
+                message: 'targetUserId is required for mute, remove and readmit actions',
             },
             400
         );
     }
 
-    if (action === 'remove') {
-        db.leaveVoiceRoom(room.id, targetUserId);
+    const logModeration = (
+        eventType: VoiceRoomEventRecord['eventType'],
+        metadata: Record<string, string>
+    ) =>
+        db.logVoiceRoomEvent({
+            roomId: room.id,
+            canopyId,
+            channelId,
+            userId: user.sub,
+            actorId: user.sub,
+            targetUserId,
+            eventType,
+            metadata: { role, ...metadata },
+        });
+
+    if (action === 'readmit') {
+        const lifted = db.liftVoiceRoomSanction(room.id, targetUserId, 'remove', user.sub);
+        if (lifted) logModeration('readmit', {});
+        return c.json({ ok: true, action, targetUserId, readmitted: Boolean(lifted) });
     }
 
-    db.logVoiceRoomEvent({
-        roomId: room.id,
-        canopyId,
-        channelId,
-        userId: user.sub,
-        actorId: user.sub,
-        targetUserId,
-        eventType: action === 'mute' ? 'mute' : 'remove',
-        metadata: { role },
-    });
+    // Mute and remove act in LiveKit (`services/voiceModeration.ts`). The API's
+    // record is written first, so the account's next token follows the
+    // moderator's decision even if LiveKit then fails, and the response says
+    // what stands. Without LiveKit nothing is written and the answer is 503.
+    if (!isLiveKitConfigured()) return livekitRefusal(c, 'livekit_not_configured', '');
 
-    return c.json({ ok: true, action, targetUserId });
+    if (action === 'mute') {
+        const muted = parsed.muted ?? true;
+        // What an unmute restores: the publish grant the target joined with.
+        const joinedWithPublish =
+            db.getVoiceRoomActiveParticipants(room.id).find((p) => p.userId === targetUserId)
+                ?.canPublish ?? true;
+        if (muted) {
+            db.applyVoiceRoomSanction({
+                roomId: room.id,
+                userId: targetUserId,
+                kind: 'mute',
+                actorId: user.sub,
+            });
+        } else {
+            db.liftVoiceRoomSanction(room.id, targetUserId, 'mute', user.sub);
+        }
+        const outcome = await muteParticipantInLiveKit(
+            room.livekitRoomName,
+            targetUserId,
+            muted,
+            joinedWithPublish
+        );
+        logModeration(muted ? 'mute' : 'unmute', {
+            livekit: outcome.ok
+                ? outcome.connected
+                    ? 'applied'
+                    : 'not_connected'
+                : outcome.reason,
+        });
+        if (!outcome.ok) {
+            return livekitRefusal(
+                c,
+                outcome.reason,
+                muted
+                    ? 'The mute is recorded: their next token cannot publish, but they may still be heard now.'
+                    : 'The unmute is recorded: their next token can publish, but their current connection may still be muted.'
+            );
+        }
+        return c.json({
+            ok: true,
+            action,
+            targetUserId,
+            muted,
+            livekit: outcome.connected
+                ? { connected: true, mutedTrackSids: outcome.mutedTrackSids }
+                : { connected: false },
+        });
+    }
+
+    db.applyVoiceRoomSanction({
+        roomId: room.id,
+        userId: targetUserId,
+        kind: 'remove',
+        actorId: user.sub,
+    });
+    db.leaveVoiceRoom(room.id, targetUserId);
+    const outcome = await removeParticipantFromLiveKit(room.livekitRoomName, targetUserId);
+    logModeration('remove', {
+        livekit: outcome.ok
+            ? outcome.disconnected
+                ? 'disconnected'
+                : 'not_connected'
+            : outcome.reason,
+    });
+    if (!outcome.ok) {
+        return livekitRefusal(
+            c,
+            outcome.reason,
+            'The removal is recorded: they get no new token for this room, but they may still be connected now.'
+        );
+    }
+    return c.json({
+        ok: true,
+        action,
+        targetUserId,
+        livekit: { disconnected: outcome.disconnected },
+    });
 });
 
 // Who is in the room and its join, leave and moderation history: not for
@@ -390,6 +540,7 @@ voice.get('/rooms/:canopyId/:channelId/events', (c) => {
     return c.json({
         events: db.listVoiceRoomEvents(room.id),
         activeParticipants: db.getVoiceRoomActiveParticipants(room.id),
+        sanctions: db.listActiveVoiceRoomSanctions(room.id),
     });
 });
 
