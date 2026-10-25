@@ -79,6 +79,18 @@ const lockedRoomRefusal = (c: Context, verdict: VoiceRoleVerdict): Response =>
         : refuse(c, verdict.reason);
 
 /**
+ * The canopy's own answer on whether this account may be in its voice rooms
+ * at all (`entry`): an account it banned is refused, and so is a non-member of
+ * a canopy that is not public. Before the lock and the room's own records, so
+ * a banned account is not told the room is merely locked. Only when the
+ * homeserver answered: when it could not, an unlocked room still admits a
+ * member (`roleOrMember`), so an ordinary join does not depend on the
+ * homeserver.
+ */
+const entryRefusal = (c: Context, verdict: VoiceRoleVerdict): Response | null =>
+    verdict.ok && verdict.entry !== 'ok' ? refuse(c, verdict.entry) : null;
+
+/**
  * An account a moderator removed from the room gets no token for it and does
  * not join it until a moderator readmits it (or the room ends: the record is
  * keyed by the room). Checked before the lock, so the answer does not change
@@ -227,6 +239,8 @@ voice.post('/rooms/join', async (c) => {
     }
 
     const verdict = await readVoiceRole(user.sub, canopyId);
+    const refused = entryRefusal(c, verdict);
+    if (refused) return refused;
     const role = roleOrMember(verdict);
 
     // Read again after the homeserver call: the room may have been locked since.
@@ -338,6 +352,8 @@ voice.post('/token', async (c) => {
     }
 
     const verdict = await readVoiceRole(user.sub, canopyId);
+    const refused = entryRefusal(c, verdict);
+    if (refused) return refused;
     const role = roleOrMember(verdict);
 
     // Read again after the homeserver call: the room may have been locked since.

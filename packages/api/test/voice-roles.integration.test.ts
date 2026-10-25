@@ -17,6 +17,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import {
     createMatrixStub,
+    joinRulesEvent,
     memberEvent,
     powerLevelsEvent,
     type StubStateEvent,
@@ -102,14 +103,20 @@ const canopyPowerLevels = (users: Record<string, unknown>) =>
 const newCanopyId = () => `!canopy-${randomUUID().slice(0, 8)}:${matrix.domain}`;
 const newChannelId = () => `ch-${randomUUID().slice(0, 8)}`;
 
-/** A listed canopy whose creator is at 100, a moderator at 50 and a member at 0, all joined. */
-const seedCanopy = () => {
+/**
+ * A listed canopy whose creator is at 100, a moderator at 50 and a member at 0,
+ * all joined; public, as the New canopy form makes a listed canopy, unless
+ * `joinRule` says otherwise (`null`: no join-rules event at all).
+ */
+const seedCanopy = (options: { joinRule?: string | null } = {}) => {
     const admin = seedUser();
     const moderator = seedUser();
     const member = seedUser();
     const canopyId = newCanopyId();
+    const joinRule = options.joinRule === undefined ? 'public' : options.joinRule;
     matrix.rooms.set(canopyId, [
         createEvent(),
+        ...(joinRule === null ? [] : [joinRulesEvent(joinRule)]),
         memberEvent(admin.mxid),
         memberEvent(moderator.mxid),
         memberEvent(member.mxid),
@@ -337,7 +344,7 @@ test('V-3: a member cannot create, moderate or enter a locked room; a moderator 
     assert.equal(isLocked(canopyId, channelId), false);
 });
 
-test('V-4: a caller who is not joined to the canopy gets no role, whatever their level', async () => {
+test('V-4: a caller who is not joined to the canopy gets no role, whatever their level; a banned one is kept out', async () => {
     const { canopyId, admin } = seedCanopy();
     const stranger = seedUser();
     const departed = seedUser();
@@ -345,6 +352,7 @@ test('V-4: a caller who is not joined to the canopy gets no role, whatever their
     const banned = seedUser();
     matrix.rooms.set(canopyId, [
         createEvent(),
+        joinRulesEvent('public'),
         memberEvent(admin.mxid),
         memberEvent(departed.mxid, 'leave'),
         memberEvent(invited.mxid, 'invite'),
@@ -381,6 +389,11 @@ test('V-4: a caller who is not joined to the canopy gets no role, whatever their
             { status: 403, code: 'not_canopy_moderator' },
             label
         );
+    }
+    // The canopy is public, so a stranger, someone who left and someone invited
+    // drop into the unlocked room as members (`/rooms/open` lists it to every
+    // signed-in account), and the locked room refuses them as members.
+    for (const [label, caller] of Object.entries({ stranger, departed, invited })) {
         assert.deepEqual(
             await refusal(
                 await post('/rooms/join', caller, { canopyId, channelId: locked.channelId })
@@ -388,14 +401,23 @@ test('V-4: a caller who is not joined to the canopy gets no role, whatever their
             { status: 423, code: 'room_locked' },
             label
         );
-        // Unchanged: an unlocked room is drop-in (`/rooms/open` lists it to every
-        // signed-in account), so they join it, as a member. That includes an
-        // account the canopy banned (recorded in the triage record).
         assert.equal((await joinAs(caller, canopyId, open.channelId)).role, 'member', label);
+    }
+    // An account the canopy banned is refused by both rooms, for a join and for
+    // a token, before the lock is looked at: its level counts for nothing.
+    for (const path of ['/rooms/join', '/token']) {
+        for (const room of [open, locked]) {
+            assert.deepEqual(
+                await refusal(await post(path, banned, { canopyId, channelId: room.channelId })),
+                { status: 403, code: 'canopy_banned' },
+                path
+            );
+        }
     }
     assert.equal(db.getVoiceRoom(canopyId, otherChannel), undefined);
     assert.equal(isLocked(canopyId, open.channelId), false);
     assert.deepEqual(activeIds(locked.roomId), []);
+    assert.deepEqual(activeIds(open.roomId).sort(), [stranger.id, departed.id, invited.id].sort());
 });
 
 test('V-5: a role named in the request grants nothing, and is not refused', async () => {
@@ -1214,4 +1236,113 @@ test('V-15: a LiveKit token lives two minutes, and neither the request nor the e
     } finally {
         delete process.env.LIVEKIT_TOKEN_TTL_SECONDS;
     }
+});
+
+test('V-16: the canopy decides who enters its rooms: never a banned account, and a non-member only where it is public', async () => {
+    // Not public (join rule `invite`): its members and the invited get in; nobody else.
+    const closed = seedCanopy({ joinRule: 'invite' });
+    const stranger = seedUser();
+    const departed = seedUser();
+    const invited = seedUser();
+    const banned = seedUser();
+    matrix.rooms.set(closed.canopyId, [
+        ...(matrix.rooms.get(closed.canopyId) as StubStateEvent[]).filter(
+            (e) => e.type !== 'm.room.power_levels'
+        ),
+        memberEvent(departed.mxid, 'leave'),
+        memberEvent(invited.mxid, 'invite'),
+        memberEvent(banned.mxid, 'ban'),
+        canopyPowerLevels({
+            [closed.admin.mxid]: 100,
+            [closed.moderator.mxid]: 50,
+            [banned.mxid]: 100,
+        }),
+    ]);
+    const room = seedRoom(closed.canopyId);
+    for (const path of ['/rooms/join', '/token']) {
+        for (const [label, caller] of Object.entries({ stranger, departed })) {
+            matrix.clearCalls();
+            assert.deepEqual(
+                await refusal(
+                    await post(path, caller, {
+                        canopyId: closed.canopyId,
+                        channelId: room.channelId,
+                    })
+                ),
+                { status: 403, code: 'not_canopy_member' },
+                `${label}: ${path}`
+            );
+            assert.deepEqual(matrix.stateReads, [closed.canopyId], label);
+        }
+        assert.deepEqual(
+            await refusal(
+                await post(path, banned, { canopyId: closed.canopyId, channelId: room.channelId })
+            ),
+            { status: 403, code: 'canopy_banned' },
+            path
+        );
+    }
+    assert.equal((await joinAs(invited, closed.canopyId, room.channelId)).role, 'member');
+    assert.equal((await joinAs(closed.member, closed.canopyId, room.channelId)).role, 'member');
+    assert.equal(await tokenAs(closed.moderator, closed.canopyId, room.channelId), 'moderator');
+    assert.deepEqual(activeIds(room.roomId).sort(), [invited.id, closed.member.id].sort());
+
+    // Every rule but `public` keeps a non-member out, and so does a canopy with
+    // no join rule to read: the API cannot evaluate an allow list, so it fails
+    // closed. `public` lets them in.
+    for (const joinRule of ['knock', 'restricted', 'knock_restricted', 'private', null, 'public']) {
+        const canopy = seedCanopy({ joinRule });
+        const { channelId } = seedRoom(canopy.canopyId);
+        const outsider = seedUser();
+        const label = `join rule ${joinRule}`;
+        if (joinRule === 'public') {
+            assert.equal(
+                (await joinAs(outsider, canopy.canopyId, channelId)).role,
+                'member',
+                label
+            );
+            assert.equal(await tokenAs(outsider, canopy.canopyId, channelId), 'member', label);
+        } else {
+            for (const path of ['/rooms/join', '/token']) {
+                assert.deepEqual(
+                    await refusal(
+                        await post(path, outsider, { canopyId: canopy.canopyId, channelId })
+                    ),
+                    { status: 403, code: 'not_canopy_member' },
+                    `${label}: ${path}`
+                );
+            }
+        }
+        // Its own members are unaffected by the rule.
+        assert.equal(
+            (await joinAs(canopy.member, canopy.canopyId, channelId)).role,
+            'member',
+            label
+        );
+    }
+
+    // A room whose canopy the homeserver does not know admits nobody: there is
+    // no canopy to be a member of, and none to join.
+    const gone = newCanopyId();
+    const orphan = seedRoom(gone);
+    for (const path of ['/rooms/join', '/token']) {
+        matrix.clearCalls();
+        assert.deepEqual(
+            await refusal(
+                await post(path, stranger, { canopyId: gone, channelId: orphan.channelId })
+            ),
+            { status: 403, code: 'not_canopy_member' },
+            path
+        );
+        assert.deepEqual(matrix.stateReads, [gone]);
+    }
+    assert.deepEqual(activeIds(orphan.roomId), []);
+
+    // When the homeserver cannot say, the entry cannot be checked: an unlocked
+    // room still admits the account as a member, as before (recorded in
+    // KNOWN_LIMITATIONS.md); a locked one answers with the reason (V-7).
+    const down = seedCanopy();
+    const downRoom = seedRoom(down.canopyId);
+    matrix.rooms.set(down.canopyId, 500);
+    assert.equal((await joinAs(stranger, down.canopyId, downRoom.channelId)).role, 'member');
 });
