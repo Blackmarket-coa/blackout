@@ -339,6 +339,39 @@ For the source-of-truth triage with tier/owner detail see
 -   **Next:** a role model built from Matrix power levels
     ([`docs/security/capability-header-triage-2026-10-23.md`](docs/security/capability-header-triage-2026-10-23.md)).
 
+### Voice rooms in the API (2026-10-24)
+
+-   **Where:** the API's voice rooms under `/v1/voice`
+    (`packages/api/src/routes/voice.ts`). Calls in the apps do not use them:
+    they go through MatrixRTC and lk-jwt-service. The web app reads only the
+    list of open rooms.
+-   **Roles come from the homeserver.** A canopy's admins (who can change its
+    power levels) and moderators (at its kick level, 50 unless its admins
+    changed it) can create a voice room in a listed canopy (with the premium
+    subscription), lock and unlock it, mute and remove people, and enter it
+    while it is locked. Everyone else is a member. A role named in a request
+    counts for nothing; before 2026-10-24 any signed-in account could claim to
+    be an admin. When the API cannot read the canopy from the homeserver,
+    nobody has an elevated role: creating and moderating are refused, and
+    joining an unlocked room still works.
+-   **Joining needs a room that exists;** it no longer creates one. An
+    unlocked room is open to every signed-in account with the premium
+    subscription, member of the canopy or not, including an account the canopy
+    banned: locking the room is how to keep people out. Getting a token alone
+    (`/v1/voice/token`) does not check the subscription.
+-   **Moderation is a record, not enforcement.** Mute only records the action,
+    and remove only ends the person's session record in the API. Neither
+    touches the call in LiveKit, so the person stays connected and can still
+    speak. Lock refuses new joins and tokens to members, but a LiveKit token
+    already issued keeps working until it expires (5 minutes by default, at
+    most 15), and keeps the role it was issued with. A moderator can also mute
+    or remove someone above them, the canopy's admin included.
+-   **A room's event feed** (who is in it, and its join, leave and moderation
+    history) needs a signed-in account, and any signed-in account can read
+    it, a locked room's included.
+-   **Next:** V2, V4, V5 and V7 in
+    [`docs/security/capability-header-triage-2026-10-23.md`](docs/security/capability-header-triage-2026-10-23.md).
+
 ---
 
 ## Deferred multi-week workstreams

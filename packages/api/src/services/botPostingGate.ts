@@ -36,7 +36,8 @@
  * `events['m.room.message'] ?? events_default ?? 0`; with no power-levels
  * event anyone may post. A level that is present but not an integer refuses.
  * The membership and power-level readers are exported for the canopy listing
- * check (`canopyListingGate.ts`), so the two read a room's state the same way.
+ * check (`canopyListingGate.ts`) and the voice-room role check
+ * (`voiceRoleGate.ts`), so all three read a room's state the same way.
  */
 import { matrixClient, type RoomStateEvent } from '../integrations/matrix-client';
 import { matrixUserIdFor } from './userIdentity';
@@ -120,6 +121,17 @@ export const requiredPowerLevel = (
         ? firstLevel(asLevel(events[eventType]), asLevel(content.state_default), 50)
         : firstLevel(asLevel(events[eventType]), asLevel(content.events_default));
 };
+
+/**
+ * One of the spec's named levels (`kick`, `ban`, `redact`, `invite`), else
+ * `fallback`, the spec's default for it (50 for the first three, 0 for
+ * `invite`); `null` when the level present is unusable.
+ */
+export const namedPowerLevel = (
+    content: Record<string, unknown>,
+    name: 'kick' | 'ban' | 'redact' | 'invite',
+    fallback: number
+): number | null => firstLevel(asLevel(content[name]), fallback);
 
 const mayPostMessage = (state: RoomStateEvent[], mxid: string): boolean => {
     const content = powerLevelsContent(state);

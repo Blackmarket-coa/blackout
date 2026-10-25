@@ -9,17 +9,21 @@ operator decided on (a staged one), the inventory it was built from, and what
 is still open. Every finding gets a fix or a written reason, per the standing
 rule in this directory.
 
-Written against `develop` at `291f593`, with the change set that fixes it.
-**Read** below means the claim rests on the code; **Test** names the
-regression test that drives the real Hono app (in memory mode, against the stub
-homeserver in `packages/api/test/_fixtures/matrixStub.ts` where a homeserver is
-involved), so CI's `api-smoke-and-integration` job keeps this record honest.
+Written against `develop` at `291f593`, with the change set that fixes it; the
+dated section at the end, against `develop` at `6ea67c4`, with the change set
+that fixes O4. **Read** below means the claim rests on the code; **Run** that
+it was observed by running it; **Test** names the regression test that drives
+the real Hono app (in memory mode, against the stub homeserver in
+`packages/api/test/_fixtures/matrixStub.ts` where a homeserver is involved),
+so CI's `api-smoke-and-integration` job keeps this record honest.
 
-**Result:** H1 to H5 fixed. Open: the community role model (O1), the join
-rule on listing (O2), scopes that mix owner-checked and shared-state routes
-(O3), voice-room roles taken from the request (O4), the rollout window for
-tokens minted before the change (O5), and whether dead-drop writes can be
-minted (O6).
+**Result:** H1 to H5 fixed. O4 fixed on 2026-10-24, with V1 to V3 found and
+fixed alongside it (last section). Open: the community role model (O1), the
+join rule on listing (O2), scopes that mix owner-checked and shared-state
+routes (O3), the rollout window for tokens minted before the change (O5),
+whether dead-drop writes can be minted (O6), and, for voice rooms, moderation
+that does not reach LiveKit (V4), the token route's subscription check (V5)
+and levels in moderation (V7). V6, drop-in rooms, is recorded as unchanged.
 
 | ID  | Finding                                                                                                 | Verified    | Disposition                                                    |
 | --- | ------------------------------------------------------------------------------------------------------- | ----------- | -------------------------------------------------------------- |
@@ -31,9 +35,16 @@ minted (O6).
 | O1  | Governance, moderation, forum, channels and growth writes need a community role model                   | Read        | Open: admin-only until then                                    |
 | O2  | Listing does not check the canopy's join rule                                                           | Read        | Open, recorded follow-up                                       |
 | O3  | `moderation.write` and `growth.write` also guard owner-checked routes, which are admin-only as a result | Read        | Open: split the scopes                                         |
-| O4  | Voice-room roles (`admin`, `moderator`) are taken from the request body                                 | Read        | Open: needs the same role model; not a capability check        |
+| O4  | Voice-room roles (`admin`, `moderator`) were taken from the request body                                | Read; tests | Fixed 2026-10-24: from the canopy's power levels               |
 | O5  | Tokens minted before the change keep the old capability list until they expire or are refreshed         | Read        | Open, transitional                                             |
 | O6  | A dead drop can be addressed to any account, and appears in that account's export                       | Read        | Open: admin-only until decided                                 |
+| V1  | Joining a voice room created it, with no directory or role check                                        | Read; tests | Fixed 2026-10-24: only create makes a room                     |
+| V2  | A voice room's event feed (participants, history) had no sign-in check                                  | Run; test   | Fixed for anonymous callers; signed-in audience open           |
+| V3  | An unknown voice moderation action logged a removal that removed nobody                                 | Run; test   | Fixed 2026-10-24: 404 `unknown_action`                         |
+| V4  | Voice moderation does not reach LiveKit, and tokens already issued stay valid                           | Read        | Open: stated in `KNOWN_LIMITATIONS.md`                         |
+| V5  | `POST /v1/voice/token` skips the subscription check that joining makes                                  | Read        | Open: a billing rule, for the operator                         |
+| V6  | Unlocked voice rooms are drop-in for every entitled account, banned ones included                       | Read; test  | Unchanged: the drop-in design; locking is the control          |
+| V7  | Voice mute and remove do not compare the moderator's level with the target's                            | Read        | Open, low while V4 stands                                      |
 
 ---
 
@@ -218,8 +229,9 @@ unchanged.
 -   **O1 — a community role model.** Governance, moderation, forum, channels
     and growth writes stay admin-only until the API can tell a community's
     members and moderators from anyone else; the plan is to derive roles from
-    Matrix power levels, as the listing check does for one canopy. Until then
-    a community cannot govern or moderate itself through the API.
+    Matrix power levels, as the listing check does for one canopy, and as
+    voice rooms now do (O4). Until then a community cannot govern or moderate
+    itself through the API.
 -   **O2 — the join rule on listing.** A canopy's admin can list a canopy that
     is not public (`KNOWN_LIMITATIONS.md`, "New canopy and den defaults"). A
     server-side check of the join rule is a recorded follow-up, not part of
@@ -230,11 +242,13 @@ unchanged.
     They are admin-only as a result. No shipped client could use them before
     (no token carried the scope and the web client does not send the header),
     so nothing that worked stops working. Splitting the scopes is a follow-up.
--   **O4 — voice-room roles from the request.** Found while reading the
-    `hasCanopy` callers: `routes/voice.ts` takes `role` (`admin`, `moderator`)
-    from the request body, and that role decides who may create a voice room,
-    take moderation actions in one, and join one that is locked. It is not a
-    capability check and is not changed here; it needs the role model of O1.
+-   **O4 — voice-room roles from the request — fixed 2026-10-24** (last
+    section). Found while reading the `hasCanopy` callers: `routes/voice.ts`
+    took `role` (`admin`, `moderator`) from the request body, and that role
+    decided who may create a voice room, take moderation actions in one, and
+    join one that is locked. It was not a capability check and was not changed
+    with H1 to H5; it needed the role model of O1, and now has one for voice
+    rooms: the caller's power level in the canopy on the homeserver.
 -   **O5 — tokens minted before the change.** A session token carries the
     capability list of the moment it was signed, for up to 24 hours. Until it
     expires or is refreshed, such a token does not carry `discovery.write` or
@@ -255,9 +269,10 @@ unchanged.
     community's actions to every token (FEED-6 in
     [`deadman-and-feeds-triage-2026-10-12.md`](deadman-and-feeds-triage-2026-10-12.md));
     `deadman.write` stays unminted (N2). The launch-smoke suite's
-    `registerCanopy` helper sends no capability and was refused before this
-    change too; LS-CALL-01 passes because joining a voice room does not look at
-    the directory.
+    `registerCanopy` helper sent no capability and was refused before this
+    change too; LS-CALL-01 passed because joining a voice room did not look at
+    the directory. (Since 2026-10-24 joining needs an existing room, V1, so
+    LS-CALL-01 seeds one and the helper is gone.)
 
 ## Still unverified
 
@@ -283,3 +298,233 @@ unchanged.
 -   Comments: `modules/authz.ts`, `deriveUserCapabilities` and
     `adminAllowlist` in `services/auth.ts`, `routes/admin.ts`,
     `routes/coalitions.ts`, `discoveryClient.ts`.
+
+---
+
+## 2026-10-24: O4 fixed — voice-room roles come from the homeserver
+
+The operator approved fixing O4 on 2026-10-24. **Read**, **Run** and **Test**
+as above; the tests are `packages/api/test/voice-roles.integration.test.ts`
+(V-1 to V-11), against the stub homeserver.
+
+### What the role decided
+
+`routes/voice.ts` took the role from the request body (`roleFromRequest`:
+`admin` or `moderator` if the body said so, else `member`). What the claim
+unlocked:
+
+| Route                                                | `member`                               | `moderator` or `admin`, claimed                                       |
+| ---------------------------------------------------- | -------------------------------------- | --------------------------------------------------------------------- |
+| `POST /rooms/create`                                 | 403                                    | a room in any listed canopy (the premium subscription still required) |
+| `POST /rooms/join`                                   | an unlocked room; 423 for a locked one | a locked one too, with publish and subscribe forced on                |
+| `POST /token`                                        | a token for an unlocked room           | for a locked one too                                                  |
+| `POST /rooms/moderation/lock`, `mute`, `remove`      | 403                                    | in any room                                                           |
+| LiveKit token `metadata`, participant row, event log | `member`                               | the claimed role, which the other participants see                    |
+
+-   **Verified:** read. No shipped caller sends `role` or calls these routes.
+    The web client's only `/v1/voice` call is `GET /rooms/open`
+    (`features/circle-feed/OpenVoiceRooms.tsx`); its calls go through MatrixRTC
+    and lk-jwt-service (`features/call/`); the desktop and mobile shells ship
+    that client; the SDK, the Expo app and `legacy/` make no voice calls. The
+    `packages/web` voice panel that sent `role` (`ef5449e`) is no longer in the
+    tree. The only senders left were API tests, all with `role: member`.
+
+### Which room: the canopy
+
+`canopyId` is the canopy's Matrix room id: the space the New canopy form lists
+(`CreateSpace.tsx` passes the new room's id), the id the listing check reads
+(H4), and what `/rooms/create` requires to be listed. `channelId` is a label:
+nothing in the API resolves it to a room or checks that it is in the canopy,
+the tests use `main` and `chan-1`, and the open-rooms list shows it as the
+room's name. The old refusals said "canopy admins/mods". So the role is the
+caller's standing in the canopy. A den's own power levels would be a finer
+source, but the API has no den id to read.
+
+### The rule
+
+`services/voiceRoleGate.ts` reads the canopy's current state through the
+Synapse admin API (`getRoomStateAdmin`), as the listing check does, with the
+same readers (`membershipOf`, `powerLevelsContent`, `userPowerLevel`,
+`requiredPowerLevel`, and `namedPowerLevel`, added beside them in
+`botPostingGate.ts`). The caller's level is `users[mxid] ?? users_default ?? 0`.
+
+| Role        | Rule                                                                                                                                                                    |
+| ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `admin`     | joined, and the level reaches `events['m.room.power_levels'] ?? state_default ?? 50`: the listing check's definition of a canopy admin                                  |
+| `moderator` | joined, and the level reaches `kick ?? 50`                                                                                                                              |
+| `member`    | anyone else: not joined (left, invited, banned, never there) whatever level they kept, below both levels, or a room the homeserver does not know (404, the same answer) |
+
+**Why `kick` for a moderator.** The power-levels event names a level for each
+power over other members: `kick` (make a member leave, default 50), `ban`
+(make them leave and keep them out, default 50), `redact` (remove someone
+else's event, default 50) and `invite` (default 0). `state_default`
+(default 50) is the fallback for state events that `events` does not list,
+and `events_default` (default 0) for messages. The voice powers are removing a
+participant, muting one, locking the room to new joins, entering a locked
+room and creating one. Removing is a kick; muting is a lesser sanction on the
+same person; locking removes nobody and lifts on unlock; entering and creating
+are what running a room takes. `kick` is the field a canopy's admins set to
+say who may remove people, and the fork's own kick check is the same
+comparison (`synapse/event_auth.py`: `user_level < kick_level` refuses).
+`ban` would key the role to keeping a person out, which no voice action does.
+`state_default` describes no power over members, and the fork's default power
+levels list the settings that matter in `events` explicitly
+(`m.room.power_levels`, `m.room.history_visibility`, `m.room.encryption` at
+100; `m.room.name`, `m.room.avatar`, `m.room.canonical_alias` at 50:
+`synapse/handlers/room.py`), so it mostly governs types nobody listed. A
+canopy made with the New canopy form keeps the fork's defaults (the form
+overrides only `events_default`, to 50): `kick`, `ban`, `redact` and
+`state_default` are all 50 and the creator has 100, so the choice changes
+nothing there. It matters only where a canopy's admins changed `kick`, and
+then it follows them.
+
+`admin` is checked first: a level that reaches the power-levels level is
+`admin` even where `kick` is higher (an odd room), and both may moderate.
+
+**It fails closed.** When the gate cannot tell, nobody gets an elevated role:
+
+| Refusal                    | Status | When                                                                                                                                                                                         |
+| -------------------------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `not_canopy_moderator`     | 403    | creating or moderating as a `member`                                                                                                                                                         |
+| `account_unknown`          | 401    | the token's account no longer exists, so there is no Matrix id                                                                                                                               |
+| `matrix_not_configured`    | 503    | no homeserver or bot token                                                                                                                                                                   |
+| `canopy_check_unavailable` | 503    | the state could not be read (network, any homeserver error but 404, a bad body), or the caller is joined but the room has no power-levels event, or a level the rule needs is not an integer |
+
+Create and moderation answer with the refusal. Join and token still serve a
+member: into an unlocked room they go ahead as `member`, so an ordinary join
+does not depend on the homeserver (LS-CALL-01 runs with none configured); a
+locked room answers the refusal instead of 423, so a moderator is not told the
+room is simply locked. If `MATRIX_HOMESERVER_DOMAIN` differs from Synapse's
+`server_name`, no caller is found joined and nobody is a moderator, which also
+fails closed.
+
+**A `role` in the request is ignored, not refused.** The schemas no longer
+name it and zod drops unknown keys (zod 4.6.6; run), so no code can read it.
+Refusing it would add nothing, since it grants nothing either way, and would
+break a client that sends a harmless `role: member`. The join response
+already reports the role the caller got (`permissions.role`; the LiveKit
+token's `metadata` carries the same).
+
+### V1 — joining created rooms — fixed
+
+-   **Found:** `/rooms/join` called `createOrUpdateVoiceRoom` for whatever
+    canopy and channel it was given, with no directory or role check, so any
+    entitled account could start a room in any canopy, listed or not, and the
+    create route's role check bounded nothing. `KNOWN_LIMITATIONS.md` said the
+    API gates voice rooms on the directory entry; joining did not. Nothing ever
+    ends a room (no code sets `active: false`), so each one stayed in
+    `/rooms/open`, created by whoever joined first.
+-   **Fix:** join and token answer 404 `room_not_found` for a room nobody
+    created, before asking the homeserver; only `/rooms/create` (a listed
+    canopy, the subscription, a moderator) makes one. Join still refreshes the
+    room's `updatedAt`, which the OBS mute path uses to pick a creator's current
+    room. Both read the room again after the homeserver answers, so a room
+    locked meanwhile still refuses a member.
+-   **Test:** V-8, V-9.
+
+### What changes for callers
+
+| Route                               | Before                                                                      | After                                                                         |
+| ----------------------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| create                              | any entitled account claiming a role, in any listed canopy                  | the canopy's moderators and admins on the homeserver                          |
+| join                                | any entitled account; joining created the room; a claim entered locked ones | an existing room only; a locked one admits the canopy's moderators and admins |
+| token                               | any account; a claim entered locked rooms                                   | any account, for an existing room; a locked one admits moderators and admins  |
+| moderation                          | any account claiming a role                                                 | the canopy's moderators and admins                                            |
+| role in the token, the row, the log | the claim                                                                   | the homeserver's answer at that request                                       |
+
+No shipped client changes: none sends `role` or calls these routes. The tests
+that sent `role: member` (LS-CALL-01, LS-CALL-03, the v1-routes join test) no
+longer do, and the two join tests join a room seeded as `/rooms/create` leaves
+it (neither file stubs a homeserver) instead of relying on join to create it.
+
+-   **Test:** V-1 (the admin and a moderator create; the API asked the
+    homeserver), V-2 (each role at join; publish and subscribe forced for
+    moderators only), V-3 (a member cannot create, lock, mute, remove or enter
+    a locked room; a moderator and the admin can), V-4 (a stranger, and
+    accounts that left, are invited or are banned with 100 kept, are members),
+    V-5 (a body claiming `admin` or `moderator` gets nothing on any route and
+    is not refused; one claiming `member` does not demote the admin), V-6 (the
+    thresholds and their fallbacks; integer strings), V-7 (each failure mode,
+    for the admin at 100: create, lock, a locked join and a locked token
+    refused with the code; an unlocked join goes ahead as `member`), V-8, V-9.
+-   **Mutation check (run):** each key line of the gate and the routes was
+    removed or weakened in turn, and all 36 mutations fail at least one of V-1
+    to V-9. In the gate: the account, no-bot-token, 404, failed-read,
+    membership and missing-power-levels checks, each of the three non-integer
+    checks, the admin and moderator branches, `>` for `>=` in each, the
+    moderator level taken from `ban`, from `state_default` or with a default
+    of 0, the admin level ignoring the `events` entry, and `namedPowerLevel`
+    ignoring the room's value. In the routes: each refusal on create and
+    moderation, each lock check, each room-exists check, join creating rooms
+    again, the lock read before the homeserver call (join and token), a failed
+    check giving `admin`, a locked room answering 423 when the check failed,
+    `canModerate` dropping moderators, and the body's `role` honoured again on
+    create, join, token or moderation.
+
+### Found while fixing O4
+
+-   **V2 — the event feed had no sign-in check — fixed for anonymous
+    callers.** `GET /v1/voice/rooms/:canopyId/:channelId/events` answered
+    anyone who could reach the API (run: 200 with no token) with a room's
+    participants (Blackout user ids, roles, join times) and its join, leave and
+    moderation history. It now requires a signed-in caller, as every other
+    voice route does (V-10; removing the check fails it). Open: any
+    signed-in account can still read any room's feed, a locked room's
+    included. Moderators only would follow the role model; no shipped client
+    reads it.
+-   **V3 — an unknown moderation action logged a removal — fixed.**
+    `/rooms/moderation/<anything but lock, mute or remove>` with a target
+    answered 200 and logged a `remove` that removed nobody (run, with `kick`).
+    It now answers 404 `unknown_action` before reading the body or asking the
+    homeserver (V-11; removing the check, or dropping `mute` from the allowed
+    actions, fails a test).
+-   **V4 — moderation does not reach LiveKit — open.** `mute` only records the
+    action, and `remove` only ends the participant's row in the API; neither
+    calls LiveKit, so the person stays connected and can still speak. `lock`
+    refuses new joins and tokens, but a LiveKit token already issued stays
+    valid until it expires (5 minutes by default, at most 15:
+    `services/livekit.ts`), with the role it was minted with. Real moderation
+    needs LiveKit's room service (`removeParticipant`, `mutePublishedTrack`;
+    `services/livekitAdmin.ts` already holds a client for the OBS mute path).
+    Stated in `KNOWN_LIMITATIONS.md`.
+-   **V5 — the token route skips the subscription check — open.** Joining
+    requires the premium canopy subscription; `POST /v1/voice/token` does not,
+    so any signed-in account gets a token for an existing unlocked room. A
+    billing rule, not a role, so it is the operator's call.
+-   **V6 — unlocked rooms are drop-in — unchanged.** Any signed-in, entitled
+    account can join an unlocked room, member of the canopy or not, including
+    one the canopy banned (V-4), and `/rooms/open` lists every unlocked room
+    with its canopy id to every signed-in account. That is the drop-in design
+    (the comment on `/rooms/open`), and ordinary joins keep working, as asked.
+    Refusing banned accounts would be a membership rule rather than a role, and
+    a new account gets around it; locking the room is the control that holds.
+-   **V7 — moderation does not compare levels — open, low.** A Matrix kick also
+    needs the kicker's level above the target's; voice mute and remove compare
+    nothing, so a moderator can mute or remove the canopy's admin. Low while V4
+    stands, since neither touches the call; worth mirroring when moderation
+    reaches LiveKit.
+-   **Not changed:** rooms that joining created before this change stay (rooms
+    never end), including any for an unlisted canopy or a made-up id; they can
+    still be joined, and moderating one takes a role in the room its
+    `canopyId` names. The gate does not check that the canopy is a space: new
+    rooms need a listed canopy, and listing requires one.
+
+### Still unverified
+
+-   The check against a running fork: as for H4, the admin room-state endpoint
+    is read (`RoomStateRestServlet`), not run; the tests use the stub.
+-   Room version 12: a creator has no `users` entry there and would be read as
+    `member`, which fails closed. The fork knows room versions 1 to 11.
+-   Cost: each create, join, token and moderation request reads the canopy's
+    whole state, member events included. Not measured for large canopies.
+-   A role changed on the homeserver applies from the caller's next request;
+    a LiveKit token already issued keeps its role until it expires (V4).
+
+### Documentation corrected with this section
+
+-   `KNOWN_LIMITATIONS.md`: a new entry, "Voice rooms in the API".
+-   `THREAT_MODEL.md`: adversary A6.
+-   `packages/api/README.md`: the voice routes, who may use them, and what
+    moderation does.
+-   `TRUST.md` and `trust.html`: unchanged; they make no claim about voice
+    rooms or their moderation.
