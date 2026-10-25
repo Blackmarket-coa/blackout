@@ -398,3 +398,19 @@ upstream.
   `tests/federation/test_federation_base.py` (new file), both upstream's.
   `patch.object` is given a 1-tuple here where upstream passes a bare string
   and relies on substring `in`.
+
+### Private read receipts sent to application services (upstream 1.161.0, #20114)
+
+- `synapse/handlers/receipts.py`: `ReceiptEventSource.filter_out_private_receipts`
+  now delegates to a new `_filter_private_receipts(rooms, is_visible)`, and
+  `get_new_events_as` runs the receipts it hands to an application service
+  through it with `service.is_interested_in_user`. An appservice that opts in
+  to ephemeral events (MSC2409) now sees `m.read.private` only for users in
+  its namespaces (or its sender user); public receipts are unchanged. `List`
+  is spelled `typing.List` for Python 3.8.
+- Context: `deploy/matrix-appservice/registration.yaml` sets
+  `de.sorunome.msc2409.push_ephemeral: false`, so the deaddrop appservice never
+  received these; any appservice that opts in would have.
+- Test: `tests/handlers/test_appservice.py`
+  `test_application_services_receive_private_read_receipts_of_namespaced_users_only`
+  (upstream's, unchanged).
