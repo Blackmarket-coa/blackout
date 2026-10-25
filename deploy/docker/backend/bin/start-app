@@ -1,7 +1,20 @@
 #!/bin/sh
 # Start the @blackout/api HTTP server. Honours APP_PORT (compose) by mapping it
 # to PORT, which the server reads (default 3000).
+#
+# The API shuts down on SIGTERM (packages/api/src/index.ts: it stops
+# accepting, and once its connections have closed it flushes the write-behind
+# store and exits), so it must be the process that receives it. Exec node
+# itself, with tsx as its loader, as start-worker does; it replaces this
+# shell. Through `pnpm --filter @blackout/api start` (`tsx src/index.ts`) the
+# signal had to pass pnpm, pnpm's script shell and the tsx CLI. Where that
+# shell does not exec the command (dash), the shell died of it and pnpm
+# exited, so the container stopped with the API in it. Where it does (busybox
+# ash, the image's /bin/sh), the tsx CLI passed it on, then SIGKILLed the API
+# when the API had not acknowledged it within 30 ms, as an API busy with
+# requests does not.
 set -eu
 . "$(dirname "$0")/_entrypoint-env.sh"
 export PORT="${PORT:-${APP_PORT:-3000}}"
-exec pnpm --filter @blackout/api start
+cd packages/api
+exec node --import tsx src/index.ts

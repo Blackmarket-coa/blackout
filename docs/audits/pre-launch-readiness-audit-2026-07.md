@@ -295,7 +295,7 @@ Fixes landed on branch `claude/pre-launch-app-audit-mp0yvg` (PR #857) after the 
 | --------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
 | C1        | Dead-man's switch never fires autonomously   | ⚠️ Partly fixed — the sweep moves overdue switches to `triggered`; triggering sends nothing to anyone (re-checked 2026-10-12, note below) |
 | H1        | WS shims outside middleware / DoS            | ✅ Fixed — frame caps + unauthenticated idle timeout on Twitch/OBS shims                                                                  |
-| H2        | Graceful shutdown only in postgres mode      | ✅ Fixed — unconditional shutdown; closes HTTP server + drains                                                                            |
+| H2        | Graceful shutdown only in postgres mode      | ⚠️ Partly fixed — exits without the flush if a connection outlives `SHUTDOWN_TIMEOUT_MS` (re-checked 2026-10-24, note below)              |
 | H4        | Background-loop double-processing at scale   | ✅ Fixed — Postgres advisory-lock leader election (fails safe)                                                                            |
 | H5        | Rate limiter fails open                      | ✅ Fixed — auth bucket fails closed on store error                                                                                        |
 | H6        | Default `file` DB mode in production         | ✅ Fixed — production refuses to boot unless `BLACKOUT_DB_MODE=postgres`                                                                  |
@@ -344,6 +344,27 @@ one 72-hour grace window (operator decision; `THREAT_MODEL.md` R10), and the
 retention sweeps purge whatever is already past its window. Checked against
 Postgres 16, not against a deployment; the Caddy behaviour is as Caddy
 documents it, not run.
+
+**App correction, 2026-10-24.** H2's shutdown runs in the API process, and
+`docker stop` signals only a container's PID 1. In `deploy/docker/production`
+the API ran below `/bin/sh -lc './bin/migrate && ./bin/start-app'`, the
+`pnpm --filter @blackout/api start` that start-app ran, pnpm's script shell
+and the tsx CLI. Run with the node:22-alpine layers (busybox 1.37.0 ash as
+`/bin/sh`) in a PID namespace against Postgres 16, with `docker stop`
+emulated and writes held in the queue (H3) by a slow trigger: idle, the
+signal arrived and the API drained. With 60 requests in flight, the tsx CLI
+SIGKILLed the API about 0.14 s after the SIGTERM, having waited 30 ms for an
+acknowledgement the busy API did not send, and a write acknowledged with a
+201 never reached Postgres. With dash as `/bin/sh` the signal never arrived:
+Docker SIGKILLed the API at 10 s, and a write it acknowledged in that time
+was lost. Fixed: `bin/start-app` execs node and the compose command execs
+start-app after the migrations, so the API is PID 1, and `app` and
+`app_canary` have `stop_grace_period: 20s`. Still open, so H2 is only partly
+fixed: the flush waits for every connection to close, and if one is still
+open after `SHUTDOWN_TIMEOUT_MS` the API exits 0 without it. An SSE stream or
+a WebSocket client, such as an OBS overlay, does not close on its own; with
+either open and 15 s of writes queued, a write acknowledged with a 201 was
+lost. Checked by emulation, not against a deployment.
 
 **L8 correction (2026-10-11).** The ✅ above overstated it. That change made a boot failure visible (fail-fast, `api.log` artifact) and pointed the API at postgres, but production also refuses to boot without `MAIL_PROVIDER` (`initMailerFromEnv`, there since 2026-05-12). So from 2026-07-28, when the change reached `develop`, every nightly stopped at "Start API in background"; before that, `k6 — health` failed first and the later scripts were skipped. None of the 157 scheduled runs from 2026-05-07 to 2026-10-10 passed, and the auth, rate-limit and coalition-feed scripts never ran in CI at all. Replayed locally against a booted API, all four scripts then failed their thresholds on 429s. Every VU shared one per-address rate-limit bucket (`global:local`, 120 req/min; the auth bucket allows 10). And `rate-limit.js` scored `eventually_429` over the ten attempts where 401 is the right answer, which capped a correct limiter at 50% against `rate>0.90`; it also counted every 401/429 as a failed request. Fixed alongside this note:
 
