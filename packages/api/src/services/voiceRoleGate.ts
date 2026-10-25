@@ -118,6 +118,7 @@ export type VoiceRoleVerdict =
 export type VoiceRoleRefusal =
     | VoiceRoleUnavailable
     | 'not_canopy_moderator'
+    | 'target_not_below_moderator'
     | Exclude<VoiceEntry, 'ok'>;
 
 const MEMBERSHIPS: ReadonlySet<string> = new Set(['join', 'invite', 'knock', 'leave', 'ban']);
@@ -219,6 +220,14 @@ export const voiceRoleRefusalResponse = (
                 body: {
                     code: reason,
                     message: 'Only a moderator or admin of this canopy can do that.',
+                },
+            };
+        case 'target_not_below_moderator':
+            return {
+                status: 403,
+                body: {
+                    code: reason,
+                    message: 'You can only moderate someone below your level in the canopy.',
                 },
             };
         case 'canopy_banned':

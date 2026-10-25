@@ -12,12 +12,14 @@ import {
 } from '../services/livekit';
 import { hasPremiumCanopyEntitlement } from '../services/subscriptions';
 import { hasCanopy } from '../services/canopyDirectory';
+import { matrixUserIdFor } from '../services/userIdentity';
 import {
     muteParticipantInLiveKit,
     removeParticipantFromLiveKit,
     type LiveKitModerationFailure,
 } from '../services/voiceModeration';
 import {
+    readCanopyStandings,
     readVoiceRole,
     voiceRoleRefusalResponse,
     type VoiceRoleRefusal,
@@ -401,15 +403,12 @@ voice.post('/rooms/moderation/:action', async (c) => {
     const { canopyId, channelId } = parsed;
     const targetUserId = parsed.targetUserId ?? '';
 
-    const verdict = await readVoiceRole(user.sub, canopyId);
-    if (!verdict.ok) return refuse(c, verdict.reason);
-    if (!canModerate(verdict.role)) return refuse(c, 'not_canopy_moderator');
-    const { role } = verdict;
-
-    const room = db.getVoiceRoom(canopyId, channelId);
-    if (!room) return c.json({ code: 'room_not_found', message: 'Room not found' }, 404);
-
     if (action === 'lock') {
+        const verdict = await readVoiceRole(user.sub, canopyId);
+        if (!verdict.ok) return refuse(c, verdict.reason);
+        if (!canModerate(verdict.role)) return refuse(c, 'not_canopy_moderator');
+        const room = db.getVoiceRoom(canopyId, channelId);
+        if (!room) return c.json({ code: 'room_not_found', message: 'Room not found' }, 404);
         const isLocked = parsed.locked ?? true;
         const updated = db.setVoiceRoomLock(room.id, isLocked);
         db.logVoiceRoomEvent({
@@ -419,11 +418,12 @@ voice.post('/rooms/moderation/:action', async (c) => {
             userId: user.sub,
             actorId: user.sub,
             eventType: isLocked ? 'lock' : 'unlock',
-            metadata: { role },
+            metadata: { role: verdict.role },
         });
         return c.json({ room: updated });
     }
 
+    // Mute, remove and readmit name a target.
     if (!targetUserId) {
         return c.json(
             {
@@ -433,6 +433,40 @@ voice.post('/rooms/moderation/:action', async (c) => {
             400
         );
     }
+
+    // The moderator's standing and the target's come from one read of the
+    // canopy's state, so both are judged against the same levels. A target with
+    // no account is reported only to a moderator (below), so a member cannot
+    // use this route to learn which accounts exist.
+    const actorMxid = matrixUserIdFor(user.sub);
+    if (!actorMxid) return refuse(c, 'account_unknown');
+    const targetMxid = matrixUserIdFor(targetUserId);
+    const read = await readCanopyStandings(
+        canopyId,
+        targetMxid ? [actorMxid, targetMxid] : [actorMxid]
+    );
+    if (!read.ok) return refuse(c, read.reason);
+    const actor = read.standings.get(actorMxid)!;
+    if (!canModerate(actor.role)) return refuse(c, 'not_canopy_moderator');
+    const { role } = actor;
+
+    const room = db.getVoiceRoom(canopyId, channelId);
+    if (!room) return c.json({ code: 'room_not_found', message: 'Room not found' }, 404);
+
+    const target = targetMxid ? read.standings.get(targetMxid) : undefined;
+    if (!target) {
+        return c.json({ code: 'target_unknown', message: 'That account could not be found.' }, 404);
+    }
+
+    // As with a kick on the homeserver (`synapse/event_auth.py` refuses a kick
+    // whose target is at or above the sender), the moderator must be above the
+    // target: the canopy's admin, a fellow moderator and oneself are out of
+    // reach. A level the state does not give as an integer refuses rather than
+    // comparing a guess.
+    if (actor.level === null || target.level === null) {
+        return refuse(c, 'canopy_check_unavailable');
+    }
+    if (actor.level <= target.level) return refuse(c, 'target_not_below_moderator');
 
     const logModeration = (
         eventType: VoiceRoomEventRecord['eventType'],

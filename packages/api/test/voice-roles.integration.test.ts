@@ -1346,3 +1346,136 @@ test('V-16: the canopy decides who enters its rooms: never a banned account, and
     matrix.rooms.set(down.canopyId, 500);
     assert.equal((await joinAs(stranger, down.canopyId, downRoom.channelId)).role, 'member');
 });
+
+test('V-17: mute, remove and readmit need the moderator above the target, as a kick on the homeserver does', async () => {
+    const { canopyId, admin, moderator, member } = seedCanopy();
+    const peer = seedUser();
+    // A second moderator at 50, joined like the others.
+    matrix.rooms.set(canopyId, [
+        createEvent(),
+        joinRulesEvent('public'),
+        memberEvent(admin.mxid),
+        memberEvent(moderator.mxid),
+        memberEvent(peer.mxid),
+        memberEvent(member.mxid),
+        canopyPowerLevels({ [admin.mxid]: 100, [moderator.mxid]: 50, [peer.mxid]: 50 }),
+    ]);
+    const { channelId, roomId } = seedRoom(canopyId);
+    const roomName = livekitRoomName(canopyId, channelId);
+    for (const who of [admin, moderator, peer, member]) {
+        await joinAs(who, canopyId, channelId);
+        livekit.connect(roomName, who.id, [{ sid: `TR_${who.username}`, kind: 'audio' }]);
+    }
+    const everyone = [admin.id, moderator.id, peer.id, member.id].sort();
+    const attempt = (actor: Caller, target: { id: string }, action: string) =>
+        post(`/rooms/moderation/${action}`, actor, {
+            canopyId,
+            channelId,
+            targetUserId: target.id,
+        });
+
+    // Equal or higher: refused, and nothing is done, recorded or asked of LiveKit.
+    livekit.clearCalls();
+    const refusedPairs: Array<[string, Caller, Caller]> = [
+        ['a moderator on the admin', moderator, admin],
+        ['a moderator on a fellow moderator', moderator, peer],
+        ['a moderator on themselves', moderator, moderator],
+        ['the admin on themselves', admin, admin],
+    ];
+    for (const [label, actor, target] of refusedPairs) {
+        for (const action of ['mute', 'remove', 'readmit']) {
+            matrix.clearCalls();
+            assert.deepEqual(
+                await refusal(await attempt(actor, target, action)),
+                { status: 403, code: 'target_not_below_moderator' },
+                `${label}: ${action}`
+            );
+            // Both standings came from one read of the canopy's state.
+            assert.deepEqual(matrix.stateReads, [canopyId], `${label}: ${action}`);
+        }
+    }
+    assert.deepEqual(livekit.calls, []);
+    assert.deepEqual(moderationLog(roomId), []);
+    assert.deepEqual(activeSanctions(roomId), []);
+    assert.deepEqual(activeIds(roomId).sort(), everyone);
+
+    // Above: the admin mutes and removes a moderator; a moderator removes a member.
+    assert.equal((await attempt(admin, moderator, 'mute')).status, 200);
+    assert.equal(livekit.participant(roomName, moderator.id)?.permission?.canPublish, false);
+    assert.equal((await attempt(admin, peer, 'remove')).status, 200);
+    assert.equal(livekit.participant(roomName, peer.id), undefined);
+    assert.equal((await attempt(admin, peer, 'readmit')).status, 200);
+    assert.equal((await attempt(moderator, member, 'remove')).status, 200);
+    assert.equal(livekit.participant(roomName, member.id), undefined);
+    assert.deepEqual(activeIds(roomId).sort(), [admin.id, moderator.id].sort());
+
+    // Levels, not roles: where kick is 0 everyone at users_default is a
+    // moderator, and none of them is above another.
+    const flat = seedUser();
+    const flatPeer = seedUser();
+    const flatCanopy = newCanopyId();
+    matrix.rooms.set(flatCanopy, [
+        createEvent(),
+        joinRulesEvent('public'),
+        memberEvent(flat.mxid),
+        memberEvent(flatPeer.mxid),
+        powerLevelsEvent({ users_default: 0, kick: 0, events: { 'm.room.power_levels': 100 } }),
+    ]);
+    const flatRoom = seedRoom(flatCanopy);
+    assert.equal((await joinAs(flat, flatCanopy, flatRoom.channelId)).role, 'moderator');
+    assert.deepEqual(
+        await refusal(
+            await post('/rooms/moderation/mute', flat, {
+                canopyId: flatCanopy,
+                channelId: flatRoom.channelId,
+                targetUserId: flatPeer.id,
+            })
+        ),
+        { status: 403, code: 'target_not_below_moderator' }
+    );
+
+    // A target that is not in the canopy is judged by the level it would have
+    // there (users_default), so a moderator can still remove a drop-in.
+    const dropIn = seedUser();
+    await joinAs(dropIn, canopyId, channelId);
+    assert.equal((await attempt(moderator, dropIn, 'remove')).status, 200);
+
+    // A target with no Blackout account: 404 for a moderator. A member is
+    // refused before the target is looked up, and learns nothing about which
+    // accounts exist.
+    const nobody = { id: randomUUID() };
+    assert.deepEqual(await refusal(await attempt(moderator, nobody, 'mute')), {
+        status: 404,
+        code: 'target_unknown',
+    });
+    assert.deepEqual(await refusal(await attempt(member, nobody, 'mute')), {
+        status: 403,
+        code: 'not_canopy_moderator',
+    });
+    assert.deepEqual(await refusal(await attempt(member, admin, 'mute')), {
+        status: 403,
+        code: 'not_canopy_moderator',
+    });
+
+    // A target level the state does not give as an integer is not guessed at,
+    // whether the target is in the canopy (the whole read fails) or has left it
+    // (the route refuses to compare).
+    for (const membership of ['join', 'leave']) {
+        matrix.rooms.set(canopyId, [
+            createEvent(),
+            joinRulesEvent('public'),
+            memberEvent(admin.mxid),
+            memberEvent(peer.mxid, membership),
+            canopyPowerLevels({ [admin.mxid]: 100, [peer.mxid]: 'lots' }),
+        ]);
+        assert.deepEqual(
+            await refusal(await attempt(admin, peer, 'mute')),
+            { status: 503, code: 'canopy_check_unavailable' },
+            membership
+        );
+    }
+    assert.deepEqual(
+        moderationLog(roomId).map(([eventType]) => eventType),
+        ['mute', 'remove', 'readmit', 'remove', 'remove']
+    );
+});
