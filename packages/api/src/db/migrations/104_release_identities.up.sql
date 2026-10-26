@@ -11,7 +11,8 @@
 -- identity sets superseded_at on the current row and adds a new one; every row
 -- is kept, and an identity an account published before is never published
 -- again. At most 3 new rows per account in any 24 hours, and 1000 in all.
--- Account deletion removes the account's rows.
+-- Account deletion blanks the account's rows (keys, signature, fingerprint and
+-- account id), one targeted write per row; each keeps its id, version and times.
 --
 -- No uniqueness on the current row per account: the store writes the old
 -- row's superseded_at and the new row as two ordered upserts, and reads take

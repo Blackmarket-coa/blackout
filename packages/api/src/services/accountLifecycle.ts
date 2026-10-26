@@ -322,10 +322,13 @@ export const confirmAccountDeletion = (
         record.userId,
         matrixUserIdFor(record.userId) ?? undefined
     );
-    // Release identities: the public keys go with the account. The private
-    // halves are on the person's devices and in their recovery files, which
-    // the server never had.
-    db.deleteReleaseIdentitiesForAccount(record.userId);
+    // Release identities: the public keys go with the account, one row at a
+    // time, so nothing but this account's rows is written. The private halves
+    // are on the person's devices and in their recovery files, which the
+    // server never had.
+    for (const identity of db.listReleaseIdentitiesForAccount(record.userId)) {
+        db.eraseReleaseIdentity(identity.id);
+    }
     db.purgeUserAuthArtifacts(record.userId);
     db.deleteUser(record.userId);
     return { kind: 'ok', userId: record.userId };

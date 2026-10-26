@@ -346,7 +346,7 @@ test('account deletion cancels the owner’s unfired switches and clears what th
     assert.equal(db.getDeadmanSwitch(inGrace.id)?.status, 'cancelled');
 });
 
-test('account deletion removes the account’s release identities and nobody else’s', async () => {
+test('account deletion erases the account’s release identities and nobody else’s', async () => {
     const { db } = await loadModules();
     const lifecycle = await import('../src/services/accountLifecycle');
     const user = await seedUser(db);
@@ -362,8 +362,7 @@ test('account deletion removes the account’s release identities and nobody els
             signature: 'signature',
             fingerprint,
         });
-    publish(user.id, 'a'.repeat(64));
-    publish(user.id, 'b'.repeat(64));
+    const rows = [publish(user.id, 'a'.repeat(64)), publish(user.id, 'b'.repeat(64))];
     publish(other.id, 'c'.repeat(64));
     assert.equal(db.listReleaseIdentitiesForAccount(user.id).length, 2);
 
@@ -372,6 +371,17 @@ test('account deletion removes the account’s release identities and nobody els
     assert.equal(lifecycle.confirmAccountDeletion(issued!.token, user.id).kind, 'ok');
 
     assert.equal(db.listReleaseIdentitiesForAccount(user.id).length, 0);
+    // Each row is blanked in place: no key, signature, fingerprint or account.
+    for (const row of rows) {
+        const stub = db.releaseIdentities.get(row.id);
+        assert.equal(stub?.accountId, '');
+        assert.equal(stub?.signingKey, '');
+        assert.equal(stub?.x25519Key, '');
+        assert.equal(stub?.mlkem768Key, '');
+        assert.equal(stub?.signature, '');
+        assert.equal(stub?.fingerprint, '');
+        assert.ok(stub?.supersededAt);
+    }
     assert.equal(db.getCurrentReleaseIdentity(other.id)?.fingerprint, 'c'.repeat(64));
 });
 

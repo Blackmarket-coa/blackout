@@ -1,7 +1,8 @@
 /**
  * Release identities must survive a restart in Postgres, keep their history
- * (the replaced row's superseded_at written before the new row), and leave
- * Postgres with the account, not only the in-memory mirror. The store writes
+ * (the replaced row's superseded_at written before the new row), and be
+ * erased in Postgres with the account, not only in the in-memory mirror,
+ * without touching any other account's rows. The store writes
  * only fields that have a column (migration 104), so these run
  * PostgresBackedDb against an in-process PGlite with every migration applied
  * and read the rows back after a simulated restart.
@@ -101,7 +102,15 @@ test('a published identity and its replacement survive a restart, history and al
     }
 });
 
-test('deleting an account’s identities removes the rows from Postgres, and only those', async () => {
+const rowById = async (pg: AnyPg, id: string) =>
+    (
+        await pg.query(
+            'SELECT account_id, signing_key, x25519_key, mlkem768_key, signature, fingerprint, superseded_at FROM release_identities WHERE id = $1',
+            [id]
+        )
+    ).rows[0] as Record<string, unknown> | undefined;
+
+test('erasing an account’s identities blanks its rows in Postgres, and only those', async () => {
     const pg = new PGlite() as unknown as AnyPg;
     const pool = poolFor(pg);
     try {
@@ -109,15 +118,32 @@ test('deleting an account’s identities removes the rows from Postgres, and onl
         const store1 = new PostgresBackedDb();
         await store1.init(pool as never);
         const accountId = ALICE.identity.accountId;
-        store1.publishReleaseIdentity(vectorRecord(ALICE));
-        store1.publishReleaseIdentity({ ...vectorRecord(BOB), accountId });
+        const first = store1.publishReleaseIdentity(vectorRecord(ALICE));
+        const second = store1.publishReleaseIdentity({ ...vectorRecord(BOB), accountId });
         store1.publishReleaseIdentity(vectorRecord(BOB));
         await store1.drain();
         assert.equal((await rowsFor(pg, accountId)).length, 2);
 
-        assert.equal(store1.deleteReleaseIdentitiesForAccount(accountId), 2);
+        for (const record of store1.listReleaseIdentitiesForAccount(accountId)) {
+            assert.ok(store1.eraseReleaseIdentity(record.id));
+        }
         await store1.drain();
         assert.equal((await rowsFor(pg, accountId)).length, 0);
+        for (const id of [first.id, second.id]) {
+            const stub = await rowById(pg, id);
+            assert.deepEqual(
+                { ...stub, superseded_at: stub?.superseded_at ? 'set' : null },
+                {
+                    account_id: '',
+                    signing_key: '',
+                    x25519_key: '',
+                    mlkem768_key: '',
+                    signature: '',
+                    fingerprint: '',
+                    superseded_at: 'set',
+                }
+            );
+        }
         assert.equal((await rowsFor(pg, BOB.identity.accountId)).length, 1);
 
         const store2 = new PostgresBackedDb();
@@ -126,6 +152,45 @@ test('deleting an account’s identities removes the rows from Postgres, and onl
         assert.equal(
             store2.getCurrentReleaseIdentity(BOB.identity.accountId)?.fingerprint,
             BOB.fingerprint
+        );
+    } finally {
+        await pg.close?.();
+    }
+});
+
+test('an erasure on one replica leaves a publish another replica has not mirrored yet', async () => {
+    // L6 of the independent review: account deletion used to resync the whole
+    // table, which deletes every Postgres row the deleting replica's mirror
+    // lacks, such as another account's publish that replica B wrote moments
+    // ago. Two stores on one database, with no change transport between them,
+    // stand in for that window.
+    const pg = new PGlite() as unknown as AnyPg;
+    const pool = poolFor(pg);
+    try {
+        await migrateUp({ pool: pool as never, migrationsDir: MIGRATIONS_DIR });
+        const replicaA = new PostgresBackedDb();
+        await replicaA.init(pool as never);
+        const replicaB = new PostgresBackedDb();
+        await replicaB.init(pool as never);
+
+        const leaving = ALICE.identity.accountId;
+        replicaA.publishReleaseIdentity(vectorRecord(ALICE));
+        await replicaA.drain();
+        // Replica B publishes for someone else; A never hears of it.
+        const staying = replicaB.publishReleaseIdentity(vectorRecord(BOB));
+        await replicaB.drain();
+
+        for (const record of replicaA.listReleaseIdentitiesForAccount(leaving)) {
+            replicaA.eraseReleaseIdentity(record.id);
+        }
+        await replicaA.drain();
+
+        assert.equal((await rowsFor(pg, leaving)).length, 0);
+        const kept = await rowsFor(pg, BOB.identity.accountId);
+        assert.deepEqual(
+            kept.map((row) => row.id),
+            [staying.id],
+            'the other replica’s row is still in Postgres'
         );
     } finally {
         await pg.close?.();

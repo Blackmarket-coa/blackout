@@ -910,7 +910,8 @@ export interface DeadmanSwitchRecord {
  * the public keys and signature exactly as sent, already verified, and the
  * fingerprint the API computed. Publishing a different identity marks the
  * current row `supersededAt` and adds a new one, so the history of an
- * account's keys shows. Rows go with the account. Migration 104;
+ * account's keys shows. Account deletion blanks the account's rows
+ * (`eraseReleaseIdentity`). Migration 104;
  * `docs/security/release-identities-2026-10-26.md`.
  */
 export interface ReleaseIdentityRecord {

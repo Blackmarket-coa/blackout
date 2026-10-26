@@ -624,8 +624,8 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
     // first by publishReleaseIdentity) and then adds the new one.
     supersedeReleaseIdentity: upsert('releaseIdentities'),
     publishReleaseIdentity: upsert('releaseIdentities'),
-    // Account deletion removes the rows, so the table is reconciled.
-    deleteReleaseIdentitiesForAccount: resync('releaseIdentities'),
+    // Account deletion. A targeted upsert, not a resync: see the store method.
+    eraseReleaseIdentity: upsert('releaseIdentities'),
     createModerationAction: upsert('moderationActions'),
     upsertCreatorStreamAuth: upsert('creatorStreamAuth'),
     upsertStream: upsert('streams'),

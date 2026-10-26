@@ -8,7 +8,7 @@ import { join } from 'node:path';
 // BLACKOUT_DB_MODE=file persists by overriding each mutator with a super-call
 // plus persist(). A release-identity mutator without one, or a map missing
 // from the snapshot or from hydrate(), would keep identities in memory only.
-// This publishes, replaces and deletes through the process singleton and
+// This publishes, replaces and erases through the process singleton and
 // re-opens the file as a second FileBackedDb each time (a simulated restart).
 // (Runs in its own process; node --test isolates files, so this env is local.)
 const tmpDir = mkdtempSync(join(tmpdir(), 'release-identities-file-'));
@@ -34,7 +34,7 @@ const identity = (accountId: string, fingerprint: string) => ({
     fingerprint,
 });
 
-test('published, replaced and deleted identities survive a restart of the file store', () => {
+test('published, replaced and erased identities survive a restart of the file store', () => {
     const accountId = randomUUID();
     const other = randomUUID();
     const first = db.publishReleaseIdentity(identity(accountId, 'a'.repeat(64)));
@@ -48,8 +48,19 @@ test('published, replaced and deleted identities survive a restart of the file s
         .find((record) => record.id === first.id);
     assert.ok(replaced?.supersededAt, 'the replaced identity keeps superseded_at');
 
-    assert.equal(db.deleteReleaseIdentitiesForAccount(accountId), 2);
+    for (const record of db.listReleaseIdentitiesForAccount(accountId)) {
+        assert.ok(db.eraseReleaseIdentity(record.id));
+    }
     const afterDeletion = new FileBackedDb();
     assert.equal(afterDeletion.listReleaseIdentitiesForAccount(accountId).length, 0);
+    for (const id of [first.id, second.id]) {
+        const stub = afterDeletion.releaseIdentities.get(id);
+        assert.ok(stub, 'the erased row stays, blank');
+        assert.equal(stub?.accountId, '');
+        assert.equal(stub?.signingKey, '');
+        assert.equal(stub?.mlkem768Key, '');
+        assert.equal(stub?.signature, '');
+        assert.equal(stub?.fingerprint, '');
+    }
     assert.equal(afterDeletion.getCurrentReleaseIdentity(other)?.fingerprint, 'c'.repeat(64));
 });

@@ -2539,6 +2539,8 @@ class InMemoryDb {
 
     /** Every release identity the account published, newest first. */
     listReleaseIdentitiesForAccount(accountId: string): ReleaseIdentityRecord[] {
+        // Erased rows have no account; nothing finds them by one.
+        if (!accountId) return [];
         return [...this.releaseIdentities.values()]
             .filter((record) => record.accountId === accountId)
             .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt) || b.id.localeCompare(a.id));
@@ -2580,13 +2582,29 @@ class InMemoryDb {
     }
 
     /**
-     * Account deletion: every release identity the account published goes,
-     * current and superseded. A resync in Postgres, since rows are deleted.
+     * Account deletion: blank one release identity, current or superseded:
+     * its keys, signature, fingerprint and account go, and the row keeps only
+     * its id, format version and times. The row stays because this is a
+     * targeted upsert, as `eraseScheduledMessage` and `eraseDeadmanSwitch`
+     * are: the Postgres writer has no targeted delete, and a resync of the
+     * table can delete rows another replica has just written, or write back
+     * stale copies of them.
      */
-    deleteReleaseIdentitiesForAccount(accountId: string): number {
-        const rows = this.listReleaseIdentitiesForAccount(accountId);
-        for (const record of rows) this.releaseIdentities.delete(record.id);
-        return rows.length;
+    eraseReleaseIdentity(id: string): ReleaseIdentityRecord | undefined {
+        const record = this.releaseIdentities.get(id);
+        if (!record) return undefined;
+        const updated: ReleaseIdentityRecord = {
+            ...record,
+            accountId: '',
+            signingKey: '',
+            x25519Key: '',
+            mlkem768Key: '',
+            signature: '',
+            fingerprint: '',
+            supersededAt: record.supersededAt ?? nowIso(),
+        };
+        this.releaseIdentities.set(id, updated);
+        return updated;
     }
 
     createModerationAction(
@@ -6796,10 +6814,10 @@ export class FileBackedDb extends InMemoryDb {
         return record;
     }
 
-    override deleteReleaseIdentitiesForAccount(accountId: string): number {
-        const removed = super.deleteReleaseIdentitiesForAccount(accountId);
-        if (removed > 0) this.persist();
-        return removed;
+    override eraseReleaseIdentity(id: string): ReleaseIdentityRecord | undefined {
+        const updated = super.eraseReleaseIdentity(id);
+        if (updated) this.persist();
+        return updated;
     }
 
     override createModerationAction(
