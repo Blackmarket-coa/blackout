@@ -54,11 +54,22 @@ export function isLiveKitConfigured(): boolean {
     return LIVEKIT_ENV.every((name) => Boolean(process.env[name]?.trim()));
 }
 
+/**
+ * `url` is what clients are given to connect to (`LIVEKIT_URL`, the public
+ * address). `roomServiceUrl` is where the API itself calls LiveKit's room
+ * service (moderation, the webhook's enforcement, the OBS mute path):
+ * `LIVEKIT_INTERNAL_URL` when it is set, else `LIVEKIT_URL`. Set it where the API
+ * cannot use the public address, as in the single-server stack: its api
+ * container is on internal networks only, and its `LIVEKIT_URL` carries a path
+ * (`/livekit/sfu`) that the SDK drops (it resolves `/twirp/...` against the
+ * host), which asks nginx for a path it answers 404.
+ */
 export function getLiveKitConfig() {
     const url = requiredEnv('LIVEKIT_URL');
     const apiKey = requiredEnv('LIVEKIT_API_KEY');
     const apiSecret = requiredEnv('LIVEKIT_API_SECRET');
-    return { url, apiKey, apiSecret, tokenTtlSeconds: LIVEKIT_TOKEN_TTL_SECONDS };
+    const roomServiceUrl = process.env.LIVEKIT_INTERNAL_URL?.trim() || url;
+    return { url, roomServiceUrl, apiKey, apiSecret, tokenTtlSeconds: LIVEKIT_TOKEN_TTL_SECONDS };
 }
 
 export function createLiveKitAccessToken(input: LiveKitTokenRequest): {
