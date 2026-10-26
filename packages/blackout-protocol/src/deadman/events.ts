@@ -15,7 +15,9 @@ import type { EventEnvelope } from '../common/types';
  *   armed -> grace -> triggered
  *           ^----- (cancelled at any time before triggered)
  *
- * Cancelling a switch, and deleting its owner's account, clear the payload.
+ * Cancelling a switch clears the payload, and so does deleting its owner's
+ * account for a switch that has not fired; a fired switch keeps it for the
+ * people it named.
  *
  * Arming is closed until the API can release a message to the people the
  * owner names (`POST /v1/deadman/switches` answers 409 `arming_unavailable`);
@@ -57,9 +59,10 @@ export interface DeadmanSwitchPayload {
     recipients: string[];
     /**
      * The payload as the owner supplied it; the server never decrypts it.
-     * Present while the store still holds one: cancelling the switch and
-     * deleting the owner's account both clear it, so a cancelled switch's
-     * view has no payload unless it was cancelled before cancel cleared them.
+     * Present while the store still holds one: cancelling the switch clears
+     * it (as deleting the owner's account does for a switch that has not
+     * fired), so a cancelled switch's view has no payload unless it was
+     * cancelled before cancel cleared them.
      */
     encryptedPayload?: string;
     /** Optional label. Shown to the owner only. */
