@@ -63,6 +63,7 @@ const { upsertCanopy } = await import('../src/services/canopyDirectory');
 const { applySubscriptionWebhookEvent } = await import('../src/services/subscriptions');
 const { setRoomServiceClientFactory } = await import('../src/services/livekitAdmin');
 const { LIVEKIT_TOKEN_TTL_SECONDS } = await import('../src/services/livekit');
+const { LIVEKIT_WEBHOOK_RATE_LIMIT_MAX } = await import('../src/middleware/rate-limit');
 
 const livekit = createLiveKitStub();
 setRoomServiceClientFactory(() => livekit.client);
@@ -2274,4 +2275,31 @@ test('V-24: without LiveKit configured, the webhook answers 503 and does nothing
     }
     assert.deepEqual(livekit.calls, []);
     assert.ok(livekit.participant(roomName, member.id));
+});
+
+test("V-25: LiveKit's deliveries are counted in a bucket of their own, not in the global one", async () => {
+    // One address, as LiveKit's server posts from one; not one the other tests use,
+    // so both of its buckets start empty.
+    const address = '2001:db8:7880::1';
+    const fromLiveKit = () => deliver('{}', undefined, { 'x-forwarded-for': address });
+    const elsewhere = () =>
+        app.request('/v1/voice/config', { headers: { 'x-forwarded-for': address } });
+
+    // More than the global limit allows an address in a minute: none is refused
+    // for the rate (each is refused as unverified)...
+    for (let i = 0; i < 130; i++) assert.equal((await fromLiveKit()).status, 401);
+    // ...and none counted against the address's global bucket, which still
+    // holds the address to 120 a minute everywhere else.
+    for (let i = 0; i < 120; i++) assert.equal((await elsewhere()).status, 200);
+    assert.equal((await elsewhere()).status, 429);
+
+    // The webhook's own bucket stops at its own limit, for that address only.
+    for (let i = 130; i < LIVEKIT_WEBHOOK_RATE_LIMIT_MAX; i++) {
+        assert.equal((await fromLiveKit()).status, 401);
+    }
+    assert.deepEqual(await refusal(await fromLiveKit()), { status: 429, code: 'rate_limited' });
+    assert.equal(
+        (await deliver('{}', undefined, { 'x-forwarded-for': '2001:db8:7880::2' })).status,
+        401
+    );
 });

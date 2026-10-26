@@ -165,7 +165,12 @@ app.use('*', httpMetricsMiddleware);
 // 413 carries them and is counted; on the Content-Length fast path bodyLimit
 // rejects without reading the body at all.
 app.use('*', jsonBodyLimit(GLOBAL_MAX_BODY_BYTES));
-app.use('*', rateLimit);
+const apiRoots = legacyAliasEnabled ? [API_ROOTS.v1, API_ROOTS.legacyApiAlias] : [API_ROOTS.v1];
+// LiveKit's webhook deliveries are counted in a bucket of their own, on their
+// route (`livekitWebhookRateLimit` in middleware/rate-limit.ts says why), and
+// not here; this path only, exactly as mounted below.
+const ownBucketPaths = new Set(apiRoots.map((root) => `${root}${LIVEKIT_WEBHOOK_PATH}`));
+app.use('*', (c, next) => (ownBucketPaths.has(c.req.path) ? next() : rateLimit(c, next)));
 
 // Public canary tripwire (OSS-manifest G5) — mounted before the /v1 auth gate
 // so an unauthorized party who opens a honeypot artifact fires the canary.
@@ -188,7 +193,7 @@ if (legacyAliasEnabled) {
     startLegacyApiAliasWeeklyReporter();
 }
 
-for (const root of legacyAliasEnabled ? [API_ROOTS.v1, API_ROOTS.legacyApiAlias] : [API_ROOTS.v1]) {
+for (const root of apiRoots) {
     app.route(`${root}/auth`, authRoutes);
     app.route(`${root}/admin`, adminRoutes);
     app.route(`${root}/invitations`, invitationRoutes);

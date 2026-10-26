@@ -238,3 +238,24 @@ export const exportRateLimit = createRateLimit({
     maxRequests: Number.isFinite(exportMax) && exportMax > 0 ? exportMax : 5,
     identify: (c) => getAuthUser(c)?.sub ?? null,
 });
+
+// LiveKit's webhook deliveries (routes/livekitWebhook.ts). One LiveKit server
+// posts every room's events from its one address, at the rate rooms change: each
+// join and leave, and each track published and unpublished, in every room on that
+// server, MatrixRTC calls included. A busy minute is more than the global
+// bucket's 120, which they would share with every other caller that reaches the
+// API directly from inside the stack (with no forwarding header they all key on
+// `local`: the container healthcheck, FBM's webhooks), and a 429 makes LiveKit
+// wait the minute its `Retry-After` names before trying again, which is the
+// moment a rejoin is to be caught. So these deliveries are counted in this bucket
+// instead (index.ts leaves their path out of the global one): per address, a
+// judgement for a busy server, and still a bound on anyone else posting there,
+// verified or not. Override with LIVEKIT_WEBHOOK_RATE_LIMIT_MAX.
+const livekitWebhookMax = Number.parseInt(process.env.LIVEKIT_WEBHOOK_RATE_LIMIT_MAX ?? '', 10);
+export const LIVEKIT_WEBHOOK_RATE_LIMIT_MAX =
+    Number.isFinite(livekitWebhookMax) && livekitWebhookMax > 0 ? livekitWebhookMax : 1200;
+export const livekitWebhookRateLimit = createRateLimit({
+    bucket: 'livekit-webhook',
+    windowMs: 60_000,
+    maxRequests: LIVEKIT_WEBHOOK_RATE_LIMIT_MAX,
+});

@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { jsonBodyLimit, WEBHOOK_MAX_BODY_BYTES } from '../middleware/body-limit';
+import { livekitWebhookRateLimit } from '../middleware/rate-limit';
 import { isLiveKitConfigured } from '../services/livekit';
 import { handleLiveKitWebhookEvent, verifyLiveKitWebhook } from '../services/livekitWebhook';
 import { log } from '../telemetry/logger';
@@ -17,6 +18,8 @@ import { log } from '../telemetry/logger';
  * this route). The body is read raw, as the Twitch and Patreon receivers read
  * theirs, because the signature covers its exact bytes, and it is capped at
  * 256 KiB before it is buffered. Nothing in it is acted on unless it verifies.
+ * Deliveries are counted in a rate-limit bucket of their own rather than the
+ * global one (`livekitWebhookRateLimit` says why).
  *
  * Answers:
  *   - 503 `livekit_not_configured`: LiveKit is not configured; nothing is read.
@@ -25,6 +28,8 @@ import { log } from '../telemetry/logger';
  *   - 200: handled, whether a standing sanction was applied or there was
  *     nothing to apply.
  *   - 502 `livekit_unavailable`: LiveKit did not carry out a standing sanction.
+ *   - 429 `rate_limited`: more deliveries from one address in a minute than
+ *     `LIVEKIT_WEBHOOK_RATE_LIMIT_MAX`.
  *
  * LiveKit retries a delivery answered 5xx or 429 up to four times, waiting 1, 2,
  * 4 and 8 seconds, or what a 429's or a 503's `Retry-After` says; it does not
@@ -33,6 +38,7 @@ import { log } from '../telemetry/logger';
 export const LIVEKIT_WEBHOOK_PATH = '/voice/livekit/webhook';
 
 const livekitWebhook = new Hono();
+livekitWebhook.use('*', livekitWebhookRateLimit);
 livekitWebhook.use('*', jsonBodyLimit(WEBHOOK_MAX_BODY_BYTES));
 
 livekitWebhook.post('/', async (c) => {
