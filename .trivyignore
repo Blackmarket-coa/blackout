@@ -26,3 +26,18 @@ GHSA-5p2g-fcmc-qvqq
 CVE-2025-71329
 GHSA-w3rx-r6r6-pgpr
 CVE-2025-71330
+
+# Twisted 26.4.0 (apps/blackout-server/poetry.lock): three HIGH denial-of-service
+# advisories whose only fix is the 26.10.0rc1 pre-release (2026-10-22), which is
+# not locked. Each is in a protocol implementation Synapse never imports:
+# twisted.words.xish (XMPP XML stream), twisted.words.protocols.irc, and
+# twisted.conch.telnet; the manhole uses twisted.conch.manhole_ssh, not telnet.
+# Remove these three entries when Twisted 26.10.0 final is locked. CVE aliases
+# listed because Trivy matches by CVE. Record:
+# docs/security/synapse-dependencies-triage-2026-10-25.md. Review by 2026-12-31.
+GHSA-3476-c5c2-fr73
+CVE-2026-115775
+GHSA-53xc-49m8-p798
+CVE-2026-115776
+GHSA-cwm5-jh59-mwxr
+CVE-2026-115778

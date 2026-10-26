@@ -953,9 +953,8 @@ class CASTestCase(unittest.HomeserverTestCase):
         # Test that the response is HTML.
         self.assertEqual(channel.code, 200, channel.result)
         content_type_header_value = ""
-        for header in channel.result.get("headers", []):
-            if header[0] == b"Content-Type":
-                content_type_header_value = header[1].decode("utf8")
+        for value in channel.headers.getRawHeaders(b"Content-Type", []):
+            content_type_header_value = value.decode("utf8")
 
         self.assertTrue(content_type_header_value.startswith("text/html"))
 
@@ -1160,18 +1159,18 @@ class JWTTestCase(unittest.HomeserverTestCase):
         channel = self.jwt_login({"sub": "kermit", "iss": "invalid"})
         self.assertEqual(channel.code, 403, msg=channel.result)
         self.assertEqual(channel.json_body["errcode"], "M_FORBIDDEN")
-        self.assertEqual(
+        self.assertRegex(
             channel.json_body["error"],
-            'JWT validation failed: invalid_claim: Invalid claim "iss"',
+            r"^JWT validation failed: invalid_claim: Invalid claim [\"']iss[\"']$",
         )
 
         # Not providing an issuer.
         channel = self.jwt_login({"sub": "kermit"})
         self.assertEqual(channel.code, 403, msg=channel.result)
         self.assertEqual(channel.json_body["errcode"], "M_FORBIDDEN")
-        self.assertEqual(
+        self.assertRegex(
             channel.json_body["error"],
-            'JWT validation failed: missing_claim: Missing "iss" claim',
+            r"^JWT validation failed: missing_claim: Missing [\"']iss[\"'] claim$",
         )
 
     def test_login_iss_no_config(self) -> None:
@@ -1192,18 +1191,18 @@ class JWTTestCase(unittest.HomeserverTestCase):
         channel = self.jwt_login({"sub": "kermit", "aud": "invalid"})
         self.assertEqual(channel.code, 403, msg=channel.result)
         self.assertEqual(channel.json_body["errcode"], "M_FORBIDDEN")
-        self.assertEqual(
+        self.assertRegex(
             channel.json_body["error"],
-            'JWT validation failed: invalid_claim: Invalid claim "aud"',
+            r"^JWT validation failed: invalid_claim: Invalid claim [\"']aud[\"']$",
         )
 
         # Not providing an audience.
         channel = self.jwt_login({"sub": "kermit"})
         self.assertEqual(channel.code, 403, msg=channel.result)
         self.assertEqual(channel.json_body["errcode"], "M_FORBIDDEN")
-        self.assertEqual(
+        self.assertRegex(
             channel.json_body["error"],
-            'JWT validation failed: missing_claim: Missing "aud" claim',
+            r"^JWT validation failed: missing_claim: Missing [\"']aud[\"'] claim$",
         )
 
     def test_login_aud_no_config(self) -> None:
@@ -1211,9 +1210,9 @@ class JWTTestCase(unittest.HomeserverTestCase):
         channel = self.jwt_login({"sub": "kermit", "aud": "invalid"})
         self.assertEqual(channel.code, 403, msg=channel.result)
         self.assertEqual(channel.json_body["errcode"], "M_FORBIDDEN")
-        self.assertEqual(
+        self.assertRegex(
             channel.json_body["error"],
-            'JWT validation failed: invalid_claim: Invalid claim "aud"',
+            r"^JWT validation failed: invalid_claim: Invalid claim [\"']aud[\"']$",
         )
 
     def test_login_default_sub(self) -> None:

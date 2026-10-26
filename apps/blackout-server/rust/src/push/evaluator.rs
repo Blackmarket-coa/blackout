@@ -154,6 +154,7 @@ impl PushRuleEvaluator {
     ///
     /// Returns the set of actions, if any, that match (filtering out any
     /// `dont_notify` and `coalesce` actions).
+    #[pyo3(signature = (push_rules, user_id=None, display_name=None))]
     pub fn run(
         &self,
         push_rules: &FilteredPushRules,
@@ -222,6 +223,7 @@ impl PushRuleEvaluator {
     }
 
     /// Check if the given condition matches.
+    #[pyo3(signature = (condition, user_id=None, display_name=None))]
     fn matches(
         &self,
         condition: Condition,

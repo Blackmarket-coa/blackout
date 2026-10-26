@@ -231,6 +231,21 @@ class AuthTestCase(unittest.HomeserverTestCase):
         )
         self.assertIsNotNone(self.token_login(token))
 
+    def test_hash_long_password(self) -> None:
+        """A password longer than bcrypt's 72-byte limit still hashes and validates.
+
+        bcrypt < 5 silently truncated the input; bcrypt 5 raises ValueError
+        instead, so the handler truncates to 72 bytes itself.
+        """
+        password = "p" * 100
+        hashed = self.get_success(self.auth_handler.hash(password))
+        self.assertTrue(
+            self.get_success(self.auth_handler.validate_hash(password, hashed))
+        )
+        self.assertFalse(
+            self.get_success(self.auth_handler.validate_hash("p" * 50, hashed))
+        )
+
     def test_mau_limits_not_exceeded(self) -> None:
         self.auth_blocking._limit_usage_by_mau = True
 

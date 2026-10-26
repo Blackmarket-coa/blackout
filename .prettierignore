@@ -6,6 +6,11 @@
 /*.log
 # Upstream Element/Cinny fork — not formatted by the modern root config.
 /legacy
+# Upstream Synapse fork — its docs, YAML and JSON keep element-hq/synapse's own
+# formatting so the diff against upstream stays small (PATCHES.md). Only the
+# fork-authored PATCHES.md follows the root config.
+/apps/blackout-server/*
+!/apps/blackout-server/PATCHES.md
 yarn.lock
 pnpm-lock.yaml
 electron/dist

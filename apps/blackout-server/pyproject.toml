@@ -35,7 +35,7 @@
         showcontent = true
 
 [tool.black]
-target-version = ['py38', 'py39', 'py310', 'py311']
+target-version = ['py311']
 # black ignores everything in .gitignore by default, see
 # https://black.readthedocs.io/en/stable/usage_and_configuration/file_collection_and_discovery.html#gitignore
 # Use `extend-exclude` if you want to exclude something in addition to this.
@@ -154,7 +154,7 @@ synapse_review_recent_signups = "synapse._scripts.review_recent_signups:main"
 update_synapse_database = "synapse._scripts.update_synapse_database:main"
 
 [tool.poetry.dependencies]
-python = "^3.8.0"
+python = "^3.11"
 
 # Mandatory Dependencies
 # ----------------------
@@ -170,36 +170,39 @@ canonicaljson = "^2.0.0"
 # we use the type definitions added in signedjson 1.1.
 signedjson = "^1.1.0"
 # validating SSL certs for IP addresses requires service_identity 18.1.
-service-identity = ">=18.1.0"
+# 24.2.0 is the first release that no longer calls pyOpenSSL's
+# X509.get_extension, which pyOpenSSL 26 removed: under 23.1.0 every
+# hostname-verified TLS connection fails. Upstream's lock is also on 24.2.0.
+service-identity = ">=24.2.0"
 # Twisted 18.9 introduces some logger improvements that the structured
-# logger utilises
-Twisted = {extras = ["tls"], version = ">=18.9.0"}
+# logger utilises. 26.4.0 is the newest final release and fixes
+# GHSA-grgv-6hw6-v9g4 (twisted.names); GHSA-3476-c5c2-fr73, GHSA-53xc-49m8-p798
+# and GHSA-cwm5-jh59-mwxr are fixed only in the 26.10.0 pre-release, which is
+# not locked. See docs/security/synapse-dependencies-triage-2026-10-25.md
+# (repository root).
+Twisted = {extras = ["tls"], version = ">=26.4.0"}
 treq = ">=15.1"
 # Modern cryptography releases require a recent pyOpenSSL for compatibility.
 # Older pyOpenSSL versions fail at import-time with newer OpenSSL bindings.
-pyOpenSSL = ">=25.1.0"
+# 26.0.0 fixes GHSA-5pwr-322w-8jr4.
+pyOpenSSL = ">=26.0.0"
 PyYAML = ">=3.13"
-pyasn1 = ">=0.1.9"
+# 0.6.4 fixes GHSA-jr27-m4p2-rc6r, GHSA-8ppf-4f7h-5ppj, GHSA-hm4w-wwcw-mr6r and
+# GHSA-m4p7-r5rc-7g4j (all High).
+pyasn1 = ">=0.6.4"
 pyasn1-modules = ">=0.0.7"
 bcrypt = ">=3.1.7"
-# 10.0.1 minimum is mandatory here because of libwebp CVE-2023-4863.
-# Packagers that already took care of libwebp can lower that down to 5.4.0.
-#
-# On Python >= 3.11 the minimum is 13.0.0: the thumbnailer decodes
-# attacker-supplied images, and 13.0.0 is the first release that fixes every
-# advisory OSV lists against 10.1.0. Pillow 13 requires Python >= 3.11, and no
-# release that runs on 3.8-3.10 fixes them all, so those interpreters keep the
-# old bound and stay on the 10.1.0 lock entry. synapse/util/check_dependencies.py
-# must evaluate python_version markers for this to start on 3.8-3.10. See
-# docs/security/synapse-dependencies-triage-2026-10-24.md (repository root).
-Pillow = [
-    { version = ">=13.0.0", python = ">=3.11" },
-    { version = ">=10.0.1", python = "<3.11" },
-]
+# The thumbnailer decodes attacker-supplied images, and 13.0.0 is the first
+# release that fixes every advisory OSV lists against 10.1.0 (51 GitHub
+# advisories, 5 of them Critical). It requires Python >= 3.11, which is this
+# project's floor. See docs/security/synapse-dependencies-triage-2026-10-24.md
+# (repository root).
+Pillow = ">=13.0.0"
 # We use SortedDict.peekitem(), which was added in sortedcontainers 1.5.2.
 sortedcontainers = ">=1.5.2"
 pymacaroons = ">=0.13.0"
-msgpack = ">=0.5.2"
+# 1.2.1 fixes GHSA-6v7p-g79w-8964 (High).
+msgpack = ">=1.2.1"
 phonenumbers = ">=8.2.0"
 # we use GaugeHistogramMetric, which was added in prom-client 0.4.0.
 # prometheus-client >=0.21 changes Collector typing and breaks our Generic/Collector
@@ -219,8 +222,10 @@ bleach = ">=1.4.3"
 # generic over ParamSpecs.
 typing-extensions = ">=3.10.0.1"
 # We enforce that we have a `cryptography` version that bundles an `openssl`
-# with the latest security patches.
-cryptography = ">=3.4.7"
+# with the latest security patches. 49.0.0 is the first release that fixes
+# every High advisory OSV lists against 41.0.7 (the last one, CVE-2026-69249,
+# is fixed there).
+cryptography = ">=49.0.0"
 # ijson 3.1.4 fixes a bug with "." in property names
 ijson = ">=3.1.4"
 matrix-common = "^1.3.0"
@@ -240,6 +245,21 @@ pydantic = ">=1.7.4, <3"
 # needed.
 setuptools_rust = ">=1.3"
 
+# Transitive dependencies pinned here only because the lock otherwise resolves
+# them to releases with High or Critical advisories (see
+# docs/security/synapse-dependencies-triage-2026-10-25.md, repository root).
+# None of them is imported by Synapse directly.
+#
+# certifi: pulled in by requests (via treq) and sentry-sdk. 2026.10.19 fixes
+# GHSA-6q48-6c7w-9gw2 (Critical).
+certifi = ">=2026.10.19"
+# urllib3: pulled in by requests. 2.8.0 is the first release that fixes all six
+# High advisories against 2.0.7.
+urllib3 = ">=2.8.0"
+# setuptools: pulled in by setuptools_rust and zope.interface. 78.1.1 fixes
+# GHSA-cx63-2mw6-8hw5 and GHSA-5rjg-fvgr-3xxf (both High).
+setuptools = ">=78.1.1"
+
 
 # Optional Dependencies
 # ---------------------
@@ -248,19 +268,34 @@ psycopg2 = { version = ">=2.8", markers = "platform_python_implementation != 'Py
 psycopg2cffi = { version = ">=2.8", markers = "platform_python_implementation == 'PyPy'", optional = true }
 psycopg2cffi-compat = { version = "==1.1", markers = "platform_python_implementation == 'PyPy'", optional = true }
 pysaml2 = { version = ">=4.5.0", optional = true }
-authlib = { version = ">=0.15.1", optional = true }
+# 1.6.12 is the first release that fixes every advisory against 1.2.1,
+# including GHSA-wvwj-cvrp-7pv5 (Critical). Capped below 1.7: from 1.7.0 authlib
+# validates id_token claims with joserfc, which rejects a non-string `sub`, and
+# synapse/handlers/oidc.py accepts providers that send an integer one
+# (tests/handlers/test_oidc.py, test_map_userinfo_to_user). Upstream's lock is
+# also on 1.6.12.
+authlib = { version = ">=1.6.12,<1.7", optional = true }
 # systemd-python is necessary for logging to the systemd journal via
 # `systemd.journal.JournalHandler`, as is documented in
 # `contrib/systemd/log_config.yaml`.
 # Note: systemd-python 231 appears to have been yanked from pypi
 systemd-python = { version = ">=231", optional = true }
-lxml = { version = ">=4.2.0", optional = true }
+# 6.1.0 fixes GHSA-vfmq-68hx-4jfw (High).
+lxml = { version = ">=6.1.0", optional = true }
 sentry-sdk = { version = ">=0.7.2", optional = true }
 opentracing = { version = ">=2.2.0", optional = true }
 jaeger-client = { version = ">=4.0.0", optional = true }
+# thrift and tornado are jaeger-client's dependencies, pinned for the same
+# reason as the transitive floors above: 0.24.0 fixes GHSA-6pjx-3pjc-mrj8 and
+# GHSA-8wv5-x4w7-5gww, 6.5.9 fixes all ten High advisories against tornado 6.2.
+thrift = { version = ">=0.24.0", optional = true }
+tornado = { version = ">=6.5.9", optional = true }
 txredisapi = { version = ">=1.4.7", optional = true }
 hiredis = { version = "*", optional = true }
-Pympler = { version = "*", optional = true }
+# Pympler 1.1 depends on pywin32 on Windows, which ships no sdist, and
+# scripts-dev/check_locked_deps_have_sdists.py requires one for every locked
+# package. Upstream's lock is also on 1.0.1.
+Pympler = { version = ">=1.0.1,<1.1", optional = true }
 parameterized = { version = ">=0.7.4", optional = true }
 idna = { version = ">=2.5", optional = true }
 pyicu = { version = ">=2.10.2", optional = true }
@@ -278,7 +313,7 @@ oidc = ["authlib"]
 systemd = ["systemd-python"]
 url-preview = ["lxml"]
 sentry = ["sentry-sdk"]
-opentracing = ["jaeger-client", "opentracing"]
+opentracing = ["jaeger-client", "opentracing", "thrift", "tornado"]
 jwt = ["authlib"]
 # hiredis is not a *strict* dependency, but it makes things much faster.
 # (if it is not installed, we fall back to slow code.)
@@ -316,7 +351,7 @@ all = [
     # sentry
     "sentry-sdk",
     # opentracing
-    "jaeger-client", "opentracing",
+    "jaeger-client", "opentracing", "thrift", "tornado",
     # redis
     "txredisapi", "hiredis",
     # cache-memory
@@ -365,8 +400,12 @@ idna = ">=2.5"
 
 # The following are used by the release script
 click = ">=8.1.3"
-# GitPython was == 3.1.14; bumped to 3.1.20, the first release with type hints.
-GitPython = ">=3.1.20"
+# GitPython was == 3.1.14; bumped to 3.1.20, the first release with type hints,
+# then to 3.2.1, the first release that fixes all 26 High/Critical advisories
+# against 3.1.40.
+GitPython = ">=3.2.1"
+# pyjwt is pygithub's dependency; 2.14.0 fixes its Critical and High advisories.
+pyjwt = ">=2.14.0"
 commonmark = ">=0.9.1"
 pygithub = ">=1.55"
 # The following are executed as commands by the release script.
@@ -383,10 +422,13 @@ tomli = ">=1.2.3"
 optional = true
 
 [tool.poetry.group.dev-docs.dependencies]
-sphinx = {version = "^6.1", python = "^3.8"}
-sphinx-autodoc2 = {version = ">=0.4.2,<0.6.0", python = "^3.8"}
-myst-parser = {version = "^1.0.0", python = "^3.8"}
+sphinx = "^6.1"
+sphinx-autodoc2 = ">=0.4.2,<0.6.0"
+myst-parser = "^1.0.0"
 furo = ">=2022.12.7,<2024.0.0"
+# soupsieve is beautifulsoup4's dependency (via furo); 2.8.4 fixes
+# GHSA-2wc2-fm75-p42x and GHSA-836r-79rf-4m37 (both High).
+soupsieve = ">=2.8.4"
 
 
 [build-system]
@@ -404,13 +446,13 @@ build-backend = "poetry.core.masonry.api"
 # Skip unsupported platforms (by us or by Rust).
 # See https://cibuildwheel.readthedocs.io/en/stable/options/#build-skip for the list of build targets.
 # We skip:
-#  - CPython 3.6 and 3.7: EOLed
-#  - PyPy 3.7: we only support Python 3.8+
+#  - CPython 3.6 to 3.10: below our minimum of Python 3.11
+#  - PyPy 3.7 to 3.10: we only support Python 3.11+
 #  - musllinux i686: excluded to reduce number of wheels we build.
 #    c.f. https://github.com/matrix-org/synapse/pull/12595#discussion_r963107677
 #  - PyPy on Aarch64 and musllinux on aarch64: too slow to build.
 #    c.f. https://github.com/matrix-org/synapse/pull/14259
-skip = "cp36* cp37* pp37* *-musllinux_i686 pp*aarch64 *-musllinux_aarch64"
+skip = "cp36* cp37* cp38* cp39* cp310* pp37* pp38* pp39* pp310* *-musllinux_i686 pp*aarch64 *-musllinux_aarch64"
 
 # We need a rust compiler
 before-all =  "curl https://sh.rustup.rs -sSf | sh -s -- --default-toolchain stable -y --profile minimal"

@@ -16,15 +16,17 @@ trusted_key_servers:
 # Authentication mode toggles:
 # - Local Synapse auth:     SYNAPSE_AUTH_MODE=local, SYNAPSE_MSC3861_ENABLED=false
 # - MAS delegated auth:     SYNAPSE_AUTH_MODE=mas,   SYNAPSE_MSC3861_ENABLED=true
-experimental_features:
-  msc3861:
-    enabled: ${SYNAPSE_MSC3861_ENABLED}
-    issuer: "${SYNAPSE_MSC3861_ISSUER}"
-    client_id: "${SYNAPSE_MSC3861_CLIENT_ID}"
-    client_auth_method: "${SYNAPSE_MSC3861_CLIENT_AUTH_METHOD}"
-    client_secret: "${SYNAPSE_MSC3861_CLIENT_SECRET}"
-    admin_token: "${SYNAPSE_MSC3861_ADMIN_TOKEN}"
-    account_management_url: "${SYNAPSE_MSC3861_ACCOUNT_MANAGEMENT_URL}"
+#
+# Synapse v1.136.0 made the Matrix Authentication Service integration stable
+# and v1.157.0 removed `experimental_features.msc3861`: a config that still
+# carries that block does not start, even with `enabled: false`. The stable
+# integration authenticates both directions with the secret MAS holds as
+# `matrix.secret` (MAS_MATRIX_SECRET); the client id/secret, admin token and
+# account management URL of the old block are no longer read. Needs MAS 0.20+.
+matrix_authentication_service:
+  enabled: ${SYNAPSE_MSC3861_ENABLED}
+  endpoint: "http://mas:8080"
+  secret: "${MAS_MATRIX_SECRET}"
 
 # Appservice registrations (optional integrations profile):
 # 1) Start the integrations profile once to render Hookshot registration:

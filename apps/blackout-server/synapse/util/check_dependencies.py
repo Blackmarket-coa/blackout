@@ -22,7 +22,7 @@ require. But this is probably just symptomatic of Python's package management.
 
 import logging
 from importlib import metadata
-from typing import Any, Dict, Iterable, NamedTuple, Optional, Sequence, Set, cast
+from typing import Any, Iterable, NamedTuple, Optional, Sequence, cast
 
 from packaging.markers import Marker, Value, Variable, default_environment
 from packaging.requirements import Requirement
@@ -68,10 +68,10 @@ except metadata.PackageNotFoundError:
 RUNTIME_EXTRAS = set(ALL_EXTRAS) - DEV_EXTRAS
 
 
-def _marker_environment(extra: str) -> Dict[str, str]:
+def _marker_environment(extra: str) -> dict[str, str]:
     """Return the marker environment for `extra`, seeded with the current interpreter."""
 
-    env = cast(Dict[str, str], dict(default_environment()))
+    env = cast(dict[str, str], dict(default_environment()))
     env["extra"] = extra
     return env
 
@@ -168,7 +168,7 @@ def _dependencies_for_extra(extra: str) -> Iterable[Dependency]:
             yield Dependency(req, True)
 
 
-def _values_from_marker_value(value: Value) -> Set[str]:
+def _values_from_marker_value(value: Value) -> set[str]:
     """Extract text values contained in a marker `Value`."""
 
     raw: Any = value.value
@@ -179,10 +179,10 @@ def _values_from_marker_value(value: Value) -> Set[str]:
     return {str(raw)}
 
 
-def _extras_from_marker(marker: Optional[Marker]) -> Set[str]:
+def _extras_from_marker(marker: Optional[Marker]) -> set[str]:
     """Return every `extra` referenced in the supplied marker tree."""
 
-    extras: Set[str] = set()
+    extras: set[str] = set()
 
     if marker is None:
         return extras
@@ -212,7 +212,7 @@ def _extras_from_marker(marker: Optional[Marker]) -> Set[str]:
 
 def _extras_to_consider_for_requirement(
     marker: Marker, base_candidates: Sequence[str]
-) -> Set[str]:
+) -> set[str]:
     """
     Augment `base_candidates` with extras explicitly mentioned in `marker`.
 
@@ -229,7 +229,7 @@ def _extras_to_consider_for_requirement(
     return extras
 
 
-def _marker_applies_for_any_extra(requirement: Requirement, extras: Set[str]) -> bool:
+def _marker_applies_for_any_extra(requirement: Requirement, extras: set[str]) -> bool:
     """Check whether a requirement's marker matches any evaluated `extra`."""
 
     if requirement.marker is None:

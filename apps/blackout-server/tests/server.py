@@ -189,17 +189,35 @@ class FakeChannel:
     def headers(self) -> Headers:
         if not self.result:
             raise Exception("No result yet.")
-        h = Headers()
-        for i in self.result["headers"]:
-            h.addRawHeader(*i)
+
+        h = self.result["headers"]
+        assert isinstance(h, Headers)
         return h
 
     def writeHeaders(
-        self, version: bytes, code: bytes, reason: bytes, headers: Headers
+        self,
+        version: bytes,
+        code: bytes,
+        reason: bytes,
+        headers: Union[Headers, List[Tuple[bytes, bytes]]],
     ) -> None:
         self.result["version"] = version
         self.result["code"] = code
         self.result["reason"] = reason
+
+        if isinstance(headers, list):
+            # Support prior to Twisted 24.7.0rc1
+            new_headers = Headers()
+            for k, v in headers:
+                assert isinstance(k, bytes), f"key is not of type bytes: {k!r}"
+                assert isinstance(v, bytes), f"value is not of type bytes: {v!r}"
+                new_headers.addRawHeader(k, v)
+            headers = new_headers
+
+        assert isinstance(
+            headers, Headers
+        ), f"headers are of the wrong type: {headers!r}"
+
         self.result["headers"] = headers
 
     def write(self, data: bytes) -> None:
@@ -319,15 +337,20 @@ class FakeSite:
         resource: IResource,
         reactor: IReactorTime,
         experimental_cors_msc3886: bool = False,
+        *,
+        parsePOSTFormSubmission: bool = True,
     ):
         """
 
         Args:
             resource: the resource to be used for rendering all requests
+            parsePOSTFormSubmission: read by twisted.web.server.Request (Twisted
+                26), which a real Site sets in its constructor
         """
         self._resource = resource
         self.reactor = reactor
         self.experimental_cors_msc3886 = experimental_cors_msc3886
+        self._parsePOSTFormSubmission = parsePOSTFormSubmission
 
     def getResourceFor(self, request: Request) -> IResource:
         return self._resource
@@ -486,8 +509,12 @@ class ThreadedMemoryReactorClock(MemoryReactorClock):
 
             tls._get_default_clock = lambda: self
 
-        self.nameResolver = SimpleResolverComplexifier(FakeResolver())
         super().__init__()
+
+        # Override the default name resolver with our fake resolver. This must
+        # happen after `super().__init__()`: since Twisted 26 MemoryReactor's
+        # constructor installs its own resolver and would overwrite it.
+        self.nameResolver = SimpleResolverComplexifier(FakeResolver())
 
     def installNameResolver(self, resolver: IHostnameResolver) -> IHostnameResolver:
         raise RuntimeError(
@@ -915,6 +942,37 @@ class FakeTransport:
         if not self.buffer and self.disconnecting:
             logger.info("FakeTransport: Buffer now empty, completing disconnect")
             self.disconnected = True
+
+    def getTcpNoDelay(self) -> bool:
+        """
+        Return if C{TCP_NODELAY} is enabled.
+        """
+        return False
+
+    def setTcpNoDelay(self, enabled: bool) -> None:
+        """
+        Enable/disable C{TCP_NODELAY}.
+
+        Enabling C{TCP_NODELAY} turns off Nagle's algorithm. Small packets are
+        sent sooner, possibly at the expense of overall throughput.
+        """
+        # Ignore setting this.
+
+    def getTcpKeepAlive(self) -> bool:
+        """
+        Return if C{SO_KEEPALIVE} is enabled.
+        """
+        return False
+
+    def setTcpKeepAlive(self, enabled: bool) -> None:
+        """
+        Enable/disable C{SO_KEEPALIVE}.
+
+        Enabling C{SO_KEEPALIVE} sends packets periodically when the connection
+        is otherwise idle, usually once every two hours. They are intended
+        to allow detection of lost peers in a non-infinite amount of time.
+        """
+        # Ignore setting this.
 
 
 def connect_client(
