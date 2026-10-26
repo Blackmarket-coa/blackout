@@ -97,8 +97,9 @@ so there is no JSON canonicalisation to get wrong.
     leaves the device.
 -   **C4, one form.** `fromBase64` in `deaddrop/crypto/encoding.ts` skips
     whitespace and ignores non-zero trailing bits, so `AA==` and `AB==` decode
-    alike, as do `AA AA` and `AAAA` (**Run**). An identity field is accepted only if encoding the decoded bytes
-    gives back the same string, and only at the exact length. That gave the
+    alike, as do `AA AA` and `AAAA` (**Run**). An identity field is accepted
+    only if encoding the decoded bytes gives back the same string, and only at
+    the exact length. That gave the
     base64 one form but not the keys inside it: the independent review found
     that an X25519 key with its top bit set, or with u of p or more, gives
     the same shared secret as its reduced form and another fingerprint (L2),
@@ -714,22 +715,28 @@ different release key".
     holds a key that is not one of this device's, the Release keys screen
     says that if the person didn't make it on another device, someone with
     access to their account, or Blackout's server, published it. It does not
-    offer to publish a key the server lists as replaced. Replacing keys shows
-    what else to do, before and after: sign the lost device out (from a
-    Matrix client that lists sessions, or by resetting the password with
-    "Sign out of other devices"), and tell the people compared with, outside
-    Blackout, that the key changed. PR 3's rule is in §2 and §5, item 8: a
-    comparison counts only for the account's current identity, and is stale
-    once the device has seen a newer identity or the directory lists the
-    compared fingerprint as superseded.
+    offer to publish a key the server lists as replaced, and when the server
+    shows a key this device replaced as current again, with the newer one
+    listed as replaced (the rollback this finding describes), it says the
+    server did that, since the API refuses it to every account. It tells
+    these cases apart by comparing identities, never the fingerprints the
+    server states. Replacing keys shows what else to do, before and after:
+    sign the lost device out (from a Matrix client that lists sessions, or
+    by resetting the password with "Sign out of other devices"), and tell
+    the people compared with, outside Blackout, that the key changed. PR 3's
+    rule is in §2 and §5, item 8: a comparison counts only for the account's
+    current identity, and is stale once the device has seen a newer identity
+    or the directory lists the compared fingerprint as superseded.
 -   **Tests.** `release-identities.integration.test.ts`: "a new identity
     replaces the current one, which stays listed as superseded" (it asserted
     the old behaviour; it now asserts the 409) and "no identity from an
     account's history becomes current again, however old".
     `ReleaseKeysPanel.test.tsx`: "says who could have published a key this
-    device did not make…", "does not offer to publish a key the server lists
-    as replaced", "says what else to do when replacing keys, before and
-    after", and the refusal cases.
+    device did not make…", "does not let a fingerprint the server states
+    turn a stranger's key into this device's old one", "says when the server
+    has put back a key this device replaced", "does not offer to publish a
+    key the server lists as replaced", "says what else to do when replacing
+    keys, before and after", and the refusal cases.
 -   **Still open.** A compelled server can serve any key as current; against
     that, only PR 3's client rule holds. Decision 18 covers signing out the
     lost device.

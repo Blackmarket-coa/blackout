@@ -120,6 +120,17 @@ export const missingKeysWarning = (fingerprint: string): string =>
     "below. If you didn't make them, someone with access to your account, or Blackout's " +
     'server, published them.';
 
+/**
+ * The server shows a key this device replaced as current again, and lists the
+ * newer one as replaced: the rollback H1 describes. The API refuses to make a
+ * replaced identity current again, so asking it cannot produce this.
+ */
+export const rolledBackWarning = (fingerprint: string): string =>
+    `Blackout's server shows a key this device replaced (${fingerprint}) as your current key ` +
+    'again, and lists your newer key as replaced. Its API refuses to do that for any account ' +
+    'that asks, so it was done on the server itself, or by a fault in it. Tell the people you ' +
+    'compared codes with, outside Blackout, not to rely on your key until you compare again.';
+
 export const RELEASE_KEY_REPLACED_ON_SERVER =
     "Blackout's server lists this device's key as replaced, so it can't be published again. " +
     "To replace the server's key, create new release keys.";
@@ -368,14 +379,17 @@ export const ReleaseKeysPanel = ({
         ? 'unpublished'
         : sameIdentity(me.current.identity, local.identity)
         ? 'published'
-        : device?.keySets.some((set) => set.fingerprint === me.current?.fingerprint)
+        : device?.keySets.some(
+              (set) => me.current !== null && sameIdentity(set.identity, me.current.identity)
+          )
         ? 'older'
         : 'foreign';
     // H1: the API refuses to make a replaced identity current again, so a key
-    // the server lists as replaced cannot be published from here.
+    // the server lists as replaced cannot be published from here. Identities
+    // are compared, never the fingerprints the server states.
     const replacedOnServer =
         local !== undefined &&
-        (me?.superseded ?? []).some((entry) => entry.fingerprint === local.fingerprint);
+        (me?.superseded ?? []).some((entry) => sameIdentity(entry.identity, local.identity));
     const serverName = me?.matrixId?.slice(me.matrixId.indexOf(':') + 1) ?? 'this server';
 
     const publish = useCallback(
@@ -404,8 +418,8 @@ export const ReleaseKeysPanel = ({
                     } catch {
                         // Keep what the screen had.
                     }
-                    const reused = (entry?.superseded ?? []).some(
-                        (superseded) => superseded.fingerprint === keySet.fingerprint
+                    const reused = (entry?.superseded ?? []).some((superseded) =>
+                        sameIdentity(superseded.identity, keySet.identity)
                     );
                     setNotice({
                         tone: 'error',
@@ -741,7 +755,14 @@ export const ReleaseKeysPanel = ({
                                             publish it.
                                         </p>
                                     )}
-                                    {publication === 'older' && me.current && (
+                                    {publication === 'older' && me.current && replacedOnServer && (
+                                        <p data-testid="publication" role="alert">
+                                            {rolledBackWarning(
+                                                shortFingerprint(me.current.fingerprint)
+                                            )}
+                                        </p>
+                                    )}
+                                    {publication === 'older' && me.current && !replacedOnServer && (
                                         <p data-testid="publication">
                                             Not published yet: Blackout&apos;s server still has the
                                             key this device used before (

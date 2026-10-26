@@ -28,6 +28,7 @@ import {
     PUBLISH_REUSED,
     PUBLISH_STORAGE_LIMIT,
     RELEASE_KEY_REPLACED_ON_SERVER,
+    rolledBackWarning,
     RELEASE_KEYS_BROWSER,
     RELEASE_KEYS_LISTING,
     RELEASE_KEYS_LOSS,
@@ -484,6 +485,76 @@ describe('Settings → Release keys', () => {
         expect(currentKeySet(stored)?.fingerprint).toBe(ALICE.fingerprint);
         expect(text()).toContain("Published: Blackout's server has this key for you.");
     }, 180_000);
+
+    it('does not let a fingerprint the server states turn a stranger’s key into this device’s old one', async () => {
+        // This device made Alice's vector key, then replaced it.
+        const newer = await createReleaseKeySet(ACCOUNT, new Date('2026-10-26T11:00:00Z'));
+        await indexedDbReleaseKeyStore.save(
+            withNewCurrentKeySet(
+                withNewCurrentKeySet(null, ACCOUNT, aliceKeySet, NOW),
+                ACCOUNT,
+                newer,
+                NOW
+            )
+        );
+        // The server serves a key this device never made, labelled with the
+        // fingerprint of the device's old key.
+        const stranger = { ...BOB.identity, accountId: ACCOUNT };
+        const { client } = fakeApi({
+            mine: entryFor(ACCOUNT, '@alice:test.local', stranger, ALICE.fingerprint),
+        });
+        await render({ apiClient: client });
+        // Once this device's keys are on screen, the stranger's key must get
+        // the warning, whatever fingerprint the server gave it.
+        await waitFor(
+            () => Boolean(container.querySelector('[data-testid="own-fingerprint"]')),
+            "this device's keys"
+        );
+        await waitFor(
+            () =>
+                text().includes(
+                    foreignKeyWarning(formatReleaseFingerprint(ALICE.fingerprint.slice(0, 16)))
+                ),
+            'the warning'
+        );
+        expect(text()).not.toContain('still has the key this device used before');
+    }, 60_000);
+
+    it('says when the server has put back a key this device replaced', async () => {
+        const newer = await createReleaseKeySet(ACCOUNT, new Date('2026-10-26T11:00:00Z'));
+        await indexedDbReleaseKeyStore.save(
+            withNewCurrentKeySet(
+                withNewCurrentKeySet(null, ACCOUNT, aliceKeySet, NOW),
+                ACCOUNT,
+                newer,
+                NOW
+            )
+        );
+        // Alice's old key current again, the device's newer one listed as replaced.
+        const { client } = fakeApi({
+            mine: {
+                ...entryFor(ACCOUNT, '@alice:test.local', ALICE.identity, ALICE.fingerprint),
+                superseded: [
+                    {
+                        identity: newer.identity,
+                        fingerprint: newer.fingerprint,
+                        publishedAt: '2026-10-26T11:05:00.000Z',
+                        supersededAt: '2026-10-26T11:10:00.000Z',
+                    },
+                ],
+            },
+        });
+        await render({ apiClient: client });
+        await waitFor(
+            () =>
+                text().includes(
+                    rolledBackWarning(formatReleaseFingerprint(ALICE.fingerprint.slice(0, 16)))
+                ),
+            'the rollback warning'
+        );
+        expect(text()).toContain(RELEASE_KEY_REPLACED_ON_SERVER);
+        expect(text()).not.toContain('still has the key this device used before');
+    }, 60_000);
 
     it('does not offer to publish a key the server lists as replaced', async () => {
         await deviceWithAlice();
