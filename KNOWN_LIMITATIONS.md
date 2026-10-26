@@ -259,6 +259,34 @@ For the source-of-truth triage with tier/owner detail see
     1.27.5 and 1.22.1 in containers) and Chromium only, not on a deployed host
     or through Cloudflare.
 
+### Panic wipe (2026-10-26)
+
+-   **Where:** Settings → Help & advanced → Panic wipe
+    (`apps/blackout-client/src/app/features/panic/`).
+-   **It removes only some localStorage entries:** unsent drafts, the list of
+    burner identities and the account to go back to from one, saved
+    steganography passphrases and settings, the data-broker deletion details,
+    ephemeral-drop view counts and reading positions. Until 2026-10-26 its
+    screen said it cleared the "sensitive data this app stores on this
+    device", which it never did; the screen now lists what it removes and
+    what stays.
+-   **What stays:** the Matrix client's IndexedDB stores, which hold this
+    device's copy of your rooms and recent messages and the encryption keys
+    that decrypt your messages (the app does not encrypt these stores:
+    `initRustCrypto` is called without a storage key or password); the
+    original videos in the device's video vault; and everything else the app
+    keeps in localStorage, such as settings, per-room notification choices,
+    recent reactions and GIFs, saved homeservers and the Matrix client's own
+    entries.
+-   **"Also forget this device's sign-ins"** (labelled "Also sign out" until
+    2026-10-26) removes the stored session of every account on the device,
+    burner identities included, and the Blackout API token, so the app opens
+    on the sign-in screen. It sends nothing to the homeserver: those sessions
+    are not ended there, and they stay on the account's list of sessions.
+-   **Not a forensic wipe:** the browser deletes the entries, but their data
+    may stay on the disk. Forensic imaging of a seized device (adversary A10)
+    is out of scope in [`THREAT_MODEL.md`](THREAT_MODEL.md).
+
 ### Scheduled messages
 
 -   **Where:** the composer's "Scheduled send preset"

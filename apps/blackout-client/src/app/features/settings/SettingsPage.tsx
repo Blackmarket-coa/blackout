@@ -168,7 +168,7 @@ const sections: SettingsSection[] = [
     {
         id: 'panic',
         label: 'Panic wipe',
-        summary: 'Clear sensitive local traces from this device',
+        summary: 'Remove drafts, saved passphrases and other listed data from this device',
         component: PanicSettings,
     },
     {
