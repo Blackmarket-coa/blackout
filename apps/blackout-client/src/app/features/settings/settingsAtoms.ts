@@ -13,6 +13,7 @@ export type SettingsSectionId =
     | 'data-transparency'
     | 'data-deletion'
     | 'identities'
+    | 'release-keys'
     | 'voice-video'
     | 'accessibility'
     | 'keybinds'
