@@ -7,8 +7,10 @@
  * can now only narrow what the caller holds. Session tokens carry a write
  * scope only where every route behind it checks ownership (or also requires
  * an admin); shared-state writes with no ownership or role check are for
- * allowlisted admins only, and `deadman.write` is held by nobody (N2).
- * Record: `docs/security/capability-header-triage-2026-10-23.md`.
+ * allowlisted admins only. `deadman.write` is minted: its routes act on the
+ * caller's own switches, and the arm route refuses every arm until the API
+ * can release a message (`docs/security/deadman-release-design-2026-10-24.md`
+ * §8, H-8 below). Record: `docs/security/capability-header-triage-2026-10-23.md`.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -115,17 +117,18 @@ const UNMINTED_WRITES: Record<
         body: { channelId: 'caps-channel', recipientId: 'caps-recipient', payload: 'sealed' },
         rows: () => db.deadDrops.size,
     },
-    'deadman.write': {
-        method: 'POST',
-        path: '/v1/deadman/switches',
-        body: {
-            roomId: '!caps-room:example.org',
-            checkInIntervalSeconds: 3600,
-            gracePeriodSeconds: 600,
-            recipients: ['@witness:example.org'],
-            encryptedPayload: 'sealed-payload',
-        },
-        rows: () => db.deadmanSwitches.size,
+};
+
+/** The arm route: behind a minted scope, and refusing every arm (H-8). */
+const ARM_SWITCH = {
+    method: 'POST',
+    path: '/v1/deadman/switches',
+    body: {
+        roomId: '!caps-room:example.org',
+        checkInIntervalSeconds: 3600,
+        gracePeriodSeconds: 600,
+        recipients: ['@witness:example.org'],
+        encryptedPayload: 'sealed-payload',
     },
 };
 
@@ -137,6 +140,7 @@ const unmintedWriteScopes = () =>
 test('H-1: session tokens carry write scopes only for the owner-checked domains', () => {
     const minted = deriveUserCapabilities();
     assert.deepEqual(minted.filter((cap) => cap.endsWith('.write')).sort(), [
+        'deadman.write',
         'discovery.write',
         'profile.write',
         'stego.write',
@@ -175,17 +179,13 @@ test('H-3: the same routes accept a token whose claims carry the scope (the test
     }
 });
 
-test('H-4: an allowlisted admin holds the admin-only scopes, but not deadman.write', async () => {
+test('H-4: an allowlisted admin holds the admin-only scopes', async () => {
     const admin = seedUser();
     const token = signJwt(admin.id, admin.username, 600);
     await withAdmins([admin.username], async () => {
         for (const [scope, route] of Object.entries(UNMINTED_WRITES)) {
             const res = await send(route, token);
-            if (scope === 'deadman.write') {
-                assert.equal(res.status, 403, 'an admin cannot arm a dead-man switch (N2)');
-            } else {
-                assert.equal(res.status, 201, `${scope} for an allowlisted admin`);
-            }
+            assert.equal(res.status, 201, `${scope} for an allowlisted admin`);
         }
         const channels = await send({ method: 'GET', path: '/v1/channels' }, token);
         assert.equal(channels.status, 200, 'channels.read is admin-only, and the admin holds it');
@@ -271,4 +271,26 @@ test('H-7: discovery index writes other than canopy listing are for allowlisted 
         const job = await send(indexWrites[2], token);
         assert.equal(job.status, 200);
     });
+});
+
+test('H-8: deadman.write is minted, and arming is refused by the route, not the scope', async () => {
+    const user = seedUser();
+    const token = signJwt(user.id, user.username, 600);
+    const before = db.deadmanSwitches.size;
+
+    // Every session holds the scope, and the route answers 409 to every arm.
+    const refused = await send(ARM_SWITCH, token);
+    assert.equal(refused.status, 409);
+    assert.equal(((await refused.json()) as { code: string }).code, 'arming_unavailable');
+
+    // The header still narrows it like any other scope.
+    const narrowed = await send(ARM_SWITCH, token, 'deadman.read');
+    assert.equal(narrowed.status, 403);
+    assert.equal(((await narrowed.json()) as { code: string }).code, 'missing_capability');
+
+    // An allowlisted admin gets the same refusal: it is the route's, not the scope's.
+    await withAdmins([user.username], async () => {
+        assert.equal((await send(ARM_SWITCH, token)).status, 409);
+    });
+    assert.equal(db.deadmanSwitches.size, before, 'no arm wrote a row');
 });

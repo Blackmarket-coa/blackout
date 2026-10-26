@@ -2442,6 +2442,33 @@ class InMemoryDb {
         return this.updateDeadmanSwitch(id, { status });
     }
 
+    /**
+     * Account deletion: the owner is gone, so a switch that has not fired is
+     * cancelled and what the owner put in it is removed, the payload and the
+     * label. A switch that has already fired keeps its status and payload for
+     * the people it named, since nothing may take a release back (cancel
+     * refuses a triggered switch for the same reason); only its label goes.
+     * The row stays, as a targeted upsert like `eraseScheduledMessage`.
+     */
+    eraseDeadmanSwitch(id: string): DeadmanSwitchRecord | undefined {
+        const record = this.deadmanSwitches.get(id);
+        if (!record) return undefined;
+        const updated: DeadmanSwitchRecord = {
+            ...record,
+            headline: undefined,
+            ...(record.status === 'triggered'
+                ? {}
+                : {
+                      status: 'cancelled' as const,
+                      encryptedPayload: '',
+                      backlogGraceStartedAt: undefined,
+                  }),
+            updatedAt: nowIso(),
+        };
+        this.deadmanSwitches.set(id, updated);
+        return updated;
+    }
+
     createModerationAction(
         input: Omit<ModerationActionRecord, 'createdAt'>
     ): ModerationActionRecord {
@@ -6524,6 +6551,12 @@ export class FileBackedDb extends InMemoryDb {
         patch: Partial<Omit<DeadmanSwitchRecord, 'id' | 'createdAt'>>
     ): DeadmanSwitchRecord | undefined {
         const updated = super.updateDeadmanSwitch(id, patch);
+        if (updated) this.persist();
+        return updated;
+    }
+
+    override eraseDeadmanSwitch(id: string): DeadmanSwitchRecord | undefined {
+        const updated = super.eraseDeadmanSwitch(id);
         if (updated) this.persist();
         return updated;
     }

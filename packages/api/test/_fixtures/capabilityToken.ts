@@ -4,11 +4,11 @@
  * Session tokens are minted by `signJwtWithMeta` with `deriveUserCapabilities()`
  * (`src/services/auth.ts`), and the `x-blackout-capabilities` header can only
  * narrow what a token grants (`src/modules/authz.ts`). Tests of a route behind
- * a scope that no session token carries (`governance.write`, `deadman.write`,
+ * a scope that no session token carries (`governance.write`, `channels.read`,
  * ...) need a caller that holds it: this signs a token the way
  * `signJwtWithMeta` does, with the API's own runtime config, carrying the
  * default capabilities plus `scopes`. Outside tests only an allowlisted admin
- * holds the admin-only scopes, and nobody holds `deadman.write`.
+ * holds the admin-only scopes.
  *
  * Call it after the test file has set the JWT environment variables.
  */

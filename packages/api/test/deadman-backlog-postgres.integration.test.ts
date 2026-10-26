@@ -118,3 +118,64 @@ test('a backlog window survives a restart, and a check-in clears it in Postgres 
         await pg.close?.();
     }
 });
+
+test('account deletion’s erasure reaches Postgres: an unfired switch is cancelled with its payload and label gone, a fired one keeps its payload', async () => {
+    const pg = new PGlite() as unknown as AnyPg;
+    const pool = poolFor(pg);
+    try {
+        await migrateUp({ pool: pool as never, migrationsDir: MIGRATIONS_DIR });
+        const store = new PostgresBackedDb();
+        await store.init(pool as never);
+        const seed = (status: 'armed' | 'triggered', encryptedPayload: string) =>
+            store.createDeadmanSwitch({
+                id: randomUUID(),
+                ownerId: 'owner',
+                roomId: '!room:test.local',
+                status,
+                checkInIntervalSeconds: 60,
+                gracePeriodSeconds: 60,
+                lastCheckInAt: '2026-01-01T00:00:00.000Z',
+                triggerAt: '2026-01-01T00:01:00.000Z',
+                releaseAt: '2026-01-01T00:02:00.000Z',
+                recipients: ['recipient'],
+                encryptedPayload,
+                headline: 'label',
+            });
+        const unfired = seed('armed', 'sealed-unfired');
+        const fired = seed('triggered', 'sealed-fired');
+
+        // What confirmAccountDeletion calls for each of the owner's switches.
+        store.eraseDeadmanSwitch(unfired.id);
+        store.eraseDeadmanSwitch(fired.id);
+        await store.drain();
+
+        const rowOf = async (id: string) => {
+            const res = await pg.query(
+                'SELECT status, encrypted_payload, headline FROM deadman_switches WHERE id = $1',
+                [id]
+            );
+            assert.equal(res.rows.length, 1, `switch ${id} exists`);
+            return res.rows[0];
+        };
+        assert.deepEqual(await rowOf(unfired.id), {
+            status: 'cancelled',
+            encrypted_payload: '',
+            headline: null,
+        });
+        assert.deepEqual(await rowOf(fired.id), {
+            status: 'triggered',
+            encrypted_payload: 'sealed-fired',
+            headline: null,
+        });
+
+        const restarted = new PostgresBackedDb();
+        await restarted.init(pool as never);
+        assert.equal(restarted.getDeadmanSwitch(unfired.id)?.status, 'cancelled');
+        assert.equal(restarted.getDeadmanSwitch(unfired.id)?.encryptedPayload, '');
+        assert.equal(restarted.getDeadmanSwitch(unfired.id)?.headline, undefined);
+        assert.equal(restarted.getDeadmanSwitch(fired.id)?.encryptedPayload, 'sealed-fired');
+        assert.equal(restarted.getDeadmanSwitch(fired.id)?.headline, undefined);
+    } finally {
+        await pg.close?.();
+    }
+});

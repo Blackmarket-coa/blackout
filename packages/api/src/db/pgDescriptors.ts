@@ -610,6 +610,8 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
     openDeadDrop: upsert('deadDrops'),
     createDeadmanSwitch: upsert('deadmanSwitches'),
     updateDeadmanSwitch: upsert('deadmanSwitches'),
+    // Account deletion. A targeted upsert, not a resync: see the store method.
+    eraseDeadmanSwitch: upsert('deadmanSwitches'),
     createModerationAction: upsert('moderationActions'),
     upsertCreatorStreamAuth: upsert('creatorStreamAuth'),
     upsertStream: upsert('streams'),

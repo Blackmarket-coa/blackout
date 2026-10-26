@@ -6,9 +6,10 @@ import { BACKLOG_TOLERANCE_FLOOR_MS, backlogToleranceMs } from './backlogToleran
  * Autonomous dead-man's-switch sweep loop.
  *
  * A dead-man's switch must fire when its owner has gone dark — precisely the
- * moment no client is around to call an endpoint. The owner-scoped
- * `POST /v1/deadman/process-overdue` endpoint cannot do that; this loop can,
- * because it runs server-side on a timer with no user present.
+ * moment no client is around to call an endpoint. No request can do that;
+ * this loop can, because it runs server-side on a timer with no user present.
+ * It is the only code path that moves a switch forward: the owner-scoped
+ * `POST /v1/deadman/process-overdue` route that also did was removed (D6).
  *
  * On by default (BLACKOUT_DEADMAN_SWEEP !== '0'), like the scheduled-message
  * dispatcher, because it backs a first-party safety feature rather than an

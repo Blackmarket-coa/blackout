@@ -285,6 +285,12 @@ export const confirmAccountDeletion = (
     for (const msg of db.listScheduledMessagesForUser(record.userId)) {
         db.eraseScheduledMessage(msg.id);
     }
+    // Dead-man switches: cancel the ones that have not fired and remove what
+    // the owner put in them, so none fires for an account that is gone. One
+    // that has fired stays readable to the people it named; its label goes.
+    for (const sw of db.listDeadmanSwitchesForOwner(record.userId)) {
+        db.eraseDeadmanSwitch(sw.id);
+    }
     db.purgeUserAuthArtifacts(record.userId);
     db.deleteUser(record.userId);
     return { kind: 'ok', userId: record.userId };

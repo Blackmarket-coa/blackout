@@ -222,17 +222,19 @@ export const isAdminUser = (userId: string, username: string): boolean => {
  * plus write only where every route behind the scope checks per-resource
  * ownership or also takes an admin: `streaming.write` (per creator),
  * `profile.write` (`subject === userId`), `stego.write` (each account's own
- * channels) and `discovery.write` (listing a canopy takes being its admin on
+ * channels), `discovery.write` (listing a canopy takes being its admin on
  * the homeserver; the other discovery index writes also take an allowlisted
- * admin).
+ * admin) and `deadman.write` (the caller's own switches; see below).
  *
  * Not minted: the write scopes whose routes change shared state with no
  * ownership or role check (governance, moderation, forum, channels, growth,
  * and dead drops, which can be addressed to any account), which only an
- * allowlisted admin holds (`ADMIN_ONLY_SCOPES` in `modules/authz.ts`), and
- * `deadman.write`, held back until it is decided whether the app may arm a
- * dead-man switch (N2 in
- * `docs/security/deadman-and-feeds-triage-2026-10-12.md`). The
+ * allowlisted admin holds (`ADMIN_ONLY_SCOPES` in `modules/authz.ts`).
+ * `deadman.write` is minted since 2026-10-26: every route behind it acts on
+ * the caller's own switches, and `POST /v1/deadman/switches` refuses every
+ * arm (409 `arming_unavailable`) until the API can release a message to the
+ * people an owner names (N2, decided in
+ * `docs/security/deadman-release-design-2026-10-24.md` §8). The
  * `x-blackout-capabilities` header can only narrow this set.
  */
 export function deriveUserCapabilities(): string[] {
@@ -245,6 +247,7 @@ export function deriveUserCapabilities(): string[] {
         'forum.read',
         'deaddrop.read',
         'deadman.read',
+        'deadman.write',
         'moderation.read',
         'discovery.read',
         'discovery.write',
