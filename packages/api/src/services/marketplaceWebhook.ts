@@ -82,8 +82,15 @@ export async function dispatchMarketplaceWebhook(
     // cleared (D5 in docs/black-mask-account-link-design.md §7). For a
     // lifecycle event the answer carries what the first delivery granted, as
     // the entitlement path has always done for a replay.
-    const eventId = verification.eventId ?? payloadEventId(payload);
-    if (eventId && hasProcessedWebhookEvent(provider.id, eventId)) {
+    //
+    // The signed body's eventId is checked first: the `x-fbm-event-id` header
+    // is outside the signature, so a captured delivery re-sent with a fresh
+    // header value must still be recognised by the id inside it. FBM sends the
+    // same value in both, so the header is checked too.
+    const eventId = [payloadEventId(payload), verification.eventId].find(
+        (id): id is string => typeof id === 'string' && hasProcessedWebhookEvent(provider.id, id)
+    );
+    if (eventId) {
         const event = provider.parseEvent(payload);
         incrementCounter('marketplace_webhook_replayed_total', { providerId: provider.id });
         logEvent('marketplace.webhook.replay', {
@@ -190,7 +197,7 @@ function safeParse(raw: string): unknown {
     }
 }
 
-/** The event id a payload names, when the delivery carried no `x-fbm-event-id` header. */
+/** The event id the signed payload names (FBM's envelope `eventId`). */
 function payloadEventId(payload: unknown): string | null {
     if (!payload || typeof payload !== 'object') return null;
     const eventId = (payload as { eventId?: unknown }).eventId;

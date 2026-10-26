@@ -274,8 +274,11 @@ re-activated a subscription cancelled after the first delivery.
 
 **The fix, part one — replay acknowledgement for every family.** After the
 signature check, `dispatchMarketplaceWebhook` acknowledges a delivery whose
-event id (from `x-fbm-event-id`, or the payload's `eventId` when the header is
-absent) is already marked processed, before any handler runs: `200`,
+event id is already marked processed, before any handler runs. The id is taken
+from the payload's `eventId` first, because the body is what the signature
+covers; `x-fbm-event-id` is outside it, so a captured delivery re-sent under a
+fresh header value is still recognised (FBM sends the same value in both, so
+the header is checked as well). The answer is `200`,
 `alreadyProcessed: true`, `reason: 'already-processed'`, the
 `marketplace_webhook_replayed_total` counter and a `marketplace.webhook.replay`
 log line. For a lifecycle event the answer carries what the first delivery
@@ -305,7 +308,10 @@ signature; at the route, a timestamped delivery accepted and a stale one refused
 `timestamp-skew`, a mixed one `signature-mismatch`; a replayed tip capture
 acknowledged with the capture counter still 1; a subscription cancelled after
 the first delivery stays cancelled across a replay; a replay recognised by the
-payload's event id with no header. The marketplace, monetization, growth,
+payload's event id with no header; and a replay under a fresh, attacker-chosen
+`x-fbm-event-id` still caught by the signed payload id, its capture counter
+still 1. That last test failed on the first version of this fix, which
+preferred the header. The marketplace, monetization, growth,
 bridge, ACL and smoke suites that drive the webhook pass unchanged.
 
 ## D6 — FBM's coalition-tier lookup — not Blackout's

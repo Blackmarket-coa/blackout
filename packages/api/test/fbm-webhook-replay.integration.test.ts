@@ -322,6 +322,45 @@ test('route: a replay does not re-activate a subscription cancelled after the fi
     );
 });
 
+test('route: a replay under a fresh x-fbm-event-id header is caught by the signed payload id', async () => {
+    // The header is not covered by the signature; the body, and the eventId in
+    // it, are. A captured delivery re-sent with a new header value must still
+    // be recognised as the delivery it is.
+    reset();
+    const tip = createTip({
+        senderUserId: 'fan-replay',
+        recipientUserId: 'creator-replay',
+        contextKind: 'profile',
+        grossCents: 700,
+        currency: 'USD',
+    });
+    const body = purchase({
+        eventId: 'evt-tip-header-swap',
+        amountCents: 700,
+        metadata: { tipId: tip.id, fbmOrderId: 'order-tip-header-swap' },
+    });
+    const signature = signBody(body);
+
+    const first = await deliver(body, {
+        'x-fbm-event-id': 'evt-tip-header-swap',
+        'x-fbm-signature': signature,
+    });
+    assert.equal(first.status, 200);
+    assert.equal(((await first.json()) as WebhookJson).alreadyProcessed, false);
+
+    const replay = await deliver(body, {
+        'x-fbm-event-id': 'evt-attacker-chosen',
+        'x-fbm-signature': signature,
+    });
+    assert.equal(replay.status, 200);
+    assert.equal(((await replay.json()) as WebhookJson).alreadyProcessed, true);
+    assert.equal(
+        getCounter('marketplace_tip_captured_total', { providerId: 'freeblackmarket' }),
+        1,
+        'the capture ran once, not again under the new header'
+    );
+});
+
 test('route: a replay is recognised by the payload event id when the header is absent', async () => {
     reset();
     const body = purchase({ eventId: 'evt-no-header', providerListingId: 'listing-no-header' });
