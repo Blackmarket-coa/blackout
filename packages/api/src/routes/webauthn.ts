@@ -146,8 +146,8 @@ router.post('/register/finish', async (c) => {
     const cd = parseClientData(parsed.credential.response.clientDataJSON);
     if (!cd) return c.json({ code: 'malformed_client_data' }, 400);
 
-    // The challenge was issued to the caller's session; one issued to anyone
-    // else does not match.
+    // The challenge was issued to the signed-in account; one issued to any
+    // other account does not match.
     const challenge = consumeChallenge(cd.challenge, {
         userId: user.sub,
         purpose: 'register',

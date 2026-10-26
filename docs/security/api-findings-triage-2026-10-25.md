@@ -533,10 +533,11 @@ passkey could be trusted.
 **The fix.** Registration takes a session and stores the credential under the
 caller's Blackout id. A `userId` in the body is optional and must name the
 caller, by Blackout id or local Matrix id, or the request is refused
-`403 user_mismatch` (F1's rule). The challenge is issued to the session, so
-another session cannot finish with it. A credential id already registered, to
-anyone, is refused `409 credential_exists`. `register/begin` takes no body or
-`{}` and answers the WebAuthn user entity with the caller's id and username.
+`403 user_mismatch` (F1's rule). The challenge is issued to the signed-in
+account, so another account cannot finish with it. A credential id already
+registered, to anyone, is refused `409 credential_exists`. `register/begin`
+takes no body or `{}` and answers the WebAuthn user entity with the caller's id
+and username.
 
 **Sign-in needs no session.** `login/begin` and `login/finish` run before
 there is one, by nature. They now take a Blackout id or a local Matrix id and
@@ -544,15 +545,15 @@ look credentials up under the Blackout id, where registration stores them;
 `login/finish` still mints no session. All four routes stay behind
 `WEBAUTHN_ENABLED` and `authRateLimit`.
 
-**Verification.** `packages/api/test/webauthn-routes.integration.test.ts`
-drives the routes with a software authenticator, real `none` attestations and
-P-256 assertions that `@simplewebauthn/server` verifies: flag off `503` on all
-four routes; no session `401`; another account by either id, or the caller's
-username on another homeserver, `403`; a challenge from another session `400`;
-the caller's own registration with no body, `{}`, their Blackout id and their
-Matrix id; a registered credential id refused for another account and for its
-owner, the record unchanged; sign-in by either id form, another account's
-passkey refused, an assertion carrying another challenge's signature
+**Verification.** `packages/api/test/webauthn-routes.integration.test.ts` drives
+the routes with a software authenticator, real `none` attestations and P-256
+assertions that `@simplewebauthn/server` verifies: flag off `503` on all four
+routes; no session `401`; another account by either id, or the caller's username
+on another homeserver, `403`; a challenge issued to another account `400`; the
+caller's own registration with no body, `{}`, their Blackout id and their Matrix
+id; a registered credential id refused for another account and for its owner,
+the record unchanged; sign-in by either id form, another account's passkey
+refused, an assertion carrying another challenge's signature
 `verification_failed`. Six of the seven fail against the previous routes (the
 flag test passes on both). The test process sets `WEBAUTHN_ENABLED` for itself
 only, as `webauthn.integration.test.ts` does; the 15 service tests there pass

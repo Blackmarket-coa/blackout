@@ -10,7 +10,7 @@ Blackout API and the operator knobs that govern it.
 
 -   HTTP routes under `/v1/auth/webauthn/`:
     -   `POST /register/begin` — signed-in callers only: issues a
-        registration challenge bound to the caller's session and the
+        registration challenge bound to the signed-in account and the
         `PublicKeyCredentialCreationOptions` shape the client should pass
         to `navigator.credentials.create()`, with the caller's Blackout id
         and username as the user entity. It takes no body, `{}`, or a
@@ -18,7 +18,7 @@ Blackout API and the operator knobs that govern it.
         any other `userId` is refused `403 user_mismatch`.
     -   `POST /register/finish` — signed-in callers only: accepts the
         attestation response, validates clientDataJSON, consumes the
-        challenge issued to the same session, and stores the credential
+        challenge issued to the same account, and stores the credential
         under the caller's Blackout id. A credential id that is already
         registered, to anyone, is refused `409 credential_exists` rather
         than replacing the stored record.

@@ -6,7 +6,7 @@
  * Until 2026-10-26 `register/begin` and `register/finish` took any `userId`
  * and no session, so anyone could register their own authenticator under
  * another account (F7 in docs/security/api-findings-triage-2026-10-25.md).
- * Registration is now bound to the caller's session and stored under their
+ * Registration now needs the caller's session and is stored under their
  * Blackout id; a known credential id cannot be registered again; sign-in
  * looks credentials up under the Blackout id, given that id or a local Matrix
  * id. Every route stays behind `WEBAUTHN_ENABLED`, which this process sets
@@ -295,7 +295,7 @@ test('a userId naming another account, by Blackout id or Matrix id, is refused a
     });
 });
 
-test("a challenge issued to one session cannot finish another's registration", async () => {
+test("a challenge issued to one account cannot finish another account's registration", async () => {
     await enabled(async () => {
         const alice = seedUser();
         const mallory = seedUser();
