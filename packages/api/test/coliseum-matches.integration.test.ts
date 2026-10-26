@@ -176,8 +176,13 @@ test('challenge link exposes a public dodge status', async () => {
     assert.equal(link1.status, 'pending');
     assert.ok(link1.token);
 
-    // Opening the link records a "seen" ping (the dodge).
-    await app.request(`/v1/coliseum/matches/${match.id}/seen`, { method: 'POST' });
+    // The person challenged opening the link records a "seen" ping (the dodge).
+    // Only they can (test/coliseum-challenge-seen.integration.test.ts).
+    const seen = await app.request(`/v1/coliseum/matches/${match.id}/seen`, {
+        method: 'POST',
+        headers: auth('target-1'),
+    });
+    assert.equal(seen.status, 200);
     const link2 = (await json(await app.request(`/v1/coliseum/matches/${match.id}/link`))) as {
         status: string;
     };
