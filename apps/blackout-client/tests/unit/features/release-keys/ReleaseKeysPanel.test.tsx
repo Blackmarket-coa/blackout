@@ -21,12 +21,15 @@ import {
     COMPARE_MEANING,
     COMPARE_READ_ALL,
     compareHow,
+    FOREIGN_KEY_PUBLISH_NOTE,
     foreignKeyWarning,
+    INVALID_SERVER_KEY_WARNING,
     lookupMismatch,
     missingKeysWarning,
     PUBLISH_RATE_LIMITED,
     PUBLISH_REUSED,
     PUBLISH_STORAGE_LIMIT,
+    RECOVERY_PASSPHRASE_DONT_SAVE,
     RELEASE_KEY_REPLACED_ON_SERVER,
     rolledBackWarning,
     RELEASE_KEYS_BROWSER,
@@ -135,6 +138,10 @@ const aliceKeySet = {
 };
 const deviceWithAlice = () =>
     indexedDbReleaseKeyStore.save(withNewCurrentKeySet(null, ACCOUNT, aliceKeySet, NOW));
+/** A validly signed key for this account that this device did not make. */
+const keyFromElsewhere = () => createReleaseKeySet(ACCOUNT, new Date('2026-10-26T08:00:00Z'));
+/** The short form the screen shows a fingerprint in. */
+const short = (fingerprint: string) => formatReleaseFingerprint(fingerprint.slice(0, 16));
 
 let container: HTMLDivElement;
 let root: ReactDOM.Root;
@@ -384,17 +391,20 @@ describe('Settings → Release keys', () => {
 
     it('says who could have published a key this device did not make, and offers to publish this device’s', async () => {
         await deviceWithAlice();
-        const other = { ...BOB.identity, accountId: ACCOUNT };
+        const other = await keyFromElsewhere();
         const { client, requests } = fakeApi({
-            mine: entryFor(ACCOUNT, '@alice:test.local', other, BOB.fingerprint),
+            mine: entryFor(ACCOUNT, '@alice:test.local', other.identity, other.fingerprint),
         });
         await render({ apiClient: client });
         // H1: not "a different key", but who could have put it there.
-        const warning = foreignKeyWarning(formatReleaseFingerprint(BOB.fingerprint.slice(0, 16)));
+        const warning = foreignKeyWarning(short(other.fingerprint));
         await waitFor(() => text().includes(warning), 'the warning');
         expect(warning).toContain(
             "If you didn't, someone with access to your account, or Blackout's server, published it."
         );
+        // Publishing this device's key retires that one for good.
+        expect(text()).toContain(FOREIGN_KEY_PUBLISH_NOTE);
+        expect(FOREIGN_KEY_PUBLISH_NOTE).toContain("it can't be published again afterwards");
         expect(text()).toContain('Publish your key first');
         await click("Publish this device's key");
         await waitFor(
@@ -499,25 +509,38 @@ describe('Settings → Release keys', () => {
         );
         // The server serves a key this device never made, labelled with the
         // fingerprint of the device's old key.
-        const stranger = { ...BOB.identity, accountId: ACCOUNT };
+        const stranger = await keyFromElsewhere();
         const { client } = fakeApi({
-            mine: entryFor(ACCOUNT, '@alice:test.local', stranger, ALICE.fingerprint),
+            mine: entryFor(ACCOUNT, '@alice:test.local', stranger.identity, ALICE.fingerprint),
         });
         await render({ apiClient: client });
         // Once this device's keys are on screen, the stranger's key must get
-        // the warning, whatever fingerprint the server gave it.
+        // the warning, whatever fingerprint the server gave it, and the
+        // warning shows the fingerprint this device computed (the re-check).
         await waitFor(
             () => Boolean(container.querySelector('[data-testid="own-fingerprint"]')),
             "this device's keys"
         );
         await waitFor(
-            () =>
-                text().includes(
-                    foreignKeyWarning(formatReleaseFingerprint(ALICE.fingerprint.slice(0, 16)))
-                ),
+            () => text().includes(foreignKeyWarning(short(stranger.fingerprint))),
             'the warning'
         );
+        expect(text()).not.toContain(short(ALICE.fingerprint));
         expect(text()).not.toContain('still has the key this device used before');
+    }, 60_000);
+
+    it('says the server itself put there a key of yours that fails its check', async () => {
+        await deviceWithAlice();
+        const other = await keyFromElsewhere();
+        // Signed for another account, so its check fails for this one.
+        const broken = { ...other.identity, signature: BOB.identity.signature };
+        const { client } = fakeApi({
+            mine: entryFor(ACCOUNT, '@alice:test.local', broken, other.fingerprint),
+        });
+        await render({ apiClient: client });
+        await waitFor(() => text().includes(INVALID_SERVER_KEY_WARNING), 'the warning');
+        expect(text()).not.toContain(short(other.fingerprint));
+        expect(text()).not.toContain('If you made it on another device');
     }, 60_000);
 
     it('says when the server has put back a key this device replaced', async () => {
@@ -546,22 +569,27 @@ describe('Settings → Release keys', () => {
         });
         await render({ apiClient: client });
         await waitFor(
-            () =>
-                text().includes(
-                    rolledBackWarning(formatReleaseFingerprint(ALICE.fingerprint.slice(0, 16)))
-                ),
+            () => text().includes(rolledBackWarning(short(ALICE.fingerprint))),
             'the rollback warning'
         );
+        // N1 of the re-check: the API refuses only identities it has seen, so
+        // a key replaced here before it was published can still be published
+        // later, from another tab or device, or by someone with the account.
+        const warning = rolledBackWarning(short(ALICE.fingerprint));
+        expect(warning).toContain('another tab or device of yours');
+        expect(warning).toContain('someone with access to your account');
+        expect(warning).toContain("Blackout's server put it back");
+        expect(warning).not.toMatch(/refuses to do that|for any account|done on the server itself/);
         expect(text()).toContain(RELEASE_KEY_REPLACED_ON_SERVER);
         expect(text()).not.toContain('still has the key this device used before');
     }, 60_000);
 
     it('does not offer to publish a key the server lists as replaced', async () => {
         await deviceWithAlice();
-        const other = { ...BOB.identity, accountId: ACCOUNT };
+        const other = await keyFromElsewhere();
         const { client } = fakeApi({
             mine: {
-                ...entryFor(ACCOUNT, '@alice:test.local', other, BOB.fingerprint),
+                ...entryFor(ACCOUNT, '@alice:test.local', other.identity, other.fingerprint),
                 superseded: [
                     {
                         identity: ALICE.identity,
@@ -612,8 +640,13 @@ describe('Settings → Release keys', () => {
         ['409 for the storage bound', 409, false, PUBLISH_STORAGE_LIMIT],
     ])('says why a publish was refused: %s', async (_case, status, listed, message) => {
         await deviceWithAlice();
-        const other = { ...BOB.identity, accountId: ACCOUNT };
-        const serverEntry = entryFor(ACCOUNT, '@alice:test.local', other, BOB.fingerprint);
+        const other = await keyFromElsewhere();
+        const serverEntry = entryFor(
+            ACCOUNT,
+            '@alice:test.local',
+            other.identity,
+            other.fingerprint
+        );
         const { client } = fakeApi({
             mine: serverEntry,
             refusePublish: {
@@ -666,6 +699,8 @@ describe('Settings → Release keys', () => {
         const fields = Array.from(container.querySelectorAll('input[type="password"]'));
         expect(fields).toHaveLength(3);
         for (const field of fields) expect(field.getAttribute('autocomplete')).toBe('off');
+        // L4: browsers may offer to save it anyway, so the screen says to refuse.
+        expect(text()).toContain(RECOVERY_PASSPHRASE_DONT_SAVE);
     });
 
     // M4 (independent review, 2026-10-26): an older recovery file does not

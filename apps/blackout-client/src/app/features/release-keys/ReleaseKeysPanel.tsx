@@ -12,6 +12,7 @@ import {
     ReleaseRecoveryError,
     verifyReleaseIdentity,
     writeRecoveryFile,
+    type ReleaseIdentity,
     type ReleaseIdentityDirectoryEntry,
     type ReleaseRecoveryContents,
     type StoredReleaseKeySet,
@@ -114,6 +115,16 @@ export const foreignKeyWarning = (fingerprint: string): string =>
     "below. If you didn't, someone with access to your account, or Blackout's server, " +
     'published it.';
 
+/**
+ * The server's current key for this person fails its check on this device.
+ * The API checks a key before it takes one, so nobody publishing through it
+ * put this one there.
+ */
+export const INVALID_SERVER_KEY_WARNING =
+    "Blackout's server gives a release key for you that fails its check on this device. Its " +
+    'API checks keys before it takes them, so the server itself, or a fault in it, put this ' +
+    'one there. Nobody can compare a code with you while it does.';
+
 /** The same, for a device that holds no release keys at all. */
 export const missingKeysWarning = (fingerprint: string): string =>
     `Blackout's server has release keys for you that aren't on this device (${fingerprint}). ` +
@@ -122,15 +133,24 @@ export const missingKeysWarning = (fingerprint: string): string =>
     'server, published them.';
 
 /**
- * The server shows a key this device replaced as current again, and lists the
- * newer one as replaced: the rollback H1 describes. The API refuses to make a
- * replaced identity current again, so asking it cannot produce this.
+ * The server shows a key this device replaced as current, and lists the newer
+ * one as replaced. The API refuses an identity it has seen before for the
+ * account, but it never saw a key that was replaced here before it was
+ * published, and an identity carries no sequence number, so it cannot tell
+ * that key is older (the re-check's N1). Every possibility is named.
  */
 export const rolledBackWarning = (fingerprint: string): string =>
-    `Blackout's server shows a key this device replaced (${fingerprint}) as your current key ` +
-    'again, and lists your newer key as replaced. Its API refuses to do that for any account ' +
-    'that asks, so it was done on the server itself, or by a fault in it. Tell the people you ' +
-    'compared codes with, outside Blackout, not to rely on your key until you compare again.';
+    `Blackout's server shows a key this device replaced (${fingerprint}) as your current key, ` +
+    'and lists your newer key as replaced. Either that older key was published after your ' +
+    'newer one, from another tab or device of yours or by someone with access to your ' +
+    "account who has it, or Blackout's server put it back. Tell the people you compared " +
+    'codes with, outside Blackout, not to rely on your key until you compare again.';
+
+/** Next to "Publish this device's key" when the server has a key this device didn't make. */
+export const FOREIGN_KEY_PUBLISH_NOTE =
+    "Publishing this device's key replaces it for good: if it is your own key from another " +
+    "device, it can't be published again afterwards, and anyone who compared a code with you " +
+    'would have to compare again.';
 
 /** A tab tried to publish a key set the store no longer has as current (N1). */
 export const CHANGED_ELSEWHERE_NOT_PUBLISHED =
@@ -147,6 +167,11 @@ export const SAVED_STORED_KEYS =
 export const NO_KEYS_TO_SAVE =
     'Nothing was saved: there are no release keys on this device any more. They were removed ' +
     'in another tab or window, or by the panic wipe.';
+
+/** Next to the passphrase fields (L4): the attribute alone may be ignored. */
+export const RECOVERY_PASSPHRASE_DONT_SAVE =
+    "If your browser offers to save a recovery file's passphrase, say no: anyone who can see " +
+    "this browser's saved passwords could then open the file.";
 
 export const RELEASE_KEY_REPLACED_ON_SERVER =
     "Blackout's server lists this device's key as replaced, so it can't be published again. " +
@@ -365,6 +390,12 @@ export const ReleaseKeysPanel = ({
     const [comparing, setComparing] = useState<Comparing>({ status: 'idle' });
     const [pendingLoad, setPendingLoad] = useState<PendingLoad | null>(null);
     const [replaced, setReplaced] = useState(false);
+    // The server's current key for this account, with the fingerprint this
+    // device computed from it: the screen never shows the server's stated one.
+    const [serverKey, setServerKey] = useState<{
+        identity: ReleaseIdentity;
+        fingerprint: string | null;
+    } | null>(null);
 
     const refresh = useCallback(async () => {
         try {
@@ -376,6 +407,32 @@ export const ReleaseKeysPanel = ({
             setLoadError(errorText(cause));
         }
     }, [actions, store]);
+
+    useEffect(() => {
+        let cancelled = false;
+        const identity = me?.current?.identity;
+        if (!me || !identity) {
+            setServerKey(null);
+            return undefined;
+        }
+        void verifyReleaseIdentity(identity, { accountId: me.accountId }).then((check) => {
+            if (!cancelled) {
+                setServerKey({ identity, fingerprint: check.ok ? check.fingerprint : null });
+            }
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [me]);
+
+    /** The server's current key, as this device computed its fingerprint. */
+    const serverKeyChecked =
+        serverKey !== null &&
+        me?.current != null &&
+        sameIdentity(serverKey.identity, me.current.identity);
+    const serverKeyInvalid = serverKeyChecked && serverKey?.fingerprint === null;
+    const serverKeyText =
+        serverKeyChecked && serverKey?.fingerprint ? shortFingerprint(serverKey.fingerprint) : '…';
 
     useEffect(() => {
         let cancelled = false;
@@ -406,9 +463,9 @@ export const ReleaseKeysPanel = ({
           )
         ? 'older'
         : 'foreign';
-    // H1: the API refuses to make a replaced identity current again, so a key
-    // the server lists as replaced cannot be published from here. Identities
-    // are compared, never the fingerprints the server states.
+    // H1: the API refuses an identity it has seen before, so a key the server
+    // lists as replaced cannot be published again from here. Identities are
+    // compared, never the fingerprints the server states.
     const replacedOnServer =
         local !== undefined &&
         (me?.superseded ?? []).some((entry) => sameIdentity(entry.identity, local.identity));
@@ -825,25 +882,23 @@ export const ReleaseKeysPanel = ({
                                     )}
                                     {publication === 'older' && me.current && replacedOnServer && (
                                         <p data-testid="publication" role="alert">
-                                            {rolledBackWarning(
-                                                shortFingerprint(me.current.fingerprint)
-                                            )}
+                                            {rolledBackWarning(serverKeyText)}
                                         </p>
                                     )}
                                     {publication === 'older' && me.current && !replacedOnServer && (
                                         <p data-testid="publication">
                                             Not published yet: Blackout&apos;s server still has the
-                                            key this device used before (
-                                            {shortFingerprint(me.current.fingerprint)}). Publishing
-                                            this device&apos;s key replaces it, and anyone who
-                                            compared a code with you would have to compare again.
+                                            key this device used before ({serverKeyText}).
+                                            Publishing this device&apos;s key replaces it, and
+                                            anyone who compared a code with you would have to
+                                            compare again.
                                         </p>
                                     )}
                                     {publication === 'foreign' && me.current && (
                                         <p data-testid="publication" role="alert">
-                                            {foreignKeyWarning(
-                                                shortFingerprint(me.current.fingerprint)
-                                            )}
+                                            {serverKeyInvalid
+                                                ? INVALID_SERVER_KEY_WARNING
+                                                : foreignKeyWarning(serverKeyText)}
                                         </p>
                                     )}
                                     {publication !== 'published' && replacedOnServer && (
@@ -854,11 +909,7 @@ export const ReleaseKeysPanel = ({
                                     {publication !== 'published' && !replacedOnServer && (
                                         <>
                                             {publication === 'foreign' && (
-                                                <p>
-                                                    Publishing this device&apos;s key replaces it,
-                                                    and anyone who compared a code with you would
-                                                    have to compare again.
-                                                </p>
+                                                <p>{FOREIGN_KEY_PUBLISH_NOTE}</p>
                                             )}
                                             <button
                                                 type="button"
@@ -891,9 +942,9 @@ export const ReleaseKeysPanel = ({
                                     {me.current ? (
                                         <>
                                             <p data-testid="publication" role="alert">
-                                                {missingKeysWarning(
-                                                    shortFingerprint(me.current.fingerprint)
-                                                )}
+                                                {serverKeyInvalid
+                                                    ? INVALID_SERVER_KEY_WARNING
+                                                    : missingKeysWarning(serverKeyText)}
                                             </p>
                                             <p>
                                                 Creating new keys replaces them, and anyone who
@@ -972,6 +1023,7 @@ export const ReleaseKeysPanel = ({
 
                         <div style={sectionStyle}>
                             <h3 style={{ marginTop: 0 }}>Recovery file</h3>
+                            <p>{RECOVERY_PASSPHRASE_DONT_SAVE}</p>
                             {local && (
                                 <>
                                     <p>{RECOVERY_SAVE_NOTE}</p>
