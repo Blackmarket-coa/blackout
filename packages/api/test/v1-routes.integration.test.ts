@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createMatrixStub, memberEvent, powerLevelsEvent } from './_fixtures/matrixStub';
 
 process.env.NODE_ENV = process.env.NODE_ENV ?? 'test';
 process.env.JWT_SECRET_PRIMARY =
@@ -599,9 +600,54 @@ test('v1 apps contract, events, and actions are exposed', async () => {
     assert.deepEqual(actionsBody.actions, ['post_message', 'moderate_user', 'assign_role']);
 });
 
+// Installing, running an action and revoking take being the canopy's admin
+// on the homeserver (test/apps-routes.integration.test.ts). This test stubs
+// the homeserver for itself only, with the registered user as the canopy's
+// creator, and puts the real one back after.
+async function asCanopyAdmin(
+    username: string,
+    canopyId: string,
+    run: () => Promise<void>
+): Promise<void> {
+    const matrix = createMatrixStub({ domain: 'v1-routes.test' });
+    const mxid = matrix.mxid(username);
+    matrix.rooms.set(canopyId, [
+        { type: 'm.room.create', state_key: '', content: { type: 'm.space' } },
+        memberEvent(mxid),
+        powerLevelsEvent({ users: { [mxid]: 100 }, events: { 'm.room.power_levels': 100 } }),
+    ]);
+    const saved = {
+        fetch: globalThis.fetch,
+        homeserver: process.env.MATRIX_HOMESERVER,
+        botToken: process.env.MATRIX_BOT_TOKEN,
+        domain: process.env.MATRIX_HOMESERVER_DOMAIN,
+    };
+    const restore = (name: string, value: string | undefined) => {
+        if (value === undefined) delete process.env[name];
+        else process.env[name] = value;
+    };
+    globalThis.fetch = matrix.fetch;
+    process.env.MATRIX_HOMESERVER = 'https://matrix.v1-routes.test';
+    process.env.MATRIX_BOT_TOKEN = 'syt_v1_routes_stub';
+    process.env.MATRIX_HOMESERVER_DOMAIN = matrix.domain;
+    try {
+        await run();
+        assert.ok(matrix.stateReads.includes(canopyId), 'the homeserver was asked');
+    } finally {
+        globalThis.fetch = saved.fetch;
+        restore('MATRIX_HOMESERVER', saved.homeserver);
+        restore('MATRIX_BOT_TOKEN', saved.botToken);
+        restore('MATRIX_HOMESERVER_DOMAIN', saved.domain);
+    }
+}
+
 test('v1 app directory install review and revoke flow works', async () => {
-    await registerUser();
+    const owner = await registerUser();
     registerTestCanopy('main');
+    const ownerHeaders = {
+        authorization: `Bearer ${owner.token}`,
+        'content-type': 'application/json',
+    };
 
     const directory = await app.request('/v1/apps/directory?canopyId=main');
     assert.equal(directory.status, 200);
@@ -610,41 +656,43 @@ test('v1 app directory install review and revoke flow works', async () => {
     assert.ok(apps.length >= 1);
 
     const target = apps[0];
-    const install = await app.request(`/v1/apps/directory/${target.id}/install`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ canopyId: 'main', permissions: target.defaultScopes }),
-    });
-    assert.equal(install.status, 201);
+    await asCanopyAdmin(owner.username, 'main', async () => {
+        const install = await app.request(`/v1/apps/directory/${target.id}/install`, {
+            method: 'POST',
+            headers: ownerHeaders,
+            body: JSON.stringify({ canopyId: 'main', permissions: target.defaultScopes }),
+        });
+        assert.equal(install.status, 201);
 
-    const observability = await app.request(
-        `/v1/apps/directory/${target.id}/observability?canopyId=main`
-    );
-    assert.equal(observability.status, 200);
-    const obsBody = await json(observability);
-    const metrics = obsBody.metrics as Record<string, unknown>;
-    assert.equal(metrics.quotaUsed, 0);
+        const observability = await app.request(
+            `/v1/apps/directory/${target.id}/observability?canopyId=main`
+        );
+        assert.equal(observability.status, 200);
+        const obsBody = await json(observability);
+        const metrics = obsBody.metrics as Record<string, unknown>;
+        assert.equal(metrics.quotaUsed, 0);
 
-    const action = await app.request('/v1/apps/actions/post_message', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ appId: target.id, canopyId: 'main', latencyMs: 42 }),
-    });
-    assert.equal(action.status, 200);
+        const action = await app.request('/v1/apps/actions/post_message', {
+            method: 'POST',
+            headers: ownerHeaders,
+            body: JSON.stringify({ appId: target.id, canopyId: 'main', latencyMs: 42 }),
+        });
+        assert.equal(action.status, 200);
 
-    const revoke = await app.request(`/v1/apps/directory/${target.id}/revoke`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ canopyId: 'main' }),
-    });
-    assert.equal(revoke.status, 200);
+        const revoke = await app.request(`/v1/apps/directory/${target.id}/revoke`, {
+            method: 'POST',
+            headers: ownerHeaders,
+            body: JSON.stringify({ canopyId: 'main' }),
+        });
+        assert.equal(revoke.status, 200);
 
-    const deniedAction = await app.request('/v1/apps/actions/post_message', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ appId: target.id, canopyId: 'main', latencyMs: 10 }),
+        const deniedAction = await app.request('/v1/apps/actions/post_message', {
+            method: 'POST',
+            headers: ownerHeaders,
+            body: JSON.stringify({ appId: target.id, canopyId: 'main', latencyMs: 10 }),
+        });
+        assert.equal(deniedAction.status, 404);
     });
-    assert.equal(deniedAction.status, 404);
 });
 
 test('v1 managed n8n templates are exposed for common automation packs', async () => {
