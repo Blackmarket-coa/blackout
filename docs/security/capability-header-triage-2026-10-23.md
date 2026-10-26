@@ -1049,6 +1049,11 @@ Not covered:
     rejoin; nothing stands against them any longer).
 -   **More than 1,200 deliveries a minute** from LiveKit's address are refused
     with 429, and LiveKit waits 60 seconds before retrying each.
+-   **Clocks apart.** A delivery is refused outside its signature's window,
+    which opens when LiveKit sends it and closes five minutes later: an API
+    clock more than ten seconds behind LiveKit's (or five minutes ahead)
+    refuses every delivery, with a 401 LiveKit does not retry. Containers on
+    one host share a clock; separate hosts need NTP.
 -   **A lock** (V10), and **rooms the API did not create**: not acted on.
 -   **Revocation.** The token stays valid: the API cannot stop the connection
     being made, only end it.

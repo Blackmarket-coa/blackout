@@ -7,16 +7,16 @@
  * valid one, the API's (two minutes) or one LiveKit's server gave it while it
  * was connected (ten minutes, renewed every five: `services/livekit.ts`), can
  * connect to the room again until it expires, and a muted one can reconnect
- * with a token issued before the mute and publish. The API cannot stop that connection being made; it can end
- * it. With the LiveKit server's `webhook.urls` pointing at
- * `POST /v1/voice/livekit/webhook` (`routes/livekitWebhook.ts`), LiveKit posts
- * `participant_joined` once a participant is connected and `track_published`
- * each time one publishes a track. In a room the API created, the API then
- * applies what stands against the participant's identity (the Blackout user id,
- * as the API mints tokens) through the moderation route's own calls
- * (`voiceModeration.ts`): a removal disconnects them; a mute mutes their audio
- * tracks and takes publishing away, and LiveKit then unpublishes their tracks
- * and refuses new ones.
+ * with a token issued before the mute and publish. The API cannot stop that
+ * connection being made; it can end it. With the LiveKit server's
+ * `webhook.urls` pointing at `POST /v1/voice/livekit/webhook`
+ * (`routes/livekitWebhook.ts`), LiveKit posts `participant_joined` once a
+ * participant is connected and `track_published` each time one publishes a
+ * track. In a room the API created, the API then applies what stands against
+ * the participant's identity (the Blackout user id, as the API mints tokens)
+ * through the moderation route's own calls (`voiceModeration.ts`): a removal
+ * disconnects them; a mute mutes their audio tracks and takes publishing away,
+ * and LiveKit then unpublishes their tracks and refuses new ones.
  *
  * What a delivery can do: nothing is read from it before it verifies
  * (`verifyLiveKitWebhook`), and even then it only names a room and an identity.

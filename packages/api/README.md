@@ -88,6 +88,11 @@ rooms it created and keeps nothing about the others. LiveKit server 1.11.0
 also accepts `filter_params: { include_events: [participant_joined, track_published] }`
 under `webhook`, the two events the API uses; 1.8.4 has no filter.
 
+The API's clock must not run more than ten seconds behind LiveKit's (nor five
+minutes ahead): LiveKit signs a delivery valid from the moment it sends it, for
+five minutes, the API refuses one outside that window, and LiveKit does not
+retry a 401.
+
 Deliveries have a rate-limit bucket of their own, 1,200 a minute per address
 (`LIVEKIT_WEBHOOK_RATE_LIMIT_MAX`), and are not counted in the global one. Not
 covered: the moment between someone reconnecting and the API acting on

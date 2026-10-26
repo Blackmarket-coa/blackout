@@ -23,8 +23,10 @@ import { log } from '../telemetry/logger';
  *
  * Answers:
  *   - 503 `livekit_not_configured`: LiveKit is not configured; nothing is read.
+ *   - 413 `payload_too_large`: a body over 256 KiB; nothing is read.
  *   - 401 `webhook_unverified`: the delivery does not verify (no header, another
- *     secret or key, another body, expired) or cannot be read; nothing is done.
+ *     secret or key, another body, outside its `nbf` to `exp` window) or cannot
+ *     be read; nothing is done.
  *   - 200: handled, whether a standing sanction was applied or there was
  *     nothing to apply.
  *   - 502 `livekit_unavailable`: LiveKit did not carry out a standing sanction.
