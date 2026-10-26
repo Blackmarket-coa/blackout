@@ -9,12 +9,27 @@
  * a stub (`_fixtures/matrixStub.ts`) answering the Synapse admin room-state
  * read the check makes; the tests that expect the check to run assert that the
  * read reached it. LiveKit's room service, which mute and remove act through,
- * is a fake (`_fixtures/livekitStub.ts`) that records the calls.
- * Record: O4 and V1 to V7 in `docs/security/capability-header-triage-2026-10-23.md`.
+ * is a fake (`_fixtures/livekitStub.ts`) that records the calls. LiveKit's
+ * webhook deliveries (V-19 on) are built and signed here as LiveKit's server
+ * builds them, with the SDK's own `AccessToken`, so the route's
+ * `WebhookReceiver` verifies them for real.
+ * Record: O4, V1 to V7 and V4's residual in
+ * `docs/security/capability-header-triage-2026-10-23.md`.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import { SignJWT } from 'jose';
+import {
+    AccessToken,
+    ParticipantInfo,
+    ParticipantPermission,
+    Room,
+    TrackInfo,
+    TrackSource,
+    TrackType,
+    WebhookEvent,
+} from 'livekit-server-sdk';
 import {
     createMatrixStub,
     joinRulesEvent,
@@ -48,6 +63,7 @@ const { upsertCanopy } = await import('../src/services/canopyDirectory');
 const { applySubscriptionWebhookEvent } = await import('../src/services/subscriptions');
 const { setRoomServiceClientFactory } = await import('../src/services/livekitAdmin');
 const { LIVEKIT_TOKEN_TTL_SECONDS } = await import('../src/services/livekit');
+const { LIVEKIT_WEBHOOK_RATE_LIMIT_MAX } = await import('../src/middleware/rate-limit');
 
 const livekit = createLiveKitStub();
 setRoomServiceClientFactory(() => livekit.client);
@@ -256,6 +272,94 @@ const withRealRoomService = async (
         setRoomServiceClientFactory(() => livekit.client);
     }
     return asked;
+};
+
+const bodyHash = (body: string) => createHash('sha256').update(body).digest('base64');
+
+/** The `Authorization` LiveKit's server sends with `body`, signed by the SDK's own `AccessToken`. */
+const signDelivery = (
+    body: string,
+    key = process.env.LIVEKIT_API_KEY!,
+    secret = process.env.LIVEKIT_API_SECRET!
+) => {
+    const token = new AccessToken(key, secret, { ttl: '5m' });
+    token.sha256 = bodyHash(body);
+    return token.toJwt();
+};
+
+/**
+ * A LiveKit webhook delivery as LiveKit's server builds one (`webhook/` in
+ * `livekit/protocol`): the event as protobuf JSON, and in `Authorization` a JWT
+ * signed with the API secret, issued by the API key, valid for five minutes and
+ * carrying the body's SHA-256, so the route's `WebhookReceiver` verifies it for
+ * real.
+ */
+const liveKitDelivery = async (
+    eventName: string,
+    roomName: string,
+    identity: string,
+    options: { canPublish?: boolean; track?: 'audio' | 'video' } = {}
+) => {
+    const id = `EV_${randomUUID().replace(/-/g, '').slice(0, 12)}`;
+    const event = new WebhookEvent({
+        id,
+        createdAt: BigInt(Math.floor(Date.now() / 1000)),
+        room: new Room({ sid: 'RM_test', name: roomName }),
+        // `participant_joined` carries the participant's permission;
+        // `track_published` names the participant only.
+        participant: new ParticipantInfo({
+            sid: `PA_${identity.slice(0, 8)}`,
+            identity,
+            permission:
+                options.canPublish === undefined
+                    ? undefined
+                    : new ParticipantPermission({
+                          canPublish: options.canPublish,
+                          canSubscribe: true,
+                          canPublishData: true,
+                      }),
+        }),
+        track: options.track
+            ? new TrackInfo({
+                  sid: `TR_new_${options.track}`,
+                  type: options.track === 'audio' ? TrackType.AUDIO : TrackType.VIDEO,
+                  source: options.track === 'audio' ? TrackSource.MICROPHONE : TrackSource.CAMERA,
+              })
+            : undefined,
+    });
+    // The SDK's class resets `event` after the constructor has set it.
+    event.event = eventName as typeof event.event;
+    const body = event.toJsonString();
+    return { id, body, authorization: await signDelivery(body) };
+};
+
+/** POST a delivery as LiveKit does: from inside the stack, with no forwarding header. */
+const deliver = (body: string, authorization?: string, headers: Record<string, string> = {}) =>
+    app.request('/v1/voice/livekit/webhook', {
+        method: 'POST',
+        headers: {
+            'content-type': 'application/webhook+json',
+            ...(authorization === undefined ? {} : { authorization }),
+            ...headers,
+        },
+        body,
+    });
+
+const delivered = async (delivery: { body: string; authorization: string }) => {
+    const res = await deliver(delivery.body, delivery.authorization);
+    return { status: res.status, body: (await res.json()) as Record<string, unknown> };
+};
+
+/** The latest entry in a room's event log, as the feed serves it. */
+const lastEvent = (roomId: string) => {
+    const event = db.listVoiceRoomEvents(roomId).at(-1)!;
+    return {
+        eventType: event.eventType,
+        userId: event.userId,
+        actorId: event.actorId,
+        targetUserId: event.targetUserId,
+        metadata: event.metadata,
+    };
 };
 
 test('V-1: the canopy admin and a moderator create voice rooms; the API asked the homeserver', async () => {
@@ -1654,6 +1758,7 @@ test("V-26: the API calls LiveKit's room service at LIVEKIT_INTERNAL_URL when it
 test("V-27: only LiveKit's own not_found means nobody was there to act on; any other 404 means LiveKit was not reached", async () => {
     const { canopyId, moderator, member } = seedCanopy();
     const { channelId } = seedRoom(canopyId);
+    const roomName = livekitRoomName(canopyId, channelId);
     await joinAs(member, canopyId, channelId);
     // What LiveKit answers for a participant who is not in the room...
     const livekitNotFound = () =>
@@ -1683,4 +1788,535 @@ test("V-27: only LiveKit's own not_found means nobody was there to act on; any o
         res = await remove();
     });
     assert.deepEqual(await refusal(res!), { status: 502, code: 'livekit_unavailable' });
+
+    // The webhook's enforcement is held to the same: a rejoin is not logged as
+    // nobody there when LiveKit was never asked.
+    const rejoin = await liveKitDelivery('participant_joined', roomName, member.id);
+    let delivery: Awaited<ReturnType<typeof delivered>> | undefined;
+    await withRealRoomService(proxyNotFound, async () => {
+        delivery = await delivered(rejoin);
+    });
+    assert.equal(delivery!.status, 502);
+    await withRealRoomService(livekitNotFound, async () => {
+        delivery = await delivered(rejoin);
+    });
+    assert.deepEqual(delivery, {
+        status: 200,
+        body: { ok: true, enforced: 'remove', livekit: 'not_connected' },
+    });
+});
+
+test('V-19: when LiveKit reports someone a moderator removed or muted back in the room, the API applies what stands', async () => {
+    const { canopyId, moderator, member } = seedCanopy();
+    const talker = seedUser();
+    const { channelId, roomId } = seedRoom(canopyId);
+    const roomName = livekitRoomName(canopyId, channelId);
+    await joinAs(member, canopyId, channelId);
+    await joinAs(talker, canopyId, channelId);
+    livekit.connect(roomName, member.id, [{ sid: 'TR_member_mic', kind: 'audio' }]);
+    livekit.connect(roomName, talker.id, [{ sid: 'TR_talker_mic', kind: 'audio' }]);
+    const moderate = (action: string, target: Caller) =>
+        post(`/rooms/moderation/${action}`, moderator, {
+            canopyId,
+            channelId,
+            targetUserId: target.id,
+        });
+    // The member is muted, then removed; the talker is muted.
+    assert.equal((await moderate('mute', member)).status, 200);
+    assert.equal((await moderate('remove', member)).status, 200);
+    assert.equal((await moderate('mute', talker)).status, 200);
+    const removal = db.getActiveVoiceRoomSanction(roomId, member.id, 'remove')!;
+    const mute = db.getActiveVoiceRoomSanction(roomId, talker.id, 'mute')!;
+
+    // The removed member's client kept a token from before the removal and
+    // connects again with it. LiveKit admits a valid token, and reports the
+    // join: the API disconnects them (the removal, not the mute, that also stands).
+    livekit.connect(roomName, member.id, [{ sid: 'TR_member_mic', kind: 'audio' }]);
+    livekit.clearCalls();
+    const rejoin = await liveKitDelivery('participant_joined', roomName, member.id, {
+        canPublish: true,
+    });
+    assert.deepEqual(await delivered(rejoin), {
+        status: 200,
+        body: { ok: true, enforced: 'remove', livekit: 'disconnected' },
+    });
+    assert.deepEqual(livekit.calls, [
+        { method: 'removeParticipant', room: roomName, identity: member.id },
+    ]);
+    assert.equal(livekit.participant(roomName, member.id), undefined);
+    // Logged as the moderation route logs a removal, under the moderator whose
+    // removal it is, with what LiveKit reported and what was done.
+    assert.deepEqual(lastEvent(roomId), {
+        eventType: 'remove',
+        userId: moderator.id,
+        actorId: moderator.id,
+        targetUserId: member.id,
+        metadata: {
+            enforcedOn: 'participant_joined',
+            sanctionId: removal.id,
+            livekitEventId: rejoin.id,
+            livekit: 'disconnected',
+        },
+    });
+
+    // The muted talker reconnects with a token from before the mute, which can
+    // publish: the API mutes the audio and takes publishing away, through the
+    // moderation route's own calls.
+    livekit.connect(roomName, talker.id, [
+        { sid: 'TR_talker_mic2', kind: 'audio' },
+        { sid: 'TR_talker_cam', kind: 'video' },
+    ]);
+    livekit.clearCalls();
+    const reconnect = await liveKitDelivery('participant_joined', roomName, talker.id, {
+        canPublish: true,
+    });
+    assert.deepEqual(await delivered(reconnect), {
+        status: 200,
+        body: { ok: true, enforced: 'mute', livekit: 'applied' },
+    });
+    assert.deepEqual(livekit.calls, [
+        { method: 'listParticipants', room: roomName },
+        {
+            method: 'mutePublishedTrack',
+            room: roomName,
+            identity: talker.id,
+            trackSid: 'TR_talker_mic2',
+            muted: true,
+        },
+        {
+            method: 'updateParticipant',
+            room: roomName,
+            identity: talker.id,
+            permission: { canPublish: false, canSubscribe: true, canPublishData: true },
+        },
+    ]);
+    assert.equal(livekit.participant(roomName, talker.id)?.permission?.canPublish, false);
+    assert.deepEqual(lastEvent(roomId), {
+        eventType: 'mute',
+        userId: moderator.id,
+        actorId: moderator.id,
+        targetUserId: talker.id,
+        metadata: {
+            enforcedOn: 'participant_joined',
+            sanctionId: mute.id,
+            livekitEventId: reconnect.id,
+            livekit: 'applied',
+        },
+    });
+
+    // Reconnecting with a token the API issued after the mute is no way round
+    // it: LiveKit holds them unable to publish, and nothing is done or logged.
+    const logged = db.listVoiceRoomEvents(roomId).length;
+    livekit.clearCalls();
+    const withNewToken = await liveKitDelivery('participant_joined', roomName, talker.id, {
+        canPublish: false,
+    });
+    assert.deepEqual(await delivered(withNewToken), {
+        status: 200,
+        body: { ok: true, enforced: null },
+    });
+    assert.deepEqual(livekit.calls, []);
+    assert.equal(db.listVoiceRoomEvents(roomId).length, logged);
+
+    // The sanctions stand as the moderator left them: applying one records no new one.
+    assert.deepEqual(activeSanctions(roomId), [
+        ['mute', member.id, moderator.id],
+        ['remove', member.id, moderator.id],
+        ['mute', talker.id, moderator.id],
+    ]);
+});
+
+test('V-20: a mute or a removal LiveKit could not carry out at the time is applied when the person next publishes', async () => {
+    const { canopyId, moderator, member } = seedCanopy();
+    const talker = seedUser();
+    const { channelId, roomId } = seedRoom(canopyId);
+    const roomName = livekitRoomName(canopyId, channelId);
+    for (const who of [member, talker]) {
+        await joinAs(who, canopyId, channelId);
+        livekit.connect(roomName, who.id, [{ sid: `TR_${who.username}`, kind: 'audio' }]);
+    }
+
+    // LiveKit is down when the moderator acts: both records stand (502), and
+    // both people are still connected, speaking.
+    livekit.failure = new Error('connect ECONNREFUSED');
+    try {
+        for (const [action, target] of [
+            ['mute', talker],
+            ['remove', member],
+        ] as const) {
+            const res = await post(`/rooms/moderation/${action}`, moderator, {
+                canopyId,
+                channelId,
+                targetUserId: target.id,
+            });
+            assert.equal(res.status, 502, action);
+        }
+    } finally {
+        livekit.failure = null;
+    }
+    assert.ok(livekit.participant(roomName, member.id));
+    assert.equal(livekit.participant(roomName, talker.id)?.permission?.canPublish, true);
+
+    // LiveKit is back. The talker shares their screen's sound: LiveKit reports
+    // the new track, and the API applies the mute that stands.
+    livekit.connect(roomName, talker.id, [
+        { sid: `TR_${talker.username}`, kind: 'audio' },
+        { sid: 'TR_new_audio', kind: 'audio' },
+    ]);
+    livekit.clearCalls();
+    const published = await liveKitDelivery('track_published', roomName, talker.id, {
+        track: 'audio',
+    });
+    assert.deepEqual(await delivered(published), {
+        status: 200,
+        body: { ok: true, enforced: 'mute', livekit: 'applied' },
+    });
+    assert.deepEqual(
+        livekit.calls.map((call) => call.method),
+        ['listParticipants', 'mutePublishedTrack', 'mutePublishedTrack', 'updateParticipant']
+    );
+    assert.equal(livekit.participant(roomName, talker.id)?.permission?.canPublish, false);
+    assert.deepEqual(lastEvent(roomId).metadata, {
+        enforcedOn: 'track_published',
+        sanctionId: db.getActiveVoiceRoomSanction(roomId, talker.id, 'mute')!.id,
+        livekitEventId: published.id,
+        livekit: 'applied',
+    });
+
+    // A publish by someone removed disconnects them, camera or microphone.
+    livekit.clearCalls();
+    const camera = await liveKitDelivery('track_published', roomName, member.id, {
+        track: 'video',
+    });
+    assert.deepEqual(await delivered(camera), {
+        status: 200,
+        body: { ok: true, enforced: 'remove', livekit: 'disconnected' },
+    });
+    assert.deepEqual(livekit.calls, [
+        { method: 'removeParticipant', room: roomName, identity: member.id },
+    ]);
+    assert.equal(livekit.participant(roomName, member.id), undefined);
+});
+
+test('V-21: a LiveKit delivery that does not verify is refused, and nothing in it is acted on', async () => {
+    const { canopyId, moderator, member } = seedCanopy();
+    const bystander = seedUser();
+    const { channelId, roomId } = seedRoom(canopyId);
+    const roomName = livekitRoomName(canopyId, channelId);
+    await joinAs(member, canopyId, channelId);
+    const joined = (await (
+        await post('/rooms/join', bystander, { canopyId, channelId })
+    ).json()) as { livekit: { token: string } };
+    livekit.connect(roomName, member.id, [{ sid: 'TR_mic', kind: 'audio' }]);
+    assert.equal(
+        (
+            await post('/rooms/moderation/remove', moderator, {
+                canopyId,
+                channelId,
+                targetUserId: member.id,
+            })
+        ).status,
+        200
+    );
+    // Back with a token from before the removal: a delivery that verified would
+    // disconnect them.
+    livekit.connect(roomName, member.id, [{ sid: 'TR_mic', kind: 'audio' }]);
+    const genuine = await liveKitDelivery('participant_joined', roomName, member.id);
+    const innocuous = await liveKitDelivery('participant_joined', roomName, bystander.id);
+    const key = process.env.LIVEKIT_API_KEY!;
+    const secret = process.env.LIVEKIT_API_SECRET!;
+    const now = Math.floor(Date.now() / 1000);
+    const expired = await new SignJWT({ sha256: bodyHash(genuine.body) })
+        .setProtectedHeader({ alg: 'HS256' })
+        .setIssuer(key)
+        .setNotBefore(now - 600)
+        .setExpirationTime(now - 300)
+        .sign(new TextEncoder().encode(secret));
+    const logged = db.listVoiceRoomEvents(roomId).length;
+    livekit.clearCalls();
+
+    const refused: Array<[string, string, string | undefined]> = [
+        ['no Authorization header', genuine.body, undefined],
+        ['an empty Authorization header', genuine.body, ''],
+        [
+            'signed with another secret',
+            genuine.body,
+            await signDelivery(genuine.body, key, `${secret}-other`),
+        ],
+        [
+            'issued by another API key',
+            genuine.body,
+            await signDelivery(genuine.body, `${key}-other`, secret),
+        ],
+        // A captured signature over one body, sent with another.
+        ['the signature of another delivery', genuine.body, innocuous.authorization],
+        ['the body changed after signing', `${genuine.body} `, genuine.authorization],
+        ['expired five minutes ago', genuine.body, expired],
+        // Signed with the same secret, but carries no body hash.
+        ["a participant's own LiveKit token", genuine.body, joined.livekit.token],
+    ];
+    for (const [label, body, authorization] of refused) {
+        assert.deepEqual(
+            await refusal(await deliver(body, authorization)),
+            { status: 401, code: 'webhook_unverified' },
+            label
+        );
+    }
+    // As a `Bearer` token it is taken for a Blackout session, and refused before the route.
+    assert.deepEqual(
+        await refusal(await deliver(genuine.body, `Bearer ${genuine.authorization}`)),
+        {
+            status: 401,
+            code: 'unauthorized',
+        }
+    );
+    // A body over 256 KiB is refused before it is read, even one signed as LiveKit signs.
+    const oversized = `${genuine.body}${' '.repeat(256 * 1024)}`;
+    assert.deepEqual(await refusal(await deliver(oversized, await signDelivery(oversized))), {
+        status: 413,
+        code: 'payload_too_large',
+    });
+    assert.deepEqual(livekit.calls, []);
+    assert.equal(db.listVoiceRoomEvents(roomId).length, logged);
+    assert.ok(livekit.participant(roomName, member.id));
+
+    // The same delivery, as LiveKit signed it, disconnects them.
+    assert.deepEqual(await delivered(genuine), {
+        status: 200,
+        body: { ok: true, enforced: 'remove', livekit: 'disconnected' },
+    });
+    assert.equal(livekit.participant(roomName, member.id), undefined);
+});
+
+test('V-22: a delivery about a room the API did not create, or about someone nothing stands against, does nothing', async () => {
+    const { canopyId, moderator, member } = seedCanopy();
+    const bystander = seedUser();
+    const { channelId, roomId } = seedRoom(canopyId);
+    const roomName = livekitRoomName(canopyId, channelId);
+    await joinAs(member, canopyId, channelId);
+    livekit.connect(roomName, member.id, [{ sid: 'TR_mic', kind: 'audio' }]);
+    const nothing = { status: 200, body: { ok: true, enforced: null } };
+
+    // Reported before any sanction is written, a join does nothing. That is the
+    // order a removal can race in, and it is safe: the moderation route writes
+    // the removal first and then disconnects whoever is connected itself, so the
+    // webhook only has to catch a later rejoin, which LiveKit reports after.
+    livekit.clearCalls();
+    assert.deepEqual(
+        await delivered(await liveKitDelivery('participant_joined', roomName, member.id)),
+        nothing
+    );
+    assert.deepEqual(livekit.calls, []);
+    assert.equal(
+        (
+            await post('/rooms/moderation/remove', moderator, {
+                canopyId,
+                channelId,
+                targetUserId: member.id,
+            })
+        ).status,
+        200
+    );
+    assert.deepEqual(livekit.calls, [
+        { method: 'removeParticipant', room: roomName, identity: member.id },
+    ]);
+
+    // Removed, and back. Reports that are not a join or a publish do nothing...
+    livekit.connect(roomName, member.id, [{ sid: 'TR_mic', kind: 'audio' }]);
+    livekit.clearCalls();
+    for (const event of [
+        'participant_left',
+        'participant_connection_aborted',
+        'track_unpublished',
+        'room_started',
+        'room_finished',
+    ]) {
+        assert.deepEqual(
+            await delivered(await liveKitDelivery(event, roomName, member.id)),
+            nothing,
+            event
+        );
+    }
+    // ...nor does a join in a LiveKit room the API did not create (a MatrixRTC
+    // call on the same server), under the same identity, nor a join here by
+    // someone nothing stands against.
+    for (const [label, delivery] of [
+        ['another room', await liveKitDelivery('participant_joined', 'matrixrtc-call', member.id)],
+        ['a bystander', await liveKitDelivery('participant_joined', roomName, bystander.id)],
+        ['no participant', await liveKitDelivery('participant_joined', roomName, '')],
+    ] as const) {
+        assert.deepEqual(await delivered(delivery), nothing, label);
+    }
+    assert.deepEqual(livekit.calls, []);
+    assert.ok(livekit.participant(roomName, member.id));
+
+    // Readmitted, the same report finds nothing to apply.
+    assert.equal(
+        (
+            await post('/rooms/moderation/readmit', moderator, {
+                canopyId,
+                channelId,
+                targetUserId: member.id,
+            })
+        ).status,
+        200
+    );
+    assert.deepEqual(
+        await delivered(await liveKitDelivery('participant_joined', roomName, member.id)),
+        nothing
+    );
+    assert.deepEqual(livekit.calls, []);
+    assert.deepEqual(moderationLog(roomId), [
+        ['remove', moderator.id, 'moderator'],
+        ['readmit', moderator.id, 'moderator'],
+    ]);
+});
+
+test('V-23: a repeated delivery is harmless, and one LiveKit could not carry out is tried again', async () => {
+    const { canopyId, moderator, member } = seedCanopy();
+    const { channelId, roomId } = seedRoom(canopyId);
+    const roomName = livekitRoomName(canopyId, channelId);
+    await joinAs(member, canopyId, channelId);
+    livekit.connect(roomName, member.id, [{ sid: 'TR_mic', kind: 'audio' }]);
+    assert.equal(
+        (
+            await post('/rooms/moderation/remove', moderator, {
+                canopyId,
+                channelId,
+                targetUserId: member.id,
+            })
+        ).status,
+        200
+    );
+    const enforcements = () =>
+        db
+            .listVoiceRoomEvents(roomId)
+            .filter((e) => e.metadata?.enforcedOn)
+            .map((e) => e.metadata?.livekit);
+
+    livekit.connect(roomName, member.id, [{ sid: 'TR_mic', kind: 'audio' }]);
+    livekit.clearCalls();
+    const rejoin = await liveKitDelivery('participant_joined', roomName, member.id);
+    assert.deepEqual((await delivered(rejoin)).body, {
+        ok: true,
+        enforced: 'remove',
+        livekit: 'disconnected',
+    });
+    // The same delivery again (LiveKit retrying one whose answer it did not
+    // get, or a copy replayed while its signature still verifies) is answered,
+    // and nothing is done or logged a second time, even though they have since
+    // connected again.
+    livekit.connect(roomName, member.id, [{ sid: 'TR_mic', kind: 'audio' }]);
+    for (let i = 0; i < 2; i++) {
+        assert.deepEqual(await delivered(rejoin), {
+            status: 200,
+            body: { ok: true, enforced: null, duplicate: true },
+        });
+    }
+    assert.deepEqual(livekit.calls, [
+        { method: 'removeParticipant', room: roomName, identity: member.id },
+    ]);
+    assert.deepEqual(enforcements(), ['disconnected']);
+    // That connection is a new one, which LiveKit reports with a new delivery.
+    assert.deepEqual(
+        (await delivered(await liveKitDelivery('participant_joined', roomName, member.id))).body,
+        { ok: true, enforced: 'remove', livekit: 'disconnected' }
+    );
+    assert.deepEqual(enforcements(), ['disconnected', 'disconnected']);
+
+    // When LiveKit does not carry it out, the answer is a 5xx, which LiveKit
+    // retries, and the retry, the same delivery, is acted on.
+    livekit.connect(roomName, member.id, [{ sid: 'TR_mic', kind: 'audio' }]);
+    const retried = await liveKitDelivery('participant_joined', roomName, member.id);
+    livekit.failure = new Error('connect ECONNREFUSED');
+    try {
+        const first = await delivered(retried);
+        assert.equal(first.status, 502);
+        assert.equal(first.body.code, 'livekit_unavailable');
+    } finally {
+        livekit.failure = null;
+    }
+    assert.ok(livekit.participant(roomName, member.id));
+    assert.deepEqual((await delivered(retried)).body, {
+        ok: true,
+        enforced: 'remove',
+        livekit: 'disconnected',
+    });
+    assert.equal(livekit.participant(roomName, member.id), undefined);
+    assert.deepEqual((await delivered(retried)).body, {
+        ok: true,
+        enforced: null,
+        duplicate: true,
+    });
+    assert.deepEqual(enforcements(), [
+        'disconnected',
+        'disconnected',
+        'livekit_unavailable',
+        'disconnected',
+    ]);
+    // One removal stands throughout, the moderator's.
+    assert.deepEqual(activeSanctions(roomId), [['remove', member.id, moderator.id]]);
+});
+
+test('V-24: without LiveKit configured, the webhook answers 503 and does nothing', async () => {
+    const { canopyId, moderator, member } = seedCanopy();
+    const { channelId } = seedRoom(canopyId);
+    const roomName = livekitRoomName(canopyId, channelId);
+    await joinAs(member, canopyId, channelId);
+    livekit.connect(roomName, member.id, [{ sid: 'TR_mic', kind: 'audio' }]);
+    assert.equal(
+        (
+            await post('/rooms/moderation/remove', moderator, {
+                canopyId,
+                channelId,
+                targetUserId: member.id,
+            })
+        ).status,
+        200
+    );
+    livekit.connect(roomName, member.id, [{ sid: 'TR_mic', kind: 'audio' }]);
+    const rejoin = await liveKitDelivery('participant_joined', roomName, member.id);
+    livekit.clearCalls();
+    for (const name of ['LIVEKIT_URL', 'LIVEKIT_API_KEY', 'LIVEKIT_API_SECRET']) {
+        const saved = process.env[name];
+        delete process.env[name];
+        try {
+            assert.deepEqual(
+                await refusal(await deliver(rejoin.body, rejoin.authorization)),
+                { status: 503, code: 'livekit_not_configured' },
+                name
+            );
+        } finally {
+            process.env[name] = saved;
+        }
+    }
+    assert.deepEqual(livekit.calls, []);
+    assert.ok(livekit.participant(roomName, member.id));
+});
+
+test("V-25: LiveKit's deliveries are counted in a bucket of their own, not in the global one", async () => {
+    // One address, as LiveKit's server posts from one; not one the other tests use,
+    // so both of its buckets start empty.
+    const address = '2001:db8:7880::1';
+    const fromLiveKit = () => deliver('{}', undefined, { 'x-forwarded-for': address });
+    const elsewhere = () =>
+        app.request('/v1/voice/config', { headers: { 'x-forwarded-for': address } });
+
+    // More than the global limit allows an address in a minute: none is refused
+    // for the rate (each is refused as unverified)...
+    for (let i = 0; i < 130; i++) assert.equal((await fromLiveKit()).status, 401);
+    // ...and none counted against the address's global bucket, which still
+    // holds the address to 120 a minute everywhere else.
+    for (let i = 0; i < 120; i++) assert.equal((await elsewhere()).status, 200);
+    assert.equal((await elsewhere()).status, 429);
+
+    // The webhook's own bucket stops at its own limit, for that address only.
+    for (let i = 130; i < LIVEKIT_WEBHOOK_RATE_LIMIT_MAX; i++) {
+        assert.equal((await fromLiveKit()).status, 401);
+    }
+    assert.deepEqual(await refusal(await fromLiveKit()), { status: 429, code: 'rate_limited' });
+    assert.equal(
+        (await deliver('{}', undefined, { 'x-forwarded-for': '2001:db8:7880::2' })).status,
+        401
+    );
 });

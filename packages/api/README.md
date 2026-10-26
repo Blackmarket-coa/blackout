@@ -33,8 +33,9 @@ the web app reads only `GET /voice/rooms/open`.
 -   `POST /voice/rooms/join` — join an existing room + mint a LiveKit token that lives 120 s (`LIVEKIT_TOKEN_TTL_SECONDS` in `src/services/livekit.ts`; not configurable, and `ttlSeconds` in the request is ignored). Joining does not create a room. The canopy decides who enters: an account it banned is refused (403 `canopy_banned`), an outsider gets in only where the canopy is public (403 `not_canopy_member` otherwise), an account a moderator removed not at all until readmitted (403 `removed_from_room`); a locked room admits moderators and admins only (423 `room_locked` for members).
 -   `POST /voice/token` — mint a token only, for an existing room, under the same entry, removal and lock checks; a standing mute makes the token unable to publish. It does not check the premium subscription that joining does (V5 in the record below, the operator's billing decision).
 -   `POST /voice/rooms/leave` — leave room and log duration.
--   `POST /voice/rooms/moderation/lock|mute|remove|readmit` — for the canopy's moderators and admins. `mute` (`muted: false` to unmute), `remove` and `readmit` name a `targetUserId` whose level must be below the moderator's (403 `target_not_below_moderator`; 404 `target_unknown` for an id with no account). Mute mutes the target's published audio tracks in LiveKit and takes away their permission to publish; remove disconnects them. Both are recorded first and outlive the connection: a removed account gets no new token for the room until readmitted, and a muted one's new tokens cannot publish. Tokens already issued are not revoked (the API's live 120 s; LiveKit can refresh a connected client's token), so a removed account's client that kept one can rejoin until it expires (`KNOWN_LIMITATIONS.md`). Without LiveKit configured they do nothing and answer 503 `livekit_not_configured`; if LiveKit fails, the record stands and the answer is 502 `livekit_unavailable`, saying so. Lock refuses new joins and tokens; it does not end connections already made.
+-   `POST /voice/rooms/moderation/lock|mute|remove|readmit` — for the canopy's moderators and admins. `mute` (`muted: false` to unmute), `remove` and `readmit` name a `targetUserId` whose level must be below the moderator's (403 `target_not_below_moderator`; 404 `target_unknown` for an id with no account). Mute mutes the target's published audio tracks in LiveKit and takes away their permission to publish; remove disconnects them. Both are recorded first and outlive the connection: a removed account gets no new token for the room until readmitted, and a muted one's new tokens cannot publish. Tokens already issued are not revoked (the API's live 120 s; LiveKit's server gives a connected client ten-minute tokens of its own), so a removed account's client that kept one can connect again, and a muted one can reconnect and publish, until the API acts on LiveKit's webhook (below) or, without it, until a moderator acts again (`KNOWN_LIMITATIONS.md`). Without LiveKit configured they do nothing and answer 503 `livekit_not_configured`; if LiveKit fails, the record stands and the answer is 502 `livekit_unavailable`, saying so. Lock refuses new joins and tokens; it does not end connections already made.
 -   `GET /voice/rooms/:canopyId/:channelId/events` — who is in the room, its join/leave/moderation history and the mutes and removals that stand, for joined members of the canopy (403 `forbidden` otherwise, with the same body for a room that does not exist).
+-   `POST /voice/livekit/webhook` — LiveKit's server, not a client: its room events, verified with the SDK's `WebhookReceiver` (401 `webhook_unverified` otherwise, nothing done; 503 without LiveKit configured). On `participant_joined` and `track_published` in a room the API created, the mute or removal that stands against the participant is applied again, as moderation applies it, and logged in the room's event log (`enforcedOn` in its metadata). Needs the LiveKit server configured to send its webhooks here (below).
 
 A caller's role (`member`, `moderator`, `admin`) and whether the canopy admits
 them at all come from the canopy's state on the homeserver
@@ -56,3 +57,46 @@ Set `LIVEKIT_URL`, `LIVEKIT_API_KEY`, and `LIVEKIT_API_SECRET` to use either:
 
 1. **Self-hosted LiveKit server** (`wss://your-livekit-host`), or
 2. **LiveKit Cloud** URL/API credentials.
+
+`LIVEKIT_URL` is what clients are given. Where the API itself cannot use it to
+call LiveKit's room service (moderation, the webhook below), set
+`LIVEKIT_INTERNAL_URL` to an address it can, such as `http://livekit:7880` on a
+container network. A path in `LIVEKIT_URL` is dropped for those calls: the SDK
+resolves its `/twirp/...` path against the host.
+
+### LiveKit's webhook
+
+LiveKit cannot revoke a token, so the API applies a standing mute or removal
+when LiveKit reports the person back: this works only when the LiveKit server
+is configured to send its webhooks to the API. In LiveKit's config:
+
+```yaml
+webhook:
+    # One of the server's `keys`: the pair the API holds as LIVEKIT_API_KEY and
+    # LIVEKIT_API_SECRET. LiveKit signs each delivery with its secret, and does
+    # not start if this key is not one of its keys.
+    api_key: <LIVEKIT_API_KEY>
+    urls:
+        # The API's internal address, not through the public proxy.
+        - http://<api-host>:<port>/v1/voice/livekit/webhook
+```
+
+`infra/single-server-baseline/livekit/livekit.yaml.template` already has it, to
+`http://api:9000`; its RUNBOOK (step 6) has the checks. LiveKit then posts the
+events of every room it hosts, MatrixRTC calls included; the API acts only on
+rooms it created and keeps nothing about the others. LiveKit server 1.11.0
+also accepts `filter_params: { include_events: [participant_joined, track_published] }`
+under `webhook`, the two events the API uses; 1.8.4 has no filter.
+
+The API's clock must not run more than ten seconds behind LiveKit's (nor five
+minutes ahead): LiveKit signs a delivery valid from the moment it sends it, for
+five minutes, the API refuses one outside that window, and LiveKit does not
+retry a 401.
+
+Deliveries have a rate-limit bucket of their own, 1,200 a minute per address
+(`LIVEKIT_WEBHOOK_RATE_LIMIT_MAX`), and are not counted in the global one. Not
+covered: the moment between someone reconnecting and the API acting on
+LiveKit's report, a report LiveKit drops, a lock (a token issued before it still
+connects), and anyone who never reconnects (the moderation route acts on them
+itself). Record: V4's residual, in the 2026-10-26 section of
+[`docs/security/capability-header-triage-2026-10-23.md`](../../docs/security/capability-header-triage-2026-10-23.md).

@@ -11,7 +11,8 @@ rule in this directory.
 
 Written against `develop` at `291f593`, with the change set that fixes it; the
 dated sections at the end, against `develop` at `6ea67c4` (the change set that
-fixes O4) and at `3c19d0e` (the one that fixes V2, V4, V6 and V7). **Read**
+fixes O4), at `3c19d0e` (the one that fixes V2, V4, V6 and V7) and at
+`9d0f81d` (the one that closes V4's residual). **Read**
 below means the claim rests on the code; **Run** that
 it was observed by running it; **Test** names the regression test that drives
 the real Hono app (in memory mode, against the stub homeserver in
@@ -22,13 +23,17 @@ so CI's `api-smoke-and-integration` job keeps this record honest.
 fixed alongside it and V2 half fixed. V2, V4, V6 and V7 fixed on 2026-10-25
 (last section): voice moderation acts in LiveKit and outlives the connection,
 the canopy's bans and join rule decide who enters, a moderator must be above
-the target, and the event feed is for the canopy's members. Open: the
-community role model (O1), the join rule on listing (O2), scopes that mix
-owner-checked and shared-state routes (O3), the rollout window for tokens
-minted before the change (O5), whether dead-drop writes can be minted (O6),
-and, for voice rooms, LiveKit tokens already issued, which moderation cannot
-revoke (V4's residual), and the token route's subscription check (V5), a
-billing decision for the operator.
+the target, and the event feed is for the canopy's members. V4's residual
+closed on 2026-10-26 (last section), given a deployment change: where the
+LiveKit server sends its webhooks to the API, a mute or removal that stands is
+applied to anyone LiveKit reports joining or publishing, a connection made
+with a token issued before it included; V8 and V9, found alongside it, fixed.
+Open: the community role model (O1), the join rule on listing (O2), scopes
+that mix owner-checked and shared-state routes (O3), the rollout window for
+tokens minted before the change (O5), whether dead-drop writes can be minted
+(O6), and, for voice rooms, the token route's subscription check (V5), a
+billing decision for the operator, and a lock, which a token issued before it
+still gets past (V10).
 
 | ID  | Finding                                                                                                 | Verified    | Disposition                                                    |
 | --- | ------------------------------------------------------------------------------------------------------- | ----------- | -------------------------------------------------------------- |
@@ -46,10 +51,13 @@ billing decision for the operator.
 | V1  | Joining a voice room created it, with no directory or role check                                        | Read; tests | Fixed 2026-10-24: only create makes a room                     |
 | V2  | A voice room's event feed (participants, history) had no sign-in check                                  | Run; tests  | Fixed 2026-10-25: the canopy's joined members only (V-18)      |
 | V3  | An unknown voice moderation action logged a removal that removed nobody                                 | Run; test   | Fixed 2026-10-24: 404 `unknown_action`                         |
-| V4  | Voice moderation does not reach LiveKit, and tokens already issued stay valid                           | Read; tests | Fixed 2026-10-25 (V-12 to V-15); issued tokens not revoked     |
+| V4  | Voice moderation does not reach LiveKit, and tokens already issued stay valid                           | Read; tests | Fixed 2026-10-25; residual closed 2026-10-26, given webhooks   |
 | V5  | `POST /v1/voice/token` skips the subscription check that joining makes                                  | Read        | Open: a billing rule, for the operator (last section)          |
 | V6  | Unlocked voice rooms are drop-in for every entitled account, banned ones included                       | Read; tests | Fixed 2026-10-25: bans and the join rule decide (V-4, V-16)    |
 | V7  | Voice mute and remove do not compare the moderator's level with the target's                            | Read; tests | Fixed 2026-10-25: moderator above the target (V-17)            |
+| V8  | In the single-server stack the API could not reach LiveKit's room service at `LIVEKIT_URL`              | Run; test   | Fixed 2026-10-26: `LIVEKIT_INTERNAL_URL` (V-26)                |
+| V9  | Any 404 from the room service counted as "nobody connected", so a misrouted removal answered 200        | Read; test  | Fixed 2026-10-26: only LiveKit's `not_found` counts (V-27)     |
+| V10 | A token issued before a lock still connects to the locked room                                          | Read        | Open: a lock is not applied on arrival                         |
 
 ---
 
@@ -640,7 +648,8 @@ were extended. No LiveKit server and no running fork were available; see
     `participant_joined` webhook, which the SDK's `WebhookReceiver` verifies)
     so the API can apply a standing sanction on arrival, with the LiveKit
     server configured to send webhooks to the API: a deployment change, not
-    made here. Stated in `KNOWN_LIMITATIONS.md`.
+    made here. Stated in `KNOWN_LIMITATIONS.md`. **Closed 2026-10-26** (last
+    section), given that deployment change.
 
 ### V6 — the canopy decides who enters — fixed
 
@@ -796,5 +805,334 @@ a test.
 -   Comments: `LIVEKIT_TOKEN_TTL_SECONDS` in `services/livekit.ts`, the file
     comment of `services/voiceModeration.ts` and the removal check in
     `routes/voice.ts`: a token already issued is not revoked.
+-   `TRUST.md` and `trust.html`: unchanged; they make no claim about voice
+    rooms.
+
+---
+
+## 2026-10-26: V4's residual closed — a standing mute or removal is applied when LiveKit reports the person
+
+Closing V4's residual as the 2026-10-25 section describes it, against `develop`
+at `9d0f81d`. **Read**, **Run** and **Test** as above; the tests are V-19 to
+V-27 in `packages/api/test/voice-roles.integration.test.ts`. Their LiveKit
+deliveries are built and signed as LiveKit's server builds them, with the SDK's
+own `AccessToken`, so the route's `WebhookReceiver` verifies them for real. The
+room service is the 2026-10-25 fake, except in V-26 and V-27, which drive the
+SDK's real `RoomServiceClient` against a fake HTTP answer. No LiveKit server
+and no Docker daemon were available. LiveKit's side is read in its source at
+the versions the repo deploys: `livekit-server` 1.8.4 (the single-server
+baseline) and 1.11.0 (`deploy/docker/blackout-backend`), the `livekit/protocol`
+1.34.0 and 1.45.3 they build on, and `go-retryablehttp` 0.7.7, the HTTP client
+of LiveKit's webhook sender.
+
+### What was open
+
+LiveKit cannot revoke a token, and a connected client holds more than the
+API's. **Read** (`pkg/service/roommanager.go`, both versions): LiveKit's server
+sends a connected client a token of its own as it connects and every five
+minutes after (`tokenRefreshInterval`), each valid for ten (`tokenDefaultTTL`),
+built from the participant's grants at the time, and again whenever they
+change. So a removed participant whose client kept one could connect to the
+room again for up to ten minutes (two, with the API's own), and a muted one
+could reconnect with a token from before the mute and publish; that connection
+then stayed until a moderator acted again.
+
+### The fix
+
+`POST /v1/voice/livekit/webhook` (`routes/livekitWebhook.ts`,
+`services/livekitWebhook.ts`) takes LiveKit's room events.
+
+-   **Verified first.** The raw body (`c.req.text()`, as the Twitch and Patreon
+    receivers read theirs, capped at 256 KiB before it is buffered) and the
+    `Authorization` header go to the SDK's `WebhookReceiver` with the API's
+    `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET`. It checks an HS256 JWT signed
+    with the secret, its `iss` against the key, its `nbf` and `exp` (with ten
+    seconds' tolerance) and its `sha256` claim against the body's SHA-256, and
+    only then parses the body (**Read**: `livekit-server-sdk` 2.15.2,
+    `WebhookReceiver.ts` and `AccessToken.ts`). Anything that fails is 401
+    `webhook_unverified`, and nothing is done. LiveKit sends the JWT with no
+    `Bearer ` prefix, so the `/v1` auth middleware passes the request on as an
+    anonymous one; a `Bearer` value is refused there, as a bad session. Without
+    LiveKit configured the answer is 503 `livekit_not_configured`, before the
+    body is read.
+-   **What is acted on.** `participant_joined`, which LiveKit sends once a
+    participant is connected (when it becomes active, and not on a migration:
+    **Read**, `ParticipantActive` in `pkg/telemetry/events.go`), and
+    `track_published`, in a LiveKit room whose name is one the API gave a room
+    it created (`livekitRoomName`). Every other event and every other room is
+    answered 200 and left alone.
+-   **What is applied.** What stands against the participant's identity (the
+    Blackout user id, as the API mints tokens) in that room, a removal before a
+    mute, through the moderation route's own calls in `voiceModeration.ts`. A
+    removal disconnects (`removeParticipant`). A mute mutes the published audio
+    tracks and takes publishing away (`updateParticipant`); LiveKit then
+    unpublishes every track the participant may no longer publish and refuses
+    new ones (**Read**, `ParticipantImpl.SetPermission` and the publish checks
+    in `pkg/rtc/participant.go`, both versions; 2026-10-25 listed this as
+    assumed). A `participant_joined` whose permission already forbids
+    publishing is left alone for a mute: a token the API minted after the mute
+    connects that way, and acting on it would log every ordinary reconnect as a
+    way round the mute. `track_published` carries no permission, and means the
+    participant could publish.
+-   **Recorded** in the room's event log as the moderation route records its
+    actions: `eventType` `remove` or `mute`; `userId` and `actorId` the
+    moderator who imposed it; `targetUserId` the participant; and in `metadata`,
+    `enforcedOn` (the LiveKit event), `sanctionId`, `livekitEventId` and
+    `livekit` (`disconnected`, `applied`, `not_connected`, or the failure). No
+    sanction is written or changed.
+-   **When LiveKit does not carry it out** the answer is 502
+    `livekit_unavailable`, the attempt is logged, and LiveKit retries the
+    delivery.
+
+### What a delivery can do, and replay
+
+-   **Who can make one.** A holder of the API secret: LiveKit, the API, and, in
+    the single-server stack, lk-jwt-service, which holds the same pair. A
+    participant's own LiveKit token is signed with that secret but has no
+    `sha256` claim, and is refused (V-21), as is a token LiveKit's server
+    refreshes, which has none either.
+-   **What it can make the API do.** The body only names a room and an
+    identity. What is applied is what the API's own records say stands at that
+    moment: no delivery creates, lifts or widens a sanction. A forged one (which
+    takes the secret, and whoever has it can call LiveKit's room service
+    directly) or a replayed one can at most make the API apply a moderator's
+    decision again.
+-   **What limits replay. Read** (`webhook/url_notifier.go` in protocol 1.34.0,
+    `webhook/resource_url_notifier.go` in 1.45.3, `auth/accesstoken.go` in
+    both): LiveKit signs each delivery as it sends it, with `iss` the API key,
+    `nbf` now, `exp` five minutes on and the body's hash; there is no `iat`,
+    and the SDK's verifier does not ask for one. The hash pins the bytes, so a
+    copy can only be replayed verbatim, and only until its `exp` and the ten
+    seconds' tolerance. Within that window the API answers a repeat of a
+    delivery it acted on without acting again: it keeps, for six minutes, the
+    LiveKit event id (`EV_…`) of each, which is inside the signed body.
+    LiveKit's retries are the same request, body and header, so they are
+    repeats too.
+-   **Idempotent.** A repeat the API has not acted on, such as the retry of one
+    answered 502, is acted on; what stands is not changed by it. The ids are
+    kept per process: a repeat that reaches another replica applies the
+    standing sanction again, as a new report of the same person would, and adds
+    a log entry. Two copies arriving together can both act, to the same effect.
+-   **Retries. Read** (`go-retryablehttp` 0.7.7, with the defaults LiveKit's
+    sender keeps): up to four retries, after 1, 2, 4 and 8 seconds, on a
+    connection error, a 429 or a 5xx other than 501, and after exactly the
+    `Retry-After` of a 429 or a 503; any other 4xx is not retried. LiveKit
+    1.8.4 queues deliveries per room (ten workers, a hundred deep, dropping
+    when full); 1.11.0 drops one that waited in its queue more than 30
+    seconds.
+
+### Ordering: a report handled before the sanction is written
+
+A report handled before the moderation route has written the sanction finds
+nothing and does nothing (V-22). That order is safe. The route writes the
+sanction first and then mutes or disconnects whoever is connected itself, and
+LiveKit sends `participant_joined` only once a participant is connected. So if
+the report came first, the person was connected before the write and the
+route's own call reaches them; if they connect after the write, the report that
+follows finds the sanction. The webhook only has to catch rejoins. When the
+route's own call fails (502), the record stands and the next join or publish
+LiveKit reports is acted on (V-20).
+
+### Its own rate-limit bucket
+
+LiveKit posts every room's events from its server's one address: each join,
+leave and track, in every room on that server, MatrixRTC calls included. The
+global limit allows an address 120 requests a minute, and where LiveKit reaches
+the API directly, as in the single-server stack, it would share the `local` key
+with every other direct caller (the container healthcheck, FBM's webhooks: none
+sends a forwarding header). A 429 makes LiveKit wait the 60 seconds the
+limiter's `Retry-After` names, at the moment a rejoin is to be caught. So the
+route has its own bucket, `livekit-webhook`: 1,200 a minute per address
+(`LIVEKIT_WEBHOOK_RATE_LIMIT_MAX` overrides it), applied before the body is
+read, verified or not, and the global bucket leaves out exactly this path. The
+number is a judgement, not a measurement.
+
+### Deployment
+
+The protection exists only where the LiveKit server is configured to send its
+webhooks to this route. `infra/single-server-baseline`, the one stack in the
+repo that runs the API and a LiveKit server together, now is; its
+`livekit/livekit.yaml.template` has
+
+```yaml
+webhook:
+    api_key: ${LIVEKIT_API_KEY}
+    urls:
+        - http://api:9000/v1/voice/livekit/webhook
+```
+
+straight to the api container on the internal `app` network. `api_key` must be
+one of LiveKit's `keys` or LiveKit does not start (**Read**,
+`createWebhookNotifier` in `pkg/service/wire.go`); it is the pair the API
+holds. RUNBOOK step 6 gives the checks; they were not run.
+`deploy/docker/blackout-backend` and `infra/townhall-staging` run LiveKit
+without the API, and the Helm chart and `deploy/docker/production` run the API
+without a LiveKit of their own: nothing changes there, and
+`packages/api/README.md` and the Townhall provisioning runbook give the snippet
+for an operator who points one at the other, or at LiveKit Cloud. No feature
+flag was set or added.
+
+### Found while closing it
+
+-   **V8 — the room service was out of reach in the single-server stack —
+    fixed.** The room-service client, which moderation uses since 2026-10-25,
+    was built from `LIVEKIT_URL`, the address clients are given. There that is
+    `wss://matrix.<domain>/livekit/sfu`, which cannot work for two reasons. The
+    api container is on internal networks only (**Read**: its compose file;
+    RUNBOOK section 19 asserts it has no route out). And the SDK resolves its
+    `/twirp/…` path against the URL's host, dropping `/livekit/sfu` (**Run**:
+    `new URL('/twirp/x', 'https://h/livekit/sfu')` is `https://h/twirp/x`), a
+    path the matrix vhost answers 404 (**Read**, its nginx config). So mute
+    and remove could not reach LiveKit there. `LIVEKIT_INTERNAL_URL`, when set,
+    is where the API calls the room service; the single-server compose sets it
+    to `http://livekit:7880`. Clients are still given `LIVEKIT_URL`.
+    **Test:** V-26.
+-   **V9 — any 404 counted as "nobody connected" — fixed.**
+    `voiceModeration.ts` took any 404 from the room service for LiveKit saying
+    the participant was not there, so a misrouted removal (V8's 404, for one)
+    answered 200 `disconnected: false` while the person stayed in the call.
+    Only a Twirp error with code `not_found` counts now, the answer LiveKit
+    gives for a participant it does not have (**Read**:
+    `RoomService.RemoveParticipant`; in 1.11.0 through psrpc's `NotFound`,
+    which converts to Twirp's `not_found`). Any other 404 is 502
+    `livekit_unavailable`. **Test:** V-27.
+-   **V10 — a lock is not applied on arrival — open.** A token issued before a
+    lock, or one LiveKit refreshed for someone connected before it, still
+    connects to the locked room: a lock refuses new joins and tokens through
+    the API, nothing more. Applying it on arrival would need the participant's
+    role at that moment (a homeserver read per join), and would also turn away
+    someone who was in the room before the lock and whose connection merely
+    dropped. For the operator.
+-   **The API now sees every room on that LiveKit server.** LiveKit 1.8.4 has
+    no event filter, so it posts the events of every room it hosts, MatrixRTC
+    calls included. For those, lk-jwt-service 0.2.3 makes the LiveKit room the
+    Matrix room id the client asked for and the identity
+    `<Matrix user id>:<device id>` (**Read**, its `main.go`). The API reads
+    only the room name and the identity, of `participant_joined` and
+    `track_published`, keeps nothing about a room it did not create and logs
+    nothing about one; but the deliveries reach it, where before only LiveKit,
+    run by the same operator, held that. LiveKit 1.11.0 accepts
+    `webhook.filter_params.include_events`, which can cut the deliveries to the
+    two events the API uses (by event, not by room). For the operator: accept
+    it, or give the API's voice rooms a LiveKit server of their own.
+
+### What is covered, and what is not
+
+Covered, where LiveKit sends its webhooks: someone a moderator removed who
+connects again, with any token, is disconnected as soon as LiveKit reports it;
+someone muted who connects with a token that can publish, or who publishes, is
+muted and loses publishing as soon as LiveKit reports it; and a mute or removal
+LiveKit could not carry out when the moderator made it is applied at the
+person's next reported join or publish.
+
+Not covered:
+
+-   **Without the deployment change** nothing is different: the 2026-10-25
+    residual stands as written.
+-   **The moment before the API acts.** Between someone connecting and the API
+    acting on LiveKit's report they are in the room: a removed person can hear
+    it, and a muted one who publishes at once can be heard. LiveKit reports a
+    participant once the connection is up; the delivery and one or two
+    room-service calls follow. Not measured.
+-   **A client that never reconnects** keeps its connection until a moderator
+    acts. The moderation route mutes or disconnects the live participant
+    itself; if that call fails, the person stays until they rejoin, publish or
+    the moderator retries.
+-   **A lost report.** LiveKit drops a delivery its queue cannot hold (1.8.4)
+    or one that waited more than 30 seconds (1.11.0), and gives up on one after
+    four retries; the person then stays until their next reported join or
+    publish, or until a moderator acts. A removed person who does neither stays
+    connected, listening.
+-   **A lift racing the webhook.** An unmute that lands while the webhook is
+    applying the mute can be overtaken by it (the moderator unmutes again), and
+    someone readmitted in that moment can be disconnected once more (they
+    rejoin; nothing stands against them any longer).
+-   **More than 1,200 deliveries a minute** from LiveKit's address are refused
+    with 429, and LiveKit waits 60 seconds before retrying each.
+-   **Clocks apart.** A delivery is refused outside its signature's window,
+    which opens when LiveKit sends it and closes five minutes later: an API
+    clock more than ten seconds behind LiveKit's (or five minutes ahead)
+    refuses every delivery, with a 401 LiveKit does not retry. Containers on
+    one host share a clock; separate hosts need NTP.
+-   **A lock** (V10), and **rooms the API did not create**: not acted on.
+-   **Revocation.** The token stays valid: the API cannot stop the connection
+    being made, only end it.
+
+### Tests and mutation check
+
+-   **Test:** V-19 (a removed member back with a token from before the removal
+    is disconnected, asserted against the fake, and the removal is what is
+    applied though a mute also stands; a muted talker back with a token that
+    can publish has the audio muted and publishing taken away; both logged
+    under the moderator in the shape above; a reconnect LiveKit already holds
+    unable to publish is left alone; the sanctions are as the moderator left
+    them), V-20 (with LiveKit down, mute and remove answer 502; once it is
+    back, the talker's next `track_published` applies the mute and the
+    member's the removal), V-21 (no header, an empty one, another secret,
+    another API key, another delivery's signature, a body changed after
+    signing, a delivery that expired five minutes ago, and a participant's own
+    LiveKit token are 401 with nothing called or logged; a `Bearer` value is
+    refused by the auth middleware; an oversized body is 413; the same delivery
+    as LiveKit signed it then acts), V-22 (a report before the sanction is
+    written does nothing, and the moderation route disconnects the participant
+    itself; other events, another LiveKit room, a bystander, no participant and
+    a readmitted member do nothing), V-23 (a repeat of a delivery acted on does
+    nothing, twice, though the member has connected again; a new delivery
+    acts; one answered 502 is acted on when retried, and is then a repeat; one
+    removal stands throughout), V-24 (each of the three LiveKit variables
+    missing: 503, nothing called), V-25 (130 deliveries from one address are
+    not limited and leave its global bucket alone, which still stops the
+    address's 121st other request; the own bucket stops the 1,201st delivery,
+    for that address only), V-26 and V-27 (above).
+-   **Mutation check (run):** 29 mutations, each failing at least one of V-19
+    to V-27: verification skipped (`skipAuth`), the unverified acted on, no
+    503, no body limit, every event acted on, `track_published` or
+    `participant_joined` ignored, removals or mutes not looked up, a mute
+    before a removal, any room matching, the publish-permission check removed
+    or widened to a missing permission, no repeat check, ids kept for no time,
+    a failed delivery remembered, a failure answered 200, a removal applied as
+    a mute and the reverse, the entry logged under the participant, nothing
+    logged, the identity read from the participant's name; the webhook path
+    counted in the global bucket as well, every `/v1/voice` path left out of
+    it, no own bucket, an own bucket of 120; the room service built from
+    `LIVEKIT_URL`, `LIVEKIT_INTERNAL_URL` not read; and any 404 taken for
+    `not_found`.
+
+### Still unverified
+
+-   **A LiveKit server.** None was available, nor a Docker daemon. The
+    delivery's format, header and signature are read in LiveKit's source at the
+    versions above and reproduced in the tests with the SDK's own
+    `AccessToken`, which the SDK's verifier then checks as in production. That
+    LiveKit's servers send what that source says was not observed. LiveKit
+    Cloud was not looked at.
+-   **The single-server stack.** The RUNBOOK's checks were not run. That its
+    api container cannot reach the public address, and that the matrix vhost
+    answers `/twirp/…` with 404, are read from its compose file and nginx
+    config.
+-   **LiveKit's behaviour**, read, not run: the token refresh (five and ten
+    minutes), `participant_joined` once a participant is active, tracks
+    removed when publishing is taken away, the queue's drops and the retries'
+    timing.
+-   **The window** between a reconnect and the API acting on it, and **the
+    cost** of every room's events reaching the API: not measured.
+
+### Documentation corrected with this section
+
+-   `KNOWN_LIMITATIONS.md`: "Voice rooms in the API", for what the webhook
+    covers and what it does not, the deployment change it needs, and what it
+    gives the API.
+-   `THREAT_MODEL.md`: adversary A6; the B3 residual risk, since a two-minute
+    voice token opens a call that LiveKit keeps up with tokens of its own.
+-   `docs/black-mask-chat-panel-and-account-link.md`: the same, for a panel's
+    voice token.
+-   `packages/api/README.md`: the webhook route, the LiveKit configuration it
+    needs, `LIVEKIT_INTERNAL_URL` and `LIVEKIT_WEBHOOK_RATE_LIMIT_MAX`.
+-   `docs/operations/runbooks/townhall-livekit-coturn-provisioning.md` and
+    `infra/single-server-baseline/RUNBOOK.md`: the webhook in LiveKit's
+    configuration, and its checks.
+-   Comments: `LIVEKIT_TOKEN_TTL_SECONDS` in `services/livekit.ts`, the file
+    comment of `services/voiceModeration.ts` and the removal check in
+    `routes/voice.ts`.
 -   `TRUST.md` and `trust.html`: unchanged; they make no claim about voice
     rooms.

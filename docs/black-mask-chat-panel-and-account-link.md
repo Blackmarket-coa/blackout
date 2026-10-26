@@ -666,8 +666,9 @@ more:
 -   **What the session did while it was valid is not undone:** messages sent,
     rooms joined, and anything it created through the API that is meant to
     outlive a session (widget-alert tokens, outbound webhooks, OBS passwords
-    and similar), or a LiveKit voice token of up to two minutes, or an OpenID
-    token (above), that a modified client asked for.
+    and similar), or a LiveKit voice token of up to two minutes (and a call
+    joined with it, which LiveKit's server keeps up with ten-minute tokens of
+    its own), or an OpenID token (above), that a modified client asked for.
 -   **What stays in the browser:** at the end the panel deletes the device's
     sync cache and encryption stores (and, if the device still exists, signs
     it out on the server) — at once if it is open, otherwise the next time it

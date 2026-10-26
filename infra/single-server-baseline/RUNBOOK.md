@@ -143,6 +143,30 @@ config and the `lk-jwt` token bridge. After `docker compose up`, verify with
 `org.matrix.msc4143.rtc_foci` entry; the client's call UI reports
 `healthy` once the focus resolves.
 
+The same key pair signs LiveKit's webhook. The rendered `livekit/livekit.yaml`
+sends LiveKit's room events straight to the api container
+(`http://api:9000/v1/voice/livekit/webhook`), so that a voice-room mute or
+removal that stands is applied to anyone who connects again with a token
+issued before it; without them that connection stays until a moderator acts
+again (`packages/api/README.md`, "Voice rooms"). The api calls LiveKit back at
+`LIVEKIT_INTERNAL_URL` (`http://livekit:7880`, set in `docker-compose.yml`): it
+has no route to the public `LIVEKIT_PUBLIC_WS_URL`. LiveKit refuses to start
+when `webhook.api_key` is not one of its `keys`, so keep it
+`${LIVEKIT_API_KEY}`. After `docker compose up`, check both directions:
+
+```bash
+# LiveKit reaches the route: expect "401 Unauthorized" (an unsigned delivery is
+# refused); 503 means the api has no LIVEKIT_* values; anything else, no route.
+docker compose exec livekit wget -qSO- --post-data='{}' http://api:9000/v1/voice/livekit/webhook
+# The api reaches LiveKit's room service: expect "OK".
+docker compose exec api wget -qO- http://livekit:7880
+# Once someone has joined a call: LiveKit logs "sent webhook" for each delivery
+# answered at all, "failed to send webhook" for one it gave up on; the api logs
+# livekit_webhook_rejected for each it refused (expect none).
+docker compose logs livekit | grep -E 'sent webhook|failed to send webhook'
+docker compose logs api | grep livekit_webhook_rejected
+```
+
 ## 3) Initial TLS bootstrap
 
 Start reverse-proxy first for ACME challenge responses:

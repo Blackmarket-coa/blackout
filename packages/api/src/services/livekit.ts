@@ -15,15 +15,21 @@ export type VoiceRole = 'member' | 'moderator' | 'admin';
  * Two minutes leaves time to fetch the token, connect, and retry a first
  * connection that failed or dropped; it is a judgement, not a measurement.
  *
- * It is not a revocation. A token already issued stays valid until it expires,
- * and LiveKit's signal protocol lets the server hand a connected client a
- * refreshed token (`refresh_token`), whose lifetime the LiveKit server sets and
- * the API cannot shorten. So a removed participant whose client kept a valid
- * token can rejoin the LiveKit room with it until it expires (the SDK's
- * `removeParticipant`: "the participant can still re-join the room"); the API
- * refuses that account any new token. One constant on purpose: neither the
- * environment (`LIVEKIT_TOKEN_TTL_SECONDS` used to allow up to 15 minutes) nor
- * the request (`ttlSeconds`) can lengthen it.
+ * It is not a revocation, and it bounds only the API's own tokens. A token
+ * already issued stays valid until it expires, and a connected client gets
+ * tokens from LiveKit's server too (`refresh_token`): one as it connects and
+ * another every five minutes, each valid for ten (`tokenRefreshInterval` and
+ * `tokenDefaultTTL` in LiveKit server 1.8.4 and 1.11.0, the versions the repo
+ * deploys), which the API cannot shorten. So a removed participant whose
+ * client kept a valid token can connect to the room again until it expires
+ * (the SDK's `removeParticipant`: "the participant can still re-join the
+ * room"), and a muted one can reconnect with a token from before the mute and
+ * publish. When the LiveKit server sends its webhooks to the API, the API ends
+ * such a connection, or mutes it, as soon as LiveKit reports it
+ * (`services/livekitWebhook.ts`); without them it stays until a moderator acts
+ * again. Either way the API refuses that account any new token. One constant
+ * on purpose: neither the environment (`LIVEKIT_TOKEN_TTL_SECONDS` used to
+ * allow up to 15 minutes) nor the request (`ttlSeconds`) can lengthen it.
  */
 export const LIVEKIT_TOKEN_TTL_SECONDS = 120;
 
