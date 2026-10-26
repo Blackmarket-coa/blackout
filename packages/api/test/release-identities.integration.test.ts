@@ -282,6 +282,40 @@ test('at most 3 new identities in any 24 hours, then 429 with when to try again'
     assert.equal(db.listReleaseIdentitiesForAccount(user.id).length, 4);
 });
 
+test('with more than 3 identities in the window, Retry-After waits until enough have left it', async () => {
+    // Replicas racing past the limit can leave four or more rows inside the
+    // window; a publish fits again only once fewer than three remain.
+    const user = seedUser();
+    const hour = 3600 * 1000;
+    const ages = [20, 10, 5, 1].map((hours) => hours * hour);
+    for (const [i, age] of ages.entries()) {
+        const record = db.publishReleaseIdentity({
+            id: randomUUID(),
+            accountId: user.id,
+            formatVersion: 1,
+            signingKey: 'seeded',
+            x25519Key: 'seeded',
+            mlkem768Key: 'seeded',
+            signature: 'seeded',
+            fingerprint: `${i}`.padStart(64, 'a'),
+        });
+        db.releaseIdentities.set(record.id, {
+            ...record,
+            publishedAt: new Date(Date.now() - age).toISOString(),
+        });
+    }
+    const res = await publish(user, await freshIdentity(user.id));
+    assert.equal(res.status, 429);
+    const { retryAfterSeconds } = (await res.json()) as { retryAfterSeconds: number };
+    // The second oldest (10 hours old) must leave: 14 hours, not the 4 hours
+    // after which the oldest alone leaves and three are still inside.
+    assert.ok(
+        Math.abs(retryAfterSeconds - 14 * 3600) <= 5,
+        `expected about 14 hours, got ${retryAfterSeconds} s`
+    );
+    assert.equal(res.headers.get('retry-after'), String(retryAfterSeconds));
+});
+
 test('the history keeps every identity, and only a storage bound of 1000 stops publishing', async () => {
     assert.equal(protocol.RELEASE_IDENTITY_STORAGE_LIMIT, 1000);
     const user = seedUser();

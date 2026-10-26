@@ -83,13 +83,15 @@ const PUBLISH_WINDOW_MS = 24 * 60 * 60 * 1000;
 /**
  * Publish `input` as `accountId`'s release identity. An identity equal to
  * the current one changes nothing. Any other identity the account published
- * before is refused (`reused`): a replaced identity is never made current
- * again, whoever asks, so a stolen session cannot put back a key its owner
- * replaced after losing a device (the independent review's H1). A new one
- * becomes current and the old one is kept as superseded, every one of them:
- * the history is what that refusal reads. At most
- * `RELEASE_IDENTITY_PUBLISHES_PER_DAY` new identities in any 24 hours
- * (`rate_limited`, with when the oldest of them leaves the window), and at
+ * before is refused (`reused`), whoever asks: an identity this server has
+ * seen is never made current again, so a stolen session cannot put back a
+ * published key its owner replaced (the independent review's H1). An older
+ * key the server never saw is a new identity to it: identity v1 carries no
+ * sequence number or time, so nothing here can tell that it is older (the
+ * re-check's N1). A new one becomes current and the old one is kept as
+ * superseded, every one of them: the history is what the refusal reads. At
+ * most `RELEASE_IDENTITY_PUBLISHES_PER_DAY` new identities in any 24 hours
+ * (`rate_limited`, with how long until one more fits in the window), and at
  * most `RELEASE_IDENTITY_STORAGE_LIMIT` in all (`limit`), a bound on storage
  * only.
  */
@@ -121,9 +123,14 @@ export const publishReleaseIdentity = async (
     const at = now().getTime();
     const recent = history
         .map((record) => Date.parse(record.publishedAt))
-        .filter((publishedAt) => publishedAt > at - PUBLISH_WINDOW_MS);
+        .filter((publishedAt) => publishedAt > at - PUBLISH_WINDOW_MS)
+        .sort((a, b) => a - b);
     if (recent.length >= RELEASE_IDENTITY_PUBLISHES_PER_DAY) {
-        const opensAt = Math.min(...recent) + PUBLISH_WINDOW_MS;
+        // A publish fits again once fewer than the limit remain in the window,
+        // which is when the (n - limit + 1)-th oldest leaves it. Usually n is
+        // the limit and that is the oldest; replicas racing can leave more.
+        const opensAt =
+            recent[recent.length - RELEASE_IDENTITY_PUBLISHES_PER_DAY] + PUBLISH_WINDOW_MS;
         return {
             kind: 'rate_limited',
             retryAfterSeconds: Math.max(1, Math.ceil((opensAt - at) / 1000)),
