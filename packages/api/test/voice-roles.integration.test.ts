@@ -1650,3 +1650,37 @@ test("V-26: the API calls LiveKit's room service at LIVEKIT_INTERNAL_URL when it
         delete process.env.LIVEKIT_INTERNAL_URL;
     }
 });
+
+test("V-27: only LiveKit's own not_found means nobody was there to act on; any other 404 means LiveKit was not reached", async () => {
+    const { canopyId, moderator, member } = seedCanopy();
+    const { channelId } = seedRoom(canopyId);
+    await joinAs(member, canopyId, channelId);
+    // What LiveKit answers for a participant who is not in the room...
+    const livekitNotFound = () =>
+        Response.json({ code: 'not_found', msg: 'participant not found' }, { status: 404 });
+    // ...and what a proxy answers for a path it does not route.
+    const proxyNotFound = () =>
+        new Response('<html><body>404 Not Found</body></html>', {
+            status: 404,
+            headers: { 'content-type': 'text/html' },
+        });
+    const remove = () =>
+        post('/rooms/moderation/remove', moderator, {
+            canopyId,
+            channelId,
+            targetUserId: member.id,
+        });
+
+    let res: Response | undefined;
+    await withRealRoomService(livekitNotFound, async () => {
+        res = await remove();
+    });
+    assert.equal(res!.status, 200);
+    assert.deepEqual(((await res!.json()) as { livekit: unknown }).livekit, {
+        disconnected: false,
+    });
+    await withRealRoomService(proxyNotFound, async () => {
+        res = await remove();
+    });
+    assert.deepEqual(await refusal(res!), { status: 502, code: 'livekit_unavailable' });
+});

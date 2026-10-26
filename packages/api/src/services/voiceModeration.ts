@@ -46,9 +46,15 @@ export type LiveKitRemoveOutcome =
     | { ok: true; disconnected: boolean }
     | { ok: false; reason: LiveKitModerationFailure; detail?: string };
 
-/** LiveKit's answer for a room, participant or track that is not there (Twirp `not_found`, HTTP 404). */
+/**
+ * LiveKit's answer for a room, participant or track that is not there: a Twirp
+ * error whose code is `not_found` (with HTTP 404). A 404 without that code is
+ * not LiveKit saying so; it is whatever answered instead (a proxy's page for a
+ * path it does not route, say), so LiveKit was not reached and nothing is known
+ * about who is connected.
+ */
 const isNotFound = (error: unknown): boolean =>
-    error instanceof TwirpError && (error.status === 404 || error.code === 'not_found');
+    error instanceof TwirpError && error.code === 'not_found';
 
 const unavailable = (
     action: string,
