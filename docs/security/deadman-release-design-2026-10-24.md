@@ -669,7 +669,7 @@ BO-1.
         triage record (N2 decided, linking here; D4 and D6 closed; the
         recipient-metadata finding); the C1 note in
         `docs/audits/pre-launch-readiness-audit-2026-07.md`.
-2.  **Release identities.** Migration 104 (103 is held by an open branch).
+2.  **Release identities.** Migration 104 (103 is #983's).
     -   Protocol and SDK: a `release` module in `packages/blackout-protocol`
         with the identity, its canonical bytes and fingerprint, the safety code
         over two identities, and fixed test vectors. It uses the dead-drop
@@ -738,9 +738,9 @@ if one is wanted, with its own threat model.
 progress holds a 103 today, but parallel work may take it first, so each PR
 takes the next free number when it merges.
 
-_2026-10-26:_ an open branch holds `103_voice_room_sanctions`, so PR 2
-takes ordinal 104. The runner records applied migrations by id, so a gap at
-103 on `develop` is harmless until that branch merges.
+_2026-10-26:_ #983 merged `103_voice_room_sanctions` into `develop`, so PR 2
+takes ordinal 104, and PR 3 and PR 5 each take the next free number when they
+merge.
 
 ### Existing switches
 
