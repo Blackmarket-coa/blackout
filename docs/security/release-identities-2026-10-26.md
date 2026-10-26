@@ -555,13 +555,15 @@ would be identity v2.
     (409 `release_identity_limit`, a bound on storage only); the first
     build's cap of 32, which locked an account for good, is gone (M2). Every
     miss gets the same 404. Table `release_identities`, migration 104 (103 is
-    #983's), wired through the memory, file and Postgres stores and
-    `pgDescriptors.ts`: publishing writes the superseded row before the new
-    one; account deletion blanks the account's rows one targeted upsert at
-    a time (`eraseReleaseIdentity`: keys, signature, fingerprint and account
-    id go; the id, format version and times stay), as PR 1 does for
-    dead-man switches, rather than resyncing the table (L6); the account
-    export lists them.
+    #983's, and 105 is #987's, which reached `develop` first: the runner
+    applies every migration `schema_migrations` does not list, so 104 also
+    runs on a database that already has 105), wired through the memory, file
+    and Postgres stores and `pgDescriptors.ts`: publishing writes the
+    superseded row before the new one; account deletion blanks the account's
+    rows one targeted upsert at a time (`eraseReleaseIdentity`: keys,
+    signature, fingerprint and account id go; the id, format version and
+    times stay), as PR 1 does for dead-man switches, rather than resyncing
+    the table (L6); the account export lists them.
 -   **Client:** Settings → Account & identity → Release keys
     (`apps/blackout-client/src/app/features/release-keys/`), for every
     account, behind no flag: create and publish keys on this device (the

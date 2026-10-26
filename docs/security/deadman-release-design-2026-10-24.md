@@ -682,7 +682,7 @@ BO-1.
         triage record (N2 decided, linking here; D4 and D6 closed; the
         recipient-metadata finding); the C1 note in
         `docs/audits/pre-launch-readiness-audit-2026-07.md`.
-2.  **Release identities.** Migration 104 (103 is #983's).
+2.  **Release identities.** Migration 104 (103 is #983's, 105 #987's).
     -   Protocol and SDK: a `release` module in `packages/blackout-protocol`
         with the identity, its canonical bytes and fingerprint, the safety code
         over two identities, and fixed test vectors. It uses the dead-drop
