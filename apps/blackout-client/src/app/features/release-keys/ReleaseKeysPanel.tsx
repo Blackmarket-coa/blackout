@@ -17,7 +17,12 @@ import {
     type ReleaseRecoveryContents,
     type StoredReleaseKeySet,
 } from '@blackout/protocol';
-import { BlackoutSdkError, createReleaseIdentityActions, type ApiClient } from '@blackout/sdk';
+import {
+    BlackoutSdkError,
+    createAuthActions,
+    createReleaseIdentityActions,
+    type ApiClient,
+} from '@blackout/sdk';
 import {
     currentKeySet,
     indexedDbReleaseKeyStore,
@@ -96,13 +101,52 @@ export const RELEASE_KEYS_LISTING =
     'on this server can see that you have release keys, and when you change them. The listing ' +
     'stays until your account is deleted; there is no way to unpublish.';
 
-/** When someone replaces their keys: what else to do. */
+/**
+ * When someone replaces their keys: what else to do. New keys sign nothing
+ * out, and a device that is still signed in can publish keys of its own in
+ * place of the new ones, so ending its access comes first (the re-check's N2).
+ */
 export const RELEASE_KEYS_REPLACE_GUIDANCE =
-    'If you are replacing them because a device was lost, or someone else may have it: sign ' +
-    'that device out of your account (from a Matrix client that lists your sessions, or by ' +
-    'resetting your password with “Sign out of other devices”), and tell the people you ' +
-    'compared codes with, in person or on a call and not over Blackout, that your key changed, ' +
-    'so that they compare again.';
+    'If you are replacing them because a device was lost, or someone else may have it: new ' +
+    "keys don't sign that device out, and while it is signed in it can publish keys of its " +
+    'own in place of yours, so first do what “If a device is lost” below says. Then tell the ' +
+    'people you compared codes with, in person or on a call and not over Blackout, that your ' +
+    'key changed, so that they compare again.';
+
+/**
+ * What ends a lost device's access, and what each step ends (the re-check's
+ * N2). A device has a Matrix session and Blackout API sessions, and a device
+ * still signed in to Matrix gets a new Blackout session by exchanging its
+ * Matrix token, so the Matrix step comes first.
+ */
+export const RELEASE_KEYS_LOST_DEVICE: readonly string[] = [
+    'A lost device keeps the access to your account it had until you end it. It has two ' +
+        'kinds of session, and each step below ends only one kind.',
+    'First its Matrix session: sign that device out from a Matrix client that lists your ' +
+        'account’s sessions, or reset your password with “Sign out of other devices”. Until ' +
+        'then it can keep getting new Blackout sessions by itself.',
+    'Then its Blackout sessions: use “Sign out every Blackout session” below.',
+    "If your account was made with an email and password through Blackout's API rather " +
+        'than in this app, that API keeps its own password, which a Matrix password reset ' +
+        "doesn't change, and anyone who knows it can start new Blackout sessions. This app " +
+        'has no screen to change it.',
+    'If the device held your release keys, whoever has it may have them too: then create ' +
+        'new ones above.',
+];
+
+/** The revoke-all button and what it does (`POST /v1/auth/sessions/revoke`). */
+export const REVOKE_ALL_SESSIONS = 'Sign out every Blackout session';
+
+export const REVOKE_ALL_SESSIONS_CONFIRM =
+    'This ends every Blackout session your account has right now, on every device, this one ' +
+    "included: Blackout's server revokes their refresh tokens and refuses their API tokens. " +
+    'It ends no Matrix session, and a device still signed in to Matrix, this one included, ' +
+    'gets a new Blackout session by itself. So sign the lost device out of Matrix first, or ' +
+    "this won't keep it out.";
+
+export const REVOKE_ALL_SESSIONS_DONE =
+    'Every Blackout session your account had was ended. This device gets a new one from its ' +
+    'Matrix session when it next needs one.';
 
 /**
  * H1 of the independent review: when the server holds a release key for this
@@ -287,7 +331,7 @@ type Comparing =
     | { status: 'recorded'; matrixId: string }
     | { status: 'rejected'; matrixId: string };
 
-type Confirming = 'replace' | 'remove' | null;
+type Confirming = 'replace' | 'remove' | 'revoke' | null;
 
 type AskPlan = Extract<RecoveryLoadPlan, { kind: 'ask' }>;
 
@@ -598,6 +642,22 @@ export const ReleaseKeysPanel = ({
             });
         } catch (cause) {
             setNotice({ tone: 'error', text: `Removing them failed: ${errorText(cause)}` });
+        } finally {
+            setBusy(null);
+        }
+    };
+
+    const revokeAllSessions = async () => {
+        setConfirming(null);
+        setBusy('revoke');
+        try {
+            await createAuthActions(apiClient).revokeAllSessions();
+            setNotice({ tone: 'info', text: REVOKE_ALL_SESSIONS_DONE });
+        } catch (cause) {
+            setNotice({
+                tone: 'error',
+                text: `Signing out every Blackout session failed: ${errorText(cause)}`,
+            });
         } finally {
             setBusy(null);
         }
@@ -1018,6 +1078,36 @@ export const ReleaseKeysPanel = ({
                                         Keep them
                                     </button>
                                 </div>
+                            )}
+                        </div>
+
+                        <div style={sectionStyle}>
+                            <h3 style={{ marginTop: 0 }}>If a device is lost</h3>
+                            {RELEASE_KEYS_LOST_DEVICE.map((line) => (
+                                <p key={line}>{line}</p>
+                            ))}
+                            {confirming === 'revoke' ? (
+                                <div
+                                    role="group"
+                                    aria-label="Confirm signing out every Blackout session"
+                                    style={sectionStyle}
+                                >
+                                    <p>{REVOKE_ALL_SESSIONS_CONFIRM}</p>
+                                    <button type="button" onClick={() => void revokeAllSessions()}>
+                                        Sign them all out
+                                    </button>{' '}
+                                    <button type="button" onClick={() => setConfirming(null)}>
+                                        Cancel
+                                    </button>
+                                </div>
+                            ) : (
+                                <button
+                                    type="button"
+                                    disabled={working}
+                                    onClick={() => setConfirming('revoke')}
+                                >
+                                    {REVOKE_ALL_SESSIONS}
+                                </button>
                             )}
                         </div>
 

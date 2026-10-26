@@ -34,6 +34,7 @@ import {
     rolledBackWarning,
     RELEASE_KEYS_BROWSER,
     RELEASE_KEYS_LISTING,
+    RELEASE_KEYS_LOST_DEVICE,
     RELEASE_KEYS_LOSS,
     RELEASE_KEYS_PURPOSE,
     RELEASE_KEYS_REPLACE_GUIDANCE,
@@ -41,6 +42,9 @@ import {
     RELEASE_KEYS_SIGN_OUT,
     RELEASE_KEYS_UNSUPPORTED,
     ReleaseKeysPanel,
+    REVOKE_ALL_SESSIONS,
+    REVOKE_ALL_SESSIONS_CONFIRM,
+    REVOKE_ALL_SESSIONS_DONE,
 } from '../../../../src/app/features/release-keys/ReleaseKeysPanel';
 import {
     currentKeySet,
@@ -111,6 +115,9 @@ const fakeApi = (options: {
                 );
             mine = entryFor(mine.accountId, mine.matrixId ?? '', identity, check.fingerprint);
             return { ...mine, changed: true } as T;
+        }
+        if (request.method === 'POST' && request.path === '/v1/auth/sessions/revoke') {
+            return { ok: true, refreshTokensRevoked: 2 } as T;
         }
         if (request.method === 'POST' && request.path === '/v1/release-identities/lookup') {
             const { matrixId } = request.body as { matrixId: string };
@@ -621,8 +628,20 @@ describe('Settings → Release keys', () => {
         );
         await click('Create and publish new release keys');
         expect(text()).toContain(RELEASE_KEYS_REPLACE_GUIDANCE);
-        expect(RELEASE_KEYS_REPLACE_GUIDANCE).toContain('sign that device out of your account');
+        // N2 of the re-check: new keys sign nothing out, so the lost device's
+        // sessions are ended first, as the section below says.
+        expect(RELEASE_KEYS_REPLACE_GUIDANCE).toContain("new keys don't sign that device out");
+        expect(RELEASE_KEYS_REPLACE_GUIDANCE).toContain(
+            'first do what “If a device is lost” below says'
+        );
         expect(RELEASE_KEYS_REPLACE_GUIDANCE).toContain('not over Blackout, that your key changed');
+        // The section it points to is there, below, with the sign-out button.
+        const headings = Array.from(container.querySelectorAll('h3'), (h) => h.textContent);
+        expect(headings.indexOf('If a device is lost')).toBeGreaterThan(
+            headings.indexOf('Your keys on this device')
+        );
+        expect(headings.indexOf('Your keys on this device')).toBeGreaterThanOrEqual(0);
+        expect(button(REVOKE_ALL_SESSIONS)).toBeTruthy();
         await click('Create and publish new keys');
         await waitFor(
             () => Boolean(container.querySelector('[data-testid="replace-guidance"]')),
@@ -701,6 +720,33 @@ describe('Settings → Release keys', () => {
         for (const field of fields) expect(field.getAttribute('autocomplete')).toBe('off');
         // L4: browsers may offer to save it anyway, so the screen says to refuse.
         expect(text()).toContain(RECOVERY_PASSPHRASE_DONT_SAVE);
+    });
+
+    it('signs out every Blackout session only once confirmed, and says what that ends', async () => {
+        await deviceWithAlice();
+        const { client, requests } = fakeApi({ mine: aliceMine(true) });
+        await render({ apiClient: client });
+        await waitFor(() => text().includes(REVOKE_ALL_SESSIONS), 'the button');
+        for (const line of RELEASE_KEYS_LOST_DEVICE) expect(text()).toContain(line);
+        const revokes = () =>
+            requests.filter((request) => request.path === '/v1/auth/sessions/revoke');
+
+        await click(REVOKE_ALL_SESSIONS);
+        expect(text()).toContain(REVOKE_ALL_SESSIONS_CONFIRM);
+        // N2 of the re-check: the route ends the caller's own API session
+        // too, and no Matrix session, and a device still signed in to Matrix
+        // gets a new Blackout session by itself.
+        expect(REVOKE_ALL_SESSIONS_CONFIRM).toContain('on every device, this one included');
+        expect(REVOKE_ALL_SESSIONS_CONFIRM).toContain('It ends no Matrix session');
+        expect(REVOKE_ALL_SESSIONS_CONFIRM).toContain('sign the lost device out of Matrix first');
+        expect(revokes()).toHaveLength(0);
+        await click('Cancel');
+        expect(revokes()).toHaveLength(0);
+
+        await click(REVOKE_ALL_SESSIONS);
+        await click('Sign them all out');
+        await waitFor(() => text().includes(REVOKE_ALL_SESSIONS_DONE), 'the note');
+        expect(revokes()).toEqual([{ method: 'POST', path: '/v1/auth/sessions/revoke', body: {} }]);
     });
 
     // M4 (independent review, 2026-10-26): an older recovery file does not
