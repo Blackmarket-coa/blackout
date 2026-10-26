@@ -347,7 +347,12 @@ jobs:
 
     e2e-smoke:
         name: Client e2e smoke (Playwright / chromium)
-        runs-on: ubuntu-latest
+        # Pinned, not ubuntu-latest: `playwright install --with-deps` needs an OS
+        # the locked Playwright knows. ubuntu-latest now resolves to 26.04 (first
+        # failing here on 2026-10-25), which Playwright 1.58.2 refuses ("does not
+        # support chromium on ubuntu26.04-x64"). visual-regression.yml avoids this by running in the
+        # pinned mcr.microsoft.com/playwright image. Move this when Playwright is bumped.
+        runs-on: ubuntu-24.04
         timeout-minutes: 20
         steps:
             - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
@@ -381,7 +386,12 @@ jobs:
 
     nav-audit:
         name: Navigation audit (Playwright + crawler + mobile)
-        runs-on: ubuntu-latest
+        # Pinned, not ubuntu-latest: `playwright install --with-deps` needs an OS
+        # the locked Playwright knows. ubuntu-latest now resolves to 26.04 (first
+        # failing here on 2026-10-25), which Playwright 1.58.2 refuses ("does not
+        # support chromium on ubuntu26.04-x64"). visual-regression.yml avoids this by running in the
+        # pinned mcr.microsoft.com/playwright image. Move this when Playwright is bumped.
+        runs-on: ubuntu-24.04
         timeout-minutes: 25
         steps:
             - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
