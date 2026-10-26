@@ -50,10 +50,14 @@ const accountLookup = async (url: string, token: string, userId: string) => {
 
 /**
  * The admin PUT answers 201 when it created the account and 200 when it
- * updated one that already had the id, which here means one appeared after the
- * lookup. That is refused like a name the homeserver already had, and logged
- * as an error because the existing account was changed. Undefined for any
- * other status.
+ * updated one that already had the id — here, one that appeared in the window
+ * between the lookup and the PUT. The caller is refused as for a name the
+ * homeserver already had. One caveat the refusal cannot cover: the PUT has
+ * already run, so it has written to that existing account (a password reset,
+ * per the admin API); refusing the caller does not undo that write. The error
+ * log is the signal for an operator to look. The window is narrow — two bot
+ * admin calls back to back — and holds only when a concurrent creation lands
+ * inside it. Undefined for any other status.
  */
 const updatedInsteadOfCreated = (status: number, userId: string) => {
     if (status !== 200) return undefined;
