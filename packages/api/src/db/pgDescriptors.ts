@@ -601,6 +601,7 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
     revokeRefreshTokenFamily: resync('refreshTokens'),
     revokeRefreshTokensForUser: resync('refreshTokens'),
     revokeSession: upsert('revokedSessions'),
+    pruneExpiredRevokedSessions: resync('revokedSessions'),
     createMessage: upsert('messages'),
     createVote: upsert('votes'),
     castVote: upsert('voteEntries'),

@@ -6429,6 +6429,12 @@ export class FileBackedDb extends InMemoryDb {
         return record;
     }
 
+    override pruneExpiredRevokedSessions(now: Date = new Date()): number {
+        const removed = super.pruneExpiredRevokedSessions(now);
+        if (removed > 0) this.persist();
+        return removed;
+    }
+
     override upsertCanopyDirectoryEntry(
         input: Omit<CanopyDirectoryEntryRecord, 'indexedAt'>
     ): CanopyDirectoryEntryRecord {
@@ -7034,6 +7040,12 @@ export class FileBackedDb extends InMemoryDb {
 
     override prunePendingOAuthLinks(now: Date = new Date()): number {
         const removed = super.prunePendingOAuthLinks(now);
+        if (removed > 0) this.persist();
+        return removed;
+    }
+
+    override prunePendingOidcLogins(now: Date = new Date()): number {
+        const removed = super.prunePendingOidcLogins(now);
         if (removed > 0) this.persist();
         return removed;
     }

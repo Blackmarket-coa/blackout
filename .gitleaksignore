@@ -36,3 +36,11 @@ eff3f80589879b156a2378743f3c42e2ce7314f1:packages/api/test/github-issues.integra
 #    fixture.
 7d97c67571d48d7e3f06138aff8501b19e9b4d7a:apps/blackout-client/tests/unit/features/monetization/pluginInstaller.codePlugin.test.ts:generic-api-key:18
 7d97c67571d48d7e3f06138aff8501b19e9b4d7a:apps/blackout-client/tests/unit/features/monetization/pluginInstaller.codePluginGate.test.ts:generic-api-key:18
+
+# 5) Not a value at all: a code comment in the message endpoint said
+#    accounts have no signing key, then (after a colon) named the user
+#    record's Ed25519 public-key field, and generic-api-key read the field
+#    name as a key value. The comment is reworded in a later commit so edits
+#    to it do not reintroduce the flag. See the F3 entry in
+#    docs/security/api-findings-triage-2026-10-25.md.
+9aafe6c971ba584305186633e73c1a73ab78c008:packages/api/src/routes/messages.ts:generic-api-key:116

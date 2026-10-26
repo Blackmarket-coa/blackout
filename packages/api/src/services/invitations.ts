@@ -226,90 +226,10 @@ export const redeemInvitation = async (
         return evaluateInvitation(refreshed) as RedeemOutcome;
     }
 
-    let matrixInvite: { ok: boolean } | undefined;
-    let canopyId: string | undefined;
-    if (updated.matrixRoomId) {
-        const matrixUserId = matrixUserIdFor(redeemer.username);
-
-        // Resolve the canopy (parent space) FIRST: a den created inside a canopy
-        // that is not public is `restricted` to it (the client's
-        // `createDenInCanopy` and `CreateRoomForm` write that rule; a den in a
-        // public canopy is public by default in the Blackout app, and dens made
-        // before 2026-10 are invite-only), so the redeemer must be admitted to
-        // the CANOPY before such a den is
-        // joinable. A Synapse admin-join does NOT bypass the restricted rule —
-        // membership in the canopy is what unlocks the den.
-        const parent = await matrixClient.getRoomParentSpace(updated.matrixRoomId);
-        if (parent.ok) {
-            canopyId = parent.canopyId;
-        } else {
-            log.warn('invite.redeem.canopy_unresolved', {
-                roomId: updated.matrixRoomId,
-                status: 'status' in parent ? parent.status : undefined,
-                reason: 'reason' in parent ? parent.reason : undefined,
-            });
-        }
-
-        // 1) Admit the redeemer to the canopy (the bot was force-joined to the
-        //    canopy at link-creation, so it can invite/admit here). Skipped when
-        //    the den has no distinct canopy (orphan den, or the den is the space).
-        let canopyJoin: Awaited<ReturnType<typeof matrixClient.adminJoinUserToRoom>> | undefined;
-        if (canopyId && canopyId !== updated.matrixRoomId) {
-            canopyJoin = await matrixClient.adminJoinUserToRoom(canopyId, matrixUserId);
-            if (!canopyJoin.ok) {
-                log.warn('invite.redeem.canopy_join_failed', {
-                    canopyId,
-                    userId: matrixUserId,
-                    status: 'status' in canopyJoin ? canopyJoin.status : undefined,
-                    reason: 'reason' in canopyJoin ? canopyJoin.reason : undefined,
-                    detail: 'detail' in canopyJoin ? canopyJoin.detail : undefined,
-                });
-            }
-        }
-
-        // 2) Admit to the den itself — now allowed by the restricted rule once the
-        //    redeemer is in the canopy. Fall back to a bot invite if admin-join fails.
-        const join = await matrixClient.adminJoinUserToRoom(updated.matrixRoomId, matrixUserId);
-        let invite: Awaited<ReturnType<typeof matrixClient.inviteToRoom>> | undefined;
-        if (join.ok) {
-            matrixInvite = { ok: true };
-        } else {
-            invite = await matrixClient.inviteToRoom(
-                updated.matrixRoomId,
-                matrixUserId,
-                'Invitation link redeemed'
-            );
-            matrixInvite = { ok: invite.ok };
-        }
-
-        // Redemption survives Matrix failure, but if we couldn't admit the redeemer
-        // they'll be stranded. Log the exact Synapse status/body for each step so
-        // the failure mode (e.g. bot not a member of the canopy) is visible.
-        if (!matrixInvite.ok) {
-            log.warn('invite.redeem.matrix_admit_failed', {
-                roomId: updated.matrixRoomId,
-                canopyId,
-                userId: matrixUserId,
-                canopyJoinStatus:
-                    canopyJoin && 'status' in canopyJoin ? canopyJoin.status : undefined,
-                canopyJoinDetail:
-                    canopyJoin && 'detail' in canopyJoin ? canopyJoin.detail : undefined,
-                adminJoinStatus: 'status' in join ? join.status : undefined,
-                adminJoinReason: 'reason' in join ? join.reason : undefined,
-                adminJoinDetail: 'detail' in join ? join.detail : undefined,
-                inviteStatus: invite && 'status' in invite ? invite.status : undefined,
-                inviteReason: invite && 'reason' in invite ? invite.reason : undefined,
-                inviteDetail: invite && 'detail' in invite ? invite.detail : undefined,
-            });
-        } else {
-            log.info('invite.redeem.matrix_admitted', {
-                roomId: updated.matrixRoomId,
-                canopyId,
-                canopyJoined: canopyJoin?.ok,
-                via: join.ok ? 'admin_join' : 'invite',
-            });
-        }
-    }
+    const { matrixInvite, canopyId } = await admitInvitedMatrixUser(
+        updated,
+        matrixUserIdFor(redeemer.username)
+    );
 
     db.createInvitationRedemption({
         id: randomUUID(),
@@ -331,6 +251,130 @@ export const redeemInvitation = async (
     }
 
     return { kind: 'ok', record: updated, matrixInvite, canopyId };
+};
+
+/**
+ * Consume one use of an invitation for a Matrix account that has no Blackout
+ * row yet: the account-number sign-up (`POST /v1/auth/account-number`) mints a
+ * Matrix account only, and its Blackout row is created lazily on the first
+ * token exchange. So there is no redeemer to record a redemption for, to
+ * follow the inviter from, or to check self-redemption against. What the
+ * invite gate rests on is the use count, incremented atomically exactly as in
+ * `redeemInvitation`; a room-bound invitation admits the new Matrix account.
+ * Until 2026-10-25 that sign-up path had no invite gate at all (D3 in
+ * docs/black-mask-account-link-design.md §7).
+ */
+export const redeemInvitationForMatrixUser = async (
+    presentedToken: string,
+    matrixUserId: string
+): Promise<RedeemOutcome> => {
+    const tokenRecord = db.findInvitationTokenByHash(sha256(presentedToken));
+    if (!tokenRecord) return { kind: 'invalid' };
+
+    const status = evaluateInvitation(tokenRecord);
+    if (status.kind !== 'ok') return status;
+
+    const updated = db.incrementInvitationTokenUseCount(tokenRecord.id);
+    if (!updated) {
+        const refreshed = db.getInvitationTokenById(tokenRecord.id);
+        if (!refreshed) return { kind: 'invalid' };
+        return evaluateInvitation(refreshed) as RedeemOutcome;
+    }
+
+    const { matrixInvite, canopyId } = await admitInvitedMatrixUser(updated, matrixUserId);
+    return { kind: 'ok', record: updated, matrixInvite, canopyId };
+};
+
+/**
+ * Admit a Matrix user to the room an invitation is bound to, if any. The
+ * canopy (parent space) comes FIRST: a den created inside a canopy that is not
+ * public is `restricted` to it (the client's `createDenInCanopy` and
+ * `CreateRoomForm` write that rule; a den in a public canopy is public by
+ * default in the Blackout app, and dens made before 2026-10 are invite-only),
+ * so the redeemer must be admitted to the canopy before such a den is
+ * joinable. A Synapse admin-join does NOT bypass the restricted rule —
+ * membership in the canopy is what unlocks the den. Best-effort: the
+ * redemption is already durable, and a Matrix failure is logged in full so a
+ * stranded redeemer is visible.
+ */
+const admitInvitedMatrixUser = async (
+    token: InvitationTokenRecord,
+    matrixUserId: string
+): Promise<{ matrixInvite?: { ok: boolean }; canopyId?: string }> => {
+    if (!token.matrixRoomId) return {};
+
+    let canopyId: string | undefined;
+    const parent = await matrixClient.getRoomParentSpace(token.matrixRoomId);
+    if (parent.ok) {
+        canopyId = parent.canopyId;
+    } else {
+        log.warn('invite.redeem.canopy_unresolved', {
+            roomId: token.matrixRoomId,
+            status: 'status' in parent ? parent.status : undefined,
+            reason: 'reason' in parent ? parent.reason : undefined,
+        });
+    }
+
+    // 1) Admit the redeemer to the canopy (the bot was force-joined to the
+    //    canopy at link-creation, so it can invite/admit here). Skipped when
+    //    the den has no distinct canopy (orphan den, or the den is the space).
+    let canopyJoin: Awaited<ReturnType<typeof matrixClient.adminJoinUserToRoom>> | undefined;
+    if (canopyId && canopyId !== token.matrixRoomId) {
+        canopyJoin = await matrixClient.adminJoinUserToRoom(canopyId, matrixUserId);
+        if (!canopyJoin.ok) {
+            log.warn('invite.redeem.canopy_join_failed', {
+                canopyId,
+                userId: matrixUserId,
+                status: 'status' in canopyJoin ? canopyJoin.status : undefined,
+                reason: 'reason' in canopyJoin ? canopyJoin.reason : undefined,
+                detail: 'detail' in canopyJoin ? canopyJoin.detail : undefined,
+            });
+        }
+    }
+
+    // 2) Admit to the den itself — now allowed by the restricted rule once the
+    //    redeemer is in the canopy. Fall back to a bot invite if admin-join fails.
+    const join = await matrixClient.adminJoinUserToRoom(token.matrixRoomId, matrixUserId);
+    let invite: Awaited<ReturnType<typeof matrixClient.inviteToRoom>> | undefined;
+    let matrixInvite: { ok: boolean };
+    if (join.ok) {
+        matrixInvite = { ok: true };
+    } else {
+        invite = await matrixClient.inviteToRoom(
+            token.matrixRoomId,
+            matrixUserId,
+            'Invitation link redeemed'
+        );
+        matrixInvite = { ok: invite.ok };
+    }
+
+    // Redemption survives Matrix failure, but if we couldn't admit the redeemer
+    // they'll be stranded. Log the exact Synapse status/body for each step so
+    // the failure mode (e.g. bot not a member of the canopy) is visible.
+    if (!matrixInvite.ok) {
+        log.warn('invite.redeem.matrix_admit_failed', {
+            roomId: token.matrixRoomId,
+            canopyId,
+            userId: matrixUserId,
+            canopyJoinStatus: canopyJoin && 'status' in canopyJoin ? canopyJoin.status : undefined,
+            canopyJoinDetail: canopyJoin && 'detail' in canopyJoin ? canopyJoin.detail : undefined,
+            adminJoinStatus: 'status' in join ? join.status : undefined,
+            adminJoinReason: 'reason' in join ? join.reason : undefined,
+            adminJoinDetail: 'detail' in join ? join.detail : undefined,
+            inviteStatus: invite && 'status' in invite ? invite.status : undefined,
+            inviteReason: invite && 'reason' in invite ? invite.reason : undefined,
+            inviteDetail: invite && 'detail' in invite ? invite.detail : undefined,
+        });
+    } else {
+        log.info('invite.redeem.matrix_admitted', {
+            roomId: token.matrixRoomId,
+            canopyId,
+            canopyJoined: canopyJoin?.ok,
+            via: join.ok ? 'admin_join' : 'invite',
+        });
+    }
+
+    return { matrixInvite, canopyId };
 };
 
 /**

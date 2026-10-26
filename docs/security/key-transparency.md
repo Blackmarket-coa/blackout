@@ -1,7 +1,10 @@
 # Key Transparency Log
 
-Status: **shipped**. Pluggable persistence (in-memory or JSON-file) and
-optional Ed25519 witness signatures over each tree head.
+Status: **server side shipped; no client verifies it yet.** Pluggable
+persistence (in-memory or JSON-file) and optional Ed25519 witness
+signatures over each tree head. No shipped Blackout client fetches or
+checks a proof, so today the log detects a key substitution only for an
+auditor who reads it (`docs/security/api-findings-triage-2026-10-25.md`).
 
 ## What it is
 
@@ -26,22 +29,22 @@ node_hash(L, R)     = SHA-256(0x01 || L || R)
 
 `/v1/key-transparency/`:
 
-| Method | Path | Purpose |
-|--------|------|---------|
-| `POST` | `/append` | Append a new `(userId, masterKey)` leaf. Returns the new leaf index and root. |
-| `GET` | `/root` | Current tree head (size + root hash). |
-| `GET` | `/sth` | Current Signed Tree Head (size + root hash + witness signature + scheme). |
-| `GET` | `/inclusion/:leafIndex` | Inclusion proof (leaf-up audit path) for a specific leaf. |
-| `GET` | `/consistency?from=&to=` | Consistency proof between two tree sizes. |
-| `GET` | `/lookup/:userId` | All leaves for a user. |
-| `POST` | `/verify` | Server-side inclusion verifier (mirror of the client function for diagnostics). |
-| `POST` | `/verify-sth` | Server-side STH verifier — pure function, identical to the client verifier. |
+| Method | Path                     | Purpose                                                                                                                                                                                                                                                                       |
+| ------ | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST` | `/append`                | Append a `masterKey` leaf for the **caller's own account** (session required; `userId` optional, the caller's Matrix id or Blackout id — any other account, or the same username on another homeserver, is refused `403 user_mismatch`). Returns the new leaf index and root. |
+| `GET`  | `/root`                  | Current tree head (size + root hash).                                                                                                                                                                                                                                         |
+| `GET`  | `/sth`                   | Current Signed Tree Head (size + root hash + witness signature + scheme).                                                                                                                                                                                                     |
+| `GET`  | `/inclusion/:leafIndex`  | Inclusion proof (leaf-up audit path) for a specific leaf.                                                                                                                                                                                                                     |
+| `GET`  | `/consistency?from=&to=` | Consistency proof between two tree sizes.                                                                                                                                                                                                                                     |
+| `GET`  | `/lookup/:userId`        | All leaves for a user.                                                                                                                                                                                                                                                        |
+| `POST` | `/verify`                | Server-side inclusion verifier (mirror of the client function for diagnostics).                                                                                                                                                                                               |
+| `POST` | `/verify-sth`            | Server-side STH verifier — pure function, identical to the client verifier. Answers `{ ok, signed }`: `ok` says the STH is well-formed for its scheme (an unsigned `scheme: 'none'` STH is `ok`), `signed` says an Ed25519 witness signature was present and verified.        |
 
 The service module (`packages/api/src/services/keyTransparency.ts`) is
 storage-agnostic. `verifyInclusion` is a pure function so the client
-runs *exactly the same* verification code as auditors do.
+runs _exactly the same_ verification code as auditors do.
 
-## What clients should do
+## What clients should do (none does yet)
 
 On every session start:
 
@@ -60,7 +63,7 @@ Set `KT_LOG_FILE` to a writable path on the API host (e.g.
 `/var/lib/blackout/key-transparency.json`) and the log is loaded from
 that file on boot and atomically rewritten on every append. Without
 the env var the log defaults to in-memory, which is the right choice
-for unit tests and ephemeral CI runs but explicitly *not* for
+for unit tests and ephemeral CI runs but explicitly _not_ for
 production.
 
 The JSON shape is `{ "version": 1, "entries": [...] }`. A future SQL
@@ -85,24 +88,34 @@ env var the STH endpoint returns an explicitly-unsigned response
 
 ## Still left (rate-limiting & federation)
 
-- **Rate-limiting append.** Any caller that can hit the API can
-  currently append. Tighten to "the authenticated user can only
-  append their own master key, and rotation is bounded to N times/day"
-  before exposing externally.
-- **Federation gossip.** The witness scheme is per-deployment.
-  Federated deployments should periodically gossip STHs so that a
-  malicious operator running both the homeserver and the witness key
-  cannot fork the log. This is a topology decision, not a code change.
+-   **Rate-limiting append.** Since 2026-10-25 only a signed-in caller
+    can append, and only for their own account (until then any caller
+    could append any key under any `userId`, into the log a client is
+    meant to check its own key against). Rotation is still unbounded:
+    bound it to N appends per account per day before exposing externally.
+-   **Client verification.** Nothing in `apps/blackout-client` publishes a
+    key to the log or checks a proof. Until a client does, the steps
+    above are a design, not a protection.
+-   **Federation gossip.** The witness scheme is per-deployment.
+    Federated deployments should periodically gossip STHs so that a
+    malicious operator running both the homeserver and the witness key
+    cannot fork the log. This is a topology decision, not a code change.
 
 ## Tracking
 
-- Source: `packages/api/src/services/keyTransparency.ts`,
-  `packages/api/src/services/keyTransparencyStorage.ts`,
-  `packages/api/src/routes/keyTransparency.ts`.
-- Tests: `packages/api/test/keyTransparency.integration.test.ts`
-  (27 tests covering empty/append/root, RFC 6962 hash vectors,
-  inclusion verification across many tree sizes, consistency proofs,
-  tampering rejection, JSON-file persistence round-trip + corruption
-  guard + cross-process growth, and Ed25519 witness STH sign/verify
-  including tampering and witness-key-swap rejection).
-- Threat model entry: `THREAT_MODEL.md` §7 R5.
+-   Source: `packages/api/src/services/keyTransparency.ts`,
+    `packages/api/src/services/keyTransparencyStorage.ts`,
+    `packages/api/src/routes/keyTransparency.ts`.
+-   Tests: `packages/api/test/keyTransparency-routes.integration.test.ts`
+    (route auth: anonymous and other-account appends refused, own-account
+    appends by Matrix id, Blackout id and by default, inclusion proof
+    round-trip, unsigned STH reported `signed: false`),
+    `packages/api/test/keyTransparency-witness.integration.test.ts`
+    (seeded witness: served STH signed by that key, tampered root fails)
+    and `packages/api/test/keyTransparency.integration.test.ts`
+    (27 tests covering empty/append/root, RFC 6962 hash vectors,
+    inclusion verification across many tree sizes, consistency proofs,
+    tampering rejection, JSON-file persistence round-trip + corruption
+    guard + cross-process growth, and Ed25519 witness STH sign/verify
+    including tampering and witness-key-swap rejection).
+-   Threat model entry: `THREAT_MODEL.md` §7 R5.

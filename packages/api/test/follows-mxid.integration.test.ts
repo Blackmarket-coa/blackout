@@ -9,6 +9,7 @@ process.env.JWT_ISSUER = 'blackout-api-test';
 process.env.JWT_AUDIENCE = 'blackout-client-test';
 process.env.AUTH_RATE_LIMIT_MAX = '10000';
 process.env.BLACKOUT_DB_MODE = 'memory';
+process.env.MATRIX_HOMESERVER_DOMAIN = 'test.local';
 
 const { default: app } = await import('../src/index');
 const { signJwt, hashPassword } = await import('../src/services/auth');
@@ -38,12 +39,12 @@ test('follows: POST accepts a Matrix id and resolves it by localpart', async () 
     const follower = seedUser();
     const followee = seedUser();
 
-    // The profile surface only knows the target's Matrix id; the localpart is
-    // the Blackout username, whatever the homeserver domain.
+    // The profile surface only knows the target's Matrix id; on this
+    // homeserver the localpart is the Blackout username.
     const follow = await app.request('/v1/follows', {
         method: 'POST',
         headers: bearer(follower.id, follower.username),
-        body: JSON.stringify({ followeeId: `@${followee.username}:any.domain.example` }),
+        body: JSON.stringify({ followeeId: `@${followee.username}:test.local` }),
     });
     assert.equal(follow.status, 201);
 
@@ -58,12 +59,30 @@ test('follows: POST accepts a Matrix id and resolves it by localpart', async () 
     );
 });
 
+test('follows: POST with the same localpart on another homeserver follows nobody', async () => {
+    // Until 2026-10-25 any server name resolved to the local account of the
+    // same name (docs/security/api-findings-triage-2026-10-25.md, F2).
+    const follower = seedUser();
+    const namesake = seedUser();
+    const follow = await app.request('/v1/follows', {
+        method: 'POST',
+        headers: bearer(follower.id, follower.username),
+        body: JSON.stringify({ followeeId: `@${namesake.username}:any.domain.example` }),
+    });
+    assert.equal(follow.status, 404);
+    const list = await app.request('/v1/follows/following', {
+        headers: bearer(follower.id, follower.username),
+    });
+    const body = (await list.json()) as { following: { userId: string }[] };
+    assert.deepEqual(body.following, []);
+});
+
 test('follows: POST with an unknown Matrix localpart still 404s', async () => {
     const follower = seedUser();
     const res = await app.request('/v1/follows', {
         method: 'POST',
         headers: bearer(follower.id, follower.username),
-        body: JSON.stringify({ followeeId: '@no-such-user:any.domain.example' }),
+        body: JSON.stringify({ followeeId: '@no-such-user:test.local' }),
     });
     assert.equal(res.status, 404);
 });

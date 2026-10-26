@@ -61,6 +61,8 @@ services:
       FREEBLACKMARKET_BASE_URL: "http://free-black-market-backend-1:9000"
       FREEBLACKMARKET_API_KEY: "${FREEBLACKMARKET_API_KEY}"
       FREEBLACKMARKET_WEBHOOK_SECRET: "${FREEBLACKMARKET_WEBHOOK_SECRET}"
+      # Once FBM sends x-fbm-timestamp (work order §1), refuse deliveries without it:
+      # FREEBLACKMARKET_WEBHOOK_REQUIRE_TIMESTAMP: "1"
       # FBM service-token integration (entitlements reads, coalition pushes,
       # reputation events) and the two FBM-driven workers. All default-off;
       # uncomment only as part of a deliberate rollout (RUNBOOK §19). The base

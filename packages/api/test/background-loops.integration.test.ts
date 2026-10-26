@@ -3,7 +3,7 @@
  * stop it on shutdown, and the tick registry lets that shutdown wait for work
  * already running. Memory mode, default env: the loops that are on by default
  * are the scheduled-message and creator-content dispatchers, the external-reply
- * retention sweep and the dead-man sweep.
+ * retention sweep, the expired-auth-rows prune and the dead-man sweep.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -25,17 +25,20 @@ const { isCoalitionExternalRetentionSchedulerRunning } = await import(
     '../src/services/coalitionExternalRetentionScheduler'
 );
 const { isDeadmanSweepSchedulerRunning } = await import('../src/services/deadmanSweepScheduler');
+const { isAuthRowsPruneSchedulerRunning } = await import('../src/services/authRowsPruneScheduler');
 
 const running = () => ({
     scheduledMessages: isScheduledMessageDispatcherRunning(),
     scheduledContent: isScheduledContentDispatcherRunning(),
     externalRetention: isCoalitionExternalRetentionSchedulerRunning(),
+    authRowsPrune: isAuthRowsPruneSchedulerRunning(),
     deadmanSweep: isDeadmanSweepSchedulerRunning(),
 });
 const all = (value: boolean) => ({
     scheduledMessages: value,
     scheduledContent: value,
     externalRetention: value,
+    authRowsPrune: value,
     deadmanSweep: value,
 });
 

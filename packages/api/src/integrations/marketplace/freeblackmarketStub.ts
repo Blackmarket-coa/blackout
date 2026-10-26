@@ -16,6 +16,7 @@ import type {
     WebhookVerification,
 } from '@blackout/core';
 import { parseNormalizedLifecycleEvent } from '@blackout/core';
+import { verifyFreeblackmarketWebhookSignature } from './freeblackmarket';
 
 const PROVIDER_ID = 'freeblackmarket' as const;
 const STUB_KEY_ID = 'fbm-dev-hmac';
@@ -743,21 +744,20 @@ export function createFreeblackmarketStubProvider(): MarketplaceProvider {
             };
         },
 
+        // The same verifier as the real provider, so a test or a dev deploy
+        // exercising the stub sees exactly the acceptance rules production
+        // applies (timestamped form, replay window, body-only form while
+        // FREEBLACKMARKET_WEBHOOK_REQUIRE_TIMESTAMP is off).
         verifyWebhook(
             rawBody: string,
             headers: Record<string, string | undefined>
         ): WebhookVerification {
-            const signature = headers['x-fbm-signature'];
-            const eventId = headers['x-fbm-event-id'] ?? null;
-            if (!signature) return { ok: false, eventId, reason: 'signature-missing' };
-            const expected = crypto
-                .createHmac('sha256', webhookSecret)
-                .update(rawBody)
-                .digest('hex');
-            const sigBuf = Buffer.from(signature, 'hex');
-            const expBuf = Buffer.from(expected, 'hex');
-            const ok = sigBuf.length === expBuf.length && crypto.timingSafeEqual(sigBuf, expBuf);
-            return { ok, eventId, reason: ok ? undefined : 'signature-mismatch' };
+            return verifyFreeblackmarketWebhookSignature({
+                rawBody,
+                headers,
+                secret: webhookSecret,
+                requireTimestamp: envBool('FREEBLACKMARKET_WEBHOOK_REQUIRE_TIMESTAMP', false),
+            });
         },
 
         parseEvent(payload: unknown): NormalizedLifecycleEvent | null {

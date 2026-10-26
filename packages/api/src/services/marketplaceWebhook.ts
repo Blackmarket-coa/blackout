@@ -72,6 +72,43 @@ export async function dispatchMarketplaceWebhook(
 
     const payload = safeParse(rawBody);
 
+    // A delivery whose event id has already been processed — FBM's own retry,
+    // or a captured delivery replayed inside the signature's time window — is
+    // acknowledged without running any handler again. The entitlement, bridge,
+    // ACL and growth paths check this marker themselves; the monetization
+    // paths (tip, creator-subscription, canopy-plan and boost-pledge captures)
+    // did not, and re-ran their capture on every replay: counters and domain
+    // events fired again, and a cancelled subscription had its `canceledAt`
+    // cleared (D5 in docs/black-mask-account-link-design.md §7). For a
+    // lifecycle event the answer carries what the first delivery granted, as
+    // the entitlement path has always done for a replay.
+    //
+    // The signed body's eventId is checked first: the `x-fbm-event-id` header
+    // is outside the signature, so a captured delivery re-sent with a fresh
+    // header value must still be recognised by the id inside it. FBM sends the
+    // same value in both, so the header is checked too.
+    const eventId = [payloadEventId(payload), verification.eventId].find(
+        (id): id is string => typeof id === 'string' && hasProcessedWebhookEvent(provider.id, id)
+    );
+    if (eventId) {
+        const event = provider.parseEvent(payload);
+        incrementCounter('marketplace_webhook_replayed_total', { providerId: provider.id });
+        logEvent('marketplace.webhook.replay', {
+            providerId: provider.id,
+            eventId,
+            eventType: event?.type,
+        });
+        return {
+            ok: true,
+            status: 200,
+            reason: 'already-processed',
+            event: event ?? undefined,
+            applied: event
+                ? { ...applyLifecycleEvent(event), alreadyProcessed: true }
+                : { entitlement: null, licenseKey: null, alreadyProcessed: true },
+        };
+    }
+
     // entitlements.changed → ACL sync (independent of the bridge gate). Returns
     // null for any other payload so the bridge/lifecycle branches below run.
     const aclAck = tryHandleEntitlementsChanged(provider, payload);
@@ -158,6 +195,13 @@ function safeParse(raw: string): unknown {
     } catch {
         return null;
     }
+}
+
+/** The event id the signed payload names (FBM's envelope `eventId`). */
+function payloadEventId(payload: unknown): string | null {
+    if (!payload || typeof payload !== 'object') return null;
+    const eventId = (payload as { eventId?: unknown }).eventId;
+    return typeof eventId === 'string' && eventId.length > 0 ? eventId : null;
 }
 
 // Routes purchase events that carry monetization-primitive metadata

@@ -1,8 +1,8 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { encodeStego, encryptE2E, formatFederatedMessage, signMessage } from '@blackout/core';
+import { encodeStego, formatFederatedMessage } from '@blackout/core';
 import { db } from '../db/store';
-import type { VoteRecord } from '../db/types';
+import type { MessageRecord, VoteRecord } from '../db/types';
 import { matrixClient } from '../integrations/matrix-client';
 import { requireUser } from '../middleware/require-user';
 import { botPostRefusalResponse, checkBotMayPostAs } from '../services/botPostingGate';
@@ -17,6 +17,23 @@ import { log } from '../telemetry/logger';
  * shows is a DM-shaped id, `dm-<userId>-<userId>`, which names its two
  * participants, so reads of those are limited to the two of them. Every other
  * channel is readable by any signed-in account.
+ *
+ * Nothing on this endpoint is encryption. The text arrives at the API in the
+ * request and is stored readable by the server whatever `stegoTier` a client
+ * asks for (TRUST.md, "The API message endpoint"):
+ *
+ *   1  stored as written.
+ *   2  stored as written. Until 2026-10-25 this tier XOR-ed the text with the
+ *      first 16 characters of a server-stored per-account string and labelled
+ *      the result `e2e`; the "key" was minted and held by the server, so the
+ *      label was false whatever the cipher
+ *      (docs/security/api-findings-triage-2026-10-25.md, finding 3).
+ *   3  XOR-ed with the server's `STEGO_KEY` and URL-encoded, so the text is not
+ *      readable at a glance by a bridged chat viewer. Reversible by the server,
+ *      which holds the key, and by nobody else.
+ *
+ * So `isEncrypted` is always false and no `encryptionAlgorithm` is recorded;
+ * rows written before 2026-10-25 are reported the same way on read.
  */
 const messages = new Hono();
 
@@ -26,6 +43,9 @@ const sendMessageSchema = z.object({
     // here; anything else is refused.
     userId: z.string().min(1).optional(),
     stegoTier: z.union([z.literal(1), z.literal(2), z.literal(3)]).optional(),
+    // Accepted so an older client's request still parses; `true` is refused
+    // (see the handler) rather than answered with something that is not a
+    // signature.
     sign: z.boolean().optional(),
     matrixRoomId: z.string().optional(),
     governance: z.looseObject({ type: z.string() }).optional(),
@@ -45,6 +65,18 @@ const mayReadChannel = (userId: string, channelId: string): boolean => {
     return participants === null || participants.includes(userId.toLowerCase());
 };
 
+/**
+ * A stored row as the API now describes it. Rows written before 2026-10-25
+ * carry `isEncrypted: true` and `encryptionAlgorithm: 'e2e' | 'steganography'`,
+ * neither of which was true; the stored text is left as it is (a tier-2 row
+ * from then is XOR-ed with the account's `pubkeyEd25519`, a tier-3 row with
+ * the server's `STEGO_KEY`).
+ */
+const withoutEncryptionClaims = (row: MessageRecord): MessageRecord => {
+    const { encryptionAlgorithm: _dropped, ...rest } = row;
+    return { ...rest, isEncrypted: false };
+};
+
 messages.get('/:channelId', (c) => {
     const user = requireUser(c);
     if (user instanceof Response) return user;
@@ -61,7 +93,11 @@ messages.get('/:channelId', (c) => {
     const { limit = '50', before } = c.req.query();
     const parsedLimit = Number.parseInt(limit, 10);
 
-    return c.json(db.getMessages(channelId, Number.isNaN(parsedLimit) ? 50 : parsedLimit, before));
+    return c.json(
+        db
+            .getMessages(channelId, Number.isNaN(parsedLimit) ? 50 : parsedLimit, before)
+            .map(withoutEncryptionClaims)
+    );
 });
 
 messages.post('/:channelId', async (c) => {
@@ -76,6 +112,21 @@ messages.post('/:channelId', async (c) => {
         return c.json({ code: 'user_mismatch', message: 'You can only post as yourself.' }, 403);
     }
     const userId = session.sub;
+
+    // Accounts have no signing key. The `pubkeyEd25519` field on a user record
+    // is a random string minted at sign-up, with no private half anywhere. Until
+    // 2026-10-25 `sign: true` stored `encodeURIComponent('<userId>:<content>')`
+    // as the "signature" — a copy of the text, not a signature. Refusing is the
+    // only truthful answer.
+    if (sign) {
+        return c.json(
+            {
+                code: 'signing_unavailable',
+                message: 'Messages cannot be signed: this account has no signing key.',
+            },
+            400
+        );
+    }
 
     const user = db.getUserById(userId);
     if (!user) {
@@ -94,30 +145,22 @@ messages.post('/:channelId', async (c) => {
         }
     }
 
-    let transformedContent = content;
-    let encryptionAlgorithm: string | undefined;
-
-    if (stegoTier === 3) {
-        transformedContent = encodeStego(content, process.env.STEGO_KEY ?? 'local-stego-key');
-        encryptionAlgorithm = 'steganography';
-    } else if (stegoTier === 2) {
-        transformedContent = encryptE2E(content, user.pubkeyEd25519);
-        encryptionAlgorithm = 'e2e';
-    }
+    const storedContent =
+        stegoTier === 3
+            ? encodeStego(content, process.env.STEGO_KEY ?? 'local-stego-key')
+            : content;
 
     const message = db.createMessage({
         id: crypto.randomUUID(),
         channelId,
         userId,
-        content: transformedContent,
+        content: storedContent,
         governance:
             governance?.type === 'poll'
                 ? (governance as { type: 'poll'; data: VoteRecord })
                 : undefined,
         contentStegoTier: stegoTier,
-        signature: sign ? signMessage(content, userId) : undefined,
-        isEncrypted: stegoTier > 1,
-        encryptionAlgorithm,
+        isEncrypted: false,
     });
 
     const federatedPreview = formatFederatedMessage(user.username, content);
@@ -128,10 +171,11 @@ messages.post('/:channelId', async (c) => {
     // After landing the message in the Blackout-side Matrix room, fan it
     // out to any source platforms bridged to that room (Twitch chat bridge
     // → Twitch IRC; YouTube chat bridge → liveChatMessages.insert). Only
-    // the plain `m.text` body — encrypted / steganographic content stays
-    // Blackout-internal because it isn't meaningful to a Twitch viewer.
-    // Loop prevention: this dispatch path never carries `m.blackout.origin`,
-    // so the chat-bridge ingress side doesn't see its own echo.
+    // tier 1 — a tier-3 body is scrambled and means nothing to a Twitch
+    // viewer, and tier 2 keeps the behaviour it had when it was labelled
+    // encrypted. Loop prevention: this dispatch path never carries
+    // `m.blackout.origin`, so the chat-bridge ingress side doesn't see its
+    // own echo.
     let outboundFanout: Awaited<ReturnType<typeof routeOutboundMatrixMessage>> | null = null;
     if (matrixRoomId && stegoTier === 1) {
         try {

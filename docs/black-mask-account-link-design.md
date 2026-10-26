@@ -1451,7 +1451,9 @@ told otherwise.
 
 ## 7. Defects found along the way
 
-None of these is fixed here (decision 9). Each needs its own triage.
+None of these is fixed here (decision 9). Each needs its own triage. That
+triage is `docs/security/api-findings-triage-2026-10-25.md` (2026-10-25); it
+fixes D1–D5 and hands D6 to FBM's ledger.
 
 -   **D1 — a refused refresh is treated as a passing failure (Blackout
     client).**
@@ -1475,12 +1477,21 @@ None of these is fixed here (decision 9). Each needs its own triage.
         Devices), the full app, and B5's open panel.
     -   _How it was found._ By reading the SDK; it was not reproduced in a
         browser.
+    -   _Status (2026-10-25):_ **fixed.** `buildTokenRefreshFunction` throws
+        the SDK's `TokenRefreshLogoutError` on a 401 or 403 from `/refresh`, so
+        the SDK signs the session out; 429 and 5xx stay transient
+        (`apps/blackout-client/tests/unit/client/initMatrix.tokenRefresh.test.ts`).
+        Still not reproduced in a browser.
 -   **D2 — expired auth rows are never pruned (API).**
     `pruneExpiredRevokedSessions` and `prunePendingOAuthLinks` in
     `packages/api/src/db/store.ts` have no caller, on 6ea67c4 or on current
     `develop`. Expired denylist entries and pending OAuth rows are never
     removed. Only growth is affected: expiry is checked whenever they are
     read.
+    -   _Status (2026-10-25):_ **fixed.** An hourly prune
+        (`packages/api/src/services/authRowsPruneScheduler.ts`, started by
+        `startBackgroundLoops`, `BLACKOUT_AUTH_ROWS_PRUNE=0` disables) calls
+        both, and `prunePendingOidcLogins`, which had no caller either.
 -   **D3 — account-number sign-up bypasses the invite gate (API).**
     -   _The behaviour._ `POST /v1/auth/account-number` creates Matrix
         accounts through the admin API with no invite check.
@@ -1492,15 +1503,32 @@ None of these is fixed here (decision 9). Each needs its own triage.
     -   _Why it matters here._ The panel offers this path ("Create an
         anonymous account (no email)"), so link mode inherits it.
     -   _Open:_ whether it is intended.
+    -   _Status (2026-10-25):_ **fixed**, as not intended. The route takes an
+        optional `inviteToken`, refuses `403 invite_required` without one when
+        `REQUIRE_INVITE_TOKEN=1`, checks a presented token before minting and
+        consumes one use after (`redeemInvitationForMatrixUser`, which also
+        admits the new Matrix account to a room-bound invitation's room).
 -   **D4 — `KNOWN_LIMITATIONS.md` is out of date (docs).** Its "Black Mask
     chat panel" section still lists "creating a canopy or a den from the
     panel" under "Not there yet". The New canopy and New den screens shipped
     (`EmbedNew.tsx`; spec, section 1; PR #965, merged 2026-10-24).
+    -   _Status (2026-10-25):_ **fixed.** The section now says the screens
+        shipped.
 -   **D5 — FBM webhooks can be replayed (API).** Blackout's FBM webhook check
     (`verifyWebhook` in `packages/api/src/integrations/marketplace/freeblackmarket.ts`)
     is an HMAC over the body alone, with no timestamp. A captured delivery
     therefore verifies forever. Deduplication on the event id is the only
     defence against replay.
+    -   _Status (2026-10-25):_ **fixed in Blackout; FBM's half pending.** The
+        verifier accepts `x-fbm-timestamp` and then signs over
+        `<timestamp>.<body>` with a 300-second window (the form FBM already
+        uses for Blackstar); the body-only form stays accepted until the
+        operator sets `FREEBLACKMARKET_WEBHOOK_REQUIRE_TIMESTAMP=1`, which
+        needs FBM to send the header first (work order §1). Independently, a
+        delivery whose event id was already processed is acknowledged before
+        any handler runs — the tip, creator-subscription, canopy-plan and
+        boost captures re-ran on every replay, and a replay re-activated a
+        cancelled subscription.
 -   **D6 — the coalition-tier lookup never finds a customer (FBM).**
     `resolveCustomerIdByMxid` in `backend/src/lib/blackout-identity.ts`
     queries `metadata->>mxid` with the key unquoted. Postgres reads that as a

@@ -26,6 +26,47 @@ should be described as a published privacy policy until that review lands.
 
 ---
 
+## 2026-10-25 — Two gaps between the code and the encryption and logging commitments, closed
+
+**Why this entry exists:** no commitment changes. Two places where the code
+contradicted [`TRUST.md`](../../TRUST.md) §1 were found and fixed, and the process
+document asks that a closed gap be recorded against the commitment it restored.
+The full record, with the other findings fixed alongside, is
+[`docs/security/api-findings-triage-2026-10-25.md`](../security/api-findings-triage-2026-10-25.md).
+
+### Changed
+
+-   **The API message endpoint no longer claims encryption or signatures it does
+    not do.** `POST /v1/messages/:channelId`
+    ([`packages/api/src/routes/messages.ts`](../../packages/api/src/routes/messages.ts))
+    stores the text readable on the server at every `stegoTier`, as §1 has
+    always said. Until this date a request with `stegoTier: 2` had its text
+    XOR-ed with the first sixteen characters of a server-minted random string
+    and the row labelled `encryptionAlgorithm: 'e2e'`, `isEncrypted: true`; a
+    request with `sign: true` stored a URL-encoded copy of the text as its
+    "signature". The endpoint now reports `isEncrypted: false` on every row, old
+    rows included, stores tier-2 text as written, and answers
+    `400 signing_unavailable` to a request for a signature. The helpers behind
+    the labels (`encryptE2E`, `decryptE2E`, `signMessage`, `verifySignature`)
+    were removed from `@blackout/core` so nothing can build on them. Visible to
+    a client of that endpoint: the Expo scaffold in `packages/mobile` sends
+    `stegoTier: 2` and now reads its text back as written.
+-   **The dead-drop appservice's legacy queue no longer logs message text.** Its
+    flush
+    ([`apps/deaddrop-appservice/src/index.mjs`](../../apps/deaddrop-appservice/src/index.mjs))
+    wrote each queued message's body and sender to the console, against §1's
+    "nothing logs your messages". It now logs the body's byte length and whether
+    the room anonymizes senders. Not user-visible: only an operator reading the
+    appservice's log saw it, and the v1 opaque-envelope path the clients use was
+    never affected.
+
+### Rationale
+
+-   A label that says encrypted when the server can read the text is the defect
+    this file exists to prevent, whichever direction it points. The helpers were
+    removed rather than repaired: an XOR against a value the server holds is not
+    something to make work.
+
 ## 2026-09-20 — Coalitions: cross-posting, inbound replies, attribution
 
 **Why this entry exists:** this work introduces a new category of data
