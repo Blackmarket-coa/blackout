@@ -60,6 +60,7 @@ import type {
     AccountDeletionTokenRecord,
     InvitationTokenRecord,
     InvitationRedemptionRecord,
+    InvitationAdmissionRecord,
     BurnerIdentityRecord,
     RefreshTokenRecord,
     RevokedSessionRecord,
@@ -243,6 +244,7 @@ type PersistedState = {
     accountDeletionTokens: AccountDeletionTokenRecord[];
     invitationTokens: InvitationTokenRecord[];
     invitationRedemptions: InvitationRedemptionRecord[];
+    invitationAdmissions: InvitationAdmissionRecord[];
     burnerIdentities: BurnerIdentityRecord[];
     refreshTokens: RefreshTokenRecord[];
     revokedSessions: RevokedSessionRecord[];
@@ -420,6 +422,8 @@ class InMemoryDb {
     invitationTokens = new Map<string, InvitationTokenRecord>();
     /** Keyed by redemption id. */
     invitationRedemptions = new Map<string, InvitationRedemptionRecord>();
+    /** Keyed by admission id: account-number sign-up's spent uses (D3). */
+    invitationAdmissions = new Map<string, InvitationAdmissionRecord>();
     /** Burner identities, keyed by row id. */
     burnerIdentities = new Map<string, BurnerIdentityRecord>();
     refreshTokens = new Map<string, RefreshTokenRecord>();
@@ -959,6 +963,62 @@ class InMemoryDb {
         return [...this.invitationRedemptions.values()]
             .filter((r) => r.invitationTokenId === invitationTokenId)
             .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    }
+
+    createInvitationAdmission(
+        input: Omit<InvitationAdmissionRecord, 'createdAt' | 'claimedAt' | 'claimedByUserId'>
+    ): InvitationAdmissionRecord {
+        const record: InvitationAdmissionRecord = { ...input, createdAt: nowIso() };
+        this.invitationAdmissions.set(record.id, record);
+        return record;
+    }
+
+    /** The admission of `matrixUserId` on an invitation, claimed or not. */
+    findInvitationAdmission(
+        invitationTokenId: string,
+        matrixUserId: string
+    ): InvitationAdmissionRecord | undefined {
+        return [...this.invitationAdmissions.values()].find(
+            (a) => a.invitationTokenId === invitationTokenId && a.matrixUserId === matrixUserId
+        );
+    }
+
+    /**
+     * Claim an unclaimed admission for `userId`. A compare-and-set, checked and
+     * written in one synchronous call, so of two claims of one admission
+     * exactly one gets the claimed record back. Undefined when the admission
+     * is gone or already claimed, by anyone.
+     */
+    claimInvitationAdmission(id: string, userId: string): InvitationAdmissionRecord | undefined {
+        const existing = this.invitationAdmissions.get(id);
+        if (!existing || existing.claimedByUserId) return undefined;
+        const updated: InvitationAdmissionRecord = {
+            ...existing,
+            claimedAt: nowIso(),
+            claimedByUserId: userId,
+        };
+        this.invitationAdmissions.set(id, updated);
+        return updated;
+    }
+
+    /**
+     * Account deletion: remove an account's admissions, the one it claimed and
+     * any for its Matrix id that it never claimed, since each holds that
+     * Matrix id. The redemption row a claim wrote stays, as every redemption
+     * row does. Returns how many were removed.
+     */
+    deleteInvitationAdmissionsForUser(userId: string, matrixUserId?: string): number {
+        let removed = 0;
+        for (const [id, admission] of this.invitationAdmissions) {
+            if (
+                admission.claimedByUserId === userId ||
+                (matrixUserId !== undefined && admission.matrixUserId === matrixUserId)
+            ) {
+                this.invitationAdmissions.delete(id);
+                removed += 1;
+            }
+        }
+        return removed;
     }
 
     /** Best-effort cascade: drop all per-user auth artifacts so a deleted user
@@ -5720,6 +5780,9 @@ export class FileBackedDb extends InMemoryDb {
         this.invitationRedemptions = new Map(
             (parsed.invitationRedemptions ?? []).map((row) => [row.id, row])
         );
+        this.invitationAdmissions = new Map(
+            (parsed.invitationAdmissions ?? []).map((row) => [row.id, row])
+        );
         this.burnerIdentities = new Map(
             (parsed.burnerIdentities ?? []).map((row) => [row.id, row])
         );
@@ -6191,6 +6254,7 @@ export class FileBackedDb extends InMemoryDb {
             accountDeletionTokens: [...this.accountDeletionTokens.values()],
             invitationTokens: [...this.invitationTokens.values()],
             invitationRedemptions: [...this.invitationRedemptions.values()],
+            invitationAdmissions: [...this.invitationAdmissions.values()],
             burnerIdentities: [...this.burnerIdentities.values()],
             refreshTokens: [...this.refreshTokens.values()],
             revokedSessions: [...this.revokedSessions.values()],
@@ -6457,6 +6521,29 @@ export class FileBackedDb extends InMemoryDb {
         const record = super.createInvitationRedemption(input);
         this.persist();
         return record;
+    }
+
+    override createInvitationAdmission(
+        input: Omit<InvitationAdmissionRecord, 'createdAt' | 'claimedAt' | 'claimedByUserId'>
+    ): InvitationAdmissionRecord {
+        const record = super.createInvitationAdmission(input);
+        this.persist();
+        return record;
+    }
+
+    override claimInvitationAdmission(
+        id: string,
+        userId: string
+    ): InvitationAdmissionRecord | undefined {
+        const updated = super.claimInvitationAdmission(id, userId);
+        if (updated) this.persist();
+        return updated;
+    }
+
+    override deleteInvitationAdmissionsForUser(userId: string, matrixUserId?: string): number {
+        const removed = super.deleteInvitationAdmissionsForUser(userId, matrixUserId);
+        if (removed > 0) this.persist();
+        return removed;
     }
 
     override purgeUserAuthArtifacts(userId: string): void {

@@ -1508,6 +1508,12 @@ fixes D1–D5 and hands D6 to FBM's ledger.
         `REQUIRE_INVITE_TOKEN=1`, checks a presented token before minting and
         consumes one use after (`redeemInvitationForMatrixUser`, which also
         admits the new Matrix account to a room-bound invitation's room).
+    -   _Status (2026-10-26):_ the web client's account-number sign-up sends
+        the token, and the new account's first redeem claims the use the
+        sign-up spent rather than spending a second (`invitation_admissions`,
+        migration 105), so `REQUIRE_INVITE_TOKEN=1` can be turned on without
+        breaking that sign-up. See D3 in
+        `docs/security/api-findings-triage-2026-10-25.md`.
 -   **D4 — `KNOWN_LIMITATIONS.md` is out of date (docs).** Its "Black Mask
     chat panel" section still lists "creating a canopy or a den from the
     panel" under "Not there yet". The New canopy and New den screens shipped

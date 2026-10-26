@@ -50,8 +50,9 @@ test('every descriptor maps to a real table with columns', async () => {
     }
     // Bumped by coalition_campaign_engagement (the counts half of two-way sync)
     // and coalition_campaign_attribution (what a share produced), then by
-    // voice_room_sanctions (mutes and removals that outlive the connection).
-    assert.equal(TABLE_DESCRIPTORS.length, 154);
+    // voice_room_sanctions (mutes and removals that outlive the connection),
+    // then by invitation_admissions (the use an account-number sign-up spent).
+    assert.equal(TABLE_DESCRIPTORS.length, 155);
     await pg.query('SELECT 1');
 });
 

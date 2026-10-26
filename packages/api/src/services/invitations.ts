@@ -1,9 +1,10 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { db } from '../db/store';
-import type { InvitationTokenRecord, UserRecord } from '../db/types';
+import type { InvitationAdmissionRecord, InvitationTokenRecord, UserRecord } from '../db/types';
 import { matrixClient } from '../integrations/matrix-client';
 import { log } from '../telemetry/logger';
 import { followUser } from './follows';
+import { homeserverDomain } from './userIdentity';
 
 const INVITATION_TOKEN_BYTES = 32;
 const DEFAULT_MAX_USES = 1;
@@ -13,10 +14,8 @@ export const MAX_TTL_HOURS = 24 * 365; // one year
 
 const sha256 = (input: string): string => createHash('sha256').update(input).digest('hex');
 
-const matrixUserIdFor = (username: string): string => {
-    const domain = (process.env.MATRIX_HOMESERVER_DOMAIN ?? 'blackout.local').replace(/^@+/, '');
-    return `@${username}:${domain}`;
-};
+/** The Matrix id of a Blackout username on this homeserver. */
+const matrixUserIdFor = (username: string): string => `@${username}:${homeserverDomain()}`;
 
 export interface CreateInvitationInput {
     createdBy: string;
@@ -203,6 +202,11 @@ export type RedeemOutcome =
  * a best-effort invite is sent for the redeemer's Matrix ID after the
  * redemption is durable — Matrix failure does not roll back the redemption,
  * matching how registration tolerates `matrix_not_configured`.
+ *
+ * An account that account-number sign-up created with this token has already
+ * had its use spent, and holds an admission for it
+ * (`redeemInvitationForMatrixUser`); its redeem claims the admission instead
+ * of spending a second use (`claimAdmission`).
  */
 export const redeemInvitation = async (
     presentedToken: string,
@@ -210,6 +214,21 @@ export const redeemInvitation = async (
 ): Promise<RedeemOutcome> => {
     const tokenRecord = db.findInvitationTokenByHash(sha256(presentedToken));
     if (!tokenRecord) return { kind: 'invalid' };
+
+    // Ahead of the usability checks: a claim completes a use spent while the
+    // invitation was usable, so it needs no use left, and a revocation or
+    // expiry since does not undo it, as neither undoes a redemption made here.
+    const claim = claimAdmission(tokenRecord, redeemer);
+    if (claim.kind === 'self_redeem') return claim;
+    if (claim.kind === 'claimed') {
+        const { matrixInviteOk } = claim.admission;
+        return {
+            kind: 'ok',
+            record: tokenRecord,
+            matrixInvite: matrixInviteOk === undefined ? undefined : { ok: matrixInviteOk },
+            canopyId: await resolveCanopyId(tokenRecord),
+        };
+    }
 
     const status = evaluateInvitation(tokenRecord);
     if (status.kind !== 'ok') return status;
@@ -237,32 +256,96 @@ export const redeemInvitation = async (
         redeemedByUserId: redeemer.id,
         matrixInviteOk: matrixInvite?.ok,
     });
+    followInviter(redeemer.id, updated.createdBy);
 
-    // The redeemer follows the inviter (one-way). Best-effort: a follow failure
-    // must never roll back a durable redemption.
+    return { kind: 'ok', record: updated, matrixInvite, canopyId };
+};
+
+type AdmissionClaim =
+    | { kind: 'none' }
+    | { kind: 'self_redeem' }
+    | { kind: 'claimed'; admission: InvitationAdmissionRecord };
+
+/**
+ * Claim the redeemer's admission on this invitation, when it has one (D3 in
+ * docs/security/api-findings-triage-2026-10-25.md).
+ *
+ * The admission is matched on the full Matrix id, server name included, so
+ * one for a Matrix account on another homeserver is never claimed by the
+ * local account of the same name, and an account without one gets a normal
+ * redeem (`none`). The first claim writes the redemption row and the follow
+ * as a normal redeem does, and spends no use; one this account already
+ * claimed is answered the same with nothing written (a retry, a second tab).
+ * Everything here runs in one synchronous turn: the lookup, the claim (a
+ * compare-and-set in the store) and both writes, so of two concurrent redeems
+ * from one account exactly one claims and neither spends a use. Nothing here
+ * touches the room: the sign-up already admitted the account, and admitting
+ * it again could undo a kick or a ban that came after.
+ *
+ * The inviter is refused `self_redeem` and claims nothing, as on a normal
+ * redeem: the rule keeps an inviter from counting themselves among the people
+ * their link brought in, whenever the use was spent. Sign-up always mints a
+ * new Matrix id, so no route leads there; the rule is kept in force anyway.
+ */
+const claimAdmission = (token: InvitationTokenRecord, redeemer: UserRecord): AdmissionClaim => {
+    const admission = db.findInvitationAdmission(token.id, matrixUserIdFor(redeemer.username));
+    if (!admission) return { kind: 'none' };
+    if (admission.claimedByUserId) {
+        // Claimed by another account. Deletion removes the admissions an
+        // account claimed, so a new account under a deleted one's name should
+        // not meet one; if it does, the old claim does not carry over and the
+        // new account gets a normal redeem.
+        return admission.claimedByUserId === redeemer.id
+            ? { kind: 'claimed', admission }
+            : { kind: 'none' };
+    }
+    if (token.createdBy === redeemer.id) return { kind: 'self_redeem' };
+
+    const claimed = db.claimInvitationAdmission(admission.id, redeemer.id);
+    // The compare-and-set cannot lose to anything between the lookup above and
+    // here. If it ever did, the admission is judged again as it now stands.
+    if (!claimed) return claimAdmission(token, redeemer);
+
+    db.createInvitationRedemption({
+        id: randomUUID(),
+        invitationTokenId: token.id,
+        redeemedByUserId: redeemer.id,
+        matrixInviteOk: claimed.matrixInviteOk,
+    });
+    followInviter(redeemer.id, token.createdBy);
+    log.info('invite.redeem.admission_claimed', { invitationId: token.id });
+    return { kind: 'claimed', admission: claimed };
+};
+
+/**
+ * The redeemer follows the inviter (one-way). Best-effort: a follow failure
+ * must never roll back a durable redemption.
+ */
+const followInviter = (redeemerId: string, inviterId: string): void => {
     try {
-        followUser(redeemer.id, updated.createdBy);
+        followUser(redeemerId, inviterId);
     } catch (err) {
         log.warn('invite.redeem.follow_failed', {
-            inviterId: updated.createdBy,
-            redeemerId: redeemer.id,
+            inviterId,
+            redeemerId,
             detail: err instanceof Error ? err.message : String(err),
         });
     }
-
-    return { kind: 'ok', record: updated, matrixInvite, canopyId };
 };
 
 /**
  * Consume one use of an invitation for a Matrix account that has no Blackout
  * row yet: the account-number sign-up (`POST /v1/auth/account-number`) mints a
  * Matrix account only, and its Blackout row is created lazily on the first
- * token exchange. So there is no redeemer to record a redemption for, to
- * follow the inviter from, or to check self-redemption against. What the
- * invite gate rests on is the use count, incremented atomically exactly as in
- * `redeemInvitation`; a room-bound invitation admits the new Matrix account.
- * Until 2026-10-25 that sign-up path had no invite gate at all (D3 in
- * docs/black-mask-account-link-design.md §7).
+ * token exchange. What the invite gate rests on is the use count, incremented
+ * atomically exactly as in `redeemInvitation`; a room-bound invitation admits
+ * the new Matrix account. There is no account yet to record a redemption for,
+ * to follow the inviter from, or to check self-redemption against, so the use
+ * is recorded as an admission against the Matrix id, and the account's first
+ * `redeemInvitation` claims it: the redemption and the follow are written
+ * then, without a second use. Until 2026-10-25 that sign-up path had no invite
+ * gate at all, and until 2026-10-26 the redeem the client makes after sign-in
+ * spent a second use (D3 in docs/security/api-findings-triage-2026-10-25.md).
  */
 export const redeemInvitationForMatrixUser = async (
     presentedToken: string,
@@ -282,7 +365,30 @@ export const redeemInvitationForMatrixUser = async (
     }
 
     const { matrixInvite, canopyId } = await admitInvitedMatrixUser(updated, matrixUserId);
+    db.createInvitationAdmission({
+        id: randomUUID(),
+        invitationTokenId: updated.id,
+        matrixUserId,
+        matrixInviteOk: matrixInvite?.ok,
+    });
     return { kind: 'ok', record: updated, matrixInvite, canopyId };
+};
+
+/**
+ * The canopy (parent space) of an invitation's room, read from the
+ * homeserver; undefined when the invitation has no room or the lookup fails.
+ * A read only: it admits nobody.
+ */
+const resolveCanopyId = async (token: InvitationTokenRecord): Promise<string | undefined> => {
+    if (!token.matrixRoomId) return undefined;
+    const parent = await matrixClient.getRoomParentSpace(token.matrixRoomId);
+    if (parent.ok) return parent.canopyId;
+    log.warn('invite.redeem.canopy_unresolved', {
+        roomId: token.matrixRoomId,
+        status: 'status' in parent ? parent.status : undefined,
+        reason: 'reason' in parent ? parent.reason : undefined,
+    });
+    return undefined;
 };
 
 /**
@@ -303,17 +409,7 @@ const admitInvitedMatrixUser = async (
 ): Promise<{ matrixInvite?: { ok: boolean }; canopyId?: string }> => {
     if (!token.matrixRoomId) return {};
 
-    let canopyId: string | undefined;
-    const parent = await matrixClient.getRoomParentSpace(token.matrixRoomId);
-    if (parent.ok) {
-        canopyId = parent.canopyId;
-    } else {
-        log.warn('invite.redeem.canopy_unresolved', {
-            roomId: token.matrixRoomId,
-            status: 'status' in parent ? parent.status : undefined,
-            reason: 'reason' in parent ? parent.reason : undefined,
-        });
-    }
+    const canopyId = await resolveCanopyId(token);
 
     // 1) Admit the redeemer to the canopy (the bot was force-joined to the
     //    canopy at link-creation, so it can invite/admit here). Skipped when
