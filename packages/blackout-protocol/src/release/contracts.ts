@@ -2,10 +2,11 @@
  * The API's release-identity directory, as the SDK and the client see it.
  * Routes (`packages/api/src/routes/releaseIdentities.ts`):
  *
- *   GET /v1/release-identities/me                  the caller's own entry
- *   PUT /v1/release-identities/me                  publish the caller's identity
- *   GET /v1/release-identities/:accountId          anyone's entry
- *   GET /v1/release-identities/lookup?matrixId=…   by Matrix id, this homeserver only
+ *   GET  /v1/release-identities/me           the caller's own entry
+ *   PUT  /v1/release-identities/me           publish the caller's identity
+ *   GET  /v1/release-identities/:accountId   anyone's entry
+ *   POST /v1/release-identities/lookup       by Matrix id ({ matrixId } in the
+ *                                            body), this homeserver only
  *
  * A fingerprint in a response is the server's; a client recomputes it with
  * `verifyReleaseIdentity` and never relies on the one sent.

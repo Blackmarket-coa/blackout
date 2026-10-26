@@ -44,12 +44,14 @@ export const createReleaseIdentityActions = (client: ApiClient) => ({
         }),
     /**
      * An account's entry by Matrix id. Only a Matrix id on this homeserver,
-     * exactly as the account has it, finds anyone.
+     * exactly as the account has it, finds anyone. The id goes in the body
+     * of a POST, so that it is not in the URL that proxies log.
      */
     lookupByMatrixId: (matrixId: string) =>
         client<ReleaseIdentityDirectoryEntry>({
-            method: 'GET',
-            path: `/v1/release-identities/lookup?matrixId=${encodeURIComponent(matrixId)}`,
+            method: 'POST',
+            path: '/v1/release-identities/lookup',
+            body: { matrixId },
         }),
 });
 

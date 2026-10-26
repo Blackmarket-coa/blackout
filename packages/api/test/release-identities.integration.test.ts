@@ -67,6 +67,13 @@ const publish = (user: { id: string; username: string }, identity: unknown) =>
 const get = (user: { id: string; username: string }, path: string) =>
     app.request(`/v1/release-identities${path}`, { headers: headers(user) });
 
+const lookUp = (user: { id: string; username: string }, body: unknown) =>
+    app.request('/v1/release-identities/lookup', {
+        method: 'POST',
+        headers: headers(user),
+        body: JSON.stringify(body),
+    });
+
 const freshIdentity = async (accountId: string): Promise<ReleaseIdentity> =>
     (await protocol.createReleaseKeySet(accountId)).identity;
 
@@ -80,7 +87,7 @@ test('every route needs a signed-in caller', async () => {
         ['GET', '/v1/release-identities/me'],
         ['PUT', '/v1/release-identities/me'],
         ['GET', `/v1/release-identities/${alice.id}`],
-        ['GET', '/v1/release-identities/lookup?matrixId=%40alice-vector%3Atest.local'],
+        ['POST', '/v1/release-identities/lookup'],
     ]) {
         const res = await app.request(path, { method });
         assert.equal(res.status, 401, `${method} ${path}`);
@@ -329,8 +336,7 @@ test('anyone signed in reads an entry by account id; nobody gets one answer', as
 test('a lookup by Matrix id finds only this homeserver’s exact Matrix id', async () => {
     const reader = seedUser();
     assert.ok([200, 201].includes((await publish(bob, BOB.identity)).status));
-    const lookup = (matrixId: string) =>
-        get(reader, `/lookup?matrixId=${encodeURIComponent(matrixId)}`);
+    const lookup = (matrixId: string) => lookUp(reader, { matrixId });
 
     const found = await lookup('@bob-vector:test.local');
     assert.equal(found.status, 200);
@@ -360,8 +366,24 @@ test('a lookup by Matrix id finds only this homeserver’s exact Matrix id', asy
         });
     }
 
-    const missing = await get(reader, '/lookup');
-    assert.equal(missing.status, 400);
+    for (const body of [{}, { matrixId: '' }, { matrixId: 7 }, { matrixId: 'x', extra: 1 }]) {
+        assert.equal((await lookUp(reader, body)).status, 400, JSON.stringify(body));
+    }
+});
+
+test('the lookup takes the Matrix id in a POST body, never in the URL', async () => {
+    const reader = seedUser();
+    assert.ok([200, 201].includes((await publish(bob, BOB.identity)).status));
+    const found = await lookUp(reader, { matrixId: '@bob-vector:test.local' });
+    assert.equal(found.status, 200);
+    assert.deepEqual(((await found.json()) as Entry).current?.identity, BOB.identity);
+    // The old GET form is gone: it reaches /:accountId and finds nobody.
+    const asQuery = await get(reader, '/lookup?matrixId=%40bob-vector%3Atest.local');
+    assert.equal(asQuery.status, 404);
+    assert.deepEqual(await asQuery.json(), {
+        code: 'release_identity_not_found',
+        message: 'No release identity',
+    });
 });
 
 test('account deletion removes the account’s identities, current and superseded', async () => {
@@ -378,15 +400,7 @@ test('account deletion removes the account’s identities, current and supersede
 
     assert.equal(db.listReleaseIdentitiesForAccount(user.id).length, 0);
     assert.equal((await get(reader, `/${user.id}`)).status, 404);
-    assert.equal(
-        (
-            await get(
-                reader,
-                `/lookup?matrixId=${encodeURIComponent(`@${user.username}:test.local`)}`
-            )
-        ).status,
-        404
-    );
+    assert.equal((await lookUp(reader, { matrixId: `@${user.username}:test.local` })).status, 404);
     // Other accounts' identities stay.
     assert.equal((await get(reader, `/${bob.id}`)).status, 200);
 });

@@ -18,10 +18,16 @@ import {
  * Release identities: the public keys people publish for dead-man switch
  * releases (`docs/security/release-identities-2026-10-26.md`).
  *
- *   GET /v1/release-identities/me                  the caller's own entry
- *   PUT /v1/release-identities/me                  publish the caller's identity
- *   GET /v1/release-identities/lookup?matrixId=…   by Matrix id, this homeserver only
- *   GET /v1/release-identities/:accountId          anyone's entry
+ *   GET  /v1/release-identities/me           the caller's own entry
+ *   PUT  /v1/release-identities/me           publish the caller's identity
+ *   POST /v1/release-identities/lookup       by Matrix id, this homeserver only
+ *   GET  /v1/release-identities/:accountId   anyone's entry
+ *
+ * The lookup is a POST with `{ matrixId }` in the body, not a GET with the id
+ * in the query string, so that "this address looked up @bob" stays out of
+ * the URL, which proxies log with the client's address (`infra/nginx/nginx.conf`
+ * logs `$request`). A GET to `/lookup` reaches `/:accountId` and gets the
+ * same 404 as anyone unknown.
  *
  * Signed-in callers only, and no capability scope: like the API's other
  * routes outside the feature modules, these are gated by the session, and
@@ -134,15 +140,15 @@ releaseIdentities.put('/me', async (c) => {
     }
 });
 
-releaseIdentities.get('/lookup', (c) => {
+const lookupSchema = z.strictObject({ matrixId: z.string().min(1).max(255) });
+
+releaseIdentities.post('/lookup', async (c) => {
     const user = requireUser(c);
     if (user instanceof Response) return user;
 
-    const matrixId = c.req.query('matrixId');
-    if (!matrixId) {
-        return c.json({ code: 'invalid_request', message: 'matrixId is required' }, 400);
-    }
-    const accountId = accountForLocalMatrixId(matrixId);
+    const parsed = await readJsonBody(c, lookupSchema);
+    if (parsed instanceof Response) return parsed;
+    const accountId = accountForLocalMatrixId(parsed.matrixId);
     if (!accountId) return notFound(c);
     const entry = releaseIdentityEntryFor(accountId);
     return entry.current ? c.json(entry) : notFound(c);

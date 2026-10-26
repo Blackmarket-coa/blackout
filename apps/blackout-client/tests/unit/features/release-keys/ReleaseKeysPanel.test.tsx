@@ -84,8 +84,8 @@ const fakeApi = (options: {
             mine = entryFor(mine.accountId, mine.matrixId ?? '', identity, check.fingerprint);
             return { ...mine, changed: true } as T;
         }
-        if (request.method === 'GET' && request.path.startsWith('/v1/release-identities/lookup?')) {
-            const matrixId = new URLSearchParams(request.path.split('?')[1]).get('matrixId') ?? '';
+        if (request.method === 'POST' && request.path === '/v1/release-identities/lookup') {
+            const { matrixId } = request.body as { matrixId: string };
             const found = options.lookup?.(matrixId) ?? null;
             if (!found) throw notFound();
             return found as T;

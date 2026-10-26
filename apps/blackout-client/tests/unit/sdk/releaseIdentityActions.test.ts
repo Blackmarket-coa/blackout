@@ -43,15 +43,17 @@ describe('createReleaseIdentityActions', () => {
         expect(sent).not.toContain(ALICE.mlkem768SecretKey.slice(0, 40));
     });
 
-    it('fetches by account id and by Matrix id, encoded', async () => {
+    it('fetches by account id, encoded, and by Matrix id in a POST body, not the URL', async () => {
         const { client, requests } = recordingClient();
         const actions = createReleaseIdentityActions(client);
         await actions.getForAccount('a/b');
         await actions.lookupByMatrixId('@bob:blackout.example');
         expect(requests[0]).toEqual({ method: 'GET', path: '/v1/release-identities/a%2Fb' });
         expect(requests[1]).toEqual({
-            method: 'GET',
-            path: '/v1/release-identities/lookup?matrixId=%40bob%3Ablackout.example',
+            method: 'POST',
+            path: '/v1/release-identities/lookup',
+            body: { matrixId: '@bob:blackout.example' },
         });
+        expect(requests[1].path).not.toContain('bob');
     });
 });
