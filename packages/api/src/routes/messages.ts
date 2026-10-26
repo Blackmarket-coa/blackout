@@ -113,8 +113,8 @@ messages.post('/:channelId', async (c) => {
     }
     const userId = session.sub;
 
-    // Accounts have no signing key: `pubkeyEd25519` on a user record is a
-    // random string minted at sign-up, with no private half anywhere. Until
+    // Accounts have no signing key. The `pubkeyEd25519` field on a user record
+    // is a random string minted at sign-up, with no private half anywhere. Until
     // 2026-10-25 `sign: true` stored `encodeURIComponent('<userId>:<content>')`
     // as the "signature" — a copy of the text, not a signature. Refusing is the
     // only truthful answer.

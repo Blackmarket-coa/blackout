@@ -149,6 +149,12 @@ unchanged; `sign: true` refused and nothing stored, `sign: false` fine; legacy
 rows read back without their labels. The existing message-auth and outbound
 router suites pass.
 
+Gitleaks' `generic-api-key` rule flagged a comment this fix added to
+`routes/messages.ts`: the comment said accounts have no signing key and, after
+a colon, named the user record's public-key field, which the rule read as a
+key value. The finding's fingerprint is entry 5 in `.gitleaksignore`, and the
+comment is reworded so later edits to it do not reintroduce the flag.
+
 ## F4 — the dead-drop appservice logged message bodies and senders — fixed
 
 **The behaviour.** The legacy queue's `flushRoom` in
