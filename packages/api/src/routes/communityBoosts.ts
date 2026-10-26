@@ -133,7 +133,7 @@ boosts.post('/pledges/:id/capture', async (c) => {
     const guard = adminGate(c);
     if (guard !== true) return guard;
     const parsed = await readJsonBody(c, captureSchema);
-    const detail = parsed instanceof Response ? {} : (parsed ?? {});
+    const detail = parsed instanceof Response ? {} : parsed ?? {};
     const pledge = captureBoostPledge(c.req.param('id'), detail);
     if (!pledge) return c.json({ code: 'pledge_not_found', message: 'No such pledge' }, 404);
     return c.json({ pledge });

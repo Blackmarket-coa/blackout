@@ -58,7 +58,10 @@ tips.post('/', async (c) => {
         return c.json({ tip }, 201);
     } catch (error) {
         if (error instanceof TipValidationError) {
-            return c.json({ code: error.code, message: error.message }, ERROR_STATUS[error.code] as 400 | 404 | 409);
+            return c.json(
+                { code: error.code, message: error.message },
+                ERROR_STATUS[error.code] as 400 | 404 | 409
+            );
         }
         throw error;
     }
