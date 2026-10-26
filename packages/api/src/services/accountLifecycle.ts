@@ -1,6 +1,7 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { db } from '../db/store';
 import type { UserRecord } from '../db/types';
+import { matrixUserIdFor } from './userIdentity';
 
 const DELETE_TOKEN_BYTES = 32;
 const DEFAULT_DELETE_TTL_SECONDS = 60 * 30; // 30 minutes
@@ -291,6 +292,14 @@ export const confirmAccountDeletion = (
     for (const sw of db.listDeadmanSwitchesForOwner(record.userId)) {
         db.eraseDeadmanSwitch(sw.id);
     }
+    // Invitation admissions (the use an account-number sign-up spent) hold the
+    // account's Matrix id, so they go with it, claimed or not. The redemption
+    // row a claim wrote stays, as every redemption row does. Read the Matrix id
+    // while the user row still exists.
+    db.deleteInvitationAdmissionsForUser(
+        record.userId,
+        matrixUserIdFor(record.userId) ?? undefined
+    );
     db.purgeUserAuthArtifacts(record.userId);
     db.deleteUser(record.userId);
     return { kind: 'ok', userId: record.userId };
