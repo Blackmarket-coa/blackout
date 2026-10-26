@@ -10,7 +10,7 @@
         "worker": "tsx src/worker.ts",
         "build": "node -e \"console.log('api build scaffold ok')\"",
         "lint": "eslint \"src/**/*.ts\" \"test/**/*.ts\" --max-warnings=0",
-        "test": "tsx --test --test-force-exit --test-concurrency=1 test/**/*.test.ts",
+        "test": "tsx --import ./test/_setup/blocking-stdio.mjs --test --test-force-exit --test-concurrency=1 test/**/*.test.ts",
         "typecheck": "tsc --noEmit -p tsconfig.json",
         "test:integration": "tsx --test test/**/*.integration.test.ts",
         "test:launch-smoke": "tsx --test test/launch-smoke.integration.test.ts",
