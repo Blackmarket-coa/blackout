@@ -1,7 +1,11 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { z } from 'zod';
-import { RELEASE_IDENTITY_ERRORS } from '@blackout/protocol';
+import {
+    RELEASE_IDENTITY_ERRORS,
+    RELEASE_IDENTITY_PUBLISHES_PER_DAY,
+    RELEASE_IDENTITY_STORAGE_LIMIT,
+} from '@blackout/protocol';
 import { requireUser } from '../middleware/require-user';
 import { readJsonBody } from '../middleware/validate';
 import {
@@ -98,11 +102,30 @@ releaseIdentities.put('/me', async (c) => {
                 },
                 403
             );
+        case 'reused':
+            return c.json(
+                {
+                    code: RELEASE_IDENTITY_ERRORS.reused,
+                    message:
+                        'This release identity was replaced before; a replaced identity cannot be made current again.',
+                },
+                409
+            );
+        case 'rate_limited':
+            c.header('Retry-After', String(outcome.retryAfterSeconds));
+            return c.json(
+                {
+                    code: RELEASE_IDENTITY_ERRORS.rateLimited,
+                    message: `At most ${RELEASE_IDENTITY_PUBLISHES_PER_DAY} new release identities in any 24 hours.`,
+                    retryAfterSeconds: outcome.retryAfterSeconds,
+                },
+                429
+            );
         case 'limit':
             return c.json(
                 {
                     code: RELEASE_IDENTITY_ERRORS.limit,
-                    message: 'This account has published as many release identities as are kept.',
+                    message: `This account has published ${RELEASE_IDENTITY_STORAGE_LIMIT} release identities, as many as are kept.`,
                 },
                 409
             );

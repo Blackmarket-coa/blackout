@@ -133,10 +133,41 @@ test('a new identity replaces the current one, which stays listed as superseded'
     assert.equal(old.fingerprint, firstCheck.fingerprint);
     assert.ok(old.supersededAt, 'the replaced identity says when it was replaced');
 
-    // Publishing the old one again makes it current again, as a new entry.
-    const back = (await (await publish(user, first)).json()) as Entry;
-    assert.equal(back.current?.fingerprint, firstCheck.fingerprint);
-    assert.equal(back.superseded.length, 2);
+    // Publishing the old one again is refused: a replaced identity is never
+    // made current again (H1 of the independent review), and nothing changes.
+    const back = await publish(user, first);
+    assert.equal(back.status, 409);
+    assert.deepEqual(await back.json(), {
+        code: 'release_identity_reused',
+        message:
+            'This release identity was replaced before; a replaced identity cannot be made current again.',
+    });
+    const after = (await (await get(user, '/me')).json()) as Entry;
+    assert.deepEqual(after.current?.identity, second);
+    assert.equal(after.superseded.length, 1);
+    assert.equal(db.listReleaseIdentitiesForAccount(user.id).length, 2);
+});
+
+test('no identity from an account’s history becomes current again, however old', async () => {
+    const user = seedUser();
+    const { publishReleaseIdentity } = await import('../src/services/releaseIdentities');
+    // The service reads the clock it is given: a day apart, the daily limit
+    // stays out of the way.
+    const day = (n: number) => () => new Date(Date.now() + n * 25 * 60 * 60 * 1000);
+    const published: ReleaseIdentity[] = [];
+    for (let n = 0; n < 4; n += 1) {
+        const identity = await freshIdentity(user.id);
+        published.push(identity);
+        assert.equal((await publishReleaseIdentity(user.id, identity, day(n))).kind, 'published');
+    }
+    assert.equal(db.listReleaseIdentitiesForAccount(user.id).length, 4);
+    for (const old of published.slice(0, 3)) {
+        assert.deepEqual(await publishReleaseIdentity(user.id, old, day(10)), { kind: 'reused' });
+    }
+    // The current one is still "unchanged", not refused.
+    const again = await publishReleaseIdentity(user.id, published[3], day(10));
+    assert.equal(again.kind, 'published');
+    assert.equal(again.kind === 'published' && again.changed, false);
 });
 
 test('nobody publishes an identity for another account', async () => {
@@ -210,9 +241,44 @@ test('a body carrying anything besides the six public fields is refused whole', 
     assert.equal(db.listReleaseIdentitiesForAccount(user.id).length, 0);
 });
 
-test('an account keeps at most 32 identities; the next one is refused', async () => {
+/** Move every identity of `accountId` back by `ms`, as if published that long ago. */
+const backdate = (accountId: string, ms: number) => {
+    for (const record of db.listReleaseIdentitiesForAccount(accountId)) {
+        db.releaseIdentities.set(record.id, {
+            ...record,
+            publishedAt: new Date(Date.parse(record.publishedAt) - ms).toISOString(),
+        });
+    }
+};
+
+test('at most 3 new identities in any 24 hours, then 429 with when to try again', async () => {
+    assert.equal(protocol.RELEASE_IDENTITY_PUBLISHES_PER_DAY, 3);
     const user = seedUser();
-    for (let i = 0; i < protocol.RELEASE_IDENTITY_HISTORY_LIMIT; i += 1) {
+    const identities = await Promise.all([1, 2, 3, 4].map(() => freshIdentity(user.id)));
+    for (const identity of identities.slice(0, 3)) {
+        assert.equal((await publish(user, identity)).status, 201);
+    }
+    // Republishing the current identity changes nothing and is not counted.
+    assert.equal((await publish(user, identities[2])).status, 200);
+
+    const refused = await publish(user, identities[3]);
+    assert.equal(refused.status, 429);
+    const body = (await refused.json()) as { code: string; retryAfterSeconds: number };
+    assert.equal(body.code, 'release_identity_rate_limited');
+    assert.ok(body.retryAfterSeconds > 23 * 3600 && body.retryAfterSeconds <= 24 * 3600);
+    assert.equal(refused.headers.get('retry-after'), String(body.retryAfterSeconds));
+    assert.equal(db.listReleaseIdentitiesForAccount(user.id).length, 3);
+
+    // Once the first of the three is more than a day old, one more fits.
+    backdate(user.id, 24 * 3600 * 1000 + 1000);
+    assert.equal((await publish(user, identities[3])).status, 201);
+    assert.equal(db.listReleaseIdentitiesForAccount(user.id).length, 4);
+});
+
+test('the history keeps every identity, and only a storage bound of 1000 stops publishing', async () => {
+    assert.equal(protocol.RELEASE_IDENTITY_STORAGE_LIMIT, 1000);
+    const user = seedUser();
+    for (let i = 0; i < protocol.RELEASE_IDENTITY_STORAGE_LIMIT - 1; i += 1) {
         db.publishReleaseIdentity({
             id: randomUUID(),
             accountId: user.id,
@@ -224,12 +290,17 @@ test('an account keeps at most 32 identities; the next one is refused', async ()
             fingerprint: `${i}`.padStart(64, '0'),
         });
     }
+    // Long ago, so the daily limit is not what refuses.
+    backdate(user.id, 7 * 24 * 3600 * 1000);
+    // The thousandth fits: the old cap of 32 is gone.
+    assert.equal((await publish(user, await freshIdentity(user.id))).status, 201);
+    backdate(user.id, 7 * 24 * 3600 * 1000);
     const res = await publish(user, await freshIdentity(user.id));
     assert.equal(res.status, 409);
     assert.equal(((await res.json()) as { code: string }).code, 'release_identity_limit');
     assert.equal(
         db.listReleaseIdentitiesForAccount(user.id).length,
-        protocol.RELEASE_IDENTITY_HISTORY_LIMIT
+        protocol.RELEASE_IDENTITY_STORAGE_LIMIT
     );
 });
 

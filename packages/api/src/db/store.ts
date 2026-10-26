@@ -2564,7 +2564,8 @@ class InMemoryDb {
      * Publish an account's release identity. Every identity of the account
      * not yet superseded is marked superseded first, each as its own write,
      * so Postgres sees the old row replaced before the new one appears.
-     * Callers check the identity and the account's history limit first.
+     * Callers check the identity, the account's history and the publish
+     * limits first (`services/releaseIdentities.ts`).
      */
     publishReleaseIdentity(
         input: Omit<ReleaseIdentityRecord, 'publishedAt' | 'supersededAt'>

@@ -8,9 +8,10 @@
 -- signature over them, all exactly as sent and verified, and the fingerprint
 -- the API computed. Nothing private is stored here: the private halves never
 -- leave the person's devices and recovery files. Publishing a different
--- identity sets superseded_at on the current row and adds a new one, so a
--- change of keys stays visible; at most 32 rows are kept per account. Account
--- deletion removes the account's rows.
+-- identity sets superseded_at on the current row and adds a new one; every row
+-- is kept, and an identity an account published before is never published
+-- again. At most 3 new rows per account in any 24 hours, and 1000 in all.
+-- Account deletion removes the account's rows.
 --
 -- No uniqueness on the current row per account: the store writes the old
 -- row's superseded_at and the new row as two ordered upserts, and reads take

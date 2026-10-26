@@ -36,12 +36,29 @@ export type ReleaseIdentityPublishResult = ReleaseIdentityDirectoryEntry & {
     changed: boolean;
 };
 
-/** How many identities the API keeps per account, current and replaced. */
-export const RELEASE_IDENTITY_HISTORY_LIMIT = 32;
+/**
+ * How many new identities an account may publish in any 24 hours (429 past
+ * that). Republishing the current identity does not count. Every identity an
+ * account published is kept, so this, not a cap on history, is what bounds a
+ * buggy client or a stolen session.
+ */
+export const RELEASE_IDENTITY_PUBLISHES_PER_DAY = 3;
+
+/**
+ * The most identities the API keeps for one account, current and replaced,
+ * there only to bound storage: at the daily limit it takes 334 days of
+ * publishing every day to reach. Past it, publishing is refused (409).
+ */
+export const RELEASE_IDENTITY_STORAGE_LIMIT = 1000;
 
 export const RELEASE_IDENTITY_ERRORS = {
     notFound: 'release_identity_not_found',
     invalid: 'invalid_release_identity',
     notYours: 'release_identity_not_yours',
+    /** 409: the identity was this account's before and was replaced. */
+    reused: 'release_identity_reused',
+    /** 429: `RELEASE_IDENTITY_PUBLISHES_PER_DAY` reached. */
+    rateLimited: 'release_identity_rate_limited',
+    /** 409: `RELEASE_IDENTITY_STORAGE_LIMIT` reached. */
     limit: 'release_identity_limit',
 } as const;

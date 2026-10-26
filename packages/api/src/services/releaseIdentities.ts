@@ -12,7 +12,8 @@
  */
 import { randomUUID } from 'node:crypto';
 import {
-    RELEASE_IDENTITY_HISTORY_LIMIT,
+    RELEASE_IDENTITY_PUBLISHES_PER_DAY,
+    RELEASE_IDENTITY_STORAGE_LIMIT,
     verifyReleaseIdentity,
     type ReleaseIdentity,
     type ReleaseIdentityDirectoryEntry,
@@ -72,18 +73,30 @@ export type PublishReleaseIdentityOutcome =
     | { kind: 'published'; changed: boolean; entry: ReleaseIdentityDirectoryEntry }
     | { kind: 'invalid'; problem: ReleaseIdentityProblem }
     | { kind: 'not_yours' }
+    | { kind: 'reused' }
+    | { kind: 'rate_limited'; retryAfterSeconds: number }
     | { kind: 'limit' }
     | { kind: 'no_account' };
 
+const PUBLISH_WINDOW_MS = 24 * 60 * 60 * 1000;
+
 /**
  * Publish `input` as `accountId`'s release identity. An identity equal to
- * the current one changes nothing; a different one becomes current and the
- * old one is kept as superseded, so a change of keys shows. At most
- * `RELEASE_IDENTITY_HISTORY_LIMIT` identities are kept per account.
+ * the current one changes nothing. Any other identity the account published
+ * before is refused (`reused`): a replaced identity is never made current
+ * again, whoever asks, so a stolen session cannot put back a key its owner
+ * replaced after losing a device (the independent review's H1). A new one
+ * becomes current and the old one is kept as superseded, every one of them:
+ * the history is what that refusal reads. At most
+ * `RELEASE_IDENTITY_PUBLISHES_PER_DAY` new identities in any 24 hours
+ * (`rate_limited`, with when the oldest of them leaves the window), and at
+ * most `RELEASE_IDENTITY_STORAGE_LIMIT` in all (`limit`), a bound on storage
+ * only.
  */
 export const publishReleaseIdentity = async (
     accountId: string,
-    input: unknown
+    input: unknown,
+    now: () => Date = () => new Date()
 ): Promise<PublishReleaseIdentityOutcome> => {
     const check = await verifyReleaseIdentity(input);
     if (!check.ok) {
@@ -94,15 +107,29 @@ export const publishReleaseIdentity = async (
     }
     if (check.identity.accountId !== accountId) return { kind: 'not_yours' };
 
-    // The checks above awaited, so the account and its history are read now.
+    // The checks above awaited, so the account and its history are read now,
+    // and nothing below awaits before the write.
     if (!db.getUserById(accountId)) return { kind: 'no_account' };
-    const current = db.getCurrentReleaseIdentity(accountId);
+    const history = db.listReleaseIdentitiesForAccount(accountId);
+    const current = history.find((record) => !record.supersededAt);
     if (current && current.fingerprint === check.fingerprint) {
         return { kind: 'published', changed: false, entry: releaseIdentityEntryFor(accountId) };
     }
-    if (db.listReleaseIdentitiesForAccount(accountId).length >= RELEASE_IDENTITY_HISTORY_LIMIT) {
-        return { kind: 'limit' };
+    if (history.some((record) => record.fingerprint === check.fingerprint)) {
+        return { kind: 'reused' };
     }
+    const at = now().getTime();
+    const recent = history
+        .map((record) => Date.parse(record.publishedAt))
+        .filter((publishedAt) => publishedAt > at - PUBLISH_WINDOW_MS);
+    if (recent.length >= RELEASE_IDENTITY_PUBLISHES_PER_DAY) {
+        const opensAt = Math.min(...recent) + PUBLISH_WINDOW_MS;
+        return {
+            kind: 'rate_limited',
+            retryAfterSeconds: Math.max(1, Math.ceil((opensAt - at) / 1000)),
+        };
+    }
+    if (history.length >= RELEASE_IDENTITY_STORAGE_LIMIT) return { kind: 'limit' };
     db.publishReleaseIdentity({
         id: randomUUID(),
         accountId,

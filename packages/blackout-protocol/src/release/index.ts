@@ -76,7 +76,8 @@ export {
     type CheckRecoveryContentsOptions,
 } from './recoveryFile';
 export {
-    RELEASE_IDENTITY_HISTORY_LIMIT,
+    RELEASE_IDENTITY_PUBLISHES_PER_DAY,
+    RELEASE_IDENTITY_STORAGE_LIMIT,
     RELEASE_IDENTITY_ERRORS,
     type ReleaseIdentityEntry,
     type ReleaseIdentityDirectoryEntry,
