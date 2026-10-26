@@ -44,3 +44,17 @@ eff3f80589879b156a2378743f3c42e2ce7314f1:packages/api/test/github-issues.integra
 #    to it do not reintroduce the flag. See the F3 entry in
 #    docs/security/api-findings-triage-2026-10-25.md.
 9aafe6c971ba584305186633e73c1a73ab78c008:packages/api/src/routes/messages.ts:generic-api-key:116
+
+# 6) Release-identity test vectors in
+#    packages/blackout-protocol/src/release/testVectors.ts (see
+#    docs/security/release-identities-2026-10-26.md, section 6). Fixed and
+#    synthetic: the vector identities' private keys are byte ranges (0x00,
+#    0x01, ...) so the known-answer tests can be reproduced, and they protect
+#    nothing real. Two of the flagged lines hold the X25519 public key of the
+#    "Alice" vector identity (once in the identity, once in the recovery
+#    file's contents); the third holds the argon2id output for the vector's
+#    test passphrase, written in the same file, which opens only the vector
+#    recovery file. Dropping or weakening them would weaken the tests.
+d7942424ce1e010f23b1bbf390eff7a1dfae527b:packages/blackout-protocol/src/release/testVectors.ts:generic-api-key:63
+d7942424ce1e010f23b1bbf390eff7a1dfae527b:packages/blackout-protocol/src/release/testVectors.ts:generic-api-key:159
+d7942424ce1e010f23b1bbf390eff7a1dfae527b:packages/blackout-protocol/src/release/testVectors.ts:generic-api-key:170
