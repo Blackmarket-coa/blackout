@@ -207,10 +207,11 @@ export const DataRetentionSection: React.FC = () => {
                 <h4 style={{ margin: 0 }}>Download your data</h4>
                 <small>
                     Exports a JSON file with your account data: profile and linked accounts, social
-                    graph, ledger records, scheduled messages and dead-man switches. It does not yet
-                    include every record the server keeps. Free on every tier. The contents of your
-                    encrypted rooms are not included — the server cannot read them — and the file
-                    tells you how to export those from this client instead.
+                    graph, ledger records, scheduled messages, dead-man switches and the public half
+                    of your release keys. It does not yet include every record the server keeps.
+                    Free on every tier. The contents of your encrypted rooms are not included — the
+                    server cannot read them — and the file tells you how to export those from this
+                    client instead.
                 </small>
                 <div>
                     <button
@@ -241,7 +242,9 @@ export const DataRetentionSection: React.FC = () => {
                     you participated in. Scheduled messages you have not sent yet are cancelled.
                     Dead-man switches you own that have not fired are cancelled, and what you put in
                     them is removed from Blackout&apos;s database. One that has already fired stays
-                    readable to the people it named.
+                    readable to the people it named. The public half of your release keys is removed
+                    from Blackout&apos;s server; the private keys on your devices and in your
+                    recovery files stay there until you remove them.
                 </small>
                 {deleteStage === 'idle' && (
                     <div>
