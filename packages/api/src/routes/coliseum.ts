@@ -842,11 +842,19 @@ coliseum.get('/matches/:id/link', (c) => {
     });
 });
 
-// Public dodge ping — recorded when the Challenge Link preview is opened.
-coliseum.post('/matches/:id/seen', (c) => {
-    const match = markChallengeSeen(c.req.param('id'));
-    if (!match) return c.json({ code: 'not_found', message: 'Match not found' }, 404);
-    return c.json({ status: challengeStatusFor(match) });
+// The dodge ping: the person challenged opened the Challenge Link. Only they
+// can record it, signed in (markChallengeSeen); the status it sets is public.
+coliseum.post('/matches/:id/seen', matchRateLimit, (c) => {
+    const user = requireUser(c, 'Sign in to open a challenge');
+    if (user instanceof Response) return user;
+    const result = markChallengeSeen(c.req.param('id') ?? '', user.sub);
+    if (result === 'not_found') {
+        return c.json({ code: 'not_found', message: 'Match not found' }, 404);
+    }
+    if (result === 'forbidden') {
+        return c.json({ code: 'forbidden', message: 'Not your challenge' }, 403);
+    }
+    return c.json({ status: challengeStatusFor(result) });
 });
 
 function matchActionResult(

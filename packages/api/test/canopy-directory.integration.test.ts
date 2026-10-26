@@ -163,12 +163,17 @@ test('canopy index requires write capability', async () => {
     assert.equal(getCanopy(canopyId), null);
 });
 
+// Installing takes being the canopy's admin (test/apps-routes.integration.test.ts),
+// so both callers here are: the first canopy is a space they administer that
+// was never listed.
 test('apps install rejects unknown canopy with code unknown_canopy', async () => {
     __resetCanopyDirectoryForTests();
+    const admin = seedUser();
+    const canopyId = seedSpace(admin.mxid);
     const response = await app.request('/v1/apps/directory/welcome-ops/install', {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ canopyId: 'never-registered', permissions: ['members:read'] }),
+        headers: { ...readHeaders(admin), 'content-type': 'application/json' },
+        body: JSON.stringify({ canopyId, permissions: ['members:read'] }),
     });
     assert.equal(response.status, 400);
     const body = (await response.json()) as { code?: string };
@@ -183,7 +188,7 @@ test('apps install succeeds after canopy is registered', async () => {
     assert.equal(listed.status, 202);
     const install = await app.request('/v1/apps/directory/welcome-ops/install', {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { ...readHeaders(admin), 'content-type': 'application/json' },
         body: JSON.stringify({ canopyId, permissions: ['members:read'] }),
     });
     assert.equal(install.status, 201);

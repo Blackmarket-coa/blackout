@@ -179,10 +179,22 @@ export function declineMatch(
     return next;
 }
 
-/** Record that the Challenge Link was opened (the dodge ping). */
-export function markChallengeSeen(matchId: string): ColiseumMatch | null {
+/**
+ * Record that the person challenged opened the Challenge Link (the dodge
+ * ping). The status it leads to, "Seen, No Response", is public and says that
+ * person saw the challenge and said nothing, so only they can record it: the
+ * named opponent of a targeted challenge, as for declining. An open challenge
+ * names nobody, and its status stays `open` whoever sees it. Until 2026-10-26
+ * anyone, signed in or not, could mark any challenge seen by its match id, the
+ * challenger included (F9 in docs/security/api-findings-triage-2026-10-25.md).
+ */
+export function markChallengeSeen(
+    matchId: string,
+    userId: string
+): ColiseumMatch | 'not_found' | 'forbidden' {
     const match = db.getColiseumMatch(matchId);
-    if (!match) return null;
+    if (!match) return 'not_found';
+    if (match.open || !match.opponentId || match.opponentId !== userId) return 'forbidden';
     if (match.acceptedAt || match.declinedAt || match.challengeSeenAt) return match;
     const next: ColiseumMatch = { ...match, challengeSeenAt: new Date().toISOString() };
     db.upsertColiseumMatch(next);

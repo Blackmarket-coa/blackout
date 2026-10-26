@@ -435,6 +435,36 @@ For the source-of-truth triage with tier/owner detail see
 -   **Not there yet:** client publication and verification; a bound on how often
     an account may append; witness gossip across deployments.
 
+### API write routes that took no session (2026-10-26)
+
+-   **Where:** app installs (`/v1/apps`), federation links
+    (`/v1/federation/links`), passkey registration (`/v1/auth/webauthn`), the
+    Coliseum challenge "seen" ping, and the admin writes behind the admin API
+    key; F5–F9 in
+    [`docs/security/api-findings-triage-2026-10-25.md`](docs/security/api-findings-triage-2026-10-25.md),
+    which lists every write route in the API and the check it makes.
+-   **App installs:** installing an app in a canopy, revoking it, and recording
+    an action it ran take being that canopy's admin on the homeserver (able to
+    change its power levels); its moderators cannot. While the API cannot read
+    the canopy from the homeserver, all three are refused. No app runs yet: an
+    install records scopes that nothing acts on.
+-   **Federation links:** a link takes an admin of both canopies, so two
+    communities with different admins cannot be linked; there is no way for one
+    to propose and the other to accept.
+-   **Passkeys:** still off unless `WEBAUTHN_ENABLED=1`, and no app offers them.
+    Registering one needs the account signed in, and a passkey already
+    registered cannot be registered again by anyone. Signing in with one checks
+    the passkey and starts no session, and anyone can ask whether an account has
+    passkeys.
+-   **Admin API key:** ad-revenue periods and payouts, capturing and refunding
+    tips, creator subscriptions and boost pledges, and comping or refunding a
+    subscription answer 503 until the operator sets `BLACKOUT_ADMIN_API_KEY`.
+    Before 2026-10-26 an unset key fell back to a value printed in the source.
+-   **"Seen, No Response" in the Coliseum:** only the person challenged, signed
+    in, can record that they opened a challenge; opening it signed out records
+    nothing. No app sends the ping yet, so through the apps no challenge shows
+    as seen.
+
 ## Deferred multi-week workstreams
 
 These are tracked in

@@ -39,6 +39,11 @@
  *
  * The canopy's join rule is not checked: its admin can list a canopy that is
  * not public (`KNOWN_LIMITATIONS.md`, "New canopy and den defaults").
+ *
+ * The same check, under the name `checkCanopyAdmin`, gates the other writes
+ * that change a canopy's configuration: installing, revoking and metering an
+ * app there (`routes/apps.ts`) and linking it to another canopy
+ * (`routes/federation.ts`).
  */
 import { matrixClient } from '../integrations/matrix-client';
 import {
@@ -95,18 +100,27 @@ export async function checkMayListCanopy(
     return { ok: true };
 }
 
-/** HTTP status and body for a refusal. */
+/**
+ * Is the Blackout user `userId` an admin of the canopy `canopyId` on the
+ * homeserver? The listing check itself, for the routes that need the same
+ * standing for something other than the directory entry: same rule, same
+ * order, same refusals, and it fails closed when the homeserver cannot answer.
+ */
+export const checkCanopyAdmin = checkMayListCanopy;
+
+/**
+ * HTTP status and body for a refusal. `notAdminMessage` says what being an
+ * admin was needed for; the default is the directory listing's.
+ */
 export const canopyListingRefusalResponse = (
-    reason: CanopyListingRefusal
+    reason: CanopyListingRefusal,
+    notAdminMessage = 'Only an admin of this canopy can list it in the directory.'
 ): { status: 401 | 403 | 409 | 503; body: { code: CanopyListingRefusal; message: string } } => {
     switch (reason) {
         case 'not_canopy_admin':
             return {
                 status: 403,
-                body: {
-                    code: reason,
-                    message: 'Only an admin of this canopy can list it in the directory.',
-                },
+                body: { code: reason, message: notAdminMessage },
             };
         case 'not_a_space':
             return {
@@ -140,3 +154,6 @@ export const canopyListingRefusalResponse = (
         }
     }
 };
+
+/** `canopyListingRefusalResponse`, named for the routes that use `checkCanopyAdmin`. */
+export const canopyAdminRefusalResponse = canopyListingRefusalResponse;
