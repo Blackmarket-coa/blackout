@@ -13,16 +13,20 @@ import {
     writeRecoveryFile,
     type ReleaseIdentity,
     type ReleaseIdentityDirectoryEntry,
+    type ReleaseRecoveryContents,
 } from '@blackout/protocol';
 import { BlackoutSdkError, createReleaseIdentityActions, type ApiClient } from '@blackout/sdk';
 import {
     currentKeySet,
     indexedDbReleaseKeyStore,
     mergeRecoveryContents,
+    planRecoveryLoad,
     toRecoveryContents,
     withComparison,
     withNewCurrentKeySet,
     type DeviceReleaseKeys,
+    type RecoveryCurrentChoice,
+    type RecoveryLoadPlan,
     type ReleaseKeyStore,
 } from './releaseKeyStore';
 import { releaseKeysSupported } from './support';
@@ -164,6 +168,54 @@ type Comparing =
 
 type Confirming = 'replace' | 'remove' | null;
 
+type AskPlan = Extract<RecoveryLoadPlan, { kind: 'ask' }>;
+
+type PendingLoad = {
+    contents: ReleaseRecoveryContents;
+    plan: AskPlan;
+    replacedOnServer: boolean;
+};
+
+/** Said when another tab or window changed the keys while this one showed them. */
+export const CHANGED_ELSEWHERE_NOT_REMOVED =
+    'Your release keys on this device changed in another tab or window, so nothing was ' +
+    'removed. Check them below, then remove them again if you still want to.';
+
+export const CHANGED_ELSEWHERE_NOT_RECORDED =
+    'Nothing was recorded: your release keys were removed from this device in another tab ' +
+    'or window.';
+
+export const COMPARED_WITH_OLD_KEY =
+    'Recorded, but your release keys changed in another tab or window while you compared: ' +
+    'that code was for your previous key, so compare again with your new one.';
+
+/** The question asked before a recovery file's key may replace this device's current one. */
+export const recoveryLoadQuestion = (
+    pending: PendingLoad,
+    describe: (keySet: AskPlan['device']) => string
+): string => {
+    const { plan } = pending;
+    const why =
+        plan.reason === 'older'
+            ? `This recovery file's current release key (${describe(
+                  plan.file
+              )}) is older than the one this device uses (${describe(plan.device)}).`
+            : pending.replacedOnServer
+            ? `This recovery file's current release key (${describe(
+                  plan.file
+              )}) was replaced: Blackout's server lists it as replaced, so it can't be published again. This device uses ${describe(
+                  plan.device
+              )}.`
+            : `This recovery file's current release key (${describe(
+                  plan.file
+              )}) was replaced on this device, which uses ${describe(plan.device)}.`;
+    return (
+        `${why} Keep using this device's key? Either way, the file's keys are kept on this ` +
+        "device as old keys and its comparisons are added. Use the file's key only if you know " +
+        "this device's key shouldn't be used."
+    );
+};
+
 const sectionStyle: CSSProperties = {
     border: '1px solid var(--border-default, #444)',
     borderRadius: 8,
@@ -209,6 +261,7 @@ export const ReleaseKeysPanel = ({
     const [loadPassphrase, setLoadPassphrase] = useState('');
     const [compareInput, setCompareInput] = useState('');
     const [comparing, setComparing] = useState<Comparing>({ status: 'idle' });
+    const [pendingLoad, setPendingLoad] = useState<PendingLoad | null>(null);
 
     const refresh = useCallback(async () => {
         try {
@@ -273,11 +326,14 @@ export const ReleaseKeysPanel = ({
         setNotice(null);
         try {
             const keySet = await createReleaseKeySet(me.accountId, now());
-            const next = withNewCurrentKeySet(device, me.accountId, keySet, now());
-            await store.save(next);
+            // Built from what is stored now, not from this tab's copy, so keys
+            // another tab made meanwhile are kept as old keys, not lost.
+            const next = await store.update(me.accountId, (stored) =>
+                withNewCurrentKeySet(stored, me.accountId, keySet, now())
+            );
             setDevice(next);
             setComparing({ status: 'idle' });
-            await publish(next);
+            if (next) await publish(next);
         } catch (cause) {
             setNotice({ tone: 'error', text: `Creating release keys failed: ${errorText(cause)}` });
         } finally {
@@ -300,7 +356,13 @@ export const ReleaseKeysPanel = ({
         setConfirming(null);
         setBusy('remove');
         try {
-            await store.remove(me.accountId);
+            // Only the record this tab showed: keys another tab made or loaded
+            // meanwhile are not deleted unseen.
+            if (!(await store.remove(me.accountId, device))) {
+                setDevice(await store.load(me.accountId));
+                setNotice({ tone: 'error', text: CHANGED_ELSEWHERE_NOT_REMOVED });
+                return;
+            }
             setDevice(null);
             setComparing({ status: 'idle' });
             setNotice({
@@ -365,11 +427,35 @@ export const ReleaseKeysPanel = ({
                 accountId: me.accountId,
                 onProgress: setProgress,
             });
-            const next = mergeRecoveryContents(device, contents, now());
-            await store.save(next);
-            setDevice(next);
+            const supersededOnServer = new Set(me.superseded.map((entry) => entry.fingerprint));
+            // Decided against what is stored now, in the same transaction as
+            // the write. A file whose key is older or was replaced does not
+            // replace this device's key without asking.
+            const asked: { plan?: AskPlan } = {};
+            const next = await store.update(me.accountId, (stored) => {
+                const plan = planRecoveryLoad(stored, contents, supersededOnServer);
+                if (plan.kind === 'ask') {
+                    asked.plan = plan;
+                    return undefined;
+                }
+                return mergeRecoveryContents(
+                    stored,
+                    contents,
+                    now(),
+                    plan.kind === 'adopt' ? 'file' : 'device'
+                );
+            });
             setLoadPassphrase('');
             setLoadText(null);
+            if (asked.plan) {
+                setPendingLoad({
+                    contents,
+                    plan: asked.plan,
+                    replacedOnServer: supersededOnServer.has(asked.plan.file.fingerprint),
+                });
+                return;
+            }
+            setDevice(next);
             setComparing({ status: 'idle' });
             setNotice({ tone: 'info', text: 'Loaded your release keys from the recovery file.' });
         } catch (cause) {
@@ -377,6 +463,31 @@ export const ReleaseKeysPanel = ({
         } finally {
             setBusy(null);
             setProgress(null);
+        }
+    };
+
+    const finishLoad = async (choice: RecoveryCurrentChoice) => {
+        if (!me || !pendingLoad) return;
+        const { contents } = pendingLoad;
+        setPendingLoad(null);
+        setBusy('load');
+        try {
+            const next = await store.update(me.accountId, (stored) =>
+                mergeRecoveryContents(stored, contents, now(), choice)
+            );
+            setDevice(next);
+            setComparing({ status: 'idle' });
+            setNotice({
+                tone: 'info',
+                text:
+                    choice === 'device'
+                        ? "Loaded the recovery file's keys as old keys, and its comparisons. This device's key stays your current key."
+                        : "Loaded your release keys from the recovery file. The file's key is now this device's current key.",
+            });
+        } catch (cause) {
+            setNotice({ tone: 'error', text: errorText(cause) });
+        } finally {
+            setBusy(null);
         }
     };
 
@@ -417,23 +528,32 @@ export const ReleaseKeysPanel = ({
     };
 
     const recordMatch = async () => {
-        if (comparing.status !== 'code' || !device || !local) return;
+        if (comparing.status !== 'code' || !device || !local || !me) return;
         const at = now();
-        const next = withComparison(
-            device,
-            {
-                accountId: comparing.accountId,
-                matrixId: comparing.matrixId,
-                fingerprint: comparing.fingerprint,
-                ownFingerprint: local.fingerprint,
-                comparedAt: at.toISOString(),
-            },
-            at
-        );
+        const comparison = {
+            accountId: comparing.accountId,
+            matrixId: comparing.matrixId,
+            fingerprint: comparing.fingerprint,
+            ownFingerprint: local.fingerprint,
+            comparedAt: at.toISOString(),
+        };
         try {
-            await store.save(next);
+            // Added to what is stored now: a key set another tab made or
+            // removed meanwhile is neither lost nor brought back.
+            const next = await store.update(me.accountId, (stored) =>
+                stored ? withComparison(stored, comparison, at) : undefined
+            );
             setDevice(next);
+            if (!next) {
+                // The compare section goes with the keys, so say it up top.
+                setComparing({ status: 'idle' });
+                setNotice({ tone: 'error', text: CHANGED_ELSEWHERE_NOT_RECORDED });
+                return;
+            }
             setComparing({ status: 'recorded', matrixId: comparing.matrixId });
+            if (currentKeySet(next)?.fingerprint !== local.fingerprint) {
+                setNotice({ tone: 'info', text: COMPARED_WITH_OLD_KEY });
+            }
         } catch (cause) {
             setComparing({ status: 'error', text: errorText(cause) });
         }
@@ -649,10 +769,11 @@ export const ReleaseKeysPanel = ({
                                 </>
                             )}
                             <p>
-                                To load one, choose the file and enter its passphrase. Its keys
-                                become your current keys on this device; any other keys here are
-                                kept as old keys, and its comparisons are added to this
-                                device&apos;s.
+                                To load one, choose the file and enter its passphrase. Its keys are
+                                kept on this device and its comparisons are added. Its current key
+                                becomes this device&apos;s current key only if this device has none,
+                                or the file&apos;s is newer and wasn&apos;t replaced; otherwise you
+                                are asked first.
                             </p>
                             <label style={{ display: 'block' }}>
                                 Recovery file{' '}
@@ -683,6 +804,32 @@ export const ReleaseKeysPanel = ({
                             >
                                 Load the recovery file
                             </button>
+                            {pendingLoad && (
+                                <div
+                                    role="group"
+                                    aria-label="Confirm which key to use"
+                                    style={sectionStyle}
+                                >
+                                    <p>
+                                        {recoveryLoadQuestion(
+                                            pendingLoad,
+                                            (keySet) =>
+                                                `${shortFingerprint(
+                                                    keySet.fingerprint
+                                                )}, created ${formatLocalTime(keySet.createdAt)}`
+                                        )}
+                                    </p>
+                                    <button type="button" onClick={() => void finishLoad('device')}>
+                                        Keep this device&apos;s key
+                                    </button>{' '}
+                                    <button type="button" onClick={() => void finishLoad('file')}>
+                                        Use the file&apos;s key
+                                    </button>{' '}
+                                    <button type="button" onClick={() => setPendingLoad(null)}>
+                                        Don&apos;t load the file
+                                    </button>
+                                </div>
+                            )}
                         </div>
 
                         {local && (

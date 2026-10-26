@@ -23,11 +23,41 @@ export type DeviceReleaseKeys = {
     updatedAt: string;
 };
 
+/**
+ * What a change to the stored record returns: the record to store, or
+ * `undefined` to leave what is stored as it is.
+ */
+export type ReleaseKeysChange = (stored: DeviceReleaseKeys | null) => DeviceReleaseKeys | undefined;
+
 export interface ReleaseKeyStore {
     load(accountId: string): Promise<DeviceReleaseKeys | null>;
-    save(record: DeviceReleaseKeys): Promise<void>;
-    remove(accountId: string): Promise<void>;
+    /**
+     * Read the stored record, compute the next one from it with `change` and
+     * write that, all in one readwrite transaction, so that a change another
+     * tab or window made in the meantime is what `change` starts from rather
+     * than something a stale copy overwrites (the independent review's M3).
+     * `change` must not await anything: the transaction ends once it returns.
+     * Resolves to the record stored afterwards.
+     */
+    update(accountId: string, change: ReleaseKeysChange): Promise<DeviceReleaseKeys | null>;
+    /**
+     * Delete the account's record, in one transaction with reading it, and
+     * only if it is still exactly `expected` (when given): a record changed
+     * elsewhere since the caller read it is left alone, and this resolves to
+     * false.
+     */
+    remove(accountId: string, expected?: DeviceReleaseKeys | null): Promise<boolean>;
 }
+
+/**
+ * Whether two copies of a record hold the same things. IndexedDB returns a
+ * structured clone, which keeps property order, so the JSON forms match
+ * exactly when the contents do.
+ */
+export const sameDeviceRecord = (
+    a: DeviceReleaseKeys | null,
+    b: DeviceReleaseKeys | null
+): boolean => JSON.stringify(a) === JSON.stringify(b);
 
 const DB_NAME = 'blackout-release-keys';
 const DB_VERSION = 1;
@@ -80,6 +110,40 @@ const withStore = async <T>(
 };
 
 /**
+ * One readwrite transaction: read the account's record, then let `decide`
+ * act on it with the same store before the transaction commits. Whatever
+ * `decide` returns is what this resolves to once the transaction completes.
+ */
+const readThenWrite = async <T>(
+    accountId: string,
+    decide: (stored: DeviceReleaseKeys | null, store: IDBObjectStore) => T
+): Promise<T> => {
+    const db = await openDb();
+    try {
+        return await new Promise<T>((resolve, reject) => {
+            const tx = db.transaction(ACCOUNTS, 'readwrite');
+            const store = tx.objectStore(ACCOUNTS);
+            let result: T;
+            let failure: unknown;
+            const read = store.get(accountId);
+            read.onsuccess = () => {
+                try {
+                    result = decide((read.result as DeviceReleaseKeys | undefined) ?? null, store);
+                } catch (cause) {
+                    failure = cause;
+                    tx.abort();
+                }
+            };
+            tx.oncomplete = () => resolve(result);
+            tx.onabort = () =>
+                reject(failure ?? tx.error ?? new Error('Release key store transaction aborted.'));
+        });
+    } finally {
+        db.close();
+    }
+};
+
+/**
  * Ask the browser to treat this site's storage as the person's data rather
  * than evictable cache. Browsers may say no; the keys are stored either way.
  */
@@ -91,19 +155,42 @@ const requestPersistence = async (): Promise<void> => {
     }
 };
 
-export const indexedDbReleaseKeyStore: ReleaseKeyStore = {
+export const indexedDbReleaseKeyStore: ReleaseKeyStore & {
+    /**
+     * Replace the record whatever is stored. Only for seeding a store (tests,
+     * tools); the screen writes through `update`, which cannot lose a change
+     * made elsewhere.
+     */
+    save(record: DeviceReleaseKeys): Promise<void>;
+} = {
     async load(accountId) {
         const record = await withStore<DeviceReleaseKeys | undefined>('readonly', (store) =>
             store.get(accountId)
         );
         return record ?? null;
     },
+    async update(accountId, change) {
+        await requestPersistence();
+        return readThenWrite(accountId, (stored, store) => {
+            const next = change(stored);
+            if (next === undefined) return stored;
+            if (next.accountId !== accountId) {
+                throw new Error('release keys: a record must stay under its own account');
+            }
+            store.put(next);
+            return next;
+        });
+    },
+    async remove(accountId, expected) {
+        return readThenWrite(accountId, (stored, store) => {
+            if (expected !== undefined && !sameDeviceRecord(stored, expected)) return false;
+            store.delete(accountId);
+            return true;
+        });
+    },
     async save(record) {
         await requestPersistence();
         await withStore<void>('readwrite', (store) => store.put(record));
-    },
-    async remove(accountId) {
-        await withStore<void>('readwrite', (store) => store.delete(accountId));
     },
 };
 
@@ -146,30 +233,93 @@ export const withComparison = (
     updatedAt: now.toISOString(),
 });
 
+/** Which key set stays current when a recovery file is taken in. */
+export type RecoveryCurrentChoice = 'device' | 'file';
+
+/**
+ * What loading a recovery file may do to this device's current key set.
+ * `adopt`: the file's current key set may become current without asking,
+ * because this device has none, or the file's is newer (created later) and
+ * neither this device nor the server lists it as replaced. `same`: both have
+ * the same current key set. `ask`: the file's is older, or was replaced, so
+ * making it current would quietly bring back a key the person moved away
+ * from, perhaps after losing a device (the independent review's M4); the
+ * screen asks first, and keeps this device's unless told otherwise.
+ */
+export type RecoveryLoadPlan =
+    | { kind: 'adopt' }
+    | { kind: 'same' }
+    | {
+          kind: 'ask';
+          reason: 'older' | 'replaced';
+          device: StoredReleaseKeySet;
+          file: StoredReleaseKeySet;
+      };
+
+export const planRecoveryLoad = (
+    record: DeviceReleaseKeys | null,
+    contents: ReleaseRecoveryContents,
+    supersededOnServer: ReadonlySet<string> = new Set()
+): RecoveryLoadPlan => {
+    const here = currentKeySet(record);
+    const fromFile = contents.keySets.find((set) => set.status === 'current');
+    if (!here || !fromFile) return { kind: 'adopt' };
+    if (here.fingerprint === fromFile.fingerprint) return { kind: 'same' };
+    const replaced =
+        supersededOnServer.has(fromFile.fingerprint) ||
+        (record?.keySets ?? []).some(
+            (set) => set.fingerprint === fromFile.fingerprint && set.status === 'superseded'
+        );
+    const fileTime = Date.parse(fromFile.createdAt);
+    const hereTime = Date.parse(here.createdAt);
+    const newer = Number.isFinite(fileTime) && Number.isFinite(hereTime) && fileTime > hereTime;
+    if (newer && !replaced) return { kind: 'adopt' };
+    return { kind: 'ask', reason: replaced ? 'replaced' : 'older', device: here, file: fromFile };
+};
+
 /**
  * Take in what a recovery file held (already checked by
- * `readRecoveryFile`): the file's current key set becomes current here; key
- * sets only this device had stay, as superseded ones; comparisons are joined,
- * the later of two for the same person and key kept.
+ * `readRecoveryFile`). With `current: 'file'` the file's current key set
+ * becomes current here and the key sets only this device had stay, as
+ * superseded ones. With `current: 'device'` this device's key sets keep their
+ * places and the file's other key sets are added, superseded. Either way the
+ * comparisons are joined, the later of two for the same person and key kept.
+ * `planRecoveryLoad` says which choice needs asking for.
  */
 export const mergeRecoveryContents = (
     record: DeviceReleaseKeys | null,
     contents: ReleaseRecoveryContents,
-    now: Date
+    now: Date,
+    current: RecoveryCurrentChoice
 ): DeviceReleaseKeys => {
-    const fromFile = new Set(contents.keySets.map((set) => set.fingerprint));
-    const onlyHere = (record?.keySets ?? [])
-        .filter((set) => !fromFile.has(set.fingerprint))
-        .map((set): StoredReleaseKeySet => ({ ...set, status: 'superseded' }));
     const comparisons = [...(record?.comparisons ?? [])];
     for (const comparison of contents.comparisons) {
         const at = comparisons.findIndex((existing) => sameComparison(existing, comparison));
         if (at === -1) comparisons.push(comparison);
         else if (comparison.comparedAt > comparisons[at].comparedAt) comparisons[at] = comparison;
     }
+    const keepHere = current === 'device' && currentKeySet(record) !== undefined;
+    let keySets: StoredReleaseKeySet[];
+    if (keepHere) {
+        const here = new Set((record?.keySets ?? []).map((set) => set.fingerprint));
+        keySets = [
+            ...(record?.keySets ?? []),
+            ...contents.keySets
+                .filter((set) => !here.has(set.fingerprint))
+                .map((set): StoredReleaseKeySet => ({ ...set, status: 'superseded' })),
+        ];
+    } else {
+        const fromFile = new Set(contents.keySets.map((set) => set.fingerprint));
+        keySets = [
+            ...(record?.keySets ?? [])
+                .filter((set) => !fromFile.has(set.fingerprint))
+                .map((set): StoredReleaseKeySet => ({ ...set, status: 'superseded' })),
+            ...contents.keySets,
+        ];
+    }
     return {
         accountId: contents.accountId,
-        keySets: [...onlyHere, ...contents.keySets],
+        keySets,
         comparisons,
         updatedAt: now.toISOString(),
     };

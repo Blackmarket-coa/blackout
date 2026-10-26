@@ -5,6 +5,7 @@ import { act } from 'react-dom/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { IDBFactory } from 'fake-indexeddb';
 import {
+    createReleaseKeySet,
     mlKem768Provider,
     NULL_KEM_PROVIDER,
     parseRecoveryFile,
@@ -34,6 +35,7 @@ import {
 import {
     ALICE,
     BOB,
+    RECOVERY_FILE_ALICE,
     SAFETY_CODE_ALICE_BOB,
 } from '../../../../../../packages/blackout-protocol/src/release/testVectors';
 
@@ -446,5 +448,120 @@ describe('Settings → Release keys', () => {
         const stored = await indexedDbReleaseKeyStore.load(ACCOUNT);
         expect(currentKeySet(stored)?.fingerprint).toBe(ALICE.fingerprint);
         expect(text()).toContain("Published: Blackout's server has this key for you.");
+    }, 180_000);
+
+    // M4 (independent review, 2026-10-26): an older recovery file does not
+    // quietly replace this device's newer key.
+    const chooseVectorFile = async () => {
+        const file = new File([RECOVERY_FILE_ALICE.fileText], RECOVERY_FILE_NAME, {
+            type: 'application/json',
+        });
+        if (typeof file.text !== 'function') {
+            Object.defineProperty(file, 'text', {
+                value: async () => RECOVERY_FILE_ALICE.fileText,
+            });
+        }
+        const input = inputLabelled('Recovery file');
+        await act(async () => {
+            Object.defineProperty(input, 'files', { configurable: true, value: [file] });
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+        await type('Its passphrase', RECOVERY_FILE_ALICE.passphrase);
+        await waitFor(() => !button('Load the recovery file').disabled, 'the file to be read');
+        await click('Load the recovery file');
+    };
+
+    /** A key set made on this device an hour after the vector file's. */
+    const newerDevice = async () => {
+        const newer = await createReleaseKeySet(ACCOUNT, new Date('2026-10-26T11:00:00Z'));
+        await indexedDbReleaseKeyStore.save(withNewCurrentKeySet(null, ACCOUNT, newer, NOW));
+        return newer;
+    };
+
+    it('asks before an older recovery file’s key replaces this device’s, and keeps this device’s', async () => {
+        const newer = await newerDevice();
+        const { client } = fakeApi({
+            mine: entryFor(ACCOUNT, '@alice:test.local', newer.identity, newer.fingerprint),
+        });
+        await render({ apiClient: client });
+        await waitFor(() => text().includes('Load the recovery file'), 'the load section');
+        await chooseVectorFile();
+        await waitFor(
+            () => text().includes("Keep using this device's key?"),
+            'the question',
+            60_000
+        );
+        expect(text()).toContain('is older than the one this device uses');
+        // Nothing changed while the question is open.
+        expect(currentKeySet(await indexedDbReleaseKeyStore.load(ACCOUNT))?.fingerprint).toBe(
+            newer.fingerprint
+        );
+        await click("Keep this device's key");
+        await waitFor(
+            () => text().includes("This device's key stays your current key"),
+            'the note'
+        );
+        const stored = await indexedDbReleaseKeyStore.load(ACCOUNT);
+        expect(currentKeySet(stored)?.fingerprint).toBe(newer.fingerprint);
+        expect(stored?.keySets.map((set) => [set.fingerprint, set.status])).toEqual([
+            [newer.fingerprint, 'current'],
+            [ALICE.fingerprint, 'superseded'],
+        ]);
+        expect(stored?.comparisons).toEqual(RECOVERY_FILE_ALICE.contents.comparisons);
+        expect(text()).toContain("Published: Blackout's server has this key for you.");
+    }, 180_000);
+
+    it('uses the file’s key only when told to', async () => {
+        const newer = await newerDevice();
+        const { client } = fakeApi({
+            mine: entryFor(ACCOUNT, '@alice:test.local', newer.identity, newer.fingerprint),
+        });
+        await render({ apiClient: client });
+        await waitFor(() => text().includes('Load the recovery file'), 'the load section');
+        await chooseVectorFile();
+        await waitFor(
+            () => text().includes("Keep using this device's key?"),
+            'the question',
+            60_000
+        );
+        await click("Use the file's key");
+        await waitFor(() => text().includes("The file's key is now this device's"), 'the note');
+        const stored = await indexedDbReleaseKeyStore.load(ACCOUNT);
+        expect(currentKeySet(stored)?.fingerprint).toBe(ALICE.fingerprint);
+        expect(stored?.keySets.map((set) => [set.fingerprint, set.status])).toEqual([
+            [newer.fingerprint, 'superseded'],
+            [ALICE.fingerprint, 'current'],
+        ]);
+    }, 180_000);
+
+    it('says when the file’s key is one the server lists as replaced', async () => {
+        const newer = await newerDevice();
+        const { client } = fakeApi({
+            mine: {
+                ...entryFor(ACCOUNT, '@alice:test.local', newer.identity, newer.fingerprint),
+                superseded: [
+                    {
+                        identity: ALICE.identity,
+                        fingerprint: ALICE.fingerprint,
+                        publishedAt: '2026-10-26T10:05:00.000Z',
+                        supersededAt: '2026-10-26T11:05:00.000Z',
+                    },
+                ],
+            },
+        });
+        await render({ apiClient: client });
+        await waitFor(() => text().includes('Load the recovery file'), 'the load section');
+        await chooseVectorFile();
+        await waitFor(
+            () => text().includes("Keep using this device's key?"),
+            'the question',
+            60_000
+        );
+        expect(text()).toContain("Blackout's server lists it as replaced");
+        await click("Don't load the file");
+        expect(currentKeySet(await indexedDbReleaseKeyStore.load(ACCOUNT))?.fingerprint).toBe(
+            newer.fingerprint
+        );
+        expect((await indexedDbReleaseKeyStore.load(ACCOUNT))?.keySets).toHaveLength(1);
     }, 180_000);
 });

@@ -16,9 +16,13 @@ export {
     indexedDbReleaseKeyStore,
     currentKeySet,
     mergeRecoveryContents,
+    planRecoveryLoad,
     toRecoveryContents,
     withComparison,
     withNewCurrentKeySet,
     type DeviceReleaseKeys,
+    type RecoveryCurrentChoice,
+    type RecoveryLoadPlan,
+    type ReleaseKeysChange,
     type ReleaseKeyStore,
 } from './releaseKeyStore';
