@@ -8,6 +8,11 @@ and asked for a design before the build. Nothing described here is built. This
 record says what exists, what each way of building the release can and cannot
 promise, and recommends one as PR-sized steps.
 
+**Status, 2026-10-26:** PR 1 (§8) is merged (#979). Before PR 2, the
+composition in §4(a) was reviewed in
+[`release-identities-2026-10-26.md`](release-identities-2026-10-26.md), which
+changed §4(a) steps 1, 3 and 5 and the safety code; those passages say so.
+
 The switch may be relied on for someone's physical safety. Every property
 below is stated with its limits, and §7 gives the wording the app may use and
 the claims it must never make.
@@ -310,12 +315,12 @@ server swapped in at that moment lets it read the message at once, not just at
 release. Without a check the owner makes outside Blackout, (a) is no better
 than (d) against an operator who substitutes keys.
 
-| Source                                                                  | What exists                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | What it would give                                                                                                                                                                                                                                                                                                                        | Verdict                       |
-| ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
-| A key directory on the API, checked with a safety code                  | Nothing yet (PR 2)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | The owner's and the recipient's devices each compute a code from both release identities and both account ids, and the two people compare it in person or on a call. A key the server swapped in, on either side, gives a different code. Needs no trust in the server and no Matrix encryption. Costs a meeting or a call per recipient. | **Chosen**                    |
-| The key-transparency log (`packages/api/src/routes/keyTransparency.ts`) | It holds cross-signing master keys, not encryption keys (`packages/api/src/services/keyTransparency.ts:41-48`). **Observed:** `POST /append` with no `Authorization` header stores any `userId` and key (the auth middleware lets token-less requests through, `packages/api/src/middleware/auth.ts:9-13`, and `docs/security/key-transparency.md` says "Any caller that can hit the API can currently append"); `lookup` returns it; `sth` answers `scheme: 'none'`. It is in memory unless `KT_LOG_FILE` is set and unsigned unless `KT_WITNESS_ED25519_SEED` is; no tracked deploy file sets either. The verifier lives in the API package on `node:crypto`, and no client fetches or checks a proof. | Even finished, it detects a swapped key after the fact, and only with a witness the operator does not hold                                                                                                                                                                                                                                | Not now; later hardening (§8) |
-| Matrix cross-signing                                                    | The Rust crypto has cross-signing and the SDK has `requestVerificationDM` and `getUserVerificationStatus`, but the client has no screen for verifying another person, and the crypto API has no call that signs arbitrary data with a cross-signing key, so a release key could be tied to a Matrix identity only by sending it in an encrypted message                                                                                                                                                                                                                                                                                                                                                  | Reuses Matrix verification, but routes trust through Matrix encryption (BO-1)                                                                                                                                                                                                                                                             | Not now                       |
-| Trust the first key fetched, warn when it changes                       | Nothing beyond the directory                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | The server can swap the very first key, which is when it matters most, and the app could only say "Blackout's server could read this if it gave you a false key"                                                                                                                                                                          | Rejected for this build (Q3)  |
+| Source                                                                  | What exists                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | What it would give                                                                                                                                                                                                                                                                                                                                                                                                           | Verdict                       |
+| ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
+| A key directory on the API, checked with a safety code                  | Nothing yet (PR 2)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | The owner's and the recipient's devices each compute a code from both release identities and both account ids (one 30-digit half per identity, 60 digits: `release-identities-2026-10-26.md` §2), and the two people compare it in person or on a call. A key the server swapped in, on either side, gives a different code. Needs no trust in the server and no Matrix encryption. Costs a meeting or a call per recipient. | **Chosen**                    |
+| The key-transparency log (`packages/api/src/routes/keyTransparency.ts`) | It holds cross-signing master keys, not encryption keys (`packages/api/src/services/keyTransparency.ts:41-48`). **Observed:** `POST /append` with no `Authorization` header stores any `userId` and key (the auth middleware lets token-less requests through, `packages/api/src/middleware/auth.ts:9-13`, and `docs/security/key-transparency.md` says "Any caller that can hit the API can currently append"); `lookup` returns it; `sth` answers `scheme: 'none'`. It is in memory unless `KT_LOG_FILE` is set and unsigned unless `KT_WITNESS_ED25519_SEED` is; no tracked deploy file sets either. The verifier lives in the API package on `node:crypto`, and no client fetches or checks a proof. | Even finished, it detects a swapped key after the fact, and only with a witness the operator does not hold                                                                                                                                                                                                                                                                                                                   | Not now; later hardening (§8) |
+| Matrix cross-signing                                                    | The Rust crypto has cross-signing and the SDK has `requestVerificationDM` and `getUserVerificationStatus`, but the client has no screen for verifying another person, and the crypto API has no call that signs arbitrary data with a cross-signing key, so a release key could be tied to a Matrix identity only by sending it in an encrypted message                                                                                                                                                                                                                                                                                                                                                  | Reuses Matrix verification, but routes trust through Matrix encryption (BO-1)                                                                                                                                                                                                                                                                                                                                                | Not now                       |
+| Trust the first key fetched, warn when it changes                       | Nothing beyond the directory                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | The server can swap the very first key, which is when it matters most, and the app could only say "Blackout's server could read this if it gave you a false key"                                                                                                                                                                                                                                                             | Rejected for this build (Q3)  |
 
 The directory is not specific to the switch. Dead drops, which were decided
 first, need recipients' public keys too (the SDK's `sendDeadDrop` takes one
@@ -326,10 +331,13 @@ and nothing provides it), so the identities and routes should not live under
 
 1.  **Release identity.** Each person, owner and recipients alike, creates one
     on a device: an Ed25519 signing key, an X25519 key and an ML-KEM-768 key,
-    signed with the first and published to the API. The private halves stay in
-    the device's IndexedDB and in a passphrase-protected recovery file the
-    person can save, together with the record of whom they have compared codes
-    with.
+    signed with the first together with the person's Blackout account id, and
+    published to the API. The private halves stay in the device's IndexedDB
+    and in a passphrase-protected recovery file the person can save, together
+    with the record of whom they have compared codes with. _(Changed by the
+    2026-10-26 review: the signature covers the account id, and every message
+    a release key signs starts with its own label. The format is fixed in
+    `release-identities-2026-10-26.md` §1.)_
 2.  **Adding a recipient.** The owner's client fetches the recipient's
     identity and the two people compare the safety code. No comparison, no
     recipient. Comparing tells the recipient the owner may name them; it does
@@ -339,18 +347,25 @@ and nothing provides it), so the identities and routes should not live under
     release id and owner id as associated data. For each recipient, and for
     the owner, it seals K with the dead-drop v2 construction (an ephemeral
     X25519 key and an ML-KEM-768 encapsulation, HKDF-SHA-256 with the release
-    id, the recipient's id and their key fingerprint in the transcript,
-    AES-256-GCM), then signs each sealed copy together with the ciphertext's
-    hash, the release id, both account ids and the fingerprint. The server
-    receives the ciphertext, the sealed copies, the signatures and the timer
-    settings.
+    id, both account ids and both key fingerprints in the transcript,
+    AES-256-GCM), refusing an all-zero X25519 output, then signs each sealed
+    copy together with the ciphertext's hash, a commitment to K, the release
+    id, both account ids and both fingerprints. The server receives the
+    ciphertext, the sealed copies, the signatures and the timer settings.
+    _(Changed by the 2026-10-26 review: the owner's fingerprint and the
+    all-zero check are new, and so is the commitment to K, because AES-GCM
+    does not commit to its key. One sealing function serves dead drops and
+    releases. Details and the HPKE comparison:
+    `release-identities-2026-10-26.md` §5.)_
 4.  **Release.** The sweep marks the switch triggered, as today. From then on
     `GET /v1/deadman/releases` gives each recipient the ciphertext and their
     own sealed copy and signature, never anyone else's, and the bot sends the
     notice (§5).
 5.  **Opening.** The recipient's client checks the signature against the
-    owner identity it compared, opens its sealed copy and decrypts. If the
-    signature fails, the app shows the failure and not the content.
+    owner identity it compared, checks that the copy names its own account
+    and fingerprint, opens its sealed copy, checks K against the commitment
+    and decrypts. If any check fails, the app shows the failure and not the
+    content.
 6.  **Key changes.** When a recipient's identity changes, the owner's list
     says so; after a new comparison the owner's client re-seals K to the new
     key. Until then the old sealed copy stands, so recipients keep superseded
@@ -652,7 +667,7 @@ BO-1.
         triage record (N2 decided, linking here; D4 and D6 closed; the
         recipient-metadata finding); the C1 note in
         `docs/audits/pre-launch-readiness-audit-2026-07.md`.
-2.  **Release identities.** Migration 103.
+2.  **Release identities.** Migration 104 (103 is held by an open branch).
     -   Protocol and SDK: a `release` module in `packages/blackout-protocol`
         with the identity, its canonical bytes and fingerprint, the safety code
         over two identities, and fixed test vectors. It uses the dead-drop
@@ -668,8 +683,8 @@ BO-1.
         `setKemProvider(mlKem768Provider)` at startup.
     -   Docs: `THREAT_MODEL.md` §4 asset and §5 row; `KNOWN_LIMITATIONS.md` (a
         lost device without its recovery file loses the key).
-3.  **Release, recipient read and notices (API).** Migration 104. Behind
-    `BLACKOUT_DEADMAN_RELEASES`, off by default, until PR 4.
+3.  **Release, recipient read and notices (API).** The next free migration.
+    Behind `BLACKOUT_DEADMAN_RELEASES`, off by default, until PR 4.
     -   Protocol and SDK: the release envelope and its validators (§4(a) step
         3); `armReleaseSwitch`, `resealRecipient`, `listReleases`.
     -   API: `POST /switches` accepts the new format only, and checks that each
@@ -681,7 +696,7 @@ BO-1.
         sends them (§5). A released ciphertext is removed after 365 days. A
         limits route for the form (bounds, tolerance, backlog window).
         `is_direct` support in `createRoom` and `inviteToRoom`.
-    -   Migration 104: `deadman_switches.release_format` (existing rows
+    -   The migration: `deadman_switches.release_format` (existing rows
         `legacy`), `released_at`, and `room_id` made nullable; tables
         `deadman_release_wraps` (switch, recipient, fingerprint, sealed key,
         signature) and `deadman_release_notices` (switch, recipient, room,
@@ -701,9 +716,9 @@ BO-1.
         `docs/features/OVERVIEW.md` keep "experimental" until the release has
         been exercised on a deployment; the triage record closes N2; R10's
         rationale adds that a fired switch now also notifies its recipients.
-5.  **Reminders.** Migration 105.
+5.  **Reminders.** The next free migration.
     -   API: the per-switch setting, the reminders of §6 through the notifier,
-        and the one at the start of a backlog window. Migration 105 holds the
+        and the one at the start of a backlog window. The migration holds the
         setting and the last reminder sent.
     -   Client: the choice in the form and on each switch; the reminder card.
     -   Docs: `KNOWN_LIMITATIONS.md`, `TRUST.md` §1.
@@ -721,11 +736,15 @@ if one is wanted, with its own threat model.
 progress holds a 103 today, but parallel work may take it first, so each PR
 takes the next free number when it merges.
 
+_2026-10-26:_ an open branch holds `103_voice_room_sanctions`, so PR 2
+takes ordinal 104. The runner records applied migrations by id, so a gap at
+103 on `develop` is harmless until that branch merges.
+
 ### Existing switches
 
 They stay as they are (Q4). The server never had their plaintext, so it cannot
-convert them, and their owners armed them to fire. Migration 104 marks every
-existing row `legacy`: on trigger it changes status only, as today; recipients
+convert them, and their owners armed them to fire. PR 3's migration marks
+every existing row `legacy`: on trigger it changes status only, as today; recipients
 named by account id can read the payload through the API after the trigger;
 there are no notices and no reminders. PR 1 lets their owners check in and
 cancel, and the panel labels them (§7). Before PR 1 ships, count them:
@@ -769,9 +788,13 @@ a wider change for nothing the refusal does not already give.
     their build configuration only.
 -   Browser support for WebCrypto X25519 and Ed25519 on every target: this
     relies on `deaddrop/crypto/keys.ts` and the plugin verifier, not on a test
-    matrix.
+    matrix. _(2026-10-26: MDN's data per engine is in
+    `release-identities-2026-10-26.md` §1; still no device was tested.)_
 -   The cryptographic composition in §4(a) is a proposal. It needs review
     against HPKE (RFC 9180) and the dead-drop suite before any code is written.
+    _(Reviewed on 2026-10-26 in `release-identities-2026-10-26.md`, which
+    changed steps 1, 3 and 5 and the safety code. The seal is HPKE-shaped,
+    not HPKE.)_
 
 ## Sources
 
