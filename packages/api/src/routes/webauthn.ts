@@ -105,15 +105,19 @@ router.post('/register/finish', async (c) => {
         userId: parsed.userId,
         publicKeyCose: result.publicKeyCose,
         signCount: result.signCount,
-        transports: result.transports.length > 0
-            ? result.transports
-            : parsed.credential.response.transports ?? [],
+        transports:
+            result.transports.length > 0
+                ? result.transports
+                : parsed.credential.response.transports ?? [],
         createdAt: Date.now(),
         lastUsedAt: null,
         label: parsed.label,
     });
 
-    log.info('webauthn credential registered', { user_id: parsed.userId, credential_id: result.credentialId });
+    log.info('webauthn credential registered', {
+        user_id: parsed.userId,
+        credential_id: result.credentialId,
+    });
     return c.json({ ok: true, credentialId: result.credentialId });
 });
 

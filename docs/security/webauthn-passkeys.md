@@ -8,31 +8,31 @@ Blackout API and the operator knobs that govern it.
 
 ## What ships today
 
-- HTTP routes under `/v1/auth/webauthn/`:
-  - `POST /register/begin` — issues a registration challenge and the
-    `PublicKeyCredentialCreationOptions` shape the client should pass
-    to `navigator.credentials.create()`.
-  - `POST /register/finish` — accepts the attestation response,
-    validates clientDataJSON, consumes the challenge, and (will)
-    persist the credential.
-  - `POST /login/begin` — issues a login challenge and the allow-list
-    of credentials registered for the user.
-  - `POST /login/finish` — accepts the assertion response and
-    validates clientDataJSON / challenge.
-- Storage shape for credentials (`PasskeyCredential`).
-- Single-use, time-bounded challenge management with strict
-  user/purpose binding (see `consumeChallenge`).
-- ClientDataJSON parsing and validation (origin allow-list, challenge
-  match via `timingSafeEqual`, type pinning, cross-origin rejection).
-- Operator config knobs:
-  - `WEBAUTHN_ENABLED` — feature flag.
-  - `WEBAUTHN_RP_ID` — Relying Party ID (eTLD+1 of the app domain).
-  - `WEBAUTHN_RP_NAME` — display name.
-  - `WEBAUTHN_ORIGINS` — comma-separated origin allow-list.
-- 16 regression tests covering challenge handling, parsing, validation,
-  storage, the clientData pre-checks in `verifyAttestation` /
-  `verifyAssertion`, and the failure paths after delegation to
-  `@simplewebauthn/server` (`verification_failed`).
+-   HTTP routes under `/v1/auth/webauthn/`:
+    -   `POST /register/begin` — issues a registration challenge and the
+        `PublicKeyCredentialCreationOptions` shape the client should pass
+        to `navigator.credentials.create()`.
+    -   `POST /register/finish` — accepts the attestation response,
+        validates clientDataJSON, consumes the challenge, and (will)
+        persist the credential.
+    -   `POST /login/begin` — issues a login challenge and the allow-list
+        of credentials registered for the user.
+    -   `POST /login/finish` — accepts the assertion response and
+        validates clientDataJSON / challenge.
+-   Storage shape for credentials (`PasskeyCredential`).
+-   Single-use, time-bounded challenge management with strict
+    user/purpose binding (see `consumeChallenge`).
+-   ClientDataJSON parsing and validation (origin allow-list, challenge
+    match via `timingSafeEqual`, type pinning, cross-origin rejection).
+-   Operator config knobs:
+    -   `WEBAUTHN_ENABLED` — feature flag.
+    -   `WEBAUTHN_RP_ID` — Relying Party ID (eTLD+1 of the app domain).
+    -   `WEBAUTHN_RP_NAME` — display name.
+    -   `WEBAUTHN_ORIGINS` — comma-separated origin allow-list.
+-   16 regression tests covering challenge handling, parsing, validation,
+    storage, the clientData pre-checks in `verifyAttestation` /
+    `verifyAssertion`, and the failure paths after delegation to
+    `@simplewebauthn/server` (`verification_failed`).
 
 ## Verification (now wired)
 
@@ -60,8 +60,8 @@ flag, are accepted. Operators that want strict UV can flip this in
 
 ## Tracking
 
-- Source: `packages/api/src/services/webauthn.ts`,
-  `packages/api/src/routes/webauthn.ts`.
-- Tests: `packages/api/test/webauthn.integration.test.ts`.
-- Threat model entry: `THREAT_MODEL.md` §7 R4.
-- Dependency: `@simplewebauthn/server`.
+-   Source: `packages/api/src/services/webauthn.ts`,
+    `packages/api/src/routes/webauthn.ts`.
+-   Tests: `packages/api/test/webauthn.integration.test.ts`.
+-   Threat model entry: `THREAT_MODEL.md` §7 R4.
+-   Dependency: `@simplewebauthn/server`.
