@@ -17,6 +17,11 @@
  *   - a removal disconnects the participant (`removeParticipant`). It does not
  *     revoke a token the participant already holds (`services/livekit.ts`).
  *
+ * When LiveKit's server sends its webhooks to the API, the same calls apply a
+ * removal or a mute that stands to anyone LiveKit reports joining or
+ * publishing, a connection made with such a token included
+ * (`livekitWebhook.ts`).
+ *
  * The LiveKit identity is the Blackout user id, as the tokens are minted. A
  * participant who is not connected is not an error: the route writes its
  * record before calling here, and that record decides the account's next

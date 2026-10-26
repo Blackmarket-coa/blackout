@@ -34,6 +34,7 @@ import pluginDiscoveryRoutes from './routes/pluginDiscovery';
 import creatorRoutes from './routes/creator';
 import vaultRoutes from './routes/vault';
 import voiceRoutes from './routes/voice';
+import livekitWebhookRoutes, { LIVEKIT_WEBHOOK_PATH } from './routes/livekitWebhook';
 import subscriptionRoutes from './routes/subscriptions';
 import tipRoutes from './routes/tips';
 import creatorSubRoutes from './routes/creatorSubs';
@@ -224,6 +225,8 @@ for (const root of legacyAliasEnabled ? [API_ROOTS.v1, API_ROOTS.legacyApiAlias]
     app.route(`${root}/creator`, creatorRoutes);
     app.route(`${root}/vault`, vaultRoutes);
     app.route(`${root}/voice`, voiceRoutes);
+    // LiveKit's server posts here, not a signed-in client (routes/livekitWebhook.ts).
+    app.route(`${root}${LIVEKIT_WEBHOOK_PATH}`, livekitWebhookRoutes);
     app.route(`${root}/subscriptions`, subscriptionRoutes);
     app.route(`${root}/tips`, tipRoutes);
     app.route(`${root}/creator-subs`, creatorSubRoutes);
