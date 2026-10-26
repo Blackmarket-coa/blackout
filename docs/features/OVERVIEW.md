@@ -70,7 +70,9 @@ real adversaries.
 -   **Dead-man's switch (experimental)** — timed check-in. When a switch
     fires, Blackout sends nothing, and there are no configurable
     consequences. Recipients named by Blackout account id can read the
-    encrypted payload through the API only after it fires. See
+    payload through the API only after it fires, and see nothing before.
+    Owners can check in and cancel; arming a new switch is closed until the
+    release design ships. See
     [`KNOWN_LIMITATIONS.md`](../../KNOWN_LIMITATIONS.md) (`deadman`,
     `modules/deadman`).
 -   **Canary tripwire & transparency** — warrant-canary tripwires, key

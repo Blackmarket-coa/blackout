@@ -14,19 +14,23 @@ not in this repository. Each fixed finding also has a regression test that
 drives the real Hono app, named below; those run in CI.
 
 **Result:** D1, D3, D5 and C7 fixed; D2 fixed on the API and documentation
-side, open on the product side; D4 and D6 open, waiting on decision N2; the
-governance and moderation feeds scoped, the others left open with the reason.
+side, its product side (N2) decided on 2026-10-24 in
+[`deadman-release-design-2026-10-24.md`](deadman-release-design-2026-10-24.md);
+D4 and D6 closed on 2026-10-26 by that design's PR 1, which also fixed D7,
+found while writing it; the governance and moderation feeds scoped, the others
+left open with the reason.
 
-| ID    | Finding                                                                   | Verified                                  | Disposition                                  |
-| ----- | ------------------------------------------------------------------------- | ----------------------------------------- | -------------------------------------------- |
-| D1    | `GET /v1/deadman/events` returned every user's switch events              | Observed live; regression test            | Fixed: own switches only                     |
-| D2    | Triggering delivers nothing, while the API said the payload "has shipped" | Observed live (0 outbound requests)       | Text fixed; product side open (N2)           |
-| D3    | Recipients could read `encryptedPayload` in every status                  | Observed live; regression test            | Fixed: owner always, recipient after trigger |
-| D4    | Check-in and cancel from the app are refused; the app cannot arm          | Observed live; read                       | Open (N2)                                    |
-| D5    | The panel refetched in a loop and used up the rate limit                  | Observed (8,153 calls/s); regression test | Fixed: memoized actions                      |
-| D6    | `process-overdue` accepts a caller-supplied `now`                         | Read                                      | Open, low (owner-scoped)                     |
-| C7    | `GET /streams/:id/goal` had no owner check, while `/revenue` has one      | Observed live; regression test            | Fixed: owner only                            |
-| Feeds | The other process-wide `/events` routes, read with a default token        | Read; regression tests                    | Governance ballots and moderation scoped     |
+| ID    | Finding                                                                                        | Verified                                  | Disposition                                                                     |
+| ----- | ---------------------------------------------------------------------------------------------- | ----------------------------------------- | ------------------------------------------------------------------------------- |
+| D1    | `GET /v1/deadman/events` returned every user's switch events                                   | Observed live; regression test            | Fixed: own switches only                                                        |
+| D2    | Triggering delivers nothing, while the API said the payload "has shipped"                      | Observed live (0 outbound requests)       | Text fixed; N2 decided 2026-10-24                                               |
+| D3    | Recipients could read `encryptedPayload` in every status                                       | Observed live; regression test            | Fixed: owner always, recipient after trigger; cancel clears it since 2026-10-26 |
+| D4    | Check-in and cancel from the app are refused; the app cannot arm                               | Observed live; read                       | Closed 2026-10-26: `deadman.write` minted, the arm route refuses                |
+| D5    | The panel refetched in a loop and used up the rate limit                                       | Observed (8,153 calls/s); regression test | Fixed: memoized actions                                                         |
+| D6    | `process-overdue` accepts a caller-supplied `now`                                              | Read                                      | Closed 2026-10-26: route removed                                                |
+| D7    | A recipient could follow the owner's check-ins and see the other recipients before the trigger | Read (2026-10-24, the release design §1)  | Fixed 2026-10-26: nothing before the trigger                                    |
+| C7    | `GET /streams/:id/goal` had no owner check, while `/revenue` has one                           | Observed live; regression test            | Fixed: owner only                                                               |
+| Feeds | The other process-wide `/events` routes, read with a default token                             | Read; regression tests                    | Governance ballots and moderation scoped                                        |
 
 ---
 
@@ -80,9 +84,13 @@ governance and moderation feeds scoped, the others left open with the reason.
     `KNOWN_LIMITATIONS.md`, `README.md`, `docs/features/OVERVIEW.md`,
     `THREAT_MODEL.md` (§4, §5) and the C1 row of
     `docs/audits/pre-launch-readiness-audit-2026-07.md` say the same.
--   **Test:** "process-overdue advances grace and triggered transitions"
-    asserts the 409 code and message and that the message does not claim
-    anything was shipped, published, delivered, released or sent.
+-   **Test:** "a triggered switch cannot be checked in or cancelled, and the
+    refusal claims nothing was sent (D2)" in
+    `test/deadman-routes.integration.test.ts` asserts the 409 code and
+    message and that the message does not claim anything was shipped,
+    published, delivered, released or sent. (Until 2026-10-26 the assertion
+    lived in "process-overdue advances grace and triggered transitions",
+    removed with the route, D6.)
 -   **Open (N2):** what a switch should release, and to whom. Three options
     were laid out for the operator: hide the feature until it can release
     something; ship it honestly as a server-held release (mint
@@ -91,6 +99,11 @@ governance and moderation feeds scoped, the others left open with the reason.
     a real release (on trigger the bot posts a pointer, with the key material
     sealed to the recipients). No option is taken here: the feature stays
     visible and the limitations are documented.
+-   **N2 decided, 2026-10-24:** the third option, as an owner-sealed release
+    with notices from the bot; the design and its build plan are
+    [`deadman-release-design-2026-10-24.md`](deadman-release-design-2026-10-24.md).
+    Its PR 1 (2026-10-26) made today's behaviour true in the code and the
+    documents: D4, D6 and D7 below, and the panel's text (§7 there).
 -   **Deployment note:** in `deploy/docker/production` the sweep runs in the
     `worker` service, which at `1555912` did not load the store
     (`packages/api/src/worker.ts` started the loops without
@@ -143,6 +156,15 @@ governance and moderation feeds scoped, the others left open with the reason.
     triggers, never after a cancel": no payload while armed or in grace, in
     either view; the payload once triggered; never for a cancelled switch,
     while the owner's own cancel envelope still carries it.
+-   **Since 2026-10-26 (PR 1 of the release design):** cancel clears the
+    payload, so the owner's cancel envelope no longer carries it and that
+    assertion changed; a second cancel clears the payload of a switch
+    cancelled before this. Before the trigger a recipient now gets the same
+    404 as a stranger (D7). Tests: "a recipient sees nothing before the
+    trigger, and after it only the released view", "a cancelled switch never
+    reaches its recipient, however long after (D3)" and "a default session
+    token can check in and cancel its own switch, and cancel removes the
+    payload" in `test/deadman-routes.integration.test.ts`.
 -   **Notes:** release needs the sweep to run against the loaded store; where
     it does not, a recipient gets nothing, which is the fail-closed
     direction. `deploy/docker/production` did not until 2026-10-23 (D2).
@@ -151,7 +173,7 @@ governance and moderation feeds scoped, the others left open with the reason.
     recipient named by Matrix id or room id never matches a reader. That is
     part of N2.
 
-## D4 — check-in and cancel from the app are refused; the app cannot arm — open
+## D4 — check-in and cancel from the app are refused; the app cannot arm — closed 2026-10-26
 
 -   **Found:** session tokens carry `deadman.read` only; `deadman.write` is
     minted nowhere, so the panel's check-in and cancel get 403
@@ -166,6 +188,19 @@ governance and moderation feeds scoped, the others left open with the reason.
     together with an arming flow and a recipient model. Meanwhile
     `KNOWN_LIMITATIONS.md` says the app can show switches but not arm,
     check in or cancel.
+-   **Closed 2026-10-26:** `deriveUserCapabilities` mints `deadman.write`.
+    Every route behind it acts on the caller's own switches, and
+    `POST /v1/deadman/switches` answers 409 `arming_unavailable` to every arm
+    until the release design's PR 4 (its §8, "`deadman.write`"). The panel
+    checks in and cancels with a default token, says that a new switch cannot
+    be armed yet, and no longer points at an SDK call or an arming form; the
+    unused `useDeadmanSwitch` hook and the SDK's `createDeadmanMatrixActions`,
+    which would have mirrored a switch into unencrypted room state, are
+    deleted. Tests: H-1 and H-8 in `test/capability-header.integration.test.ts`;
+    "arming is refused with 409 arming_unavailable before the body is read,
+    and writes nothing" and "a default session token can check in and cancel
+    its own switch, and cancel removes the payload" in
+    `test/deadman-routes.integration.test.ts`.
 
 ## D5 — the panel's request loop — fixed
 
@@ -183,7 +218,7 @@ governance and moderation feeds scoped, the others left open with the reason.
     exactly one list call on mount, and after a failed check-in the alert is
     still on screen with no refetch behind it.
 
-## D6 — `process-overdue` takes the caller's clock — open, low
+## D6 — `process-overdue` takes the caller's clock — closed 2026-10-26
 
 -   **Found:** `POST /v1/deadman/process-overdue` accepts an optional `now`
     and evaluates the caller's switches against it. The route filters to the
@@ -195,6 +230,35 @@ governance and moderation feeds scoped, the others left open with the reason.
     parameter.
 -   **Disposition:** left as it is. Whether the route survives, and in what
     form, follows from N2.
+-   **Closed 2026-10-26:** the route is removed, with the SDK's
+    `processOverdue`; the sweep is the only code path that moves a switch
+    (release design §8, PR 1). Test: "POST /process-overdue is gone (D6)".
+
+## D7 — a recipient could follow the owner's check-ins before the trigger — fixed
+
+-   **Found:** `GET /v1/deadman/switches?scope=recipient` and
+    `GET /v1/deadman/switches/:id` returned every switch that named the
+    caller, in every status, with the owner id, room id, interval, grace,
+    `lastCheckInAt`, `triggerAt`, `releaseAt`, every recipient and the label.
+    D3 closed the payload, not this: before anything fired, a recipient could
+    watch when the owner checked in and learn who else was named. Found on
+    2026-10-24 while writing the release design (its §1, "What a recipient
+    can read").
+-   **Verified:** read; the old test "a recipient gets the encrypted payload
+    only after the switch triggers, never after a cancel" read an armed switch
+    as its recipient and got 200 with the metadata.
+-   **Fix (2026-10-26, PR 1 of the design):** a recipient is answered exactly
+    like a stranger until the switch has triggered: 404 `switch_not_found`
+    from the single read, and nothing in the list. After the trigger both
+    return `DeadmanReleasedSwitch`
+    (`packages/blackout-protocol/src/deadman/events.ts`): switch id, owner
+    id, status, release time and payload, with no check-in history, interval,
+    room, label or other recipients. The same 404 answers an unknown id,
+    someone else's switch and a recipient's switch before the trigger, so an
+    id does not reveal whether a switch exists.
+-   **Test:** "a recipient sees nothing before the trigger, and after it only
+    the released view" and "anyone but the owner gets the same 404, whether
+    the switch exists or not" in `test/deadman-routes.integration.test.ts`.
 
 ## C7 — a stream's goal progress was readable by any signed-in user — fixed
 
@@ -271,3 +335,12 @@ routes.
     with the re-check note.
 -   `packages/blackout-protocol/src/deadman/events.ts` and
     `packages/blackout-sdk/src/deadman/actions.ts`: comments as under D2.
+-   2026-10-26, PR 1 of the release design: `KNOWN_LIMITATIONS.md` (check-in
+    and cancel work; arming is closed; cancel clears the payload,
+    and deletion clears it for a switch that has not fired;
+    recipients see nothing before the trigger), `THREAT_MODEL.md` §5 (the
+    payload is whatever the caller sent), the C1 note in
+    `docs/audits/pre-launch-readiness-audit-2026-07.md`,
+    `docs/features/OVERVIEW.md`, and
+    [`capability-header-triage-2026-10-23.md`](capability-header-triage-2026-10-23.md)
+    (`deadman.write` minted).
