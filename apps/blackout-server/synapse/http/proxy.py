@@ -45,16 +45,19 @@ logger = logging.getLogger(__name__)
 # "Hop-by-hop" headers (as opposed to "end-to-end" headers) as defined by RFC2616
 # section 13.5.1 and referenced in RFC9110 section 7.6.1. These are meant to only be
 # consumed by the immediate recipient and not be forwarded on.
-HOP_BY_HOP_HEADERS = {
-    "Connection",
-    "Keep-Alive",
-    "Proxy-Authenticate",
-    "Proxy-Authorization",
-    "TE",
-    "Trailers",
-    "Transfer-Encoding",
-    "Upgrade",
-}
+HOP_BY_HOP_HEADERS_LOWERCASE = frozenset(
+    {
+        "connection",
+        "keep-alive",
+        "proxy-authenticate",
+        "proxy-authorization",
+        "te",
+        "trailers",
+        "transfer-encoding",
+        "upgrade",
+    }
+)
+assert all(header.lower() == header for header in HOP_BY_HOP_HEADERS_LOWERCASE)
 
 
 def parse_connection_header_value(
@@ -66,24 +69,23 @@ def parse_connection_header_value(
 
     As defined by RFC2616 section 14.10 and RFC9110 section 7.6.1
 
-    Example: `Connection: close, X-Foo, X-Bar` will return `{"Close", "X-Foo", "X-Bar"}`
+    Example: `Connection: close, X-Foo, X-Bar` will return `{"close", "x-foo", "x-bar"}`
 
     Even though "close" is a special directive, let's just treat it as just another
     header for simplicity. If people want to check for this directive, they can simply
-    check for `"Close" in headers`.
+    check for `"close" in headers`.
 
     Args:
         connection_header_value: The value of the `Connection` header.
 
     Returns:
         The set of header names that should not be copied over from the remote response.
-        The keys are capitalized in canonical capitalization.
+        The keys are lowercased.
     """
-    headers = Headers()
     extra_headers_to_remove: Set[str] = set()
     if connection_header_value:
         extra_headers_to_remove = {
-            headers._canonicalNameCaps(connection_option.strip()).decode("ascii")
+            connection_option.decode("ascii").strip().lower()
             for connection_option in connection_header_value.split(b",")
         }
 
@@ -180,7 +182,7 @@ class ProxyResource(_AsyncResource):
 
         # The `Connection` header also defines which headers should not be copied over.
         connection_header = response_headers.getRawHeaders(b"connection")
-        extra_headers_to_remove = parse_connection_header_value(
+        extra_headers_to_remove_lowercase = parse_connection_header_value(
             connection_header[0] if connection_header else None
         )
 
@@ -188,10 +190,10 @@ class ProxyResource(_AsyncResource):
         for k, v in response_headers.getAllRawHeaders():
             # Do not copy over any hop-by-hop headers. These are meant to only be
             # consumed by the immediate recipient and not be forwarded on.
-            header_key = k.decode("ascii")
+            header_key_lowercase = k.decode("ascii").lower()
             if (
-                header_key in HOP_BY_HOP_HEADERS
-                or header_key in extra_headers_to_remove
+                header_key_lowercase in HOP_BY_HOP_HEADERS_LOWERCASE
+                or header_key_lowercase in extra_headers_to_remove_lowercase
             ):
                 continue
 
