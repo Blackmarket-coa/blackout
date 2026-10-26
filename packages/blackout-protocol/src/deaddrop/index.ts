@@ -46,4 +46,10 @@ export {
     type KemProvider,
     type KemEncapsulation,
     type DeriveHybridKeyInput,
+    hybridSeal,
+    hybridSealWith,
+    hybridOpen,
+    HybridSealError,
+    type HybridSealed,
+    type HybridSealRandomness,
 } from './crypto';

@@ -1,4 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import {
+    createCipheriv,
+    createPrivateKey,
+    createPublicKey,
+    diffieHellman,
+    hkdfSync,
+} from 'node:crypto';
+import { describe, expect, it, vi } from 'vitest';
 import {
     decryptDeadDrop,
     deriveHybridAeadKey,
@@ -11,12 +18,18 @@ import {
     NULL_KEM_PROVIDER,
     setKemProvider,
     getKemProvider,
+    HybridSealError,
+    hybridOpen,
+    hybridSeal,
+    hybridSealWith,
     PQ_HYBRID_INFO,
     SUPPORTED_SUITES,
     type DeadDropEnvelopeV1,
     type DeadDropEnvelopeV2,
     type KemProvider,
 } from '@blackout/protocol';
+import { ml_kem768 } from '../../../../../packages/blackout-protocol/node_modules/@noble/post-quantum/ml-kem.js';
+import { BOB } from '../../../../../packages/blackout-protocol/src/release/testVectors';
 
 const bytes = (...n: number[]): Uint8Array => Uint8Array.from(n);
 
@@ -130,7 +143,7 @@ describe('deriveHybridAeadKey', () => {
                 pqSecret: bytes(1),
                 ephemeralX25519Pub: bytes(2),
                 pqCiphertext: bytes(3),
-            }),
+            })
         ).rejects.toThrow(/ecSecret/);
         await expect(
             deriveHybridAeadKey({
@@ -138,7 +151,7 @@ describe('deriveHybridAeadKey', () => {
                 pqSecret: new Uint8Array(),
                 ephemeralX25519Pub: bytes(2),
                 pqCiphertext: bytes(3),
-            }),
+            })
         ).rejects.toThrow(/pqSecret/);
     });
 
@@ -151,10 +164,10 @@ describe('NULL_KEM_PROVIDER (default)', () => {
     it('refuses every operation so we never ship a zero-strength KEM', async () => {
         await expect(NULL_KEM_PROVIDER.generateKeyPair()).rejects.toThrow(/not configured/);
         await expect(NULL_KEM_PROVIDER.encapsulate(new Uint8Array(1184))).rejects.toThrow(
-            /not configured/,
+            /not configured/
         );
         await expect(
-            NULL_KEM_PROVIDER.decapsulate(new Uint8Array(1088), new Uint8Array(2400)),
+            NULL_KEM_PROVIDER.decapsulate(new Uint8Array(1088), new Uint8Array(2400))
         ).rejects.toThrow(/not configured/);
     });
 
@@ -242,7 +255,7 @@ describe('envelope shape (v1 ↔ v2)', () => {
             isOpaqueEnvelopeV2({
                 ...v2,
                 suite: 'sealedbox-x25519-aes256gcm-v1',
-            } as unknown),
+            } as unknown)
         ).toBe(false);
     });
 });
@@ -286,17 +299,17 @@ describe('mlKem768Provider (FIPS 203 ML-KEM-768)', () => {
 
     it('encapsulate rejects a wrong-length recipient public key', async () => {
         await expect(mlKem768Provider.encapsulate(new Uint8Array(100))).rejects.toThrow(
-            /publicKey/,
+            /publicKey/
         );
     });
 
     it('decapsulate rejects wrong-length ciphertext or secret key', async () => {
         const { secretKey } = await mlKem768Provider.generateKeyPair();
+        await expect(mlKem768Provider.decapsulate(new Uint8Array(10), secretKey)).rejects.toThrow(
+            /ciphertext/
+        );
         await expect(
-            mlKem768Provider.decapsulate(new Uint8Array(10), secretKey),
-        ).rejects.toThrow(/ciphertext/);
-        await expect(
-            mlKem768Provider.decapsulate(new Uint8Array(1088), new Uint8Array(10)),
+            mlKem768Provider.decapsulate(new Uint8Array(1088), new Uint8Array(10))
         ).rejects.toThrow(/secretKey/);
     });
 });
@@ -355,7 +368,7 @@ describe('encryptDeadDrop / decryptDeadDrop with v2 hybrid envelope', () => {
                     envelope,
                     recipientPrivateKeyJwk: ec.privateKeyJwk,
                     recipientPqSecretKey: wrong.secretKey,
-                }),
+                })
             ).rejects.toBeDefined();
         } finally {
             setKemProvider(NULL_KEM_PROVIDER);
@@ -374,7 +387,7 @@ describe('encryptDeadDrop / decryptDeadDrop with v2 hybrid envelope', () => {
                     expiresAt: new Date(Date.now() + 60_000).toISOString(),
                     // @ts-expect-error — overload requires recipientPqPublicKey, runtime check too
                     suite: 'sealedbox-x25519-mlkem768-aes256gcm-v2',
-                }),
+                })
             ).rejects.toThrow(/recipientPqPublicKey/);
         } finally {
             setKemProvider(NULL_KEM_PROVIDER);
@@ -398,7 +411,7 @@ describe('encryptDeadDrop / decryptDeadDrop with v2 hybrid envelope', () => {
                 decryptDeadDrop({
                     envelope,
                     recipientPrivateKeyJwk: ec.privateKeyJwk,
-                }),
+                })
             ).rejects.toThrow(/recipientPqSecretKey/);
         } finally {
             setKemProvider(NULL_KEM_PROVIDER);
@@ -420,5 +433,212 @@ describe('encryptDeadDrop / decryptDeadDrop with v2 hybrid envelope', () => {
             recipientPrivateKeyJwk: ec.privateKeyJwk,
         });
         expect(DEC.decode(recovered)).toBe('legacy');
+    });
+});
+
+describe('one hybrid sealing function for dead drops and release copies (hybridSeal.ts)', () => {
+    // Fixed, synthetic inputs: an ephemeral X25519 scalar, an ML-KEM-768
+    // encapsulation seed and a nonce, all byte ranges; the recipient is the
+    // release-identity vectors' Bob. Every expected value is rebuilt here
+    // with node:crypto (and noble's ML-KEM, the only one in the tree).
+    const scalar = Uint8Array.from({ length: 32 }, (_, i) => 0x21 + i);
+    const seed = Uint8Array.from({ length: 32 }, (_, i) => 0x61 + i);
+    const nonce = Uint8Array.from({ length: 12 }, (_, i) => 0xa1 + i);
+    const plaintext = new Uint8Array(40).fill(7);
+    const pkcs8X25519 = (key: Uint8Array) =>
+        Buffer.concat([Buffer.from('302e020100300506032b656e04220420', 'hex'), Buffer.from(key)]);
+    const fromB64 = (value: string) => Uint8Array.from(Buffer.from(value, 'base64'));
+
+    const fixed = async () => {
+        const privateKey = await globalThis.crypto.subtle.importKey(
+            'pkcs8',
+            pkcs8X25519(scalar),
+            { name: 'X25519' },
+            true,
+            ['deriveBits']
+        );
+        const jwk = await globalThis.crypto.subtle.exportKey('jwk', privateKey);
+        const publicKeyBytes = Uint8Array.from(Buffer.from(jwk.x as string, 'base64url'));
+        const encapsulation = ml_kem768.encapsulate(fromB64(BOB.identity.mlkem768Key), seed);
+        return {
+            randomness: {
+                ephemeral: { privateKey, publicKeyBytes },
+                encapsulation: {
+                    ciphertext: encapsulation.cipherText,
+                    sharedSecret: encapsulation.sharedSecret,
+                },
+                nonce,
+            },
+            recipient: await globalThis.crypto.subtle.importKey(
+                'raw',
+                fromB64(BOB.identity.x25519Key),
+                { name: 'X25519' },
+                true,
+                []
+            ),
+        };
+    };
+
+    // ssX, then HKDF(ssX ‖ ssM, salt = ephemeral ‖ ML-KEM ciphertext,
+    // info = "blackout-deaddrop-v2-hybrid" ‖ transcript), then AES-256-GCM.
+    const byHand = (transcript: Uint8Array, kemCiphertext: Uint8Array, kemSecret: Uint8Array) => {
+        const ephemeral = createPrivateKey({
+            key: pkcs8X25519(scalar),
+            format: 'der',
+            type: 'pkcs8',
+        });
+        const ephemeralPublic = Buffer.from(
+            createPublicKey(ephemeral).export({ format: 'jwk' }).x as string,
+            'base64url'
+        );
+        const ssX = diffieHellman({
+            privateKey: ephemeral,
+            publicKey: createPublicKey({
+                key: Buffer.concat([
+                    Buffer.from('302a300506032b656e032100', 'hex'),
+                    Buffer.from(fromB64(BOB.identity.x25519Key)),
+                ]),
+                format: 'der',
+                type: 'spki',
+            }),
+        });
+        const key = Buffer.from(
+            hkdfSync(
+                'sha256',
+                Buffer.concat([ssX, Buffer.from(kemSecret)]),
+                Buffer.concat([ephemeralPublic, Buffer.from(kemCiphertext)]),
+                Buffer.concat([Buffer.from('blackout-deaddrop-v2-hybrid', 'ascii'), transcript]),
+                32
+            )
+        );
+        const cipher = createCipheriv('aes-256-gcm', key, Buffer.from(nonce));
+        return Buffer.concat([cipher.update(plaintext), cipher.final(), cipher.getAuthTag()]);
+    };
+
+    it('with no transcript, seals exactly as dead-drop v2 always derived it', async () => {
+        const { randomness, recipient } = await fixed();
+        const sealed = await hybridSealWith(
+            { plaintext, recipientX25519PublicKey: recipient },
+            randomness
+        );
+        const expected = byHand(
+            new Uint8Array(0),
+            randomness.encapsulation.ciphertext,
+            randomness.encapsulation.sharedSecret
+        );
+        expect(Buffer.from(sealed.ciphertext).equals(expected)).toBe(true);
+        expect(Array.from(sealed.ephemeralPublicKey)).toEqual(
+            Array.from(randomness.ephemeral.publicKeyBytes)
+        );
+        expect(Array.from(sealed.kemCiphertext)).toEqual(
+            Array.from(randomness.encapsulation.ciphertext)
+        );
+    });
+
+    it('with a transcript, appends it to the info, and only then', async () => {
+        const { randomness, recipient } = await fixed();
+        const transcript = Uint8Array.from([1, 2, 3, 4]);
+        const sealed = await hybridSealWith(
+            { plaintext, recipientX25519PublicKey: recipient, transcript },
+            randomness
+        );
+        expect(
+            Buffer.from(sealed.ciphertext).equals(
+                byHand(
+                    transcript,
+                    randomness.encapsulation.ciphertext,
+                    randomness.encapsulation.sharedSecret
+                )
+            )
+        ).toBe(true);
+    });
+
+    it('opens with the recipient’s keys and the same transcript, and with nothing else', async () => {
+        setKemProvider(mlKem768Provider);
+        try {
+            const transcript = Uint8Array.from([9, 9]);
+            const sealed = await hybridSeal({
+                plaintext,
+                recipientX25519PublicKeyBase64: BOB.identity.x25519Key,
+                recipientPqPublicKey: fromB64(BOB.identity.mlkem768Key),
+                transcript,
+            });
+            const privateKey = await globalThis.crypto.subtle.importKey(
+                'jwk',
+                BOB.x25519PrivateJwk,
+                { name: 'X25519' },
+                false,
+                ['deriveBits']
+            );
+            const open = (with_: Uint8Array | undefined) =>
+                hybridOpen({
+                    sealed,
+                    recipientPrivateKey: privateKey,
+                    recipientPqSecretKey: fromB64(BOB.mlkem768SecretKey),
+                    transcript: with_,
+                });
+            expect(Array.from(await open(transcript))).toEqual(Array.from(plaintext));
+            await expect(open(undefined)).rejects.toThrow();
+            await expect(open(Uint8Array.from([9, 8]))).rejects.toThrow();
+        } finally {
+            setKemProvider(NULL_KEM_PROVIDER);
+        }
+    });
+
+    it('refuses an all-zero X25519 output when sealing, where an engine returns zeros', async () => {
+        // Node's WebCrypto throws on small-order keys, so the zero check is
+        // reached only by an engine that returns zeros; this stands in for one.
+        const { randomness, recipient } = await fixed();
+        const deriveBits = vi
+            .spyOn(globalThis.crypto.subtle, 'deriveBits')
+            .mockResolvedValueOnce(new ArrayBuffer(32));
+        try {
+            await expect(
+                hybridSealWith({ plaintext, recipientX25519PublicKey: recipient }, randomness)
+            ).rejects.toBeInstanceOf(HybridSealError);
+        } finally {
+            deriveBits.mockRestore();
+        }
+    });
+
+    it('refuses an all-zero X25519 output when opening, a dead drop included', async () => {
+        setKemProvider(mlKem768Provider);
+        try {
+            const envelope = await encryptDeadDrop({
+                plaintext,
+                recipientPublicKeyBase64: BOB.identity.x25519Key,
+                paddingStrategy: 'minimal',
+                expiresAt: new Date(Date.now() + 60_000).toISOString(),
+                suite: 'sealedbox-x25519-mlkem768-aes256gcm-v2',
+                recipientPqPublicKey: fromB64(BOB.identity.mlkem768Key),
+            });
+            const open = () =>
+                decryptDeadDrop({
+                    envelope,
+                    recipientPrivateKeyJwk: BOB.x25519PrivateJwk,
+                    recipientPqSecretKey: fromB64(BOB.mlkem768SecretKey),
+                });
+            expect(Array.from(await open())).toEqual(Array.from(plaintext));
+            const deriveBits = vi
+                .spyOn(globalThis.crypto.subtle, 'deriveBits')
+                .mockResolvedValueOnce(new ArrayBuffer(32));
+            try {
+                await expect(open()).rejects.toMatchObject({ code: 'zero_shared_secret' });
+            } finally {
+                deriveBits.mockRestore();
+            }
+        } finally {
+            setKemProvider(NULL_KEM_PROVIDER);
+        }
+    });
+
+    it('refuses a nonce that is not 12 bytes', async () => {
+        const { randomness, recipient } = await fixed();
+        await expect(
+            hybridSealWith(
+                { plaintext, recipientX25519PublicKey: recipient },
+                { ...randomness, nonce: new Uint8Array(8) }
+            )
+        ).rejects.toThrow(/nonce must be 12 bytes/);
     });
 });
