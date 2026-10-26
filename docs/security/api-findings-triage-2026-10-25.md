@@ -592,7 +592,13 @@ The tips, creator-subscription, monetization phase 2 to 4, growth-attribution
 and v1-routes suites, which set the key, pass unchanged.
 
 **What an operator must do.** Set `BLACKOUT_ADMIN_API_KEY` to a long random
-value wherever these admin routes are used; until then they answer `503`.
+value wherever these admin routes are used; until then they answer `503`. And
+check whether any deployment ran without it: if so, the admin routes above
+accepted the published literal from anyone, and their effects (ad-revenue
+periods and payouts, captures and refunds, subscription comps) need reviewing
+in that deployment's records.
+
+Shipped ahead of the rest of this sweep, in #984, because of what it opened.
 
 ## F9 — anyone could mark a Coliseum challenge "seen" for the person challenged — fixed
 
