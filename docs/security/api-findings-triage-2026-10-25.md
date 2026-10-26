@@ -20,6 +20,7 @@ documents that described the old behaviour are corrected (last section).
 | D4  | `KNOWN_LIMITATIONS.md` said the panel could not create canopies or dens                                 | `KNOWN_LIMITATIONS.md`                                                                           | fixed                                            |
 | D5  | FBM webhooks could be replayed                                                                          | `packages/api/src/integrations/marketplace/freeblackmarket.ts`, `services/marketplaceWebhook.ts` | fixed on Blackout's side; FBM to send the header |
 | D6  | FBM's coalition-tier lookup never finds a customer                                                      | the FBM repository                                                                               | not Blackout's; left to FBM's ledger             |
+| F8  | The admin API key fell back to a value printed in the source                                            | `packages/api/src/middleware/admin-api-key.ts` (new)                                             | fixed; the operator must set the key             |
 
 ## F1 — the key-transparency log took anyone's word for anyone's key — fixed
 
@@ -325,6 +326,49 @@ bridge, ACL and smoke suites that drive the webhook pass unchanged.
 `resolveCustomerIdByMxid` in FBM's `backend/src/lib/blackout-identity.ts` is in
 the FBM repository. Nothing here changes; it belongs in FBM's `docs/AUDIT_DEBT.md`
 next to F1 there, as the design doc said.
+
+## F8 — the admin API key fell back to a value printed in the source — fixed
+
+Found on 2026-10-26 by the handler-level sweep of write routes that follows
+this record's "Found while fixing" section, and shipped ahead of the rest of
+that sweep because of what it opened.
+
+**The behaviour.** Twelve money-path admin writes check the `x-admin-api-key`
+header against `BLACKOUT_ADMIN_API_KEY`: ad-revenue periods, allocation, paid
+and void (`adRevenue.ts`); tip, creator-subscription and boost-pledge capture
+and refund (`tips.ts`, `creatorSubs.ts`, `communityBoosts.ts`); and subscription
+comps and refund syncs (`subscriptions.ts`). Each of the five files fell back to
+the literal `dev-admin-key` when the variable was unset, and compared with `!==`.
+
+**The effect.** No tracked deploy file sets the variable. Wherever it was
+unset, anyone, signed in or not, could send that literal and create and
+allocate ad-revenue periods, mark shares paid or void them, capture and refund
+tips, creator subscriptions and boost pledges, and comp any account a Canopy
+subscription, which unlocks the premium canopy features, voice rooms among
+them. The two admin reads behind the same header (another creator's
+ad-revenue share, the subscription audit timeline) opened the same way.
+
+**The fix.** One check, `packages/api/src/middleware/admin-api-key.ts`, used by
+all five files. With no key configured, or a blank one, every request is
+refused `503 admin_api_key_not_configured`; with one, only that value passes
+(`403 forbidden` otherwise), compared in constant time over SHA-256 digests so
+neither the length nor a prefix leaks. A session never stands in for the key.
+
+**Verification.** `packages/api/test/admin-api-key.integration.test.ts`, over
+all twelve writes with a state probe for each: with no key the former default
+and any other value are refused and nothing is written; a blank key counts as
+none; with a key, no header, a wrong value, the former default and a session are
+refused and nothing is written; the configured key is allowed and the write
+happens; the two reads. Four of its seven tests fail against the previous gates.
+The tips, creator-subscription, monetization phase 2 to 4, growth-attribution
+and v1-routes suites, which set the key, pass unchanged.
+
+**What an operator must do.** Set `BLACKOUT_ADMIN_API_KEY` to a long random
+value wherever these admin routes are used; until then they answer `503`. And
+check whether any deployment ran without it: if so, the admin routes above
+accepted the published literal from anyone, and their effects (ad-revenue
+periods and payouts, captures and refunds, subscription comps) need reviewing
+in that deployment's records.
 
 ## Found while fixing: other write routes with no session check — open
 
