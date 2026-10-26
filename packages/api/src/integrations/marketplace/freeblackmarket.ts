@@ -183,11 +183,82 @@ export function assertFreeblackmarketSecretsForProduction(
     }
 }
 
+/** How far, in seconds, a delivery's `x-fbm-timestamp` may differ from the receiving clock. */
+export const WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS = 300;
+
+export interface WebhookSignatureCheck {
+    rawBody: string;
+    headers: Record<string, string | undefined>;
+    secret: string;
+    /**
+     * Refuse a delivery that carries no `x-fbm-timestamp`. FBM signs the body
+     * alone today (`docs/contracts/freeblackmarket-integration-work-order.md`
+     * §1); that form stays accepted until FBM ships the timestamped one and the
+     * operator sets `FREEBLACKMARKET_WEBHOOK_REQUIRE_TIMESTAMP=1`.
+     */
+    requireTimestamp: boolean;
+    toleranceSeconds?: number;
+    /** The receiving clock, for tests; defaults to now. */
+    nowSeconds?: number;
+}
+
+/**
+ * Verify an FBM webhook delivery's signature.
+ *
+ * With `x-fbm-timestamp` (unix seconds): the signature is lowercase hex
+ * `HMAC-SHA256("<timestamp>.<rawBody>", secret)` — the form FBM already uses
+ * for Blackstar's deliveries to it — and the timestamp must be within
+ * `toleranceSeconds` of the receiving clock, so a captured delivery stops
+ * verifying once the window closes. Without it, the body-only form
+ * `HMAC-SHA256(rawBody, secret)`, which a captured delivery satisfies forever
+ * (D5 in docs/black-mask-account-link-design.md §7); accepted only while
+ * `requireTimestamp` is off. Replays inside the window are caught by the
+ * dispatcher's event-id check (`services/marketplaceWebhook.ts`).
+ */
+export function verifyFreeblackmarketWebhookSignature(
+    check: WebhookSignatureCheck
+): WebhookVerification {
+    const signature = check.headers['x-fbm-signature'];
+    const eventId = check.headers['x-fbm-event-id'] ?? null;
+    const timestamp = check.headers['x-fbm-timestamp'];
+    if (!check.secret) return { ok: false, eventId, reason: 'webhook-secret-missing' };
+    if (!signature) return { ok: false, eventId, reason: 'signature-missing' };
+
+    let signedMaterial: string;
+    if (timestamp !== undefined) {
+        if (!/^\d+$/.test(timestamp)) return { ok: false, eventId, reason: 'timestamp-invalid' };
+        const now = check.nowSeconds ?? Math.floor(Date.now() / 1000);
+        const tolerance = check.toleranceSeconds ?? WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS;
+        if (Math.abs(now - Number(timestamp)) > tolerance) {
+            return { ok: false, eventId, reason: 'timestamp-skew' };
+        }
+        signedMaterial = `${timestamp}.${check.rawBody}`;
+    } else {
+        if (check.requireTimestamp) return { ok: false, eventId, reason: 'timestamp-missing' };
+        signedMaterial = check.rawBody;
+    }
+
+    const expected = crypto.createHmac('sha256', check.secret).update(signedMaterial).digest('hex');
+    const sigBuf = Buffer.from(signature, 'hex');
+    const expBuf = Buffer.from(expected, 'hex');
+    const ok = sigBuf.length === expBuf.length && crypto.timingSafeEqual(sigBuf, expBuf);
+    return { ok, eventId, reason: ok ? undefined : 'signature-mismatch' };
+}
+
 export function createFreeblackmarketProvider(): MarketplaceProvider {
     const baseUrl = process.env.FREEBLACKMARKET_BASE_URL ?? 'https://api.freeblackmarket.com';
     const apiPrefix = normalizeFreeblackmarketApiPrefix(process.env.FREEBLACKMARKET_API_PREFIX);
     const apiKey = process.env.FREEBLACKMARKET_API_KEY ?? '';
     const webhookSecret = process.env.FREEBLACKMARKET_WEBHOOK_SECRET ?? '';
+    const webhookRequireTimestamp = envBool('FREEBLACKMARKET_WEBHOOK_REQUIRE_TIMESTAMP', false);
+    const toleranceRaw = Number.parseInt(
+        process.env.FREEBLACKMARKET_WEBHOOK_TOLERANCE_SECONDS ?? '',
+        10
+    );
+    const webhookToleranceSeconds =
+        Number.isFinite(toleranceRaw) && toleranceRaw > 0
+            ? toleranceRaw
+            : WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS;
     // Medusa gates every /store/* route behind a (public-by-design) storefront
     // publishable key; FBM's plugin registry read side lives there. Optional —
     // only the signed-bundle path needs it, and it fails closed with a
@@ -608,18 +679,13 @@ export function createFreeblackmarketProvider(): MarketplaceProvider {
             rawBody: string,
             headers: Record<string, string | undefined>
         ): WebhookVerification {
-            const signature = headers['x-fbm-signature'];
-            const eventId = headers['x-fbm-event-id'] ?? null;
-            if (!webhookSecret) return { ok: false, eventId, reason: 'webhook-secret-missing' };
-            if (!signature) return { ok: false, eventId, reason: 'signature-missing' };
-            const expected = crypto
-                .createHmac('sha256', webhookSecret)
-                .update(rawBody)
-                .digest('hex');
-            const sigBuf = Buffer.from(signature, 'hex');
-            const expBuf = Buffer.from(expected, 'hex');
-            const ok = sigBuf.length === expBuf.length && crypto.timingSafeEqual(sigBuf, expBuf);
-            return { ok, eventId, reason: ok ? undefined : 'signature-mismatch' };
+            return verifyFreeblackmarketWebhookSignature({
+                rawBody,
+                headers,
+                secret: webhookSecret,
+                requireTimestamp: webhookRequireTimestamp,
+                toleranceSeconds: webhookToleranceSeconds,
+            });
         },
 
         parseEvent(payload: unknown): NormalizedLifecycleEvent | null {
