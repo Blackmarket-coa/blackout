@@ -1,10 +1,10 @@
 /**
  * Fixed test vectors for release identities, format v1
  * (`docs/security/release-identities-2026-10-26.md`). Every value is
- * synthetic: the private keys come from byte ranges (0x00, 0x01, …), and
- * nothing here is, or protects, anything real. Not exported from the package
- * index, so they stay out of application bundles; tests import this file by
- * path.
+ * synthetic: the RFC vectors are the RFCs' own, the vector identities'
+ * private keys are byte ranges (0x00, 0x01, …), and nothing here is, or
+ * protects, anything real. Not exported from the package index, so they stay
+ * out of application bundles; tests import this file by path.
  *
  * How they were made: each Ed25519 seed and X25519 scalar imported into
  * WebCrypto (PKCS #8) and exported as a JWK; each ML-KEM-768 pair from

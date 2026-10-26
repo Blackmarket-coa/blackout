@@ -462,18 +462,20 @@ history limit, deletion, both exports), `release-identities-postgres.integration
 (PGlite across a restart: history and deletion),
 `release-identities-file.integration.test.ts` (the same through the file
 store) and a case in `auth-lifecycle.integration.test.ts`. The screen's are under
-`apps/blackout-client/tests/unit/features/release-keys/`. Every check those
-tests stand for was also removed, one at a time, to see a test fail; the
-two checks that survived that at first (the all-zero X25519 output, which
-Node's WebCrypto never reaches, and the ML-KEM round trip, which noble's own
-hash check had been doing the work of) each have a test of their own now.
+`apps/blackout-client/tests/unit/features/release-keys/`. The main checks
+were also removed one at a time, to see a test fail. Two survived that at
+first, the all-zero X25519 output (which Node's WebCrypto never reaches) and
+the ML-KEM round trip (whose work noble's own hash check had been doing), and
+each has a test of its own now. The server-name check still survives it,
+because the exact-match check refuses another server's name by itself (§4).
 
 **Gitleaks.** The vectors are fixed, synthetic keys, seeds and a recovery
-file made from them, and CI's secret scan flags key-shaped literals. Each
-flagged vector line is listed in `.gitleaksignore` with a numbered comment
-saying it is a synthetic test value; no vector was weakened or left out.
-Lines of code it flagged (a field name, a colon and an expression) were
-rewritten instead of listed.
+file made from them, and CI's secret scan flags key-shaped literals. It
+flagged three vector lines (the vector identity's X25519 public key, twice,
+and the vector recovery file's derived key); they are listed in
+`.gitleaksignore` as entry 6, with a comment saying why, and no vector was
+weakened or left out. Lines of code it flagged (a field name, a colon and an
+expression) were rewritten instead of listed.
 
 ## Decisions for the operator to confirm or veto
 
