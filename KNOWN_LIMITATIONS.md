@@ -354,7 +354,7 @@ For the source-of-truth triage with tier/owner detail see
 -   **Next:** a role model built from Matrix power levels
     ([`docs/security/capability-header-triage-2026-10-23.md`](docs/security/capability-header-triage-2026-10-23.md)).
 
-### Voice rooms in the API (2026-10-24)
+### Voice rooms in the API (2026-10-25)
 
 -   **Where:** the API's voice rooms under `/v1/voice`
     (`packages/api/src/routes/voice.ts`). Calls in the apps do not use them:
@@ -363,29 +363,51 @@ For the source-of-truth triage with tier/owner detail see
 -   **Roles come from the homeserver.** A canopy's admins (who can change its
     power levels) and moderators (at its kick level, 50 unless its admins
     changed it) can create a voice room in a listed canopy (with the premium
-    subscription), lock and unlock it, mute and remove people, and enter it
-    while it is locked. Everyone else is a member. A role named in a request
-    counts for nothing; before 2026-10-24 any signed-in account could claim to
-    be an admin. When the API cannot read the canopy from the homeserver,
-    nobody has an elevated role: creating and moderating are refused, and
-    joining an unlocked room still works.
--   **Joining needs a room that exists;** it no longer creates one. An
-    unlocked room is open to every signed-in account with the premium
-    subscription, member of the canopy or not, including an account the canopy
-    banned: locking the room is how to keep people out. Getting a token alone
-    (`/v1/voice/token`) does not check the subscription.
--   **Moderation is a record, not enforcement.** Mute only records the action,
-    and remove only ends the person's session record in the API. Neither
-    touches the call in LiveKit, so the person stays connected and can still
-    speak. Lock refuses new joins and tokens to members, but a LiveKit token
-    already issued keeps working until it expires (5 minutes by default, at
-    most 15), and keeps the role it was issued with. A moderator can also mute
-    or remove someone above them, the canopy's admin included.
--   **A room's event feed** (who is in it, and its join, leave and moderation
-    history) needs a signed-in account, and any signed-in account can read
-    it, a locked room's included.
--   **Next:** V2, V4, V5 and V7 in
-    [`docs/security/capability-header-triage-2026-10-23.md`](docs/security/capability-header-triage-2026-10-23.md).
+    subscription), lock and unlock it, mute, unmute, remove and readmit people,
+    and enter it while it is locked. Everyone else is a member. A role named in
+    a request counts for nothing; before 2026-10-24 any signed-in account could
+    claim to be an admin. Mute, remove and readmit also need the moderator's
+    level above the target's, as a kick on the homeserver does: a moderator
+    cannot act on anyone at or above their own level, such as the canopy's
+    admin, a moderator at the same level, or themselves.
+-   **The canopy decides who may enter.** An account the canopy banned is
+    refused, whatever level it kept. Its members and the invited get in. Anyone
+    else gets into an unlocked room only where the canopy is public; under any
+    other join rule they are refused. Joining needs a room that exists; it no
+    longer creates one. Getting a token alone (`/v1/voice/token`) does not
+    check the premium subscription that joining does.
+-   **Moderation acts in the call.** A mute mutes the person's published audio
+    tracks in LiveKit and takes away their permission to publish; a removal
+    disconnects them. Both are recorded first and outlive the connection: a
+    removed account gets no new token for that room and cannot join it through
+    the API until a moderator readmits it, and a muted account's new tokens
+    cannot publish until it is unmuted. **A token already issued is not
+    revoked.** One the API issued lives two minutes, and LiveKit can give a
+    connected client a refreshed token of its own, whose lifetime LiveKit's
+    server sets. Until such a token expires, a removed person's client that
+    kept it can rejoin the call, and a muted person who reconnects with a token
+    issued before the mute can speak; a connection made that way stays until a
+    moderator acts again. A lock refuses new joins and tokens but does not end
+    connections already made. Without LiveKit configured, mute and remove do
+    nothing and say so (503); when LiveKit fails, the record stands, the answer
+    is 502, and it says the person may still be heard or connected until the
+    moderator retries.
+-   **When the homeserver cannot be read** (no bot token, an error), nobody has
+    an elevated role: creating and moderating are refused, a locked room is
+    refused with the reason, and an unlocked room still admits the account as
+    a member, so an ordinary join does not depend on the homeserver. While that
+    holds the ban and membership checks cannot run either: during a homeserver
+    outage a banned account can enter an unlocked room. The list of open rooms
+    shows every unlocked room to every signed-in account, rooms of canopies the
+    viewer cannot enter included.
+-   **A room's event feed** (who is in it, its join, leave and moderation
+    history, and the mutes and removals that stand) is for joined members of
+    the canopy. A room that does not exist and one the caller may not read get
+    the same answer.
+-   **Next:** in
+    [`docs/security/capability-header-triage-2026-10-23.md`](docs/security/capability-header-triage-2026-10-23.md),
+    V4's residual (tokens already issued; closing it needs LiveKit's webhooks)
+    and V5 (the operator's billing decision on the token route).
 
 ---
 
