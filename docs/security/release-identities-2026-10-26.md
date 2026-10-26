@@ -21,7 +21,9 @@ the review; the build was then merged with `develop` at `9d0f81d` (#980 to
 `develop` at `df2f64e18d` (#984 to #986), and an independent review of the
 whole diff followed. Its findings, and what was done about each, are in the
 section "Independent review, 2026-10-26", before the sources; the passages it
-changed say so.
+changed say so. After the re-check of those fixes the branch was replayed
+again, onto `develop` at `8a20ad6a0b` (#987 to #990), without the panic-wipe
+commit that `develop` already carries as `20aab8891e` (#989).
 **Read** means a claim rests on the code or a standard; **Run** that it was
 observed in Node 22.22.0 in this worktree; **Test** names the regression test
 that keeps it true. Nothing was run on a phone, a desktop shell or a browser
@@ -804,7 +806,7 @@ compared with, while its screen said it cleared this app's sensitive data.**
     what stays, says the sign-in option ("Also forget this device's
     sign-ins") does not end the sessions on the server, and says it is not a
     forensic wipe. That part applies to `develop` as it is and went out on
-    its own. On this branch the screen also lists release keys and
+    its own, as #989. On this branch the screen also lists release keys and
     comparisons under what stays, and has an option, off by default, "Also
     delete release keys from this device", which shows the key-loss warning
     and clears the release-key store for every account on the device; if
