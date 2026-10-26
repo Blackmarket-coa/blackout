@@ -41,7 +41,9 @@ Arming a switch is still closed, so nothing is encrypted for them yet.
     replaced, and when
     ([`packages/api/src/routes/releaseIdentities.ts`](../../packages/api/src/routes/releaseIdentities.ts)).
     Any account signed in on the homeserver can read them, and the server sees
-    who looks up whom. Deleting the account removes them.
+    who looks up whom. Deleting the account removes them: for each one a row
+    stays with no keys and no account, saying only when it was published and
+    replaced.
 -   **The private half never reaches the server.** It stays on the devices
     that made it or loaded a recovery file, and in the recovery files the
     person saves; signing out does not remove it from a device. The app's

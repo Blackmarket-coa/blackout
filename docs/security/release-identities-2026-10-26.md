@@ -17,6 +17,11 @@ comparison mandatory; existing switches left as they are).
 the review; the build was then merged with `develop` at `9d0f81d` (#980 to
 #983, among them #981's homeserver-only Matrix id resolver and #983's migration
 103).
+**Replayed and reviewed:** on 2026-10-26 the branch was replayed onto
+`develop` at `df2f64e18d` (#984 to #986), and an independent review of the
+whole diff followed. Its findings, and what was done about each, are in the
+section "Independent review, 2026-10-26", before the sources; the passages it
+changed say so.
 **Read** means a claim rests on the code or a standard; **Run** that it was
 observed in Node 22.22.0 in this worktree; **Test** names the regression test
 that keeps it true. Nothing was run on a phone, a desktop shell or a browser
@@ -27,24 +32,24 @@ the design (C1, C2, C3, C7 and the PR 3 transcript in C5); the rest fix the
 tree or are stated limits. Nothing here makes a release possible: arming
 stays closed until PR 4.
 
-| ID  | Finding                                                                                                                                                                  | Verified          | Disposition                                                                                                              |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| C1  | The proposed self-signature covers the three keys only, so nothing binds an identity to an account                                                                       | Read (§4(a))      | Fixed in the format: the signed bytes carry the account id; the API and the client check it                              |
-| C2  | WebCrypto's Ed25519 has no context string, so one key's signatures for different purposes differ only in what they sign                                                  | Read              | Fixed in the format: every message a release key signs starts with its own NUL-terminated label                          |
-| C3  | A safety code read as one hash over both identities lets a key-swapping server search for a collision across both sides, at half the code's strength                     | Read (analysis)   | Fixed in the design: one 30-digit half per identity, as Signal does; 60 digits                                           |
-| C4  | The tree's base64 decoder accepts whitespace and non-zero trailing bits, so one identity could travel in several forms                                                   | Read              | Fixed for identities: a field decodes only if re-encoding gives the same string                                          |
-| C5  | Dead-drop v2's key derivation does not bind the recipient's X25519 key, which HPKE's DHKEM and X-Wing do, and passes no associated data to AES-GCM                       | Read              | PR 3 constraint: the seal transcript carries both fingerprints. Dead drops unchanged (no live flow); noted for that work |
-| C6  | `deaddrop-pq-hybrid.md` says the combiner "matches draft-irtf-cfrg-hpke (HPKE hybrid)" and that the suite shipped end to end                                             | Read              | Fixed: that record now says what the construction is, and that no shipped flow uses it                                   |
-| C7  | AES-GCM does not commit to its key: one ciphertext can open under two keys to two texts, so recipients sharing a ciphertext hash need not have read the same message     | Read (literature) | PR 3 constraint: a commitment to the content key in the signed data                                                      |
-| C8  | The dead-drop code has no all-zero check on the X25519 output; Node's WebCrypto refuses small-order keys itself                                                          | Run; test         | Fixed for identities (a key that contributes nothing is refused); PR 3 adds the check RFC 9180 §7.1.4 requires           |
-| C9  | FIPS 203 §7.2 requires a check on an ML-KEM encapsulation key before use                                                                                                 | Read; test        | Fixed for identities: the validator runs it itself, so the API can without a KEM provider                                |
-| C10 | `@noble/hashes`' argon2 was outside its 2022 external audit (self-audited at 2.2.0) and is about 5x slower than native code, a margin an attacker with native code gains | Read              | Accepted with RFC 9106's second recommended parameters and a 12-character minimum; stated here                           |
-| C11 | The recovery file's size would show roughly how many people its owner compared codes with                                                                                | Read (analysis)   | Fixed: the plaintext is padded to the dead-drop buckets                                                                  |
-| C12 | `deaddrop/crypto/keys.ts` gave browser versions (Chrome 124) that MDN's compatibility data does not                                                                      | Read              | Fixed: the comment cites the data; no device was tested                                                                  |
-| C13 | Node rejects a private JWK whose public part does not match; nothing says every browser does                                                                             | Run               | Fixed: the client checks every loaded key against its identity itself                                                    |
-| C14 | The directory tells the server who looked up whom, and shows every signed-in account who has release keys and when they changed them                                     | Read              | Disclosed in `THREAT_MODEL.md` §5, `KNOWN_LIMITATIONS.md` and on the screen                                              |
-| C15 | PR 3's signatures are transferable: anyone holding a released copy and the owner's identity can show the owner's release key signed it                                   | Read (analysis)   | For the operator (below); the app must not claim deniability                                                             |
-| C16 | Authenticity is Ed25519 only; confidentiality is hybrid                                                                                                                  | Read              | Accepted; a post-quantum signature would be identity v2                                                                  |
+| ID  | Finding                                                                                                                                                                  | Verified          | Disposition                                                                                                                   |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| C1  | The proposed self-signature covers the three keys only, so nothing binds an identity to an account                                                                       | Read (§4(a))      | Fixed in the format: the signed bytes carry the account id; the API and the client check it                                   |
+| C2  | WebCrypto's Ed25519 has no context string, so one key's signatures for different purposes differ only in what they sign                                                  | Read              | Fixed in the format: every message a release key signs starts with its own NUL-terminated label                               |
+| C3  | A safety code read as one hash over both identities lets a key-swapping server search for a collision across both sides, at half the code's strength                     | Read (analysis)   | Fixed in the design: one 30-digit half per identity, as Signal does; 60 digits                                                |
+| C4  | The tree's base64 decoder accepts whitespace and non-zero trailing bits, so one identity could travel in several forms                                                   | Read              | Fixed for identities: a field decodes only if re-encoding gives the same string, and (since L1, L2) each key has one encoding |
+| C5  | Dead-drop v2's key derivation does not bind the recipient's X25519 key, which HPKE's DHKEM and X-Wing do, and passes no associated data to AES-GCM                       | Read              | PR 3 constraint: the seal transcript carries both fingerprints. Dead drops unchanged (no live flow); noted for that work      |
+| C6  | `deaddrop-pq-hybrid.md` says the combiner "matches draft-irtf-cfrg-hpke (HPKE hybrid)" and that the suite shipped end to end                                             | Read              | Fixed: that record now says what the construction is, and that no shipped flow uses it                                        |
+| C7  | AES-GCM does not commit to its key: one ciphertext can open under two keys to two texts, so recipients sharing a ciphertext hash need not have read the same message     | Read (literature) | PR 3 constraint: a commitment to the content key in the signed data                                                           |
+| C8  | The dead-drop code has no all-zero check on the X25519 output; Node's WebCrypto refuses small-order keys itself                                                          | Run; test         | Fixed for identities (a key that contributes nothing is refused); PR 3 adds the check RFC 9180 §7.1.4 requires                |
+| C9  | FIPS 203 §7.2 requires a check on an ML-KEM encapsulation key before use                                                                                                 | Read; test        | Fixed for identities: the validator runs it itself, so the API can without a KEM provider                                     |
+| C10 | `@noble/hashes`' argon2 was outside its 2022 external audit (self-audited at 2.2.0) and is about 5x slower than native code, a margin an attacker with native code gains | Read              | Accepted with RFC 9106's second recommended parameters and a 12-character minimum; stated here                                |
+| C11 | The recovery file's size would show roughly how many people its owner compared codes with                                                                                | Read (analysis)   | Fixed: the plaintext is padded to the dead-drop buckets                                                                       |
+| C12 | `deaddrop/crypto/keys.ts` gave browser versions (Chrome 124) that MDN's compatibility data does not                                                                      | Read              | Fixed: the comment cites the data; no device was tested                                                                       |
+| C13 | Node rejects a private JWK whose public part does not match; nothing says every browser does                                                                             | Run               | Fixed: the client checks every loaded key against its identity itself                                                         |
+| C14 | The directory tells the server who looked up whom, and shows every signed-in account who has release keys and when they changed them                                     | Read              | Disclosed in `THREAT_MODEL.md` §5, `KNOWN_LIMITATIONS.md` and on the screen                                                   |
+| C15 | PR 3's signatures are transferable: anyone holding a released copy and the owner's identity can show the owner's release key signed it                                   | Read (analysis)   | For the operator (below); the app must not claim deniability                                                                  |
+| C16 | Authenticity is Ed25519 only; confidentiality is hybrid                                                                                                                  | Read              | Accepted; a post-quantum signature would be identity v2                                                                       |
 
 ---
 
@@ -93,7 +98,13 @@ so there is no JSON canonicalisation to get wrong.
 -   **C4, one form.** `fromBase64` in `deaddrop/crypto/encoding.ts` skips
     whitespace and ignores non-zero trailing bits, so `AA==` and `AB==` decode
     alike, as do `AA AA` and `AAAA` (**Run**). An identity field is accepted only if encoding the decoded bytes
-    gives back the same string, and only at the exact length.
+    gives back the same string, and only at the exact length. That gave the
+    base64 one form but not the keys inside it: the independent review found
+    that an X25519 key with its top bit set, or with u of p or more, gives
+    the same shared secret as its reduced form and another fingerprint (L2),
+    and an Ed25519 key whose y is not reduced is the same case. The validator
+    now refuses both (`x25519KeyIsCanonical`, `ed25519PublicKeyIsAcceptable`),
+    so one key has one fingerprint.
 -   **C8, X25519.** A small-order X25519 key makes every shared secret with it
     zero. The validator computes X25519 with a fresh key against the
     identity's key and refuses it if that fails or gives all zeros. **Run:**
@@ -109,10 +120,24 @@ so there is no JSON canonicalisation to get wrong.
     a test checks that it refuses what noble refuses.
 -   **Ed25519 edge cases.** Implementations differ on non-canonical and
     small-order Ed25519 keys and signatures; the API verifies with OpenSSL
-    through Node, a browser with its own library. Only a crafted identity can
-    land on such a difference, and a weak signing key weakens only the
-    identity of the person who chose it: the comparison binds the exact key.
-    Not tested across implementations; accepted.
+    through Node, a browser with its own library. This record first accepted
+    that, reasoning that a weak signing key weakens only the identity of the
+    person who chose it. The independent review showed that was wrong (L1): a
+    small-order key verifies R = identity, S = 0 over every message, so its
+    self-signature proves nobody holds a private key, and anyone could sign
+    PR 3's statements for such an identity. **Run:** Node's WebCrypto accepts
+    that signature under three encodings of the identity point. The
+    validator now refuses, before WebCrypto runs, what libsodium's
+    `crypto_sign_verify_detached` refuses: a key whose y is not below p, a
+    key of small order (libsodium's seven y values, with either sign bit), an
+    R of small order and an S not below L (`ed25519PublicKeyIsAcceptable`,
+    `ed25519SignatureIsAcceptable`). Engines that differ on those cases now
+    give one answer. Still accepted, as in libsodium: a mixed-order key (a
+    large-order point plus a small-order part), under which a signature can
+    verify with one engine's equation and not another's. Only the key's
+    owner can make one, and it affects only whether their own identity is
+    accepted. PR 3 must apply `ed25519SignatureIsAcceptable` to every
+    signature it verifies under a release key.
 -   **Version.** The label and `v` both say 1. A different key set
     (ML-KEM-1024, a post-quantum signature, C16) is a new version, with a new
     label and so a new fingerprint.
@@ -170,11 +195,38 @@ and this design takes it.
 -   The code is the two halves in ascending order, joined: 60 digits, shown as
     twelve groups of five, the same on both devices. A code between an
     identity and itself is refused.
--   To match, a swapped key's half must equal the real key's half: a second
-    preimage, about 2^99.66 attempts for each side, every attempt a new key
-    pair and two hashes. A server grinding against every account at once
-    divides that by the number of accounts. There is no iterated hashing, as
-    Signal adds; the margin above was judged enough, and a v2 could add it.
+-   **If all 60 digits are compared,** a swapped key's half must equal the
+    real key's half: a second preimage, about 2^99.66 attempts for each side,
+    every attempt a candidate key and two hashes (the fingerprint, then the
+    half; only the key that wins needs a signature). A server grinding
+    against every account at once divides that by the number of accounts.
+-   **Comparing part of the code is far weaker** (the independent review's
+    M1). Both screens put the smaller half first. A server that gives each
+    person a forged key for the other can search for two forged keys, one
+    naming each account, whose halves are equal: a collision between two
+    sets it controls, about √(10^30), so 2^50, attempts. If that shared half
+    sorts below both real halves (about one try in three, or the server
+    grinds for it), the first six groups match on both screens; if above
+    both, the last six do. So comparing only the first or only the last six
+    groups costs the server about 2^50 in all. Comparing the first k and the
+    last k digits costs it about 10^k attempts per side: each forged key needs
+    a half that agrees with the real one in k digits at the right end. Reading
+    only the first and the last group (k = 5) costs about 10^5 attempts per
+    side, seconds of work. The screen says to read all twelve groups and to
+    stop at the first that differs (`COMPARE_READ_ALL`).
+-   **No iterated hashing.** Signal's numeric fingerprints iterate their hash
+    thousands of times; this code hashes once. Iterating N times multiplies
+    every cost above by N: with N = 5000, about 2^12.3, the 2^50 collision
+    would cost about 2^62 and the first-and-last-group shortcut about
+    5 × 10^8 attempts per side. That does not make a partial comparison safe,
+    and a full comparison does not need it. It is recommended to the operator
+    all the same, and now is the time: nothing depends on v1 yet, while after
+    people have compared codes any change needs a new label, both
+    derivations during a transition, and everyone comparing again. The cost
+    to people is small. **Run:** 5000 awaited WebCrypto SHA-512 calls take
+    about 0.2 s in Node 22 on this machine, so about 0.4 s for a code; phones
+    and browsers were not measured. Not done in this PR: the derivation is
+    the operator's to change.
 -   Not offered: copying the code, which invites pasting it into a Blackout
     chat, and a QR code, which needs a camera flow that is not built.
 
@@ -185,19 +237,36 @@ id with another account, that account's fingerprint gives another half. It
 binds no time and no session: the code stays the same while neither identity
 changes, and changes when either does.
 
-**What a match proves,** when both devices run unaltered Blackout code and the
-two people really reached each other (in person, or on a call where each knows
-the other's voice): the identity each device holds for the other person is the
+**What a match proves,** when all twelve groups were read and matched, both
+devices run unaltered Blackout code, and the two people really reached each
+other (in person, or on a call where each knows the other's voice, which an
+adversary who can intercept the call and imitate a voice can defeat): at the
+time of comparing, the identity each device holds for the other person is the
 one that person's device holds as its own, so neither was given a key the
 server put there. **What it does not prove:** that the other person keeps
 their private keys safe or their device uncompromised; anything about keys
-published later (a change shows as a new code); anything at all if the app
+published later (a later key gives another code, which only a new comparison
+shows); anything at all if the app
 code was altered, which a server can do to a browser (A3, A11), while the
 desktop and mobile apps carry their own copy; that the comparison is mutual
 (each device records it only when its own user confirms); or anything about a
 switch: comparing tells nobody whether one exists. A comparison carried over
 Blackout itself, by message or by a call through Blackout's servers, is not a
 comparison against Blackout's server.
+
+**When a comparison stops counting** (the independent review's H1). A
+comparison is about two particular identities. The signed bytes carry no
+time or sequence number, so a client cannot order identities by themselves,
+and a server can serve an old identity as current. PR 3 must therefore count
+a comparison only for the identity that is the account's current one when it
+is used, and treat it as stale once the device has seen a newer identity for
+that account (any other identity the directory served as current after the
+comparison), or the directory lists the compared fingerprint as superseded;
+the client then asks for a new comparison rather than sealing to the old key.
+The API now refuses to make a replaced identity current again
+(`release_identity_reused`), which stops an honest server from being used to
+roll a key back, but a compelled server can serve whatever it likes, so the
+client's rule is the one that holds.
 
 ## 3. The recovery file
 
@@ -271,6 +340,16 @@ comparison against Blackout's server.
     encapsulation key, and an encapsulation to it opens). **Run:** Node
     refuses a JWK whose `x` does not match its `d`; nothing says every
     browser does, so the check does not rely on it.
+-   **Which key becomes current** (the independent review's M4). The first
+    build made the file's current key set current and demoted the device's,
+    even a newer one, after which the screen offered to publish the old key.
+    Now the file's key becomes current without asking only when the device
+    has none, or the file's is newer (created later) and neither the device
+    nor the server lists it as replaced (`planRecoveryLoad`); otherwise the
+    screen asks, and "Keep this device's key" keeps it and adds the file's
+    key sets as old ones. "Newer" reads the creation times the files and the
+    device recorded, so a device with a wrong clock can mislead it; asking is
+    the default whenever it cannot tell.
 -   **The file name** is `blackout-release-keys.json`, which names no one, and
     the header holds no account id.
 -   **What it is not:** a backup Blackout keeps; current after later
@@ -286,21 +365,33 @@ comparison against Blackout's server.
     refuse; clearing site data deletes the keys. This app never sends a
     private half to the API: the SDK's publish call sends the six public
     fields and nothing else, whatever object it is given (test).
--   The panic wipe (`features/panic/localTraces.ts`) clears local storage
-    prefixes only, so it does not delete release keys. Nor does signing out:
-    `logout` (`client/auth.ts`) and `logoutClient` (`client/initMatrix.ts`)
-    delete the Matrix stores and the session, not `blackout-release-keys`, so
-    the keys stay on the device for the next sign-in, and the screen says so.
-    The screen's own "Remove release keys from this device" deletes them.
+-   The panic wipe (`features/panic/`) clears local storage prefixes, so on
+    its own it does not delete release keys; since the independent review
+    (H2) it has an option, off by default, "Also delete release keys from
+    this device", which clears the `blackout-release-keys` store for every
+    account on the device after the screen says what that costs, and the
+    screen lists release keys under what stays unless it is ticked. Signing
+    out does not delete them either: `logout` (`client/auth.ts`) and
+    `logoutClient` (`client/initMatrix.ts`) delete the Matrix stores and the
+    session, not `blackout-release-keys`, so the keys stay on the device for
+    the next sign-in, and the Release keys screen says so, and names the
+    panic wipe's option. The screen's own "Remove release keys from this
+    device" deletes them.
+-   Two tabs share the store. Every change the screen makes reads the stored
+    record and writes the next one in one IndexedDB readwrite transaction
+    (`update`), and Remove deletes only the record the tab showed (the
+    independent review's M3).
 -   The API stores the public identity, its fingerprint, when it was published
     and when it was replaced (`release_identities`, migration 104). **C14:**
     any signed-in account on this homeserver can read any account's current
     and replaced identities, so who has release keys, and when each changed
     them, is visible to all of them, and every lookup tells the server who
     looked up whom, and when.
--   A lookup by Matrix id resolves only `@localpart:server` where the server
-    name is this deployment's and the localpart is exactly an account's
-    username. Any other server name resolves to nobody, with the same answer
+-   A lookup by Matrix id is a `POST` with the id in the body, so it is not in
+    the URL that the front proxy logs with the caller's address (the
+    independent review's L5). It resolves only `@localpart:server` where the
+    server name is this deployment's and the localpart is exactly an
+    account's username. Any other server name resolves to nobody, with the same answer
     as an unknown name. When this was written the shared resolver
     (`resolveBlackoutUserId` in `services/userIdentity.ts`) dropped the server
     name; #981 fixed that before this branch merged it, and the directory now
@@ -380,6 +471,16 @@ whose transcript is empty, lack it, which belongs to the dead-drop work.
     signing key of the owner identity whose fingerprint it compared; the
     recipient account id and fingerprint in it are its own; the opened key
     matches the commitment; the content decrypts.
+8.  **A comparison counts only while it is current** (added by the
+    independent review, H1): only for the identity that is the account's
+    current one, and stale once the device has seen a newer identity for
+    that account or the directory lists the compared fingerprint as
+    superseded (§2). The owner's client re-asks before sealing to a recipient
+    whose comparison is stale, and a recipient's client says a release was
+    signed by a key it compared only while that comparison is current.
+9.  **Every release signature passes `ed25519SignatureIsAcceptable`** before
+    WebCrypto verifies it (R not of small order, S below L), and every key it
+    is verified under passed `verifyReleaseIdentity` (L1).
 
 **C15, for the operator.** These signatures are transferable: anyone holding
 a recipient's copy and the owner's public identity can show that the owner's
@@ -414,10 +515,11 @@ would be identity v2.
     recovery file.
 -   **SDK:** `createReleaseIdentityActions` (`getMine`, `publishMine`,
     `getForAccount`, `lookupByMatrixId`); `publishMine` sends the six public
-    fields only.
+    fields only, and `lookupByMatrixId` posts the Matrix id in the body.
 -   **API:** `GET` and `PUT /v1/release-identities/me`,
     `GET /v1/release-identities/:accountId`, and
-    `GET /v1/release-identities/lookup?matrixId=…`
+    `POST /v1/release-identities/lookup` with `{ matrixId }` (a `GET` with
+    the id in the query string until the independent review, L5)
     (`packages/api/src/routes/releaseIdentities.ts`,
     `services/releaseIdentities.ts`). A signed-in route with no capability
     scope: the API's routes outside the feature modules are gated by the
@@ -426,22 +528,34 @@ would be identity v2.
     else, private keys included, is refused whole); an identity naming
     another account gets 403 before anything else is checked; then the
     identity is checked as in §1 and refused with 400 and the reason. The
-    same identity again changes nothing; a different one becomes current
-    and the old one is kept with `superseded_at`. At most 32 per account;
-    the 33rd is refused (409). Every miss gets the same 404. Table
-    `release_identities`, migration 104 (103 is #983's), wired through the
-    memory, file and Postgres stores and `pgDescriptors.ts`: publishing
-    writes the superseded row before the new one; account deletion removes
-    the account's rows (`services/accountLifecycle.ts`, next to PR 1's
-    dead-man erasure); the account export lists them.
+    same identity again changes nothing; one the account published before
+    and replaced is refused with 409 `release_identity_reused` (H1); a new
+    one becomes current and the old one is kept with `superseded_at`, every
+    one of them. An account may publish 3 new identities in any 24 hours
+    (429 `release_identity_rate_limited`, with `Retry-After`) and 1000 in all
+    (409 `release_identity_limit`, a bound on storage only); the first
+    build's cap of 32, which locked an account for good, is gone (M2). Every
+    miss gets the same 404. Table `release_identities`, migration 104 (103 is
+    #983's), wired through the memory, file and Postgres stores and
+    `pgDescriptors.ts`: publishing writes the superseded row before the new
+    one; account deletion blanks the account's rows one targeted upsert at
+    a time (`eraseReleaseIdentity`: keys, signature, fingerprint and account
+    id go; the id, format version and times stay), as PR 1 does for
+    dead-man switches, rather than resyncing the table (L6); the account
+    export lists them.
 -   **Client:** Settings → Account & identity → Release keys
     (`apps/blackout-client/src/app/features/release-keys/`), for every
-    account, behind no flag: create keys on this device and publish them;
-    see whether the server has this device's key, none, or another; save and
-    load a recovery file; compare a code with someone by Matrix id; see whom
-    this device compared with; replace the keys or remove them from the
+    account, behind no flag: create and publish keys on this device (the
+    button says both, and the screen says the listing stays until the
+    account is deleted, M5); see whether the server has this device's key,
+    none, an older one of this device's, or one this device did not make,
+    and in that case who could have published it (H1); save and load a
+    recovery file; compare a code with someone by Matrix id, reading all
+    twelve groups (M1); see whom this device compared with; replace the keys
+    (with what else to do after losing a device, H1) or remove them from the
     device, each after a confirmation. The screen checks every identity it
-    fetches and computes the code from its own fingerprints, never the
+    fetches, refuses an answer for another Matrix id than the one typed
+    (L3), and computes the code from its own fingerprints, never the
     server's. `installReleaseKemProvider()` (`setKemProvider(mlKem768Provider)`)
     runs at startup in `main.tsx`. The screen says what the keys are for and
     that arming isn't available. Settings' account deletion and export text
@@ -461,11 +575,16 @@ truncated, edited and foreign files; parameters it does not read; keys that
 do not fit; bucket padding) and `releaseIdentityActions.test.ts`. The API's:
 `packages/api/test/release-identities.integration.test.ts` (the routes
 against the client's vectors, the server-name and exact-match rules, the
-history limit, deletion, both exports), `release-identities-postgres.integration.test.ts`
-(PGlite across a restart: history and deletion),
+history rules and publish limits, the POST lookup, deletion, both exports),
+`release-identities-postgres.integration.test.ts`
+(PGlite across a restart: history and erasure, and two replicas, one erasing
+while the other publishes),
 `release-identities-file.integration.test.ts` (the same through the file
 store) and a case in `auth-lifecycle.integration.test.ts`. The screen's are under
-`apps/blackout-client/tests/unit/features/release-keys/`. The main checks
+`apps/blackout-client/tests/unit/features/release-keys/` (including
+`ReleaseKeysPanel.tabs.test.tsx`, two tabs on one store), and the panic
+wipe's in `apps/blackout-client/tests/unit/features/panic/`. The tests the
+independent review asked for are listed with its findings below. The main checks
 were also removed one at a time, to see a test fail. Two survived that at
 first, the all-zero X25519 output (which Node's WebCrypto never reaches) and
 the ML-KEM round trip (whose work noble's own hash check had been doing), and
@@ -486,8 +605,15 @@ expression) were rewritten instead of listed.
     copy button and no QR code (§2).
 2.  A recovery passphrase needs 12 characters at least; nothing else is
     required of it, and the app does not suggest one (§3).
-3.  The API keeps at most 32 identities per account; the next is refused
-    rather than the oldest dropped, so the record of changes stays whole.
+3.  An account may publish 3 new identities in any 24 hours and keep 1000 in
+    all; every identity is kept, and a replaced one is never made current
+    again (M2, H1). The numbers are the operator's to change: three covers a
+    first publish and two replacements in a day, and holds a buggy client or
+    a stolen session to three a day; 1000 takes 334 days at that rate. Past
+    1000, publishing is refused, a lock again, but not one that honest use
+    reaches. Requiring a recent sign-in to publish, which the review also
+    suggested, is not built. (Until the review: at most 32 identities, then
+    refused for good.)
 4.  Anyone signed in on this homeserver can read anyone's current and replaced
     identities (C14). A narrower rule would need a contact model the API
     does not have.
@@ -505,13 +631,39 @@ expression) were rewritten instead of listed.
     for it from the server rather than from the token.
 11. The Release keys screen is under Settings → Account & identity, for
     every account, behind no flag.
-12. The panic wipe and signing out leave release keys on the device (§4):
-    the panic wipe leaves every IndexedDB store, and signing out deletes the
-    Matrix stores and the session, not these. Making either remove them would
-    destroy keys that only a recovery file could bring back, so it would need
-    a warning first for anyone without one. The screen tells people on a
-    shared device to remove them before signing out, and its own remove
+12. Signing out leaves release keys on the device, and so does the panic
+    wipe unless its option "Also delete release keys from this device" is
+    ticked; the option is off by default, and the screen shows the key-loss
+    warning next to it (§4, H2). Deleting them destroys keys that only a
+    recovery file could bring back. The Release keys screen tells people on
+    a shared device to remove them before signing out, and its own remove
     button does it.
+13. `COMPARE_MEANING` and `compareHow`, the approved §7 wording, were changed
+    as little as truth needed (M1): "If all twelve groups match, you have
+    each other's real keys, as long as neither of you is running altered app
+    code", and "in person. If you can't, use a call where you know their
+    voice, though a voice can be imitated and a call intercepted". The code
+    screen adds "Read all twelve groups to each other, in order. If any
+    group differs, stop." The design's §7 table now carries the same text,
+    marked as changed. Confirm or reword.
+14. Iterated hashing of the safety code is recommended and not done (§2):
+    decide before release, while nothing depends on v1.
+15. Account deletion blanks release-identity rows in place (id, format
+    version and times stay) rather than deleting them, because the Postgres
+    writer has no targeted delete (L6). A delete kind in the writer, the
+    write-behind queue and the peer notifications would allow real
+    deletion.
+16. There is no way to unpublish release keys short of deleting the account
+    (M5); the screen says so before anything is made. An unpublish route
+    would need a tombstone, so that a removal shows to people who compared.
+17. Only the Matrix-id lookup moved to a `POST` (L5); the read by account id
+    is still a `GET` with the opaque account id in the path, which the proxy
+    logs with the caller's address.
+18. Blackout's own app has no screen that signs out other sessions, so the
+    guidance after replacing keys names a Matrix client that lists sessions,
+    or the password reset with "Sign out of other devices" (H1); a Blackout
+    API token already issued to the lost device stays valid until it
+    expires, up to 24 hours.
 
 ## Not verified here
 
@@ -527,6 +679,218 @@ expression) were rewritten instead of listed.
     to check the file was saved.
 -   The desktop and mobile apps' claim to carry their own code (§7 of the
     design): their build configuration only.
+-   From the independent review: whether browsers honour `autocomplete="off"`
+    on the passphrase fields (several offer to save passwords anyway); the
+    small-order and canonical-encoding refusals against any engine but
+    Node's WebCrypto; two tabs in a real browser (the tests use
+    fake-indexeddb); the targeted erasure on a deployment with more than one
+    replica (the test uses two stores on one PGlite, without a change
+    transport); the cost of iterated hashing on phones.
+
+## Independent review, 2026-10-26
+
+An independent review read the whole branch (`git diff origin/develop...HEAD`
+at `9ad59b3068`), ran probes against it, and reported two high, five medium
+and seven low findings, and claims in the docs, the screens and the code that
+were not true. It found nothing critical: no private key or passphrase
+reaches the server, the account binding holds, and the lookup stays on this
+homeserver. The branch was then replayed onto `develop` at `df2f64e18d`, and
+each finding was fixed or explained as below. Tests named here run in the
+client's Vitest suite (`apps/blackout-client/tests/unit/`) or the API's
+(`packages/api/test/`); each new test was also run against the code before
+its fix, or with the fix taken out, and failed.
+
+### High
+
+**H1. A replaced identity could be made current again, and nothing caught it
+after a comparison** (latent until PR 3). The API made any identity other
+than the current one current, an old one included, and a test asserted it; a
+stolen session could put back a key its owner had replaced after losing a
+device, using only public data, and the owner's own screen called that "a
+different release key".
+
+-   **Done.** `PUT /v1/release-identities/me` refuses an identity already in
+    the account's history: 409 `release_identity_reused`. When the server
+    holds a key that is not one of this device's, the Release keys screen
+    says that if the person didn't make it on another device, someone with
+    access to their account, or Blackout's server, published it. It does not
+    offer to publish a key the server lists as replaced. Replacing keys shows
+    what else to do, before and after: sign the lost device out (from a
+    Matrix client that lists sessions, or by resetting the password with
+    "Sign out of other devices"), and tell the people compared with, outside
+    Blackout, that the key changed. PR 3's rule is in §2 and §5, item 8: a
+    comparison counts only for the account's current identity, and is stale
+    once the device has seen a newer identity or the directory lists the
+    compared fingerprint as superseded.
+-   **Tests.** `release-identities.integration.test.ts`: "a new identity
+    replaces the current one, which stays listed as superseded" (it asserted
+    the old behaviour; it now asserts the 409) and "no identity from an
+    account's history becomes current again, however old".
+    `ReleaseKeysPanel.test.tsx`: "says who could have published a key this
+    device did not make…", "does not offer to publish a key the server lists
+    as replaced", "says what else to do when replacing keys, before and
+    after", and the refusal cases.
+-   **Still open.** A compelled server can serve any key as current; against
+    that, only PR 3's client rule holds. Decision 18 covers signing out the
+    lost device.
+
+**H2. The panic wipe left the private release keys and the list of people
+compared with, while its screen said it cleared this app's sensitive data.**
+
+-   **Done.** What the wipe removes was checked in the code. It removes seven
+    groups of localStorage entries and, if asked, the stored sign-ins. It
+    never touches IndexedDB, so the Matrix client's stores (this device's
+    copy of rooms and recent messages, and the encryption keys, which the
+    app does not encrypt) and the video vault stay, and its "Also sign out"
+    sent nothing to the homeserver. The screen now lists what it removes and
+    what stays, says the sign-in option ("Also forget this device's
+    sign-ins") does not end the sessions on the server, and says it is not a
+    forensic wipe. That part applies to `develop` as it is and went out on
+    its own. On this branch the screen also lists release keys and
+    comparisons under what stays, and has an option, off by default, "Also
+    delete release keys from this device", which shows the key-loss warning
+    and clears the release-key store for every account on the device; if
+    that fails, the screen says the keys are still there and does not
+    reload. The Release keys screen's sign-out note names the option. The
+    headline's overclaim is older than this branch, and is recorded here as
+    found by this review.
+-   **Tests.** `features/panic/PanicSettings.test.tsx`: the screen's lists
+    against the prefixes; the wipe removes exactly what is listed; the Matrix
+    stores and the video vault are still in IndexedDB afterwards; the
+    release-key option off by default, ticked, and failing.
+
+### Medium
+
+**M1. The safety code is strong only if all 60 digits are compared, and the
+screen never said so.**
+
+-   **Done.** The code screen says "Read all twelve groups to each other, in
+    order. If any group differs, stop." §2 gives the 2^99.66 figure "if all
+    60 digits are compared" and the partial-comparison costs: about 2^50 in
+    all for either half alone, and about 10^k per side for the first and
+    last k digits. The code derivation is unchanged; iterated hashing is
+    recommended in §2, with why now (decision 14). `COMPARE_MEANING` and
+    `compareHow` changed only as far as needed to be true (decision 13).
+-   **Test.** `ReleaseKeysPanel.test.tsx`: "compares a code with someone by
+    Matrix id, and records it when they match" (the read-all note).
+
+**M2. The 32-identity cap locked an account for good.**
+
+-   **Done.** The cap is gone and every identity is kept, since H1's refusal
+    reads the history. At most 3 new identities in any 24 hours (429, with
+    `Retry-After`) and 1000 in all (409 `release_identity_limit`); decision 3
+    gives the reasons. Each refusal has its own message on the screen.
+-   **Tests.** `release-identities.integration.test.ts`: "at most 3 new
+    identities in any 24 hours, then 429 with when to try again" and "the
+    history keeps every identity, and only a storage bound of 1000 stops
+    publishing". `ReleaseKeysPanel.test.tsx`: "says why a publish was
+    refused" (429 and both 409s).
+
+**M3. Two open tabs could erase a new key set or undo "Remove".**
+
+-   **Done.** The device store's `update` reads the record, computes the next
+    one and writes it in one IndexedDB readwrite transaction, and `remove`
+    deletes only the record the tab showed (§4). A stale tab's Remove leaves
+    newer keys alone and says so; a comparison made against keys removed
+    elsewhere is not recorded, and one made against keys replaced elsewhere
+    is recorded for the key it used, with a note to compare again.
+-   **Tests.** `features/release-keys/ReleaseKeysPanel.tabs.test.tsx`, two
+    tabs on one fake-indexeddb store: a stale tab's comparison keeps the
+    other tab's new keys and does not bring back removed ones, and a stale
+    tab's Remove does not delete newer keys. All three fail against the
+    previous panel and store. `releaseKeyStore.test.ts`: two changes at
+    once, a change built on removed keys, the conditional remove.
+
+**M4. Loading an older recovery file quietly brought back a replaced key.**
+
+-   **Done.** §3, "Which key becomes current". The store test that asserted
+    the old merge now asserts each case.
+-   **Tests.** `releaseKeyStore.test.ts` (a newer file is taken without
+    asking; an older or replaced one asks; the same key changes nothing) and
+    `ReleaseKeysPanel.test.tsx` ("asks before an older recovery file's key
+    replaces this device's…", "uses the file's key only when told to", "says
+    when the file's key is one the server lists as replaced").
+
+**M5. "Create release keys on this device" also published, and nothing could
+be unpublished.**
+
+-   **Done.** The buttons read "Create and publish release keys" and "Create
+    and publish new release keys", and the screen says before anything is
+    made that the listing stays until the account is deleted, with no way to
+    unpublish. An unpublish route is not built: open (decision 16).
+-   **Test.** `ReleaseKeysPanel.test.tsx`: "creates keys on this device and
+    publishes only their public half" (the note and the label).
+
+### Low
+
+-   **L1. Small-order Ed25519 signing keys were accepted.** Fixed (§1,
+    "Ed25519 edge cases"). Tests, `sdk/releaseIdentity.test.ts`: the identity
+    point, which Node's WebCrypto accepts with R = identity, S = 0; every
+    small-order encoding with both sign bits; the review's probe values (y =
+    p + 1, "-0", the identity, the point of order 2); unreduced y; a
+    small-order R and S of L or more, refused before WebCrypto runs.
+-   **L2. Non-canonical X25519 encodings were accepted.** Fixed (§1, C4).
+    Tests, `sdk/releaseIdentity.test.ts`: the probe's top-bit key (the same
+    shared secret, refused before any X25519 runs) and u = p to p + 18,
+    including the probe's u = p + 9; u = 9 still passes.
+-   **L3. The lookup showed and recorded the Matrix id the server sent, not
+    the one typed.** Fixed: an answer for another Matrix id gives no code,
+    and the comparison records the id typed. Test: "refuses a lookup answer
+    for another Matrix id than the one typed".
+-   **L4. The recovery-passphrase fields invited the browser to save the
+    passphrase.** Fixed as far as a page can: `autocomplete="off"` on all
+    three. Browsers may offer to save it anyway; `KNOWN_LIMITATIONS.md` says
+    not to let one. Test: "does not ask the browser to save a recovery
+    passphrase".
+-   **L5. The lookup put the target in the URL.** Fixed: `POST
+/v1/release-identities/lookup` with `{ matrixId }`, free to change
+    because the route was not released. The server still sees who looked up
+    whom (C14); the proxy's access log, which records `$request` with
+    `$remote_addr`, no longer does. Tests: "the lookup takes the Matrix id in
+    a POST body, never in the URL" and the lookup rules, now through the
+    body; `sdk/releaseIdentityActions.test.ts`.
+-   **L6. Account deletion reconciled the whole table.** Fixed with the
+    targeted erasure in §6, since the writer cannot delete one row; real
+    deletion is open (decision 15). Test,
+    `release-identities-postgres.integration.test.ts`: "an erasure on one
+    replica leaves a publish another replica has not mirrored yet" (two
+    stores on one PGlite, no change transport; it fails with the old resync
+    spec), and the erasure checks in the file, Postgres and lifecycle tests.
+-   **L7. Test gaps.** The tests above cover L1, the panic wipe, two tabs,
+    and H1 and M4 as fixed rather than as intended. Two gaps stay, stated
+    here: ML-KEM-768 keys come only from `@noble/post-quantum`, and no NIST
+    known-answer test of ML-KEM-768 key generation runs (the round trip and
+    the modulus check do); and the "outside WebCrypto" Ed25519 check uses
+    `node:crypto`, the same OpenSSL as Node's WebCrypto, so it is a second
+    interface, not an independent implementation. `@noble/curves`, in the
+    lockfile through `@noble/post-quantum`, could provide one; it is not
+    wired in.
+
+### Claims that were not true, and what they say now
+
+-   The panic screen's headline: H2.
+-   `THREAT_MODEL.md` §5, release identities: "a safety-code comparison
+    catches a key the server substitutes" and "replaced identities stay
+    listed, so a change shows". The row now says a comparison of all 60
+    digits shows it at the time of comparing and nothing about later keys,
+    and that PR 3 must treat a comparison as stale once a newer identity
+    appears or the compared one is listed as replaced. The same overstatement
+    in the design's §8 ("so a change shows") and in `KNOWN_LIMITATIONS.md`
+    ("only a comparison catches that") is corrected the same way.
+-   `THREAT_MODEL.md` R3: "shipped end-to-end"; it now says built and tested,
+    in no shipped flow.
+-   `pqHybrid.ts`: "HPKE hybrid", and a KEM provider "wired in a follow-up
+    dependency PR"; it now says what the construction is (§5) and that the
+    provider is wired.
+-   This record: §2's 2^99.66 holds "if all 60 digits are compared"; §1's
+    "one form" held only for base64 (L2); §1 accepted Ed25519 edge cases
+    without seeing that a small-order key needs no private key (L1); §6 and
+    decision 3 gave the 32 cap without its permanent lock (M2).
+-   `RECOVERY_SAVE_NOTE`: "Anyone who has the file and your passphrase" now
+    also names guessing the passphrase on a copy of the file.
+-   `DataRetentionSection.tsx`: the public half is removed from Blackout's
+    database, "though copies in any backups the operator keeps are not".
+-   The create button: M5. `COMPARE_MEANING` and `compareHow`: M1.
 
 ## Sources
 

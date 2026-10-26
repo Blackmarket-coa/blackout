@@ -408,14 +408,28 @@ For the source-of-truth triage with tier/owner detail see
     or learns the passphrase can use your release keys, and Blackout cannot
     reset a forgotten passphrase. The app asks the browser to download the
     file; whether that works in the desktop and mobile apps was not tested,
-    so check that the file was saved.
+    so check that the file was saved. The passphrase fields ask the browser
+    not to offer saving the passphrase (`autocomplete="off"`), but browsers
+    may offer it anyway; don't let one save it. Loading a file whose current
+    key is older than this device's, or was replaced, asks before it changes
+    which key this device uses.
 -   **What the server sees:** the public half of your keys, and the keys you
     replaced, which any account signed in on this homeserver can read, and
-    who looked up whom. A safety-code comparison, in person or on a call
-    where you know the voice, is what shows a key is the person's own; the
-    server could hand out a different one, and only a comparison catches
-    that. In a web browser the server also supplies the app's code, which a
-    comparison cannot check.
+    who looked up whom (the Matrix id you look up travels in the request
+    body, not in the URL that proxies log). The server could hand out a key
+    that isn't the person's. A safety-code comparison shows whether the key
+    you were given is theirs, at the time you compare, and only if you read
+    all twelve groups: checking a few is far weaker. Compare in person if you
+    can; on a call, know that a voice can be imitated. A comparison says
+    nothing about keys published later. In a web browser the server also
+    supplies the app's code, which a comparison cannot check.
+-   **Publishing:** creating keys publishes them, and the listing stays until
+    your account is deleted; there is no way to unpublish. An account can
+    publish at most 3 new release keys in any 24 hours, and 1000 in all. A
+    key you replaced can never be made current again: the server refuses it.
+    If Blackout's server shows a key for you that you didn't make, someone
+    with access to your account, or the server, published it; the screen
+    says so.
 -   **Only this homeserver:** a Matrix id on another server finds nobody.
 -   **Devices:** a browser or webview needs WebCrypto Ed25519 and X25519 and
     IndexedDB; the screen says so when one is missing. Support was read from
