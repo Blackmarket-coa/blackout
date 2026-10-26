@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
+import { hasAdminApiKey, requireAdminApiKey } from '../middleware/admin-api-key';
 import { requireUser } from '../middleware/require-user';
 import { readJsonBody } from '../middleware/validate';
 import {
@@ -54,15 +55,6 @@ const ERROR_STATUS: Record<AdRevenueError['code'], number> = {
     share_not_pending: 409,
 };
 
-function adminGate(c: import('hono').Context): true | Response {
-    const expected = process.env.BLACKOUT_ADMIN_API_KEY ?? 'dev-admin-key';
-    const got = c.req.header('x-admin-api-key');
-    if (!got || got !== expected) {
-        return c.json({ code: 'forbidden', message: 'Admin API key required' }, 403);
-    }
-    return true;
-}
-
 function handleAdRevenueError(c: import('hono').Context, error: AdRevenueError): Response {
     return c.json(
         { code: error.code, message: error.message },
@@ -73,8 +65,8 @@ function handleAdRevenueError(c: import('hono').Context, error: AdRevenueError):
 // Admin-only period + allocation surface.
 
 adRevenue.post('/periods', async (c) => {
-    const guard = adminGate(c);
-    if (guard !== true) return guard;
+    const denied = requireAdminApiKey(c);
+    if (denied) return denied;
     const parsed = await readJsonBody(c, createPeriodSchema);
     if (parsed instanceof Response) return parsed;
     try {
@@ -103,8 +95,8 @@ adRevenue.get('/periods/:id', (c) => {
 });
 
 adRevenue.post('/periods/:id/allocate', async (c) => {
-    const guard = adminGate(c);
-    if (guard !== true) return guard;
+    const denied = requireAdminApiKey(c);
+    if (denied) return denied;
     const parsed = await readJsonBody(c, allocateSchema);
     if (parsed instanceof Response) return parsed;
     try {
@@ -132,20 +124,16 @@ adRevenue.get('/shares/:id', (c) => {
     if (user instanceof Response) return user;
     const share = getShare(c.req.param('id'));
     if (!share) return c.json({ code: 'share_not_found', message: 'No such share' }, 404);
-    if (share.creatorUserId !== user.sub) {
-        // Admin can read any share; non-creators get a 404 to avoid leakage.
-        const got = c.req.header('x-admin-api-key');
-        const expected = process.env.BLACKOUT_ADMIN_API_KEY ?? 'dev-admin-key';
-        if (got !== expected) {
-            return c.json({ code: 'share_not_found', message: 'No such share' }, 404);
-        }
+    // Admin can read any share; non-creators get a 404 to avoid leakage.
+    if (share.creatorUserId !== user.sub && !hasAdminApiKey(c)) {
+        return c.json({ code: 'share_not_found', message: 'No such share' }, 404);
     }
     return c.json({ share });
 });
 
 adRevenue.post('/shares/:id/mark-paid', async (c) => {
-    const guard = adminGate(c);
-    if (guard !== true) return guard;
+    const denied = requireAdminApiKey(c);
+    if (denied) return denied;
     const parsed = await readJsonBody(c, markPaidSchema);
     if (parsed instanceof Response) return parsed;
     try {
@@ -159,8 +147,8 @@ adRevenue.post('/shares/:id/mark-paid', async (c) => {
 });
 
 adRevenue.post('/shares/:id/void', (c) => {
-    const guard = adminGate(c);
-    if (guard !== true) return guard;
+    const denied = requireAdminApiKey(c);
+    if (denied) return denied;
     try {
         const share = voidShare(c.req.param('id'));
         if (!share) return c.json({ code: 'share_not_found', message: 'No such share' }, 404);

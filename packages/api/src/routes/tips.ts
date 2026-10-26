@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
+import { requireAdminApiKey } from '../middleware/admin-api-key';
 import { requireUser } from '../middleware/require-user';
 import { readJsonBody } from '../middleware/validate';
 import {
@@ -98,11 +99,8 @@ tips.get('/:id', (c) => {
 // subscriptions module uses; in production this is invoked by the FBM
 // webhook dispatcher once payment confirms.
 tips.post('/:id/capture', async (c) => {
-    const expected = process.env.BLACKOUT_ADMIN_API_KEY ?? 'dev-admin-key';
-    const got = c.req.header('x-admin-api-key');
-    if (!got || got !== expected) {
-        return c.json({ code: 'forbidden', message: 'Admin API key required' }, 403);
-    }
+    const denied = requireAdminApiKey(c);
+    if (denied) return denied;
     const parsed = await readJsonBody(c, captureSchema);
     const detail = parsed instanceof Response ? {} : parsed;
     const tip = captureTip(c.req.param('id'), detail);
@@ -111,11 +109,8 @@ tips.post('/:id/capture', async (c) => {
 });
 
 tips.post('/:id/refund', async (c) => {
-    const expected = process.env.BLACKOUT_ADMIN_API_KEY ?? 'dev-admin-key';
-    const got = c.req.header('x-admin-api-key');
-    if (!got || got !== expected) {
-        return c.json({ code: 'forbidden', message: 'Admin API key required' }, 403);
-    }
+    const denied = requireAdminApiKey(c);
+    if (denied) return denied;
     const tip = refundTip(c.req.param('id'));
     if (!tip) return c.json({ code: 'tip_not_found', message: 'No such tip' }, 404);
     return c.json({ tip });
