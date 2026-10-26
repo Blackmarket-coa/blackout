@@ -38,7 +38,12 @@ import {
     issueEmailVerificationToken,
     markVerificationTokenSent,
 } from '../services/emailVerification';
-import { redeemInvitation } from '../services/invitations';
+import {
+    previewInvitation,
+    redeemInvitation,
+    redeemInvitationForMatrixUser,
+} from '../services/invitations';
+import { homeserverDomain } from '../services/userIdentity';
 import {
     confirmAccountDeletion,
     exportUserData,
@@ -349,7 +354,62 @@ auth.post('/register', async (c) => {
  * logs in with the number via the standard Matrix password flow; the local
  * Blackout user is auto-provisioned lazily on the first token exchange.
  */
+const accountNumberSchema = z.object({
+    /**
+     * Plaintext invite token from a /v1/invitations link. The same gate as
+     * /register: optional unless REQUIRE_INVITE_TOKEN=1, in which case no
+     * account is minted without one. Until 2026-10-25 this route had no gate,
+     * so the invite-only setting applied to every sign-up but this one (D3 in
+     * docs/black-mask-account-link-design.md §7).
+     */
+    inviteToken: z.string().min(1).max(512).optional(),
+});
+
 auth.post('/account-number', async (c) => {
+    // Clients send `{}`; a request with no body at all is read the same way,
+    // as it was when this route read no body.
+    const rawBody = await c.req.text();
+    let body: unknown = {};
+    if (rawBody.trim().length > 0) {
+        try {
+            body = JSON.parse(rawBody);
+        } catch {
+            return c.json(
+                { code: 'invalid_request', message: 'Request body must be valid JSON' },
+                400
+            );
+        }
+    }
+    const parsed = accountNumberSchema.safeParse(body);
+    if (!parsed.success) {
+        return c.json({ code: 'invalid_request', message: 'Request body failed validation' }, 400);
+    }
+    const { inviteToken } = parsed.data;
+
+    if (process.env.REQUIRE_INVITE_TOKEN === '1' && !inviteToken) {
+        return c.json(
+            { code: 'invite_required', message: 'Registration requires an invitation token' },
+            403
+        );
+    }
+
+    // A presented token is checked before anything is provisioned, so a bad
+    // one never costs a Matrix account. It is consumed after provisioning, as
+    // /register does, so a room-bound invitation can admit the new account.
+    if (inviteToken) {
+        const preview = previewInvitation(inviteToken);
+        if (preview.kind !== 'ok') {
+            return c.json(
+                {
+                    code: 'invite_token_invalid',
+                    message: 'Invitation token is not usable',
+                    reason: preview.kind,
+                },
+                400
+            );
+        }
+    }
+
     for (let attempt = 0; attempt < 5; attempt += 1) {
         const accountNumber = generateAccountNumber();
         const localpart = await accountNumberToLocalpart(accountNumber);
@@ -371,7 +431,31 @@ auth.post('/account-number', async (c) => {
         // matrix_not_configured is expected in local/dev — return the number so the
         // flow is exercisable; real login still needs a configured homeserver.
         if (matrix.ok || ('reason' in matrix && matrix.reason === 'matrix_not_configured')) {
-            return c.json({ accountNumber: formatAccountNumber(accountNumber) }, 201);
+            let invite: { ok: true; matrixInvite?: { ok: boolean } } | undefined;
+            if (inviteToken) {
+                const outcome = await redeemInvitationForMatrixUser(
+                    inviteToken,
+                    `@${localpart}:${homeserverDomain()}`
+                );
+                if (outcome.kind !== 'ok') {
+                    // The token's last use went to someone else between the check
+                    // above and here. The Matrix account exists but its number is
+                    // never handed out, so nothing can sign in to it (/register, in
+                    // the same case, deletes the local row it had created; there is
+                    // none here).
+                    log.warn('account_number.invite_redeem_failed', { reason: outcome.kind });
+                    return c.json(
+                        {
+                            code: 'invite_token_invalid',
+                            message: 'Invitation token is not usable',
+                            reason: outcome.kind,
+                        },
+                        400
+                    );
+                }
+                invite = { ok: true, matrixInvite: outcome.matrixInvite };
+            }
+            return c.json({ accountNumber: formatAccountNumber(accountNumber), invite }, 201);
         }
 
         // Collision / rejection on this localpart → mint a fresh number and retry.
