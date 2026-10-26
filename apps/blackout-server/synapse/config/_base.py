@@ -16,6 +16,7 @@
 
 import argparse
 import errno
+import importlib.resources as importlib_resources
 import logging
 import os
 import re
@@ -40,7 +41,6 @@ from typing import (
 
 import attr
 import jinja2
-import pkg_resources
 import yaml
 
 from synapse.types import StrSequence
@@ -168,8 +168,8 @@ class Config:
         self.root = root_config
 
         # Get the path to the default Synapse template directory
-        self.default_template_dir = pkg_resources.resource_filename(
-            "synapse", "res/templates"
+        self.default_template_dir = str(
+            importlib_resources.files("synapse").joinpath("res").joinpath("templates")
         )
 
     @staticmethod
