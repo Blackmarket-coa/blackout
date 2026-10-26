@@ -63,7 +63,10 @@ real adversaries.
 -   **Deaddrop** — hidden ephemeral messaging via a dedicated Matrix appservice
     with opaque envelopes and decoy traffic (`deaddrop`,
     `apps/deaddrop-appservice/`).
--   **Panic button & active defense** — one-action lockdown plus configurable
+-   **Panic button & active defense** — a panic wipe that removes listed
+    local data from the device (drafts, burner list, saved steganography
+    passphrases; it leaves the Matrix stores and encryption keys, see
+    [`KNOWN_LIMITATIONS.md`](../../KNOWN_LIMITATIONS.md)) plus configurable
     active-defense settings (`panic`, `activedefense.ts`).
 -   **Burner identities** — disposable identities with a burner-mode indicator
     (`burner-identity`, `identities.ts`).
