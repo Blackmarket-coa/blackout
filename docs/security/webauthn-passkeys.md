@@ -9,17 +9,29 @@ Blackout API and the operator knobs that govern it.
 ## What ships today
 
 -   HTTP routes under `/v1/auth/webauthn/`:
-    -   `POST /register/begin` — issues a registration challenge and the
+    -   `POST /register/begin` — signed-in callers only: issues a
+        registration challenge bound to the caller's session and the
         `PublicKeyCredentialCreationOptions` shape the client should pass
-        to `navigator.credentials.create()`.
-    -   `POST /register/finish` — accepts the attestation response,
-        validates clientDataJSON, consumes the challenge, and (will)
-        persist the credential.
-    -   `POST /login/begin` — issues a login challenge and the allow-list
-        of credentials registered for the user.
-    -   `POST /login/finish` — accepts the assertion response and
-        validates clientDataJSON / challenge.
--   Storage shape for credentials (`PasskeyCredential`).
+        to `navigator.credentials.create()`, with the caller's Blackout id
+        and username as the user entity. It takes no body, `{}`, or a
+        `userId` that names the caller (Blackout id or local Matrix id);
+        any other `userId` is refused `403 user_mismatch`.
+    -   `POST /register/finish` — signed-in callers only: accepts the
+        attestation response, validates clientDataJSON, consumes the
+        challenge issued to the same session, and stores the credential
+        under the caller's Blackout id. A credential id that is already
+        registered, to anyone, is refused `409 credential_exists` rather
+        than replacing the stored record.
+    -   `POST /login/begin` — no session (sign-in comes first): issues a
+        login challenge and the allow-list of credentials registered for
+        the account named by a Blackout id or local Matrix id.
+    -   `POST /login/finish` — no session: accepts the assertion response,
+        validates clientDataJSON / challenge and the signature. It mints
+        no session; nothing signs in with a passkey yet.
+-   Until 2026-10-26 both registration routes took any `userId` and no
+    session (F7 in `docs/security/api-findings-triage-2026-10-25.md`).
+-   Storage shape for credentials (`PasskeyCredential`). Credentials and
+    challenges are kept in memory, so a restart forgets them.
 -   Single-use, time-bounded challenge management with strict
     user/purpose binding (see `consumeChallenge`).
 -   ClientDataJSON parsing and validation (origin allow-list, challenge
@@ -29,10 +41,12 @@ Blackout API and the operator knobs that govern it.
     -   `WEBAUTHN_RP_ID` — Relying Party ID (eTLD+1 of the app domain).
     -   `WEBAUTHN_RP_NAME` — display name.
     -   `WEBAUTHN_ORIGINS` — comma-separated origin allow-list.
--   16 regression tests covering challenge handling, parsing, validation,
+-   15 service tests covering challenge handling, parsing, validation,
     storage, the clientData pre-checks in `verifyAttestation` /
     `verifyAssertion`, and the failure paths after delegation to
-    `@simplewebauthn/server` (`verification_failed`).
+    `@simplewebauthn/server` (`verification_failed`), and 7 route tests
+    that register and sign in with a software authenticator (session
+    binding, another account refused, credential ids registered once).
 
 ## Verification (now wired)
 
@@ -62,6 +76,7 @@ flag, are accepted. Operators that want strict UV can flip this in
 
 -   Source: `packages/api/src/services/webauthn.ts`,
     `packages/api/src/routes/webauthn.ts`.
--   Tests: `packages/api/test/webauthn.integration.test.ts`.
+-   Tests: `packages/api/test/webauthn.integration.test.ts` (service),
+    `packages/api/test/webauthn-routes.integration.test.ts` (routes).
 -   Threat model entry: `THREAT_MODEL.md` §7 R4.
 -   Dependency: `@simplewebauthn/server`.
