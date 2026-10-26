@@ -905,6 +905,28 @@ export interface DeadmanSwitchRecord {
     updatedAt: string;
 }
 
+/**
+ * One release identity an account published (`PUT /v1/release-identities/me`):
+ * the public keys and signature exactly as sent, already verified, and the
+ * fingerprint the API computed. Publishing a different identity marks the
+ * current row `supersededAt` and adds a new one, so the history of an
+ * account's keys shows. Rows go with the account. Migration 104;
+ * `docs/security/release-identities-2026-10-26.md`.
+ */
+export interface ReleaseIdentityRecord {
+    id: UUID;
+    accountId: UUID;
+    /** The identity format version (`v`). */
+    formatVersion: number;
+    signingKey: string;
+    x25519Key: string;
+    mlkem768Key: string;
+    signature: string;
+    fingerprint: string;
+    publishedAt: string;
+    supersededAt?: string;
+}
+
 export interface ModerationActionRecord {
     id: UUID;
     communityId: UUID;

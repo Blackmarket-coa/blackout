@@ -346,6 +346,35 @@ test('account deletion cancels the owner’s unfired switches and clears what th
     assert.equal(db.getDeadmanSwitch(inGrace.id)?.status, 'cancelled');
 });
 
+test('account deletion removes the account’s release identities and nobody else’s', async () => {
+    const { db } = await loadModules();
+    const lifecycle = await import('../src/services/accountLifecycle');
+    const user = await seedUser(db);
+    const other = await seedUser(db);
+    const publish = (accountId: string, fingerprint: string) =>
+        db.publishReleaseIdentity({
+            id: randomUUID(),
+            accountId,
+            formatVersion: 1,
+            signingKey: 'public-signing-key',
+            x25519Key: 'public-agreement-key',
+            mlkem768Key: 'public-kem-key',
+            signature: 'signature',
+            fingerprint,
+        });
+    publish(user.id, 'a'.repeat(64));
+    publish(user.id, 'b'.repeat(64));
+    publish(other.id, 'c'.repeat(64));
+    assert.equal(db.listReleaseIdentitiesForAccount(user.id).length, 2);
+
+    const issued = lifecycle.requestAccountDeletion({ userId: user.id });
+    assert.ok(issued);
+    assert.equal(lifecycle.confirmAccountDeletion(issued!.token, user.id).kind, 'ok');
+
+    assert.equal(db.listReleaseIdentitiesForAccount(user.id).length, 0);
+    assert.equal(db.getCurrentReleaseIdentity(other.id)?.fingerprint, 'c'.repeat(64));
+});
+
 test('account deletion rejects expired tokens', async () => {
     const { db } = await loadModules();
     const lifecycle = await import('../src/services/accountLifecycle');

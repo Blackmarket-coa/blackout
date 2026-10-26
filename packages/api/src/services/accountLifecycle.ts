@@ -1,6 +1,8 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import type { ReleaseIdentity } from '@blackout/protocol';
 import { db } from '../db/store';
 import type { UserRecord } from '../db/types';
+import { recordToReleaseIdentity } from './releaseIdentities';
 import { matrixUserIdFor } from './userIdentity';
 
 const DELETE_TOKEN_BYTES = 32;
@@ -80,6 +82,16 @@ export interface AccountExport {
         releaseAt: string;
         recipientCount: number;
         createdAt: string;
+    }>;
+    /**
+     * Release identities this user published, current and replaced: public
+     * keys only. The private halves were never sent to the server.
+     */
+    releaseIdentities: Array<{
+        fingerprint: string;
+        publishedAt: string;
+        supersededAt?: string;
+        identity: ReleaseIdentity;
     }>;
     refreshTokensCount: number;
     passwordResetTokensCount: number;
@@ -202,6 +214,15 @@ export const exportUserData = (userId: string): AccountExport | null => {
             createdAt: sw.createdAt,
         }));
 
+    const releaseIdentities: AccountExport['releaseIdentities'] = db
+        .listReleaseIdentitiesForAccount(userId)
+        .map((record) => ({
+            fingerprint: record.fingerprint,
+            publishedAt: record.publishedAt,
+            ...(record.supersededAt ? { supersededAt: record.supersededAt } : {}),
+            identity: recordToReleaseIdentity(record),
+        }));
+
     const refreshTokensCount = [...db.refreshTokens.values()].filter(
         (t) => t.userId === userId
     ).length;
@@ -225,6 +246,7 @@ export const exportUserData = (userId: string): AccountExport | null => {
         moderationActions,
         scheduledMessages,
         deadmanSwitches,
+        releaseIdentities,
         refreshTokensCount,
         passwordResetTokensCount,
         emailVerificationTokensCount,
@@ -300,6 +322,10 @@ export const confirmAccountDeletion = (
         record.userId,
         matrixUserIdFor(record.userId) ?? undefined
     );
+    // Release identities: the public keys go with the account. The private
+    // halves are on the person's devices and in their recovery files, which
+    // the server never had.
+    db.deleteReleaseIdentitiesForAccount(record.userId);
     db.purgeUserAuthArtifacts(record.userId);
     db.deleteUser(record.userId);
     return { kind: 'ok', userId: record.userId };

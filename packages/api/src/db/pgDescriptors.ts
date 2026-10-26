@@ -395,6 +395,7 @@ const ALL_MAP_NAMES = [
     'forumPosts',
     'deadDrops',
     'deadmanSwitches',
+    'releaseIdentities',
     'moderationActions',
     'creatorStreamAuth',
     'streams',
@@ -619,6 +620,12 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
     updateDeadmanSwitch: upsert('deadmanSwitches'),
     // Account deletion. A targeted upsert, not a resync: see the store method.
     eraseDeadmanSwitch: upsert('deadmanSwitches'),
+    // Publishing supersedes the current identity (its own upsert, issued
+    // first by publishReleaseIdentity) and then adds the new one.
+    supersedeReleaseIdentity: upsert('releaseIdentities'),
+    publishReleaseIdentity: upsert('releaseIdentities'),
+    // Account deletion removes the rows, so the table is reconciled.
+    deleteReleaseIdentitiesForAccount: resync('releaseIdentities'),
     createModerationAction: upsert('moderationActions'),
     upsertCreatorStreamAuth: upsert('creatorStreamAuth'),
     upsertStream: upsert('streams'),

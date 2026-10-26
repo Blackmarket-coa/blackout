@@ -84,6 +84,7 @@ import reputationRoutes from './routes/reputation';
 import spatialRoutes from './routes/spatial';
 import webauthnRoutes from './routes/webauthn';
 import keyTransparencyRoutes from './routes/keyTransparency';
+import releaseIdentityRoutes from './routes/releaseIdentities';
 import diagnosticsRoutes from './routes/diagnostics';
 import telemetryRoutes from './routes/telemetry';
 import adminRoutes from './routes/admin';
@@ -277,6 +278,8 @@ for (const root of apiRoots) {
     app.route(`${root}/spatial`, spatialRoutes);
     app.route(`${root}/auth/webauthn`, webauthnRoutes);
     app.route(`${root}/key-transparency`, keyTransparencyRoutes);
+    // Release identities for dead-man switch releases (and, later, dead drops).
+    app.route(`${root}/release-identities`, releaseIdentityRoutes);
     app.route(`${root}/diagnostics`, diagnosticsRoutes);
     app.route(`${root}/telemetry`, telemetryRoutes);
     // Also reachable under /v1 (and the legacy alias) so the web client works on
