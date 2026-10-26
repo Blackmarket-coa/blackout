@@ -230,6 +230,34 @@ const moderationLog = (roomId: string) =>
         .filter((e) => e.eventType !== 'join' && e.eventType !== 'leave')
         .map((e) => [e.eventType, e.actorId, e.metadata?.role]);
 
+/**
+ * Run `fn` with the SDK's own `RoomServiceClient`, built from the environment as
+ * it is in production, speaking HTTP to `answer` in place of a LiveKit server
+ * (the homeserver is still the stub). Returns the room-service URLs it asked.
+ */
+const withRealRoomService = async (
+    answer: (url: string) => Response,
+    fn: () => Promise<void>
+): Promise<string[]> => {
+    const asked: string[] = [];
+    const stubFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url =
+            typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+        if (!url.includes('/twirp/livekit.RoomService/')) return stubFetch(input, init);
+        asked.push(url);
+        return answer(url);
+    }) as typeof fetch;
+    setRoomServiceClientFactory(undefined);
+    try {
+        await fn();
+    } finally {
+        globalThis.fetch = stubFetch;
+        setRoomServiceClientFactory(() => livekit.client);
+    }
+    return asked;
+};
+
 test('V-1: the canopy admin and a moderator create voice rooms; the API asked the homeserver', async () => {
     const { canopyId, admin, moderator } = seedCanopy();
     for (const caller of [admin, moderator]) {
@@ -1582,4 +1610,77 @@ test("V-18: a voice room's event feed is for joined members of the canopy, and t
     } finally {
         process.env.MATRIX_BOT_TOKEN = botToken;
     }
+});
+
+test("V-26: the API calls LiveKit's room service at LIVEKIT_INTERNAL_URL when it is set, at LIVEKIT_URL otherwise", async () => {
+    const { canopyId, moderator, member } = seedCanopy();
+    const { channelId } = seedRoom(canopyId);
+    await joinAs(member, canopyId, channelId);
+    const mute = async () => {
+        const res = await post('/rooms/moderation/mute', moderator, {
+            canopyId,
+            channelId,
+            targetUserId: member.id,
+        });
+        assert.equal(res.status, 200);
+    };
+    const nobodyThere = () => Response.json({ participants: [] });
+    const publicUrl = process.env.LIVEKIT_URL!;
+    try {
+        process.env.LIVEKIT_INTERNAL_URL = 'http://livekit:7880';
+        assert.deepEqual(await withRealRoomService(nobodyThere, mute), [
+            'http://livekit:7880/twirp/livekit.RoomService/ListParticipants',
+        ]);
+        // Clients are still given the public address.
+        const config = (await (await app.request('/v1/voice/config')).json()) as { url: string };
+        assert.equal(config.url, publicUrl);
+
+        delete process.env.LIVEKIT_INTERNAL_URL;
+        assert.deepEqual(await withRealRoomService(nobodyThere, mute), [
+            'https://livekit.local/twirp/livekit.RoomService/ListParticipants',
+        ]);
+        // A path in LIVEKIT_URL, such as the single-server stack's /livekit/sfu,
+        // is dropped: the SDK resolves its own path against the host.
+        process.env.LIVEKIT_URL = 'wss://matrix.example.org/livekit/sfu';
+        assert.deepEqual(await withRealRoomService(nobodyThere, mute), [
+            'https://matrix.example.org/twirp/livekit.RoomService/ListParticipants',
+        ]);
+    } finally {
+        process.env.LIVEKIT_URL = publicUrl;
+        delete process.env.LIVEKIT_INTERNAL_URL;
+    }
+});
+
+test("V-27: only LiveKit's own not_found means nobody was there to act on; any other 404 means LiveKit was not reached", async () => {
+    const { canopyId, moderator, member } = seedCanopy();
+    const { channelId } = seedRoom(canopyId);
+    await joinAs(member, canopyId, channelId);
+    // What LiveKit answers for a participant who is not in the room...
+    const livekitNotFound = () =>
+        Response.json({ code: 'not_found', msg: 'participant not found' }, { status: 404 });
+    // ...and what a proxy answers for a path it does not route.
+    const proxyNotFound = () =>
+        new Response('<html><body>404 Not Found</body></html>', {
+            status: 404,
+            headers: { 'content-type': 'text/html' },
+        });
+    const remove = () =>
+        post('/rooms/moderation/remove', moderator, {
+            canopyId,
+            channelId,
+            targetUserId: member.id,
+        });
+
+    let res: Response | undefined;
+    await withRealRoomService(livekitNotFound, async () => {
+        res = await remove();
+    });
+    assert.equal(res!.status, 200);
+    assert.deepEqual(((await res!.json()) as { livekit: unknown }).livekit, {
+        disconnected: false,
+    });
+    await withRealRoomService(proxyNotFound, async () => {
+        res = await remove();
+    });
+    assert.deepEqual(await refusal(res!), { status: 502, code: 'livekit_unavailable' });
 });
