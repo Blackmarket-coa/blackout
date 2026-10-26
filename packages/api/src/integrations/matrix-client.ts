@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { log } from '../telemetry/logger';
 
 const homeserver = () => process.env.MATRIX_HOMESERVER ?? process.env.MATRIX_HOMESERVER_URL;
 const botToken = () => process.env.MATRIX_BOT_TOKEN;
@@ -26,6 +27,40 @@ let botUserIdCache: string | undefined;
 // Alias → room id cache. Room aliases are stable for the process lifetime.
 const roomAliasCache = new Map<string, string>();
 
+/**
+ * Before an admin `PUT /_synapse/admin/v2/users/{userId}` that is meant to
+ * create an account, look the account up. Returns the refusal to hand back, or
+ * undefined when the homeserver answered 404 and the PUT may go ahead. A 200
+ * means the homeserver already has the name (`matrix_user_exists`); any other
+ * answer fails closed.
+ */
+const accountLookup = async (url: string, token: string, userId: string) => {
+    const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    if (response.status === 404) return undefined;
+    if (response.status === 200) {
+        return { ok: false as const, status: 409, reason: 'matrix_user_exists' as const };
+    }
+    log.warn('matrix.account_lookup_failed', { userId, status: response.status });
+    return {
+        ok: false as const,
+        status: response.status,
+        reason: 'matrix_user_lookup_failed' as const,
+    };
+};
+
+/**
+ * The admin PUT answers 201 when it created the account and 200 when it
+ * updated one that already had the id, which here means one appeared after the
+ * lookup. That is refused like a name the homeserver already had, and logged
+ * as an error because the existing account was changed. Undefined for any
+ * other status.
+ */
+const updatedInsteadOfCreated = (status: number, userId: string) => {
+    if (status !== 200) return undefined;
+    log.error('matrix.account_create_updated_existing', { userId });
+    return { ok: false as const, status: 409, reason: 'matrix_user_exists' as const };
+};
+
 export const matrixClient = {
     /**
      * Resolve the bot account's own Matrix user id (`@blackout:domain`) by
@@ -48,6 +83,13 @@ export const matrixClient = {
         botUserIdCache = `@${localpart}:${homeserverDomain()}`;
         return botUserIdCache;
     },
+    /**
+     * Create a Matrix account through the admin API. Account creation refuses
+     * a username the homeserver already has: the admin
+     * `PUT /_synapse/admin/v2/users/{userId}` both creates and updates, so the
+     * account is looked up first and only a 404 goes on to the PUT; any other
+     * answer to the lookup fails closed. Only a 201 from the PUT is a creation.
+     */
     async registerUser(username: string, password: string) {
         const hs = homeserver();
         const token = botToken();
@@ -56,25 +98,35 @@ export const matrixClient = {
             return { ok: false as const, reason: 'matrix_not_configured' as const };
         }
 
-        const response = await fetch(
-            `${hs}/_synapse/admin/v2/users/@${encodeURIComponent(username)}:${homeserverDomain()}`,
-            {
-                method: 'PUT',
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    password,
-                    displayname: username,
-                }),
-            }
-        );
+        const userId = `@${username}:${homeserverDomain()}`;
+        const url = `${hs}/_synapse/admin/v2/users/@${encodeURIComponent(
+            username
+        )}:${homeserverDomain()}`;
+        const lookup = await accountLookup(url, token, userId);
+        if (lookup) return lookup;
 
-        return {
-            ok: response.ok,
-            status: response.status,
-        };
+        const response = await fetch(url, {
+            method: 'PUT',
+            headers: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                password,
+                displayname: username,
+            }),
+        });
+
+        const updated = updatedInsteadOfCreated(response.status, userId);
+        if (updated) return updated;
+        if (response.status !== 201) {
+            return {
+                ok: false as const,
+                status: response.status,
+                reason: 'synapse_rejected' as const,
+            };
+        }
+        return { ok: true as const, status: response.status };
     },
 
     /**
@@ -97,10 +149,15 @@ export const matrixClient = {
         const password = randomBytes(24).toString('base64url');
         const userId = `@${localpart}:${homeserverDomain()}`;
         const displayname = label.slice(0, 80) || 'Burner';
+        const url = `${hs}/_synapse/admin/v2/users/${encodeURIComponent(userId)}`;
 
         let response: Response;
         try {
-            response = await fetch(`${hs}/_synapse/admin/v2/users/${encodeURIComponent(userId)}`, {
+            // The same create-only rule as registerUser: a name the homeserver
+            // already has is refused, and only a 201 is a creation.
+            const lookup = await accountLookup(url, token, userId);
+            if (lookup) return lookup;
+            response = await fetch(url, {
                 method: 'PUT',
                 headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
                 body: JSON.stringify({ password, displayname }),
@@ -113,7 +170,10 @@ export const matrixClient = {
             };
         }
 
-        if (!response.ok) {
+        const updated = updatedInsteadOfCreated(response.status, userId);
+        if (updated) return updated;
+
+        if (response.status !== 201) {
             let detail: string | undefined;
             try {
                 detail = await response.text();

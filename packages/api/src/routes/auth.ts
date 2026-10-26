@@ -210,13 +210,30 @@ auth.post('/register', async (c) => {
     }
 
     // Invite-gated mode: when REQUIRE_INVITE_TOKEN=1 the public /register
-    // route is closed unless the caller presents a valid token. We do the
-    // up-front lookup so we never create a user we're about to roll back.
+    // route is closed unless the caller presents a valid token.
     if (process.env.REQUIRE_INVITE_TOKEN === '1' && !inviteToken) {
         return c.json(
             { code: 'invite_required', message: 'Registration requires an invitation token' },
             403
         );
+    }
+
+    // A presented token is checked before anything is created, so an unusable
+    // one never creates a local row or a Matrix account (it is consumed after,
+    // below), exactly as account-number sign-up does. With the gate on this is
+    // also what closes it: no usable token, nothing created.
+    if (inviteToken) {
+        const preview = previewInvitation(inviteToken);
+        if (preview.kind !== 'ok') {
+            return c.json(
+                {
+                    code: 'invite_token_invalid',
+                    message: 'Invitation token is not usable',
+                    reason: preview.kind,
+                },
+                400
+            );
+        }
     }
 
     // Hash first, off the event loop. The await yields, so it must come before
@@ -266,6 +283,13 @@ auth.post('/register', async (c) => {
     // the caller can retry with the same email/username.
     if (!matrix.ok && !('reason' in matrix && matrix.reason === 'matrix_not_configured')) {
         db.deleteUser(user.id);
+        // The homeserver already has this username. Answer it as a local
+        // username collision does, so the response does not reveal which
+        // Matrix accounts exist, and never carry the caller's password to an
+        // account that is not theirs.
+        if ('reason' in matrix && matrix.reason === 'matrix_user_exists') {
+            return c.json({ code: 'user_exists', message: 'User already exists' }, 409);
+        }
         return c.json(
             {
                 code: 'matrix_provisioning_failed',
