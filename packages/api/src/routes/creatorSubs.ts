@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { MarketplaceProviderId } from '@blackout/core';
+import { requireAdminApiKey } from '../middleware/admin-api-key';
 import { requireUser } from '../middleware/require-user';
 import { readJsonBody } from '../middleware/validate';
 import { getMarketplaceProvider } from '../integrations/marketplace';
@@ -61,15 +62,6 @@ const ERROR_STATUS: Record<CreatorSubscriptionError['code'], number> = {
     subscription_not_found: 404,
     provider_unsupported: 400,
 };
-
-function adminGate(c: import('hono').Context): true | Response {
-    const expected = process.env.BLACKOUT_ADMIN_API_KEY ?? 'dev-admin-key';
-    const got = c.req.header('x-admin-api-key');
-    if (!got || got !== expected) {
-        return c.json({ code: 'forbidden', message: 'Admin API key required' }, 403);
-    }
-    return true;
-}
 
 // Tier management — creator manages their own catalog of subscription tiers.
 
@@ -229,8 +221,8 @@ creatorSubs.post('/subscriptions/:id/cancel', (c) => {
 // Admin/webhook hooks (FBM dispatcher in production).
 
 creatorSubs.post('/subscriptions/:id/capture', async (c) => {
-    const guard = adminGate(c);
-    if (guard !== true) return guard;
+    const denied = requireAdminApiKey(c);
+    if (denied) return denied;
     const parsed = await readJsonBody(c, captureSchema);
     const detail = parsed instanceof Response ? {} : parsed ?? {};
     const sub = captureSubscription(c.req.param('id'), detail);
@@ -240,8 +232,8 @@ creatorSubs.post('/subscriptions/:id/capture', async (c) => {
 });
 
 creatorSubs.post('/subscriptions/:id/refund', (c) => {
-    const guard = adminGate(c);
-    if (guard !== true) return guard;
+    const denied = requireAdminApiKey(c);
+    if (denied) return denied;
     const sub = refundSubscription(c.req.param('id'));
     if (!sub)
         return c.json({ code: 'subscription_not_found', message: 'No such subscription' }, 404);
