@@ -290,7 +290,10 @@ For the source-of-truth triage with tier/owner detail see
 -   **State:** Deleting your Blackout account removes the account, its sessions
     and linked services, and cancels and erases your unsent scheduled messages.
     It does not yet deactivate your Matrix account, and your messages stay in
-    rooms.
+    rooms. If an anonymous sign-up used an invitation, the record tying that
+    invitation to your Matrix account is removed too. Where the inviter's list
+    of who joined through their link includes you, that entry stays, showing
+    an internal id where your name was.
 
 ### Dead-man's switch (experimental)
 
@@ -502,8 +505,18 @@ The API's own sign-up routes honour the same gate: with `REQUIRE_INVITE_TOKEN=1`
 date the account-number route minted a Matrix account with no invite check
 (D3 in [`docs/black-mask-account-link-design.md`](docs/black-mask-account-link-design.md) §7;
 fixed in [`docs/security/api-findings-triage-2026-10-25.md`](docs/security/api-findings-triage-2026-10-25.md)).
-The web client's anonymous sign-up does not send a token yet, so with the gate
-on it is refused until it does.
+Since 2026-10-26 the web client's anonymous sign-up sends the invitation token
+the invite link left in the tab, and the redeem it makes after sign-in claims
+the use that sign-up spent instead of spending a second one, so the setting can
+be turned on without breaking that sign-up; no tracked deploy file turns it on.
+With it on, an anonymous account can be created only in a tab that opened an
+invitation link: anywhere else, the Black Mask chat panel included, the sign-up
+is refused and says an invitation is needed. A new account whose first sign-in
+happens in another tab leaves its invitation's use spent with no redemption
+recorded, so the inviter sees the use but gets no follower. With the setting on
+or off, an invitation the server no longer accepts (not recognized, used up,
+expired or revoked) stops the anonymous sign-up in the tab that holds it, and
+the form says why.
 
 ### Release signoff
 

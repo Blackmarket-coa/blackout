@@ -24,7 +24,7 @@ documents that described the old behaviour are corrected (last section).
 | F9  | Anyone could mark a Coliseum challenge "seen" for the person challenged                                 | `packages/api/src/routes/coliseum.ts`, `services/coliseumMatchStore.ts`                          | fixed                                            |
 | D1  | A refused token refresh was retried instead of signing the client out                                   | `apps/blackout-client/src/client/initMatrix.ts`                                                  | fixed; not reproduced in a browser               |
 | D2  | Expired auth rows were never pruned                                                                     | `packages/api/src/services/authRowsPruneScheduler.ts` (new)                                      | fixed                                            |
-| D3  | Account-number sign-up bypassed the invite gate                                                         | `packages/api/src/routes/auth.ts`                                                                | fixed                                            |
+| D3  | Account-number sign-up bypassed the invite gate                                                         | `packages/api/src/routes/auth.ts`, `services/invitations.ts`, client `accountNumberAuth.ts`      | fixed                                            |
 | D4  | `KNOWN_LIMITATIONS.md` said the panel could not create canopies or dens                                 | `KNOWN_LIMITATIONS.md`                                                                           | fixed                                            |
 | D5  | FBM webhooks could be replayed                                                                          | `packages/api/src/integrations/marketplace/freeblackmarket.ts`, `services/marketplaceWebhook.ts` | fixed on Blackout's side; FBM to send the header |
 | D6  | FBM's coalition-tier lookup never finds a customer                                                      | the FBM repository                                                                               | not Blackout's; left to FBM's ledger             |
@@ -260,12 +260,140 @@ with the gate off a presented token is consumed and a missing one allowed; the
 race returns 400 without a number; malformed bodies are 400. The existing
 account-number and invitation suites pass.
 
-**What a client must do.** The web client's account-number sign-up
-(`apps/blackout-client/src/client/accountNumberAuth.ts`) sends `{}`. No tracked
-deploy file sets `REQUIRE_INVITE_TOKEN`, so nothing changes by default; with the
-gate on, that sign-up is now refused `403 invite_required` until the client
-passes the invite token it holds — the gate working as intended, but a client
-change is owed before an operator turns it on.
+**The client, and the second spend (2026-10-26).** Until this date the web
+client's account-number sign-up
+(`apps/blackout-client/src/client/accountNumberAuth.ts`) sent `{}`, so with the
+gate on it was refused `403 invite_required`. Sending the token the invite
+landing page stashes would not have been enough on its own: the invitation
+would have been spent twice, once when the account is minted and again when
+`usePendingInviteRedeemer` calls `POST /v1/invitations/redeem` after sign-in. A
+single-use invitation then failed there as `exhausted`, so the new account was
+not routed into the room, and the inviter saw no redemption and got no
+follower; a multi-use one was counted twice.
+
+The use stays spent at account creation. Checking the token at sign-up and
+spending it only at `/redeem` would let one token create any number of
+accounts, because the client decides whether `/redeem` is ever called.
+
+What changed is what the sign-up leaves behind. When
+`redeemInvitationForMatrixUser` spends a use, it records an _admission_: the
+invitation, the new Matrix id, and whether the room admission worked (table
+`invitation_admissions`, migration 105; a table of its own, so a redemption row
+still always names a Blackout account). When `redeemInvitation` runs for a
+Blackout account whose Matrix id on this homeserver
+(`@<username>:<MATRIX_HOMESERVER_DOMAIN>`, compared whole, server name
+included) has an admission for that invitation, it claims the admission
+instead of spending a use: it writes the redemption row and follows the
+inviter, as a normal redeem does, and answers the same `ok` with the record and
+`canopyId`, so the client routes into the room. The claim admits nobody to the
+room again: the sign-up already did, and doing it again could undo a kick or a
+ban that came after. A room admission that failed at sign-up is not retried by
+the claim either.
+
+-   **One admission, one claim.** The lookup, the claim (a compare-and-set in
+    the store, `claimInvitationAdmission`), the redemption row and the follow
+    happen in one synchronous turn, so of two concurrent redeems from one
+    account exactly one claims. The other, like any later redeem from that
+    account, is answered `ok` with nothing written. Neither spends a use: an
+    account that holds an admission for the invitation never falls through to
+    a normal redeem. This holds within one API process, as the use count's own
+    increment does; across replicas the Postgres-backed store is eventually
+    consistent (`PostgresBackedDb` in `packages/api/src/db/store.ts`), the
+    same limit the use count has.
+-   **Only its own account claims it.** Another account redeeming the same
+    invitation gets a normal redeem and spends a use of its own, and the
+    admission waits for the account it belongs to. An admission for
+    `@x:elsewhere.example` is never claimed by the local `x`.
+-   **Exhaustion, expiry and revocation are not checked again.** The use was
+    spent while the invitation was usable. Revoking it or letting it expire
+    stops later uses and does not undo earlier ones, as for a redemption made
+    through `/redeem`. A new redeem of a revoked or used-up invitation is still
+    refused.
+-   **Self-redemption.** The inviter claiming an admission on their own
+    invitation is refused `self_redeem`: no redemption row, no follow, the
+    admission stays unclaimed and its use stays spent. The rule keeps an
+    inviter from counting themselves among the people their link brought in,
+    and that does not change because the use was spent at sign-up. No route
+    creates such an admission (sign-up always mints a new Matrix id), so this
+    is the rule kept in force rather than a path anyone takes.
+-   **An admission that is never claimed.** If the person never signs in,
+    loses the account number, or first signs in from a tab without the stashed
+    token (it lives in `sessionStorage`, which is per tab), nothing claims the
+    admission. The use stays spent, which is the gate working. The inviter
+    sees the use count rise with no redemption and gets no follower, and the
+    Matrix account is in the invitation's room if the sign-up admitted it.
+    Opening the link again while signed in claims it while the invitation has
+    uses left; for a used-up one the landing page shows the preview's
+    `exhausted` and does not redeem. Unclaimed admissions are kept; each holds
+    an invitation id and a Matrix id until the account is deleted.
+-   **Account deletion** removes the account's admissions, the one it claimed
+    and any for its Matrix id it never claimed, since each holds that Matrix
+    id. The redemption row a claim wrote stays, as every redemption row does:
+    the inviter's list keeps the entry and shows the deleted account's internal
+    id where its name was. The account's data export lists neither, as it
+    listed no redemption before.
+-   **Before the number leaves the server.** In Postgres mode the sign-up
+    waits for the store's queued writes (`flushRuntimeStoreWrites`) before it
+    returns the account number, so the spent use and its admission are in the
+    database before the only credential is handed out.
+-   **The client** sends the stashed token as `inviteToken` when there is one
+    and `{}` when there is none (`createAnonymousAccount`; the slot is now
+    defined in `apps/blackout-client/src/app/features/invitations/pendingInvite.ts`).
+    The account-number form shows `403 invite_required` as "New accounts here
+    need an invitation…" and each `400 invite_token_invalid` reason in its own
+    words. Sign-up only reads the stashed token and the redeemer clears it
+    after sign-in, so a refused sign-up leaves it in place.
+
+**Verification (2026-10-26).**
+`packages/api/test/account-number-invite-claim.integration.test.ts`, through
+the routes (sign-up, the first token exchange, `/redeem`): with the gate on, a
+sign-up without a token is still refused and records nothing; a single-use
+room-bound invitation ends with use count 1, one redemption row and the
+follow, `ok` from both calls with `canopyId`, no second room admission, and a
+repeat redeem answered `ok` with nothing spent; a three-use invitation used by
+two accounts ends at 2; two concurrent redeems from one account, held open
+together in the canopy lookup, make one claim and spend nothing; another
+account's redeem is a normal one and leaves the admission to its owner; an
+admission for a Matrix id on another homeserver is not claimed by the local
+account of that name; the inviter's own admission is refused `self_redeem`; a
+claim after a revocation completes while a new redeem is refused `revoked`;
+deleting an account removes its admission, claimed or not, and keeps the
+redemption row.
+`packages/api/test/invitation-admissions-store.integration.test.ts`: the claim
+is a compare-and-set, and file mode and Postgres mode (PGlite, every migration)
+keep admissions and claims across a restart and write their deletion. Client:
+`apps/blackout-client/tests/unit/client/accountNumberAuth.test.ts` and
+`tests/unit/components/LoginForm.inviteGate.test.tsx`: the token is sent when
+stashed and not when absent, each refusal is shown, and the stashed token
+stays. Each passed on its first run, so each was also run against code broken
+on purpose, to show it reaches what it tests and does not pass through a
+normal redeem: the admission lookup disabled, the self-redemption check
+removed, a repeat treated as a new claim, the Matrix id compared by localpart
+only, the deletion dropped, the room admitted again at claim time, the
+usability checks moved ahead of the claim, the redemption row or the follow
+left out, no admission recorded at sign-up, each store mutator's persist or
+Postgres spec removed; and in the client, `{}` always sent, the token field
+always sent, the refusal bodies not resolved. Every one fails the tests meant
+for it.
+
+**Turning the gate on.** With the API and the web client from this change
+deployed together, `REQUIRE_INVITE_TOKEN=1` can be turned on without
+refusing account-number sign-up from an invitation or spending an invitation
+twice. No tracked deploy file sets it; turning it on stays the operator's
+decision. What to expect then:
+
+-   an anonymous account can be created only in a tab that opened an
+    invitation link; anywhere else, the Black Mask chat panel included, the
+    sign-up is refused and the form says an invitation is needed;
+-   the claim runs from the account's first redeem, which needs the Blackout
+    account the first token exchange creates
+    (`BLACKOUT_MATRIX_EXCHANGE_TRUSTED_HS=1`, which account-number sign-in
+    already needs);
+-   the server refuses a presented token that cannot be used whether or not
+    the gate is on (the fix above), so even with the gate off, a stashed token
+    that stopped working after the landing page checked it now stops
+    account-number sign-up in that tab, where the client used to send nothing
+    and get an account. The form says why.
 
 ## D4 — `KNOWN_LIMITATIONS.md` was out of date — fixed
 
@@ -652,8 +780,10 @@ anonymously; it now pings as the person challenged.
     together with the Expo scaffold's use of the endpoint.
 -   **FBM timestamp.** FBM's half of D5, then `FREEBLACKMARKET_WEBHOOK_REQUIRE_TIMESTAMP=1`.
     The stub's own simulated deliveries still use the body-only form.
--   **Invite token from the client.** The account-number sign-up must send
-    `inviteToken` before `REQUIRE_INVITE_TOKEN=1` is set (D3).
+-   **Turning the invite gate on.** The web client now sends the invitation
+    token on account-number sign-up, and the account's first redeem claims
+    the use the sign-up spent (D3); setting `REQUIRE_INVITE_TOKEN=1` is the
+    operator's decision.
 -   **Linking communities with different admins** (F6). There is no way for one
     side to propose and the other to accept, so only someone who administers
     both can link them. Whether links should work that way is the operator's
@@ -675,6 +805,9 @@ anonymously; it now pings as the person challenged.
 
 ## Still unverified
 
+-   D3's claim end to end: the tests drive the API routes with Synapse
+    stubbed and the client with `fetch` stubbed; nothing was run against a
+    real homeserver or in a browser, and Postgres mode only against PGlite.
 -   D1 in a browser: the SDK's reaction to the thrown error is read from
     `lib/http-api/refresh.js`, not observed.
 -   D2 in Postgres mode: the descriptors exist; no run against a database.
@@ -719,6 +852,13 @@ With the 2026-10-26 sweep (F5–F9):
 -   `docs/security/webauthn-passkeys.md` — the routes, session binding, credential
     ids registered once, tests.
 -   `packages/api/.env.example` — `BLACKOUT_ADMIN_API_KEY`, which has no default.
+
+With D3's claim (2026-10-26):
+
+-   `KNOWN_LIMITATIONS.md` — the invite-only and account-deletion sections.
+-   `packages/api/.env.example` — `REQUIRE_INVITE_TOKEN`, not described there
+    before.
+-   `docs/black-mask-account-link-design.md` §7 — a D3 status line.
 
 ## Appendix: every write handler, by the check it makes (2026-10-26)
 
