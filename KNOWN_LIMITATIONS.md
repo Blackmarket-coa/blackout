@@ -317,11 +317,13 @@ For the source-of-truth triage with tier/owner detail see
     `POST /v1/auth/account/delete/request` and `/confirm`.
 -   **State:** Deleting your Blackout account removes the account, its sessions
     and linked services, and cancels and erases your unsent scheduled messages.
-    It does not yet deactivate your Matrix account, and your messages stay in
-    rooms. If an anonymous sign-up used an invitation, the record tying that
-    invitation to your Matrix account is removed too. Where the inviter's list
-    of who joined through their link includes you, that entry stays, showing
-    an internal id where your name was.
+    It removes the release keys you published (their public halves); the
+    private keys on your devices and in your recovery files stay until you
+    remove them. It does not yet deactivate your Matrix account, and your
+    messages stay in rooms. If an anonymous sign-up used an invitation, the
+    record tying that invitation to your Matrix account is removed too. Where
+    the inviter's list of who joined through their link includes you, that
+    entry stays, showing an internal id where your name was.
 
 ### Dead-man's switch (experimental)
 
@@ -365,6 +367,46 @@ For the source-of-truth triage with tier/owner detail see
     [`docs/security/deadman-and-feeds-triage-2026-10-12.md`](docs/security/deadman-and-feeds-triage-2026-10-12.md)):
     the design above. Until it ships, nothing is released and arming stays
     closed.
+
+### Release keys (2026-10-26)
+
+-   **Where:** Settings → Account & identity → Release keys
+    (`apps/blackout-client/src/app/features/release-keys/`), and the API's
+    `/v1/release-identities` routes (`packages/api/src/routes/releaseIdentities.ts`).
+    Format and review:
+    [`docs/security/release-identities-2026-10-26.md`](docs/security/release-identities-2026-10-26.md).
+-   **What they are for:** the dead-man switch release
+    ([`docs/security/deadman-release-design-2026-10-24.md`](docs/security/deadman-release-design-2026-10-24.md)),
+    which is not built yet. You can create release keys, publish their public
+    half, save a recovery file and compare a safety code with someone, but
+    arming a switch stays closed, so nothing is encrypted for these keys yet.
+-   **Lose the device, lose the keys.** The private keys live only on the
+    device that made them and in recovery files you save. A device that is
+    lost, reset, or whose browser deletes the site's data (clearing browsing
+    data does; browsers may also evict a site's storage, Safari among them
+    after a period without a visit) loses them, and Blackout cannot bring them
+    back: it never had them. Creating new keys does not recover old ones, and
+    everyone who compared a code with you has to compare again. Save a
+    recovery file, and save a new one after each comparison: a file holds
+    only the comparisons made before it was saved. The panic wipe does not
+    remove release keys; "Remove release keys from this device" does.
+-   **Recovery file:** encrypted with your passphrase (at least 12
+    characters; argon2id, then AES-256-GCM). Anyone with the file who guesses
+    or learns the passphrase can use your release keys, and Blackout cannot
+    reset a forgotten passphrase. The app asks the browser to download the
+    file; whether that works in the desktop and mobile apps was not tested,
+    so check that the file was saved.
+-   **What the server sees:** the public half of your keys, and the keys you
+    replaced, which any account signed in on this homeserver can read, and
+    who looked up whom. A safety-code comparison, in person or on a call
+    where you know the voice, is what shows a key is the person's own; the
+    server could hand out a different one, and only a comparison catches
+    that. In a web browser the server also supplies the app's code, which a
+    comparison cannot check.
+-   **Only this homeserver:** a Matrix id on another server finds nobody.
+-   **Devices:** a browser or webview needs WebCrypto Ed25519 and X25519 and
+    IndexedDB; the screen says so when one is missing. Support was read from
+    MDN's data, not tested on devices.
 
 ### Admin-only API writes (2026-10-23)
 

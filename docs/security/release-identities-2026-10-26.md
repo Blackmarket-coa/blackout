@@ -13,7 +13,10 @@ design's recommended answers in §9 (both audiences, with whistleblower-safe
 defaults; `deadman.write` minted with arming closed; the safety-code
 comparison mandatory; existing switches left as they are).
 
-**State read:** `origin/develop` at `dde3f33`, which includes PR 1 (#979).
+**State read:** `origin/develop` at `dde3f33`, which includes PR 1 (#979), for
+the review; the build was then merged with `develop` at `9d0f81d` (#980 to
+#983, among them #981's homeserver-only Matrix id resolver and #983's migration
+103).
 **Read** means a claim rests on the code or a standard; **Run** that it was
 observed in Node 22.22.0 in this worktree; **Test** names the regression test
 that keeps it true. Nothing was run on a phone, a desktop shell or a browser
@@ -295,9 +298,13 @@ comparison against Blackout's server.
 -   A lookup by Matrix id resolves only `@localpart:server` where the server
     name is this deployment's and the localpart is exactly an account's
     username. Any other server name resolves to nobody, with the same answer
-    as an unknown name: the shared resolver (`resolveBlackoutUserId` in
-    `services/userIdentity.ts`) drops the server name, so the release
-    directory does its own check rather than rely on it.
+    as an unknown name. When this was written the shared resolver
+    (`resolveBlackoutUserId` in `services/userIdentity.ts`) dropped the server
+    name; #981 fixed that before this branch merged it, and the directory now
+    uses #981's `matrixLocalpart` and, on top, requires the exact Matrix id
+    the account has (another spelling of the localpart, or an account id
+    where a Matrix id is asked for, finds nobody). Either check alone would
+    refuse another server's name: a test shows it with each one removed.
 
 ## 5. Sealing (PR 3), against HPKE and the dead-drop suite
 
@@ -386,6 +393,87 @@ then, which matters for a release opened after that day, not for one opened
 before. WebCrypto has no ML-DSA; adding one through `@noble/post-quantum`
 would be identity v2.
 
+## 6. PR 2 as built
+
+-   **Protocol** (`packages/blackout-protocol/src/release/`): the identity, its
+    signed bytes, fingerprint, signing and validation (`identity.ts`); key
+    sets (`createReleaseKeySet`, `checkReleaseKeySet` in `keySet.ts`); the
+    safety code (`safetyCode.ts`); the recovery file (`recoveryFile.ts`); the
+    directory's wire types (`contracts.ts`). It reuses the dead-drop suite's
+    X25519 key generation and agreement, base64, random bytes, AES-GCM key
+    import, padding and KEM provider, and WebCrypto for Ed25519, SHA-256 and
+    SHA-512. `@noble/hashes` 2.2.0, already in the lockfile through
+    `@noble/post-quantum`, is now a direct dependency, for argon2id only;
+    `pnpm-lock.yaml` changed in the protocol's importer entry only. Fixed
+    vectors in `testVectors.ts`: RFC 8032 and RFC 7748 checks of WebCrypto,
+    RFC 9106's argon2id vector, two identities from fixed seeds with their
+    signed bytes, fingerprints and signatures, their safety code, and a
+    recovery file.
+-   **SDK:** `createReleaseIdentityActions` (`getMine`, `publishMine`,
+    `getForAccount`, `lookupByMatrixId`); `publishMine` sends the six public
+    fields only.
+-   **API:** `GET` and `PUT /v1/release-identities/me`,
+    `GET /v1/release-identities/:accountId`, and
+    `GET /v1/release-identities/lookup?matrixId=…`
+    (`packages/api/src/routes/releaseIdentities.ts`,
+    `services/releaseIdentities.ts`). A signed-in route with no capability
+    scope: the API's routes outside the feature modules are gated by the
+    session, and the one write acts on the caller's own identity. A `PUT`
+    body must hold exactly the six public fields (a body carrying anything
+    else, private keys included, is refused whole); an identity naming
+    another account gets 403 before anything else is checked; then the
+    identity is checked as in §1 and refused with 400 and the reason. The
+    same identity again changes nothing; a different one becomes current
+    and the old one is kept with `superseded_at`. At most 32 per account;
+    the 33rd is refused (409). Every miss gets the same 404. Table
+    `release_identities`, migration 104 (103 is #983's), wired through the
+    memory, file and Postgres stores and `pgDescriptors.ts`: publishing
+    writes the superseded row before the new one; account deletion removes
+    the account's rows (`services/accountLifecycle.ts`, next to PR 1's
+    dead-man erasure); the account export lists them.
+-   **Client:** Settings → Account & identity → Release keys
+    (`apps/blackout-client/src/app/features/release-keys/`), for every
+    account, behind no flag: create keys on this device and publish them;
+    see whether the server has this device's key, none, or another; save and
+    load a recovery file; compare a code with someone by Matrix id; see whom
+    this device compared with; replace the keys or remove them from the
+    device, each after a confirmation. The screen checks every identity it
+    fetches and computes the code from its own fingerprints, never the
+    server's. `installReleaseKemProvider()` (`setKemProvider(mlKem768Provider)`)
+    runs at startup in `main.tsx`. The screen says what the keys are for and
+    that arming isn't available. Settings' account deletion and export text
+    now mention release keys, and the policy changelog
+    (`docs/legal/CHANGELOG.md`) records the new data the server keeps.
+
+**Tests.** The crypto runs where the dead-drop crypto tests run, the
+client's Vitest suite (`apps/blackout-client/tests/unit/sdk/`):
+`releaseIdentity.test.ts` (the RFC and release vectors, every format rebuilt
+by hand from this record with `node:crypto`; tampered fields, wrong, forged
+and unlabelled signatures, non-canonical base64, the seven small-order X25519
+keys, an engine that returns zeros, bad ML-KEM coefficients, account
+mismatch, private keys that are not the identity's; the safety code),
+`releaseRecoveryFile.test.ts` (RFC 9106; the recovery vector, decrypted
+independently; a round trip with NFC passphrases; wrong passphrase;
+truncated, edited and foreign files; parameters it does not read; keys that
+do not fit; bucket padding) and `releaseIdentityActions.test.ts`. The API's:
+`packages/api/test/release-identities.integration.test.ts` (the routes
+against the client's vectors, the server-name and exact-match rules, the
+history limit, deletion, both exports), `release-identities-postgres.integration.test.ts`
+(PGlite across a restart: history and deletion) and a case in
+`auth-lifecycle.integration.test.ts`. The screen's are under
+`apps/blackout-client/tests/unit/features/release-keys/`. Every check those
+tests stand for was also removed, one at a time, to see a test fail; the
+two checks that survived that at first (the all-zero X25519 output, which
+Node's WebCrypto never reaches, and the ML-KEM round trip, which noble's own
+hash check had been doing the work of) each have a test of their own now.
+
+**Gitleaks.** The vectors are fixed, synthetic keys, seeds and a recovery
+file made from them, and CI's secret scan flags key-shaped literals. Each
+flagged vector line is listed in `.gitleaksignore` with a numbered comment
+saying it is a synthetic test value; no vector was weakened or left out.
+Lines of code it flagged (a field name, a colon and an expression) were
+rewritten instead of listed.
+
 ## Decisions for the operator to confirm or veto
 
 1.  The safety code is 60 digits, compared as twelve groups of five, with no
@@ -404,6 +492,13 @@ would be identity v2.
 7.  PR 3's signatures are transferable (C15).
 8.  A lookup by Matrix id must match the account's Matrix id exactly, case
     included: `@Alice:server` does not find the account `alice` (§4).
+9.  No capability scope for release identities: a signed-in session is
+    enough, as for the API's other routes outside the feature modules (§6).
+10. `GET /v1/release-identities/me` was added to the routes the design
+    lists, so the client learns its own account id and what the server holds
+    for it from the server rather than from the token.
+11. The Release keys screen is under Settings → Account & identity, for
+    every account, behind no flag.
 
 ## Not verified here
 

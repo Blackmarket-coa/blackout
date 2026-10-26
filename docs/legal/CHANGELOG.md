@@ -26,6 +26,31 @@ should be described as a published privacy policy until that review lands.
 
 ---
 
+## 2026-10-26 — Release keys: what the server keeps of them, and the export
+
+**Why this entry exists:** a new category of data the server keeps. Release keys
+are the keys the planned dead-man switch release is sealed to and signed with
+([`docs/security/release-identities-2026-10-26.md`](../security/release-identities-2026-10-26.md)).
+Arming a switch is still closed, so nothing is encrypted for them yet.
+
+### Added
+
+-   **The server keeps the public half of a person's release keys** once they
+    publish it from Settings → Release keys: an Ed25519, an X25519 and an
+    ML-KEM-768 public key with the person's own signature, the keys they
+    replaced, and when
+    ([`packages/api/src/routes/releaseIdentities.ts`](../../packages/api/src/routes/releaseIdentities.ts)).
+    Any account signed in on the homeserver can read them, and the server sees
+    who looks up whom. Deleting the account removes them.
+-   **The private half never reaches the server.** It stays on the device that
+    made it and in recovery files the person saves; the app's publish call
+    sends the six public fields and nothing else
+    ([`packages/blackout-sdk/src/release/actions.ts`](../../packages/blackout-sdk/src/release/actions.ts)).
+    A web browser runs the app code the server sends it, so this holds for the
+    code as published; the desktop and mobile apps carry their own copy.
+-   **The data export lists the public halves** (`account.releaseIdentities`),
+    and [`TRUST.md`](../../TRUST.md) §2 says so.
+
 ## 2026-10-25 — Two gaps between the code and the encryption and logging commitments, closed
 
 **Why this entry exists:** no commitment changes. Two places where the code

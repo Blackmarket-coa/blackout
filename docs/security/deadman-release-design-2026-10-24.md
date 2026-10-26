@@ -12,6 +12,8 @@ promise, and recommends one as PR-sized steps.
 composition in §4(a) was reviewed in
 [`release-identities-2026-10-26.md`](release-identities-2026-10-26.md), which
 changed §4(a) steps 1, 3 and 5 and the safety code; those passages say so.
+**PR 2, release identities, is built** (migration 104); what it holds and how
+it is tested is in that record, §6. Arming stays closed until PR 4.
 
 The switch may be relied on for someone's physical safety. Every property
 below is stated with its limits, and §7 gives the wording the app may use and

@@ -101,7 +101,7 @@
     <h1 id="trust">Trust</h1>
     <p>What Blackout promises, and how to check each promise yourself without taking our word for it.</p>
     <p>Every claim below links to the code that makes it true. If a link ever stops supporting the claim next to it, the claim is wrong and we want to know — see <a href="https://github.com/Blackmarket-coa/blackout/blob/develop/SECURITY.md" rel="noopener noreferrer">SECURITY.md</a>.</p>
-    <p>Last reviewed: <strong>2026-08-10</strong>; section 1 updated 2026-10-18 with the defaults for new canopies and dens. Changes to anything here are recorded in the <a href="https://github.com/Blackmarket-coa/blackout/blob/develop/docs/legal/CHANGELOG.md" rel="noopener noreferrer">policy changelog</a>.</p>
+    <p>Last reviewed: <strong>2026-08-10</strong>; section 1 updated 2026-10-18 with the defaults for new canopies and dens; section 2 updated 2026-10-26 with release keys in the export. Changes to anything here are recorded in the <a href="https://github.com/Blackmarket-coa/blackout/blob/develop/docs/legal/CHANGELOG.md" rel="noopener noreferrer">policy changelog</a>.</p>
     <hr />
     <h2 id="1-encryption-never-behind-a-paywall">1. Encryption, never behind a paywall</h2>
     <p><strong>End-to-end encryption is free, on every tier, and there is no mechanism by which it could be sold.</strong></p>
@@ -140,7 +140,7 @@
     <p>Some users see &quot;unable to decrypt&quot; on older messages when signing in on a new device without key backup set up. This is tracked as <strong>BO-1</strong> in <a href="https://github.com/Blackmarket-coa/blackout/blob/develop/KNOWN_ISSUES.md" rel="noopener noreferrer">KNOWN_ISSUES.md</a> and is <strong>not fixed</strong>. We list it here rather than waiting until it is, because a trust page that only mentions solved problems is advertising.</p>
     <hr />
     <h2 id="2-your-data-portable-free">2. Your data, portable, free</h2>
-    <p><strong>Every user can download their account data — profile, linked accounts, social graph, ledger records, scheduled messages and dead-man switches — on any tier, in one click.</strong> It does not yet include every record the server keeps.</p>
+    <p><strong>Every user can download their account data — profile, linked accounts, social graph, ledger records, scheduled messages, dead-man switches and the public half of their release keys — on any tier, in one click.</strong> It does not yet include every record the server keeps.</p>
     <p>In the app: <strong>Settings → Privacy &amp; data → Download your data</strong>. Or over HTTP:</p>
     <pre><code class="language-bash">curl -H &quot;Authorization: Bearer $TOKEN&quot; https://api.theblackout.app/v1/data-export</code></pre>
     <p>No support ticket, no queue, no tier check. Code: <a href="https://github.com/Blackmarket-coa/blackout/blob/develop/packages/api/src/routes/dataExport.ts" rel="noopener noreferrer"><code>routes/dataExport.ts</code></a> · <a href="https://github.com/Blackmarket-coa/blackout/blob/develop/docs/features/data-export.md" rel="noopener noreferrer">usage doc</a>.</p>
