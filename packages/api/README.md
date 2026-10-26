@@ -7,6 +7,23 @@ This workspace lives at `packages/api` and is the canonical server runtime targe
 
 Use `@blackout/server` in workspace filters and dependency declarations.
 
+## Tests
+
+-   `pnpm --filter @blackout/api test:integration` runs `test/**/*.integration.test.ts`.
+    It is the PR gate (the `API smoke + integration` CI job).
+-   `pnpm --filter @blackout/api test` runs every `test/**/*.test.ts` file, the
+    PGlite Postgres tests included, one file at a time. Turborepo CI runs it on
+    every push to `develop`.
+
+`test` passes `--test-force-exit`, which ends each file's process as soon as its
+tests finish. On its own, that let a file's last results go unreported: they
+were still queued on the pipe to the runner when the process exited, and the
+suite then printed fewer tests with `fail 0`. A failure among them was never
+seen. `test/_setup/blocking-stdio.mjs`, loaded with `--import`, makes those
+writes blocking, and `test/test-runner-flush.test.ts` keeps it in place. If a
+run's total looks short, compare the reported test names with a run of
+`develop`; don't take `fail 0` alone.
+
 ## Persistence
 
 The default runtime uses a JSON-backed store (`FileBackedDb` in
