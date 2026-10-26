@@ -67,6 +67,19 @@ export const createAuthActions = (client: ApiClient) => ({
             path: '/v1/auth/sign-out',
             body: {},
         }),
+    /**
+     * End every Blackout API session of the signed-in account, this one
+     * included (`POST /v1/auth/sessions/revoke`): every refresh token is
+     * revoked, and every access token issued before this second is refused.
+     * Matrix sessions are not touched, and a client still signed in to Matrix
+     * can exchange its Matrix token for a new API session.
+     */
+    revokeAllSessions: () =>
+        client<{ ok: true; refreshTokensRevoked: number }>({
+            method: 'POST',
+            path: '/v1/auth/sessions/revoke',
+            body: {},
+        }),
 });
 
 export const createThreadActivityActions = (client: ApiClient) => ({

@@ -316,6 +316,39 @@ test('with more than 3 identities in the window, Retry-After waits until enough 
     assert.equal(res.headers.get('retry-after'), String(retryAfterSeconds));
 });
 
+test('“Sign out every Blackout session” ends the caller’s own API session too', async () => {
+    // The Release keys screen says so in its confirmation; this is the route
+    // it calls. The cutoff is in whole seconds, so the token is minted a few
+    // seconds back.
+    const user = seedUser();
+    const realNow = Date.now;
+    Date.now = () => realNow() - 5000;
+    const old = signJwt(user.id, user.username, 600);
+    Date.now = realNow;
+    const auth = { authorization: `Bearer ${old}`, 'content-type': 'application/json' };
+    assert.equal((await app.request('/v1/release-identities/me', { headers: auth })).status, 200);
+    const revoke = await app.request('/v1/auth/sessions/revoke', {
+        method: 'POST',
+        headers: auth,
+        body: '{}',
+    });
+    assert.equal(revoke.status, 200);
+    const after = await app.request('/v1/release-identities/me', { headers: auth });
+    assert.equal(after.status, 401);
+    assert.equal(((await after.json()) as { code: string }).code, 'session_revoked');
+    // A token minted afterwards, as a client's next Matrix exchange would get,
+    // works again.
+    const fresh = signJwt(user.id, user.username, 600);
+    assert.equal(
+        (
+            await app.request('/v1/release-identities/me', {
+                headers: { authorization: `Bearer ${fresh}` },
+            })
+        ).status,
+        200
+    );
+});
+
 test('the history keeps every identity, and only a storage bound of 1000 stops publishing', async () => {
     assert.equal(protocol.RELEASE_IDENTITY_STORAGE_LIMIT, 1000);
     const user = seedUser();
