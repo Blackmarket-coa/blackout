@@ -626,6 +626,30 @@ and the vector recovery file's derived key); they are listed in
 weakened or left out. Lines of code it flagged (a field name, a colon and an
 expression) were rewritten instead of listed.
 
+**GitGuardian.** The GitGuardian app's pull-request check scans every commit
+in the pull request. In the one that adds the vectors (`8264a28c81`) it
+flagged four lines as generic high-entropy secrets. Three are the vector
+identities' ML-KEM-768 decapsulation keys: Alice's, in her vector and again
+in the vector recovery file's contents, and Bob's. Each is
+`ml_kem768.keygen` of its seed, a byte range (0x40, 0x41, … for Alice; 0xc0,
+0xc1, … for Bob): derived from the seed again, each gives the same key, and
+its public half is the vector identity's. The fourth is a line of
+`releaseRecoveryFile.test.ts` that names `BOB.mlkem768SecretKey` and holds no
+value. No vector was weakened or left out for it. A later commit could not
+clear the check in any case: the flagged commit stays in the pull request
+unless the branch's history is rewritten, and it is not. Nor did
+`.gitguardian.yaml` stop it. The test file is under a path that file
+allowlists, under both of its keys, and was flagged anyway; GitGuardian's
+documentation for the check names dashboard settings and GitHub custom
+properties as its configuration, and not the file, which configures
+`ggshield`. So the three incidents are the operator's to ignore in the
+GitGuardian dashboard, which closes them: 39067826 (Alice's key) and
+39067828 (Bob's) as test credentials, and 39067827 (the name) as a false
+positive. The check's own skip buttons, on the pull request, tag each
+incident as skipped in a check run instead. GitGuardian's documentation says
+a closed incident is not raised by later checks, and an ignored one is not
+reopened when its value appears in a new commit.
+
 ## Decisions for the operator to confirm or veto
 
 1.  The safety code is 60 digits, compared as twelve groups of five, with no
@@ -735,6 +759,8 @@ expression) were rewritten instead of listed.
     401 the client clears its token, exchanges its Matrix session again and
     retries once), not run against a server; the screen's test uses a fake
     API, and the route's test runs against the API in memory.
+-   That ignoring the three GitGuardian incidents (§6) turns its check green:
+    GitGuardian's documentation says so, and it has not been tried here.
 
 ## Independent review, 2026-10-26
 
