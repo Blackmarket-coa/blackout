@@ -8,7 +8,7 @@ Upstream dependency tracking and adoption decisions are documented in [`docs/mat
 
 Default profile (always on):
 
-1. `synapse` (`ghcr.io/element-hq/synapse:v1.130.0`) – Matrix homeserver
+1. `synapse` (`ghcr.io/element-hq/synapse:v1.163.2`) – Matrix homeserver
 2. `postgres` (`postgres`) – Synapse DB
 3. `redis` (`redis`) – cache/session store
 4. `livekit` (`livekit/livekit-server`) – SFU for voice/video
@@ -16,7 +16,7 @@ Default profile (always on):
 6. `draupnir` (`the-draupnir-project/draupnir`) – moderation bot
 7. `nginx` (`nginx`) – reverse proxy + `.well-known`
 8. `certbot` (`certbot/certbot`) – Let's Encrypt renewal
-9. `mas` (`ghcr.io/element-hq/matrix-authentication-service`) – delegated auth (MSC3861)
+9. `mas` (`ghcr.io/element-hq/matrix-authentication-service`) – delegated auth (stable Matrix Authentication Service integration, formerly MSC3861)
 10. `sygnal` (`matrixdotorg/sygnal`) – push gateway for APNs/FCM delivery
 11. `synapse-admin` (`ghcr.io/etkecc/synapse-admin`) – admin UI exposed at `/admin/`
 12. `rageshake` (`ghcr.io/matrix-org/rageshake`) – debug-log/bug-report receiver consumed by blackout-client/desktop/mobile, exposed at `/rageshake/`
@@ -124,10 +124,10 @@ SYNAPSE_MSC3861_ENABLED=false
 
 In this mode:
 
--   `/_matrix/*` traffic is handled by Synapse (except MAS compatibility routes, which are inert unless MSC3861 is enabled).
+-   `/_matrix/*` traffic is handled by Synapse (except MAS compatibility routes, which are inert unless delegated auth is enabled).
 -   Users authenticate directly with Synapse local auth.
 
-### Mode B: MAS-delegated auth (MSC3861/OIDC delegation)
+### Mode B: MAS-delegated auth (Matrix Authentication Service)
 
 Use Matrix Authentication Service as the auth layer and delegate auth from Synapse.
 
@@ -137,13 +137,20 @@ Recommended `.env` values:
 SYNAPSE_AUTH_MODE=mas
 SYNAPSE_PASSWORD_AUTH_ENABLED=false
 SYNAPSE_MSC3861_ENABLED=true
+# Synapse refuses enable_registration with delegated auth; sign-up moves to MAS.
+SYNAPSE_ENABLE_REGISTRATION=false
 ```
 
-Also populate all `MAS_*` and `SYNAPSE_MSC3861_*` variables in `.env`:
+Also populate all `MAS_*` variables in `.env`:
 
 -   MAS issuer/public URLs
--   Synapse-as-client ID/secret/auth method
--   Synapse ↔ MAS admin token/secret
+-   The Synapse ↔ MAS shared secret, `MAS_MATRIX_SECRET`. Since Synapse
+    v1.157.0 removed `experimental_features.msc3861`, the template's stable
+    `matrix_authentication_service` block reads this one secret (MAS holds it
+    as `matrix.secret`); the old Synapse-as-client id/secret, admin token and
+    account-management URL are no longer read. `MAS_CLIENT_*` still render the
+    legacy Synapse client entry in `mas/config.yaml.template`, which the stable
+    integration does not use and which can be removed.
 -   MAS signing/encryption keys
 -   Optional upstream OIDC provider client details and callback URL
 -   The ecosystem relying-party clients (W2): `MAS_FBM_CLIENT_*` (FBM's Medusa
@@ -169,7 +176,7 @@ docker run --rm -it \
   -v synapse_data:/data \
   -e SYNAPSE_SERVER_NAME="${MATRIX_SERVER_NAME}" \
   -e SYNAPSE_REPORT_STATS=no \
-  ghcr.io/element-hq/synapse:v1.130.0 generate
+  ghcr.io/element-hq/synapse:v1.163.2 generate
 ```
 
 Then keep using `synapse/homeserver.yaml.template` as the source template for runtime config generation.
@@ -219,6 +226,44 @@ Expose and forward:
 -   `7881/tcp` (LiveKit TCP fallback)
 -   `50100-50200/udp` (LiveKit WebRTC media)
 
+## Upgrade notes: Synapse v1.130.0 → v1.163.2
+
+Read against upstream's `docs/upgrade.md` for every release between the two
+tags. What touches this stack:
+
+-   **v1.157.0 removed `experimental_features.msc3861`** (the stable
+    `matrix_authentication_service` block arrived in v1.136.0). Synapse refuses
+    to start while the old block is present, even with `enabled: false`, so
+    `synapse/homeserver.yaml.template` now renders the stable block from
+    `SYNAPSE_MSC3861_ENABLED` and `MAS_MATRIX_SECRET`. Mode A needs no `.env`
+    change. Mode B needs MAS >= 0.20 (this stack pins v1.15.0), the same
+    `MAS_MATRIX_SECRET` on both sides, and `SYNAPSE_ENABLE_REGISTRATION=false`
+    (`.env.example` sets it to `true`, which Synapse rejects in Mode B); the
+    `SYNAPSE_MSC3861_*` client/admin variables are no longer read. Checked by
+    loading the rendered template with Synapse 1.163.2's config parser in both
+    modes.
+-   **v1.144.0 put the unstable MSC2666 mutual-rooms endpoint behind
+    `experimental_features.msc2666_enabled`** (default off). The Blackout
+    client (`useMutualRooms`) checks `/versions` and shows nothing when the
+    feature is absent. Set `msc2666_enabled: true` in the template to keep the
+    "rooms in common" view; this change does not do that.
+-   **v1.163.0 flipped `request_token_inhibit_3pid_errors` to `true`.** The
+    template configures no email/3PID verification, so nothing changes here.
+-   **v1.139.0: application services must call `/register` with
+    `inhibit_login=true` under MAS.** In Mode B, bridges from the
+    `integrations` profile that still log in the old way fail with
+    `IO.ELEMENT.MSC4190.M_APPSERVICE_LOGIN_UNSUPPORTED`; update the bridge.
+-   **v1.143.0 requires PostgreSQL 14+** (this stack runs `postgres:16`), and
+    v1.142.0 requires Python 3.10+/SQLite 3.40+ inside the image (v1.141.0
+    moved the image to Debian trixie / Python 3.13; only relevant if extra
+    Python packages are mounted into it — none are here).
+-   **v1.136.0 relabelled** `synapse_federation_last_received_pdu_time`
+    (`origin_server_name`) and `synapse_federation_last_sent_pdu_time`
+    (`destination_server_name`); dashboards using them need updating.
+-   **v1.150.0** changed the `Processed request:` log line format (`ru=(...)`,
+    `db=(...)`) and removed the `systemd` pip extra; v1.146.0 removed the
+    MSC2697 dehydrated-devices endpoints; v1.152.0 only matters with workers.
+
 ## Notes
 
 -   `matrix-org/synapse` was archived on April 26, 2024; this stack tracks the active upstream image namespace `element-hq/synapse` via pinned semver tags.
@@ -232,7 +277,7 @@ Expose and forward:
 Use this sequence to minimize login disruption:
 
 1. **Prepare MAS config and secrets while still in local mode**
-    - Fill all `MAS_*` and `SYNAPSE_MSC3861_*` variables.
+    - Fill all `MAS_*` variables (`MAS_MATRIX_SECRET` is the Synapse ↔ MAS shared secret).
     - Register the ecosystem relying parties (W2): generate real ULID client
       ids + secrets for `MAS_FBM_CLIENT_*` and `MAS_BLACKOUT_API_CLIENT_*`,
       set their exact redirect URIs, and hand the pairs to the two backends
@@ -255,6 +300,7 @@ Use this sequence to minimize login disruption:
     - Set:
         - `SYNAPSE_MSC3861_ENABLED=true`
         - `SYNAPSE_PASSWORD_AUTH_ENABLED=false`
+        - `SYNAPSE_ENABLE_REGISTRATION=false`
         - `SYNAPSE_AUTH_MODE=mas`
     - Restart:
         - `docker compose up -d synapse mas nginx`

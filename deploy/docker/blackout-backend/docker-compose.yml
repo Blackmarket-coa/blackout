@@ -33,7 +33,7 @@ services:
             - blackout-backend
 
     synapse:
-        image: ghcr.io/element-hq/synapse:v1.130.0
+        image: ghcr.io/element-hq/synapse:v1.163.2
         container_name: blackout-synapse
         restart: unless-stopped
         environment:
@@ -50,12 +50,11 @@ services:
             SYNAPSE_FORM_SECRET: ${SYNAPSE_FORM_SECRET}
             SYNAPSE_PASSWORD_AUTH_ENABLED: ${SYNAPSE_PASSWORD_AUTH_ENABLED}
             SYNAPSE_MSC3861_ENABLED: ${SYNAPSE_MSC3861_ENABLED}
-            SYNAPSE_MSC3861_ISSUER: ${SYNAPSE_MSC3861_ISSUER}
-            SYNAPSE_MSC3861_CLIENT_ID: ${SYNAPSE_MSC3861_CLIENT_ID}
-            SYNAPSE_MSC3861_CLIENT_AUTH_METHOD: ${SYNAPSE_MSC3861_CLIENT_AUTH_METHOD}
-            SYNAPSE_MSC3861_CLIENT_SECRET: ${SYNAPSE_MSC3861_CLIENT_SECRET}
-            SYNAPSE_MSC3861_ADMIN_TOKEN: ${SYNAPSE_MSC3861_ADMIN_TOKEN}
-            SYNAPSE_MSC3861_ACCOUNT_MANAGEMENT_URL: ${SYNAPSE_MSC3861_ACCOUNT_MANAGEMENT_URL}
+            # Synapse >= 1.157.0 authenticates to MAS with the shared secret
+            # (matrix_authentication_service.secret == MAS matrix.secret);
+            # the former SYNAPSE_MSC3861_{ISSUER,CLIENT_*,ADMIN_TOKEN,
+            # ACCOUNT_MANAGEMENT_URL} values are no longer read.
+            MAS_MATRIX_SECRET: ${MAS_MATRIX_SECRET}
             SYGNAL_URL: ${SYGNAL_URL}
         depends_on:
             postgres:
