@@ -243,8 +243,9 @@ export const DataRetentionSection: React.FC = () => {
                     Dead-man switches you own that have not fired are cancelled, and what you put in
                     them is removed from Blackout&apos;s database. One that has already fired stays
                     readable to the people it named. The public half of your release keys is removed
-                    from Blackout&apos;s server; the private keys on your devices and in your
-                    recovery files stay there until you remove them.
+                    from Blackout&apos;s database, though copies in any backups the operator keeps
+                    are not; the private keys on your devices and in your recovery files stay there
+                    until you remove them.
                 </small>
                 {deleteStage === 'idle' && (
                     <div>

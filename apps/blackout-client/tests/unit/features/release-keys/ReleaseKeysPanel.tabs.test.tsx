@@ -155,8 +155,8 @@ const compareWithBob = async (tab: Tab) => {
 
 /** Tab A replaces the keys and publishes the new ones. */
 const replaceKeys = async (tab: Tab) => {
-    await click(tab, 'Create new release keys');
-    await click(tab, 'Create new keys');
+    await click(tab, 'Create and publish new release keys');
+    await click(tab, 'Create and publish new keys');
     await waitFor(
         tab,
         () => ownFingerprint(tab) !== ALICE.fingerprint && text(tab).includes('Published'),

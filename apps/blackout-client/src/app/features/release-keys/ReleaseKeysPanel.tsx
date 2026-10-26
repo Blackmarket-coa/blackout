@@ -8,6 +8,8 @@ import {
     readRecoveryFile,
     RECOVERY_FILE_NAME,
     RECOVERY_PASSPHRASE_MIN_LENGTH,
+    RELEASE_IDENTITY_PUBLISHES_PER_DAY,
+    RELEASE_IDENTITY_STORAGE_LIMIT,
     ReleaseRecoveryError,
     verifyReleaseIdentity,
     writeRecoveryFile,
@@ -69,21 +71,85 @@ export const RELEASE_KEYS_UNSUPPORTED =
     "This browser or device can't hold release keys: it lacks WebCrypto's Ed25519 or X25519, " +
     'or IndexedDB.';
 
+// §7 of the release design approved COMPARE_MEANING and compareHow; the
+// independent review (M1, and the voice-cloning point) changed them only as
+// far as needed to be true. The record lists that for the operator.
 export const compareHow = (name: string): string =>
-    `Compare this code with ${name} in person or on a call where you know their voice. Don't ` +
-    "compare it over Blackout: this check is about Blackout's server, so it has to happen " +
-    "somewhere the server isn't.";
+    `Compare this code with ${name} in person. If you can't, use a call where you know their ` +
+    "voice, though a voice can be imitated and a call intercepted. Don't compare it over " +
+    "Blackout: this check is about Blackout's server, so it has to happen somewhere the " +
+    "server isn't.";
+
+export const COMPARE_READ_ALL =
+    'Read all twelve groups to each other, in order. If any group differs, stop. Checking only ' +
+    'some of them is much weaker: a server could fake a code that starts or ends the same.';
 
 export const COMPARE_MEANING =
-    "If the codes match, you have each other's real keys. If they don't, stop, and don't rely " +
-    'on these keys.';
+    "If all twelve groups match, you have each other's real keys, as long as neither of you " +
+    "is running altered app code. If any group differs, stop, and don't rely on these keys.";
+
+/** Shown next to the button that creates keys: creating them also publishes them. */
+export const RELEASE_KEYS_LISTING =
+    'Creating release keys also publishes their public half: from then on, anyone signed in ' +
+    'on this server can see that you have release keys, and when you change them. The listing ' +
+    'stays until your account is deleted; there is no way to unpublish.';
+
+/** When someone replaces their keys: what else to do. */
+export const RELEASE_KEYS_REPLACE_GUIDANCE =
+    'If you are replacing them because a device was lost, or someone else may have it: sign ' +
+    'that device out of your account (from a Matrix client that lists your sessions, or by ' +
+    'resetting your password with “Sign out of other devices”), and tell the people you ' +
+    'compared codes with, in person or on a call and not over Blackout, that your key changed, ' +
+    'so that they compare again.';
+
+/**
+ * H1 of the independent review: when the server holds a release key for this
+ * person that is not one of this device's, the screen says plainly who could
+ * have put it there, rather than only that it differs.
+ */
+export const foreignKeyWarning = (fingerprint: string): string =>
+    `Blackout's server has a release key for you that isn't one of this device's ` +
+    `(${fingerprint}). If you made it on another device, load that device's recovery file ` +
+    "below. If you didn't, someone with access to your account, or Blackout's server, " +
+    'published it.';
+
+/** The same, for a device that holds no release keys at all. */
+export const missingKeysWarning = (fingerprint: string): string =>
+    `Blackout's server has release keys for you that aren't on this device (${fingerprint}). ` +
+    'If you made them on another device, or removed them from this one, load a recovery file ' +
+    "below. If you didn't make them, someone with access to your account, or Blackout's " +
+    'server, published them.';
+
+export const RELEASE_KEY_REPLACED_ON_SERVER =
+    "Blackout's server lists this device's key as replaced, so it can't be published again. " +
+    "To replace the server's key, create new release keys.";
+
+export const PUBLISH_RATE_LIMITED =
+    `Blackout's server takes at most ${RELEASE_IDENTITY_PUBLISHES_PER_DAY} new release keys ` +
+    "for an account in any 24 hours, and this account has reached that. This device's keys " +
+    'are kept: publish them from here later.';
+
+export const PUBLISH_REUSED =
+    "Blackout's server refused this key: it was replaced before, and a replaced key can't be " +
+    'made current again. Create new release keys instead.';
+
+export const PUBLISH_STORAGE_LIMIT =
+    `Blackout's server refused this key: this account has published ${RELEASE_IDENTITY_STORAGE_LIMIT} ` +
+    "release keys, as many as the server keeps. Ask the server's operator for help.";
+
+/** The lookup answer named another Matrix id than the one typed (L3). */
+export const lookupMismatch = (typed: string, answered: string | null): string =>
+    `Blackout's server answered for ${
+        answered ?? 'no Matrix id'
+    } when you asked for ${typed}, so there is no code to compare.`;
 
 export const RECOVERY_SAVE_NOTE =
     'The file holds your private release keys and the list of people you compared codes with, ' +
-    'encrypted with your passphrase. Anyone who has the file and your passphrase can use your ' +
-    `release keys. Use at least ${RECOVERY_PASSPHRASE_MIN_LENGTH} characters and a passphrase you ` +
-    "don't use anywhere else: Blackout can't recover it for you. A file doesn't include " +
-    'comparisons you make after saving it, so save a new one after you compare with someone.';
+    'encrypted with your passphrase. Anyone who has the file and your passphrase, or who ' +
+    'guesses the passphrase by trying many on a copy of the file, can use your release keys. ' +
+    `Use at least ${RECOVERY_PASSPHRASE_MIN_LENGTH} characters and a passphrase you don't use ` +
+    "anywhere else: Blackout can't recover it for you. A file doesn't include comparisons you " +
+    'make after saving it, so save a new one after you compare with someone.';
 
 export type ReleaseKeysPanelProps = {
     apiClient: ApiClient;
@@ -157,6 +223,7 @@ type Comparing =
     | { status: 'nobody' }
     | { status: 'self' }
     | { status: 'invalid'; matrixId: string }
+    | { status: 'mismatch'; typed: string; answered: string | null }
     | { status: 'error'; text: string }
     | {
           status: 'code';
@@ -264,6 +331,7 @@ export const ReleaseKeysPanel = ({
     const [compareInput, setCompareInput] = useState('');
     const [comparing, setComparing] = useState<Comparing>({ status: 'idle' });
     const [pendingLoad, setPendingLoad] = useState<PendingLoad | null>(null);
+    const [replaced, setReplaced] = useState(false);
 
     const refresh = useCallback(async () => {
         try {
@@ -290,13 +358,24 @@ export const ReleaseKeysPanel = ({
     }, [checkSupport, refresh]);
 
     const local = currentKeySet(device);
-    const publication: 'published' | 'unpublished' | 'different' | null = !local
+    // `older`: the server has a key this device made and since replaced, so
+    // this device's newer one is not published yet. `foreign`: the server has
+    // a key this device did not make, which is either the person's own from
+    // another device, or someone else's doing (the independent review's H1).
+    const publication: 'published' | 'unpublished' | 'older' | 'foreign' | null = !local
         ? null
         : !me?.current
         ? 'unpublished'
         : sameIdentity(me.current.identity, local.identity)
         ? 'published'
-        : 'different';
+        : device?.keySets.some((set) => set.fingerprint === me.current?.fingerprint)
+        ? 'older'
+        : 'foreign';
+    // H1: the API refuses to make a replaced identity current again, so a key
+    // the server lists as replaced cannot be published from here.
+    const replacedOnServer =
+        local !== undefined &&
+        (me?.superseded ?? []).some((entry) => entry.fingerprint === local.fingerprint);
     const serverName = me?.matrixId?.slice(me.matrixId.indexOf(':') + 1) ?? 'this server';
 
     const publish = useCallback(
@@ -310,6 +389,30 @@ export const ReleaseKeysPanel = ({
                     text: "Published: Blackout's server now has this release key for you.",
                 });
             } catch (cause) {
+                const status = cause instanceof BlackoutSdkError ? cause.status : undefined;
+                if (status === 429) {
+                    setNotice({ tone: 'error', text: PUBLISH_RATE_LIMITED });
+                    return;
+                }
+                if (status === 409) {
+                    // Reused or over the storage bound: the server's own list
+                    // tells which, once it is read again.
+                    let entry: ReleaseIdentityDirectoryEntry | null = null;
+                    try {
+                        entry = await actions.getMine();
+                        setMe(entry);
+                    } catch {
+                        // Keep what the screen had.
+                    }
+                    const reused = (entry?.superseded ?? []).some(
+                        (superseded) => superseded.fingerprint === keySet.fingerprint
+                    );
+                    setNotice({
+                        tone: 'error',
+                        text: reused || !entry ? PUBLISH_REUSED : PUBLISH_STORAGE_LIMIT,
+                    });
+                    return;
+                }
                 setNotice({
                     tone: 'error',
                     text: `Your keys are on this device, but publishing them failed: ${errorText(
@@ -323,6 +426,7 @@ export const ReleaseKeysPanel = ({
 
     const createKeys = async () => {
         if (!me) return;
+        const replacing = Boolean(currentKeySet(device) || me.current);
         setConfirming(null);
         setBusy('create');
         setNotice(null);
@@ -336,6 +440,7 @@ export const ReleaseKeysPanel = ({
             setDevice(next);
             setComparing({ status: 'idle' });
             if (next) await publish(next);
+            if (replacing) setReplaced(true);
         } catch (cause) {
             setNotice({ tone: 'error', text: `Creating release keys failed: ${errorText(cause)}` });
         } finally {
@@ -499,6 +604,12 @@ export const ReleaseKeysPanel = ({
         setComparing({ status: 'looking' });
         try {
             const entry = await actions.lookupByMatrixId(matrixId);
+            // L3: the answer must be for the Matrix id typed, which is also
+            // the one recorded with the comparison.
+            if (entry.matrixId !== matrixId) {
+                setComparing({ status: 'mismatch', typed: matrixId, answered: entry.matrixId });
+                return;
+            }
             if (entry.accountId === me.accountId) {
                 setComparing({ status: 'self' });
                 return;
@@ -515,7 +626,7 @@ export const ReleaseKeysPanel = ({
             const code = await computeSafetyCode(local.fingerprint, check.fingerprint);
             setComparing({
                 status: 'code',
-                matrixId: entry.matrixId ?? matrixId,
+                matrixId,
                 accountId: entry.accountId,
                 fingerprint: check.fingerprint,
                 groups: formatSafetyCode(code),
@@ -630,23 +741,44 @@ export const ReleaseKeysPanel = ({
                                             publish it.
                                         </p>
                                     )}
-                                    {publication === 'different' && me.current && (
+                                    {publication === 'older' && me.current && (
                                         <p data-testid="publication">
-                                            Blackout&apos;s server has a different release key for
-                                            you ({shortFingerprint(me.current.fingerprint)}).
-                                            Publishing this device&apos;s key replaces it, and
-                                            anyone who compared a code with you would have to
-                                            compare again.
+                                            Not published yet: Blackout&apos;s server still has the
+                                            key this device used before (
+                                            {shortFingerprint(me.current.fingerprint)}). Publishing
+                                            this device&apos;s key replaces it, and anyone who
+                                            compared a code with you would have to compare again.
                                         </p>
                                     )}
-                                    {publication !== 'published' && (
-                                        <button
-                                            type="button"
-                                            disabled={working}
-                                            onClick={() => void publishNow()}
-                                        >
-                                            Publish this device&apos;s key
-                                        </button>
+                                    {publication === 'foreign' && me.current && (
+                                        <p data-testid="publication" role="alert">
+                                            {foreignKeyWarning(
+                                                shortFingerprint(me.current.fingerprint)
+                                            )}
+                                        </p>
+                                    )}
+                                    {publication !== 'published' && replacedOnServer && (
+                                        <p data-testid="replaced-on-server">
+                                            {RELEASE_KEY_REPLACED_ON_SERVER}
+                                        </p>
+                                    )}
+                                    {publication !== 'published' && !replacedOnServer && (
+                                        <>
+                                            {publication === 'foreign' && (
+                                                <p>
+                                                    Publishing this device&apos;s key replaces it,
+                                                    and anyone who compared a code with you would
+                                                    have to compare again.
+                                                </p>
+                                            )}
+                                            <button
+                                                type="button"
+                                                disabled={working}
+                                                onClick={() => void publishNow()}
+                                            >
+                                                Publish this device&apos;s key
+                                            </button>
+                                        </>
                                     )}
                                     <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
                                         <button
@@ -654,7 +786,7 @@ export const ReleaseKeysPanel = ({
                                             disabled={working}
                                             onClick={() => setConfirming('replace')}
                                         >
-                                            Create new release keys
+                                            Create and publish new release keys
                                         </button>
                                         <button
                                             type="button"
@@ -668,17 +800,23 @@ export const ReleaseKeysPanel = ({
                             ) : (
                                 <>
                                     {me.current ? (
-                                        <p>
-                                            Blackout&apos;s server has release keys for you that
-                                            aren&apos;t on this device (
-                                            {shortFingerprint(me.current.fingerprint)}). If you made
-                                            them on another device, load that device&apos;s recovery
-                                            file below. Creating new keys replaces them, and anyone
-                                            who compared a code with you would have to compare
-                                            again.
-                                        </p>
+                                        <>
+                                            <p data-testid="publication" role="alert">
+                                                {missingKeysWarning(
+                                                    shortFingerprint(me.current.fingerprint)
+                                                )}
+                                            </p>
+                                            <p>
+                                                Creating new keys replaces them, and anyone who
+                                                compared a code with you would have to compare
+                                                again.
+                                            </p>
+                                        </>
                                     ) : (
-                                        <p>You have no release keys yet.</p>
+                                        <>
+                                            <p>You have no release keys yet.</p>
+                                            <p>{RELEASE_KEYS_LISTING}</p>
+                                        </>
                                     )}
                                     <button
                                         type="button"
@@ -690,10 +828,15 @@ export const ReleaseKeysPanel = ({
                                         }
                                     >
                                         {me.current
-                                            ? 'Create new release keys'
-                                            : 'Create release keys on this device'}
+                                            ? 'Create and publish new release keys'
+                                            : 'Create and publish release keys'}
                                     </button>
                                 </>
+                            )}
+                            {replaced && confirming === null && (
+                                <p role="status" data-testid="replace-guidance">
+                                    {RELEASE_KEYS_REPLACE_GUIDANCE}
+                                </p>
                             )}
                             {confirming === 'replace' && (
                                 <div
@@ -702,15 +845,18 @@ export const ReleaseKeysPanel = ({
                                     style={sectionStyle}
                                 >
                                     <p>
-                                        New keys replace your current ones for everyone who looks
-                                        you up, and anyone who compared a code with you would have
-                                        to compare again.
+                                        New keys are published at once and replace your current ones
+                                        for everyone who looks you up, and anyone who compared a
+                                        code with you would have to compare again.
                                         {local
                                             ? ' Your current keys stay on this device as old keys.'
-                                            : ''}
+                                            : ''}{' '}
+                                        Replaced keys stay listed on the server until your account
+                                        is deleted.
                                     </p>
+                                    <p>{RELEASE_KEYS_REPLACE_GUIDANCE}</p>
                                     <button type="button" onClick={() => void createKeys()}>
-                                        Create new keys
+                                        Create and publish new keys
                                     </button>{' '}
                                     <button type="button" onClick={() => setConfirming(null)}>
                                         Keep my keys
@@ -744,7 +890,7 @@ export const ReleaseKeysPanel = ({
                                         Passphrase{' '}
                                         <input
                                             type="password"
-                                            autoComplete="new-password"
+                                            autoComplete="off"
                                             value={savePassphrase}
                                             onChange={(event) =>
                                                 setSavePassphrase(event.target.value)
@@ -755,7 +901,7 @@ export const ReleaseKeysPanel = ({
                                         Passphrase again{' '}
                                         <input
                                             type="password"
-                                            autoComplete="new-password"
+                                            autoComplete="off"
                                             value={saveConfirm}
                                             onChange={(event) => setSaveConfirm(event.target.value)}
                                         />
@@ -793,7 +939,7 @@ export const ReleaseKeysPanel = ({
                                 Its passphrase{' '}
                                 <input
                                     type="password"
-                                    autoComplete="current-password"
+                                    autoComplete="off"
                                     value={loadPassphrase}
                                     onChange={(event) => setLoadPassphrase(event.target.value)}
                                 />
@@ -889,12 +1035,21 @@ export const ReleaseKeysPanel = ({
                                                 no code to compare.
                                             </p>
                                         )}
+                                        {comparing.status === 'mismatch' && (
+                                            <p role="alert">
+                                                {lookupMismatch(
+                                                    comparing.typed,
+                                                    comparing.answered
+                                                )}
+                                            </p>
+                                        )}
                                         {comparing.status === 'error' && (
                                             <p role="alert">{comparing.text}</p>
                                         )}
                                         {comparing.status === 'code' && (
                                             <div data-testid="safety-code">
                                                 <p>{compareHow(comparing.matrixId)}</p>
+                                                <p>{COMPARE_READ_ALL}</p>
                                                 <div style={codeGridStyle} aria-label="Safety code">
                                                     {comparing.groups.map((group, index) => (
                                                         <span key={index}>{group}</span>

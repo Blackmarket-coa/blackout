@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { IDBFactory } from 'fake-indexeddb';
 import {
     createReleaseKeySet,
+    formatReleaseFingerprint,
     mlKem768Provider,
     NULL_KEM_PROVIDER,
     parseRecoveryFile,
@@ -18,10 +19,20 @@ import {
 import { BlackoutSdkError, type ApiClient, type ApiRequest } from '@blackout/sdk';
 import {
     COMPARE_MEANING,
+    COMPARE_READ_ALL,
     compareHow,
+    foreignKeyWarning,
+    lookupMismatch,
+    missingKeysWarning,
+    PUBLISH_RATE_LIMITED,
+    PUBLISH_REUSED,
+    PUBLISH_STORAGE_LIMIT,
+    RELEASE_KEY_REPLACED_ON_SERVER,
     RELEASE_KEYS_BROWSER,
+    RELEASE_KEYS_LISTING,
     RELEASE_KEYS_LOSS,
     RELEASE_KEYS_PURPOSE,
+    RELEASE_KEYS_REPLACE_GUIDANCE,
     RELEASE_KEYS_SERVER,
     RELEASE_KEYS_SIGN_OUT,
     RELEASE_KEYS_UNSUPPORTED,
@@ -65,6 +76,8 @@ const notFound = () =>
 const fakeApi = (options: {
     mine: ReleaseIdentityDirectoryEntry;
     lookup?: (matrixId: string) => ReleaseIdentityDirectoryEntry | null;
+    /** Refuse every publish with this status, and then answer /me with `afterRefusal`. */
+    refusePublish?: { status: number; afterRefusal?: ReleaseIdentityDirectoryEntry };
 }) => {
     const requests: ApiRequest[] = [];
     let mine = options.mine;
@@ -74,6 +87,15 @@ const fakeApi = (options: {
             return mine as T;
         }
         if (request.method === 'PUT' && request.path === '/v1/release-identities/me') {
+            if (options.refusePublish) {
+                if (options.refusePublish.afterRefusal) mine = options.refusePublish.afterRefusal;
+                throw new BlackoutSdkError(
+                    'HTTP_REQUEST_FAILED',
+                    `Request failed (${options.refusePublish.status})`,
+                    'fatal',
+                    options.refusePublish.status
+                );
+            }
             const { identity } = request.body as { identity: ReleaseIdentity };
             const check = await verifyReleaseIdentity(identity, { accountId: mine.accountId });
             if (!check.ok)
@@ -229,10 +251,13 @@ describe('Settings → Release keys', () => {
         const { client, requests } = fakeApi({ mine: aliceMine(false) });
         await render({ apiClient: client });
         await waitFor(
-            () => text().includes('Create release keys on this device'),
+            () => text().includes('Create and publish release keys'),
             'the create button'
         );
-        await click('Create release keys on this device');
+        // M5: the screen says, before anything is made, that creating publishes
+        // and that the listing stays until the account is deleted.
+        expect(text()).toContain(RELEASE_KEYS_LISTING);
+        await click('Create and publish release keys');
         await waitFor(
             () => text().includes("Published: Blackout's server has this key for you."),
             'publication'
@@ -288,6 +313,9 @@ describe('Settings → Release keys', () => {
         );
         expect(groups).toEqual(SAFETY_CODE_ALICE_BOB.groups);
         expect(text()).toContain(compareHow('@bob:test.local'));
+        // M1: read every group, and stop at the first that differs.
+        expect(text()).toContain(COMPARE_READ_ALL);
+        expect(COMPARE_READ_ALL).toContain('Read all twelve groups');
         expect(text()).toContain(COMPARE_MEANING);
 
         await click('The codes match');
@@ -330,7 +358,7 @@ describe('Settings → Release keys', () => {
             mine: aliceMine(true),
             lookup: (matrixId) =>
                 matrixId === '@tampered:test.local'
-                    ? bobEntry(tampered)
+                    ? { ...bobEntry(tampered), matrixId: '@tampered:test.local' }
                     : matrixId === '@alice:test.local'
                     ? aliceMine(true)
                     : null,
@@ -353,14 +381,19 @@ describe('Settings → Release keys', () => {
         expect(container.querySelector('[data-testid="safety-code"]')).toBeNull();
     });
 
-    it('says when the server has another key for you, and offers to publish this device’s', async () => {
+    it('says who could have published a key this device did not make, and offers to publish this device’s', async () => {
         await deviceWithAlice();
         const other = { ...BOB.identity, accountId: ACCOUNT };
         const { client, requests } = fakeApi({
             mine: entryFor(ACCOUNT, '@alice:test.local', other, BOB.fingerprint),
         });
         await render({ apiClient: client });
-        await waitFor(() => text().includes('has a different release key for you'), 'the mismatch');
+        // H1: not "a different key", but who could have put it there.
+        const warning = foreignKeyWarning(formatReleaseFingerprint(BOB.fingerprint.slice(0, 16)));
+        await waitFor(() => text().includes(warning), 'the warning');
+        expect(warning).toContain(
+            "If you didn't, someone with access to your account, or Blackout's server, published it."
+        );
         expect(text()).toContain('Publish your key first');
         await click("Publish this device's key");
         await waitFor(
@@ -388,7 +421,9 @@ describe('Settings → Release keys', () => {
             'removal'
         );
         expect(await indexedDbReleaseKeyStore.load(ACCOUNT)).toBeNull();
-        expect(text()).toContain("aren't on this device");
+        expect(text()).toContain(
+            missingKeysWarning(formatReleaseFingerprint(ALICE.fingerprint.slice(0, 16)))
+        );
     });
 
     it('refuses passphrases that differ or are short, before encrypting anything', async () => {
@@ -449,6 +484,118 @@ describe('Settings → Release keys', () => {
         expect(currentKeySet(stored)?.fingerprint).toBe(ALICE.fingerprint);
         expect(text()).toContain("Published: Blackout's server has this key for you.");
     }, 180_000);
+
+    it('does not offer to publish a key the server lists as replaced', async () => {
+        await deviceWithAlice();
+        const other = { ...BOB.identity, accountId: ACCOUNT };
+        const { client } = fakeApi({
+            mine: {
+                ...entryFor(ACCOUNT, '@alice:test.local', other, BOB.fingerprint),
+                superseded: [
+                    {
+                        identity: ALICE.identity,
+                        fingerprint: ALICE.fingerprint,
+                        publishedAt: '2026-10-26T10:05:00.000Z',
+                        supersededAt: '2026-10-26T11:05:00.000Z',
+                    },
+                ],
+            },
+        });
+        await render({ apiClient: client });
+        await waitFor(() => text().includes(RELEASE_KEY_REPLACED_ON_SERVER), 'the replaced note');
+        expect(text()).toContain("someone with access to your account, or Blackout's server");
+        expect(
+            Array.from(container.querySelectorAll('button')).some(
+                (candidate) => candidate.textContent?.trim() === "Publish this device's key"
+            )
+        ).toBe(false);
+        expect(text()).toContain('Create and publish new release keys');
+    });
+
+    it('says what else to do when replacing keys, before and after', async () => {
+        await deviceWithAlice();
+        const { client } = fakeApi({ mine: aliceMine(true) });
+        await render({ apiClient: client });
+        await waitFor(
+            () => text().includes('Create and publish new release keys'),
+            'the replace button'
+        );
+        await click('Create and publish new release keys');
+        expect(text()).toContain(RELEASE_KEYS_REPLACE_GUIDANCE);
+        expect(RELEASE_KEYS_REPLACE_GUIDANCE).toContain('sign that device out of your account');
+        expect(RELEASE_KEYS_REPLACE_GUIDANCE).toContain('not over Blackout, that your key changed');
+        await click('Create and publish new keys');
+        await waitFor(
+            () => Boolean(container.querySelector('[data-testid="replace-guidance"]')),
+            'the guidance after replacing',
+            20_000
+        );
+        expect(container.querySelector('[data-testid="replace-guidance"]')?.textContent).toBe(
+            RELEASE_KEYS_REPLACE_GUIDANCE
+        );
+    }, 60_000);
+
+    it.each([
+        ['429, the daily limit', 429, false, PUBLISH_RATE_LIMITED],
+        ['409 for a key the server lists as replaced', 409, true, PUBLISH_REUSED],
+        ['409 for the storage bound', 409, false, PUBLISH_STORAGE_LIMIT],
+    ])('says why a publish was refused: %s', async (_case, status, listed, message) => {
+        await deviceWithAlice();
+        const other = { ...BOB.identity, accountId: ACCOUNT };
+        const serverEntry = entryFor(ACCOUNT, '@alice:test.local', other, BOB.fingerprint);
+        const { client } = fakeApi({
+            mine: serverEntry,
+            refusePublish: {
+                status,
+                afterRefusal: listed
+                    ? {
+                          ...serverEntry,
+                          superseded: [
+                              {
+                                  identity: ALICE.identity,
+                                  fingerprint: ALICE.fingerprint,
+                                  publishedAt: '2026-10-26T10:05:00.000Z',
+                                  supersededAt: '2026-10-26T11:05:00.000Z',
+                              },
+                          ],
+                      }
+                    : undefined,
+            },
+        });
+        await render({ apiClient: client });
+        await waitFor(() => text().includes("Publish this device's key"), 'the publish button');
+        await click("Publish this device's key");
+        await waitFor(() => text().includes(message), 'the refusal');
+    });
+
+    it('refuses a lookup answer for another Matrix id than the one typed', async () => {
+        await deviceWithAlice();
+        const { client } = fakeApi({
+            mine: aliceMine(true),
+            // A server answering @bobby with @bob's entry.
+            lookup: (matrixId) => (matrixId === '@bobby:test.local' ? bobEntry() : null),
+        });
+        await render({ apiClient: client });
+        await waitFor(() => text().includes('Compare a safety code'), 'the compare section');
+        await type('Their Matrix id', '@bobby:test.local');
+        await click('Show the code');
+        await waitFor(
+            () => text().includes(lookupMismatch('@bobby:test.local', '@bob:test.local')),
+            'the refusal'
+        );
+        expect(container.querySelector('[data-testid="safety-code"]')).toBeNull();
+        expect((await indexedDbReleaseKeyStore.load(ACCOUNT))?.comparisons).toEqual([]);
+    });
+
+    it('does not ask the browser to save a recovery passphrase', async () => {
+        await deviceWithAlice();
+        const { client } = fakeApi({ mine: aliceMine(true) });
+        await render({ apiClient: client });
+        await waitFor(() => text().includes('Save a recovery file'), 'the save button');
+        const fields = Array.from(container.querySelectorAll('input[type="password"]'));
+        expect(fields).toHaveLength(3);
+        for (const field of fields) expect(field.getAttribute('autocomplete')).toBe('off');
+    });
 
     // M4 (independent review, 2026-10-26): an older recovery file does not
     // quietly replace this device's newer key.
