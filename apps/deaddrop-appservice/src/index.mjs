@@ -71,14 +71,15 @@ const flushRoom = async (roomId) => {
 
     const toDeliver = bucket.queue.splice(0, bucket.queue.length);
     for (const queued of toDeliver) {
-        const sender = bucket.config.anonymize
-            ? process.env.DEAD_DROP_BOT_USER_ID ?? '@deaddrop-bot:example.org'
-            : queued.sender;
-        // Replace with Matrix client `sendEvent` in production.
+        // Replace with Matrix client `sendEvent` in production. Until
+        // 2026-10-25 this line logged the message body and the sender; a log
+        // line never carries message text or who wrote it (TRUST.md, "Nothing
+        // logs your messages"). Byte length is enough for an operator to see
+        // that something was delivered.
         console.log('[dead-drop] delivering', {
             roomId,
-            sender,
-            body: queued.content?.body,
+            anonymized: Boolean(bucket.config.anonymize),
+            bodyBytes: Buffer.byteLength(String(queued.content?.body ?? ''), 'utf8'),
             queuedAt: queued.queuedAt,
         });
     }
@@ -113,8 +114,10 @@ const runSchedulerTick = async () => {
     }
 };
 
-setInterval(() => void runSchedulerTick(), 1_000);
-setInterval(() => store.sweepExpired(), SWEEP_INTERVAL_MS);
+// Neither timer keeps the process alive on its own: the listening server does
+// in production, and a test that imports this module must be able to exit.
+setInterval(() => void runSchedulerTick(), 1_000).unref();
+setInterval(() => store.sweepExpired(), SWEEP_INTERVAL_MS).unref();
 
 /* ----------------------------- v1 handlers ---------------------------- */
 

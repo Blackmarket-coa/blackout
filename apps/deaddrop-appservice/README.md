@@ -12,9 +12,9 @@ any submission that contains additional fields.
 The three endpoints intentionally accept and return identical-shape JSON
 to defeat traffic-shape analysis (cf. SecureDrop Protocol).
 
-- `POST /v1/deaddrop/send`  `{ roomId, envelope }` → `{ ok, dropId, clue }`
-- `POST /v1/deaddrop/fetch` `{ roomId, clue, decoyCount? }` → `{ envelopes, decoyCount }`
-- `POST /v1/deaddrop/open`  `{ roomId, clue }` → `{ ok, deleted }`
+-   `POST /v1/deaddrop/send` `{ roomId, envelope }` → `{ ok, dropId, clue }`
+-   `POST /v1/deaddrop/fetch` `{ roomId, clue, decoyCount? }` → `{ envelopes, decoyCount }`
+-   `POST /v1/deaddrop/open` `{ roomId, clue }` → `{ ok, deleted }`
 
 Decoys are generated server-side from a per-room HKDF seed so they are
 byte-length and structurally indistinguishable from real envelopes for
@@ -25,11 +25,15 @@ caller passes `decoyCount` based on its tier (paid → 9, free → 0).
 
 Retained for the existing scheduled-flush flow:
 
-- `GET /health`
-- `POST /configure` `{ roomId, config }`
-- `POST /ingest`    `{ roomId, sender, content, condition? }`
-- `POST /flush`     `{ roomId }`
-- `POST /clear`     `{ roomId }`
+-   `GET /health`
+-   `POST /configure` `{ roomId, config }`
+-   `POST /ingest` `{ roomId, sender, content, condition? }`
+-   `POST /flush` `{ roomId }`
+-   `POST /clear` `{ roomId }`
+
+A flush logs the room id, whether the room anonymizes senders, each body's
+byte length and its queue time — never the text or the sender (until
+2026-10-25 it logged both; TRUST.md, "Nothing logs your messages").
 
 ## Persistence
 
