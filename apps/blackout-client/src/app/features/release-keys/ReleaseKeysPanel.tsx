@@ -55,8 +55,10 @@ export const RELEASE_KEYS_LOSS =
     "don't bring old ones back.";
 
 export const RELEASE_KEYS_SIGN_OUT =
-    "Signing out of Blackout doesn't remove release keys from this device. On a device other " +
-    'people use, save a recovery file, then remove the keys here before you sign out.';
+    "Signing out of Blackout doesn't remove release keys from this device, and the panic wipe " +
+    'removes them only if you tick its “Also delete release keys from this device”. On a ' +
+    'device other people use, save a recovery file, then remove the keys here before you ' +
+    'sign out.';
 
 export const RELEASE_KEYS_BROWSER =
     "In a web browser, this app's code comes from Blackout's server, and a server made to send " +

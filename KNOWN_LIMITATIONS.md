@@ -274,10 +274,16 @@ For the source-of-truth triage with tier/owner detail see
     device's copy of your rooms and recent messages and the encryption keys
     that decrypt your messages (the app does not encrypt these stores:
     `initRustCrypto` is called without a storage key or password); the
-    original videos in the device's video vault; and everything else the app
+    original videos in the device's video vault; the release-key store
+    (private release keys and the list of people compared with, see Release
+    keys below) unless its option is ticked; and everything else the app
     keeps in localStorage, such as settings, per-room notification choices,
     recent reactions and GIFs, saved homeservers and the Matrix client's own
     entries.
+-   **"Also delete release keys from this device"** is off by default. Ticked,
+    it deletes every account's release keys and comparisons on the device, and
+    the screen says first that without a recovery file they are gone for good.
+    If that deletion fails, the screen says so and does not reload.
 -   **"Also forget this device's sign-ins"** (labelled "Also sign out" until
     2026-10-26) removes the stored session of every account on the device,
     burner identities included, and the Blackout API token, so the app opens
@@ -390,11 +396,13 @@ For the source-of-truth triage with tier/owner detail see
     with you has to compare again. Save a recovery file, and save a new one
     after each comparison: a file holds only the comparisons made before it
     was saved.
--   **Signing out leaves them, and so does the panic wipe.** Neither removes
-    release keys from the device, where any code running in the app's origin
-    can read them. "Remove release keys from this device" removes them; on a
-    device other people use, save a recovery file, then remove them before
-    you sign out.
+-   **Signing out leaves them, and so does the panic wipe unless told
+    otherwise.** Signing out never removes release keys from the device, where
+    any code running in the app's origin can read them; the panic wipe removes
+    them only when its "Also delete release keys from this device" is ticked,
+    and it is off by default. "Remove release keys from this device" removes
+    them; on a device other people use, save a recovery file, then remove them
+    before you sign out.
 -   **Recovery file:** encrypted with your passphrase (at least 12
     characters; argon2id, then AES-256-GCM). Anyone with the file who guesses
     or learns the passphrase can use your release keys, and Blackout cannot

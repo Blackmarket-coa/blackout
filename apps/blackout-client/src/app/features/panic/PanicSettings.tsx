@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { removeAllReleaseKeys } from '../release-keys/releaseKeyStore';
 import {
     type KeyValueStore,
     SENSITIVE_TRACE_PREFIXES,
@@ -44,6 +45,31 @@ export const PANIC_SIGN_IN_DETAIL =
     'The homeserver is not told: those sessions are not ended there, and they stay on your ' +
     'account’s list of sessions until they are signed out from another Matrix client.';
 
+export const PANIC_RELEASE_KEYS_OPTION = 'Also delete release keys from this device';
+
+/** Shown next to the release-key option: what deleting them costs. */
+export const PANIC_RELEASE_KEYS_WARNING =
+    'This deletes the private release keys of every account on this device, and the list of ' +
+    'people you compared safety codes with. Without a recovery file they can’t be brought ' +
+    'back: anything encrypted for them could never be opened, and new keys would mean ' +
+    'comparing codes with everyone again. Off unless you tick it.';
+
+/** Listed under "What gets removed" when the release-key option is ticked. */
+export const PANIC_RELEASE_KEYS_REMOVED =
+    'Release keys and the list of people you compared safety codes with, for every account ' +
+    'on this device';
+
+/** Listed under "What stays" when it is not. */
+export const PANIC_RELEASE_KEYS_KEPT =
+    'Your release keys and the list of people you compared safety codes with (Settings → ' +
+    'Release keys), unless you tick “' +
+    PANIC_RELEASE_KEYS_OPTION +
+    '” below.';
+
+export const PANIC_RELEASE_KEYS_FAILED =
+    'Deleting the release keys failed, so they are still on this device. Remove them in ' +
+    'Settings → Release keys, or try the wipe again.';
+
 /** What the wipe leaves on this device, whichever options are chosen. */
 export const PANIC_KEEPS: readonly string[] = [
     'Your sign-ins, unless you tick “' + PANIC_SIGN_IN_OPTION + '” below.',
@@ -60,24 +86,57 @@ export const PANIC_NOT_FORENSIC =
     'This is not a forensic wipe: the browser deletes the entries, but their data may stay ' +
     'on the disk.';
 
+/** How long the release-key deletion may take before the wipe says it failed. */
+const RELEASE_KEYS_TIMEOUT_MS = 10_000;
+
 export interface PanicSettingsProps {
     /** Where the wipe runs; the page's localStorage unless a test passes one. */
     storage?: KeyValueStore;
     /** Called after the wipe; reloads the page unless a test passes one. */
     reload?: () => void;
+    /** Deletes the release-key store; `removeAllReleaseKeys` unless a test passes one. */
+    removeReleaseKeys?: () => Promise<void>;
 }
 
-export function PanicSettings({ storage, reload }: PanicSettingsProps = {}) {
+export function PanicSettings({ storage, reload, removeReleaseKeys }: PanicSettingsProps = {}) {
     const [includeSession, setIncludeSession] = useState(false);
+    const [includeReleaseKeys, setIncludeReleaseKeys] = useState(false);
     const [armed, setArmed] = useState(false);
+    const [releaseKeysFailed, setReleaseKeysFailed] = useState(false);
 
-    const wipe = () => {
+    const deleteReleaseKeys = async (): Promise<boolean> => {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+            await Promise.race([
+                (removeReleaseKeys ?? removeAllReleaseKeys)(),
+                new Promise<never>((_, reject) => {
+                    timer = setTimeout(
+                        () => reject(new Error('timed out')),
+                        RELEASE_KEYS_TIMEOUT_MS
+                    );
+                }),
+            ]);
+            return true;
+        } catch {
+            return false;
+        } finally {
+            clearTimeout(timer);
+        }
+    };
+
+    const wipe = async () => {
         try {
             wipeSensitiveTraces(storage ?? window.localStorage, { includeSession });
         } finally {
-            // Reload so in-memory state (jotai atoms) is rebuilt from the now-cleared
-            // storage; if the sign-ins were removed this lands on the sign-in screen.
-            (reload ?? (() => window.location.reload()))();
+            if (includeReleaseKeys && !(await deleteReleaseKeys())) {
+                // Not reloading: the person must see that the keys are still here.
+                setArmed(false);
+                setReleaseKeysFailed(true);
+            } else {
+                // Reload so in-memory state (jotai atoms) is rebuilt from the now-cleared
+                // storage; if the sign-ins were removed this lands on the sign-in screen.
+                (reload ?? (() => window.location.reload()))();
+            }
         }
     };
 
@@ -99,6 +158,7 @@ export function PanicSettings({ storage, reload }: PanicSettingsProps = {}) {
                               <li key={item}>{item}</li>
                           ))
                         : null}
+                    {includeReleaseKeys ? <li>{PANIC_RELEASE_KEYS_REMOVED}</li> : null}
                 </ul>
             </div>
 
@@ -110,6 +170,7 @@ export function PanicSettings({ storage, reload }: PanicSettingsProps = {}) {
                     {PANIC_KEEPS.map((item) => (
                         <li key={item}>{item}</li>
                     ))}
+                    {includeReleaseKeys ? null : <li>{PANIC_RELEASE_KEYS_KEPT}</li>}
                 </ul>
             </div>
 
@@ -123,6 +184,23 @@ export function PanicSettings({ storage, reload }: PanicSettingsProps = {}) {
                     {PANIC_SIGN_IN_OPTION}. {PANIC_SIGN_IN_DETAIL}
                 </span>
             </label>
+
+            <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                <input
+                    type="checkbox"
+                    checked={includeReleaseKeys}
+                    onChange={(e) => setIncludeReleaseKeys(e.target.checked)}
+                />
+                <span>
+                    {PANIC_RELEASE_KEYS_OPTION}. {PANIC_RELEASE_KEYS_WARNING}
+                </span>
+            </label>
+
+            {releaseKeysFailed && (
+                <p role="alert" style={{ margin: 0, color: 'var(--danger, #d33)' }}>
+                    {PANIC_RELEASE_KEYS_FAILED}
+                </p>
+            )}
 
             {!armed ? (
                 <button
@@ -140,7 +218,7 @@ export function PanicSettings({ storage, reload }: PanicSettingsProps = {}) {
                     <div style={{ display: 'flex', gap: 6 }}>
                         <button
                             type="button"
-                            onClick={wipe}
+                            onClick={() => void wipe()}
                             style={{ color: 'var(--danger, #d33)' }}
                         >
                             {includeSession ? 'Wipe and forget sign-ins' : 'Wipe now'}

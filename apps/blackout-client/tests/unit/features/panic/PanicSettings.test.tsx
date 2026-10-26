@@ -8,12 +8,22 @@ import {
     PANIC_INTRO,
     PANIC_KEEPS,
     PANIC_NOT_FORENSIC,
+    PANIC_RELEASE_KEYS_FAILED,
+    PANIC_RELEASE_KEYS_KEPT,
+    PANIC_RELEASE_KEYS_OPTION,
+    PANIC_RELEASE_KEYS_REMOVED,
+    PANIC_RELEASE_KEYS_WARNING,
     PANIC_REMOVES,
     PANIC_SIGN_IN_DETAIL,
     PANIC_SIGN_IN_OPTION,
     PANIC_SIGN_IN_REMOVES,
     PanicSettings,
 } from '../../../../src/app/features/panic/PanicSettings';
+import {
+    indexedDbReleaseKeyStore,
+    withNewCurrentKeySet,
+} from '../../../../src/app/features/release-keys/releaseKeyStore';
+import { ALICE, BOB } from '../../../../../../packages/blackout-protocol/src/release/testVectors';
 import {
     type KeyValueStore,
     SENSITIVE_TRACE_PREFIXES,
@@ -117,6 +127,45 @@ const tickSignIns = async () => {
     });
 };
 
+/** The release-key deletion is asynchronous: wait for what follows it. */
+const waitUntil = async (check: () => boolean, what: string) => {
+    const started = Date.now();
+    while (!check()) {
+        if (Date.now() - started > 4_000) throw new Error(`timed out waiting for ${what}`);
+        await act(async () => {
+            await new Promise((resolve) => setTimeout(resolve, 20));
+        });
+    }
+};
+
+const releaseKeysBox = (): HTMLInputElement => {
+    const box = Array.from(container.querySelectorAll('label'))
+        .find((label) => label.textContent?.startsWith(PANIC_RELEASE_KEYS_OPTION))
+        ?.querySelector<HTMLInputElement>('input[type="checkbox"]');
+    if (!box) throw new Error('no release-key checkbox');
+    return box;
+};
+
+const keySetOf = (person: typeof ALICE) => ({
+    identity: person.identity,
+    fingerprint: person.fingerprint,
+    signingPrivateJwk: person.signingPrivateJwk,
+    x25519PrivateJwk: person.x25519PrivateJwk,
+    mlkem768SecretKey: person.mlkem768SecretKey,
+    createdAt: person.createdAt,
+});
+
+const NOW = new Date('2026-10-26T12:00:00Z');
+
+/** Two accounts' release keys on this device. */
+const seedReleaseKeys = async () => {
+    for (const person of [ALICE, BOB]) {
+        await indexedDbReleaseKeyStore.save(
+            withNewCurrentKeySet(null, person.identity.accountId, keySetOf(person), NOW)
+        );
+    }
+};
+
 beforeEach(() => {
     Object.defineProperty(globalThis, 'indexedDB', { configurable: true, value: new IDBFactory() });
     container = document.createElement('div');
@@ -200,5 +249,69 @@ describe('Settings → Panic wipe does what the screen says', () => {
         }
         const left = (await indexedDB.databases()).map((db) => db.name).sort();
         expect(left).toEqual([...KEPT_DATABASES].sort());
+    });
+});
+
+// H2 (independent review, 2026-10-26): the wipe leaves release keys unless
+// its release-key option, off by default, is ticked.
+describe('Settings → Panic wipe and release keys', () => {
+    it('leaves release keys by default, and says so', async () => {
+        await seedReleaseKeys();
+        const reload = vi.fn();
+        await render({ storage: mapStore([...REMOVED]), reload });
+        expect(releaseKeysBox().checked).toBe(false);
+        expect(text()).toContain(PANIC_RELEASE_KEYS_KEPT);
+        expect(text()).not.toContain(PANIC_RELEASE_KEYS_REMOVED);
+        await click('Wipe the items listed…');
+        await click('Wipe now');
+        expect(reload).toHaveBeenCalledTimes(1);
+        expect(await indexedDbReleaseKeyStore.load(ALICE.identity.accountId)).not.toBeNull();
+        expect(await indexedDbReleaseKeyStore.load(BOB.identity.accountId)).not.toBeNull();
+    });
+
+    it('with its option ticked, deletes every account’s release keys, after saying what that costs', async () => {
+        await seedReleaseKeys();
+        const reload = vi.fn();
+        await render({ storage: mapStore([...REMOVED]), reload });
+        expect(text()).toContain(PANIC_RELEASE_KEYS_WARNING);
+        await act(async () => {
+            releaseKeysBox().click();
+        });
+        expect(text()).toContain(PANIC_RELEASE_KEYS_REMOVED);
+        expect(text()).not.toContain(PANIC_RELEASE_KEYS_KEPT);
+        await click('Wipe the items listed…');
+        await click('Wipe now');
+        await waitUntil(() => reload.mock.calls.length > 0, 'the reload');
+        expect(reload).toHaveBeenCalledTimes(1);
+        expect(await indexedDbReleaseKeyStore.load(ALICE.identity.accountId)).toBeNull();
+        expect(await indexedDbReleaseKeyStore.load(BOB.identity.accountId)).toBeNull();
+    });
+
+    it('says so, and does not reload, when deleting the release keys fails', async () => {
+        await seedReleaseKeys();
+        const reload = vi.fn();
+        const storage = mapStore([...REMOVED, ...KEPT]);
+        await render({
+            storage,
+            reload,
+            removeReleaseKeys: async () => {
+                throw new Error('blocked');
+            },
+        });
+        await act(async () => {
+            releaseKeysBox().click();
+        });
+        await click('Wipe the items listed…');
+        await click('Wipe now');
+        await waitUntil(
+            () => Boolean(container.querySelector('[role="alert"]')),
+            'the failure notice'
+        );
+        expect(reload).not.toHaveBeenCalled();
+        expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+            PANIC_RELEASE_KEYS_FAILED
+        );
+        // The rest of the wipe still ran.
+        expect(storage.keys()).toEqual([...KEPT].sort());
     });
 });

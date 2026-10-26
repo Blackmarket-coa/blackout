@@ -194,6 +194,18 @@ export const indexedDbReleaseKeyStore: ReleaseKeyStore & {
     },
 };
 
+/**
+ * Delete every account's release keys and comparisons from this device in one
+ * transaction: the panic wipe's opt-in. Clearing the object store, rather
+ * than deleting the database, is not held up by another tab's open
+ * connection. Rejects if the store cannot be cleared, so the caller can say
+ * the keys are still there.
+ */
+export const removeAllReleaseKeys = async (): Promise<void> => {
+    if (!releaseKeyStoreAvailable()) return;
+    await withStore<void>('readwrite', (store) => store.clear());
+};
+
 /** The key set in use: the one marked current. */
 export const currentKeySet = (record: DeviceReleaseKeys | null): StoredReleaseKeySet | undefined =>
     record?.keySets.find((set) => set.status === 'current');

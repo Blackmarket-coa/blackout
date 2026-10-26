@@ -17,6 +17,7 @@ export {
     currentKeySet,
     mergeRecoveryContents,
     planRecoveryLoad,
+    removeAllReleaseKeys,
     toRecoveryContents,
     withComparison,
     withNewCurrentKeySet,
