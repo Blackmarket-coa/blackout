@@ -4,6 +4,7 @@ import {
     HttpApiEvent,
     IndexedDBCryptoStore,
     IndexedDBStore,
+    TokenRefreshLogoutError,
     type MatrixClient,
     type MatrixError,
 } from 'matrix-js-sdk';
@@ -228,6 +229,21 @@ const buildTokenRefreshFunction = (session: StoredSession): TokenRefreshFunction
             body: JSON.stringify({ refresh_token: refreshToken }),
         });
         if (!response.ok) {
+            // The homeserver refuses a deleted device's refresh token with 401
+            // M_UNKNOWN_TOKEN and an expired one with 403 M_FORBIDDEN: the
+            // session is over. matrix-js-sdk signs the client out only when this
+            // function throws a MatrixError or a TokenRefreshLogoutError; any
+            // other error counts as transient and it keeps retrying, so an open
+            // panel did not notice its device being deleted elsewhere (D1 in
+            // docs/black-mask-account-link-design.md §7). Rate limiting and
+            // server errors stay transient.
+            if (response.status === 401 || response.status === 403) {
+                const body = (await response.json().catch(() => ({}))) as { errcode?: string };
+                const errcode = typeof body.errcode === 'string' ? ` ${body.errcode}` : '';
+                throw new TokenRefreshLogoutError(
+                    new Error(`Token refresh refused (${response.status}${errcode}).`)
+                );
+            }
             throw new MatrixInitError(
                 response.status === 429 ? 'rate_limited' : 'invalid_credentials',
                 `Token refresh failed (${response.status}).`
