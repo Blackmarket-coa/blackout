@@ -24,7 +24,9 @@ written down and reviewed in
 [`release-envelope-2026-10-26.md`](release-envelope-2026-10-26.md): what is
 sealed to whom, the key encapsulation against HPKE and X-Wing, the labels,
 the commitment, what the owner signs, the bytes, padding, validators, test
-vectors and what a hostile server can and cannot do.
+vectors and what a hostile server can and cannot do. PR 3 is built on two
+stacked branches: the protocol and SDK first (that record's §14), then the
+API.
 
 The switch may be relied on for someone's physical safety. Every property
 below is stated with its limits, and §7 gives the wording the app may use and

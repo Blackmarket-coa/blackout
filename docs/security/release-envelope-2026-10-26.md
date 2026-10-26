@@ -13,12 +13,15 @@ the whole envelope down, compares its key encapsulation with HPKE (RFC 9180)
 and X-Wing, and fixes the bytes, before any of it is built. It is to the
 envelope what the release-identities record is to the identity.
 
-**Status, 2026-10-26:** written and reviewed (§13) before the build. Nothing
-here makes a release possible: arming stays closed until PR 4 turns
+**Status, 2026-10-26:** written and reviewed (§13) before the build. PR 3 is
+built on two stacked branches, so that the cryptography can be reviewed apart
+from the plumbing: `-v44`, the protocol and the SDK (§14), and `-v45`, the
+API, the migration, the notifier and the documents it changes. Nothing here
+makes a release possible: arming stays closed until PR 4 turns
 `BLACKOUT_DEADMAN_RELEASES` on, and that flag is set nowhere.
 
 **State read:** the PR 2 branch at `6ae33bc2e2` (#991), on `develop` at
-`8a20ad6a0b`. **Read** means a claim rests on the code or a standard; **Run**
+`8a20ad6a0b`; PR 2 then merged as `e1d4cec964`, which this branch merged. **Read** means a claim rests on the code or a standard; **Run**
 that it was observed in Node 22.22.0 in this worktree; **Test** names the
 regression test that keeps it true. Nothing was run against a deployment, a
 browser other than the WebCrypto in Node and in the client's Vitest
@@ -52,6 +55,7 @@ bring it forward (§10, R12 in `THREAT_MODEL.md`).
 | E14 | Re-sealing to a recipient's new key does not take back the old copy                                            | Read (analysis)   | Stated: after a lost device, cancel and arm again, which makes a new content key (§10)                                                                                                                           |
 | E15 | What a hostile server can and cannot do                                                                        | Read (analysis)   | §10; hold back, delay and bring forward are accepted (design §3) and named as R12                                                                                                                                |
 | E16 | Notices and what they carry (design §5)                                                                        | Read              | A pointer only, in an unencrypted room the bot owns; nothing names the owner, the label, other people or any time (§11)                                                                                          |
+| E17 | `randomBytes` asked WebCrypto for more than 65,536 bytes at once, so padding to 256 KiB threw                  | Run; test         | Fixed in `randomBytes`, which also fixes dead drops over 16 KiB and PR 2's recovery files past 16 KiB (§14)                                                                                                      |
 
 ---
 
@@ -602,17 +606,53 @@ longer current.
 
 `packages/blackout-protocol/src/release/envelopeVectors.ts`, imported by
 path by the tests and not from the package index, like PR 2's. Alice (owner)
-and Bob (recipient) are PR 2's vector identities. Fixed inputs: the release
-id, K, the content nonce, the message, and for each copy the ephemeral
-X25519 scalar, the 32-byte ML-KEM encapsulation seed and the wrap nonce.
-Pinned outputs: the padded message's length, the associated data, the
-content ciphertext and its hash, the commitment, each copy's transcript,
-shared secrets, wrap key, sealed copy, signed bytes and signature, and the
-whole envelope. The test rebuilds every byte string from this record's tables
-with `node:crypto` (X25519 through `KeyObject`s, HKDF through `hkdfSync`,
-AES-256-GCM through `createCipheriv`, Ed25519 through `sign`, SHA-256 through
-`createHash`) and noble's ML-KEM with an explicit seed, which is the only
-ML-KEM in the tree (PR 2's L7).
+and Bob (recipient) are PR 2's vector identities. **Every value is
+synthetic** and protects nothing; each input is a byte range, so anyone can
+make every output again:
+
+| Input            | Value                                                                                              |
+| ---------------- | -------------------------------------------------------------------------------------------------- |
+| Release id       | `7e1f0d2c-3b4a-4596-8a7b-6c5d4e3f2a1b`                                                             |
+| Message          | "Vector release message — synthetic, it protects nothing. ✓" (62 bytes of UTF-8, padded to 1,024)  |
+| Content key K    | the bytes 0xe0, 0xe1, … 0xff                                                                       |
+| Content nonce    | 0xc0 … 0xcb                                                                                        |
+| Alice's own copy | ephemeral X25519 scalar 0x10 … 0x2f; ML-KEM encapsulation seed 0x30 … 0x4f; wrap nonce 0xd0 … 0xdb |
+| Bob's copy       | ephemeral X25519 scalar 0x50 … 0x6f; ML-KEM encapsulation seed 0x70 … 0x8f; wrap nonce 0x90 … 0x9b |
+
+How each output was made: the content with `encryptReleaseContentWith`
+under K and the nonce (padding is deterministic); each ephemeral key by
+importing its scalar as PKCS #8 into WebCrypto; each encapsulation with
+`ml_kem768.encapsulate(the identity's ML-KEM key, the seed)` in
+`@noble/post-quantum` 0.6.1; each copy with `sealReleaseCopyWith` and
+Alice's signing key (Ed25519 is deterministic). Pinned: the associated data,
+the content ciphertext and its hash, the commitment, and for each copy its
+transcript, both shared secrets, the wrap key, the wrapped K, the sealed copy,
+the signed bytes' length and SHA-256, and the signature. **Test**,
+`releaseEnvelope.test.ts`: every one of them is rebuilt from this record's
+tables with `node:crypto` (X25519 through `KeyObject`s, HKDF through
+`hkdfSync`, AES-256-GCM through `createCipheriv`, Ed25519 through `sign`,
+SHA-256 through `createHash`) and noble's ML-KEM with the seed, the only
+ML-KEM in the tree (PR 2's L7); `sealReleaseCopyWith` reproduces both copies;
+both open. The shared sealing function's own test in
+`deaddropPqHybrid.test.ts` uses its own byte ranges (scalar 0x21 … 0x40,
+seed 0x61 … 0x80, nonce 0xa1 … 0xac) and rebuilds its expected values
+rather than pinning them.
+
+**Secret scanners.** Several of these values sit under names a scanner reads
+as secrets: `contentKey`, `ephemeralX25519Scalar`, `mlkemEncapsulationSeed`,
+`x25519SharedSecret`, `mlkemSharedSecret`, `wrapKey`, `wrappedContentKey`,
+`sealedKey` and `signature`, and in the tests, lines that name PR 2's vector
+private keys (`signingPrivateJwk`, `x25519PrivateJwk`, `mlkem768SecretKey`,
+`seeds.ed25519`) or build PKCS #8 keys from them. GitGuardian's pull-request
+check, which scans every commit and does not read `.gitguardian.yaml`
+(release-identities record, §6), will probably flag some of them. They are
+all derived as the table and paragraph above say, from byte ranges, and none
+was renamed, split or weakened for a scanner, so an incident on any of them
+is the operator's to ignore in the GitGuardian dashboard as a test
+credential. gitleaks, which reads `.gitleaksignore`, flagged six vector
+lines, each copy's two shared secrets and its wrap key; they are listed as
+entry 7 of `.gitleaksignore`, with a comment saying why, and a scan of the
+branch then finds nothing.
 
 ## 13. Review before the build
 
@@ -652,6 +692,88 @@ of the release-identities record and the questions below.
     below); the header is signed inside every copy's signature, not
     separately (E7).
 
+## 14. PR 3 as built, part 1: protocol and SDK (`-v44`)
+
+-   **The shared sealing function**,
+    `packages/blackout-protocol/src/deaddrop/crypto/hybridSeal.ts`:
+    `hybridSeal`, `hybridSealWith` (randomness as a parameter, for vectors
+    only) and `hybridOpen`, with the all-zero refusal on both sides
+    (`HybridSealError`). The v2 branches of `encryptDeadDrop` and
+    `decryptDeadDrop` call it with no transcript.
+-   **The envelope**, `packages/blackout-protocol/src/release/envelope.ts`:
+    the labels and bounds of §3 and §7; `parseReleaseHeader`,
+    `parseReleaseCopy` and `parseReleaseEnvelope` (§8); the byte builders of
+    §3 to §6 (transcript, signed bytes, associated data, commitment, content
+    hash, the sealed copy's layout); `encryptReleaseContentWith` and
+    `decryptReleaseContent`; `sealReleaseCopy` and `sealReleaseCopyWith`,
+    which verify the recipient's identity and seal both legs to the verified
+    keys; `buildReleaseEnvelope` (a fresh K and nonce, the owner's copy
+    first, K zeroed afterwards); `releaseSignatureVerifier`, which verifies
+    the owner's identity once and parses each copy it is handed;
+    `openReleaseCopy`, the recipient's checks of §8; and
+    `resealReleaseCopy`, which opens the owner's own copy with every one of
+    those checks before sealing K again. Fixed vectors in
+    `envelopeVectors.ts` (§12).
+-   **When a comparison counts**, `release/comparison.ts`:
+    `releaseComparisonState` and `releaseDirectoryFingerprints`, which
+    computes every fingerprint from an identity it verified for that
+    account (§9).
+-   **The wire contracts**, `deadman/releases.ts`: the arming and re-sealing
+    bodies, the release read, the owner's view of a release, notice counts,
+    the limits, the notice's fixed body, room name and pointer
+    (`parseDeadmanNoticePointer`), and the error codes. `deadman/events.ts`:
+    a release switch has no room (`roomId: null`), and the owner's view
+    gains the release format, when it fired, the release and the notice
+    counts.
+-   **The SDK**, `packages/blackout-sdk/src/deadman/releaseActions.ts`:
+    `createDeadmanReleaseActions(client)` with `armReleaseSwitch`,
+    `resealRecipient`, `listReleases` and `getLimits`. Arming and re-sealing
+    read the directory fresh for the owner and every recipient, refuse
+    (`ReleaseActionError`) before sending anything unless the owner's key is
+    the directory's current one and every recipient's comparison is
+    `current`, and send only the envelope, the timer and the label, or one
+    copy. The routes they call are the second branch's.
+-   **E17, found while building.** WebCrypto's `getRandomValues` fills at most
+    65,536 bytes per call and throws `QuotaExceededError` past that, and
+    `randomBytes` asked for its whole length in one call. `pad()` builds
+    every padded buffer through it, so padding to any bucket past 64 KiB
+    threw: a dead drop over 16 KiB with bucket padding, a release over
+    16,368 bytes, and a recovery file whose contents pass 16,368 bytes, which
+    three key sets do (someone who replaced their release keys twice), or
+    one key set with about 45 comparisons. **Run:** on `e1d4cec964`
+    (develop, with PR 2) `sealRecoveryFile` throws for three key sets. Fixed
+    in `random.ts`, in its own commit so it can go out alone: `randomBytes`
+    fills in 64 KiB calls. **Test:** `deaddropCrypto.test.ts` (a 256 KiB
+    fill, each chunk filled; a dead drop padded to 256 KiB),
+    `releaseRecoveryFile.test.ts` (three key sets seal to the 256 KiB bucket
+    and open); all three fail with the old `randomBytes`.
+-   **Tests** (the client's Vitest suite, `apps/blackout-client/tests/unit/sdk/`):
+    `releaseEnvelope.test.ts`, 101 (the labels; the vectors, rebuilt; a
+    recipient refusing tampered header fields and copy bytes, a copy moved
+    to another release, re-signed by a third party, signed by another key,
+    and owner-signed copies that fail at the wrap, the commitment and the
+    content; mis-addressed copies and missing key sets; small-order and
+    zero X25519; every validator; padding sizes and the cap; building,
+    opening and re-sealing with fresh keys, re-sealing's refusals, and that
+    the old copy still opens (E14); the comparison rule; each smaller check
+    on its own); `releaseEnvelopeActions.test.ts`, 12 (the SDK against a
+    fake API: what arming sends, and every refusal before it sends);
+    `deadmanReleaseContracts.test.ts`, 4; `deaddropPqHybrid.test.ts`, 36 (6
+    new, for the shared function); `deaddropCrypto.test.ts`, 11 (2 new) and
+    `releaseRecoveryFile.test.ts`, 41 (1 new), for E17.
+-   **Every check was removed once, to see a test fail.** 75 checks in
+    `envelope.ts`, `comparison.ts`, `hybridSeal.ts` and the SDK were each
+    taken out in turn (a scratch script outside the repository, which
+    restores the file after each run); each time at least one test failed.
+    Two survived at first, the verifier's and the decryptor's own parsing,
+    which only a direct call reaches, and each has a direct test now. Three
+    checks were removed instead, because another check always made them
+    and no test could tell them apart: the decryptor's padded-length check
+    (the header's parse makes it), the unwrap's 32-byte check on K (the
+    sealed copy's fixed layout makes it), and the opener's account match on
+    the key set (the fingerprint names the account, and the key set's own
+    check takes the account).
+
 ## Decisions for the operator to confirm or veto
 
 1.  The release id is the switch id, a UUID the owner's device picks; a
@@ -678,6 +800,10 @@ of the release-identities record and the questions below.
 
 ## Not verified here
 
+-   That GitGuardian's check on this branch's pull request flags only the
+    synthetic values §12 lists, and that ignoring those incidents turns it
+    green: the check runs only on a pull request, which this work does not
+    open.
 -   Everything about the homeserver is read in the fork's code, not run:
     `is_direct` on a `createRoom` invite (`synapse/handlers/room.py`) and on
     a membership set through the state endpoint
