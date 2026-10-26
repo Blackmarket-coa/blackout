@@ -12,6 +12,8 @@ import {
     checkReleaseKeySet,
     computeSafetyCode,
     createReleaseKeySet,
+    ed25519PublicKeyIsAcceptable,
+    ed25519SignatureIsAcceptable,
     formatReleaseFingerprint,
     formatSafetyCode,
     mlKem768EncapsulationKeyIsWellFormed,
@@ -24,6 +26,7 @@ import {
     setKemProvider,
     signReleaseIdentity,
     verifyReleaseIdentity,
+    x25519KeyIsCanonical,
     type ReleaseIdentity,
     type ReleaseKeySet,
 } from '@blackout/protocol';
@@ -95,6 +98,40 @@ const SMALL_ORDER_X25519 = [
     'edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f',
     'eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f',
 ];
+
+// The y-coordinates of the small-order Ed25519 points, as libsodium lists
+// them: 0, 1, the two of order 8, p - 1, and the unreduced p and p + 1. Each
+// is tried with both sign bits, which covers the other x and "-0".
+const SMALL_ORDER_ED25519 = [
+    '0000000000000000000000000000000000000000000000000000000000000000',
+    '0100000000000000000000000000000000000000000000000000000000000000',
+    '26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc05',
+    'c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac037a',
+    'ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f',
+    'edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f',
+    'eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f',
+];
+
+const withSignBit = (value: string, sign: number): Uint8Array => {
+    const bytes = fromHexString(value);
+    bytes[31] |= sign;
+    return bytes;
+};
+
+/** R = the identity point, S = 0: valid under a small-order key for every message. */
+const universalSignature = (): Uint8Array => {
+    const signature = new Uint8Array(64);
+    signature[0] = 1;
+    return signature;
+};
+
+/** p + k, little-endian, for k in 0..18: the unreduced forms of 0..18. */
+const unreducedFieldElement = (k: number): Uint8Array => {
+    const bytes = new Uint8Array(32).fill(0xff);
+    bytes[0] = 0xed + k;
+    bytes[31] = 0x7f;
+    return bytes;
+};
 
 describe('WebCrypto against the RFC vectors', () => {
     it('signs RFC 8032 §7.1 TEST 1 as the RFC does', async () => {
@@ -367,6 +404,191 @@ describe('verifyReleaseIdentity refuses', () => {
     it.each(SMALL_ORDER_X25519)('the small-order X25519 key %s, even signed', async (key) => {
         const identity = await resignedAlice({ x25519Key: b64(fromHexString(key)) });
         expect(await verifyReleaseIdentity(identity)).toEqual({ ok: false, problem: 'x25519_key' });
+    });
+
+    // L1 (independent review, 2026-10-26).
+    it('a small-order Ed25519 key, which WebCrypto alone accepts with R = identity, S = 0', async () => {
+        // The gap: Node's WebCrypto verifies the universal signature under the
+        // identity point, over the identity's bytes or any other message.
+        const identityPoint = fromHexString(SMALL_ORDER_ED25519[1]);
+        const publicKey = await subtle.importKey('raw', identityPoint, { name: 'Ed25519' }, false, [
+            'verify',
+        ]);
+        for (const message of [
+            fromHexString(ALICE.signedBytesHex),
+            new TextEncoder().encode('blackout-release-seal-signature-v1\0anything'),
+        ]) {
+            expect(
+                await subtle.verify({ name: 'Ed25519' }, publicKey, universalSignature(), message)
+            ).toBe(true);
+        }
+        // The validator refuses the key before WebCrypto sees it.
+        const verify = vi.spyOn(globalThis.crypto.subtle, 'verify');
+        try {
+            expect(
+                await verifyReleaseIdentity({
+                    ...ALICE.identity,
+                    signingKey: b64(identityPoint),
+                    signature: b64(universalSignature()),
+                })
+            ).toEqual({ ok: false, problem: 'signing_key' });
+            expect(verify).not.toHaveBeenCalled();
+        } finally {
+            verify.mockRestore();
+        }
+    });
+
+    it.each(SMALL_ORDER_ED25519.flatMap((y) => [[y, 0x00] as const, [y, 0x80] as const]))(
+        'the small-order Ed25519 key %s with sign bit %i, with the universal signature',
+        async (y, sign) => {
+            const key = withSignBit(y, sign);
+            expect(ed25519PublicKeyIsAcceptable(key)).toBe(false);
+            expect(
+                await verifyReleaseIdentity({
+                    ...ALICE.identity,
+                    signingKey: b64(key),
+                    signature: b64(universalSignature()),
+                })
+            ).toEqual({ ok: false, problem: 'signing_key' });
+        }
+    );
+
+    it('the review’s probe values: y = p + 1, "-0", the identity and the point of order 2', async () => {
+        const probes = [
+            'eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f',
+            '0100000000000000000000000000000000000000000000000000000000000080',
+            '0100000000000000000000000000000000000000000000000000000000000000',
+            'ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f',
+        ];
+        for (const probe of probes) {
+            expect(
+                await verifyReleaseIdentity({
+                    ...ALICE.identity,
+                    signingKey: b64(fromHexString(probe)),
+                    signature: b64(universalSignature()),
+                })
+            ).toEqual({ ok: false, problem: 'signing_key' });
+        }
+    });
+
+    it('an Ed25519 key whose y is not reduced, whatever point it names', async () => {
+        for (let k = 0; k <= 18; k += 1) {
+            for (const sign of [0x00, 0x80]) {
+                const key = unreducedFieldElement(k);
+                key[31] |= sign;
+                expect(ed25519PublicKeyIsAcceptable(key)).toBe(false);
+                expect(
+                    await verifyReleaseIdentity({ ...ALICE.identity, signingKey: b64(key) })
+                ).toEqual({ ok: false, problem: 'signing_key' });
+            }
+        }
+        // Alice's own key passes the same test.
+        expect(ed25519PublicKeyIsAcceptable(fromB64(ALICE.identity.signingKey))).toBe(true);
+    });
+
+    it('a signature whose R has small order, or whose S is not below L, before WebCrypto', async () => {
+        const L = (1n << 252n) + 27742317777372353535851937790883648493n;
+        const real = fromB64(ALICE.identity.signature);
+        let S = 0n;
+        for (let i = 31; i >= 0; i -= 1) S = (S << 8n) | BigInt(real[32 + i]);
+        const withS = (value: bigint): Uint8Array => {
+            const signature = Uint8Array.from(real);
+            let rest = value;
+            for (let i = 0; i < 32; i += 1) {
+                signature[32 + i] = Number(rest & 0xffn);
+                rest >>= 8n;
+            }
+            return signature;
+        };
+        const refusedBeforeWebCrypto: Uint8Array[] = [
+            withS(S + L),
+            withS(L),
+            ...SMALL_ORDER_ED25519.map((y) => {
+                const signature = Uint8Array.from(real);
+                signature.set(fromHexString(y), 0);
+                return signature;
+            }),
+        ];
+        const verify = vi.spyOn(globalThis.crypto.subtle, 'verify');
+        try {
+            for (const signature of refusedBeforeWebCrypto) {
+                expect(ed25519SignatureIsAcceptable(signature)).toBe(false);
+                expect(
+                    await verifyReleaseIdentity({ ...ALICE.identity, signature: b64(signature) })
+                ).toEqual({ ok: false, problem: 'signature' });
+            }
+            expect(verify).not.toHaveBeenCalled();
+        } finally {
+            verify.mockRestore();
+        }
+        // S = L - 1 is in range, so it reaches WebCrypto, which refuses it.
+        expect(ed25519SignatureIsAcceptable(withS(L - 1n))).toBe(true);
+        expect(
+            await verifyReleaseIdentity({ ...ALICE.identity, signature: b64(withS(L - 1n)) })
+        ).toEqual({ ok: false, problem: 'signature' });
+        expect(ed25519SignatureIsAcceptable(real)).toBe(true);
+    });
+
+    // L2 (independent review, 2026-10-26).
+    it('an X25519 key with its top bit set: the same shared secret, another fingerprint', async () => {
+        const key = fromB64(ALICE.identity.x25519Key);
+        const high = Uint8Array.from(key);
+        high[31] |= 0x80;
+        // RFC 7748 masks the bit, so both encodings agree on every secret.
+        const ephemeral = (await subtle.generateKey({ name: 'X25519' }, false, [
+            'deriveBits',
+        ])) as CryptoKeyPair;
+        const secretFor = async (bytes: Uint8Array) =>
+            hex(
+                new Uint8Array(
+                    await subtle.deriveBits(
+                        {
+                            name: 'X25519',
+                            public: await subtle.importKey(
+                                'raw',
+                                bytes,
+                                { name: 'X25519' },
+                                true,
+                                []
+                            ),
+                        } as unknown as AlgorithmIdentifier,
+                        ephemeral.privateKey,
+                        256
+                    )
+                )
+            );
+        expect(await secretFor(high)).toBe(await secretFor(key));
+        expect(x25519KeyIsCanonical(high)).toBe(false);
+        const identity = await resignedAlice({ x25519Key: b64(high) });
+        const deriveBits = vi.spyOn(globalThis.crypto.subtle, 'deriveBits');
+        try {
+            expect(await verifyReleaseIdentity(identity)).toEqual({
+                ok: false,
+                problem: 'x25519_key',
+            });
+            expect(deriveBits).not.toHaveBeenCalled();
+        } finally {
+            deriveBits.mockRestore();
+        }
+    });
+
+    it('an X25519 u-coordinate of p or more, as the review’s probe u = p + 9', async () => {
+        for (let k = 0; k <= 18; k += 1) {
+            const key = unreducedFieldElement(k);
+            expect(x25519KeyIsCanonical(key)).toBe(false);
+            const identity = await resignedAlice({ x25519Key: b64(key) });
+            expect(await verifyReleaseIdentity(identity)).toEqual({
+                ok: false,
+                problem: 'x25519_key',
+            });
+        }
+        // u = 9, the base point, is canonical and contributes.
+        const nine = new Uint8Array(32);
+        nine[0] = 9;
+        expect(x25519KeyIsCanonical(nine)).toBe(true);
+        expect(
+            (await verifyReleaseIdentity(await resignedAlice({ x25519Key: b64(nine) }))).ok
+        ).toBe(true);
     });
 
     it('a key whose X25519 output is all zeros, where an engine returns zeros instead of refusing', async () => {
