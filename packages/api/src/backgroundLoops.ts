@@ -19,8 +19,8 @@ export interface BackgroundLoopsHandle {
 /**
  * Start the API's periodic background-job loops: Twitch bridge resume +
  * chat-ingress idle sweep, the YouTube / Streamlabs pollers, the
- * scheduled-message dispatcher, and the FBM → Matrix sweepers + ACL reconcile
- * loop.
+ * scheduled-message dispatcher, the expired-auth-rows prune, and the FBM →
+ * Matrix sweepers + ACL reconcile loop.
  *
  * Each loop keeps its own env gate (most are opt-in; the scheduled-message
  * dispatcher is on by default), so this is safe to call unconditionally.
@@ -269,6 +269,21 @@ export function startBackgroundLoops(): BackgroundLoopsHandle {
                 return loop;
             }
         );
+    }
+
+    // Expired auth rows: revoked-session denylist entries, pending OAuth link
+    // state and pending OIDC login state are checked for expiry whenever they
+    // are read, but until 2026-10-25 nothing removed them, so the tables only
+    // grew. On by default like the retention sweep (it discharges an
+    // obligation, not a feature); set BLACKOUT_AUTH_ROWS_PRUNE=0 to disable, or
+    // BLACKOUT_AUTH_ROWS_PRUNE_INTERVAL_SECONDS for a custom cadence.
+    if (process.env.BLACKOUT_AUTH_ROWS_PRUNE !== '0') {
+        const intervalMs = intervalMsFromEnv('BLACKOUT_AUTH_ROWS_PRUNE_INTERVAL_SECONDS');
+        launch(import('./services/authRowsPruneScheduler'), ({ startAuthRowsPruneScheduler }) => {
+            const loop = startAuthRowsPruneScheduler(intervalMs);
+            log.info('auth_rows_prune_scheduler_started', { intervalMs });
+            return loop;
+        });
     }
 
     // Dead-man's-switch autonomous sweep. Fires switches whose check-in window
