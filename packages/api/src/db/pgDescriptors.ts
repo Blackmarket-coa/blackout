@@ -433,6 +433,7 @@ const ALL_MAP_NAMES = [
     'accountDeletionTokens',
     'invitationTokens',
     'invitationRedemptions',
+    'invitationAdmissions',
     'burnerIdentities',
     'refreshTokens',
     'revokedSessions',
@@ -586,6 +587,10 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
     incrementInvitationTokenUseCount: upsert('invitationTokens'),
     revokeInvitationToken: upsert('invitationTokens'),
     createInvitationRedemption: upsert('invitationRedemptions'),
+    createInvitationAdmission: upsert('invitationAdmissions'),
+    claimInvitationAdmission: upsert('invitationAdmissions'),
+    // Account deletion removes rows, so the map is reconciled, not upserted.
+    deleteInvitationAdmissionsForUser: resync('invitationAdmissions'),
     createBurnerIdentity: upsert('burnerIdentities'),
     markBurnerIdentityBurned: upsert('burnerIdentities'),
     rotateBurnerIdentity: upsert('burnerIdentities'),
