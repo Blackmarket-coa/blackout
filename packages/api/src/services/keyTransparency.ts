@@ -8,10 +8,13 @@
  *   leaf_hash(d)        = SHA-256(0x00 || d)
  *   node_hash(L, R)     = SHA-256(0x01 || L || R)
  *
- * Used to detect a malicious or compromised homeserver substituting
- * cross-signing keys: every client fetches an inclusion proof for its
- * own published key on session start, and a regular auditor fetches
- * consistency proofs between roots to ensure the log is append-only.
+ * Meant to detect a malicious or compromised homeserver substituting
+ * cross-signing keys: a client would fetch an inclusion proof for its
+ * own published key on session start, and a regular auditor consistency
+ * proofs between roots to ensure the log is append-only. No shipped
+ * Blackout client fetches or checks a proof yet, and the log is unsigned
+ * unless the operator sets a witness seed (docs/security/key-transparency.md
+ * says what is built and what is not).
  *
  * Storage is pluggable via `KeyTransparencyStorage` (see
  * `./keyTransparencyStorage.ts`); the default in-memory adapter keeps
@@ -25,10 +28,7 @@
  */
 
 import { createHash, createPrivateKey, createPublicKey, sign, verify } from 'node:crypto';
-import {
-    InMemoryKtStorage,
-    type KeyTransparencyStorage,
-} from './keyTransparencyStorage';
+import { InMemoryKtStorage, type KeyTransparencyStorage } from './keyTransparencyStorage';
 
 const sha256 = (input: Buffer): Buffer => createHash('sha256').update(input).digest();
 
@@ -54,7 +54,7 @@ export const encodeEntry = (entry: KeyEntry): Buffer =>
             masterKey: entry.masterKey,
             publishedAt: entry.publishedAt,
         }),
-        'utf8',
+        'utf8'
     );
 
 export interface TreeRoot {
@@ -272,7 +272,9 @@ export class KeyTransparencyLog {
 
     consistencyProof(fromSize: number, toSize: number): ConsistencyProof {
         if (fromSize < 0 || fromSize > toSize || toSize > this.leaves.length) {
-            throw new Error(`invalid range fromSize=${fromSize} toSize=${toSize} size=${this.leaves.length}`);
+            throw new Error(
+                `invalid range fromSize=${fromSize} toSize=${toSize} size=${this.leaves.length}`
+            );
         }
         if (fromSize === 0) return { fromSize, toSize, nodes: [] };
         if (fromSize === toSize) return { fromSize, toSize, nodes: [] };
@@ -297,10 +299,7 @@ export class KeyTransparencyLog {
  * combining with each sibling on the appropriate side, then compare the
  * reconstructed root to the head.
  */
-export const verifyInclusion = (
-    proof: InclusionProof,
-    expectedRoot: TreeRoot,
-): boolean => {
+export const verifyInclusion = (proof: InclusionProof, expectedRoot: TreeRoot): boolean => {
     if (proof.treeSize !== expectedRoot.treeSize) return false;
     if (proof.leafIndex < 0 || proof.leafIndex >= proof.treeSize) return false;
 
