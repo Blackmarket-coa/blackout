@@ -1,8 +1,10 @@
 /**
  * X25519 keypair generation + serialization via WebCrypto.
  *
- * Modern browsers (Chrome 124+, Firefox 130+, Safari 17+) and Node 22+ ship
- * X25519 in `crypto.subtle`. No third-party dependency required.
+ * X25519 is in `crypto.subtle` from Chrome 133, Firefox 130, Safari 17 and
+ * Node 16.17, per MDN's browser-compat-data (read 2026-10-26; not tested on
+ * devices: `docs/security/release-identities-2026-10-26.md` §1). No
+ * third-party dependency required.
  */
 
 import { fromBase64, toBase64 } from './encoding';
@@ -33,9 +35,7 @@ export const generateRecipientKeyPair = async (): Promise<DeadDropKeyPair> => {
     };
 };
 
-export const importRecipientPublicKey = async (
-    publicKeyBase64: string
-): Promise<CryptoKey> => {
+export const importRecipientPublicKey = async (publicKeyBase64: string): Promise<CryptoKey> => {
     const raw = fromBase64(publicKeyBase64);
     if (raw.length !== 32) {
         throw new Error(`X25519 public key must be 32 bytes, got ${raw.length}`);
@@ -49,16 +49,10 @@ export const importRecipientPublicKey = async (
     );
 };
 
-export const importRecipientPrivateKey = async (
-    jwk: JsonWebKey
-): Promise<CryptoKey> =>
-    subtle().importKey(
-        'jwk',
-        jwk,
-        { name: 'X25519' } as unknown as AlgorithmIdentifier,
-        false,
-        ['deriveBits']
-    );
+export const importRecipientPrivateKey = async (jwk: JsonWebKey): Promise<CryptoKey> =>
+    subtle().importKey('jwk', jwk, { name: 'X25519' } as unknown as AlgorithmIdentifier, false, [
+        'deriveBits',
+    ]);
 
 export const generateEphemeralKeyPair = async (): Promise<{
     privateKey: CryptoKey;

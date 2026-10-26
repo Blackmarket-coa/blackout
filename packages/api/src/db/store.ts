@@ -29,6 +29,7 @@ import type {
     DeadDropRecord,
     DeadmanSwitchRecord,
     DeadmanSwitchStatus,
+    ReleaseIdentityRecord,
     ForumPostRecord,
     UserRecord,
     VoiceRoomEventRecord,
@@ -213,6 +214,7 @@ type PersistedState = {
     channels: ChannelRecord[];
     deadDrops: DeadDropRecord[];
     deadmanSwitches: DeadmanSwitchRecord[];
+    releaseIdentities: ReleaseIdentityRecord[];
     moderationActions: ModerationActionRecord[];
     creatorStreamAuth: CreatorStreamAuthRecord[];
     streams: StreamRecord[];
@@ -382,6 +384,8 @@ class InMemoryDb {
     channels = new Map<string, ChannelRecord>();
     deadDrops = new Map<string, DeadDropRecord>();
     deadmanSwitches = new Map<string, DeadmanSwitchRecord>();
+    /** Published release identities, current and superseded, keyed by row id. */
+    releaseIdentities = new Map<string, ReleaseIdentityRecord>();
     moderationActions = new Map<string, ModerationActionRecord>();
     creatorStreamAuth = new Map<string, CreatorStreamAuthRecord>();
     streams = new Map<string, StreamRecord>();
@@ -2530,6 +2534,76 @@ class InMemoryDb {
             updatedAt: nowIso(),
         };
         this.deadmanSwitches.set(id, updated);
+        return updated;
+    }
+
+    /** Every release identity the account published, newest first. */
+    listReleaseIdentitiesForAccount(accountId: string): ReleaseIdentityRecord[] {
+        // Erased rows have no account; nothing finds them by one.
+        if (!accountId) return [];
+        return [...this.releaseIdentities.values()]
+            .filter((record) => record.accountId === accountId)
+            .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt) || b.id.localeCompare(a.id));
+    }
+
+    /** The account's current release identity: the newest one not superseded. */
+    getCurrentReleaseIdentity(accountId: string): ReleaseIdentityRecord | undefined {
+        return this.listReleaseIdentitiesForAccount(accountId).find(
+            (record) => !record.supersededAt
+        );
+    }
+
+    /** Mark one identity superseded at `at`; `undefined` if it is unknown or already was. */
+    supersedeReleaseIdentity(id: string, at: string): ReleaseIdentityRecord | undefined {
+        const record = this.releaseIdentities.get(id);
+        if (!record || record.supersededAt) return undefined;
+        const updated: ReleaseIdentityRecord = { ...record, supersededAt: at };
+        this.releaseIdentities.set(id, updated);
+        return updated;
+    }
+
+    /**
+     * Publish an account's release identity. Every identity of the account
+     * not yet superseded is marked superseded first, each as its own write,
+     * so Postgres sees the old row replaced before the new one appears.
+     * Callers check the identity, the account's history and the publish
+     * limits first (`services/releaseIdentities.ts`).
+     */
+    publishReleaseIdentity(
+        input: Omit<ReleaseIdentityRecord, 'publishedAt' | 'supersededAt'>
+    ): ReleaseIdentityRecord {
+        const at = nowIso();
+        for (const existing of this.listReleaseIdentitiesForAccount(input.accountId)) {
+            if (!existing.supersededAt) this.supersedeReleaseIdentity(existing.id, at);
+        }
+        const record: ReleaseIdentityRecord = { ...input, publishedAt: at };
+        this.releaseIdentities.set(record.id, record);
+        return record;
+    }
+
+    /**
+     * Account deletion: blank one release identity, current or superseded:
+     * its keys, signature, fingerprint and account go, and the row keeps only
+     * its id, format version and times. The row stays because this is a
+     * targeted upsert, as `eraseScheduledMessage` and `eraseDeadmanSwitch`
+     * are: the Postgres writer has no targeted delete, and a resync of the
+     * table can delete rows another replica has just written, or write back
+     * stale copies of them.
+     */
+    eraseReleaseIdentity(id: string): ReleaseIdentityRecord | undefined {
+        const record = this.releaseIdentities.get(id);
+        if (!record) return undefined;
+        const updated: ReleaseIdentityRecord = {
+            ...record,
+            accountId: '',
+            signingKey: '',
+            x25519Key: '',
+            mlkem768Key: '',
+            signature: '',
+            fingerprint: '',
+            supersededAt: record.supersededAt ?? nowIso(),
+        };
+        this.releaseIdentities.set(id, updated);
         return updated;
     }
 
@@ -5688,6 +5762,9 @@ export class FileBackedDb extends InMemoryDb {
         this.channels = new Map((parsed.channels ?? []).map((row) => [row.id, row]));
         this.deadDrops = new Map((parsed.deadDrops ?? []).map((row) => [row.id, row]));
         this.deadmanSwitches = new Map((parsed.deadmanSwitches ?? []).map((row) => [row.id, row]));
+        this.releaseIdentities = new Map(
+            (parsed.releaseIdentities ?? []).map((row) => [row.id, row])
+        );
         this.moderationActions = new Map(
             (parsed.moderationActions ?? []).map((row) => [row.id, row])
         );
@@ -6217,6 +6294,7 @@ export class FileBackedDb extends InMemoryDb {
             channels: [...this.channels.values()],
             deadDrops: [...this.deadDrops.values()],
             deadmanSwitches: [...this.deadmanSwitches.values()],
+            releaseIdentities: [...this.releaseIdentities.values()],
             moderationActions: [...this.moderationActions.values()],
             creatorStreamAuth: [...this.creatorStreamAuth.values()],
             streams: [...this.streams.values()],
@@ -6718,6 +6796,26 @@ export class FileBackedDb extends InMemoryDb {
 
     override eraseDeadmanSwitch(id: string): DeadmanSwitchRecord | undefined {
         const updated = super.eraseDeadmanSwitch(id);
+        if (updated) this.persist();
+        return updated;
+    }
+
+    override supersedeReleaseIdentity(id: string, at: string): ReleaseIdentityRecord | undefined {
+        const updated = super.supersedeReleaseIdentity(id, at);
+        if (updated) this.persist();
+        return updated;
+    }
+
+    override publishReleaseIdentity(
+        input: Omit<ReleaseIdentityRecord, 'publishedAt' | 'supersededAt'>
+    ): ReleaseIdentityRecord {
+        const record = super.publishReleaseIdentity(input);
+        this.persist();
+        return record;
+    }
+
+    override eraseReleaseIdentity(id: string): ReleaseIdentityRecord | undefined {
+        const updated = super.eraseReleaseIdentity(id);
         if (updated) this.persist();
         return updated;
     }

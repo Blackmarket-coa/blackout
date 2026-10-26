@@ -91,9 +91,12 @@ import { ConfirmProvider } from './app/components/confirm-dialog';
 import { CrashBoundary } from './app/components/CrashBoundary';
 import { SpecVersionsBootstrap } from './app/components/SpecVersionsBootstrap';
 import { ClientConfigLoader } from './app/hooks/ClientConfigLoader';
+import { installReleaseKemProvider } from './app/features/release-keys/kemProvider';
 
 enableMapSet();
 document.body.classList.add(configClass, varsClass);
+// Release keys need a real ML-KEM-768 provider; the protocol's default throws.
+installReleaseKemProvider();
 
 if ('serviceWorker' in navigator) {
     const swUrl =

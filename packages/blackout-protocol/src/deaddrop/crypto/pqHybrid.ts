@@ -2,9 +2,13 @@
  * Post-quantum hybrid key derivation for the dead-drop sealed box.
  *
  * Combines the existing X25519 ECDH shared secret with an ML-KEM-768
- * KEM shared secret, mixing them in a transcript-bound HKDF following
- * the construction recommended by draft-irtf-cfrg-hpke (HPKE hybrid)
- * and draft-ietf-tls-hybrid-design:
+ * KEM shared secret, mixing them in a transcript-bound HKDF, a
+ * concatenate-then-KDF combiner in the style of
+ * draft-ietf-tls-hybrid-design. It is HPKE-shaped but is not HPKE
+ * (RFC 9180): it is not wire-compatible, has none of HPKE's labeled
+ * derivations, and does not bind the recipient's public key into the
+ * key, which HPKE's DHKEM and X-Wing do
+ * (`docs/security/release-identities-2026-10-26.md` §5, C5 and C6):
  *
  *   ikm     = ec_secret || pq_secret
  *   salt    = ek_x25519 || ek_kyber_ct
@@ -18,9 +22,10 @@
  *
  * The ML-KEM primitive itself is intentionally provided through a
  * `KemProvider` interface rather than implemented inline. ML-KEM-768
- * is not yet in WebCrypto and we must not roll our own; the production
- * provider should be backed by a vetted library
- * (e.g. `@noble/post-quantum`) wired in a follow-up dependency PR.
+ * is not yet in WebCrypto and we must not roll our own. The provider is
+ * `mlKem768Provider` (`mlkem768Provider.ts`, `@noble/post-quantum`);
+ * until `setKemProvider` installs it, the default provider refuses every
+ * call. The client installs it at startup (`installReleaseKemProvider`).
  */
 
 import { hkdfSha256 } from './hkdf';
@@ -119,16 +124,15 @@ export interface DeriveHybridKeyInput {
  *
  * That is, breaking the AEAD requires breaking both legs.
  */
-export const deriveHybridAeadKey = async (
-    input: DeriveHybridKeyInput,
-): Promise<Uint8Array> => {
+export const deriveHybridAeadKey = async (input: DeriveHybridKeyInput): Promise<Uint8Array> => {
     if (input.ecSecret.length === 0) throw new Error('ecSecret must not be empty');
     if (input.pqSecret.length === 0) throw new Error('pqSecret must not be empty');
     const ikm = concat(input.ecSecret, input.pqSecret);
     const salt = concat(input.ephemeralX25519Pub, input.pqCiphertext);
-    const info = input.transcript && input.transcript.length > 0
-        ? concat(PQ_HYBRID_INFO, input.transcript)
-        : PQ_HYBRID_INFO;
+    const info =
+        input.transcript && input.transcript.length > 0
+            ? concat(PQ_HYBRID_INFO, input.transcript)
+            : PQ_HYBRID_INFO;
     return hkdfSha256(ikm, salt, info, 32);
 };
 

@@ -274,10 +274,16 @@ For the source-of-truth triage with tier/owner detail see
     device's copy of your rooms and recent messages and the encryption keys
     that decrypt your messages (the app does not encrypt these stores:
     `initRustCrypto` is called without a storage key or password); the
-    original videos in the device's video vault; and everything else the app
+    original videos in the device's video vault; the release-key store
+    (private release keys and the list of people compared with, see Release
+    keys below) unless its option is ticked; and everything else the app
     keeps in localStorage, such as settings, per-room notification choices,
     recent reactions and GIFs, saved homeservers and the Matrix client's own
     entries.
+-   **"Also delete release keys from this device"** is off by default. Ticked,
+    it deletes every account's release keys and comparisons on the device, and
+    the screen says first that without a recovery file they are gone for good.
+    If that deletion fails, the screen says so and does not reload.
 -   **"Also forget this device's sign-ins"** (labelled "Also sign out" until
     2026-10-26) removes the stored session of every account on the device,
     burner identities included, and the Blackout API token, so the app opens
@@ -317,11 +323,13 @@ For the source-of-truth triage with tier/owner detail see
     `POST /v1/auth/account/delete/request` and `/confirm`.
 -   **State:** Deleting your Blackout account removes the account, its sessions
     and linked services, and cancels and erases your unsent scheduled messages.
-    It does not yet deactivate your Matrix account, and your messages stay in
-    rooms. If an anonymous sign-up used an invitation, the record tying that
-    invitation to your Matrix account is removed too. Where the inviter's list
-    of who joined through their link includes you, that entry stays, showing
-    an internal id where your name was.
+    It removes the release keys you published (their public halves); the
+    private keys on your devices and in your recovery files stay until you
+    remove them. It does not yet deactivate your Matrix account, and your
+    messages stay in rooms. If an anonymous sign-up used an invitation, the
+    record tying that invitation to your Matrix account is removed too. Where
+    the inviter's list of who joined through their link includes you, that
+    entry stays, showing an internal id where your name was.
 
 ### Dead-man's switch (experimental)
 
@@ -365,6 +373,89 @@ For the source-of-truth triage with tier/owner detail see
     [`docs/security/deadman-and-feeds-triage-2026-10-12.md`](docs/security/deadman-and-feeds-triage-2026-10-12.md)):
     the design above. Until it ships, nothing is released and arming stays
     closed.
+
+### Release keys (2026-10-26)
+
+-   **Where:** Settings → Account & identity → Release keys
+    (`apps/blackout-client/src/app/features/release-keys/`), and the API's
+    `/v1/release-identities` routes (`packages/api/src/routes/releaseIdentities.ts`).
+    Format and review:
+    [`docs/security/release-identities-2026-10-26.md`](docs/security/release-identities-2026-10-26.md).
+-   **What they are for:** the dead-man switch release
+    ([`docs/security/deadman-release-design-2026-10-24.md`](docs/security/deadman-release-design-2026-10-24.md)),
+    which is not built yet. You can create release keys, publish their public
+    half, save a recovery file and compare a safety code with someone, but
+    arming a switch stays closed, so nothing is encrypted for these keys yet.
+-   **Lose the device, lose the keys.** The private keys live only on the
+    devices that made them or loaded a recovery file, and in the recovery
+    files you save. A device that is lost, reset, or whose browser deletes
+    the site's data (clearing browsing data does; browsers may also evict a
+    site's storage, Safari among them after a period without a visit) loses
+    them, and Blackout cannot bring them back: it never had them. Creating
+    new keys does not recover old ones, and everyone who compared a code
+    with you has to compare again. Save a recovery file, and save a new one
+    after each comparison: a file holds only the comparisons made before it
+    was saved.
+-   **Signing out leaves them, and so does the panic wipe unless told
+    otherwise.** Signing out never removes release keys from the device, where
+    any code running in the app's origin can read them; the panic wipe removes
+    them only when its "Also delete release keys from this device" is ticked,
+    and it is off by default. "Remove release keys from this device" removes
+    them; on a device other people use, save a recovery file, then remove them
+    before you sign out. Another open tab that showed them keeps them in
+    memory until it is closed or reloaded (the panic wipe reloads only its
+    own tab), though it can no longer save or publish them.
+-   **Recovery file:** encrypted with your passphrase (at least 12
+    characters; argon2id, then AES-256-GCM). Anyone with the file who guesses
+    or learns the passphrase can use your release keys, and Blackout cannot
+    reset a forgotten passphrase. The app asks the browser to download the
+    file; whether that works in the desktop and mobile apps was not tested,
+    so check that the file was saved. The passphrase fields ask the browser
+    not to offer saving the passphrase (`autocomplete="off"`), but browsers
+    may offer it anyway; don't let one save it, as the screen also says.
+    Loading a file whose current key is older than this device's, was
+    replaced, or is neither the server's current key nor one this device
+    holds, asks before it changes which key this device uses.
+-   **What the server sees:** the public half of your keys, and the keys you
+    replaced, which any account signed in on this homeserver can read, and
+    who looked up whom (the Matrix id you look up travels in the request
+    body, not in the URL that proxies log). The server could hand out a key
+    that isn't the person's. A safety-code comparison shows whether the key
+    you were given is theirs, at the time you compare, and only if you read
+    all twelve groups: checking a few is far weaker. Compare in person if you
+    can; on a call, know that a voice can be imitated. A comparison says
+    nothing about keys published later. In a web browser the server also
+    supplies the app's code, which a comparison cannot check.
+-   **Publishing:** creating keys publishes them, and the listing stays until
+    your account is deleted; there is no way to unpublish. An account can
+    publish at most 3 new release keys in any 24 hours, and 1000 in all, and
+    anyone using your account shares that limit with you. The server refuses
+    a key it has seen for your account before, so a published key you
+    replaced can't be made current again. It can't refuse an older key it
+    never saw: release keys carry no sequence number, so a key you replaced
+    before it was ever published (after the daily limit, say) can still be
+    published later, from another device of yours or by someone with access
+    to your account who has it, and it then replaces your newer key for good.
+    Publishing from this app always uses the keys this device stores at that
+    moment, so a tab left open on older keys can't do it. If Blackout's
+    server shows a key for you that you didn't make, someone with access to
+    your account, or the server, published it; the screen says so.
+-   **A lost device:** replacing your release keys doesn't sign it out. End
+    its Matrix session from a Matrix client that lists your account's
+    sessions, or by resetting your password with “Sign out of other
+    devices”; then “Sign out every Blackout session”, on the Release keys
+    screen, ends every Blackout session of your account, this device's
+    included (it gets a new one from its Matrix session). Until both are
+    done, whoever has the device can publish keys of their own in place of
+    yours, which retires yours for good, and can use up the account's 3 a
+    day. An account made with an email and password through Blackout's API
+    keeps that password apart from Matrix: a Matrix reset doesn't change it,
+    and this app has no screen to change it. An API token issued in the same
+    second as the sign-out isn't refused; it expires within 24 hours.
+-   **Only this homeserver:** a Matrix id on another server finds nobody.
+-   **Devices:** a browser or webview needs WebCrypto Ed25519 and X25519 and
+    IndexedDB; the screen says so when one is missing. Support was read from
+    MDN's data, not tested on devices.
 
 ### Admin-only API writes (2026-10-23)
 
