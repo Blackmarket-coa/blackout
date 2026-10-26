@@ -30,20 +30,24 @@ Calls in the apps do not use it (they go through MatrixRTC and lk-jwt-service);
 the web app reads only `GET /voice/rooms/open`.
 
 -   `POST /voice/rooms/create` — create or rehydrate a canopy/channel room (`canopy_voice_rooms` backing model), in a listed canopy, by its moderators and admins.
--   `POST /voice/rooms/join` — join an existing room + mint short-lived LiveKit token (default TTL 300s). Joining does not create a room; a locked room admits moderators and admins only.
--   `POST /voice/token` — mint a token only, for an existing room; a locked room needs a moderator or admin.
+-   `POST /voice/rooms/join` — join an existing room + mint a LiveKit token that lives 120 s (`LIVEKIT_TOKEN_TTL_SECONDS` in `src/services/livekit.ts`; not configurable, and `ttlSeconds` in the request is ignored). Joining does not create a room. The canopy decides who enters: an account it banned is refused (403 `canopy_banned`), an outsider gets in only where the canopy is public (403 `not_canopy_member` otherwise), an account a moderator removed not at all until readmitted (403 `removed_from_room`); a locked room admits moderators and admins only (423 `room_locked` for members).
+-   `POST /voice/token` — mint a token only, for an existing room, under the same entry, removal and lock checks; a standing mute makes the token unable to publish. It does not check the premium subscription that joining does (V5 in the record below, the operator's billing decision).
 -   `POST /voice/rooms/leave` — leave room and log duration.
--   `POST /voice/rooms/moderation/mute|remove|lock` — moderation controls for the canopy's moderators and admins. They record the action in the API (remove also ends the participant's session record); they do not mute or disconnect anyone in LiveKit, and a token already issued stays valid until it expires.
--   `GET /voice/rooms/:canopyId/:channelId/events` — room event feed (join/leave/moderation analytics), for signed-in callers.
+-   `POST /voice/rooms/moderation/lock|mute|remove|readmit` — for the canopy's moderators and admins. `mute` (`muted: false` to unmute), `remove` and `readmit` name a `targetUserId` whose level must be below the moderator's (403 `target_not_below_moderator`; 404 `target_unknown` for an id with no account). Mute mutes the target's published audio tracks in LiveKit and takes away their permission to publish; remove disconnects them. Both are recorded first and outlive the connection: a removed account gets no new token for the room until readmitted, and a muted one's new tokens cannot publish. Tokens already issued are not revoked (the API's live 120 s; LiveKit can refresh a connected client's token), so a removed account's client that kept one can rejoin until it expires (`KNOWN_LIMITATIONS.md`). Without LiveKit configured they do nothing and answer 503 `livekit_not_configured`; if LiveKit fails, the record stands and the answer is 502 `livekit_unavailable`, saying so. Lock refuses new joins and tokens; it does not end connections already made.
+-   `GET /voice/rooms/:canopyId/:channelId/events` — who is in the room, its join/leave/moderation history and the mutes and removals that stand, for joined members of the canopy (403 `forbidden` otherwise, with the same body for a room that does not exist).
 
-A caller's role (`member`, `moderator`, `admin`) comes from the canopy's power
-levels on the homeserver (`src/services/voiceRoleGate.ts`), never from the
-request: `admin` at the level needed to change `m.room.power_levels`,
-`moderator` at the canopy's `kick` level, `member` otherwise. A `role` in the
-request body is ignored. The check needs `MATRIX_HOMESERVER` and an admin
-`MATRIX_BOT_TOKEN`, as canopy listing does; without them, or when the
-homeserver cannot be read, nobody is a moderator and joining an unlocked room
-still works. Record: O4 in
+A caller's role (`member`, `moderator`, `admin`) and whether the canopy admits
+them at all come from the canopy's state on the homeserver
+(`src/services/voiceRoleGate.ts`), never from the request: `admin` at the level
+needed to change `m.room.power_levels`, `moderator` at the canopy's `kick`
+level, `member` otherwise; refused when banned, and when not a member of a
+canopy that is not public. A `role` in the request body is ignored. The check
+needs `MATRIX_HOMESERVER` and an admin `MATRIX_BOT_TOKEN`, as canopy listing
+does; without them, or when the homeserver cannot be read, nobody is a
+moderator, the ban and membership checks cannot run, and joining an unlocked
+room still works (`KNOWN_LIMITATIONS.md`, "Voice rooms in the API"). Moderation
+needs `LIVEKIT_URL`, `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET`. Record: O4 and
+V1 to V7 in
 [`docs/security/capability-header-triage-2026-10-23.md`](../../docs/security/capability-header-triage-2026-10-23.md).
 
 ### Deployment modes

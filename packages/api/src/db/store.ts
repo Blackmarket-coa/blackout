@@ -33,6 +33,8 @@ import type {
     UserRecord,
     VoiceRoomEventRecord,
     VoiceRoomParticipantRecord,
+    VoiceRoomSanctionKind,
+    VoiceRoomSanctionRecord,
     VoteEntryRecord,
     VoteRecord,
     CreatorStreamAuthRecord,
@@ -219,6 +221,7 @@ type PersistedState = {
     canopyVoiceRooms: CanopyVoiceRoomRecord[];
     voiceRoomParticipants: VoiceRoomParticipantRecord[];
     voiceRoomEvents: VoiceRoomEventRecord[];
+    voiceRoomSanctions: VoiceRoomSanctionRecord[];
     marketplaceEntitlements: MarketplaceEntitlementRecord[];
     marketplaceWebhookAudit: MarketplaceWebhookAuditRecord[];
     marketplaceLicenseKeys: MarketplaceLicenseKeyRecord[];
@@ -386,6 +389,7 @@ class InMemoryDb {
     canopyVoiceRooms = new Map<string, CanopyVoiceRoomRecord>();
     voiceRoomParticipants = new Map<string, VoiceRoomParticipantRecord>();
     voiceRoomEvents = new Map<string, VoiceRoomEventRecord>();
+    voiceRoomSanctions = new Map<string, VoiceRoomSanctionRecord>();
     marketplaceEntitlements = new Map<string, MarketplaceEntitlementRecord>();
     marketplaceWebhookAudit = new Map<string, MarketplaceWebhookAuditRecord>();
     marketplaceLicenseKeys = new Map<string, MarketplaceLicenseKeyRecord>();
@@ -2744,6 +2748,66 @@ class InMemoryDb {
         return [...this.voiceRoomEvents.values()]
             .filter((event) => event.roomId === roomId)
             .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    }
+
+    /** The mute or removal (`kind`) that stands against `userId` in the room, if any. */
+    getActiveVoiceRoomSanction(
+        roomId: string,
+        userId: string,
+        kind: VoiceRoomSanctionKind
+    ): VoiceRoomSanctionRecord | undefined {
+        return [...this.voiceRoomSanctions.values()].find(
+            (sanction) =>
+                sanction.roomId === roomId &&
+                sanction.userId === userId &&
+                sanction.kind === kind &&
+                !sanction.liftedAt
+        );
+    }
+
+    listActiveVoiceRoomSanctions(roomId: string): VoiceRoomSanctionRecord[] {
+        return [...this.voiceRoomSanctions.values()]
+            .filter((sanction) => sanction.roomId === roomId && !sanction.liftedAt)
+            .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    }
+
+    /**
+     * Impose `kind` on `userId` in the room. One that already stands is
+     * returned as it is, so repeating a removal does not reset who imposed it
+     * or when.
+     */
+    applyVoiceRoomSanction(input: {
+        roomId: string;
+        userId: string;
+        kind: VoiceRoomSanctionKind;
+        actorId: string;
+    }): VoiceRoomSanctionRecord {
+        const standing = this.getActiveVoiceRoomSanction(input.roomId, input.userId, input.kind);
+        if (standing) return standing;
+        const record: VoiceRoomSanctionRecord = {
+            id: crypto.randomUUID(),
+            roomId: input.roomId,
+            userId: input.userId,
+            kind: input.kind,
+            actorId: input.actorId,
+            createdAt: nowIso(),
+        };
+        this.voiceRoomSanctions.set(record.id, record);
+        return record;
+    }
+
+    /** Lift the `kind` that stands against `userId` in the room; `undefined` when none does. */
+    liftVoiceRoomSanction(
+        roomId: string,
+        userId: string,
+        kind: VoiceRoomSanctionKind,
+        liftedBy: string
+    ): VoiceRoomSanctionRecord | undefined {
+        const standing = this.getActiveVoiceRoomSanction(roomId, userId, kind);
+        if (!standing) return undefined;
+        const lifted: VoiceRoomSanctionRecord = { ...standing, liftedAt: nowIso(), liftedBy };
+        this.voiceRoomSanctions.set(lifted.id, lifted);
+        return lifted;
     }
 
     upsertMarketplaceEntitlement(
@@ -5583,6 +5647,9 @@ export class FileBackedDb extends InMemoryDb {
             (parsed.voiceRoomParticipants ?? []).map((row) => [row.id, row])
         );
         this.voiceRoomEvents = new Map((parsed.voiceRoomEvents ?? []).map((row) => [row.id, row]));
+        this.voiceRoomSanctions = new Map(
+            (parsed.voiceRoomSanctions ?? []).map((row) => [row.id, row])
+        );
         this.marketplaceEntitlements = new Map(
             (parsed.marketplaceEntitlements ?? []).map((row) => [row.id, row])
         );
@@ -6096,6 +6163,7 @@ export class FileBackedDb extends InMemoryDb {
             canopyVoiceRooms: [...this.canopyVoiceRooms.values()],
             voiceRoomParticipants: [...this.voiceRoomParticipants.values()],
             voiceRoomEvents: [...this.voiceRoomEvents.values()],
+            voiceRoomSanctions: [...this.voiceRoomSanctions.values()],
             marketplaceEntitlements: [...this.marketplaceEntitlements.values()],
             marketplaceWebhookAudit: [...this.marketplaceWebhookAudit.values()],
             marketplaceLicenseKeys: [...this.marketplaceLicenseKeys.values()],
@@ -6691,6 +6759,28 @@ export class FileBackedDb extends InMemoryDb {
         const event = super.logVoiceRoomEvent(input);
         this.persist();
         return event;
+    }
+
+    override applyVoiceRoomSanction(input: {
+        roomId: string;
+        userId: string;
+        kind: VoiceRoomSanctionKind;
+        actorId: string;
+    }): VoiceRoomSanctionRecord {
+        const sanction = super.applyVoiceRoomSanction(input);
+        this.persist();
+        return sanction;
+    }
+
+    override liftVoiceRoomSanction(
+        roomId: string,
+        userId: string,
+        kind: VoiceRoomSanctionKind,
+        liftedBy: string
+    ): VoiceRoomSanctionRecord | undefined {
+        const sanction = super.liftVoiceRoomSanction(roomId, userId, kind, liftedBy);
+        if (sanction) this.persist();
+        return sanction;
     }
 
     override upsertMarketplaceEntitlement(

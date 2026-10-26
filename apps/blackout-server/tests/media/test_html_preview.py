@@ -316,10 +316,16 @@ class OpenGraphFromHtmlTestCase(unittest.TestCase):
         self.assertIsNone(tree)
 
     def test_no_tree(self) -> None:
-        """A valid body with no tree in it."""
+        """A body with no HTML in it does not raise and yields no title.
+
+        lxml < 6 found no tree in a lone NUL byte and returned None; lxml 6
+        (libxml2 2.14) recovers it into a document holding only U+FFFD.
+        """
         html = b"\x00"
         tree = decode_body(html, "http://example.com/test.html")
-        self.assertIsNone(tree)
+        if tree is not None:
+            og = parse_html_to_open_graph(tree)
+            self.assertIsNone(og["og:title"])
 
     def test_xml(self) -> None:
         """Test decoding XML and ensure it works properly."""

@@ -444,3 +444,124 @@ upstream.
   (`TestFixupMaxDepthCapBgUpdate`, upstream's; the last assertion builds its
   dict explicitly for this tree's `simple_select_list` typing). Exercised on
   SQLite only.
+
+## 2026-10-25 Python 3.11 floor, dependency relock, pyo3 0.29
+
+Edits outside `blackout_runtime/` for the dependency advisories recorded in
+`docs/security/synapse-dependencies-triage-2026-10-25.md` (repository root).
+Re-check each during any reconciliation with upstream. Upstream made the same
+moves in its own history (Python 3.10+ in 1.142.0, `importlib.resources`, the
+Twisted 24.7+ header and test-harness changes, pyo3 0.29 on develop), so most
+of these converge with upstream rather than diverge from it.
+
+### Python floor and lock
+
+- `pyproject.toml`: `python = "^3.11"` (was `^3.8.0`); `Pillow = ">=13.0.0"`
+  replaces the per-Python split of 2026-10-24. Floors raised to the first
+  release that clears each package's High/Critical advisories: Twisted 26.4.0,
+  pyOpenSSL 26.0.0, cryptography 49.0.0, pyasn1 0.6.4, msgpack 1.2.1, lxml
+  6.1.0, authlib 1.6.12 (also clears its Moderate ones), GitPython 3.2.1 (dev).
+  New explicit floors on transitive packages for the same reason: certifi,
+  urllib3, setuptools, thrift and tornado (jaeger-client's, so they join the
+  `opentracing` and `all` extras), pyjwt (dev), soupsieve (docs).
+  `service-identity` goes to 24.2.0, the first release that does not call
+  pyOpenSSL's `X509.get_extension`, which pyOpenSSL 26 removed.
+- Two bounds: `authlib <1.7`, because 1.7.0 validates id_token claims with
+  joserfc, which rejects the integer `sub` that `oidc.py` accepts and
+  `test_oidc.test_map_userinfo_to_user` covers (upstream's lock is also on
+  1.6.12); `Pympler <1.1`, because 1.1 pulls in `pywin32`, which ships no
+  sdist, and `scripts-dev/check_locked_deps_have_sdists.py` requires one.
+- `poetry.lock`: regenerated from the previous lock with poetry 1.3.2 (the
+  Dockerfile's version) `lock --no-update`, plus `update --lock` for bleach,
+  idna, jinja2, pynacl, requests and zipp (Moderate advisories). 27 packages
+  change version and three drop out; the dev tools keep their versions. black stays on 23.10.1: 26.10.1
+  clears its advisories but reformats 207 fork files. Twisted 26.4.0 still has
+  three High advisories that only the 26.10.0rc1 pre-release fixes, in
+  `twisted.words` and `twisted.conch.telnet`, which Synapse never loads.
+- `tox.ini` (`py311`), `mypy.ini` (`python_version = 3.11`),
+  `synapse/__init__.py` (refuses to start below 3.11), `[tool.black]` and
+  `[tool.cibuildwheel]` targets, `docker/Dockerfile` (build-arg example),
+  `docs/setup/installation.md`, `scripts-dev/build_debian_packages.py`
+  (drops bullseye, focal and jammy, whose Python is below 3.11), and the
+  fork's never-run `.github/workflows/{tests,twisted_trunk,release-artifacts}.yml`.
+- `synapse/util/check_dependencies.py`: `dict`/`set` builtins instead of the
+  `typing.Dict`/`typing.Set` spellings the 2026-10-24 port used for 3.8.
+
+### Library compatibility (production code)
+
+- `synapse/config/_base.py`, `synapse/config/oembed.py`: `pkg_resources` to
+  `importlib.resources`, as upstream has it. setuptools 82 removed
+  `pkg_resources` and the lock takes setuptools to 84.2.1, so Synapse failed
+  at import. `synapse/handlers/send_email.py` drops `parse_version` and the
+  pre-Twisted-21.2 `_NoTLSESMTPSender` branch it selected.
+- `synapse/http/proxy.py`: hop-by-hop headers are compared lowercased
+  (`HOP_BY_HOP_HEADERS_LOWERCASE`, upstream's code). Twisted 26's `Headers`
+  no longer has the private `_canonicalNameCaps()`, so
+  `parse_connection_header_value()` raised for every proxied federation
+  response that carried a `Connection` header.
+- `synapse/handlers/auth.py` (`hash`, `validate_hash`): password + pepper is
+  truncated to 72 bytes before bcrypt, as upstream does. bcrypt 5 raises
+  `ValueError` where 4.x silently truncated. This lock keeps bcrypt 4.0.1, so
+  nothing changes today; the first, full relock took bcrypt to 5.0.0, and
+  existing hashes keep verifying either way.
+
+### Tests
+
+- `pkg_resources` to `importlib.resources` in `tests/rest/client/test_register.py`,
+  `test_account.py` and `tests/push/test_email.py`;
+  `tests/metrics/test_metrics.py` compares versions with `packaging`.
+- Twisted 26 harness changes, ported from upstream: `tests/server.py`
+  (`FakeChannel.writeHeaders` accepts a `Headers` object; `FakeSite` has
+  `_parsePOSTFormSubmission`; the fake resolver is installed after
+  `MemoryReactorClock.__init__()`, which now installs its own; `FakeTransport`
+  has no-op `get/setTcpNoDelay` and `get/setTcpKeepAlive`),
+  `tests/http/server/_base.py` (patches `Deferred.__await__`; Twisted 26 has
+  no `Deferred.__next__`), `tests/http/test_proxyagent.py` (`_hostText`),
+  `tests/logging/test_terse_json.py`, `tests/util/test_async_helpers.py`, and
+  `tests/test_server.py` and `tests/rest/client/test_login.py` read headers
+  through the `Headers` API.
+- `tests/http/test_proxy.py` expects lowercased header names.
+- `tests/rest/client/test_login.py`: the JWT claim assertions accept either
+  quote style, as upstream's do.
+- `tests/media/test_html_preview.py` (`test_no_tree`): lxml 6 (libxml2 2.14)
+  recovers a lone NUL byte into a document instead of returning None; the
+  test now checks that it does not raise and yields no title.
+- `tests/handlers/test_auth.py`: `test_hash_long_password`.
+
+### Rust extension (`synapse_rust`)
+
+- `rust/Cargo.toml`: pyo3 0.20.0 to 0.29.3 (GHSA-36hh-v3qg-5jq4, High),
+  pyo3-log 0.9.0 to 0.13.4, pythonize 0.20.0 to 0.29.0, `abi3-py38` to
+  `abi3-py311`, `rust-version` 1.61.0 to 1.83.0 (pyo3 0.29's MSRV, the highest
+  in the graph). `Cargo.lock`: updated with `cargo update` for pyo3,
+  pyo3-log, pythonize and anyhow (anyhow 1.0.75 had RUSTSEC-2026-0190); cargo
+  1.97 rewrote it in lockfile format 4, which cargo 1.78 and later read. The
+  Dockerfile installs Rust `stable` through rustup.
+- `rust/src/lib.rs`, `rust/src/acl/mod.rs`, `rust/src/push/mod.rs`,
+  `rust/src/push/evaluator.rs`: the pyo3 "Bound" API migration, in the shapes
+  upstream's develop uses for the same code: `&Bound<'_, PyModule>` module
+  arguments, `add_submodule(&child)`, `Vec<PyBackedStr>` constructor
+  arguments, `IntoPyObject` in place of `IntoPy<PyObject>` (pythonize errors
+  propagate instead of `expect`), `FromPyObject<'_, 'py>` with `Borrowed`
+  input and `.cast::<PyString>()` in place of `PyTryFrom`, `PyInt` for
+  `PyLong`, `#[pyclass(from_py_object)]` on `PushRule`/`PushRules` (passed by
+  value from Python) and `skip_from_py_object` on the others, and explicit
+  `#[pyo3(signature = (..., user_id=None, display_name=None))]` on
+  `PushRuleEvaluator.run`/`matches` to keep the implicit `None` defaults pyo3
+  0.20 gave trailing `Option` arguments. No Python-visible behaviour change.
+- Note: `synapse/synapse_rust/__init__.py`, `acl.py` and `push.py` are
+  pure-Python fallbacks that this fork ships _as a package_, and a package
+  directory shadows the compiled `synapse_rust.abi3.so` module beside it, so
+  the extension is built but never imported (`tests/test_rust.py` fails on the
+  unchanged tree for this reason). The pyo3 advisory was therefore in the
+  built artifact, not on any executed path.
+
+## 2026-10-26 legacy FastAPI service pins (`services/blackout-api`)
+
+- `services/blackout-api/requirements.txt`: PyJWT 2.10.1 → 2.15.1, FastAPI
+  0.116.1 → 0.162.0, Starlette pinned at 1.10.0 (it was unpinned, held below
+  0.48 by FastAPI), pytest 8.4.2 → 9.1.1, each past its advisories. This is
+  Blackout's own service with no counterpart upstream, so an upstream sync does
+  not touch it; it is recorded here because it sits outside
+  `blackout_runtime/`. Record:
+  `docs/security/synapse-dependencies-triage-2026-10-25.md` (last section).

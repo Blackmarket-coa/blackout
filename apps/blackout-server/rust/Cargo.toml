@@ -7,7 +7,7 @@ name = "synapse"
 version = "0.1.0"
 
 edition = "2021"
-rust-version = "1.61.0"
+rust-version = "1.83.0"
 
 [lib]
 name = "synapse"
@@ -25,14 +25,17 @@ name = "synapse.synapse_rust"
 anyhow = "1.0.63"
 lazy_static = "1.4.0"
 log = "0.4.17"
-pyo3 = { version = "0.20.0", features = [
+# 0.29.0 fixes GHSA-36hh-v3qg-5jq4 (High) and GHSA-chgr-c6px-7xpp; 0.24.1 fixed
+# GHSA-pph8-gcv7-4qj5. pyo3-log and pythonize must track the same pyo3 line.
+pyo3 = { version = "0.29.3", features = [
     "macros",
     "anyhow",
     "abi3",
-    "abi3-py38",
+    # Synapse requires Python 3.11 or later (pyproject.toml).
+    "abi3-py311",
 ] }
-pyo3-log = "0.9.0"
-pythonize = "0.20.0"
+pyo3-log = "0.13.4"
+pythonize = "0.29.0"
 regex = "1.6.0"
 serde = { version = "1.0.144", features = ["derive"] }
 serde_json = "1.0.85"

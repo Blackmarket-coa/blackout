@@ -14,10 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import datetime
-import os
+import importlib.resources as importlib_resources
 from typing import Any, Dict, List, Tuple
-
-import pkg_resources
 
 from twisted.test.proto_helpers import MemoryReactor
 
@@ -940,8 +938,10 @@ class AccountValidityRenewalByEmailTestCase(unittest.HomeserverTestCase):
 
         config["email"] = {
             "enable_notifs": True,
-            "template_dir": os.path.abspath(
-                pkg_resources.resource_filename("synapse", "res/templates")
+            "template_dir": str(
+                importlib_resources.files("synapse")
+                .joinpath("res")
+                .joinpath("templates")
             ),
             "expiry_template_html": "notice_expiry.html",
             "expiry_template_text": "notice_expiry.txt",

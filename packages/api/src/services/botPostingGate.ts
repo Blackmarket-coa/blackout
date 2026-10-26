@@ -35,9 +35,9 @@
  * `users[mxid] ?? users_default ?? 0` must reach
  * `events['m.room.message'] ?? events_default ?? 0`; with no power-levels
  * event anyone may post. A level that is present but not an integer refuses.
- * The membership and power-level readers are exported for the canopy listing
- * check (`canopyListingGate.ts`) and the voice-room role check
- * (`voiceRoleGate.ts`), so all three read a room's state the same way.
+ * The membership, join-rule and power-level readers are exported for the
+ * canopy listing check (`canopyListingGate.ts`) and the voice-room standing
+ * check (`voiceRoleGate.ts`), so all three read a room's state the same way.
  */
 import { matrixClient, type RoomStateEvent } from '../integrations/matrix-client';
 import { matrixUserIdFor } from './userIdentity';
@@ -67,6 +67,13 @@ const refuse = (reason: BotPostRefusal): BotPostVerdict => ({ ok: false, reason 
 
 export const membershipOf = (state: RoomStateEvent[], mxid: string): unknown =>
     state.find((e) => e.type === 'm.room.member' && e.state_key === mxid)?.content?.membership;
+
+/** The room's join rule (`m.room.join_rules`, `join_rule`); `undefined` when absent or not a string. */
+export const joinRuleOf = (state: RoomStateEvent[]): string | undefined => {
+    const rule = state.find((e) => e.type === 'm.room.join_rules' && !e.state_key)?.content
+        ?.join_rule;
+    return typeof rule === 'string' ? rule : undefined;
+};
 
 /**
  * A power level as an integer; `undefined` when absent, `null` when present
