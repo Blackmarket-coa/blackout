@@ -459,8 +459,9 @@ do not fit; bucket padding) and `releaseIdentityActions.test.ts`. The API's:
 `packages/api/test/release-identities.integration.test.ts` (the routes
 against the client's vectors, the server-name and exact-match rules, the
 history limit, deletion, both exports), `release-identities-postgres.integration.test.ts`
-(PGlite across a restart: history and deletion) and a case in
-`auth-lifecycle.integration.test.ts`. The screen's are under
+(PGlite across a restart: history and deletion),
+`release-identities-file.integration.test.ts` (the same through the file
+store) and a case in `auth-lifecycle.integration.test.ts`. The screen's are under
 `apps/blackout-client/tests/unit/features/release-keys/`. Every check those
 tests stand for was also removed, one at a time, to see a test fail; the
 two checks that survived that at first (the all-zero X25519 output, which
