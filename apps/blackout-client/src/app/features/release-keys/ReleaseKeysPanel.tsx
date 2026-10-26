@@ -14,6 +14,7 @@ import {
     writeRecoveryFile,
     type ReleaseIdentityDirectoryEntry,
     type ReleaseRecoveryContents,
+    type StoredReleaseKeySet,
 } from '@blackout/protocol';
 import { BlackoutSdkError, createReleaseIdentityActions, type ApiClient } from '@blackout/sdk';
 import {
@@ -21,6 +22,7 @@ import {
     indexedDbReleaseKeyStore,
     mergeRecoveryContents,
     planRecoveryLoad,
+    sameDeviceRecord,
     sameReleaseIdentity,
     toRecoveryContents,
     withComparison,
@@ -129,6 +131,22 @@ export const rolledBackWarning = (fingerprint: string): string =>
     'again, and lists your newer key as replaced. Its API refuses to do that for any account ' +
     'that asks, so it was done on the server itself, or by a fault in it. Tell the people you ' +
     'compared codes with, outside Blackout, not to rely on your key until you compare again.';
+
+/** A tab tried to publish a key set the store no longer has as current (N1). */
+export const CHANGED_ELSEWHERE_NOT_PUBLISHED =
+    'Nothing was published: the release keys on this device were changed or removed in ' +
+    'another tab or window after this tab showed them. Check what is shown now before you ' +
+    'publish.';
+
+/** Added to the saved notice when the keys changed after this tab showed them (N3). */
+export const SAVED_STORED_KEYS =
+    'The release keys on this device had changed in another tab or window, so the file holds ' +
+    'the ones shown now.';
+
+/** Saving found no release keys on this device any more (N3). */
+export const NO_KEYS_TO_SAVE =
+    'Nothing was saved: there are no release keys on this device any more. They were removed ' +
+    'in another tab or window, or by the panic wipe.';
 
 export const RELEASE_KEY_REPLACED_ON_SERVER =
     "Blackout's server lists this device's key as replaced, so it can't be published again. " +
@@ -397,9 +415,34 @@ export const ReleaseKeysPanel = ({
     const serverName = me?.matrixId?.slice(me.matrixId.indexOf(':') + 1) ?? 'this server';
 
     const publish = useCallback(
-        async (record: DeviceReleaseKeys) => {
-            const keySet = currentKeySet(record);
-            if (!keySet) return;
+        async (intended: StoredReleaseKeySet) => {
+            // N1 of the re-check: publish what the store holds as current now,
+            // never a copy this tab kept. A key set the store has since
+            // replaced, or removed, is refused, so a stale tab cannot retire a
+            // newer key by publishing an older one the server never saw.
+            let stored: DeviceReleaseKeys | null;
+            try {
+                stored = await store.load(intended.identity.accountId);
+            } catch (cause) {
+                setNotice({
+                    tone: 'error',
+                    text: `Nothing was published: this device's release keys could not be read: ${errorText(
+                        cause
+                    )}`,
+                });
+                return;
+            }
+            const keySet = currentKeySet(stored);
+            if (!keySet || !sameIdentity(keySet.identity, intended.identity)) {
+                setDevice(stored);
+                setNotice({ tone: 'error', text: CHANGED_ELSEWHERE_NOT_PUBLISHED });
+                try {
+                    setMe(await actions.getMine());
+                } catch {
+                    // Keep what the screen had.
+                }
+                return;
+            }
             try {
                 setMe(await actions.publishMine(keySet.identity));
                 setNotice({
@@ -439,7 +482,7 @@ export const ReleaseKeysPanel = ({
                 });
             }
         },
-        [actions]
+        [actions, store]
     );
 
     const createKeys = async () => {
@@ -457,7 +500,8 @@ export const ReleaseKeysPanel = ({
             );
             setDevice(next);
             setComparing({ status: 'idle' });
-            if (next) await publish(next);
+            const created = currentKeySet(next);
+            if (created) await publish(created);
             if (replacing) setReplaced(true);
         } catch (cause) {
             setNotice({ tone: 'error', text: `Creating release keys failed: ${errorText(cause)}` });
@@ -467,10 +511,11 @@ export const ReleaseKeysPanel = ({
     };
 
     const publishNow = async () => {
-        if (!device) return;
+        const shown = currentKeySet(device);
+        if (!shown) return;
         setBusy('publish');
         try {
-            await publish(device);
+            await publish(shown);
         } finally {
             setBusy(null);
         }
@@ -518,8 +563,18 @@ export const ReleaseKeysPanel = ({
         setProgress(0);
         setNotice(null);
         try {
+            // N3 of the re-check: what the store holds now, not this tab's
+            // copy, which another tab may have changed or the panic wipe
+            // emptied.
+            const stored = await store.load(device.accountId);
+            const changed = !sameDeviceRecord(stored, device);
+            setDevice(stored);
+            if (!stored) {
+                setNotice({ tone: 'error', text: NO_KEYS_TO_SAVE });
+                return;
+            }
             const text = await writeRecoveryFile(
-                toRecoveryContents(device, now()),
+                toRecoveryContents(stored, now()),
                 savePassphrase,
                 {
                     onProgress: setProgress,
@@ -532,7 +587,8 @@ export const ReleaseKeysPanel = ({
                 tone: 'info',
                 text:
                     `Your browser was asked to save ${RECOVERY_FILE_NAME}. Check that it was ` +
-                    'saved, and keep it somewhere other than this device.',
+                    'saved, and keep it somewhere other than this device.' +
+                    (changed ? ` ${SAVED_STORED_KEYS}` : ''),
             });
         } catch (cause) {
             setNotice({ tone: 'error', text: recoveryErrorText(cause) });

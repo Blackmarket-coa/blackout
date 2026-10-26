@@ -4,16 +4,19 @@
  * store: the independent review's M3. Each tab holds its own copy of the
  * device's record; before the fix, a tab built its next record from that
  * copy and wrote it whole, so a stale tab could erase keys another tab had
- * just made, or bring back keys another tab had removed.
+ * just made, or bring back keys another tab had removed. The re-check's N1
+ * and N3 are the same for publishing and saving a recovery file.
  */
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { IDBFactory } from 'fake-indexeddb';
 import {
+    createReleaseKeySet,
     mlKem768Provider,
     NULL_KEM_PROVIDER,
+    readRecoveryFile,
     setKemProvider,
     verifyReleaseIdentity,
     type ReleaseIdentity,
@@ -21,10 +24,12 @@ import {
 } from '@blackout/protocol';
 import { BlackoutSdkError, type ApiClient, type ApiRequest } from '@blackout/sdk';
 import {
+    CHANGED_ELSEWHERE_NOT_PUBLISHED,
     CHANGED_ELSEWHERE_NOT_RECORDED,
     CHANGED_ELSEWHERE_NOT_REMOVED,
     COMPARED_WITH_OLD_KEY,
     ReleaseKeysPanel,
+    SAVED_STORED_KEYS,
 } from '../../../../src/app/features/release-keys/ReleaseKeysPanel';
 import {
     currentKeySet,
@@ -55,6 +60,7 @@ const entryFor = (
 /** One server for both tabs. */
 const fakeApi = () => {
     let mine = entryFor(ACCOUNT, '@alice:test.local', ALICE.identity, ALICE.fingerprint);
+    const published: ReleaseIdentity[] = [];
     const client: ApiClient = async <T,>(request: ApiRequest): Promise<T> => {
         if (request.method === 'GET' && request.path === '/v1/release-identities/me') {
             return mine as T;
@@ -63,6 +69,7 @@ const fakeApi = () => {
             const { identity } = request.body as { identity: ReleaseIdentity };
             const check = await verifyReleaseIdentity(identity, { accountId: ACCOUNT });
             if (!check.ok) throw new BlackoutSdkError('HTTP_REQUEST_FAILED', '400', 'fatal', 400);
+            published.push(identity);
             mine = entryFor(ACCOUNT, '@alice:test.local', identity, check.fingerprint);
             return { ...mine, changed: true } as T;
         }
@@ -80,12 +87,15 @@ const fakeApi = () => {
         }
         throw new Error(`unexpected request ${request.method} ${request.path}`);
     };
-    return client;
+    return { client, published, current: () => mine.current };
 };
 
 type Tab = { container: HTMLDivElement; root: ReactDOM.Root };
 
-const openTab = async (apiClient: ApiClient): Promise<Tab> => {
+const openTab = async (
+    apiClient: ApiClient,
+    saveFile: (name: string, contents: string) => void = () => undefined
+): Promise<Tab> => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = ReactDOM.createRoot(container);
@@ -94,7 +104,7 @@ const openTab = async (apiClient: ApiClient): Promise<Tab> => {
             <ReleaseKeysPanel
                 apiClient={apiClient}
                 checkSupport={async () => true}
-                saveFile={() => undefined}
+                saveFile={saveFile}
                 now={() => NOW}
             />
         );
@@ -198,13 +208,16 @@ afterEach(() => {
     Reflect.deleteProperty(globalThis, 'indexedDB');
 });
 
-const openBoth = async () => {
-    const api = fakeApi();
-    const a = await openTab(api);
-    const b = await openTab(api);
+const openBoth = async (
+    loaded = 'Compare a safety code',
+    api = fakeApi(),
+    saveFileInB?: (name: string, contents: string) => void
+) => {
+    const a = await openTab(api.client);
+    const b = await openTab(api.client, saveFileInB);
     tabs = [a, b];
     for (const tab of tabs) {
-        await waitFor(tab, () => text(tab).includes('Compare a safety code'), 'the loaded screen');
+        await waitFor(tab, () => text(tab).includes(loaded), 'the loaded screen');
     }
     return [a, b] as const;
 };
@@ -263,6 +276,78 @@ describe('Settings → Release keys in two tabs', () => {
         expect(await indexedDbReleaseKeyStore.load(ACCOUNT)).toBeNull();
         expect(text(b)).toContain(CHANGED_ELSEWHERE_NOT_RECORDED);
     }, 60_000);
+
+    it('a stale tab does not publish a key another tab replaced before it was published', async () => {
+        // N1 of the re-check: this device made a key the server never saw
+        // (the daily limit, say), so both tabs offer to publish it.
+        const unpublished = await createReleaseKeySet(ACCOUNT, new Date('2026-10-26T11:00:00Z'));
+        await indexedDbReleaseKeyStore.update(ACCOUNT, (stored) =>
+            withNewCurrentKeySet(stored, ACCOUNT, unpublished, NOW)
+        );
+        const api = fakeApi();
+        const [a, b] = await openBoth("Publish this device's key", api);
+
+        // Tab A replaces it and publishes the newer key.
+        await click(a, 'Create and publish new release keys');
+        await click(a, 'Create and publish new keys');
+        await waitFor(
+            a,
+            () =>
+                ownFingerprint(a) !== unpublished.fingerprint &&
+                text(a).includes("Published: Blackout's server has this key for you."),
+            'the newer key in tab A',
+            20_000
+        );
+        const made = ownFingerprint(a);
+        expect(api.current()?.fingerprint).toBe(made);
+
+        // Tab B still shows the older one and its publish button.
+        expect(ownFingerprint(b)).toBe(unpublished.fingerprint);
+        await click(b, "Publish this device's key");
+        await waitFor(
+            b,
+            () =>
+                text(b).includes(CHANGED_ELSEWHERE_NOT_PUBLISHED) ||
+                text(b).includes("Published: Blackout's server now has"),
+            'tab B to settle'
+        );
+        // The server never got the older key, and still has the newer one.
+        expect(
+            api.published.some(
+                (identity) => JSON.stringify(identity) === JSON.stringify(unpublished.identity)
+            )
+        ).toBe(false);
+        expect(api.current()?.fingerprint).toBe(made);
+        expect(text(b)).toContain(CHANGED_ELSEWHERE_NOT_PUBLISHED);
+        await waitFor(b, () => ownFingerprint(b) === made, 'tab B to show the newer key');
+    }, 60_000);
+
+    it('a recovery file saved in a stale tab holds the keys stored now, not that tab’s copy', async () => {
+        // N3 of the re-check.
+        const saveFile = vi.fn<(name: string, contents: string) => void>();
+        const [a, b] = await openBoth(undefined, undefined, saveFile);
+        const made = await replaceKeys(a);
+
+        const passphrase = 'a long passphrase for this test';
+        await type(b, 'Passphrase', passphrase);
+        await type(b, 'Passphrase again', passphrase);
+        await click(b, 'Save a recovery file');
+        await waitFor(b, () => saveFile.mock.calls.length === 1, 'the saved file', 60_000);
+
+        const contents = await readRecoveryFile(saveFile.mock.calls[0][1], passphrase, {
+            accountId: ACCOUNT,
+        });
+        const inFile = contents.keySets.map((set) => [set.fingerprint, set.status]);
+        expect(inFile).toEqual(
+            (await indexedDbReleaseKeyStore.load(ACCOUNT))?.keySets.map((set) => [
+                set.fingerprint,
+                set.status,
+            ])
+        );
+        expect(contents.keySets.find((set) => set.status === 'current')?.fingerprint).toBe(made);
+        expect(text(b)).toContain(SAVED_STORED_KEYS);
+        await waitFor(b, () => ownFingerprint(b) === made, 'tab B to show the newer key');
+    }, 180_000);
 
     it('a stale tab’s Remove does not delete keys another tab made since', async () => {
         const [a, b] = await openBoth();
