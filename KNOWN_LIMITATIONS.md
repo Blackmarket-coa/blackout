@@ -402,7 +402,9 @@ For the source-of-truth triage with tier/owner detail see
     them only when its "Also delete release keys from this device" is ticked,
     and it is off by default. "Remove release keys from this device" removes
     them; on a device other people use, save a recovery file, then remove them
-    before you sign out.
+    before you sign out. Another open tab that showed them keeps them in
+    memory until it is closed or reloaded (the panic wipe reloads only its
+    own tab), though it can no longer save or publish them.
 -   **Recovery file:** encrypted with your passphrase (at least 12
     characters; argon2id, then AES-256-GCM). Anyone with the file who guesses
     or learns the passphrase can use your release keys, and Blackout cannot
@@ -410,9 +412,10 @@ For the source-of-truth triage with tier/owner detail see
     file; whether that works in the desktop and mobile apps was not tested,
     so check that the file was saved. The passphrase fields ask the browser
     not to offer saving the passphrase (`autocomplete="off"`), but browsers
-    may offer it anyway; don't let one save it. Loading a file whose current
-    key is older than this device's, or was replaced, asks before it changes
-    which key this device uses.
+    may offer it anyway; don't let one save it, as the screen also says.
+    Loading a file whose current key is older than this device's, was
+    replaced, or is neither the server's current key nor one this device
+    holds, asks before it changes which key this device uses.
 -   **What the server sees:** the public half of your keys, and the keys you
     replaced, which any account signed in on this homeserver can read, and
     who looked up whom (the Matrix id you look up travels in the request
@@ -425,11 +428,30 @@ For the source-of-truth triage with tier/owner detail see
     supplies the app's code, which a comparison cannot check.
 -   **Publishing:** creating keys publishes them, and the listing stays until
     your account is deleted; there is no way to unpublish. An account can
-    publish at most 3 new release keys in any 24 hours, and 1000 in all. A
-    key you replaced can never be made current again: the server refuses it.
-    If Blackout's server shows a key for you that you didn't make, someone
-    with access to your account, or the server, published it; the screen
-    says so.
+    publish at most 3 new release keys in any 24 hours, and 1000 in all, and
+    anyone using your account shares that limit with you. The server refuses
+    a key it has seen for your account before, so a published key you
+    replaced can't be made current again. It can't refuse an older key it
+    never saw: release keys carry no sequence number, so a key you replaced
+    before it was ever published (after the daily limit, say) can still be
+    published later, from another device of yours or by someone with access
+    to your account who has it, and it then replaces your newer key for good.
+    Publishing from this app always uses the keys this device stores at that
+    moment, so a tab left open on older keys can't do it. If Blackout's
+    server shows a key for you that you didn't make, someone with access to
+    your account, or the server, published it; the screen says so.
+-   **A lost device:** replacing your release keys doesn't sign it out. End
+    its Matrix session from a Matrix client that lists your account's
+    sessions, or by resetting your password with “Sign out of other
+    devices”; then “Sign out every Blackout session”, on the Release keys
+    screen, ends every Blackout session of your account, this device's
+    included (it gets a new one from its Matrix session). Until both are
+    done, whoever has the device can publish keys of their own in place of
+    yours, which retires yours for good, and can use up the account's 3 a
+    day. An account made with an email and password through Blackout's API
+    keeps that password apart from Matrix: a Matrix reset doesn't change it,
+    and this app has no screen to change it. An API token issued in the same
+    second as the sign-out isn't refused; it expires within 24 hours.
 -   **Only this homeserver:** a Matrix id on another server finds nobody.
 -   **Devices:** a browser or webview needs WebCrypto Ed25519 and X25519 and
     IndexedDB; the screen says so when one is missing. Support was read from

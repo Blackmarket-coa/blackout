@@ -352,9 +352,11 @@ and nothing provides it), so the identities and routes should not live under
     for the identity that is the account's current one when it is used, and
     becomes stale once the device has seen a newer identity for that account
     or the directory lists the compared fingerprint as superseded; the client
-    then asks for a new comparison. The API now refuses to make a replaced
-    identity current again, but a compelled server can serve any key, so this
-    check is the client's. `release-identities-2026-10-26.md`, H1.)_
+    then asks for a new comparison. The API now refuses an identity it has
+    seen before, but not an older one it never saw, since identities carry no
+    sequence number, and a compelled server can serve any key, so this check
+    is the client's. `release-identities-2026-10-26.md`, H1, and the re-check's
+    N1.)_
 3.  **Arming.** The client picks a release id and a random 256-bit content key
     K, and encrypts the padded message with AES-256-GCM under K, with the
     release id and owner id as associated data. For each recipient, and for
@@ -689,8 +691,9 @@ BO-1.
         it). SDK calls to publish and fetch.
     -   API: `PUT /v1/release-identities/me` (one's own; its signature is
         checked; the previous one is kept as superseded, every one of them, and
-        a replaced one is never made current again; at most 3 new ones in any
-        24 hours), `GET /v1/release-identities/:accountId`, and a lookup by
+        one the server has seen is never made current again, though an older
+        one it never saw can be; at most 3 new ones in any 24 hours),
+        `GET /v1/release-identities/:accountId`, and a lookup by
         Matrix id on this server only (`POST /v1/release-identities/lookup`,
         the id in the body); table `release_identities`; erased with the
         account. _(The 2026-10-26 independent review changed the history rule,

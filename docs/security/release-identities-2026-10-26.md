@@ -264,10 +264,13 @@ is used, and treat it as stale once the device has seen a newer identity for
 that account (any other identity the directory served as current after the
 comparison), or the directory lists the compared fingerprint as superseded;
 the client then asks for a new comparison rather than sealing to the old key.
-The API now refuses to make a replaced identity current again
+The API now refuses an identity it has seen before for the account
 (`release_identity_reused`), which stops an honest server from being used to
-roll a key back, but a compelled server can serve whatever it likes, so the
-client's rule is the one that holds.
+put back a published key that was replaced. It cannot refuse an older key it
+never saw, one replaced on a device before it was published, since nothing in
+the signed bytes orders identities (the re-check's N1, §5 item 10), and a
+compelled server can serve whatever it likes, so the client's rule is the one
+that holds.
 
 ## 3. The recovery file
 
@@ -482,6 +485,19 @@ whose transcript is empty, lack it, which belongs to the dead-drop work.
 9.  **Every release signature passes `ed25519SignatureIsAcceptable`** before
     WebCrypto verifies it (R not of small order, S below L), and every key it
     is verified under passed `verifyReleaseIdentity` (L1).
+10. **Identity v1 has no sequence number** (added by the re-check, N1).
+    Nothing in the signed bytes orders an account's identities, so neither
+    the API nor a client can tell that an identity it has not seen is older
+    than one it has: the API refuses only identities it has seen. Before
+    anything is sealed to these keys, decide whether identity v2 carries an
+    order in its signed bytes, a sequence number or the fingerprint of the
+    identity it replaces, so that the server and every client can refuse an
+    older key whoever publishes it (a device that was offline, or loaded an
+    old recovery file, would then have to learn the latest one first); or
+    whether `PUT` takes the fingerprint of the identity the caller means to
+    replace and refuses the publish when that is not the current one, which
+    stops an honest stale device but not someone who reads the current one
+    first. Item 8's rule is what holds until then.
 
 **C15, for the operator.** These signatures are transferable: anyone holding
 a recipient's copy and the owner's public identity can show that the owner's
@@ -517,6 +533,8 @@ would be identity v2.
 -   **SDK:** `createReleaseIdentityActions` (`getMine`, `publishMine`,
     `getForAccount`, `lookupByMatrixId`); `publishMine` sends the six public
     fields only, and `lookupByMatrixId` posts the Matrix id in the body.
+    `createAuthActions` gained `revokeAllSessions`, for
+    `POST /v1/auth/sessions/revoke` (the re-check's N2).
 -   **API:** `GET` and `PUT /v1/release-identities/me`,
     `GET /v1/release-identities/:accountId`, and
     `POST /v1/release-identities/lookup` with `{ matrixId }` (a `GET` with
@@ -553,12 +571,16 @@ would be identity v2.
     and in that case who could have published it (H1); save and load a
     recovery file; compare a code with someone by Matrix id, reading all
     twelve groups (M1); see whom this device compared with; replace the keys
-    (with what else to do after losing a device, H1) or remove them from the
-    device, each after a confirmation. The screen checks every identity it
-    fetches, refuses an answer for another Matrix id than the one typed
-    (L3), and computes the code from its own fingerprints, never the
-    server's. `installReleaseKemProvider()` (`setKemProvider(mlKem768Provider)`)
-    runs at startup in `main.tsx`. The screen says what the keys are for and
+    or remove them from the device, each after a confirmation; and, under
+    "If a device is lost", see what ends a lost device's access and sign out
+    every Blackout session (the re-check's N2). Publishing and saving a
+    recovery file use what the device stores at that moment, not the tab's
+    copy (N1, N3). The screen checks every identity it fetches, shows the
+    fingerprints it computes from them, refuses an answer for another Matrix
+    id than the one typed (L3), and computes the code from its own
+    fingerprints, never the server's.
+    `installReleaseKemProvider()` (`setKemProvider(mlKem768Provider)`) runs
+    at startup in `main.tsx`. The screen says what the keys are for and
     that arming isn't available. Settings' account deletion and export text
     now mention release keys, and the policy changelog
     (`docs/legal/CHANGELOG.md`) records the new data the server keeps.
@@ -607,14 +629,19 @@ expression) were rewritten instead of listed.
 2.  A recovery passphrase needs 12 characters at least; nothing else is
     required of it, and the app does not suggest one (§3).
 3.  An account may publish 3 new identities in any 24 hours and keep 1000 in
-    all; every identity is kept, and a replaced one is never made current
-    again (M2, H1). The numbers are the operator's to change: three covers a
+    all; every identity is kept, and one the server has seen is never made
+    current again (M2, H1), though an older one it never saw can be (the
+    re-check's N1). The numbers are the operator's to change: three covers a
     first publish and two replacements in a day, and holds a buggy client or
     a stolen session to three a day; 1000 takes 334 days at that rate. Past
     1000, publishing is refused, a lock again, but not one that honest use
-    reaches. Requiring a recent sign-in to publish, which the review also
-    suggested, is not built. (Until the review: at most 32 identities, then
-    refused for good.)
+    reaches. The limits are per account, so a stolen session shares them with
+    the owner and can use the day's three first, and a key it publishes
+    retires the owner's for good, since the server then refuses the owner's
+    key as one it has seen: H1's trade-off, which leaves the owner to make new
+    keys once that session is ended (N2). Requiring a recent sign-in to
+    publish, which the review also suggested, is not built. (Until the review:
+    at most 32 identities, then refused for good.)
 4.  Anyone signed in on this homeserver can read anyone's current and replaced
     identities (C14). A narrower rule would need a contact model the API
     does not have.
@@ -660,11 +687,23 @@ expression) were rewritten instead of listed.
 17. Only the Matrix-id lookup moved to a `POST` (L5); the read by account id
     is still a `GET` with the opaque account id in the path, which the proxy
     logs with the caller's address.
-18. Blackout's own app has no screen that signs out other sessions, so the
-    guidance after replacing keys names a Matrix client that lists sessions,
-    or the password reset with "Sign out of other devices" (H1); a Blackout
-    API token already issued to the lost device stays valid until it
-    expires, up to 24 hours.
+18. The Release keys screen's "If a device is lost" says what ends a lost
+    device's access, in order: its Matrix session, from a Matrix client that
+    lists sessions or by a password reset with "Sign out of other devices";
+    then "Sign out every Blackout session", which calls
+    `POST /v1/auth/sessions/revoke` and ends every Blackout API session of the
+    account, this device's included (the re-check's N2). Blackout's app still
+    has no screen that ends Matrix sessions, and none that changes the
+    separate API password of an account made through `/v1/auth/register`:
+    the API's `/v1/auth/password/change` and `/v1/auth/password/reset/request`
+    and `/confirm` exist, and no client calls them. The button sits on the
+    Release keys screen because that is where the guidance is; it acts on the
+    whole account. (Until the re-check, the guidance named the Matrix steps
+    only, and a Blackout API token already issued to the lost device stayed
+    valid until it expired, up to 24 hours.)
+19. Identity v1 carries no sequence number, so the API cannot order an
+    account's identities (§5, item 10): decide before PR 3 whether v2 carries
+    one, or whether `PUT` takes the identity it replaces.
 
 ## Not verified here
 
@@ -687,6 +726,11 @@ expression) were rewritten instead of listed.
     fake-indexeddb); the targeted erasure on a deployment with more than one
     replica (the test uses two stores on one PGlite, without a change
     transport); the cost of iterated hashing on phones.
+-   From the re-check: that this device gets a new Blackout session after
+    "Sign out every Blackout session" was read in `app/sdk/client.ts` (on a
+    401 the client clears its token, exchanges its Matrix session again and
+    retries once), not run against a server; the screen's test uses a fake
+    API, and the route's test runs against the API in memory.
 
 ## Independent review, 2026-10-26
 
@@ -711,22 +755,26 @@ device, using only public data, and the owner's own screen called that "a
 different release key".
 
 -   **Done.** `PUT /v1/release-identities/me` refuses an identity already in
-    the account's history: 409 `release_identity_reused`. When the server
-    holds a key that is not one of this device's, the Release keys screen
-    says that if the person didn't make it on another device, someone with
-    access to their account, or Blackout's server, published it. It does not
-    offer to publish a key the server lists as replaced, and when the server
-    shows a key this device replaced as current again, with the newer one
-    listed as replaced (the rollback this finding describes), it says the
-    server did that, since the API refuses it to every account. It tells
+    the account's history: 409 `release_identity_reused`. That covers the
+    identities the server has seen; an older key it never saw is new to it
+    (the re-check's N1, below). When the server holds a key that is not one
+    of this device's, the Release keys screen says that if the person didn't
+    make it on another device, someone with access to their account, or
+    Blackout's server, published it. It does not offer to publish a key the
+    server lists as replaced, and when the server shows a key this device
+    replaced as current, with the newer one listed as replaced (the rollback
+    this finding describes), it names who could have done that: another tab
+    or device of the person's, someone with access to their account who has
+    that key, or the server. (Until the re-check it said the server did it,
+    since the API refuses it to every account; that was false, N1.) It tells
     these cases apart by comparing identities, never the fingerprints the
     server states. Replacing keys shows what else to do, before and after:
-    sign the lost device out (from a Matrix client that lists sessions, or
-    by resetting the password with "Sign out of other devices"), and tell
-    the people compared with, outside Blackout, that the key changed. PR 3's
-    rule is in §2 and §5, item 8: a comparison counts only for the account's
-    current identity, and is stale once the device has seen a newer identity
-    or the directory lists the compared fingerprint as superseded.
+    end the lost device's sessions first, as "If a device is lost" says (N2),
+    and tell the people compared with, outside Blackout, that the key
+    changed. PR 3's rule is in §2 and §5, item 8: a comparison counts only
+    for the account's current identity, and is stale once the device has
+    seen a newer identity or the directory lists the compared fingerprint as
+    superseded.
 -   **Tests.** `release-identities.integration.test.ts`: "a new identity
     replaces the current one, which stays listed as superseded" (it asserted
     the old behaviour; it now asserts the 409) and "no identity from an
@@ -737,8 +785,9 @@ different release key".
     has put back a key this device replaced", "does not offer to publish a
     key the server lists as replaced", "says what else to do when replacing
     keys, before and after", and the refusal cases.
--   **Still open.** A compelled server can serve any key as current; against
-    that, only PR 3's client rule holds. Decision 18 covers signing out the
+-   **Still open.** A compelled server can serve any key as current, and an
+    older key the server never saw can still be published (N1); against
+    those, only PR 3's client rule holds. Decision 18 covers signing out the
     lost device.
 
 **H2. The panic wipe left the private release keys and the list of people
@@ -898,6 +947,165 @@ be unpublished.**
 -   `DataRetentionSection.tsx`: the public half is removed from Blackout's
     database, "though copies in any backups the operator keeps are not".
 -   The create button: M5. `COMPARE_MEANING` and `compareHow`: M1.
+
+### Re-check of the fixes
+
+The reviewer re-checked the fixes at `b60ac9054a` and reported three more
+findings, N1 to N3, and smaller items. Each is fixed or explained below, in
+new commits on top of that one; every test named here failed with its fix
+taken out.
+
+**N1 (Medium). A key this device made but never published could still be
+published after a newer one, and retire the newer one for good.** H1's
+refusal knows only identities the server has seen, and an identity carries
+no time or sequence number, so the API cannot tell that a key it never saw
+is older. Such a key exists whenever one was created and replaced before it
+was published, which the 429 message ("kept: publish them from here later")
+makes more common. A stale tab, whose "Publish this device's key" published
+the copy it held in memory, another device of the person's that holds the
+key, or someone with access to the account who has it could publish it
+after the newer one: it became current, and the newer one was refused from
+then on. The rollback warning said the API refuses this "for any account
+that asks, so it was done on the server itself", which left all of those
+out, and H1 above, §2, decision 3 and `KNOWN_LIMITATIONS.md` ("A key you
+replaced can never be made current again") said the same.
+
+-   **Done.** (a) Publishing reads the device store just before the request
+    and publishes only the key set the store holds as current; a tab whose
+    key set is no longer that, because another tab replaced or removed it,
+    publishes nothing, says so, and shows what is stored. (b) The rollback
+    warning says that the older key was published after the newer one, from
+    another tab or device of the person's or by someone with access to their
+    account who has it, or that Blackout's server put it back. (c) H1 above,
+    §2, §6, decision 3, `KNOWN_LIMITATIONS.md`, `THREAT_MODEL.md` §5, the
+    design's §4(a) step 2 and §8, and the comments in
+    `services/releaseIdentities.ts` and on the screen now say that the
+    server refuses an identity it has seen and cannot refuse an older key it
+    never saw. Publishing over a key from elsewhere now says that key can't
+    be published again afterwards. (d) §5 item 10 and decision 19: identity
+    v1 has no sequence number, so the API cannot order identities; what v2
+    could carry is set out there, for PR 3.
+-   **Tests.** `ReleaseKeysPanel.tabs.test.tsx`: "a stale tab does not
+    publish a key another tab replaced before it was published" (two tabs
+    show a key the server never saw; one replaces and publishes it; the
+    other's publish sends nothing, and the server keeps the newer key).
+    `ReleaseKeysPanel.test.tsx`: "says when the server has put back a key
+    this device replaced" (the warning names a tab or device, someone with
+    the account and the server, and no longer says the API refuses it to any
+    account) and "says who could have published a key this device did not
+    make…" (the note that publishing retires that key).
+-   **Still open.** Another device, or someone with access to the account and
+    the key, can still publish an older key the server never saw: nothing in
+    v1 lets the server or a client tell that it is older. Two tabs of one
+    browser publishing at the same moment can still race between the store
+    read and the server's answer, and the server takes them in the order
+    they arrive. PR 3's rule (§2, §5 item 8) holds against all of these,
+    since a comparison counts only for the identity compared.
+
+**N2 (Medium). The guidance for a lost device ended its Matrix session, not
+its Blackout sessions.** `RELEASE_KEYS_REPLACE_GUIDANCE` pointed to a Matrix
+client or a Matrix password reset. Neither reaches Blackout's API, whose
+access tokens stay valid for up to 24 hours and whose refresh tokens mint
+more; and for an account registered through `/v1/auth/register`,
+`/v1/auth/login` checks the API's own password hash, which a Matrix reset
+does not change. `POST /v1/auth/sessions/revoke` existed, but no client
+called it, and the account's 3 publishes a day are shared with whoever holds
+a session.
+
+-   **Done.** (a) What the route ends was read first (`routes/auth.ts`,
+    `db/store.ts`, `middleware/auth.ts`): every refresh token of the account
+    (`revokeAllForUser`), and every access token issued before the request
+    (`revokeUserTokensBefore` sets a cutoff that `authMiddleware` compares
+    with each token's `iat`), the caller's own included. The Release keys
+    screen has a new section, "If a device is lost", with a "Sign out every
+    Blackout session" button, through the SDK's new `revokeAllSessions`. Its
+    confirmation says it ends every Blackout session the account has, on
+    every device, this one included; that it ends no Matrix session; and
+    that a device still signed in to Matrix, this one included, gets a new
+    Blackout session by itself, so the lost device's Matrix session has to
+    end first. (b) The section says what each step ends, in that order, and
+    that an account made with an email and password through Blackout's API
+    keeps its own password there, which a Matrix reset doesn't change and
+    which lets whoever knows it start new Blackout sessions; this app has no
+    screen to change it (decision 18 names the API's routes, which no client
+    calls). The replace guidance now sends people to the section first,
+    since new keys sign nothing out and a device still signed in can publish
+    keys of its own in their place. (c) Decision 3 and `KNOWN_LIMITATIONS.md`
+    now say that a stolen session shares the account's publish limit, and
+    that a key it publishes retires the owner's for good, since the server
+    then refuses the owner's key as one it has seen: H1's trade-off, which
+    leaves the owner to make new keys once that session is ended.
+-   **Tests.** `release-identities.integration.test.ts`: "“Sign out every
+    Blackout session” ends the caller's own API session too" (a token minted
+    before the call gets 401 `session_revoked` after it, and one minted after
+    it works). `ReleaseKeysPanel.test.tsx`: "signs out every Blackout session
+    only once confirmed, and says what that ends" (nothing is sent before
+    the confirmation or after Cancel, and the route is called once after it)
+    and "says what else to do when replacing keys, before and after" (the
+    guidance, and the section below it with the button).
+    `sdk/authThreadsActions.test.ts`: "revokeAllSessions posts to the
+    revoke-all route".
+-   **Explained.** The cutoff is in whole seconds (`iat < cutoff`), so an
+    access token issued in the same second as the request is not refused; it
+    expires like any other, within 24 hours. That this device then gets a
+    new Blackout session from its Matrix session was read, not run ("Not
+    verified here").
+
+**N3 (Low to Medium). Saving a recovery file in a stale tab wrote that tab's
+copy.**
+
+-   **Done.** Saving reads the stored record just before writing, as Remove
+    does. If the store holds no keys any more, nothing is saved and the
+    screen says so; if they changed, the file holds what is stored, the
+    screen shows it, and the notice says so.
+-   **Test.** `ReleaseKeysPanel.tabs.test.tsx`: "a recovery file saved in a
+    stale tab holds the keys stored now, not that tab's copy" (the file,
+    opened with its passphrase, holds the other tab's new keys).
+
+**Smaller items.**
+
+-   **Retry-After with four or more publishes in the window**, which replicas
+    racing past the limit can leave, was measured from the oldest of them, a
+    time when the account is still at the limit. It now waits until the
+    (n - 3 + 1)-th oldest leaves. Test,
+    `release-identities.integration.test.ts`: "with more than 3 identities
+    in the window, Retry-After waits until enough have left it" (rows 20, 10,
+    5 and 1 hours old: 14 hours, not 4).
+-   **Loading a recovery file judged "replaced on the server" by the
+    fingerprints the server states.** `planRecoveryLoad` now takes the
+    server's current and superseded identities and compares them whole.
+    Tests: `releaseKeyStore.test.ts`, "judges what the server lists by
+    identities, never by a stated fingerprint"; `ReleaseKeysPanel.test.tsx`,
+    "takes a newer file's key that is the server's, judging the server's
+    list by identity" (a superseded entry that states the file key's
+    fingerprint for another identity no longer stops it).
+-   **The warnings showed the fingerprint the server states.** The screen now
+    computes the fingerprint of the server's key on the device, from its
+    identity, and a key that fails its check gets a warning of its own: the
+    API checks keys before it takes them, so the server itself, or a fault in
+    it, put that one there. Tests: "does not let a fingerprint the server
+    states turn a stranger's key into this device's old one" (now also: the
+    computed fingerprint is shown and the stated one is not) and "says the
+    server itself put there a key of yours that fails its check".
+-   **M4's remaining case.** A file whose current key was neither the
+    server's current key nor one this device holds, with a later `createdAt`,
+    which nothing signs, was taken without asking. Now it asks, and says that
+    only the file's own time says the key is newer. A newer file whose key is
+    the server's current one is still taken without asking. Tests:
+    `releaseKeyStore.test.ts`, "asks before a newer file's key that nobody
+    knows of becomes current"; `ReleaseKeysPanel.test.tsx`, "asks before a
+    newer file's key that the server does not list becomes current".
+-   **L4.** The screen now says, above the passphrase fields, "If your browser
+    offers to save a recovery file's passphrase, say no". Test: "does not ask
+    the browser to save a recovery passphrase" (now also the line).
+-   **H2's remainder.** Another open tab keeps the key sets it read in memory
+    until it is closed or reloaded, after a Remove in another tab and after
+    the panic wipe's release-key deletion too, since the wipe reloads only
+    its own tab. Saving and publishing now read the store, so such a tab can
+    no longer save a recovery file or publish from its copy, and a comparison
+    it makes is recorded only against what is stored (M3). Until it reloads,
+    it can still show the removed keys' fingerprint and a code computed from
+    it.
 
 ## Sources
 
