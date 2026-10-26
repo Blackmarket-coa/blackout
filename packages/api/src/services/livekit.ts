@@ -7,18 +7,23 @@ export type VoiceRole = 'member' | 'moderator' | 'admin';
 /**
  * How long a LiveKit access token the API mints is valid, in seconds.
  *
- * LiveKit checks the token when a client connects, and again on a full
- * reconnect; a participant who is connected stays connected until removed,
- * whatever the token says by then. So the TTL bounds one thing: how long a
- * token minted before a lock, a mute or a removal can still open a connection
- * with the role and the permissions it was minted with (V4 in
- * `docs/security/capability-header-triage-2026-10-23.md`). Two minutes covers
- * fetching the token and connecting, and the client SDK's reconnect attempts
- * after a network drop, which give up inside a minute; a client that is out
- * for longer asks for a new token and gets the room's current answer. It is
- * one constant on purpose: neither the environment (`LIVEKIT_TOKEN_TTL_SECONDS`
- * used to allow up to 15 minutes) nor the request (`ttlSeconds`) can lengthen
- * it.
+ * LiveKit checks a token when a client connects; a participant who is
+ * connected stays connected until removed, whatever the token says by then.
+ * So the TTL bounds how long a token the API minted before a lock, a mute or a
+ * removal can still open a connection with the role and the permissions it was
+ * minted with (V4 in `docs/security/capability-header-triage-2026-10-23.md`).
+ * Two minutes leaves time to fetch the token, connect, and retry a first
+ * connection that failed or dropped; it is a judgement, not a measurement.
+ *
+ * It is not a revocation. A token already issued stays valid until it expires,
+ * and LiveKit's signal protocol lets the server hand a connected client a
+ * refreshed token (`refresh_token`), whose lifetime the LiveKit server sets and
+ * the API cannot shorten. So a removed participant whose client kept a valid
+ * token can rejoin the LiveKit room with it until it expires (the SDK's
+ * `removeParticipant`: "the participant can still re-join the room"); the API
+ * refuses that account any new token. One constant on purpose: neither the
+ * environment (`LIVEKIT_TOKEN_TTL_SECONDS` used to allow up to 15 minutes) nor
+ * the request (`ttlSeconds`) can lengthen it.
  */
 export const LIVEKIT_TOKEN_TTL_SECONDS = 120;
 

@@ -93,9 +93,9 @@ const entryRefusal = (c: Context, verdict: VoiceRoleVerdict): Response | null =>
     verdict.ok && verdict.entry !== 'ok' ? refuse(c, verdict.entry) : null;
 
 /**
- * An account a moderator removed from the room gets no token for it and does
- * not join it until a moderator readmits it (or the room ends: the record is
- * keyed by the room). Checked before the lock, so the answer does not change
+ * An account a moderator removed from the room gets no new token for it and no
+ * join until a moderator readmits it (or the room ends: the record is keyed by
+ * the room); a token it already holds is not revoked (`services/livekit.ts`). Checked before the lock, so the answer does not change
  * with the lock, and for every role: the removal was made by someone above.
  */
 const removalRefusal = (c: Context, roomId: string, userId: string): Response | null =>

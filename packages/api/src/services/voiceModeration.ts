@@ -12,9 +12,10 @@
  *
  *   - a mute mutes every audio track the participant has published
  *     (`mutePublishedTrack`) and takes away their permission to publish in
- *     the room (`updateParticipant`), so unmuting themselves does nothing;
- *     an unmute gives both back;
- *   - a removal disconnects the participant (`removeParticipant`).
+ *     the room (`updateParticipant`), so that the mute does not rest on the
+ *     track mute alone; an unmute gives both back;
+ *   - a removal disconnects the participant (`removeParticipant`). It does not
+ *     revoke a token the participant already holds (`services/livekit.ts`).
  *
  * The LiveKit identity is the Blackout user id, as the tokens are minted. A
  * participant who is not connected is not an error: the route writes its
