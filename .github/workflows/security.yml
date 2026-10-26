@@ -166,11 +166,20 @@ jobs:
                   # not double-report the vendored Synapse test-key fixtures
                   # (e.g. synapse/util/manhole.py's upstream demo RSA key).
                   scanners: vuln
-                  # Skip the vendored Synapse fork: it is upstream Python code
-                  # this repo does not deploy (production runs the upstream
-                  # matrixdotorg/synapse image), and its dependency CVE churn is
-                  # tracked via upstream-advisories.yml, not gated here.
-                  skip-dirs: apps/blackout-server
+                  # apps/blackout-server (the Synapse fork) is scanned: its
+                  # poetry.lock and Cargo.lock are what infra/single-server-baseline
+                  # builds into the blackout-synapse image, and nothing else
+                  # gates them (upstream-advisories.yml lists element-hq/synapse's
+                  # own advisories, not advisories against its dependencies). The
+                  # three Twisted advisories whose fix exists only in a pre-release
+                  # are explained in .trivyignore. Only the legacy FastAPI service
+                  # under the fork directory stays skipped: its requirements.txt
+                  # pins PyJWT 2.10.1 (six HIGH/CRITICAL, fixed in 2.14.0).
+                  # infra/single-server-baseline/deploy.sh builds it as
+                  # blackout-api:stable, but that stack runs the Hono API
+                  # (API_TAG=hono); bumping it needs its own test run. See
+                  # docs/security/synapse-dependencies-triage-2026-10-25.md.
+                  skip-dirs: apps/blackout-server/services/blackout-api
                   # Blocking: fail on fixable CRITICAL/HIGH findings. Reviewed,
                   # non-applicable advisories are documented in .trivyignore.
                   exit-code: '1'
