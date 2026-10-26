@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { generateTestJwtSecret } from './_fixtures/secrets';
+import type { DeadmanSwitchRecord } from '../src/db/types';
 
 process.env.JWT_SECRET_PRIMARY = generateTestJwtSecret();
 process.env.JWT_ISSUER = 'blackout-api';
@@ -264,6 +265,85 @@ test('account deletion confirms and purges user + tokens; rejects cross-user', a
         replay.kind === 'invalid' || replay.kind === 'consumed',
         `unexpected replay outcome: ${replay.kind}`
     );
+});
+
+test('account deletion cancels the owner’s unfired switches and clears what they held; a fired one stays readable to the people it named', async () => {
+    const { db } = await loadModules();
+    const lifecycle = await import('../src/services/accountLifecycle');
+    const { computeDeadlines } = await import('../src/services/deadmanScheduler');
+    const { sweepOverdueDeadmanSwitches } = await import('../src/modules/deadman');
+    const user = await seedUser(db);
+
+    const seed = (overrides: Partial<DeadmanSwitchRecord>) => {
+        const lastCheckInAt = new Date().toISOString();
+        const { triggerAt, releaseAt } = computeDeadlines({
+            lastCheckInAt,
+            checkInIntervalSeconds: 60,
+            gracePeriodSeconds: 60,
+        });
+        return db.createDeadmanSwitch({
+            id: randomUUID(),
+            ownerId: user.id,
+            roomId: '!room:example.org',
+            status: 'armed',
+            checkInIntervalSeconds: 60,
+            gracePeriodSeconds: 60,
+            lastCheckInAt,
+            triggerAt,
+            releaseAt,
+            recipients: ['recipient-1'],
+            encryptedPayload: 'sealed',
+            headline: 'label',
+            ...overrides,
+        });
+    };
+    const armed = seed({ encryptedPayload: 'sealed-armed', headline: 'armed label' });
+    const inGrace = seed({
+        status: 'grace',
+        encryptedPayload: 'sealed-grace',
+        headline: 'grace label',
+        backlogGraceStartedAt: new Date().toISOString(),
+    });
+    const fired = seed({
+        status: 'triggered',
+        encryptedPayload: 'sealed-fired',
+        headline: 'fired label',
+    });
+
+    const issued = lifecycle.requestAccountDeletion({ userId: user.id });
+    assert.ok(issued);
+    assert.equal(lifecycle.confirmAccountDeletion(issued!.token, user.id).kind, 'ok');
+    assert.equal(db.getUserById(user.id), undefined);
+
+    for (const id of [armed.id, inGrace.id]) {
+        const after = db.getDeadmanSwitch(id)!;
+        assert.equal(after.status, 'cancelled');
+        assert.equal(after.encryptedPayload, '');
+        assert.equal(after.headline, undefined);
+        assert.equal(after.backlogGraceStartedAt, undefined);
+    }
+    // Nothing takes a release back, so a fired switch keeps its payload for
+    // the people it named; the owner's label goes with the owner.
+    const kept = db.getDeadmanSwitch(fired.id)!;
+    assert.equal(kept.status, 'triggered');
+    assert.equal(kept.encryptedPayload, 'sealed-fired');
+    assert.equal(kept.headline, undefined);
+
+    const rows = db.listDeadmanSwitchesForOwner(user.id);
+    assert.equal(rows.length, 3, 'the rows stay: status and timestamps only');
+    assert.ok(
+        rows.every((row) => row.headline === undefined),
+        'no row still holds a label'
+    );
+    assert.ok(
+        !rows.some((row) => ['sealed-armed', 'sealed-grace'].includes(row.encryptedPayload)),
+        'no row still holds an unfired payload'
+    );
+
+    // The sweep, long after, fires none of them.
+    sweepOverdueDeadmanSwitches(new Date(Date.now() + 365 * 24 * 3600 * 1000));
+    assert.equal(db.getDeadmanSwitch(armed.id)?.status, 'cancelled');
+    assert.equal(db.getDeadmanSwitch(inGrace.id)?.status, 'cancelled');
 });
 
 test('account deletion rejects expired tokens', async () => {

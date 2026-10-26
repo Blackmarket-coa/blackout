@@ -1,13 +1,10 @@
 import { createElement, useMemo } from 'react';
-import { useAtomValue } from 'jotai';
-import { selectedRoomIdAtom } from '../../state/navigation';
 import type { FeatureRoute } from '../../core/features/types';
 import { DeadmanSwitchPanel } from './DeadmanSwitchPanel';
 import { createAuthorizedApiClient } from '../../sdk/client';
 import { readBlackoutApiToken } from '../monetization/marketplace/useMarketplaceAuth';
 
 const DeadmanRoutePage = () => {
-    const roomId = useAtomValue(selectedRoomIdAtom);
     const token = readBlackoutApiToken();
     const apiClient = useMemo(() => createAuthorizedApiClient(token), [token]);
 
@@ -15,18 +12,13 @@ const DeadmanRoutePage = () => {
         return createElement(
             'p',
             { style: { padding: 12 } },
-            'Sign in to manage deadman switches.'
+            'Sign in to manage dead-man switches.'
         );
     }
 
-    return createElement(DeadmanSwitchPanel, {
-        apiClient,
-        roomId,
-    });
+    return createElement(DeadmanSwitchPanel, { apiClient });
 };
 
-export const deadmanRoutes: FeatureRoute[] = [
-    { path: '/deadman', component: DeadmanRoutePage },
-];
+export const deadmanRoutes: FeatureRoute[] = [{ path: '/deadman', component: DeadmanRoutePage }];
 
 export { DeadmanRoutePage };

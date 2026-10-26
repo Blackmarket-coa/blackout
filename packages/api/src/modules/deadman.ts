@@ -1,57 +1,53 @@
 import { Hono } from 'hono';
-import { z } from 'zod';
-import { DEADMAN_EVENT_NAMES, type DeadmanSwitchPayload } from '@blackout/protocol';
+import type { Context } from 'hono';
+import {
+    DEADMAN_EVENT_NAMES,
+    type DeadmanReleasedSwitch,
+    type DeadmanSwitchPayload,
+} from '@blackout/protocol';
 import { db } from '../db/store';
 import type { DeadmanSwitchRecord } from '../db/types';
-import { readJsonBody } from '../middleware/validate';
 import { BACKLOG_TOLERANCE_FLOOR_MS } from '../services/backlogTolerance';
 import { log } from '../telemetry/logger';
 import { requireAuthenticatedUser, requireDomainCapability } from './authz';
 import { emitDomainEvent, listDomainEvents } from './domain-events';
-import {
-    MAX_CHECK_IN_INTERVAL_SECONDS,
-    MAX_GRACE_PERIOD_SECONDS,
-    MAX_RECIPIENTS,
-    MIN_CHECK_IN_INTERVAL_SECONDS,
-    MIN_GRACE_PERIOD_SECONDS,
-    applyCheckIn,
-    computeDeadlines,
-    evaluateSweepTransition,
-    evaluateTransition,
-    validateArmInput,
-} from '../services/deadmanScheduler';
+import { applyCheckIn, evaluateSweepTransition } from '../services/deadmanScheduler';
 import type { FeatureModule } from './types';
 
-const armSchema = z.object({
-    roomId: z.string().min(1),
-    ownerId: z.string().min(1).optional(),
-    checkInIntervalSeconds: z
-        .number()
-        .int()
-        .min(MIN_CHECK_IN_INTERVAL_SECONDS)
-        .max(MAX_CHECK_IN_INTERVAL_SECONDS),
-    gracePeriodSeconds: z
-        .number()
-        .int()
-        .min(MIN_GRACE_PERIOD_SECONDS)
-        .max(MAX_GRACE_PERIOD_SECONDS),
-    recipients: z.array(z.string().min(1)).min(1).max(MAX_RECIPIENTS),
-    encryptedPayload: z.string().min(1),
-    headline: z.string().max(280).optional(),
-});
-
-const processOverdueSchema = z.object({ now: z.string().datetime().optional() }).partial();
+/**
+ * Why `POST /switches` refuses every arm. The server cannot release a message
+ * to anyone yet: triggering changes a status, and nobody is told. Arming
+ * reopens with the release (`docs/security/deadman-release-design-2026-10-24.md`
+ * §8, PR 4), in a new format. Until then the only honest answer to an arm is
+ * this one, given before the body is read so that nothing about the request
+ * is stored and every caller gets the same reply.
+ */
+export const ARMING_UNAVAILABLE = {
+    code: 'arming_unavailable',
+    message:
+        'Arming is not available: Blackout cannot release a message to anyone yet. ' +
+        'Existing switches can be checked in and cancelled.',
+} as const;
 
 /**
- * The switch as `viewerId` may see it. The owner always gets the encrypted
- * payload. Anyone else (a recipient) gets it only once the switch has
- * triggered: never while it is armed or in grace, and never after a cancel.
- * Every caller names the viewer so no route can hand out the payload by default.
+ * The one answer for a switch the caller may not act on: an id that names no
+ * switch, someone else's switch, and a recipient's switch before it has
+ * triggered all get this same status and body. A 403 for "exists, not yours"
+ * next to a 404 for "does not exist" would let anyone holding an id learn
+ * whether a switch exists, and let a recipient follow one before release.
  */
-export const recordToPayload = (
-    record: DeadmanSwitchRecord,
-    viewerId: string
-): DeadmanSwitchPayload => {
+const SWITCH_NOT_FOUND = { code: 'switch_not_found', message: 'Switch not found' } as const;
+
+const notFound = (c: Context) => c.json(SWITCH_NOT_FOUND, 404);
+
+/**
+ * The switch as its owner sees it. `encryptedPayload` is present while the
+ * store still holds one: cancel clears it (as account deletion does for a
+ * switch that has not fired), so a cancelled switch's view carries none.
+ * Only the owner gets this view; a recipient gets `recordToReleasedSwitch`,
+ * after the trigger.
+ */
+export const recordToOwnerView = (record: DeadmanSwitchRecord): DeadmanSwitchPayload => {
     const payload: DeadmanSwitchPayload = {
         switchId: record.id,
         ownerId: record.ownerId,
@@ -67,38 +63,59 @@ export const recordToPayload = (
         createdAt: record.createdAt,
         updatedAt: record.updatedAt,
     };
-    if (viewerId === record.ownerId || record.status === 'triggered') {
+    if (record.encryptedPayload) {
         payload.encryptedPayload = record.encryptedPayload;
     }
     return payload;
 };
 
+/**
+ * The switch as a recipient sees it, once it has triggered: the payload and
+ * enough to say whose it is and when it was due. No check-in history, no
+ * interval, no room, no label, no other recipients. Callers must check the
+ * status first; this never looks at it.
+ */
+export const recordToReleasedSwitch = (record: DeadmanSwitchRecord): DeadmanReleasedSwitch => ({
+    switchId: record.id,
+    ownerId: record.ownerId,
+    status: 'triggered',
+    releaseAt: record.releaseAt,
+    encryptedPayload: record.encryptedPayload,
+});
+
 // Envelopes are only ever returned to the owner (every route that builds one
-// checks ownership first), so the owner is the viewer.
+// checks ownership first), so they carry the owner's view.
 const envelope = (event: string, record: DeadmanSwitchRecord, senderId: string) => ({
     event,
     roomId: record.roomId,
     senderId,
     occurredAt: new Date().toISOString(),
-    payload: recordToPayload(record, record.ownerId),
+    payload: recordToOwnerView(record),
 });
+
+/** The switch, if `subject` owns it; otherwise nothing, whether or not it exists. */
+const ownedSwitch = (id: string, subject: string): DeadmanSwitchRecord | undefined => {
+    const existing = db.getDeadmanSwitch(id);
+    return existing && existing.ownerId === subject ? existing : undefined;
+};
 
 /**
  * Autonomous server-side sweep of EVERY armed switch against the wall clock,
  * driving overdue ones into grace/triggered and emitting the domain event.
  *
- * This is the load-bearing half of a dead-man's switch: unlike the owner-scoped
- * POST /process-overdue endpoint (which only fires switches the *authenticated
- * owner* asks about), this runs from the background loop with no user present —
- * so a switch fires exactly when its owner has gone dark, which is the entire
- * point of the feature. `evaluateTransition` is idempotent for already
- * triggered/cancelled switches, so repeated ticks never re-emit. Returns the
- * number of switches whose status advanced this pass, backlog windows included.
+ * This is the load-bearing half of a dead-man's switch: it runs from the
+ * background loop with no user present, so a switch fires exactly when its
+ * owner has gone dark, which is the entire point of the feature. It is the
+ * only code path that moves a switch forward; the owner-scoped
+ * `POST /process-overdue` route that also did, against a clock the caller
+ * supplied, was removed (D6). `evaluateSweepTransition` is idempotent for
+ * already triggered/cancelled switches, so repeated ticks never re-emit.
+ * Returns the number of switches whose status advanced this pass, backlog
+ * windows included.
  *
  * A switch the sweep reaches more than `toleranceMs` after it should have acted
  * (the sweep was not running) gets one 72-hour backlog grace window instead of
- * firing: see `evaluateSweepTransition`. The owner-scoped route keeps
- * `evaluateTransition`, since its caller is the owner, present.
+ * firing: see `evaluateSweepTransition`.
  */
 export function sweepOverdueDeadmanSwitches(
     now: Date = new Date(),
@@ -152,68 +169,12 @@ export function sweepOverdueDeadmanSwitches(
 function createDeadmanRouter() {
     const deadman = new Hono();
 
-    deadman.post('/switches', async (c) => {
+    deadman.post('/switches', (c) => {
         const denied = requireDomainCapability(c, 'deadman', 'write');
         if (denied) return denied;
 
-        const subject = requireAuthenticatedUser(c);
-        if (!subject) {
-            return c.json({ code: 'unauthorized', message: 'Unauthorized' }, 401);
-        }
-
-        const parsed = await readJsonBody(c, armSchema);
-        if (parsed instanceof Response) return parsed;
-
-        const validationError = validateArmInput({
-            checkInIntervalSeconds: parsed.checkInIntervalSeconds,
-            gracePeriodSeconds: parsed.gracePeriodSeconds,
-            recipients: parsed.recipients,
-            encryptedPayload: parsed.encryptedPayload,
-        });
-        if (validationError) {
-            return c.json({ code: 'invalid_request', message: validationError }, 400);
-        }
-
-        const ownerId = parsed.ownerId ?? subject;
-        if (ownerId !== subject) {
-            return c.json(
-                {
-                    code: 'forbidden',
-                    message: 'A switch can only be armed for the calling subject',
-                },
-                403
-            );
-        }
-
-        const lastCheckInAt = new Date().toISOString();
-        const { triggerAt, releaseAt } = computeDeadlines({
-            lastCheckInAt,
-            checkInIntervalSeconds: parsed.checkInIntervalSeconds,
-            gracePeriodSeconds: parsed.gracePeriodSeconds,
-        });
-
-        const record = db.createDeadmanSwitch({
-            id: crypto.randomUUID(),
-            ownerId,
-            roomId: parsed.roomId,
-            status: 'armed',
-            checkInIntervalSeconds: parsed.checkInIntervalSeconds,
-            gracePeriodSeconds: parsed.gracePeriodSeconds,
-            lastCheckInAt,
-            triggerAt,
-            releaseAt,
-            recipients: parsed.recipients,
-            encryptedPayload: parsed.encryptedPayload,
-            headline: parsed.headline,
-        });
-
-        emitDomainEvent({
-            module: 'deadman',
-            type: 'deadman.switch.armed',
-            payload: { switchId: record.id, ownerId: record.ownerId, roomId: record.roomId },
-        });
-
-        return c.json(envelope(DEADMAN_EVENT_NAMES.armed, record, subject), 201);
+        // Refused before the body is read: see ARMING_UNAVAILABLE.
+        return c.json(ARMING_UNAVAILABLE, 409);
     });
 
     deadman.post('/switches/:id/check-in', (c) => {
@@ -226,16 +187,8 @@ function createDeadmanRouter() {
         }
 
         const id = c.req.param('id');
-        const existing = db.getDeadmanSwitch(id);
-        if (!existing) {
-            return c.json({ code: 'switch_not_found', message: 'Switch not found' }, 404);
-        }
-        if (existing.ownerId !== subject) {
-            return c.json(
-                { code: 'forbidden', message: 'Only the switch owner may check in' },
-                403
-            );
-        }
+        const existing = ownedSwitch(id, subject);
+        if (!existing) return notFound(c);
         if (existing.status === 'triggered') {
             // Triggering only changes the switch's status: the server sends
             // the payload to no one, so the message must not say it shipped.
@@ -254,9 +207,7 @@ function createDeadmanRouter() {
             // Ends a backlog window, so the next missed check-in can have one.
             backlogGraceStartedAt: refreshed.backlogGraceStartedAt,
         });
-        if (!updated) {
-            return c.json({ code: 'switch_not_found', message: 'Switch not found' }, 404);
-        }
+        if (!updated) return notFound(c);
 
         emitDomainEvent({
             module: 'deadman',
@@ -277,13 +228,8 @@ function createDeadmanRouter() {
         }
 
         const id = c.req.param('id');
-        const existing = db.getDeadmanSwitch(id);
-        if (!existing) {
-            return c.json({ code: 'switch_not_found', message: 'Switch not found' }, 404);
-        }
-        if (existing.ownerId !== subject) {
-            return c.json({ code: 'forbidden', message: 'Only the switch owner may cancel' }, 403);
-        }
+        const existing = ownedSwitch(id, subject);
+        if (!existing) return notFound(c);
         if (existing.status === 'triggered') {
             return c.json(
                 { code: 'switch_triggered', message: 'Switch already triggered; cannot cancel' },
@@ -291,13 +237,19 @@ function createDeadmanRouter() {
             );
         }
         if (existing.status === 'cancelled') {
-            return c.json(envelope(DEADMAN_EVENT_NAMES.cancelled, existing, subject));
+            // Cancelled before cancel cleared payloads: a second cancel is how
+            // the owner removes what the store still holds.
+            const cleared = existing.encryptedPayload
+                ? db.updateDeadmanSwitch(id, { encryptedPayload: '' }) ?? existing
+                : existing;
+            return c.json(envelope(DEADMAN_EVENT_NAMES.cancelled, cleared, subject));
         }
 
-        const updated = db.setDeadmanSwitchStatus(id, 'cancelled');
-        if (!updated) {
-            return c.json({ code: 'switch_not_found', message: 'Switch not found' }, 404);
-        }
+        // The payload goes with the cancel. The store keeps the row, so the
+        // owner's list still shows the switch and what became of it; backups
+        // keep the payload until they expire (KNOWN_LIMITATIONS.md).
+        const updated = db.updateDeadmanSwitch(id, { status: 'cancelled', encryptedPayload: '' });
+        if (!updated) return notFound(c);
 
         emitDomainEvent({
             module: 'deadman',
@@ -317,13 +269,20 @@ function createDeadmanRouter() {
             return c.json({ code: 'unauthorized', message: 'Unauthorized' }, 401);
         }
 
-        const scope = c.req.query('scope') === 'recipient' ? 'recipient' : 'owner';
-        const records =
-            scope === 'recipient'
-                ? db.listDeadmanSwitchesForRecipient(subject)
-                : db.listDeadmanSwitchesForOwner(subject);
+        if (c.req.query('scope') === 'recipient') {
+            // Released to the caller: triggered switches only. A switch that
+            // has not triggered is as absent for its recipient as for anyone
+            // else, so nobody can follow an owner's check-ins through it.
+            const released = db
+                .listDeadmanSwitchesForRecipient(subject)
+                .filter((record) => record.status === 'triggered')
+                .map(recordToReleasedSwitch);
+            return c.json({ switches: released });
+        }
 
-        return c.json({ switches: records.map((record) => recordToPayload(record, subject)) });
+        return c.json({
+            switches: db.listDeadmanSwitchesForOwner(subject).map(recordToOwnerView),
+        });
     });
 
     deadman.get('/switches/:id', (c) => {
@@ -336,72 +295,15 @@ function createDeadmanRouter() {
         }
 
         const existing = db.getDeadmanSwitch(c.req.param('id'));
-        if (!existing) {
-            return c.json({ code: 'switch_not_found', message: 'Switch not found' }, 404);
+        if (existing && existing.ownerId === subject) {
+            return c.json(recordToOwnerView(existing));
         }
-        const visible = existing.ownerId === subject || existing.recipients.includes(subject);
-        if (!visible) {
-            return c.json(
-                { code: 'forbidden', message: 'Switch is not visible to the calling subject' },
-                403
-            );
+        if (existing && existing.status === 'triggered' && existing.recipients.includes(subject)) {
+            return c.json(recordToReleasedSwitch(existing));
         }
-        return c.json(recordToPayload(existing, subject));
-    });
-
-    deadman.post('/process-overdue', async (c) => {
-        const denied = requireDomainCapability(c, 'deadman', 'write');
-        if (denied) return denied;
-
-        const subject = requireAuthenticatedUser(c);
-        if (!subject) {
-            return c.json({ code: 'unauthorized', message: 'Unauthorized' }, 401);
-        }
-
-        const parsed = await readJsonBody(c, processOverdueSchema);
-        if (parsed instanceof Response) return parsed;
-
-        const now = parsed.now ? new Date(parsed.now) : new Date();
-        const evaluatedAt = now.toISOString();
-        const processed: DeadmanSwitchPayload[] = [];
-
-        // Scope the sweep to switches owned by the authenticated caller. Previously
-        // this iterated every switch globally, letting any `deadman.write` holder
-        // drive state transitions on other users' switches.
-        const ownSwitches = db
-            .listAllDeadmanSwitches()
-            .filter((record) => record.ownerId === subject);
-        for (const record of ownSwitches) {
-            const transition = evaluateTransition(record, now);
-            if (transition.kind === 'none') continue;
-
-            const updated = db.setDeadmanSwitchStatus(record.id, transition.record.status);
-            if (!updated) continue;
-
-            const eventName =
-                transition.kind === 'grace'
-                    ? DEADMAN_EVENT_NAMES.grace
-                    : DEADMAN_EVENT_NAMES.triggered;
-
-            emitDomainEvent({
-                module: 'deadman',
-                type:
-                    transition.kind === 'grace'
-                        ? 'deadman.switch.grace'
-                        : 'deadman.switch.triggered',
-                payload: {
-                    switchId: updated.id,
-                    ownerId: updated.ownerId,
-                    roomId: updated.roomId,
-                    recipients: updated.recipients,
-                },
-            });
-
-            processed.push(recordToPayload(updated, subject));
-            void eventName;
-        }
-
-        return c.json({ processed, evaluatedAt });
+        // Unknown id, someone else's switch, or a recipient's switch before
+        // the trigger: the same answer for all three.
+        return notFound(c);
     });
 
     deadman.get('/events', (c) => {

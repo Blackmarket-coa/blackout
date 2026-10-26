@@ -17,7 +17,6 @@ export * from './forum/actions';
 export * from './deaddrop/actions';
 export * from './deaddrop/matrixActions';
 export * from './deadman/actions';
-export * from './deadman/matrixActions';
 export * from './deaddrop/entitlementGate';
 export * from './persona/entitlementGate';
 export * from './hardening/entitlementGate';
@@ -39,26 +38,26 @@ export * from './auth-threads/actions';
 export * from './education/actions';
 
 export type {
-  EntitlementKey,
-  EntitlementAccessPayload,
-  EntitlementMap,
-  EntitlementResolverInput,
-  EntitlementResolutionSource,
-  EntitlementTier,
-  ResolvedEntitlement,
+    EntitlementKey,
+    EntitlementAccessPayload,
+    EntitlementMap,
+    EntitlementResolverInput,
+    EntitlementResolutionSource,
+    EntitlementTier,
+    ResolvedEntitlement,
 } from '@blackout/protocol';
 
 export type {
-  PluginArtifactKind,
-  PluginCapability,
-  PluginManifest,
-  PluginPinnedNavSpec,
-  PluginHomepageCardSpec,
-  PluginProtocolVersion,
-  PluginSignatureEnvelope,
-  SignedPluginBundle,
-  PluginEventType,
-  PluginInstallEvent,
+    PluginArtifactKind,
+    PluginCapability,
+    PluginManifest,
+    PluginPinnedNavSpec,
+    PluginHomepageCardSpec,
+    PluginProtocolVersion,
+    PluginSignatureEnvelope,
+    SignedPluginBundle,
+    PluginEventType,
+    PluginInstallEvent,
 } from '@blackout/protocol';
 export { PLUGINS_PROTOCOL_VERSION, PLUGIN_EVENT_TYPES } from '@blackout/protocol';
 

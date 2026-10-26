@@ -1,37 +1,42 @@
 import type { EventEnvelope } from '../common/types';
 
 /**
- * Deadman switch contracts.
+ * Dead-man switch contracts.
  *
- * A deadman switch holds an encrypted payload and fires (moves to
- * `triggered`) automatically when its owner stops checking in. The pattern
- * mirrors well-known open source projects (storopoli/dead-man-switch,
- * killcord, ether-dms): a heartbeat resets a trigger countdown; missing the
- * countdown moves the switch into a grace window; missing the grace window
- * moves the switch to `triggered`. The server does not publish or deliver
- * the payload.
+ * A dead-man switch holds a payload the owner supplied and fires (moves to
+ * `triggered`) when its owner stops checking in: a check-in resets the
+ * countdown to `triggerAt`; missing it moves the switch into a grace window
+ * that ends at `releaseAt`; missing that moves the switch to `triggered`. The
+ * server keeps the timer and changes the status. It does not publish or
+ * deliver the payload, notifies nobody, and never decrypts what it holds; it
+ * also cannot tell whether what it holds is ciphertext.
  *
  * Status lifecycle:
  *   armed -> grace -> triggered
  *           ^----- (cancelled at any time before triggered)
  *
- * Servers own the canonical clock and emit envelopes. Matrix-side state
- * events (`co.bmc.deadman.*`) are defined for mirroring the configuration
- * into rooms; the API does not send them today.
+ * Cancelling a switch clears the payload, and so does deleting its owner's
+ * account for a switch that has not fired; a fired switch keeps it for the
+ * people it named.
+ *
+ * Arming is closed until the API can release a message to the people the
+ * owner names (`POST /v1/deadman/switches` answers 409 `arming_unavailable`);
+ * `docs/security/deadman-release-design-2026-10-24.md` is the plan. Nothing
+ * mirrors a switch into Matrix room state: room state is never encrypted.
  */
-
-export const DEADMAN_EVENT_TYPE = 'co.bmc.deadman';
-export const DEADMAN_COMMAND_EVENT_TYPE = 'co.bmc.deadman.command';
-export const DEADMAN_SCHEMA_VERSION = 1;
 
 export type DeadmanSwitchStatus = 'armed' | 'grace' | 'triggered' | 'cancelled';
 
+/**
+ * A switch as its owner sees it. The API returns this view to the owner
+ * only; a recipient gets `DeadmanReleasedSwitch`, and only after the trigger.
+ */
 export interface DeadmanSwitchPayload {
     /** Stable switch id (server-issued). */
     switchId: string;
     /** Owner of the switch (the subject who must check in). */
     ownerId: string;
-    /** Room the switch was created in. */
+    /** Room the switch was armed with. Any string; nothing checked it. */
     roomId: string;
     /** Current lifecycle status. */
     status: DeadmanSwitchStatus;
@@ -46,21 +51,42 @@ export interface DeadmanSwitchPayload {
     /** ISO-8601 deadline for the grace window; missing it moves the switch to `triggered`. */
     releaseAt: string;
     /**
-     * Recipients, as Blackout account ids. Matrix ids and room ids are
-     * accepted but never match a reader.
+     * The strings the switch was armed with. The API matches each against
+     * Blackout account ids: a recipient written as a Matrix id or a room id
+     * matches nobody. Shown to the owner only; a recipient never learns who
+     * else is named.
      */
     recipients: string[];
     /**
-     * Opaque encrypted payload; the server never decrypts it. Present for the
-     * owner. For a recipient, present only after the switch triggers.
+     * The payload as the owner supplied it; the server never decrypts it.
+     * Present while the store still holds one: cancelling the switch clears
+     * it (as deleting the owner's account does for a switch that has not
+     * fired), so a cancelled switch's view has no payload unless it was
+     * cancelled before cancel cleared them.
      */
     encryptedPayload?: string;
-    /** Optional human-friendly headline shown in UI before the switch triggers. */
+    /** Optional label. Shown to the owner only. */
     headline?: string;
     /** ISO-8601 creation timestamp. */
     createdAt: string;
     /** ISO-8601 timestamp of the last status change. */
     updatedAt: string;
+}
+
+/**
+ * A switch as one of its recipients sees it, and only once it has triggered.
+ * Before that the API answers a recipient exactly as it answers a stranger,
+ * so this view is the first thing a recipient learns about a switch. It
+ * carries no check-in history, interval, room, label or other recipients.
+ */
+export interface DeadmanReleasedSwitch {
+    switchId: string;
+    ownerId: string;
+    status: 'triggered';
+    /** ISO-8601 moment the switch was due to release. */
+    releaseAt: string;
+    /** The payload as the owner supplied it; the server never decrypts it. */
+    encryptedPayload: string;
 }
 
 export type DeadmanSwitchArmedEvent = EventEnvelope<
@@ -146,6 +172,19 @@ const isDeadmanPayload = (payload: unknown): payload is DeadmanSwitchPayload => 
         Array.isArray(candidate.recipients) &&
         candidate.recipients.every((entry) => typeof entry === 'string') &&
         DEADMAN_STATUSES.includes(candidate.status as DeadmanSwitchStatus)
+    );
+};
+
+/** The released view a recipient gets: exactly these fields, nothing of the owner's view. */
+export const isDeadmanReleasedSwitch = (value: unknown): value is DeadmanReleasedSwitch => {
+    if (!value || typeof value !== 'object') return false;
+    const candidate = value as Partial<DeadmanReleasedSwitch>;
+    return (
+        typeof candidate.switchId === 'string' &&
+        typeof candidate.ownerId === 'string' &&
+        candidate.status === 'triggered' &&
+        typeof candidate.releaseAt === 'string' &&
+        typeof candidate.encryptedPayload === 'string'
     );
 };
 

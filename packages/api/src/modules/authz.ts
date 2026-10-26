@@ -28,9 +28,10 @@ export type CapabilityAction = 'read' | 'write';
  * channels, private ones included; `deaddrop.write`: a drop can be addressed
  * to any account, and appears in that account's export). Until a community
  * role model exists, an operator-allowlisted admin (`BLACKOUT_ADMIN_USERS`,
- * `isAdminUser`) holds them. `deadman.write` is not here: whether the app may
- * arm a dead-man switch is an open product decision (N2 in
- * `docs/security/deadman-and-feeds-triage-2026-10-12.md`).
+ * `isAdminUser`) holds them. `deadman.write` is not here: every route behind
+ * it acts on the caller's own switches, so every session carries it, and the
+ * arm route itself refuses until the API can release a message
+ * (`docs/security/deadman-release-design-2026-10-24.md` §8).
  */
 export const ADMIN_ONLY_SCOPES: ReadonlySet<string> = new Set([
     'governance.write',

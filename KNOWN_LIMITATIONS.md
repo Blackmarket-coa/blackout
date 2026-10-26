@@ -290,15 +290,29 @@ For the source-of-truth triage with tier/owner detail see
     (`apps/blackout-client/src/app/features/deadman/`) and the API's
     `/v1/deadman` routes (`packages/api/src/modules/deadman.ts`). The panel
     is shown to every account by default (client flag `deadman`).
--   **State:** the app can show your switches but cannot arm one. Check-in
-    and cancel from the app are refused for every account, because the
-    session token never carries `deadman.write`. When a switch fires,
-    Blackout does not notify anyone or post anything: the switch only changes
-    status to `triggered`. Do not rely on it for your safety.
--   Recipients named by Blackout account id can read the encrypted payload
-    through the API only after it fires. Giving them the key is up to you:
-    the server never decrypts the payload and never delivers it. A recipient
-    named by Matrix id or room id never matches anyone.
+-   **State (2026-10-26):** you can check in and cancel the switches you
+    have, from the app or the API. You cannot arm a new one: the API refuses
+    every arm (409 `arming_unavailable`) until Blackout can release a message
+    to the people you name, which
+    [`docs/security/deadman-release-design-2026-10-24.md`](docs/security/deadman-release-design-2026-10-24.md)
+    plans. When an existing switch fires, Blackout does not notify anyone or
+    post anything: the switch only changes status to `triggered`. Do not rely
+    on it for your safety.
+-   The switches that exist were armed through the API before this. Their
+    payload is whatever was sent: the server never decrypts it and cannot
+    tell whether it is ciphertext. Recipients named by Blackout account id
+    can read it through the API only after the switch fires; until then a
+    recipient is answered exactly like anyone else and learns nothing about
+    the switch. Giving recipients a key is up to you. A recipient named by
+    Matrix id or room id never matches anyone.
+-   Cancelling a switch removes its payload from Blackout's database; the
+    switch stays in your list as cancelled. A switch cancelled before cancel
+    began removing payloads still holds its payload until you cancel it again
+    ("Remove message" in the panel). Deleting your account cancels your switches that
+    have not fired and removes their payloads and labels; a switch that has
+    already fired keeps its payload for the people it named, because a
+    release is not taken back. Where the deployment keeps database backups,
+    they hold a removed payload until they expire.
 -   If the server reaches your switch more than 15 minutes (by default) after
     it was due, because its background loops were down, it does not fire the
     switch then: the switch goes to grace with at least 72 hours left from
@@ -308,9 +322,10 @@ For the source-of-truth triage with tier/owner detail see
     the process that ran it, so where that is a separate worker
     (`deploy/docker/production`) the event feed does not list them; the
     switch's status and release time do show them.
--   What a switch should release, and to whom, is an open product decision
-    (N2 in
-    [`docs/security/deadman-and-feeds-triage-2026-10-12.md`](docs/security/deadman-and-feeds-triage-2026-10-12.md)).
+-   What a switch will release, and to whom, was decided on 2026-10-24 (N2 in
+    [`docs/security/deadman-and-feeds-triage-2026-10-12.md`](docs/security/deadman-and-feeds-triage-2026-10-12.md)):
+    the design above. Until it ships, nothing is released and arming stays
+    closed.
 
 ### Admin-only API writes (2026-10-23)
 
