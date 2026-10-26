@@ -306,7 +306,8 @@ into `blackout-synapse:stable`.
 directory holds a legacy FastAPI service whose `requirements.txt` pins
 PyJWT 2.10.1, with six High/Critical advisories fixed in 2.14.0. `deploy.sh`
 builds it as `blackout-api:stable`, but the stack runs the Hono API
-(`API_TAG=hono`). Bumping it needs its own test run.
+(`API_TAG=hono`). Bumping it needs its own test run. (Done on 2026-10-26 and
+the skip removed; see the last section.)
 
 Run as the workflow runs it (`trivy fs --scanners vuln --severity
 CRITICAL,HIGH --ignore-unfixed --exit-code 1 --ignorefile .trivyignore
@@ -384,7 +385,8 @@ nothing without it. Turning `msc2666_enabled` on is left to the operator.
 2.  **`ghcr.io/etkecc/synapse-admin:0.10.3` does not exist.** ghcr has no
     `0.10.3` or `v0.10.3` tag, only `v0.10.3-etke1` to `v0.10.3-etke12`; the
     newest is `v0.11.4-etke54`. A pull of that service fails.
-3.  **`services/blackout-api` pins PyJWT 2.10.1**, as above.
+3.  **`services/blackout-api` pins PyJWT 2.10.1**, as above. Fixed on
+    2026-10-26 (last section).
 
 ## Validation
 
@@ -440,3 +442,34 @@ nothing without it. Turning `msc2666_enabled` on is left to the operator.
     starting Synapse.
 -   The fork's own workflows were not run; GitHub does not run them.
 -   The nginx behaviour for GHSA-q7qq-6mhp-9rc4, as above.
+
+## 2026-10-26: the legacy FastAPI service, bumped and scanned
+
+`apps/blackout-server/services/blackout-api` is Blackout's own service, with no
+upstream counterpart. `infra/single-server-baseline/deploy.sh` builds it as
+`blackout-api:stable` and `blackout-api:stable-pg`. That stack runs
+`blackout-api:${API_TAG:-hono}`, so the image is not run by default, but
+setting `API_TAG=stable` would run it. Its pins, checked against OSV on
+2026-10-26:
+
+| Package   | Pinned  | Advisories at the pin                                                      | Now     |
+| --------- | ------- | -------------------------------------------------------------------------- | ------- |
+| PyJWT     | 2.10.1  | 16 (1 Critical, 5 High, all fixed by 2.14.0; two Moderates only in 2.15.0) | 2.15.1  |
+| Starlette | 0.47.3  | 6 (3 High, fixed in 0.49.1, 1.1.0 and 1.3.1); not pinned before            | 1.10.0  |
+| FastAPI   | 0.116.1 | none, but it capped Starlette below 0.48                                   | 0.162.0 |
+| pytest    | 8.4.2   | 1 Moderate (tmpdir handling), fixed in 9.0.3                               | 9.1.1   |
+
+Uvicorn, SQLAlchemy, Alembic and httpx have no advisories at their pins and
+are unchanged. Starlette is now pinned directly: FastAPI 0.162.0 accepts any
+Starlette from 0.46, and the scan reads only what `requirements.txt` names. All
+the new pins show no OSV advisories.
+
+The service's own tests (`tests/test_api.py` and `tests/test_db_guard.py`,
+Python 3.12 as its Dockerfile uses) pass before and after: 15 of 15 each. The
+only new output is PyJWT's `InsecureKeyLengthWarning` for the tests'
+11-byte HMAC secret; PyJWT warns and does not refuse, so a deployment with a
+short `JWT_SECRET` keeps working and logs the warning.
+
+With the pins moved, the Trivy gate's `skip-dirs` is removed and the gate
+scans the whole tree. Not verified: a Docker build of the image, and the
+service against a running Synapse or Postgres.
