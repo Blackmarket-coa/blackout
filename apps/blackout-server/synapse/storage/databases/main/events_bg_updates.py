@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Dict, List, Optional, Set, Tuple, cast
 
 import attr
 
-from synapse.api.constants import EventContentFields, RelationTypes
+from synapse.api.constants import MAX_DEPTH, EventContentFields, RelationTypes
 from synapse.api.room_versions import KNOWN_ROOM_VERSIONS
 from synapse.events import make_event_from_dict
 from synapse.storage._base import SQLBaseStore, db_to_json, make_in_list_sql_clause
@@ -70,6 +70,8 @@ class _BackgroundUpdates:
     EVENTS_POPULATE_STATE_KEY_REJECTIONS = "events_populate_state_key_rejections"
 
     EVENTS_JUMP_TO_DATE_INDEX = "events_jump_to_date_index"
+
+    FIXUP_MAX_DEPTH_CAP = "fixup_max_depth_cap"
 
 
 @attr.s(slots=True, frozen=True, auto_attribs=True)
@@ -270,6 +272,10 @@ class EventsBackgroundUpdatesStore(SQLBaseStore):
             table="events",
             columns=["room_id", "origin_server_ts"],
             where_clause="NOT outlier",
+        )
+
+        self.db_pool.updates.register_background_update_handler(
+            _BackgroundUpdates.FIXUP_MAX_DEPTH_CAP, self.fixup_max_depth_cap_bg_update
         )
 
     async def _background_reindex_fields_sender(
@@ -1499,3 +1505,74 @@ class EventsBackgroundUpdatesStore(SQLBaseStore):
             )
 
         return batch_size
+
+    async def fixup_max_depth_cap_bg_update(
+        self, progress: JsonDict, batch_size: int
+    ) -> int:
+        """Fixes the topological ordering for events that have a depth greater
+        than MAX_DEPTH. This should fix /messages ordering oddities."""
+
+        room_id_bound = progress.get("room_id", "")
+
+        def redo_max_depth_bg_update_txn(txn: LoggingTransaction) -> Tuple[bool, int]:
+            txn.execute(
+                """
+                SELECT room_id, room_version FROM rooms
+                WHERE room_id > ?
+                ORDER BY room_id
+                LIMIT ?
+                """,
+                (room_id_bound, batch_size),
+            )
+
+            # Find the next room ID to process, with a relevant room version.
+            room_ids: List[str] = []
+            max_room_id: Optional[str] = None
+            for room_id, room_version_str in txn:
+                max_room_id = room_id
+
+                # We only want to process rooms with a known room version that
+                # has strict canonical json validation enabled.
+                room_version = KNOWN_ROOM_VERSIONS.get(room_version_str)
+                if room_version and room_version.strict_canonicaljson:
+                    room_ids.append(room_id)
+
+            if max_room_id is None:
+                # The query did not return any rooms, so we are done.
+                return True, 0
+
+            # Update the progress to the last room ID we pulled from the DB,
+            # this ensures we always make progress.
+            self.db_pool.updates._background_update_progress_txn(
+                txn,
+                _BackgroundUpdates.FIXUP_MAX_DEPTH_CAP,
+                progress={"room_id": max_room_id},
+            )
+
+            if not room_ids:
+                # There were no rooms in this batch that required the fix.
+                return False, 0
+
+            clause, list_args = make_in_list_sql_clause(
+                self.database_engine, "room_id", room_ids
+            )
+            sql = f"""
+                UPDATE events SET topological_ordering = ?
+                WHERE topological_ordering > ? AND {clause}
+            """
+            args = [MAX_DEPTH, MAX_DEPTH]
+            args.extend(list_args)
+            txn.execute(sql, args)
+
+            return False, len(room_ids)
+
+        done, num_rooms = await self.db_pool.runInteraction(
+            "redo_max_depth_bg_update", redo_max_depth_bg_update_txn
+        )
+
+        if done:
+            await self.db_pool.updates._end_background_update(
+                _BackgroundUpdates.FIXUP_MAX_DEPTH_CAP
+            )
+
+        return num_rooms
