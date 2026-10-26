@@ -183,9 +183,12 @@ describe('device key records', () => {
         comparisons: [comparison(BOB.fingerprint, '2026-10-26T10:00:00.000Z')],
     };
 
-    it('takes in a newer recovery file without asking: its current key becomes current', () => {
+    // What Blackout's server has: the file's key as current.
+    const serverHasFileKey = { current: ALICE.identity, superseded: [] };
+
+    it('takes in a newer recovery file whose key the server has, without asking', () => {
         const here = deviceWith('2026-10-26T09:00:00.000Z');
-        expect(planRecoveryLoad(here, fileContents)).toEqual({ kind: 'adopt' });
+        expect(planRecoveryLoad(here, fileContents, serverHasFileKey)).toEqual({ kind: 'adopt' });
         const merged = mergeRecoveryContents(here, fileContents, NOW, 'file');
         expect(currentKeySet(merged)?.fingerprint).toBe(ALICE.fingerprint);
         expect(merged.keySets.map((set) => [set.fingerprint, set.status])).toEqual([
@@ -229,12 +232,47 @@ describe('device key records', () => {
             kind: 'ask',
             reason: 'replaced',
         });
-        // Replaced on the server: its directory lists the fingerprint as superseded.
+        // Replaced on the server: its directory lists the identity as superseded.
         const here = deviceWith('2026-10-26T09:00:00.000Z');
-        expect(planRecoveryLoad(here, fileContents, new Set([ALICE.fingerprint]))).toMatchObject({
-            kind: 'ask',
-            reason: 'replaced',
-        });
+        expect(
+            planRecoveryLoad(here, fileContents, { current: null, superseded: [ALICE.identity] })
+        ).toMatchObject({ kind: 'ask', reason: 'replaced' });
+    });
+
+    it('judges what the server lists by identities, never by a stated fingerprint', () => {
+        // The re-check: a listed identity that differs from the file's in any
+        // byte is another key, whatever fingerprint came with it.
+        const here = deviceWith('2026-10-26T09:00:00.000Z');
+        const lookalike = { ...ALICE.identity, signature: BOB.identity.signature };
+        expect(
+            planRecoveryLoad(here, fileContents, {
+                current: ALICE.identity,
+                superseded: [lookalike],
+            })
+        ).toEqual({ kind: 'adopt' });
+        expect(
+            planRecoveryLoad(here, fileContents, { current: lookalike, superseded: [] })
+        ).toMatchObject({ kind: 'ask', reason: 'unknown' });
+    });
+
+    it('asks before a newer file’s key that nobody knows of becomes current', () => {
+        // M4 of the re-check: neither the server's current key nor one this
+        // device holds, with only the file's unsigned creation time saying it
+        // is newer.
+        const here = deviceWith('2026-10-26T09:00:00.000Z');
+        const deviceKey = currentKeySet(here)!.identity;
+        for (const server of [
+            undefined,
+            { current: null, superseded: [] },
+            { current: deviceKey, superseded: [] },
+        ]) {
+            expect(planRecoveryLoad(here, fileContents, server)).toMatchObject({
+                kind: 'ask',
+                reason: 'unknown',
+                device: { fingerprint: BOB.fingerprint },
+                file: { fingerprint: ALICE.fingerprint },
+            });
+        }
     });
 
     it('changes nothing about the current key when the file has the same one', () => {

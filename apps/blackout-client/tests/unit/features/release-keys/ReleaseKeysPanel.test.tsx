@@ -689,6 +689,68 @@ describe('Settings → Release keys', () => {
         await click('Load the recovery file');
     };
 
+    /** A key set made on this device an hour before the vector file's, and published. */
+    const olderDevice = async () => {
+        const older = await createReleaseKeySet(ACCOUNT, new Date('2026-10-26T09:00:00Z'));
+        await indexedDbReleaseKeyStore.save(withNewCurrentKeySet(null, ACCOUNT, older, NOW));
+        return older;
+    };
+
+    it('asks before a newer file’s key that the server does not list becomes current', async () => {
+        // M4 of the re-check: the file's key is neither the server's current
+        // key nor one this device holds; only its unsigned createdAt is later.
+        const older = await olderDevice();
+        const { client } = fakeApi({
+            mine: entryFor(ACCOUNT, '@alice:test.local', older.identity, older.fingerprint),
+        });
+        await render({ apiClient: client });
+        await waitFor(() => text().includes('Load the recovery file'), 'the load section');
+        await chooseVectorFile();
+        await waitFor(
+            () => text().includes("Keep using this device's key?"),
+            'the question',
+            60_000
+        );
+        expect(text()).toContain(
+            "isn't one this device holds, and Blackout's server doesn't list it"
+        );
+        expect(text()).toContain('which nothing signs');
+        expect(currentKeySet(await indexedDbReleaseKeyStore.load(ACCOUNT))?.fingerprint).toBe(
+            older.fingerprint
+        );
+    }, 180_000);
+
+    it('takes a newer file’s key that is the server’s, judging the server’s list by identity', async () => {
+        // The server's replaced list states the file key's fingerprint for
+        // another identity: by identity, the file's key was never replaced.
+        const older = await olderDevice();
+        const { client } = fakeApi({
+            mine: {
+                ...entryFor(ACCOUNT, '@alice:test.local', ALICE.identity, ALICE.fingerprint),
+                superseded: [
+                    {
+                        identity: older.identity,
+                        fingerprint: ALICE.fingerprint,
+                        publishedAt: '2026-10-26T09:05:00.000Z',
+                        supersededAt: '2026-10-26T10:05:00.000Z',
+                    },
+                ],
+            },
+        });
+        await render({ apiClient: client });
+        await waitFor(() => text().includes('Load the recovery file'), 'the load section');
+        await chooseVectorFile();
+        await waitFor(
+            () => text().includes('Loaded your release keys from the recovery file.'),
+            'the loaded keys',
+            60_000
+        );
+        expect(text()).not.toContain("Keep using this device's key?");
+        const stored = await indexedDbReleaseKeyStore.load(ACCOUNT);
+        expect(currentKeySet(stored)?.fingerprint).toBe(ALICE.fingerprint);
+        expect(text()).toContain("Published: Blackout's server has this key for you.");
+    }, 180_000);
+
     /** A key set made on this device an hour after the vector file's. */
     const newerDevice = async () => {
         const newer = await createReleaseKeySet(ACCOUNT, new Date('2026-10-26T11:00:00Z'));

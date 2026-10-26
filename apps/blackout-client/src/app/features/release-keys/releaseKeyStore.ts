@@ -9,11 +9,13 @@
  * deletes them. The recovery file is the only copy elsewhere
  * (`docs/security/release-identities-2026-10-26.md` §3, §4).
  */
-import type {
-    ReleaseComparison,
-    ReleaseKeySet,
-    ReleaseRecoveryContents,
-    StoredReleaseKeySet,
+import {
+    publicReleaseIdentity,
+    type ReleaseComparison,
+    type ReleaseIdentity,
+    type ReleaseKeySet,
+    type ReleaseRecoveryContents,
+    type StoredReleaseKeySet,
 } from '@blackout/protocol';
 
 export type DeviceReleaseKeys = {
@@ -248,22 +250,36 @@ export const withComparison = (
 /** Which key set stays current when a recovery file is taken in. */
 export type RecoveryCurrentChoice = 'device' | 'file';
 
+/** Whether two identities are the same, field by field; never by a stated fingerprint. */
+export const sameReleaseIdentity = (a: ReleaseIdentity, b: ReleaseIdentity): boolean =>
+    JSON.stringify(publicReleaseIdentity(a)) === JSON.stringify(publicReleaseIdentity(b));
+
+/** What the directory says about this account, as identities. */
+export type ServerReleaseKeys = {
+    current: ReleaseIdentity | null;
+    superseded: readonly ReleaseIdentity[];
+};
+
 /**
  * What loading a recovery file may do to this device's current key set.
- * `adopt`: the file's current key set may become current without asking,
- * because this device has none, or the file's is newer (created later) and
- * neither this device nor the server lists it as replaced. `same`: both have
- * the same current key set. `ask`: the file's is older, or was replaced, so
- * making it current would quietly bring back a key the person moved away
- * from, perhaps after losing a device (the independent review's M4); the
- * screen asks first, and keeps this device's unless told otherwise.
+ * `adopt`: the file's current key set may become current without asking:
+ * this device has none, or the file's is newer (created later), is the key
+ * the server has as current, and neither this device nor the server lists it
+ * as replaced. `same`: both have the same current key set. `ask`: anything
+ * else. The file's is older, or was replaced, so making it current would
+ * quietly bring back a key the person moved away from (the independent
+ * review's M4); or it is a key neither this device nor the server knows, and
+ * its creation time, which nothing signs, is all that says it is newer (the
+ * re-check). The screen asks first, and keeps this device's unless told
+ * otherwise. The server's keys are compared as identities, never by the
+ * fingerprints it states.
  */
 export type RecoveryLoadPlan =
     | { kind: 'adopt' }
     | { kind: 'same' }
     | {
           kind: 'ask';
-          reason: 'older' | 'replaced';
+          reason: 'older' | 'replaced' | 'unknown';
           device: StoredReleaseKeySet;
           file: StoredReleaseKeySet;
       };
@@ -271,22 +287,26 @@ export type RecoveryLoadPlan =
 export const planRecoveryLoad = (
     record: DeviceReleaseKeys | null,
     contents: ReleaseRecoveryContents,
-    supersededOnServer: ReadonlySet<string> = new Set()
+    server: ServerReleaseKeys = { current: null, superseded: [] }
 ): RecoveryLoadPlan => {
     const here = currentKeySet(record);
     const fromFile = contents.keySets.find((set) => set.status === 'current');
     if (!here || !fromFile) return { kind: 'adopt' };
     if (here.fingerprint === fromFile.fingerprint) return { kind: 'same' };
     const replaced =
-        supersededOnServer.has(fromFile.fingerprint) ||
+        server.superseded.some((identity) => sameReleaseIdentity(identity, fromFile.identity)) ||
         (record?.keySets ?? []).some(
             (set) => set.fingerprint === fromFile.fingerprint && set.status === 'superseded'
         );
+    if (replaced) return { kind: 'ask', reason: 'replaced', device: here, file: fromFile };
     const fileTime = Date.parse(fromFile.createdAt);
     const hereTime = Date.parse(here.createdAt);
     const newer = Number.isFinite(fileTime) && Number.isFinite(hereTime) && fileTime > hereTime;
-    if (newer && !replaced) return { kind: 'adopt' };
-    return { kind: 'ask', reason: replaced ? 'replaced' : 'older', device: here, file: fromFile };
+    if (!newer) return { kind: 'ask', reason: 'older', device: here, file: fromFile };
+    const serversCurrent =
+        server.current !== null && sameReleaseIdentity(server.current, fromFile.identity);
+    if (serversCurrent) return { kind: 'adopt' };
+    return { kind: 'ask', reason: 'unknown', device: here, file: fromFile };
 };
 
 /**

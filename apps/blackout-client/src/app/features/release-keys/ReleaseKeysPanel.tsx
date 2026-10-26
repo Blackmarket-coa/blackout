@@ -4,7 +4,6 @@ import {
     createReleaseKeySet,
     formatReleaseFingerprint,
     formatSafetyCode,
-    publicReleaseIdentity,
     readRecoveryFile,
     RECOVERY_FILE_NAME,
     RECOVERY_PASSPHRASE_MIN_LENGTH,
@@ -13,7 +12,6 @@ import {
     ReleaseRecoveryError,
     verifyReleaseIdentity,
     writeRecoveryFile,
-    type ReleaseIdentity,
     type ReleaseIdentityDirectoryEntry,
     type ReleaseRecoveryContents,
 } from '@blackout/protocol';
@@ -23,6 +21,7 @@ import {
     indexedDbReleaseKeyStore,
     mergeRecoveryContents,
     planRecoveryLoad,
+    sameReleaseIdentity,
     toRecoveryContents,
     withComparison,
     withNewCurrentKeySet,
@@ -198,8 +197,7 @@ const formatLocalTime = (iso: string): string => {
 const shortFingerprint = (fingerprint: string): string =>
     formatReleaseFingerprint(fingerprint.slice(0, 16));
 
-const sameIdentity = (a: ReleaseIdentity, b: ReleaseIdentity): boolean =>
-    JSON.stringify(publicReleaseIdentity(a)) === JSON.stringify(publicReleaseIdentity(b));
+const sameIdentity = sameReleaseIdentity;
 
 const recoveryErrorText = (cause: unknown): string => {
     if (cause instanceof ReleaseRecoveryError) {
@@ -276,7 +274,13 @@ export const recoveryLoadQuestion = (
 ): string => {
     const { plan } = pending;
     const why =
-        plan.reason === 'older'
+        plan.reason === 'unknown'
+            ? `This recovery file's current release key (${describe(
+                  plan.file
+              )}) isn't one this device holds, and Blackout's server doesn't list it. Only the file's own creation time, which nothing signs, says it is newer than the one this device uses (${describe(
+                  plan.device
+              )}).`
+            : plan.reason === 'older'
             ? `This recovery file's current release key (${describe(
                   plan.file
               )}) is older than the one this device uses (${describe(plan.device)}).`
@@ -548,13 +552,18 @@ export const ReleaseKeysPanel = ({
                 accountId: me.accountId,
                 onProgress: setProgress,
             });
-            const supersededOnServer = new Set(me.superseded.map((entry) => entry.fingerprint));
+            // The server's keys as identities: its stated fingerprints are
+            // never trusted for this (the re-check).
+            const server = {
+                current: me.current?.identity ?? null,
+                superseded: me.superseded.map((entry) => entry.identity),
+            };
             // Decided against what is stored now, in the same transaction as
-            // the write. A file whose key is older or was replaced does not
-            // replace this device's key without asking.
+            // the write. A file whose key is older, was replaced, or is known
+            // to nobody does not replace this device's key without asking.
             const asked: { plan?: AskPlan } = {};
             const next = await store.update(me.accountId, (stored) => {
-                const plan = planRecoveryLoad(stored, contents, supersededOnServer);
+                const plan = planRecoveryLoad(stored, contents, server);
                 if (plan.kind === 'ask') {
                     asked.plan = plan;
                     return undefined;
@@ -569,10 +578,13 @@ export const ReleaseKeysPanel = ({
             setLoadPassphrase('');
             setLoadText(null);
             if (asked.plan) {
+                const filePlan = asked.plan;
                 setPendingLoad({
                     contents,
-                    plan: asked.plan,
-                    replacedOnServer: supersededOnServer.has(asked.plan.file.fingerprint),
+                    plan: filePlan,
+                    replacedOnServer: server.superseded.some((identity) =>
+                        sameIdentity(identity, filePlan.file.identity)
+                    ),
                 });
                 return;
             }
