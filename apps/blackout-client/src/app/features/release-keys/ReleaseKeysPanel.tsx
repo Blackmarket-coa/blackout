@@ -50,6 +50,10 @@ export const RELEASE_KEYS_LOSS =
     "private release keys are gone, and anything encrypted for them can't be opened. New keys " +
     "don't bring old ones back.";
 
+export const RELEASE_KEYS_SIGN_OUT =
+    "Signing out of Blackout doesn't remove release keys from this device. On a device other " +
+    'people use, save a recovery file, then remove the keys here before you sign out.';
+
 export const RELEASE_KEYS_BROWSER =
     "In a web browser, this app's code comes from Blackout's server, and a server made to send " +
     'altered code could read your private keys or show you a false code. The desktop and mobile ' +
@@ -453,6 +457,7 @@ export const ReleaseKeysPanel = ({
             <p>{RELEASE_KEYS_PURPOSE}</p>
             <p>{RELEASE_KEYS_SERVER}</p>
             <p>{RELEASE_KEYS_LOSS}</p>
+            <p>{RELEASE_KEYS_SIGN_OUT}</p>
 
             {notice && (
                 <p

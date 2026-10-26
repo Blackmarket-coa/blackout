@@ -22,6 +22,7 @@ import {
     RELEASE_KEYS_LOSS,
     RELEASE_KEYS_PURPOSE,
     RELEASE_KEYS_SERVER,
+    RELEASE_KEYS_SIGN_OUT,
     RELEASE_KEYS_UNSUPPORTED,
     ReleaseKeysPanel,
 } from '../../../../src/app/features/release-keys/ReleaseKeysPanel';
@@ -208,6 +209,7 @@ describe('Settings → Release keys', () => {
             RELEASE_KEYS_PURPOSE,
             RELEASE_KEYS_SERVER,
             RELEASE_KEYS_LOSS,
+            RELEASE_KEYS_SIGN_OUT,
             RELEASE_KEYS_BROWSER,
         ]) {
             expect(text()).toContain(sentence);

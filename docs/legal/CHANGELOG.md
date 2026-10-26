@@ -42,9 +42,10 @@ Arming a switch is still closed, so nothing is encrypted for them yet.
     ([`packages/api/src/routes/releaseIdentities.ts`](../../packages/api/src/routes/releaseIdentities.ts)).
     Any account signed in on the homeserver can read them, and the server sees
     who looks up whom. Deleting the account removes them.
--   **The private half never reaches the server.** It stays on the device that
-    made it and in recovery files the person saves; the app's publish call
-    sends the six public fields and nothing else
+-   **The private half never reaches the server.** It stays on the devices
+    that made it or loaded a recovery file, and in the recovery files the
+    person saves; signing out does not remove it from a device. The app's
+    publish call sends the six public fields and nothing else
     ([`packages/blackout-sdk/src/release/actions.ts`](../../packages/blackout-sdk/src/release/actions.ts)).
     A web browser runs the app code the server sends it, so this holds for the
     code as published; the desktop and mobile apps carry their own copy.

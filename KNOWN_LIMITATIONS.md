@@ -381,15 +381,20 @@ For the source-of-truth triage with tier/owner detail see
     half, save a recovery file and compare a safety code with someone, but
     arming a switch stays closed, so nothing is encrypted for these keys yet.
 -   **Lose the device, lose the keys.** The private keys live only on the
-    device that made them and in recovery files you save. A device that is
-    lost, reset, or whose browser deletes the site's data (clearing browsing
-    data does; browsers may also evict a site's storage, Safari among them
-    after a period without a visit) loses them, and Blackout cannot bring them
-    back: it never had them. Creating new keys does not recover old ones, and
-    everyone who compared a code with you has to compare again. Save a
-    recovery file, and save a new one after each comparison: a file holds
-    only the comparisons made before it was saved. The panic wipe does not
-    remove release keys; "Remove release keys from this device" does.
+    devices that made them or loaded a recovery file, and in the recovery
+    files you save. A device that is lost, reset, or whose browser deletes
+    the site's data (clearing browsing data does; browsers may also evict a
+    site's storage, Safari among them after a period without a visit) loses
+    them, and Blackout cannot bring them back: it never had them. Creating
+    new keys does not recover old ones, and everyone who compared a code
+    with you has to compare again. Save a recovery file, and save a new one
+    after each comparison: a file holds only the comparisons made before it
+    was saved.
+-   **Signing out leaves them, and so does the panic wipe.** Neither removes
+    release keys from the device, where any code running in the app's origin
+    can read them. "Remove release keys from this device" removes them; on a
+    device other people use, save a recovery file, then remove them before
+    you sign out.
 -   **Recovery file:** encrypted with your passphrase (at least 12
     characters; argon2id, then AES-256-GCM). Anyone with the file who guesses
     or learns the passphrase can use your release keys, and Blackout cannot

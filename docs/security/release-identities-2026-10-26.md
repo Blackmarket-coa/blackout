@@ -287,8 +287,11 @@ comparison against Blackout's server.
     private half to the API: the SDK's publish call sends the six public
     fields and nothing else, whatever object it is given (test).
 -   The panic wipe (`features/panic/localTraces.ts`) clears local storage
-    prefixes only, so it does not delete release keys. The screen's own
-    "Remove release keys from this device" does.
+    prefixes only, so it does not delete release keys. Nor does signing out:
+    `logout` (`client/auth.ts`) and `logoutClient` (`client/initMatrix.ts`)
+    delete the Matrix stores and the session, not `blackout-release-keys`, so
+    the keys stay on the device for the next sign-in, and the screen says so.
+    The screen's own "Remove release keys from this device" deletes them.
 -   The API stores the public identity, its fingerprint, when it was published
     and when it was replaced (`release_identities`, migration 104). **C14:**
     any signed-in account on this homeserver can read any account's current
@@ -502,6 +505,13 @@ expression) were rewritten instead of listed.
     for it from the server rather than from the token.
 11. The Release keys screen is under Settings → Account & identity, for
     every account, behind no flag.
+12. The panic wipe and signing out leave release keys on the device (§4):
+    the panic wipe leaves every IndexedDB store, and signing out deletes the
+    Matrix stores and the session, not these. Making either remove them would
+    destroy keys that only a recovery file could bring back, so it would need
+    a warning first for anyone without one. The screen tells people on a
+    shared device to remove them before signing out, and its own remove
+    button does it.
 
 ## Not verified here
 
