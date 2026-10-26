@@ -555,3 +555,13 @@ of these converge with upstream rather than diverge from it.
   the extension is built but never imported (`tests/test_rust.py` fails on the
   unchanged tree for this reason). The pyo3 advisory was therefore in the
   built artifact, not on any executed path.
+
+## 2026-10-26 legacy FastAPI service pins (`services/blackout-api`)
+
+- `services/blackout-api/requirements.txt`: PyJWT 2.10.1 → 2.15.1, FastAPI
+  0.116.1 → 0.162.0, Starlette pinned at 1.10.0 (it was unpinned, held below
+  0.48 by FastAPI), pytest 8.4.2 → 9.1.1, each past its advisories. This is
+  Blackout's own service with no counterpart upstream, so an upstream sync does
+  not touch it; it is recorded here because it sits outside
+  `blackout_runtime/`. Record:
+  `docs/security/synapse-dependencies-triage-2026-10-25.md` (last section).

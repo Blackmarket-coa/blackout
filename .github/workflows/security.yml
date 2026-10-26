@@ -172,14 +172,13 @@ jobs:
                   # gates them (upstream-advisories.yml lists element-hq/synapse's
                   # own advisories, not advisories against its dependencies). The
                   # three Twisted advisories whose fix exists only in a pre-release
-                  # are explained in .trivyignore. Only the legacy FastAPI service
-                  # under the fork directory stays skipped: its requirements.txt
-                  # pins PyJWT 2.10.1 (six HIGH/CRITICAL, fixed in 2.14.0).
-                  # infra/single-server-baseline/deploy.sh builds it as
-                  # blackout-api:stable, but that stack runs the Hono API
-                  # (API_TAG=hono); bumping it needs its own test run. See
+                  # are explained in .trivyignore. Nothing is skipped: the legacy
+                  # FastAPI service under the fork directory
+                  # (services/blackout-api, built by deploy.sh as
+                  # blackout-api:stable though that stack runs the Hono API) was
+                  # skipped until 2026-10-26, when its pins were moved past their
+                  # advisories. See
                   # docs/security/synapse-dependencies-triage-2026-10-25.md.
-                  skip-dirs: apps/blackout-server/services/blackout-api
                   # Blocking: fail on fixable CRITICAL/HIGH findings. Reviewed,
                   # non-applicable advisories are documented in .trivyignore.
                   exit-code: '1'
