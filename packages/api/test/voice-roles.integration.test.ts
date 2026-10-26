@@ -1758,6 +1758,7 @@ test("V-26: the API calls LiveKit's room service at LIVEKIT_INTERNAL_URL when it
 test("V-27: only LiveKit's own not_found means nobody was there to act on; any other 404 means LiveKit was not reached", async () => {
     const { canopyId, moderator, member } = seedCanopy();
     const { channelId } = seedRoom(canopyId);
+    const roomName = livekitRoomName(canopyId, channelId);
     await joinAs(member, canopyId, channelId);
     // What LiveKit answers for a participant who is not in the room...
     const livekitNotFound = () =>
@@ -1787,6 +1788,22 @@ test("V-27: only LiveKit's own not_found means nobody was there to act on; any o
         res = await remove();
     });
     assert.deepEqual(await refusal(res!), { status: 502, code: 'livekit_unavailable' });
+
+    // The webhook's enforcement is held to the same: a rejoin is not logged as
+    // nobody there when LiveKit was never asked.
+    const rejoin = await liveKitDelivery('participant_joined', roomName, member.id);
+    let delivery: Awaited<ReturnType<typeof delivered>> | undefined;
+    await withRealRoomService(proxyNotFound, async () => {
+        delivery = await delivered(rejoin);
+    });
+    assert.equal(delivery!.status, 502);
+    await withRealRoomService(livekitNotFound, async () => {
+        delivery = await delivered(rejoin);
+    });
+    assert.deepEqual(delivery, {
+        status: 200,
+        body: { ok: true, enforced: 'remove', livekit: 'not_connected' },
+    });
 });
 
 test('V-19: when LiveKit reports someone a moderator removed or muted back in the room, the API applies what stands', async () => {
