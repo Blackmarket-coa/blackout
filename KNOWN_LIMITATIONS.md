@@ -52,6 +52,15 @@ For the source-of-truth triage with tier/owner detail see
         as an override if FBM ever moves the mount; a path inside
         `FREEBLACKMARKET_BASE_URL` is discarded by URL resolution.
     -   Set `FREEBLACKMARKET_ENABLED=false` to opt out entirely.
+    -   **Webhook replay window (2026-10-25):** FBM signs its deliveries over
+        the body alone, so a captured delivery verifies forever and only the
+        event-id de-dupe (which now acknowledges a processed event before any
+        handler runs, for every event family) stands between it and a replay.
+        Blackout accepts a timestamped form (`x-fbm-timestamp`, signature over
+        `<timestamp>.<body>`, 300-second window) and will refuse the body-only
+        form once the operator sets `FREEBLACKMARKET_WEBHOOK_REQUIRE_TIMESTAMP=1`
+        — which needs FBM to send the header first
+        (`docs/contracts/freeblackmarket-integration-work-order.md` §1).
     -   Settings -> Subscriptions "Manage billing on Free Black Market"
         (2026-10-06) depends on FBM's manage-session endpoint, which FBM is
         building in parallel. Until it is live and `FBM_MANAGE_SESSION_ENABLED`
@@ -184,12 +193,11 @@ For the source-of-truth triage with tier/owner detail see
 -   **Where:** `apps/blackout-client/src/app/features/black-mask-embed/`;
     spec and status in `docs/black-mask-chat-panel-and-account-link.md`.
 -   **State:** built, not deployed. Shows canopies, text dens and DMs with
-    unread indicators (on by default). Framing is off unless the operator sets
+    unread indicators (on by default), and creates canopies and dens
+    (`EmbedNew.tsx`, shipped 2026-10-24 in PR #965) with the defaults in "New
+    canopy and den defaults" above. Framing is off unless the operator sets
     `BLACK_MASK_FRAME_ANCESTORS` on the web client container.
 -   **Not there yet:**
-    -   creating a canopy or a den from the panel (the defaults it will use
-        are private and, for dens, encrypted; see "New canopy and den
-        defaults" above);
     -   push notifications;
     -   account linking (B4/B5);
     -   any check of external links (B6): links open in a new tab unchecked;
@@ -389,6 +397,22 @@ For the source-of-truth triage with tier/owner detail see
 
 ---
 
+### Key-transparency log (2026-10-25)
+
+-   **Where:** `packages/api/src/routes/keyTransparency.ts`;
+    [`docs/security/key-transparency.md`](docs/security/key-transparency.md).
+-   **State:** the server side exists — an RFC 6962 log of cross-signing master
+    keys with inclusion and consistency proofs — and since 2026-10-25 only a
+    signed-in caller can append, and only for their own account (before that
+    anyone could publish any key under any user id, into the log a client is
+    meant to check its own key against). No shipped client publishes a key to it
+    or checks a proof, so today it detects a key substitution only for an auditor
+    who reads it. It is in memory unless `KT_LOG_FILE` is set and its tree heads
+    are unsigned unless `KT_WITNESS_ED25519_SEED` is; no tracked deploy file sets
+    either.
+-   **Not there yet:** client publication and verification; a bound on how often
+    an account may append; witness gossip across deployments.
+
 ## Deferred multi-week workstreams
 
 These are tracked in
@@ -419,6 +443,15 @@ by opening an [Invite request issue](https://github.com/Blackmarket-coa/blackout
 the homeserver-side mechanics are documented in
 [`infra/single-server-baseline/synapse/ENABLE_REGISTRATION.md`](infra/single-server-baseline/synapse/ENABLE_REGISTRATION.md),
 with `mint-invite-token.sh` next to it as the issuing helper.
+
+The API's own sign-up routes honour the same gate: with `REQUIRE_INVITE_TOKEN=1`,
+`POST /v1/auth/register` and, since 2026-10-25, the no-PII
+`POST /v1/auth/account-number` refuse without an invitation token. Before that
+date the account-number route minted a Matrix account with no invite check
+(D3 in [`docs/black-mask-account-link-design.md`](docs/black-mask-account-link-design.md) §7;
+fixed in [`docs/security/api-findings-triage-2026-10-25.md`](docs/security/api-findings-triage-2026-10-25.md)).
+The web client's anonymous sign-up does not send a token yet, so with the gate
+on it is refused until it does.
 
 ### Release signoff
 

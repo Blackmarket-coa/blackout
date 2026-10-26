@@ -32,11 +32,21 @@
 -   `x-fbm-signature: <hex>` — lowercase hex `HMAC-SHA256(rawRequestBody, FREEBLACKMARKET_WEBHOOK_SECRET)`.
     Sign the **exact bytes** of the JSON body you send. Blackout recomputes and compares in
     constant time; a mismatch is rejected `401`.
+-   `x-fbm-timestamp: <unix seconds>` — **send it.** Optional today, required once Blackout
+    sets `FREEBLACKMARKET_WEBHOOK_REQUIRE_TIMESTAMP=1`. With it the signature is
+    `HMAC-SHA256("<timestamp>.<rawRequestBody>", FREEBLACKMARKET_WEBHOOK_SECRET)` — the form FBM
+    already uses for its deliveries to Blackstar — and Blackout rejects a delivery whose
+    timestamp is more than 300 seconds (`FREEBLACKMARKET_WEBHOOK_TOLERANCE_SECONDS`) from its
+    clock as `401 timestamp-skew`, so a captured delivery stops verifying when the window
+    closes. Without the header the body-only form above is accepted and a captured delivery
+    verifies forever; only the event-id de-dupe below then stands between it and a replay
+    (2026-10-25, `docs/security/api-findings-triage-2026-10-25.md`, D5).
 
 **Delivery semantics:**
 
 -   **Replay-safe / idempotent:** Blackout dedupes on `(provider, eventId)`. Re-delivering the
-    same `eventId` is safe and returns `200` with `alreadyProcessed: true`. Use a **stable**
+    same `eventId` is safe and returns `200` with `alreadyProcessed: true`, for every event
+    family: a processed event id is acknowledged before any handler runs. Use a **stable**
     `eventId` per logical event.
 -   **Retry:** exponential backoff on non-2xx / timeout. A `200` body `{ ok: true, ... }` is success.
 -   **Ordering:** not assumed. Each event is self-contained.
@@ -45,8 +55,14 @@
 **Signing reference (Node):**
 
 ```js
-const sig = crypto.createHmac('sha256', WEBHOOK_SECRET).update(rawBody).digest('hex');
-// headers: { 'x-fbm-event-id': eventId, 'x-fbm-signature': sig }
+const timestamp = String(Math.floor(Date.now() / 1000));
+const sig = crypto
+    .createHmac('sha256', WEBHOOK_SECRET)
+    .update(`${timestamp}.${rawBody}`)
+    .digest('hex');
+// headers: { 'x-fbm-event-id': eventId, 'x-fbm-timestamp': timestamp, 'x-fbm-signature': sig }
+// Legacy form, accepted until FREEBLACKMARKET_WEBHOOK_REQUIRE_TIMESTAMP=1 on Blackout's side:
+//   sign rawBody alone and send no x-fbm-timestamp header.
 ```
 
 **Common envelope (all events):**
@@ -589,16 +605,18 @@ placed cannot answer "within N km".
 
 ## 7. Secrets & config to coordinate
 
-| Secret / var                     | Owner      | Used for                                                                             |
-| -------------------------------- | ---------- | ------------------------------------------------------------------------------------ |
-| `FREEBLACKMARKET_WEBHOOK_SECRET` | shared     | HMAC signing of §1–§3/§6 webhooks                                                    |
-| `FREEBLACKMARKET_API_KEY`        | FBM issues | Blackout → FBM commerce API bearer (§5)                                              |
-| `FREEBLACKMARKET_BASE_URL`       | FBM        | commerce API base                                                                    |
-| `FREEBLACKMARKET_API_PREFIX`     | FBM        | commerce API path prefix override (defaults to `/v1/integrations/blackout/commerce`) |
-| Entitlements **service token**   | FBM issues | Blackout → entitlements service bearer (§4)                                          |
-| Entitlements **base URL**        | FBM        | §4 service location                                                                  |
-| `FBM_MATRIX_BRIDGE_ENABLED`      | Blackout   | master gate for the §3/§6 room families; off by default                              |
-| `FBM_AID_MIRROR_ENABLED`         | Blackout   | gate for the §3.4 aid-board mirror, separate from the room gate; off by default      |
+| Secret / var                                | Owner      | Used for                                                                             |
+| ------------------------------------------- | ---------- | ------------------------------------------------------------------------------------ |
+| `FREEBLACKMARKET_WEBHOOK_SECRET`            | shared     | HMAC signing of §1–§3/§6 webhooks                                                    |
+| `FREEBLACKMARKET_WEBHOOK_REQUIRE_TIMESTAMP` | Blackout   | refuse §1 deliveries without `x-fbm-timestamp`; off until FBM sends the header       |
+| `FREEBLACKMARKET_WEBHOOK_TOLERANCE_SECONDS` | Blackout   | how far `x-fbm-timestamp` may differ from Blackout's clock (default 300)             |
+| `FREEBLACKMARKET_API_KEY`                   | FBM issues | Blackout → FBM commerce API bearer (§5)                                              |
+| `FREEBLACKMARKET_BASE_URL`                  | FBM        | commerce API base                                                                    |
+| `FREEBLACKMARKET_API_PREFIX`                | FBM        | commerce API path prefix override (defaults to `/v1/integrations/blackout/commerce`) |
+| Entitlements **service token**              | FBM issues | Blackout → entitlements service bearer (§4)                                          |
+| Entitlements **base URL**                   | FBM        | §4 service location                                                                  |
+| `FBM_MATRIX_BRIDGE_ENABLED`                 | Blackout   | master gate for the §3/§6 room families; off by default                              |
+| `FBM_AID_MIRROR_ENABLED`                    | Blackout   | gate for the §3.4 aid-board mirror, separate from the room gate; off by default      |
 
 ---
 
@@ -607,7 +625,13 @@ placed cannot answer "within N km".
 1. A staging purchase emits a signed `purchase.succeeded` to the §1 endpoint; Blackout returns
    `{ ok: true }` and grants the entitlement. Re-delivering the same `eventId` returns
    `alreadyProcessed: true` and does **not** double-grant.
+   1b. The same holds for every event family: a re-delivered tip, creator-subscription,
+   canopy-plan or boost purchase is acknowledged `alreadyProcessed: true` without its capture
+   running again (a subscription cancelled after the first delivery stays cancelled).
 2. An invalid `x-fbm-signature` is rejected `401`.
+   2b. A delivery carrying `x-fbm-timestamp` more than the tolerance from Blackout's clock is
+   rejected `401 timestamp-skew`; one carrying the header but signed over the body alone is
+   rejected `401 signature-mismatch`.
 3. `order.created` / `order.updated` / `ledger.*` / `inventory.low` are emitted with the §3
    shapes for a real order and appear in the vendor rooms.
 4. `dispute.opened` / `dispute.resolved` and `subscription.activated` / `subscription.lapsed`
@@ -627,6 +651,8 @@ placed cannot answer "within N km".
 ## 9. Notes for the FBM implementer
 
 -   Keep `eventId` stable across retries — it is the idempotency key on both sides.
+-   Send `x-fbm-timestamp` and sign `<timestamp>.<body>` (§1). Blackout accepts the body-only
+    form for now and will require the timestamped one.
 -   `userId` is the Blackout user id captured at account-link time; maintain that mapping.
 -   The §3.4 aid family carries no `userId` and no `vendorId` at all: FBM's projection
     withholds `requester_id`, and mirrored rows are owned by `system:freeblackmarket`.

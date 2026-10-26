@@ -104,8 +104,14 @@ Encryption claims are only worth something with the exceptions attached.
     into an encrypted room, into a room you are not in or may not post in, and
     into a room the bot is not in, and it checks again right before sending.
 -   **The API message endpoint** (`POST /v1/messages/…`, used by the Expo mobile
-    scaffold in `packages/mobile`) stores the text readable on the server, and if
-    you name a room, the bot posts it there unencrypted after the same room check.
+    scaffold in `packages/mobile`) stores the text readable on the server whatever
+    `stegoTier` a client asks for, and says so: every row reads
+    `isEncrypted: false`, and a request to sign a message is refused rather than
+    answered with something that is not a signature. Until 2026-10-25 tier 2 was
+    labelled `e2e`; it was an XOR against a server-minted string, recorded in
+    [`api-findings-triage-2026-10-25.md`](docs/security/api-findings-triage-2026-10-25.md).
+    If you name a room, the bot posts the text there unencrypted after the same
+    room check.
 -   **Spaces**, which hold hierarchy state and never messages.
 -   **Calls and townhall media** use a _different_ mechanism from messages:
     per-call media encryption is negotiated by default
