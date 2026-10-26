@@ -52,6 +52,12 @@ export const memberEvent = (userId: string, membership = 'join'): StubStateEvent
     content: { membership },
 });
 
+export const joinRulesEvent = (joinRule: string): StubStateEvent => ({
+    type: 'm.room.join_rules',
+    state_key: '',
+    content: { join_rule: joinRule },
+});
+
 export const encryptionEvent = (): StubStateEvent => ({
     type: 'm.room.encryption',
     state_key: '',

@@ -10,20 +10,25 @@ is still open. Every finding gets a fix or a written reason, per the standing
 rule in this directory.
 
 Written against `develop` at `291f593`, with the change set that fixes it; the
-dated section at the end, against `develop` at `6ea67c4`, with the change set
-that fixes O4. **Read** below means the claim rests on the code; **Run** that
+dated sections at the end, against `develop` at `6ea67c4` (the change set that
+fixes O4) and at `3c19d0e` (the one that fixes V2, V4, V6 and V7). **Read**
+below means the claim rests on the code; **Run** that
 it was observed by running it; **Test** names the regression test that drives
 the real Hono app (in memory mode, against the stub homeserver in
 `packages/api/test/_fixtures/matrixStub.ts` where a homeserver is involved),
 so CI's `api-smoke-and-integration` job keeps this record honest.
 
-**Result:** H1 to H5 fixed. O4 fixed on 2026-10-24, with V1 to V3 found and
-fixed alongside it (last section). Open: the community role model (O1), the
-join rule on listing (O2), scopes that mix owner-checked and shared-state
-routes (O3), the rollout window for tokens minted before the change (O5),
-whether dead-drop writes can be minted (O6), and, for voice rooms, moderation
-that does not reach LiveKit (V4), the token route's subscription check (V5)
-and levels in moderation (V7). V6, drop-in rooms, is recorded as unchanged.
+**Result:** H1 to H5 fixed. O4 fixed on 2026-10-24, with V1 and V3 found and
+fixed alongside it and V2 half fixed. V2, V4, V6 and V7 fixed on 2026-10-25
+(last section): voice moderation acts in LiveKit and outlives the connection,
+the canopy's bans and join rule decide who enters, a moderator must be above
+the target, and the event feed is for the canopy's members. Open: the
+community role model (O1), the join rule on listing (O2), scopes that mix
+owner-checked and shared-state routes (O3), the rollout window for tokens
+minted before the change (O5), whether dead-drop writes can be minted (O6),
+and, for voice rooms, LiveKit tokens already issued, which moderation cannot
+revoke (V4's residual), and the token route's subscription check (V5), a
+billing decision for the operator.
 
 | ID  | Finding                                                                                                 | Verified    | Disposition                                                    |
 | --- | ------------------------------------------------------------------------------------------------------- | ----------- | -------------------------------------------------------------- |
@@ -39,12 +44,12 @@ and levels in moderation (V7). V6, drop-in rooms, is recorded as unchanged.
 | O5  | Tokens minted before the change keep the old capability list until they expire or are refreshed         | Read        | Open, transitional                                             |
 | O6  | A dead drop can be addressed to any account, and appears in that account's export                       | Read        | Open: admin-only until decided                                 |
 | V1  | Joining a voice room created it, with no directory or role check                                        | Read; tests | Fixed 2026-10-24: only create makes a room                     |
-| V2  | A voice room's event feed (participants, history) had no sign-in check                                  | Run; test   | Fixed for anonymous callers; signed-in audience open           |
+| V2  | A voice room's event feed (participants, history) had no sign-in check                                  | Run; tests  | Fixed 2026-10-25: the canopy's joined members only (V-18)      |
 | V3  | An unknown voice moderation action logged a removal that removed nobody                                 | Run; test   | Fixed 2026-10-24: 404 `unknown_action`                         |
-| V4  | Voice moderation does not reach LiveKit, and tokens already issued stay valid                           | Read        | Open: stated in `KNOWN_LIMITATIONS.md`                         |
-| V5  | `POST /v1/voice/token` skips the subscription check that joining makes                                  | Read        | Open: a billing rule, for the operator                         |
-| V6  | Unlocked voice rooms are drop-in for every entitled account, banned ones included                       | Read; test  | Unchanged: the drop-in design; locking is the control          |
-| V7  | Voice mute and remove do not compare the moderator's level with the target's                            | Read        | Open, low while V4 stands                                      |
+| V4  | Voice moderation does not reach LiveKit, and tokens already issued stay valid                           | Read; tests | Fixed 2026-10-25 (V-12 to V-15); issued tokens not revoked     |
+| V5  | `POST /v1/voice/token` skips the subscription check that joining makes                                  | Read        | Open: a billing rule, for the operator (last section)          |
+| V6  | Unlocked voice rooms are drop-in for every entitled account, banned ones included                       | Read; tests | Fixed 2026-10-25: bans and the join rule decide (V-4, V-16)    |
+| V7  | Voice mute and remove do not compare the moderator's level with the target's                            | Read; tests | Fixed 2026-10-25: moderator above the target (V-17)            |
 
 ---
 
@@ -477,7 +482,8 @@ it (neither file stubs a homeserver) instead of relying on join to create it.
     voice route does (V-10; removing the check fails it). Open: any
     signed-in account can still read any room's feed, a locked room's
     included. Moderators only would follow the role model; no shipped client
-    reads it.
+    reads it. **Fixed 2026-10-25** for the canopy's joined members (last
+    section).
 -   **V3 — an unknown moderation action logged a removal — fixed.**
     `/rooms/moderation/<anything but lock, mute or remove>` with a target
     answered 200 and logged a `remove` that removed nobody (run, with `kick`).
@@ -492,11 +498,12 @@ it (neither file stubs a homeserver) instead of relying on join to create it.
     `services/livekit.ts`), with the role it was minted with. Real moderation
     needs LiveKit's room service (`removeParticipant`, `mutePublishedTrack`;
     `services/livekitAdmin.ts` already holds a client for the OBS mute path).
-    Stated in `KNOWN_LIMITATIONS.md`.
+    Stated in `KNOWN_LIMITATIONS.md`. **Fixed 2026-10-25** (last section).
 -   **V5 — the token route skips the subscription check — open.** Joining
     requires the premium canopy subscription; `POST /v1/voice/token` does not,
     so any signed-in account gets a token for an existing unlocked room. A
-    billing rule, not a role, so it is the operator's call.
+    billing rule, not a role, so it is the operator's call. Still open;
+    described for the operator in the last section.
 -   **V6 — unlocked rooms are drop-in — unchanged.** Any signed-in, entitled
     account can join an unlocked room, member of the canopy or not, including
     one the canopy banned (V-4), and `/rooms/open` lists every unlocked room
@@ -504,11 +511,13 @@ it (neither file stubs a homeserver) instead of relying on join to create it.
     (the comment on `/rooms/open`), and ordinary joins keep working, as asked.
     Refusing banned accounts would be a membership rule rather than a role, and
     a new account gets around it; locking the room is the control that holds.
+    **Fixed 2026-10-25** (last section): the canopy's bans and join rule now
+    decide.
 -   **V7 — moderation does not compare levels — open, low.** A Matrix kick also
     needs the kicker's level above the target's; voice mute and remove compare
     nothing, so a moderator can mute or remove the canopy's admin. Low while V4
     stands, since neither touches the call; worth mirroring when moderation
-    reaches LiveKit.
+    reaches LiveKit. **Fixed 2026-10-25** (last section).
 -   **Not changed:** rooms that joining created before this change stay (rooms
     never end), including any for an unlisted canopy or a made-up id; they can
     still be joined, and moderating one takes a role in the room its
@@ -524,7 +533,8 @@ it (neither file stubs a homeserver) instead of relying on join to create it.
 -   Cost: each create, join, token and moderation request reads the canopy's
     whole state, member events included. Not measured for large canopies.
 -   A role changed on the homeserver applies from the caller's next request;
-    a LiveKit token already issued keeps its role until it expires (V4).
+    a LiveKit token already issued keeps its role until it expires (V4; since
+    2026-10-25 a token lives two minutes, last section).
 
 ### Documentation corrected with this section
 
@@ -534,3 +544,257 @@ it (neither file stubs a homeserver) instead of relying on join to create it.
     moderation does.
 -   `TRUST.md` and `trust.html`: unchanged; they make no claim about voice
     rooms or their moderation.
+
+---
+
+## 2026-10-25: V2, V4, V6 and V7 fixed — voice moderation acts in LiveKit, and the canopy decides who enters
+
+The operator approved fixing the voice-room findings left open on 2026-10-24.
+Against `develop` at `3c19d0e`. **Read**, **Run** and **Test** as above; the
+tests are V-12 to V-18 in `packages/api/test/voice-roles.integration.test.ts`,
+against the stub homeserver and a fake of LiveKit's room service
+(`packages/api/test/_fixtures/livekitStub.ts`) that records every call and is
+built from the SDK's own protocol classes and error type; V-3, V-4 and V-5
+were extended. No LiveKit server and no running fork were available; see
+"Still unverified".
+
+### V4 — moderation acts in LiveKit, and a removal stands — fixed
+
+-   **Found (2026-10-24):** `mute` only wrote an event and `remove` only ended
+    the participant's row; the person stayed connected and could still speak,
+    and a token already minted kept its role for up to 15 minutes.
+-   **Fix:** `services/voiceModeration.ts` acts through LiveKit's room service
+    (`livekit-server-sdk`, `RoomServiceClient`), the client the OBS mute path
+    already builds in `services/livekitAdmin.ts`, behind the same injectable
+    factory (`setRoomServiceClientFactory`), so tests run the fake. The LiveKit
+    identity is the Blackout user id, as the tokens are minted.
+
+    | Action                        | In the API, written first                                                          | In LiveKit                                                                                                                                     |
+    | ----------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+    | `mute` (`muted` default true) | a `mute` sanction: the account's next tokens cannot publish                        | every published audio track muted (`mutePublishedTrack`, by track id), then publishing taken away (`updateParticipant`, the other grants kept) |
+    | `mute` with `muted: false`    | the sanction lifted                                                                | publishing restored to what the participant joined with, then the audio tracks unmuted                                                         |
+    | `remove`                      | a `remove` sanction: no token and no join for this room; the participant row ended | the participant disconnected (`removeParticipant`)                                                                                             |
+    | `readmit` (new)               | the `remove` sanction lifted                                                       | nothing                                                                                                                                        |
+    | `lock`                        | as before                                                                          | nothing: a lock refuses new joins and tokens; it does not end connections                                                                      |
+
+    Sanctions live in a persisted store collection (`voice_room_sanctions`,
+    migration 103; the Postgres-backed store writes only columns that exist, so
+    without the table a restart would forget a removal), keyed by the voice
+    room, so they end with it; lifted rows stay as history. `/rooms/join` and
+    `/token` refuse an account with a standing removal with 403
+    `removed_from_room`, before the lock and for every role, and mint a token
+    that cannot publish for an account with a standing mute. The event feed
+    lists the sanctions that stand.
+
+    **Claims are kept true.** Without LiveKit configured, mute and remove write
+    nothing and answer 503 `livekit_not_configured`. When LiveKit is configured
+    but the call fails, the record stands (the account's next token already
+    follows it), the answer is 502 `livekit_unavailable`, and the body says the
+    person may still be heard or connected until the moderator retries. 200
+    means the action happened, or that nobody was connected to apply it to
+    (`livekit.connected: false`, `livekit.disconnected: false`), which the
+    record covers.
+
+    **A token lives 120 seconds**, one constant with its reasoning next to it
+    (`LIVEKIT_TOKEN_TTL_SECONDS`, `services/livekit.ts`). A connected
+    participant stays until removed, so the TTL bounds how long a token the
+    API minted before a lock, a mute or a removal can still open a connection
+    with what it was minted with. Two minutes leaves time to fetch the token,
+    connect, and retry a first connection that failed or dropped; it is a
+    judgement, not a measurement. The environment variable
+    `LIVEKIT_TOKEN_TTL_SECONDS` (up to 15 minutes) is no longer read, and
+    `ttlSeconds` in a `/token` request is dropped like any unknown key.
+
+-   **Test:** V-12 (mute: both audio tracks by id, the camera left alone,
+    publishing taken away with subscribe and data kept, the next join and token
+    cannot publish however they ask, unmute reverses each step; a mute of
+    someone not connected is recorded), V-13 (remove: `removeParticipant`
+    asserted with room and identity, the participant gone from the fake, no
+    join or token until readmitted, locked or not, others unaffected, a repeat
+    keeps the one record, readmit, the record persisted and lifted), V-14 (503
+    with nothing written, nothing logged and LiveKit not asked; 502 with the
+    record standing and the reason in the log; the retry succeeds), V-15 (the
+    TTL: `/config`, a join token, a `/token` request asking for 900 seconds, the
+    old environment variable). V-3: the member refused after removal and
+    readmitted.
+-   **Mutation check (run):** 17 mutations each fail at least one test: each
+    LiveKit call skipped (the tracks, the permission on mute, the permission on
+    unmute, the removal), video tracks muted too, the removal ignored on join
+    and on token, no 503 without LiveKit (the record then written), a LiveKit
+    failure answered 200 on remove and on mute, the TTL back to 300, the mute
+    ignored on join and on token, a removal recorded as a mute, readmit lifting
+    nothing, a mute never recorded, and a lifted sanction still standing.
+-   **Residual — tokens already issued are not revoked (open).** LiveKit has
+    no revocation. The SDK describes `removeParticipant` as leaving the
+    participant able to rejoin ("the participant can still re-join the room"),
+    and LiveKit's signal protocol lets the server hand a connected client a
+    refreshed token (`refresh_token` in `@livekit/protocol`: "update the token
+    the client was using, to prevent an active client from using an expired
+    token"), whose lifetime the LiveKit server sets. So a removed participant
+    whose client kept a valid token, the API's for up to two minutes or one
+    LiveKit refreshed, can rejoin the LiveKit room until it expires, and a
+    muted one reconnecting with a token issued before the mute can publish; a
+    connection made that way stays until a moderator acts again. The API
+    refuses the account any new token, and the room's feed shows the
+    sanction. Closing it needs LiveKit to tell the API who joins (its
+    `participant_joined` webhook, which the SDK's `WebhookReceiver` verifies)
+    so the API can apply a standing sanction on arrival, with the LiveKit
+    server configured to send webhooks to the API: a deployment change, not
+    made here. Stated in `KNOWN_LIMITATIONS.md`.
+
+### V6 — the canopy decides who enters — fixed
+
+-   **Found (2026-10-24):** an unlocked room admitted every signed-in,
+    entitled account as a member, including one the canopy banned.
+-   **Fix:** `services/voiceRoleGate.ts` reads the caller's _entry_ with the
+    role, from the same state: membership `ban` refuses (403 `canopy_banned`,
+    whatever level the account kept); `join` or `invite` admits; anyone else
+    (left, knocked, never there) is admitted only where the canopy's join rule
+    (`m.room.join_rules`) is `public`, and refused under `invite`, `knock`,
+    `restricted`, `knock_restricted`, `private` or no rule at all (403
+    `not_canopy_member`): the API cannot evaluate a restricted rule's allow
+    list, so it fails closed, as the homeserver would refuse the join. A room
+    whose canopy the homeserver does not know (404) admits nobody. Join and
+    token check the entry before the lock and before the room's own records,
+    so a banned account is not told the room is merely locked.
+
+    **When the homeserver cannot say** (no bot token, an error, a bad body), an
+    unlocked room still admits the account as a member, as #974 left it: the
+    launch-smoke suite (LS-CALL-01) and the v1-routes join test run with no
+    homeserver and seed no membership, and failing closed there would make an
+    ordinary join depend on the homeserver. While that holds the ban check
+    cannot run; `KNOWN_LIMITATIONS.md` says so. A locked room answers the
+    reason (503), as before.
+
+    `/rooms/open` still lists every unlocked room to every signed-in account,
+    rooms of canopies the viewer cannot enter included; filtering it would
+    cost one state read per room per listing, and is not done.
+
+-   **Test:** V-4 (a public canopy: a stranger, someone who left and someone
+    invited drop in as members and are refused by the locked room; a banned
+    account at 100 is refused by both rooms, for a join and for a token), V-16
+    (an invite-only canopy refuses outsiders and admits the invited and its
+    members, for join and token, after one state read; knock, restricted,
+    knock_restricted, private and a missing rule refuse, public admits,
+    members unaffected; a room for a canopy the homeserver does not know
+    admits nobody; a homeserver error still admits an unlocked join). The test
+    canopy is public by default, as the New canopy form makes a listed canopy.
+-   **Mutation check (run):** 9 mutations each fail V-4, V-5 or V-16: the ban
+    not refusing, non-members admitted whatever the rule, the invited treated
+    as outsiders, an unknown canopy admitting, roles computed for non-members,
+    the join rule read from the wrong field, the entry check skipped on join,
+    skipped on token, and only bans refused.
+
+### V7 — the moderator must be above the target — fixed
+
+-   **Found (2026-10-24):** mute and remove compared nothing, so a moderator
+    could mute or remove the canopy's admin, a fellow moderator or themselves.
+-   **Fix:** the moderation route reads the moderator's standing and the
+    target's from one state read (`readCanopyStandings`) and refuses mute,
+    unmute, remove and readmit with 403 `target_not_below_moderator` unless the
+    moderator's level is strictly above the target's, the comparison the fork
+    makes for a kick and an unban (`synapse/event_auth.py`). A target that is
+    not in the canopy is judged by the level it would have there
+    (`users_default`), so a drop-in can be removed; a level that is not an
+    integer refuses with 503 `canopy_check_unavailable` rather than comparing
+    a guess. A target with no Blackout account answers 404 `target_unknown`,
+    after the role check, so a member cannot probe which accounts exist.
+-   **Test:** V-17 (a moderator on the admin, on a fellow moderator and on
+    themselves, and the admin on themselves, refused for mute, remove and
+    readmit with nothing done, recorded or asked of LiveKit, from one state
+    read; the admin on a moderator, and a moderator on a member and on a
+    drop-in, allowed; a canopy whose kick level is 0 makes everyone a moderator
+    and nobody above anyone; an unknown target, for a moderator and for a
+    member; a non-integer level, joined and departed).
+-   **Mutation check (run):** 5 mutations each fail V-17: an equal level
+    passing, no comparison, a non-integer level compared anyway, an unknown
+    target not refused, readmit exempted.
+
+### V2 — the event feed is for the canopy's members — fixed
+
+-   **Found (2026-10-24):** after the sign-in check, any signed-in account
+    could read any room's feed, a locked room's included.
+-   **Fix:** `GET /v1/voice/rooms/:canopyId/:channelId/events` serves joined
+    members of the canopy, through the same gate. The membership is read before
+    the room is looked up, and a room that does not exist gets the same 403 and
+    the same body (`forbidden`) as a room the caller may not read, so the feed
+    does not say which rooms a canopy has. When the homeserver cannot say, 503
+    with the reason: other people's data is not shown on a guess. The feed now
+    also lists the sanctions that stand.
+-   **Test:** V-18 (a member and the admin read it, with participants, history
+    and the standing sanctions; a stranger, someone who left, someone invited
+    and someone banned get one 403, after the homeserver was asked; the body is
+    byte-for-byte the same for a missing room, a missing channel and an unknown
+    canopy; 503 when the homeserver fails and when Matrix is not configured).
+    V-10 keeps the sign-in check.
+-   **Mutation check (run):** 5 mutations each fail V-18 or V-10: only bans
+    refused, a 404 for a missing room, serving on failure, the room looked up
+    before the membership, the sign-in check dropped.
+
+### V5 — the token route and the subscription — for the operator
+
+Unchanged, on purpose. `POST /v1/voice/rooms/join` requires the premium canopy
+subscription (402 `premium_required`); `POST /v1/voice/token` does not, so an
+account without the subscription can get a token for an existing room it may
+enter (a member of the canopy, or the canopy is public) and connect to the
+call, with no participant row and no `join` event in the API. What `/token`
+now checks, as join does: that the room exists, the canopy's entry (V6), a
+standing removal (V4), the lock, and a standing mute (V4). Whether a token
+alone should also require the subscription is a billing rule: either both
+routes require it, or `/token` is a reconnect path that still serves a caller
+whose subscription lapsed mid-call. The operator decides; the change is the
+one `hasPremiumCanopyEntitlement` check join makes, in either direction, with
+a test.
+
+### Response codes on the voice routes after this change
+
+| Code                         | Status | Where                                                                                                  |
+| ---------------------------- | ------ | ------------------------------------------------------------------------------------------------------ |
+| `canopy_banned`              | 403    | join, token: the canopy banned the account                                                             |
+| `not_canopy_member`          | 403    | join, token: not a member, and the canopy is not public, or the homeserver does not know it            |
+| `removed_from_room`          | 403    | join, token: a moderator removed the account from this room; `readmit` lifts it                        |
+| `room_locked`                | 423    | join, token: the room is locked and the caller is a member (after the three above)                     |
+| `target_not_below_moderator` | 403    | mute, remove, readmit: the target's level is at or above the moderator's                               |
+| `target_unknown`             | 404    | mute, remove, readmit: no Blackout account with that id (after the role check)                         |
+| `livekit_not_configured`     | 503    | mute, remove: nothing was done                                                                         |
+| `livekit_unavailable`        | 502    | mute, remove: the record stands; the body says what may still be true in the call                      |
+| `forbidden`                  | 403    | the event feed: the room does not exist, or the caller is not a joined member of its canopy (one body) |
+| `unknown_action`             | 404    | moderation: not lock, mute, remove or readmit                                                          |
+
+### Still unverified
+
+-   **A LiveKit server.** None was available. The calls are the SDK's
+    (`listParticipants`, `mutePublishedTrack`, `updateParticipant`,
+    `removeParticipant`), exercised against a fake built from the SDK's own
+    protocol classes and error type. Read in the SDK, not run: that a removed
+    participant can rejoin with a valid token, and that the server can refresh
+    a connected client's token (V4's residual). Assumed, not observed: that
+    the server keeps a connected participant after their token expires (why
+    the TTL bounds only new connections), and that taking publishing away may
+    unpublish the participant's tracks (why a mute mutes the tracks first and
+    an unmute restores the permission first, and a track that is gone by then
+    is not an error).
+-   **A running fork**, as for O4: the admin room-state endpoint and
+    `m.room.join_rules` are read as the stub serves them.
+-   **The two minutes** is a judgement, not a measurement: enough to fetch a
+    token, connect and retry a first connection. It was not measured against a
+    real client or network, and the client SDK (`livekit-client`) is not in
+    this tree to read.
+-   **Room version 12** and **cost**, as on 2026-10-24; a moderation request
+    now reads the canopy's state once for both accounts, not twice.
+
+### Documentation corrected with this section
+
+-   `KNOWN_LIMITATIONS.md`: "Voice rooms in the API", rewritten for what is
+    now true, with the homeserver-unavailable gap and `/rooms/open`.
+-   `THREAT_MODEL.md`: adversary A6, and the B3 residual-risk line about a
+    voice token's lifetime (two minutes, not fifteen).
+-   `packages/api/README.md`: the voice routes, moderation, the TTL, the feed.
+-   `packages/api/.env.example`: `LIVEKIT_TOKEN_TTL_SECONDS` removed.
+-   `docs/black-mask-chat-panel-and-account-link.md`: a voice token a panel
+    session could ask for lives two minutes, not fifteen.
+-   Comments: `LIVEKIT_TOKEN_TTL_SECONDS` in `services/livekit.ts`, the file
+    comment of `services/voiceModeration.ts` and the removal check in
+    `routes/voice.ts`: a token already issued is not revoked.
+-   `TRUST.md` and `trust.html`: unchanged; they make no claim about voice
+    rooms.

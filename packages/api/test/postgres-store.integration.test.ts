@@ -49,8 +49,9 @@ test('every descriptor maps to a real table with columns', async () => {
         assert.ok(columns.length > 0, `table ${d.tableName} (map ${d.mapName}) should exist`);
     }
     // Bumped by coalition_campaign_engagement (the counts half of two-way sync)
-    // and coalition_campaign_attribution (what a share produced).
-    assert.equal(TABLE_DESCRIPTORS.length, 153);
+    // and coalition_campaign_attribution (what a share produced), then by
+    // voice_room_sanctions (mutes and removals that outlive the connection).
+    assert.equal(TABLE_DESCRIPTORS.length, 154);
     await pg.query('SELECT 1');
 });
 

@@ -989,12 +989,33 @@ export interface VoiceRoomEventRecord {
     canopyId: UUID;
     channelId: UUID;
     userId: UUID;
-    eventType: 'join' | 'leave' | 'mute' | 'remove' | 'lock' | 'unlock';
+    eventType: 'join' | 'leave' | 'mute' | 'unmute' | 'remove' | 'readmit' | 'lock' | 'unlock';
     actorId?: UUID;
     targetUserId?: UUID;
     sessionDurationSeconds?: number;
     metadata?: Record<string, string>;
     createdAt: string;
+}
+
+export type VoiceRoomSanctionKind = 'mute' | 'remove';
+
+/**
+ * A mute or a removal a moderator imposed on an account in one voice room. It
+ * outlives the connection it was imposed on: while a removal stands the
+ * account gets no token for the room and does not join it, and while a mute
+ * stands its tokens cannot publish, until a moderator lifts it (`liftedAt`,
+ * `liftedBy`) or the room ends (the row is keyed by the room). Lifted rows are
+ * kept as history. V4 in `docs/security/capability-header-triage-2026-10-23.md`.
+ */
+export interface VoiceRoomSanctionRecord {
+    id: UUID;
+    roomId: UUID;
+    userId: UUID;
+    kind: VoiceRoomSanctionKind;
+    actorId: UUID;
+    createdAt: string;
+    liftedAt?: string;
+    liftedBy?: UUID;
 }
 
 export type MarketplaceProviderIdString =

@@ -18,9 +18,15 @@ import { log } from '../telemetry/logger';
  * created lazily from env.
  */
 
+/**
+ * The room-service calls the API makes: the OBS mute path lists participants
+ * and mutes a track; voice-room moderation (`services/voiceModeration.ts`)
+ * also takes publishing away (`updateParticipant`) and disconnects
+ * (`removeParticipant`). One interface, one factory, one fake in tests.
+ */
 export type RoomServiceClientLike = Pick<
-  RoomServiceClient,
-  'listParticipants' | 'mutePublishedTrack'
+    RoomServiceClient,
+    'listParticipants' | 'mutePublishedTrack' | 'updateParticipant' | 'removeParticipant'
 >;
 
 type Factory = () => RoomServiceClientLike;
@@ -29,19 +35,20 @@ let factory: Factory | undefined;
 let cached: RoomServiceClientLike | undefined;
 
 export const setRoomServiceClientFactory = (f: Factory | undefined): void => {
-  factory = f;
-  cached = undefined;
+    factory = f;
+    cached = undefined;
 };
 
 const defaultFactory: Factory = () => {
-  const config = getLiveKitConfig();
-  return new RoomServiceClient(config.url, config.apiKey, config.apiSecret);
+    const config = getLiveKitConfig();
+    return new RoomServiceClient(config.url, config.apiKey, config.apiSecret);
 };
 
-const getClient = (): RoomServiceClientLike => {
-  if (cached) return cached;
-  cached = (factory ?? defaultFactory)();
-  return cached;
+/** The room-service client: the injected one in tests, else one from the environment, built once. */
+export const getRoomServiceClient = (): RoomServiceClientLike => {
+    if (cached) return cached;
+    cached = (factory ?? defaultFactory)();
+    return cached;
 };
 
 /**
@@ -53,8 +60,8 @@ const getClient = (): RoomServiceClientLike => {
 export const MIC_INPUT_NAMES = new Set(['Mic', 'Microphone', 'Desktop Audio']);
 
 interface CachedTrackEntry {
-  trackSid: string;
-  expiresAtMs: number;
+    trackSid: string;
+    expiresAtMs: number;
 }
 
 const TRACK_CACHE_TTL_MS = 30_000;
@@ -63,87 +70,81 @@ const trackCache = new Map<string, CachedTrackEntry>();
 const cacheKey = (room: string, identity: string): string => `${room}:${identity}`;
 
 const findMicTrackSid = async (
-  client: RoomServiceClientLike,
-  room: string,
-  identity: string,
+    client: RoomServiceClientLike,
+    room: string,
+    identity: string
 ): Promise<string | null> => {
-  const key = cacheKey(room, identity);
-  const cached = trackCache.get(key);
-  if (cached && cached.expiresAtMs > Date.now()) return cached.trackSid;
+    const key = cacheKey(room, identity);
+    const cached = trackCache.get(key);
+    if (cached && cached.expiresAtMs > Date.now()) return cached.trackSid;
 
-  const participants: ParticipantInfo[] = await client.listParticipants(room);
-  const me = participants.find((p) => p.identity === identity);
-  if (!me) return null;
-  const micTrack = me.tracks.find((t) => t.source === TrackSource.MICROPHONE);
-  if (!micTrack) return null;
-  trackCache.set(key, {
-    trackSid: micTrack.sid,
-    expiresAtMs: Date.now() + TRACK_CACHE_TTL_MS,
-  });
-  return micTrack.sid;
+    const participants: ParticipantInfo[] = await client.listParticipants(room);
+    const me = participants.find((p) => p.identity === identity);
+    if (!me) return null;
+    const micTrack = me.tracks.find((t) => t.source === TrackSource.MICROPHONE);
+    if (!micTrack) return null;
+    trackCache.set(key, {
+        trackSid: micTrack.sid,
+        expiresAtMs: Date.now() + TRACK_CACHE_TTL_MS,
+    });
+    return micTrack.sid;
 };
 
 export type MuteOutcome =
-  | { kind: 'ok'; muted: boolean }
-  | { kind: 'unknown_input' }
-  | { kind: 'no_active_voice_room' }
-  | { kind: 'no_publish_track' };
+    | { kind: 'ok'; muted: boolean }
+    | { kind: 'unknown_input' }
+    | { kind: 'no_active_voice_room' }
+    | { kind: 'no_publish_track' };
 
 export const setInputMute = async (
-  userId: string,
-  inputName: string,
-  muted: boolean,
+    userId: string,
+    inputName: string,
+    muted: boolean
 ): Promise<MuteOutcome> => {
-  if (!MIC_INPUT_NAMES.has(inputName)) return { kind: 'unknown_input' };
-  const room = findActiveVoiceRoomForUser(userId);
-  if (!room) return { kind: 'no_active_voice_room' };
-  const client = getClient();
-  const trackSid = await findMicTrackSid(client, room.livekitRoomName, userId);
-  if (!trackSid) return { kind: 'no_publish_track' };
-  try {
-    await client.mutePublishedTrack(room.livekitRoomName, userId, trackSid, muted);
-    return { kind: 'ok', muted };
-  } catch (err) {
-    log.warn('livekit_mute_track_failed', {
-      room: room.livekitRoomName,
-      userId,
-      muted,
-      error: String(err),
-    });
-    return { kind: 'no_publish_track' };
-  }
+    if (!MIC_INPUT_NAMES.has(inputName)) return { kind: 'unknown_input' };
+    const room = findActiveVoiceRoomForUser(userId);
+    if (!room) return { kind: 'no_active_voice_room' };
+    const client = getRoomServiceClient();
+    const trackSid = await findMicTrackSid(client, room.livekitRoomName, userId);
+    if (!trackSid) return { kind: 'no_publish_track' };
+    try {
+        await client.mutePublishedTrack(room.livekitRoomName, userId, trackSid, muted);
+        return { kind: 'ok', muted };
+    } catch (err) {
+        log.warn('livekit_mute_track_failed', {
+            room: room.livekitRoomName,
+            userId,
+            muted,
+            error: String(err),
+        });
+        return { kind: 'no_publish_track' };
+    }
 };
 
-export const getInputMute = async (
-  userId: string,
-  inputName: string,
-): Promise<MuteOutcome> => {
-  if (!MIC_INPUT_NAMES.has(inputName)) return { kind: 'unknown_input' };
-  const room = findActiveVoiceRoomForUser(userId);
-  if (!room) return { kind: 'no_active_voice_room' };
-  const client = getClient();
-  const participants = await client.listParticipants(room.livekitRoomName);
-  const me = participants.find((p) => p.identity === userId);
-  if (!me) return { kind: 'no_publish_track' };
-  const micTrack = me.tracks.find((t) => t.source === TrackSource.MICROPHONE);
-  if (!micTrack) return { kind: 'no_publish_track' };
-  return { kind: 'ok', muted: micTrack.muted };
+export const getInputMute = async (userId: string, inputName: string): Promise<MuteOutcome> => {
+    if (!MIC_INPUT_NAMES.has(inputName)) return { kind: 'unknown_input' };
+    const room = findActiveVoiceRoomForUser(userId);
+    if (!room) return { kind: 'no_active_voice_room' };
+    const client = getRoomServiceClient();
+    const participants = await client.listParticipants(room.livekitRoomName);
+    const me = participants.find((p) => p.identity === userId);
+    if (!me) return { kind: 'no_publish_track' };
+    const micTrack = me.tracks.find((t) => t.source === TrackSource.MICROPHONE);
+    if (!micTrack) return { kind: 'no_publish_track' };
+    return { kind: 'ok', muted: micTrack.muted };
 };
 
-export const toggleInputMute = async (
-  userId: string,
-  inputName: string,
-): Promise<MuteOutcome> => {
-  const current = await getInputMute(userId, inputName);
-  if (current.kind !== 'ok') return current;
-  return setInputMute(userId, inputName, !current.muted);
+export const toggleInputMute = async (userId: string, inputName: string): Promise<MuteOutcome> => {
+    const current = await getInputMute(userId, inputName);
+    if (current.kind !== 'ok') return current;
+    return setInputMute(userId, inputName, !current.muted);
 };
 
 /** Reset both factory + cache. Tests use this between cases. */
 export const __test__ = {
-  resetCacheAndFactory: () => {
-    trackCache.clear();
-    factory = undefined;
-    cached = undefined;
-  },
+    resetCacheAndFactory: () => {
+        trackCache.clear();
+        factory = undefined;
+        cached = undefined;
+    },
 };
