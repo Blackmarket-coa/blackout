@@ -366,3 +366,81 @@ Re-check each during any reconciliation with upstream.
   `getexif()` in #19098.
 - When the fork's Python floor is raised to 3.11, the `Pillow` constraint
   collapses to `>=13.0.0` and the 10.1.0 lock entry goes away.
+
+## 2026-10-25 upstream security fix ports (second pass)
+
+Hand-ported fixes from upstream Synapse releases 1.130.0 to 1.161.0, found by
+re-checking upstream's `CHANGES.md` and OSV against this **1.98.0**-based tree
+after the 2026-10-09 pass. Triage, per-fix evidence and what was left alone
+are in `docs/security/synapse-upstream-advisories-triage-2026-10-25.md`
+(repository root). The source of truth for "what upstream changed" is the
+`element-hq/synapse` git history (`develop` at `8d60450b3`, release-v1.164
+merged), read, not run; the release and PR are named per entry.
+
+Each file below is a direct edit to core Synapse source outside
+`blackout_runtime/` and must be re-checked during any reconciliation with
+upstream.
+
+### Banned server signing key (upstream 1.147.1, #19459)
+
+- `synapse/crypto/keyring.py`: new module constant `BANNED_SERVER_SIGNING_KEYS`,
+  a tuple of unpadded-base64 verify keys, holding the ESS Community Helm chart
+  key from ELEMENTSEC-2025-1670 / CVE-2026-24044 (GHSA-qwcj-h6m8-vp6q). In
+  `Keyring.process_request`, a fetched key that is in the tuple is refused with 401
+  `M_UNAUTHORIZED` before it is used, so both federation request authentication
+  (`verify_json_for_server`) and event signature checks
+  (`_check_sigs_and_hash`) reject anything signed with it. Same tuple contents
+  and same check as upstream; `_process_json` keeps this tree's name (upstream
+  renamed it `process_json`). On a sync, take upstream's tuple: it is the list
+  upstream extends when another key is burned.
+- Tests: `tests/crypto/test_keyring.py`
+  (`test_verify_json_for_server_using_banned_key`) and
+  `tests/federation/test_federation_base.py` (new file), both upstream's.
+  `patch.object` is given a 1-tuple here where upstream passes a bare string
+  and relies on substring `in`.
+
+### Private read receipts sent to application services (upstream 1.161.0, #20114)
+
+- `synapse/handlers/receipts.py`: `ReceiptEventSource.filter_out_private_receipts`
+  now delegates to a new `_filter_private_receipts(rooms, is_visible)`, and
+  `get_new_events_as` runs the receipts it hands to an application service
+  through it with `service.is_interested_in_user`. An appservice that opts in
+  to ephemeral events (MSC2409) now sees `m.read.private` only for users in
+  its namespaces (or its sender user); public receipts are unchanged. `List`
+  is spelled `typing.List` for Python 3.8.
+- Context: `deploy/matrix-appservice/registration.yaml` sets
+  `de.sorunome.msc2409.push_ephemeral: false`, so the deaddrop appservice never
+  received these; any appservice that opts in would have.
+- Test: `tests/handlers/test_appservice.py`
+  `test_application_services_receive_private_read_receipts_of_namespaced_users_only`
+  (upstream's, unchanged).
+
+### OIDC session cookie `Secure` attribute (upstream 1.142.0, #19079)
+
+- `synapse/handlers/oidc.py`: in `_SESSION_COOKIES`, `oidc_session_no_samesite`
+  now carries `HttpOnly; Secure` like its `oidc_session` twin; the only
+  remaining difference is `SameSite=None`, as the cookie names say. Without
+  `Secure` a browser also sends the session macaroon (`state`, `nonce`,
+  `code_verifier`, `client_redirect_url`) over plain HTTP to the host. Both
+  production templates serve over HTTPS (`public_baseurl`); classic
+  `oidc_providers` is configured in `infra/single-server-baseline`.
+- Test: `tests/handlers/test_oidc.py`
+  `test_redirect_request_session_cookies_are_secure` (new; upstream shipped
+  none).
+
+### Repair of `topological_ordering` after GHSA-v56r-hwv5-mxg6 (upstream 1.130.0, #18447)
+
+- `synapse/storage/databases/main/events_bg_updates.py`: new background update
+  `fixup_max_depth_cap` (`fixup_max_depth_cap_bg_update`) that walks the
+  `rooms` table in batches and, in room versions with strict canonical JSON,
+  caps `events.topological_ordering` at `MAX_DEPTH`. The 2026-10-09 GHSA-v56r
+  port stops new out-of-range depths; this repairs the `/messages` ordering of
+  events persisted before it in rooms an attacker had already hit.
+  `Tuple`/`List`/`Optional` for Python 3.8.
+- `synapse/storage/schema/main/delta/84/04_fixup_max_depth_cap.sql`: schedules
+  it (ordering 8404). Upstream's is `delta/92/05` (ordering 9205); this tree is
+  at `SCHEMA_VERSION = 84`. On a sync keep one of the two, not both.
+- Test: `tests/storage/test_events_bg_updates.py`
+  (`TestFixupMaxDepthCapBgUpdate`, upstream's; the last assertion builds its
+  dict explicitly for this tree's `simple_select_list` typing). Exercised on
+  SQLite only.

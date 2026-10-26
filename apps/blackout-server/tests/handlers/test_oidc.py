@@ -373,6 +373,38 @@ class OidcHandlerTestCase(HomeserverTestCase):
             get_awaitable_result(self.provider.load_metadata())
 
     @override_config({"oidc_config": DEFAULT_CONFIG})
+    def test_redirect_request_session_cookies_are_secure(self) -> None:
+        """Both session cookies are HttpOnly and Secure; only `oidc_session` sets
+        SameSite=None (upstream Synapse #19079)."""
+        req = Mock(spec=["cookies"])
+        req.cookies = []
+
+        self.get_success(
+            self.provider.handle_redirect_request(req, b"http://client/redirect")
+        )
+
+        self.assertEqual(len(req.cookies), 2)
+        attributes = {}
+        for cookie_header in req.cookies:
+            parts = [p.strip() for p in cookie_header.split(b";")]
+            name, _ = parts[0].split(b"=")
+            attributes[name] = set(parts[1:])
+
+        self.assertEqual(
+            set(attributes.keys()), {b"oidc_session", b"oidc_session_no_samesite"}
+        )
+        for name, attrs in attributes.items():
+            self.assertIn(b"HttpOnly", attrs, name)
+            self.assertIn(b"Secure", attrs, name)
+        self.assertIn(b"SameSite=None", attributes[b"oidc_session"])
+        self.assertFalse(
+            any(
+                a.startswith(b"SameSite")
+                for a in attributes[b"oidc_session_no_samesite"]
+            )
+        )
+
+    @override_config({"oidc_config": DEFAULT_CONFIG})
     def test_redirect_request(self) -> None:
         """The redirect request has the right arguments & generates a valid session cookie."""
         req = Mock(spec=["cookies"])
