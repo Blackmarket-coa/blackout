@@ -362,7 +362,7 @@ For the source-of-truth triage with tier/owner detail see
 -   **Next:** a role model built from Matrix power levels
     ([`docs/security/capability-header-triage-2026-10-23.md`](docs/security/capability-header-triage-2026-10-23.md)).
 
-### Voice rooms in the API (2026-10-25)
+### Voice rooms in the API (2026-10-26)
 
 -   **Where:** the API's voice rooms under `/v1/voice`
     (`packages/api/src/routes/voice.ts`). Calls in the apps do not use them:
@@ -390,16 +390,35 @@ For the source-of-truth triage with tier/owner detail see
     removed account gets no new token for that room and cannot join it through
     the API until a moderator readmits it, and a muted account's new tokens
     cannot publish until it is unmuted. **A token already issued is not
-    revoked.** One the API issued lives two minutes, and LiveKit can give a
-    connected client a refreshed token of its own, whose lifetime LiveKit's
-    server sets. Until such a token expires, a removed person's client that
-    kept it can rejoin the call, and a muted person who reconnects with a token
-    issued before the mute can speak; a connection made that way stays until a
-    moderator acts again. A lock refuses new joins and tokens but does not end
-    connections already made. Without LiveKit configured, mute and remove do
-    nothing and say so (503); when LiveKit fails, the record stands, the answer
-    is 502, and it says the person may still be heard or connected until the
-    moderator retries.
+    revoked.** One the API issued lives two minutes, and LiveKit's server gives
+    a connected client tokens of its own, each valid for ten minutes and renewed
+    every five. With one, a removed person's client can connect to the call
+    again, and a muted person can reconnect with a token from before the mute
+    and speak.
+-   **Applied again on arrival, where LiveKit sends its webhooks to the API.**
+    The LiveKit server can be configured to tell the API who joins and who
+    publishes (`POST /v1/voice/livekit/webhook`; the single-server stack's
+    LiveKit configuration does, and `packages/api/README.md` gives the snippet
+    for others). Where it is, the API disconnects a removed person, or mutes a
+    muted one and takes away their publishing, as soon as LiveKit reports them
+    joining or publishing, whatever token they used; and a mute or removal
+    LiveKit could not carry out when it was made is applied at the person's
+    next reported join or publish. They are still in the call for the moment
+    that takes. A report LiveKit drops or gives up on leaves them there until
+    their next join or publish, so a removed person who reconnects and only
+    listens can stay. Someone who never reconnects is left to the moderator's
+    own action. **Without the webhook**, a connection made with an earlier
+    token stays until a moderator acts again. A lock refuses new joins and
+    tokens but does not end connections already made, and a token issued
+    before the lock still connects, webhook or not. Without LiveKit
+    configured, mute and remove do nothing and say so (503); when LiveKit
+    fails, the record stands, the answer is 502, and it says the person may
+    still be heard or connected until the moderator retries.
+-   **What the webhook gives the API.** LiveKit sends the events of every room
+    on that server, MatrixRTC calls included: for those, with the
+    lk-jwt-service 0.2.3 the single-server stack runs, the Matrix room id and
+    each participant's Matrix user id and device id. The API acts only on
+    rooms it created, and keeps and logs nothing about the others.
 -   **When the homeserver cannot be read** (no bot token, an error), nobody has
     an elevated role: creating and moderating are refused, a locked room is
     refused with the reason, and an unlocked room still admits the account as
@@ -414,8 +433,9 @@ For the source-of-truth triage with tier/owner detail see
     the same answer.
 -   **Next:** in
     [`docs/security/capability-header-triage-2026-10-23.md`](docs/security/capability-header-triage-2026-10-23.md),
-    V4's residual (tokens already issued; closing it needs LiveKit's webhooks)
-    and V5 (the operator's billing decision on the token route).
+    V5 (the operator's billing decision on the token route), V10 (a lock is
+    not applied on arrival), and the operator's decisions on the webhook
+    (2026-10-26 section).
 
 ---
 
