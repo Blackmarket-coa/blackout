@@ -151,6 +151,8 @@ export type ReleaseEnvelopeErrorCode =
     | 'message'
     | 'owner_key_changed'
     | 'own_copy'
+    /** Re-sealing: the header given is not the release the owner is acting on. */
+    | 'release_mismatch'
     | 'kem_provider';
 
 /** Thrown by the functions that make envelopes and copies, when an input cannot be used. */
@@ -429,12 +431,17 @@ export const releaseContentAssociatedData = (fields: {
         asciiField(fields.ownerAccountId, RELEASE_ACCOUNT_ID_PATTERN, "the owner's account id")
     );
 
-/** C = SHA-256("blackout-release-key-commitment-v1" 0x00 ‖ K). */
+/**
+ * C = SHA-256("blackout-release-key-commitment-v1" 0x00 ‖ K). The copy of K
+ * made for the digest's input is cleared afterwards, best effort: JavaScript
+ * gives no guarantee about what an engine has copied (review, P3-L3).
+ */
 export const releaseKeyCommitment = (contentKey: Uint8Array): Promise<Uint8Array> => {
     if (contentKey.length !== RELEASE_CONTENT_KEY_BYTES) {
         throw new Error('release envelope: the content key must be 32 bytes');
     }
-    return sha256(concatBytes(labelBytes(RELEASE_KEY_COMMITMENT_LABEL), contentKey));
+    const input = concatBytes(labelBytes(RELEASE_KEY_COMMITMENT_LABEL), contentKey);
+    return sha256(input).finally(() => input.fill(0));
 };
 
 /** SHA-256 of the content nonce, then the content ciphertext. */
@@ -507,18 +514,24 @@ export const encryptReleaseContentWith = async (
     }
     const { padded } = pad(encodeReleaseMessage(fields.text), 'bucket');
     const key = await importAesGcmKey(randomness.contentKey);
-    const ciphertext = new Uint8Array(
-        await subtleCrypto().encrypt(
-            {
-                name: 'AES-GCM',
-                iv: asBufferSource(randomness.nonce),
-                additionalData: asBufferSource(releaseContentAssociatedData(fields)),
-            } as unknown as AlgorithmIdentifier,
-            key,
-            asBufferSource(padded)
-        )
-    );
-    return { nonce: randomness.nonce, ciphertext };
+    try {
+        const ciphertext = new Uint8Array(
+            await subtleCrypto().encrypt(
+                {
+                    name: 'AES-GCM',
+                    iv: asBufferSource(randomness.nonce),
+                    additionalData: asBufferSource(releaseContentAssociatedData(fields)),
+                } as unknown as AlgorithmIdentifier,
+                key,
+                asBufferSource(padded)
+            )
+        );
+        return { nonce: randomness.nonce, ciphertext };
+    } finally {
+        // The padded text, best effort (P3-L3); the caller's `text` is a
+        // string and cannot be cleared.
+        padded.fill(0);
+    }
 };
 
 const fatalUtf8 = new TextDecoder('utf-8', { fatal: true });
@@ -892,6 +905,13 @@ export type ReleaseOpenResult =
     | {
           ok: true;
           text: string;
+          /**
+           * The release id and the owner's account id from the signed header,
+           * which are the only ones to show (review, P3-M2): a server's
+           * response carries unsigned duplicates of both next to the header.
+           */
+          releaseId: string;
+          ownerAccountId: string;
           /** The owner's fingerprint, computed from the identity that verified. */
           ownerFingerprint: string;
           /** The fingerprint of this device's key set that opened it. */
@@ -939,6 +959,8 @@ export const openReleaseCopy = async (input: OpenReleaseCopyInput): Promise<Rele
         return {
             ok: true,
             text,
+            releaseId: header.value.releaseId,
+            ownerAccountId: header.value.ownerAccountId,
             ownerFingerprint: header.value.ownerFingerprint,
             keySetFingerprint: keySet.fingerprint,
         };
@@ -950,6 +972,11 @@ export const openReleaseCopy = async (input: OpenReleaseCopyInput): Promise<Rele
 };
 
 export type ResealReleaseCopyInput = {
+    /**
+     * The switch the owner is re-sealing, which is its release's id. The
+     * header must be that release's, or nothing is opened (review, P3-H1).
+     */
+    releaseId: string;
     /** The release's header, as the owner's view of the switch carries it. */
     header: unknown;
     /** The owner's own copy, from the same view. */
@@ -961,17 +988,29 @@ export type ResealReleaseCopyInput = {
 };
 
 /**
- * Seal a release's K again, to a recipient's new identity. K comes from the
- * owner's own copy, opened with the owner's key set after every check a
- * recipient makes (its signature under the owner's own identity, the
- * commitment), so a server cannot make the owner re-seal another key. Refused
- * when the owner's key set is not the one the header names: an owner who
- * replaced their keys arms again.
+ * Seal a release's K again, to a recipient's new identity. The header must
+ * carry the release id of the switch the owner is acting on, which is in the
+ * owner's own signature and in every transcript: without that binding a
+ * server could answer the owner's view of one switch with another release's
+ * header and own copy, both genuine, and have the owner's device seal that
+ * release's key to a person named only on the first (review, P3-H1). K then
+ * comes from the owner's own copy, opened with the owner's key set after
+ * every check a recipient makes, the content's decryption included (its
+ * signature under the owner's own identity, the wrap, the commitment, the
+ * content's padding and UTF-8), so a server cannot make the owner re-seal
+ * another key, and a release whose content it corrupted in storage is not
+ * re-sealed as if it could be read. Refused when the owner's key set is not
+ * the one the header names: an owner who replaced their keys arms again.
+ * Nothing on the device says who was named on a release (E7): that the
+ * recipient is one of them is the API's check, and PR 4's own record.
  */
 export const resealReleaseCopy = async (input: ResealReleaseCopyInput): Promise<ReleaseCopy> => {
     assertMlKem768();
     const header = parseReleaseHeader(input.header);
     if (!header.ok) fail('own_copy', `the release header is malformed (${header.problem})`);
+    if (header.value.releaseId !== input.releaseId) {
+        fail('release_mismatch', 'the header is not the release being re-sealed');
+    }
     const ownCopy = parseReleaseCopy(input.ownCopy);
     if (!ownCopy.ok) fail('own_copy', `the owner's copy is malformed (${ownCopy.problem})`);
     const parsedHeader = header.value;
@@ -1007,6 +1046,13 @@ export const resealReleaseCopy = async (input: ResealReleaseCopyInput): Promise<
     }
     const contentKey = unwrapped.contentKey;
     try {
+        // The content must open under K too (P3-L2): otherwise the device
+        // would seal, to a new key, a release nobody can read, and say nothing.
+        try {
+            await decryptReleaseContent(parsedHeader, contentKey);
+        } catch {
+            fail('own_copy', "the owner's own copy did not open (content)");
+        }
         return await sealReleaseCopy({
             header: parsedHeader,
             contentKey,
