@@ -6,8 +6,8 @@
  * list as current, saying which key the directory served (P3-M3); re-sealing
  * opens the owner's own copy and sends one new copy, and refuses an owner view
  * that is not the switch's (P3-H1); the release list refuses an entry that is
- * not one, or whose unsigned ids differ from its header's (P3-M2). Against a
- * fake API.
+ * not one, whose ids are not of the id forms, or whose unsigned ids differ
+ * from its header's (P3-M2). Against a fake API.
  */
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {
@@ -459,13 +459,14 @@ describe('the read calls', () => {
         ]);
     });
 
-    it("refuses a released copy whose unsigned release id or owner differ from its header's, and an entry that is not one (P3-M2)", async () => {
+    /** One honest released entry: Bob's copy of a release of Alice's, as the API lists it. */
+    const releasedEntry = async () => {
         const envelope = await buildReleaseEnvelope({
             ownerKeySet: vectorKeySet(ALICE),
             recipients: [BOB.identity],
             message: 'x',
         });
-        const released = {
+        return {
             releaseId: envelope.releaseId,
             ownerAccountId: ALICE.identity.accountId,
             releasedAt: '2026-10-29T00:00:00.000Z',
@@ -474,10 +475,12 @@ describe('the read calls', () => {
             ownerIdentity: ALICE.identity,
             copy: envelope.copies[1],
         };
-        const list = (entries: unknown) =>
-            createDeadmanReleaseActions(
-                fakeApi(directory(), undefined, entries).client
-            ).listReleases();
+    };
+    const list = (entries: unknown) =>
+        createDeadmanReleaseActions(fakeApi(directory(), undefined, entries).client).listReleases();
+
+    it("refuses a released copy whose unsigned release id or owner differ from its header's, and an entry that is not one (P3-M2)", async () => {
+        const released = await releasedEntry();
         // The honest entry comes back as it was.
         expect(await list({ releases: [released] })).toEqual({ releases: [released] });
         // The server names another owner, or another release, beside Alice's signed header.
@@ -514,5 +517,35 @@ describe('the read calls', () => {
                 code: 'server_mismatch',
             });
         }
+    });
+
+    it('refuses a released entry whose ids agree but are not of the id forms (the third reading of P3-M2)', async () => {
+        const released = await releasedEntry();
+        // Each of these agrees with itself, so a check that compared the two
+        // sides alone passed it on. openReleaseCopy refuses such a header
+        // later (release_id, account_id), but a client that keys or routes
+        // by an entry's id before opening it would have carried these bytes.
+        const upper = released.releaseId.toUpperCase();
+        const withIds = (releaseId: string, ownerAccountId: string) => ({
+            ...released,
+            header: { ...released.header, releaseId, ownerAccountId },
+            releaseId,
+            ownerAccountId,
+        });
+        const malformed = [
+            withIds('../x', released.ownerAccountId),
+            withIds(upper, released.ownerAccountId),
+            withIds(`${released.releaseId}\n`, released.ownerAccountId),
+            withIds(released.releaseId, '<script>'),
+            withIds(released.releaseId, ''),
+            withIds(released.releaseId, `${released.ownerAccountId} `),
+        ];
+        for (const entry of malformed) {
+            await expect(list({ releases: [released, entry] })).rejects.toMatchObject({
+                code: 'server_mismatch',
+            });
+        }
+        // The honest entry, whose ids are of their forms, still comes back as it was.
+        expect(await list({ releases: [released] })).toEqual({ releases: [released] });
     });
 });

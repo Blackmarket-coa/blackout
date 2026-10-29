@@ -1,5 +1,7 @@
 import {
     DEADMAN_RELEASE_FORMAT,
+    RELEASE_ACCOUNT_ID_PATTERN,
+    RELEASE_ID_PATTERN,
     buildReleaseEnvelope,
     releaseComparisonState,
     releaseDirectoryFingerprints,
@@ -103,8 +105,8 @@ export type ReleaseActionErrorCode =
     | 'release_mismatch'
     /**
      * The release list is not a list, an entry in it is not an object with a
-     * signed header carrying both ids, or its unsigned top-level fields
-     * differ from its header's.
+     * signed header carrying both ids as strings of their form, or its
+     * unsigned top-level fields differ from its header's.
      */
     | 'server_mismatch';
 
@@ -145,18 +147,24 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 /**
  * Whether a released entry is one at all, and describes itself as its signed
- * header does: an object whose `header` is an object carrying a string
- * `releaseId` and a string `ownerAccountId`, each repeated by the entry's
- * top-level field of that name. Two absent ids are not an agreement: `null`,
- * `{}`, a string, and an entry with no ids on either side are refused, not
- * passed on as releases (the envelope review's second reading of P3-M2).
+ * header does: an object whose `header` is an object carrying a `releaseId`
+ * of the release id's form and an `ownerAccountId` of an account id's form,
+ * each repeated by the entry's top-level field of that name. Two absent ids
+ * are not an agreement: `null`, `{}`, a string, and an entry with no ids on
+ * either side are refused, not passed on as releases (the envelope review's
+ * second reading of P3-M2). Nor are two ids that agree but are not ids,
+ * `../x` or `<script>` on both sides (the third reading): `openReleaseCopy`
+ * refuses such a header later, but what a client may key or route by before
+ * then must already be of the form the header's parser accepts.
  */
 const releasedEntryIsConsistent = (entry: unknown): boolean => {
     if (!isRecord(entry) || !isRecord(entry.header)) return false;
     const { releaseId, ownerAccountId } = entry.header;
     return (
         typeof releaseId === 'string' &&
+        RELEASE_ID_PATTERN.test(releaseId) &&
         typeof ownerAccountId === 'string' &&
+        RELEASE_ACCOUNT_ID_PATTERN.test(ownerAccountId) &&
         releaseId === entry.releaseId &&
         ownerAccountId === entry.ownerAccountId
     );
@@ -235,16 +243,21 @@ export const createDeadmanReleaseActions = (client: ApiClient) => {
          * them, each with the caller's own copy only. Each entry's top-level
          * `releaseId` and `ownerAccountId` are the server's unsigned duplicates
          * of the signed header's; an entry that is not an object with a header
-         * carrying both as strings, or where they differ, is refused
+         * carrying both as strings of their form (`RELEASE_ID_PATTERN`,
+         * `RELEASE_ACCOUNT_ID_PATTERN`), or where they differ, is refused
          * (`server_mismatch`), and a screen shows only what `openReleaseCopy`
          * returns from the header, never the duplicates (P3-M2). Open one with
          * `openReleaseCopy`; then, before saying who sent it, call
-         * `releaseComparisonState` with the result's `ownerFingerprint` as
-         * `signerFingerprint`: `current` means both that the key which signed
-         * the release is the one compared and that the comparison counts now,
-         * and only then may a screen say "signed with a key you compared"
-         * (P3-M1). That one function decides; `other_key` means another key
-         * signed it, `stale` that the comparison must be made again.
+         * `releaseComparisonState` with the `ok` result's `ownerFingerprint`,
+         * a string, as `signerFingerprint`: `current` means both that the key
+         * which signed the release is the one compared and that the comparison
+         * counts now, and only then may a screen say "signed with a key you
+         * compared" (P3-M1). That one function decides; `other_key` means
+         * another key signed it, `stale` that the comparison must be made
+         * again. A failed open has no signer and nothing to show, so its state
+         * is never asked: `signerFingerprint` left out, or `undefined`, is the
+         * sealing use, where no release is in hand and the signer rule is not
+         * applied.
          */
         listReleases: async (): Promise<DeadmanReleasesResponse> => {
             const response = await client<DeadmanReleasesResponse>({

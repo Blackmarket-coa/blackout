@@ -45,9 +45,13 @@ export type ReleaseComparisonStateInput = {
     /** When sealing: this device's own current fingerprint, which must be the one compared. */
     ownFingerprint?: string;
     /**
-     * When judging a release in hand: the fingerprint that signed it
-     * (`ReleaseOpenResult.ownerFingerprint`, computed from the identity that
-     * verified). It must be the one compared, or the state is `other_key`.
+     * When judging a release in hand: the fingerprint that signed it, the
+     * `ownerFingerprint` of an `ok` `ReleaseOpenResult` (computed from the
+     * identity that verified), always a string. It must be the one compared,
+     * or the state is `other_key`. Left out, or `undefined`, means the
+     * sealing use, where no release is in hand, and this rule is not
+     * applied: a failed open has no signer and nothing to show, so its state
+     * is never asked for (the envelope review's third reading).
      */
     signerFingerprint?: string;
 };
