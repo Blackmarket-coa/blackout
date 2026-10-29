@@ -12,8 +12,17 @@
  *
  *   ikm     = ec_secret || pq_secret
  *   salt    = ek_x25519 || ek_kyber_ct
- *   info    = "blackout-deaddrop-v2-hybrid" || transcript_hash
+ *   info    = "blackout-deaddrop-v2-hybrid" || transcript
  *   key     = HKDF-SHA-256(ikm, salt, info, 32)
+ *
+ * The transcript is appended raw, not hashed, and the label before it has no
+ * terminator and no length prefix. A dead drop today has no transcript, and
+ * a release copy's transcript starts with its own NUL-terminated label, so
+ * the two `info` values cannot meet. The constraint that keeps it so: a
+ * dead-drop transcript, if one is added, must start with its own
+ * NUL-terminated label that is none of the release labels (envelope record
+ * §3), or this derivation moves to a v3 label with a terminator and a length
+ * prefix on the transcript (the envelope review, P3-L1).
  *
  * The construction is "harvest-now-decrypt-later" safe: an attacker
  * needs to break BOTH X25519 AND ML-KEM-768 to derive the AEAD key, so
@@ -109,8 +118,10 @@ export interface DeriveHybridKeyInput {
     /** ML-KEM ciphertext as it will appear on the wire. */
     pqCiphertext: Uint8Array;
     /**
-     * Optional transcript hash binding more context (e.g. recipient pubkey
-     * fingerprint, dropId) — defaults to an empty string.
+     * Optional transcript, appended raw to the `info` label (not hashed):
+     * for a release copy the 203-byte seal transcript of structured fields
+     * (`release/envelope.ts`); a dead drop passes none, which leaves `info`
+     * the label alone.
      */
     transcript?: Uint8Array;
 }

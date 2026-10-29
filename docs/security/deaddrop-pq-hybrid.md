@@ -49,6 +49,21 @@ key, so the hybrid is strictly stronger than either primitive alone.
     the comparison is in
     [`release-identities-2026-10-26.md`](release-identities-2026-10-26.md) §5.
 
+    **The framing of `info`** (the envelope's independent review, P3-L1):
+    the label `blackout-deaddrop-v2-hybrid` is 27 bytes with no terminator
+    and no length prefix, and a transcript, when there is one, follows it
+    directly and raw (not hashed). A dead drop passes no transcript, and a
+    release copy's transcript starts with its own NUL-terminated label
+    (`blackout-release-seal-v1`, 0x00), so today the two `info` values can
+    never coincide. **A dead-drop transcript, when one is added, must start
+    with its own NUL-terminated label that is none of the release labels**
+    ([`release-envelope-2026-10-26.md`](release-envelope-2026-10-26.md) §3
+    lists the eight), and the labels test must include it; or
+    `deriveHybridAeadKey` moves to a v3 label with a terminator and a length
+    prefix on the transcript. Otherwise a dead-drop `info` beginning
+    `blackout-release-seal-v1` 0x00 … could derive the same key as a release
+    wrap.
+
 -   Pluggable `KemProvider` interface with `setKemProvider()` /
     `getKemProvider()`. The default is `NULL_KEM_PROVIDER`, which throws
     on every operation so we cannot accidentally encrypt with a zero-

@@ -18,7 +18,11 @@ built on two stacked branches, so that the cryptography can be reviewed apart
 from the plumbing: `-v44`, the protocol and the SDK (§14), and `-v46`, the
 API, the migration, the notifier and the documents it changes. Nothing here
 makes a release possible: arming stays closed until PR 4 turns
-`BLACKOUT_DEADMAN_RELEASES` on, and that flag is set nowhere.
+`BLACKOUT_DEADMAN_RELEASES` on, and that flag is set nowhere. **2026-10-29:**
+part 1 had its independent review; its one high finding (re-sealing was not
+bound to the switch being re-sealed), three medium, six low and twelve untrue
+sentences are each fixed or explained in "Independent review, 2026-10-29"
+below, and the sections they touch now say what the code does.
 
 **State read:** the PR 2 branch at `6ae33bc2e2` (#991), on `develop` at
 `8a20ad6a0b`; PR 2 then merged as `e1d4cec964`, which this branch merged. **Read** means a claim rests on the code or a standard; **Run**
@@ -35,27 +39,27 @@ content key in the signed data (C7), refuses an all-zero X25519 output on
 both sides (C8), and is authenticated by the owner's Ed25519 signature over
 each copy, which is transferable (C15). None of it makes a release happen on
 time: the server keeps the timer, and can hold a release back, delay it or
-bring it forward (§10, R12 in `THREAT_MODEL.md`).
+bring it forward (§10, R12, which part 2 adds to `THREAT_MODEL.md`).
 
-| ID  | Question or finding                                                                                            | Verified          | Disposition                                                                                                                                                                                                      |
-| --- | -------------------------------------------------------------------------------------------------------------- | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| E1  | What is sealed to whom: one ciphertext, its key sealed to every recipient and to the owner                     | Read (design)     | Kept; the owner's own copy is what re-sealing opens, and what it costs is stated (§1)                                                                                                                            |
-| E2  | The key encapsulation against HPKE's DHKEM and X-Wing                                                          | Read (standards)  | Kept, with a transcript; one sealing function for dead drops and releases (§2)                                                                                                                                   |
-| E3  | The recipient's public keys must be bound into the wrap key (C5)                                               | Read              | Bound through the recipient's fingerprint in the transcript, with the owner's, the release id and both accounts (§2, §3)                                                                                         |
-| E4  | An all-zero X25519 output (C8, RFC 9180 §7.1.4)                                                                | Run; test         | Refused on both sides, inside the shared function, so dead drops get the check too (§2)                                                                                                                          |
-| E5  | New labels must not be confusable with PR 2's                                                                  | Read; test        | Four new NUL-terminated labels, each used in one place; the table of all eight is in §3                                                                                                                          |
-| E6  | AES-GCM does not commit to its key (C7)                                                                        | Read (literature) | SHA-256 of a label and the content key in every copy's signed bytes, checked before the content is decrypted (§4)                                                                                                |
-| E7  | One header every recipient receives alike (C7)                                                                 | Read (analysis)   | The header's fields are in every copy's signature; no separate header signature, and why (§4, §5)                                                                                                                |
-| E8  | Signatures are transferable (C15), and the server holds them from arming on                                    | Read (analysis)   | Stated, for the operator: no deniability is claimed anywhere (§5)                                                                                                                                                |
-| E9  | One form per value: JSON shapes, base64, ids                                                                   | Read; test        | Exact field sets, canonical base64 at exact lengths, a fixed-length sealed copy, ids by pattern; JSON is never signed (§6)                                                                                       |
-| E10 | Padding and size                                                                                               | Read; test        | Text up to 64 KiB, padded to 1, 16 or 256 KiB; the API refuses a content ciphertext of any other length (§7)                                                                                                     |
-| E11 | Identity v1 has no sequence number (decision 19)                                                               | Read              | Nothing is added to the identity; the API checks current identities at arming and re-sealing, the client applies H1 (§9)                                                                                         |
-| E12 | When a comparison counts (H1)                                                                                  | Read              | `releaseComparisonState`: only for the account's current identity, stale once a newer one is seen or the compared one is listed as replaced; when sealing, the owner's own key must not have changed either (§9) |
-| E13 | A fired release must stay checkable after its owner deletes the account, which erases their release identities | Read              | The owner's identity at arming is kept with the release, and goes with it; the deletion texts say so (§1, §11)                                                                                                   |
-| E14 | Re-sealing to a recipient's new key does not take back the old copy                                            | Read (analysis)   | Stated: after a lost device, cancel and arm again, which makes a new content key (§10)                                                                                                                           |
-| E15 | What a hostile server can and cannot do                                                                        | Read (analysis)   | §10; hold back, delay and bring forward are accepted (design §3) and named as R12                                                                                                                                |
-| E16 | Notices and what they carry (design §5)                                                                        | Read              | A pointer only, in an unencrypted room the bot owns; nothing names the owner, the label, other people or any time (§11)                                                                                          |
-| E17 | `randomBytes` asked WebCrypto for more than 65,536 bytes at once, so padding to 256 KiB threw                  | Run; test         | Fixed in `randomBytes`, which also fixes dead drops over 16 KiB and PR 2's recovery files past 16 KiB (§14)                                                                                                      |
+| ID  | Question or finding                                                                                            | Verified          | Disposition                                                                                                                                                                                                                                                                            |
+| --- | -------------------------------------------------------------------------------------------------------------- | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| E1  | What is sealed to whom: one ciphertext, its key sealed to every recipient and to the owner                     | Read (design)     | Kept; the owner's own copy is what re-sealing opens, and what it costs is stated (§1)                                                                                                                                                                                                  |
+| E2  | The key encapsulation against HPKE's DHKEM and X-Wing                                                          | Read (standards)  | Kept, with a transcript; one sealing function for dead drops and releases (§2)                                                                                                                                                                                                         |
+| E3  | The recipient's public keys must be bound into the wrap key (C5)                                               | Read              | Bound through the recipient's fingerprint in the transcript, with the owner's, the release id and both accounts (§2, §3)                                                                                                                                                               |
+| E4  | An all-zero X25519 output (C8, RFC 9180 §7.1.4)                                                                | Run; test         | Refused on both sides, inside the shared function, so dead drops get the check too (§2)                                                                                                                                                                                                |
+| E5  | New labels must not be confusable with PR 2's                                                                  | Read; test        | Four new NUL-terminated labels, each used in one place; the table of all eight is in §3                                                                                                                                                                                                |
+| E6  | AES-GCM does not commit to its key (C7)                                                                        | Read (literature) | SHA-256 of a label and the content key in every copy's signed bytes, checked before the content is decrypted (§4)                                                                                                                                                                      |
+| E7  | One header every recipient receives alike (C7)                                                                 | Read (analysis)   | The header's fields are in every copy's signature; no separate header signature, and why (§4, §5)                                                                                                                                                                                      |
+| E8  | Signatures are transferable (C15), and the server holds them from arming on                                    | Read (analysis)   | Stated, for the operator: no deniability is claimed anywhere (§5)                                                                                                                                                                                                                      |
+| E9  | One form per value: JSON shapes, base64, ids                                                                   | Read; test        | Exact field sets, canonical base64 at exact lengths, a fixed-length sealed copy, ids by pattern; JSON is never signed (§6)                                                                                                                                                             |
+| E10 | Padding and size                                                                                               | Read; test        | Text up to 64 KiB, padded to 1, 16 or 256 KiB; the API refuses a content ciphertext of any other length (§7)                                                                                                                                                                           |
+| E11 | Identity v1 has no sequence number (decision 19)                                                               | Read              | Nothing is added to the identity; the API checks current identities at arming and re-sealing, the client applies H1 (§9)                                                                                                                                                               |
+| E12 | When a comparison counts (H1)                                                                                  | Read; test        | `releaseComparisonState`: only for the account's current identity, stale once a newer one is seen or the compared one is listed as replaced; when sealing, the owner's own key must not have changed either; for a release in hand, `other_key` unless the key compared signed it (§9) |
+| E13 | A fired release must stay checkable after its owner deletes the account, which erases their release identities | Read              | The owner's identity at arming is kept with the release, and goes with it; the deletion texts say so (§1, §11)                                                                                                                                                                         |
+| E14 | Re-sealing to a recipient's new key does not take back the old copy                                            | Read (analysis)   | Stated: after a lost device, cancel and arm again, which makes a new content key (§10)                                                                                                                                                                                                 |
+| E15 | What a hostile server can and cannot do                                                                        | Read (analysis)   | §10; hold back, delay and bring forward are accepted (design §3) and named as R12, which part 2 adds to `THREAT_MODEL.md`                                                                                                                                                              |
+| E16 | Notices and what they carry (design §5)                                                                        | Read              | A pointer only, in an unencrypted room the bot owns; nothing names the owner, the label, other people or any time (§11)                                                                                                                                                                |
+| E17 | `randomBytes` asked WebCrypto for more than 65,536 bytes at once, so padding to 256 KiB threw                  | Run; test         | Fixed in `randomBytes`, which also fixes dead drops over 16 KiB and PR 2's recovery files past 16 KiB (§14)                                                                                                                                                                            |
 
 ---
 
@@ -231,7 +235,9 @@ owner's account id and fingerprint in both places.
 
 **Every label a release key or a release key's owner uses**, PR 2's and
 this record's. Each ends in 0x00, so none is a prefix of another, and each
-is used in exactly one place:
+is used in exactly one place. (The HKDF framing label
+`blackout-deaddrop-v2-hybrid`, which precedes `T`, is not one of them and is
+not terminated: see "Key derivation" below.)
 
 | Label (then 0x00)                    | Bytes | Where                                                                               | Record   |
 | ------------------------------------ | ----- | ----------------------------------------------------------------------------------- | -------- |
@@ -256,7 +262,17 @@ is used in exactly one place:
     release wrap's is the dead-drop label followed by `T`, which starts with
     the seal label. No other HKDF in the tree uses that label (the v1 sealed
     box uses `blackout-deaddrop-v1`), so a release wrap key and a dead-drop
-    key are never derived from the same `info`.
+    key are never derived from the same `info`. The dead-drop label itself,
+    `blackout-deaddrop-v2-hybrid` (27 bytes), has no terminator and no length
+    prefix, and `T` follows it directly (`pqHybrid.ts`). That is safe only
+    while a dead drop has no transcript and every release transcript starts
+    with a terminated label of its own, as today. **The constraint on later
+    work (independent review, P3-L1):** a dead-drop transcript, when one is
+    added (C5), must start with its own NUL-terminated label that is none of
+    the eight above, and the labels test then includes it; or
+    `deriveHybridAeadKey` moves to a v3 label with a terminator and a length
+    prefix on the transcript. Otherwise a dead-drop `info` beginning
+    `blackout-release-seal-v1` 0x00 … and a release wrap's could coincide.
 -   **Associated data.** The content's and a recovery file's are distinct,
     and are used under different keys anyway (K and an argon2id output).
 
@@ -406,6 +422,13 @@ gracePeriodSeconds, label?, envelope }`, nothing else (no `roomId`, no
 -   **What a recipient is given** (`GET /v1/deadman/releases`): per release,
     the release id, the owner's account id, when it was released, when it
     will be removed, the header, the owner's identity, and their own copy.
+    The release id and the owner's account id beside the header are the
+    server's unsigned duplicates of the header's two fields: the SDK's
+    `listReleases` refuses an entry where they differ (`server_mismatch`),
+    and **only the header's fields, as `openReleaseCopy` returns them
+    (`releaseId`, `ownerAccountId`, `ownerFingerprint`), are to be shown**
+    (independent review, P3-M2). When it was released and when it will be
+    removed stay the server's word.
 
 ## 7. Padding and size bounds (E10)
 
@@ -459,7 +482,23 @@ the switch, which is a release switch that has not fired or been cancelled;
 the copy is for one of its recipients, names that account's current
 identity, and its signature verifies over the stored header under the
 owner's identity named there, which must still be the owner's current one
-(otherwise the owner arms again).
+(otherwise the owner arms again). These, too, catch client bugs, not a
+hostile server.
+
+**The owner's device, before re-sealing** (`resealReleaseCopy`, through the
+SDK's `resealRecipient(switchId, …)`), which is what holds against a hostile
+server (independent review, P3-H1): the owner's view the server answers with
+is the switch asked for (`switchId`) and **the header it carries has that
+release id**, checked before the directory is read, any signature is checked
+or anything is opened; the release id is in the owner's own signature and in
+every transcript, so a server cannot answer with another release's header
+and own copy and have the device seal that release's key to a person named
+only on this one. Then the owner's own copy passes every check a recipient
+makes, the content's decryption included (P3-L2), before K is sealed again.
+Whom a given release may be re-sealed to is not in anything the owner signed
+(E7): the API checks it for an honest server, and PR 4's device-side record
+of each release's recipients, from what `armReleaseSwitch` returns, is what
+will check it against a hostile one (still open, see the review).
 
 **The recipient, before showing anything** (`openReleaseCopy`): the header
 and the copy pass `parseReleaseEnvelope`'s checks; the copy names the
@@ -468,9 +507,13 @@ holds (a replaced one included, since the owner may not have re-sealed yet);
 the owner's identity verifies and its fingerprint is the header's; the
 signature verifies; the X25519 output is not zero; the wrap opens; K matches
 C; the content opens under the release id and owner as associated data; the
-padding and the UTF-8 are valid. Whether the owner's key is one the
-recipient compared, and the comparison still counts, is a separate check
-(§9), which the app must make before saying who sent it.
+padding and the UTF-8 are valid. The result carries the header's release id
+and owner account id, the only ones to show (§6). Whether the release was
+signed by the key the recipient compared, **and** that comparison still
+counts, is `releaseComparisonState`'s, given the result's `ownerFingerprint`
+as `signerFingerprint` (§9): the app may say "signed with ‹name›'s release
+key, which you compared" only when that one call answers `current`, which
+needs both; `other_key` means another key signed it.
 
 ## 9. Ordering and comparisons (decision 19, H1)
 
@@ -497,17 +540,34 @@ recipient compared, and the comparison still counts, is a separate check
     owner's current one: the recipient's device compared that key, and will
     count a release signed by another one as unconfirmed. The SDK's arming
     and re-sealing refuse a recipient whose comparison does not count.
+-   **Where the third clause is fed from (independent review, P3-M3).** The
+    reads that decide what is sealed are the SDK's own, and they report what
+    they saw: a refusal (`ReleaseActionError`, `recipient_comparison` or
+    `owner_key_not_current`) carries `servedFingerprint`, the fingerprint of
+    the identity the directory served as that account's current one,
+    computed from the served identity (null if it served none that
+    verified); a successful arming returns `sealedTo`, each account and the
+    fingerprint its copy was sealed to. PR 4's client records each of these,
+    with its own directory reads, as seen since comparing, so that a server
+    which serves a newer key once and then puts the compared one back finds
+    `seenSinceComparison` holding the newer one, not empty.
 -   **Why that is enough for ordering:** if anyone makes an older key
     current, the owner's device sees a newer identity than the one compared,
     asks for a new comparison, and that comparison fails unless the
     recipient's device holds the same key. A key served under a recipient's
     name cannot get a sealed copy without a matching code.
 -   **After the release** the same rule applies to the recipient's view of
-    the owner's key. If the owner replaces their keys, or deletes their
-    account, after the release, a recipient's comparison stops counting, and
-    PR 4's screen can no longer say the release was signed by the key the
-    recipient compared; it can say which key signed it, and when the
-    comparison was made.
+    the owner's key, with one more input: the key that signed the release in
+    hand. `releaseComparisonState` takes it as `signerFingerprint` (the
+    `ownerFingerprint` an `openReleaseCopy` result carries, computed from
+    the identity that verified) and answers `other_key` unless it is the
+    fingerprint compared; `current` means both that the compared key signed
+    it and that the comparison counts now (P3-M1). Only then may PR 4's
+    screen say "signed with ‹name›'s release key, which you compared on
+    ‹date›". If the owner replaces their keys, or deletes their account,
+    after the release, a recipient's comparison stops counting (`stale`),
+    and the screen can no longer say that; it can say which key signed it,
+    and when the comparison was made.
 
 ## 10. What a hostile server can and cannot do
 
@@ -547,6 +607,12 @@ follow from §1–§9 and from the design's §3, which accepted the first three.
     different texts (§4);
 -   make one recipient's copy open for anyone else, or move a copy to another
     release, recipient or signer (§2);
+-   have the owner's device seal a release's key to a person not named on
+    that release by answering the owner's view of one switch with another
+    release's header and own copy: the device refuses a header whose release
+    id is not the switch it is re-sealing (§8; independent review, P3-H1,
+    which it could do before that check). Whom a given release may be
+    re-sealed to is PR 4's device-side record, still open;
 -   tell from the content more than which of three sizes it is.
 
 **E14, re-sealing does not revoke.** A re-seal replaces a recipient's copy
@@ -708,31 +774,44 @@ of the release-identities record and the questions below.
     `decryptReleaseContent`; `sealReleaseCopy` and `sealReleaseCopyWith`,
     which verify the recipient's identity and seal both legs to the verified
     keys; `buildReleaseEnvelope` (a fresh K and nonce, the owner's copy
-    first, K zeroed afterwards); `releaseSignatureVerifier`, which verifies
-    the owner's identity once and parses each copy it is handed;
-    `openReleaseCopy`, the recipient's checks of §8; and
-    `resealReleaseCopy`, which opens the owner's own copy with every one of
-    those checks before sealing K again. Fixed vectors in
-    `envelopeVectors.ts` (§12).
+    first; afterwards K, the commitment's copy of it, the padded text and,
+    inside the sealing function, both shared secrets and each wrap key's
+    bytes are filled with zeros, **best effort**: JavaScript promises
+    nothing about copies an engine made, P3-L3); `releaseSignatureVerifier`,
+    which verifies the owner's identity once and parses each copy it is
+    handed; `openReleaseCopy`, the recipient's checks of §8, returning the
+    header's release id and owner with the text; and `resealReleaseCopy`,
+    which refuses a header whose release id is not the switch's
+    (`release_mismatch`, P3-H1), then opens the owner's own copy with every
+    one of those checks, the content's decryption included (P3-L2), before
+    sealing K again. Fixed vectors in `envelopeVectors.ts` (§12).
 -   **When a comparison counts**, `release/comparison.ts`:
-    `releaseComparisonState` and `releaseDirectoryFingerprints`, which
-    computes every fingerprint from an identity it verified for that
-    account (§9).
+    `releaseComparisonState` (given the fingerprint that signed a release in
+    hand, `other_key` unless it is the one compared, P3-M1) and
+    `releaseDirectoryFingerprints`, which computes every fingerprint from an
+    identity it verified for that account (§9).
 -   **The wire contracts**, `deadman/releases.ts`: the arming and re-sealing
     bodies, the release read, the owner's view of a release, notice counts,
     the limits, the notice's fixed body, room name and pointer
-    (`parseDeadmanNoticePointer`), and the error codes. `deadman/events.ts`:
-    a release switch has no room (`roomId: null`), and the owner's view
-    gains the release format, when it fired, the release and the notice
-    counts.
+    (`parseDeadmanNoticePointer`, which takes a release id of the release
+    id's form only, P3-L4), and the error codes. `deadman/events.ts`: a
+    release switch has no room (`roomId: null`), and the owner's view gains
+    the release format, when it fired, the release and the notice counts.
 -   **The SDK**, `packages/blackout-sdk/src/deadman/releaseActions.ts`:
     `createDeadmanReleaseActions(client)` with `armReleaseSwitch`,
     `resealRecipient`, `listReleases` and `getLimits`. Arming and re-sealing
-    read the directory fresh for the owner and every recipient, refuse
-    (`ReleaseActionError`) before sending anything unless the owner's key is
-    the directory's current one and every recipient's comparison is
-    `current`, and send only the envelope, the timer and the label, or one
-    copy. The routes they call are the second branch's.
+    read the directory fresh for the owner and every recipient, and refuse
+    (`ReleaseActionError`, naming the account and the fingerprint the
+    directory served, P3-M3) **before sending the envelope or the copy**
+    unless the owner's key is the directory's current one and every
+    recipient's comparison is `current`; the directory reads are sent first,
+    and tell the server whom the owner is about to name (C14). They send
+    only the envelope, the timer and the label, or one copy. Arming returns
+    the release id and whom the envelope was sealed to (`sealedTo`, P3-H1);
+    re-sealing refuses an owner view whose switch id or header is not the
+    switch's (`release_mismatch`, P3-H1); the release list refuses an entry
+    whose unsigned ids are not its header's (`server_mismatch`, P3-M2). The
+    routes they call are the second branch's.
 -   **E17, found while building.** WebCrypto's `getRandomValues` fills at most
     65,536 bytes per call and throws `QuotaExceededError` past that, and
     `randomBytes` asked for its whole length in one call. `pad()` builds
@@ -740,7 +819,8 @@ of the release-identities record and the questions below.
     threw: a dead drop over 16 KiB with bucket padding, a release over
     16,368 bytes, and a recovery file whose contents pass 16,368 bytes, which
     three key sets do (someone who replaced their release keys twice), or
-    one key set with about 45 comparisons. **Run:** on `e1d4cec964`
+    one key set with about 35 comparisons (the review measured 34 with a
+    45-character Matrix id, 37 with a short one). **Run:** on `e1d4cec964`
     (develop, with PR 2) `sealRecoveryFile` throws for three key sets. Fixed
     in `random.ts`, in its own commit so it can go out alone: `randomBytes`
     fills in 64 KiB calls. **Test:** `deaddropCrypto.test.ts` (a 256 KiB
@@ -748,23 +828,28 @@ of the release-identities record and the questions below.
     `releaseRecoveryFile.test.ts` (three key sets seal to the 256 KiB bucket
     and open); all three fail with the old `randomBytes`.
 -   **Tests** (the client's Vitest suite, `apps/blackout-client/tests/unit/sdk/`):
-    `releaseEnvelope.test.ts`, 101 (the labels; the vectors, rebuilt; a
+    `releaseEnvelope.test.ts`, 105 (the labels; the vectors, rebuilt; a
     recipient refusing tampered header fields and copy bytes, a copy moved
     to another release, re-signed by a third party, signed by another key,
     and owner-signed copies that fail at the wrap, the commitment and the
     content; mis-addressed copies and missing key sets; small-order and
     zero X25519; every validator; padding sizes and the cap; building,
-    opening and re-sealing with fresh keys, re-sealing's refusals, and that
-    the old copy still opens (E14); the comparison rule; each smaller check
-    on its own); `releaseEnvelopeActions.test.ts`, 12 (the SDK against a
-    fake API: what arming sends, and every refusal before it sends);
-    `deadmanReleaseContracts.test.ts`, 4; `deaddropPqHybrid.test.ts`, 36 (6
+    opening and re-sealing with fresh keys, re-sealing's refusals, the
+    switch binding and the content check when re-sealing, and that the old
+    copy still opens (E14); the comparison rule, the signer included; each
+    smaller check on its own, the base64 length pre-check included);
+    `releaseEnvelopeActions.test.ts`, 14 (the SDK against a fake API: what
+    arming sends and returns, every refusal before it sends and what each
+    reports, the swapped owner view, and the release list's refusals);
+    `deadmanReleaseContracts.test.ts`, 5; `deaddropPqHybrid.test.ts`, 36 (6
     new, for the shared function); `deaddropCrypto.test.ts`, 11 (2 new) and
     `releaseRecoveryFile.test.ts`, 41 (1 new), for E17.
 -   **Every check was removed once, to see a test fail.** 75 checks in
     `envelope.ts`, `comparison.ts`, `hybridSeal.ts` and the SDK were each
     taken out in turn (a scratch script outside the repository, which
     restores the file after each run); each time at least one test failed.
+    The review's fixes added 12 more, each removed once the same way (the
+    table in "Independent review, 2026-10-29").
     Two survived at first, the verifier's and the decryptor's own parsing,
     which only a direct call reaches, and each has a direct test now. Three
     checks were removed instead, because another check always made them
@@ -812,7 +897,326 @@ of the release-identities record and the questions below.
 -   WebCrypto X25519 and Ed25519 and the small-order behaviour on engines
     other than Node's; ML-KEM only through `@noble/post-quantum`.
 -   The security arguments in §2 and §4 are from the cited analyses, read,
-    not re-proved; the construction has had no external review.
+    not re-proved; the construction has had no external review beyond the
+    independent review below, which rebuilt the vectors and read the
+    construction against this record, and did not re-prove the arguments
+    either.
+
+## Independent review, 2026-10-29
+
+An independent review read part 1 of PR 3 (`git diff origin/develop...HEAD`
+at `7fcb107e3e`, seven commits and a develop merge), rebuilt every pinned
+vector value from this record's stated inputs with `node:crypto` and noble's
+ML-KEM rather than the package's functions, ran the three test files one at a
+time, and ran probes against the protocol function and the SDK with a fake
+server. It reported one high finding, three medium, six low, and twelve
+sentences in this record, the identities record and the code that were not
+true of the code as it stood. Its verdict, as written:
+
+> The cryptography is what the record says it is: I rebuilt every pinned
+> vector value (transcript, both shared secrets, wrap key, wrapped K, sealed
+> copy, signed bytes and their hash, the Ed25519 signature, the content
+> ciphertext, its hash, the commitment and the associated data) from the
+> stated byte-range inputs with `node:crypto` and noble's ML-KEM, not with
+> the package's functions, and all 51 checks matched; the byte orders match
+> §2, §3, §5 and §6; the HKDF salt/info/IKM order is as written; the all-zero
+> X25519 output is refused on both sides inside the one shared function; the
+> commitment is inside what the owner signs and is checked before any content
+> is decrypted; a copy moved to another release, recipient or signer, or
+> re-signed by a third party, fails as the record says, and I found no way
+> for a server or a recipient to change the message or K. The one High
+> finding is not in the sealing but around it: **re-sealing is not bound to
+> the switch being re-sealed.** `resealReleaseCopy` opens whatever header
+> and own copy it is handed, and the SDK's `resealRecipient(switchId, …)`
+> never checks that what the server returned for `switchId` is that release.
+> A hostile server that answers `GET /switches/A` with release B's header and
+> B's own copy gets the owner's device to seal B's content key to a person
+> named only on A, under a valid owner signature; I ran this against the SDK
+> with a fake server and the recipient opened B. This contradicts the
+> record's §10 ("it cannot … make one recipient's copy open for anyone
+> else"), the code comment "a server cannot make the owner re-seal another
+> key", and the design's "only the named recipients can read it". The fix is
+> a one-line binding plus a test. Below it are three Mediums that are about
+> what PR 4 will be able to say truthfully (the signer-is-the-compared-key
+> check exists nowhere in part 1; the SDK hands PR 4 the server's unsigned
+> duplicates of the signed header fields; the H1 "seen since" clause has no
+> feed from the SDK's own directory reads), some Lows, and a short list of
+> sentences that are not true of the code as it stands. The 101 + 41 + 12
+> tests I ran pass, reach the source (the package's `exports` point at
+> `src/index.ts`), and do what their names say.
+
+Each finding was then fixed or explained as below, on this branch, in the
+commits after `f55bfe3aa4`. Tests named here run in the client's Vitest suite
+(`apps/blackout-client/tests/unit/sdk/`); every new check was taken out once,
+the one test file that pins it run, and the source restored (a scratch
+script outside the repository; the table is at the end of this section), and
+each time at least one test failed. The design document is edited by part 2,
+not here.
+
+### High
+
+**P3-H1. Re-sealing was not bound to the switch being re-sealed.**
+`resealReleaseCopy` checked that the header parsed, that the copy was the
+owner's own under the header's owner, that the key set was sound, that the
+copy's signature verified under the owner's own identity and that K matched
+the commitment; it never checked that the header was the release the owner
+asked to re-seal, and `resealRecipient` used `owned.release.header` and
+`owned.release.ownCopy` without comparing `owned.switchId` or the header's
+`releaseId` with `switchId`. Nothing the owner signs names a release's
+recipients (E7, by design), so nothing on the device could tell that the
+person it was sealing to was never on that release, and the owner's
+signature on the copy is transferable evidence (C15) that the owner sealed B
+to them.
+
+-   **Done.** `ResealReleaseCopyInput` has a required `releaseId`, the switch
+    the owner is acting on; `resealReleaseCopy` refuses
+    (`ReleaseEnvelopeError`, `release_mismatch`) unless the parsed header's
+    release id is that one, right after the header parses and before the
+    own copy is parsed, any signature is checked or anything is opened. The
+    release id is in the owner's own signature and in every transcript, so
+    a server cannot forge a header for A that carries B's content.
+    `resealRecipient` passes `switchId` through and refuses
+    (`ReleaseActionError`, `release_mismatch`) when the owner view's
+    `switchId`, or its header's `releaseId`, is not `switchId`, before the
+    directory is read, anything is signed or anything is sent.
+    `armReleaseSwitch` returns, next to the armed event, the release id and
+    `sealedTo` (each copy's account id and fingerprint, the owner's own
+    first) from the envelope it built, so a client can keep its own record
+    of each release's recipients from a source it made, rather than from the
+    owner's view, which is the server's word. §8 and §10 say so; the comment
+    at `resealReleaseCopy` says what is bound and what is not.
+-   **Tests.** `releaseEnvelope.test.ts`: "re-sealing is bound to the switch:
+    another release's header and own copy are refused before anything is
+    opened (P3-H1)": two envelopes from one owner, A to Bob and B to Carol;
+    B's header and own copy with A's id are refused with WebCrypto's `verify`
+    and `decrypt` spied and never called; with B's own id the same inputs
+    re-seal B and Bob reads B. `releaseEnvelopeActions.test.ts`: "refuses,
+    before reading the directory or signing, an owner view that is another
+    release's (P3-H1)": a fake API answering `GET /switches/A` with B's
+    release, as the review's probe did, gives `ReleaseActionError`
+    `release_mismatch`, nothing is sent and only the switch was read;
+    another switch's id with A's own release is refused; the honest view of
+    A re-seals A. The arming test checks `sealedTo` and that the release id
+    returned is the envelope's, not the one the server answered with.
+-   **Still open.** The device-side record and the refusal to re-seal a
+    release to an account not on it are PR 4's (below).
+
+### Medium
+
+**P3-M1. The check "this release was signed by the key I compared" existed
+nowhere, and the SDK's instructions pointed PR 4 at a function that did not
+make it.** `releaseComparisonState` answered whether a comparison still
+counted for an account; it never took the fingerprint that signed the
+release in hand. A server holding a key of its own that names the owner's
+account (the identities record's H1: PR 2 cannot stop a key the server
+itself puts in the directory) could sign a release with it while serving the
+compared key as current, and a screen following the `listReleases` doc would
+have said "signed with Alice's release key, which you compared".
+
+-   **Done.** `ReleaseComparisonStateInput` takes `signerFingerprint`, the
+    `ownerFingerprint` an `openReleaseCopy` result carries; when given and
+    not the compared fingerprint the state is the new `other_key`, decided
+    before any other rule, so `current` now means both that the signer is
+    the key compared and that the comparison counts. The `listReleases`
+    doc, §8 and §9 name `releaseComparisonState` as the one function that
+    decides, and what to pass it.
+-   **Test.** `releaseEnvelope.test.ts`: "is other_key when the release in
+    hand was signed by a key that is not the one compared (P3-M1)": the
+    compared key signing, `current`; another key, served as current or not,
+    `other_key`; another key with a stale comparison, `other_key`; the
+    compared key with a stale comparison, `stale`; no comparison, `none`.
+
+**P3-M2. `listReleases` handed PR 4 the server's unsigned duplicates of
+signed header fields, and `openReleaseCopy` did not return the signed
+ones.** `DeadmanReleasedCopy` has `releaseId` and `ownerAccountId` next to
+`header.releaseId` and `header.ownerAccountId`; a screen reading the
+top-level one, the field that sits next to `releasedAt`, would have named
+whoever the server put there under a header whose signature verifies.
+
+-   **Done.** `ReleaseOpenResult` carries `releaseId` and `ownerAccountId`
+    from the parsed header, so a screen has no reason to read anything
+    else. `listReleases` refuses (`ReleaseActionError`, `server_mismatch`)
+    an answer that is not a list and any entry whose top-level `releaseId`
+    or `ownerAccountId` is not its header's. The wire type is unchanged,
+    since the API half is built against it; §6 says only the header's
+    fields are to be shown, and that `releasedAt` and `removesAt` stay the
+    server's word.
+-   **Tests.** `releaseEnvelope.test.ts`: "Bob opens his copy, and Alice
+    opens her own" asserts the whole result, the two fields included.
+    `releaseEnvelopeActions.test.ts`: "refuses a released copy whose
+    unsigned release id or owner differ from its header's (P3-M2)": the
+    honest entry comes back as it was; another owner at the top level,
+    another release id, an entry with no header and an answer that is not a
+    list are refused.
+
+**P3-M3. The H1 "seen since comparing" clause had no feed from the SDK's
+own directory reads, which are the reads that decide what is sealed.** The
+SDK read the directory for the owner and every recipient, computed the
+served fingerprints and discarded them: a `stale` refusal did not say which
+key it saw, so a device could not record it, and a server that served a
+newer key once and then put the compared one back found
+`seenSinceComparison` empty.
+
+-   **Done.** `ReleaseActionError.servedFingerprint` carries, on
+    `recipient_comparison` and `owner_key_not_current`, the fingerprint of
+    the identity the directory served as that account's current one,
+    computed from the served identity (null when it served none that
+    verified), next to `accountId`; a successful arming returns `sealedTo`
+    (P3-H1). §9 says where the third clause is fed from.
+-   **Test.** `releaseEnvelopeActions.test.ts`, the refusal cases: a
+    directory serving Bob's new key gives `servedFingerprint` equal to that
+    key's computed fingerprint and not the string the entry states; another
+    key of the owner's served as current gives that key's; an identity of
+    another account served as the owner's gives null; a recipient never
+    compared with still reports the key served.
+
+### Low
+
+-   **P3-L1. The HKDF `info` framing has no separator between the dead-drop
+    label and the transcript, and that label is not terminated.** No format
+    change: a dead drop has no transcript and every release transcript
+    starts with its own terminated label, so the two `info` values cannot
+    meet today. The constraint on later work is written down in §3, in
+    `deaddrop-pq-hybrid.md` and in `pqHybrid.ts`: a dead-drop transcript,
+    when one is added, starts with its own NUL-terminated label that is none
+    of the eight, or the derivation moves to a v3 label with a terminator
+    and a length prefix. The `pqHybrid.ts` comments no longer say
+    `transcript_hash` (claim 9). No test now; the labels test takes the
+    dead-drop label when that work lands.
+-   **P3-L2. `resealReleaseCopy` never decrypted the content**, so the
+    owner's device would have re-sealed, to a new key, a release whose
+    content a server had corrupted in storage, and said nothing. Done: after
+    the commitment check it decrypts the content with K and refuses
+    (`own_copy`, "(content)") if the padding or the UTF-8 fails; §14's
+    "every one of those checks" is true now. Test, `releaseEnvelope.test.ts`:
+    "re-sealing refuses the owner's own copy of a release whose content K
+    does not open (P3-L2)": the owner's own copy, re-signed by the owner over
+    a content ciphertext under K with broken padding, is refused; the same
+    with readable content re-seals and the recipient reads it.
+-   **P3-L3. The record said K was zeroed; copies of K were not.** Done,
+    best effort: the commitment's input buffer after the digest, both shared
+    secrets and the wrap key's bytes once WebCrypto has imported the key (in
+    the shared sealing function, when sealing and when opening), and the
+    padded plaintext after encryption are filled with zeros. JavaScript
+    gives no guarantee about what an engine has copied, and the record and
+    the code now say "best effort". No test of memory would be honest; the
+    pq-hybrid test's independent rebuild copies the ML-KEM secret before
+    sealing, because the seal now clears it, and says so.
+-   **P3-L4. `parseDeadmanNoticePointer` took any string of up to 64
+    characters as a release id**, from an unencrypted room the homeserver
+    controls. Done: it applies `RELEASE_ID_PATTERN`. Test,
+    `deadmanReleaseContracts.test.ts`: "points only with a string of the
+    release id's form (P3-L4)": `../x`, an uppercase UUID, `r-1`, a
+    version-1 UUID, an unhyphenated one and one with a trailing newline are
+    all null.
+-   **P3-L5. A copy's base64 was decoded before its length was checked**, so
+    a hostile server could make `openReleaseCopy` decode a very long string
+    before refusing it. Done: `decodeCanonicalBase64`, given a length,
+    refuses before decoding a string whose length is not that of the base64
+    of that many bytes (4 × ⌈length / 3⌉). Test, `releaseEnvelope.test.ts`:
+    "a copy's base64 is measured before it is decoded (P3-L5)": a 10 MB
+    `sealedKey` is refused with `fromBase64` spied and never called, and a
+    copy of the right length is decoded, so the spy is known to bind.
+-   **P3-L6. Record and comment inconsistencies.** Each is in the list below.
+
+### Claims that were not true, and what they say now
+
+1.  `envelope.ts`, the comment at `resealReleaseCopy`: "K comes from the
+    owner's own copy, opened … after every check a recipient makes …, so a
+    server cannot make the owner re-seal another key." True of another key;
+    not of another release (P3-H1), and the content was not among the
+    checks (P3-L2). It now says the header must carry the release id of the
+    switch the owner is acting on and why, that every check a recipient
+    makes is made, the content's included, and that nothing on the device
+    says who was named on a release.
+2.  §10, "It cannot … make one recipient's copy open for anyone else, or
+    move a copy to another release, recipient or signer", and the design's
+    "only the named recipients can read it": it could not move a copy, but
+    it could have the owner's device mint one for a person not named on
+    that release. §10 now lists that, with the binding that closes it and
+    what stays open.
+3.  §14, "`resealReleaseCopy`, which opens the owner's own copy with every
+    one of those checks": every check up to K; not the content. True now
+    (P3-L2), and the sentence also names the release-id check.
+4.  §14, "`buildReleaseEnvelope` (… K zeroed afterwards)": the `contentKey`
+    buffer was; the commitment's copy of K, the wrap keys and the shared
+    secrets were not. It now says what is cleared, and "best effort".
+5.  §14, "refuse (`ReleaseActionError`) before sending anything", and the
+    SDK test's header "refuses, before anything is sent": the directory
+    reads for the owner and every recipient are sent first, and tell the
+    server whom the owner is about to name. Both now say "before sending
+    the envelope or the copy; the directory is read first" (C14 covers the
+    disclosure).
+6.  The result paragraph and E15, "R12 in `THREAT_MODEL.md`": there is no
+    R12 in `THREAT_MODEL.md` on this branch (R11 is now the voice-token
+    risk). Both now say "R12, which part 2 adds to `THREAT_MODEL.md`". The
+    design's §8 still says PR 3 adds "R11"; part 2 edits the design.
+7.  §8's last sentence and the SDK's `listReleases` doc, "judge its owner's
+    key with `releaseComparisonState` before saying who sent it": that
+    function did not look at which key signed the release. Both now say to
+    pass the signer's fingerprint, that `current` needs both, and that this
+    one call decides (P3-M1).
+8.  Identities record §5 item 4, "PR 3 should sign one release header
+    (release id, owner, ciphertext hash, key commitment) that every
+    recipient receives alike": PR 3 signs the header's fields inside each
+    copy's signature instead (E7, decision 5). The item now carries a note
+    saying so and pointing at §4 here.
+9.  `pqHybrid.ts`, "`info = "blackout-deaddrop-v2-hybrid" || transcript_hash`"
+    and "Optional transcript hash binding more context": the transcript is
+    appended raw, and a release transcript is 203 bytes of structured
+    fields. Both say so now, with the P3-L1 constraint beside them.
+10. `events.ts`, "Switches armed before 2026-10-26 are in the `legacy`
+    format": the date was this record's. It now says before the release
+    migration (PR 3, part 2), and that arming in that format has been
+    closed since PR 1.
+11. §14, E17, "one key set with about 45 comparisons": the review measured
+    34 with a 45-character Matrix id and about 37 with a short one. Now
+    "about 35", with the measurement.
+12. §3, "Each ends in 0x00, so none is a prefix of another": true of the
+    eight labels; the HKDF framing label `blackout-deaddrop-v2-hybrid`, which
+    precedes `T`, is not terminated and was not in the table. §3 now says so
+    (P3-L1).
+
+### Every new check removed once
+
+Each row: the check taken out, the one test file run against the mutated
+source, and what failed (the files otherwise pass 105, 14, 5 and 36). All
+twelve were caught; the sources were restored and the diff checked unchanged
+after the run.
+
+| Check removed                                                           | Test file                         | Result                                        |
+| ----------------------------------------------------------------------- | --------------------------------- | --------------------------------------------- |
+| P3-H1, `resealReleaseCopy`: the `release_mismatch` check                | `releaseEnvelope.test.ts`         | 1 failed, 104 passed: the switch binding      |
+| P3-H1, `resealRecipient`: the switch id and header check                | `releaseEnvelopeActions.test.ts`  | 1 failed, 13 passed: the swapped view         |
+| P3-H1, `armReleaseSwitch`: `sealedTo` returned empty                    | `releaseEnvelopeActions.test.ts`  | 1 failed, 13 passed: what arming sends        |
+| P3-M1, `releaseComparisonState`: the `other_key` branch                 | `releaseEnvelope.test.ts`         | 1 failed, 104 passed: the signer case         |
+| P3-M2, `openReleaseCopy`: the header's ids in the result                | `releaseEnvelope.test.ts`         | 2 failed, 103 passed: Bob opens; P3-H1        |
+| P3-M2, `listReleases`: the comparison with the header                   | `releaseEnvelopeActions.test.ts`  | 1 failed, 13 passed: the release list         |
+| P3-M3, the recipient refusal's `servedFingerprint`                      | `releaseEnvelopeActions.test.ts`  | 2 failed, 12 passed: never compared; stale    |
+| P3-M3, the owner refusal's `servedFingerprint`                          | `releaseEnvelopeActions.test.ts`  | 1 failed, 13 passed: the owner's key          |
+| P3-L2, `resealReleaseCopy`: the content decryption                      | `releaseEnvelope.test.ts`         | 1 failed, 104 passed: content K does not open |
+| P3-L3, the seal's clearing of the ML-KEM secret (no test was asked)     | `deaddropPqHybrid.test.ts`        | 1 failed, 35 passed: the rebuild's note       |
+| P3-L4, `parseDeadmanNoticePointer`: the pattern (old length check back) | `deadmanReleaseContracts.test.ts` | 1 failed, 4 passed: the id's form             |
+| P3-L5, `decodeCanonicalBase64`: the length check before decoding        | `releaseEnvelope.test.ts`         | 1 failed, 104 passed: the 10 MB copy          |
+
+### Still open
+
+-   **The device-side record of a release's recipients (PR 4).**
+    `armReleaseSwitch` now returns whom each release was sealed to, from the
+    envelope the device built; the screen that keeps that record across
+    sessions and refuses to re-seal a release to an account not on it is
+    PR 4's. Until then, a server can still list, in the owner's view of
+    switch A, a recipient A never named, and if the owner taps re-seal for
+    that person the device seals A's key to them: the binding above holds
+    the server to the switch and its own release, not to the people on it.
+-   **The design's §8 number.** The design says PR 3 adds "a new residual
+    risk R11", which is now the voice-token risk; part 2, which edits the
+    design and `THREAT_MODEL.md`, makes it R12.
+-   What the review did not verify stands: browsers other than Node's
+    WebCrypto, whether `fill(0)` clears anything an engine has copied,
+    ML-KEM beyond `@noble/post-quantum` (PR 2's L7), and whether PR 4 feeds
+    `seenSinceComparison` from its own reads, which the SDK's reads now make
+    possible for theirs (P3-M3).
 
 ## Sources
 
