@@ -9,8 +9,9 @@ supporting the claim next to it, the claim is wrong and we want to know — see
 
 Last reviewed: **2026-08-10**; section 1 updated 2026-10-18 with the defaults
 for new canopies and dens; section 2 updated 2026-10-26 with release keys in the
-export. Changes to anything here are recorded in the
-[policy changelog](docs/legal/CHANGELOG.md).
+export; sections 1 and 2 updated 2026-10-29 with the dead-man release notice and
+the releases given to a person in the export. Changes to anything here are
+recorded in the [policy changelog](docs/legal/CHANGELOG.md).
 
 ---
 
@@ -99,6 +100,18 @@ Encryption claims are only worth something with the exceptions attached.
     rooms, a delivery notice. Encrypting the service rooms would not make them
     private, it would break them. Giving the bot real crypto is on the roadmap;
     until it lands, this list stands and stays here.
+-   **Dead-man release notices.** When a dead-man switch armed in the release
+    format fires, the bot makes one "Blackout notices" room per person named,
+    invites them, and posts one fixed sentence with the release's id — nothing
+    of the message, nobody's name, not the owner's label. The room is not
+    end-to-end encrypted, because the bot cannot encrypt, and the sentence says
+    so. The message itself is encrypted on the owner's device for each person
+    named and never reaches the server readable; the notice only points at it,
+    and whether a notice reaches anyone is the homeserver's doing
+    ([`deadmanReleaseNotifier.ts`](packages/api/src/services/deadmanReleaseNotifier.ts),
+    [`release-envelope-2026-10-26.md`](docs/security/release-envelope-2026-10-26.md)
+    §11). No deployment can arm such a switch yet: arming is refused until an
+    operator turns `BLACKOUT_DEADMAN_RELEASES` on, and no deployment file does.
 -   **Scheduled messages.** When you schedule a message, you hand its text to the
     Blackout API. The API stores it as plaintext until it is sent, then clears it,
     and the bot posts it unencrypted under your name. The API refuses to schedule
@@ -147,8 +160,9 @@ is advertising.
 ## 2. Your data, portable, free
 
 **Every user can download their account data — profile, linked accounts, social
-graph, ledger records, scheduled messages, dead-man switches and the public half
-of their release keys — on any tier, in one click.** It does not yet include every record the server keeps.
+graph, ledger records, scheduled messages, dead-man switches, the dead-man
+releases given to them and the public half of their release keys — on any tier,
+in one click.** It does not yet include every record the server keeps.
 
 In the app: **Settings → Privacy & data → Download your data**. Or over HTTP:
 

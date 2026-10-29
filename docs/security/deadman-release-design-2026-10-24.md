@@ -28,6 +28,14 @@ vectors and what a hostile server can and cannot do. PR 3 is built on two
 stacked branches: the protocol and SDK first (that record's §14), then the
 API.
 
+**Status, 2026-10-29, PR 3's API side built:** arming in the release format
+behind `BLACKOUT_DEADMAN_RELEASES`, re-sealing, `GET /v1/deadman/releases`,
+the limits, the sweep's release and the notifier, the removal after 365 days,
+migration 106, and the documents §8 lists, as that record's §15 describes.
+The residual risk is R12 in `THREAT_MODEL.md`, since R11 was taken by the
+LiveKit webhook before PR 3 landed. The flag is set nowhere; arming stays
+closed until PR 4.
+
 The switch may be relied on for someone's physical safety. Every property
 below is stated with its limits, and §7 gives the wording the app may use and
 the claims it must never make.
@@ -732,9 +740,10 @@ BO-1.
         signature) and `deadman_release_notices` (switch, recipient, room,
         attempts, last error, sent at).
     -   Docs: `TRUST.md` §1 (notices and reminders join the bot's plaintext
-        posts); `THREAT_MODEL.md` §5 row and a new residual risk R11 (the
+        posts); `THREAT_MODEL.md` §5 row and a new residual risk, R12 (the
         server can hold a release back, delay it or bring it forward; the app
-        says so); `KNOWN_LIMITATIONS.md`.
+        says so; it was to be R11, which the LiveKit webhook took first);
+        `KNOWN_LIMITATIONS.md`.
 4.  **Arming and opening (client).** Turns `BLACKOUT_DEADMAN_RELEASES` on and
     lifts the 409.
     -   Client: the arming form (message; recipients by Matrix id, each behind
@@ -769,6 +778,10 @@ takes the next free number when it merges.
 _2026-10-26:_ #983 merged `103_voice_room_sanctions` into `develop`, so PR 2
 takes ordinal 104, and PR 3 and PR 5 each take the next free number when they
 merge.
+
+_2026-10-29:_ PR 2 merged as `104_release_identities`, and #987 took 105
+(`105_invitation_admissions`), so PR 3 is `106_deadman_releases`; PR 5 takes
+the next free number when it merges.
 
 ### Existing switches
 

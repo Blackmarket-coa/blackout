@@ -323,9 +323,14 @@ For the source-of-truth triage with tier/owner detail see
     `POST /v1/auth/account/delete/request` and `/confirm`.
 -   **State:** Deleting your Blackout account removes the account, its sessions
     and linked services, and cancels and erases your unsent scheduled messages.
-    It removes the release keys you published (their public halves); the
-    private keys on your devices and in your recovery files stay until you
-    remove them. It does not yet deactivate your Matrix account, and your
+    It cancels your dead-man switches that have not fired and removes what you
+    put in them, a release switch's sealed copies included; a switch that has
+    already fired stays readable to the people it named, with the public
+    release key it was signed with, until 365 days after it fired. Copies of
+    other people's releases sealed to you are removed, and a notice still owed
+    to you is dropped. It removes the release keys you published (their public
+    halves); the private keys on your devices and in your recovery files stay
+    until you remove them. It does not yet deactivate your Matrix account, and your
     messages stay in rooms. If an anonymous sign-up used an invitation, the
     record tying that invitation to your Matrix account is removed too. Where
     the inviter's list of who joined through their link includes you, that
@@ -337,14 +342,46 @@ For the source-of-truth triage with tier/owner detail see
     (`apps/blackout-client/src/app/features/deadman/`) and the API's
     `/v1/deadman` routes (`packages/api/src/modules/deadman.ts`). The panel
     is shown to every account by default (client flag `deadman`).
--   **State (2026-10-26):** you can check in and cancel the switches you
-    have, from the app or the API. You cannot arm a new one: the API refuses
-    every arm (409 `arming_unavailable`) until Blackout can release a message
-    to the people you name, which
-    [`docs/security/deadman-release-design-2026-10-24.md`](docs/security/deadman-release-design-2026-10-24.md)
-    plans. When an existing switch fires, Blackout does not notify anyone or
+-   **State (2026-10-29):** you can check in and cancel the switches you
+    have, from the app or the API. You cannot arm a new one yet: the API
+    refuses every arm (409 `arming_unavailable`) until an operator turns
+    `BLACKOUT_DEADMAN_RELEASES` on, which no deployment file does; the app's
+    arming form and "Released to you" view are the next PR of
+    [`docs/security/deadman-release-design-2026-10-24.md`](docs/security/deadman-release-design-2026-10-24.md).
+    The API's side of the release is built
+    ([`docs/security/release-envelope-2026-10-26.md`](docs/security/release-envelope-2026-10-26.md)):
+    a switch armed in the release format holds a message encrypted on the
+    owner's device for each person named, who must have release keys on this
+    server; when it fires, each of them can fetch their own sealed copy
+    (`GET /v1/deadman/releases`), and the Blackout bot tries to tell them
+    (below). When an existing switch fires, Blackout does not notify anyone or
     post anything: the switch only changes status to `triggered`. Do not rely
-    on it for your safety.
+    on a switch for anyone's safety.
+-   **What the bot's notice is.** One message from the Blackout bot in a room
+    it makes for you, "Blackout notices", which is **not end-to-end
+    encrypted** (the bot cannot encrypt): a fixed sentence, "There is
+    something new for you in Blackout. Open Blackout to see it. This room is
+    not end-to-end encrypted, so please don't reply here.", and the release's
+    id, and nothing else: not who armed the switch, not their label, not who
+    else was named, nothing of the message. Anyone who sees your
+    notifications, and your email provider if the homeserver emails you about
+    unread messages, can see that you got one. The bot retries a notice the
+    homeserver refuses for 30 days, then records it as failed; whether a
+    notice reaches you depends on the homeserver and your client, and the
+    release does not: it is released when the API's own store says so, and
+    the view the next PR adds reads that store.
+-   **What the server can do with a release.** It keeps the timer and the
+    sealed copies, so whoever runs or compels it can hold a release back,
+    delay it, or give the people named their copies early; nobody is told. It
+    cannot read the message, and cannot forge one or make a copy open for
+    anyone but its recipient. An outage delays a release by its own length
+    plus up to 72 hours (below). [`THREAT_MODEL.md`](THREAT_MODEL.md), R12.
+-   **Retention.** 365 days after a release switch fires, Blackout removes the
+    encrypted message and every sealed copy from its database; the switch
+    stays in the owner's list as fired, with how many notices were sent. Save
+    the message before then if you need it after. Cancelling a release switch
+    removes its encrypted message and every copy; backups keep them until
+    they expire.
 -   The switches that exist were armed through the API before this. Their
     payload is whatever was sent: the server never decrypts it and cannot
     tell whether it is ciphertext. Recipients named by Blackout account id
@@ -356,10 +393,11 @@ For the source-of-truth triage with tier/owner detail see
     switch stays in your list as cancelled. A switch cancelled before cancel
     began removing payloads still holds its payload until you cancel it again
     ("Remove message" in the panel). Deleting your account cancels your switches that
-    have not fired and removes their payloads and labels; a switch that has
-    already fired keeps its payload for the people it named, because a
-    release is not taken back. Where the deployment keeps database backups,
-    they hold a removed payload until they expire.
+    have not fired and removes their payloads and labels, and a release
+    switch's sealed copies; a switch that has already fired keeps its payload
+    or encrypted message for the people it named, because a release is not
+    taken back. Where the deployment keeps database backups, they hold a
+    removed payload until they expire.
 -   If the server reaches your switch more than 15 minutes (by default) after
     it was due, because its background loops were down, it does not fire the
     switch then: the switch goes to grace with at least 72 hours left from
@@ -371,7 +409,8 @@ For the source-of-truth triage with tier/owner detail see
     switch's status and release time do show them.
 -   What a switch will release, and to whom, was decided on 2026-10-24 (N2 in
     [`docs/security/deadman-and-feeds-triage-2026-10-12.md`](docs/security/deadman-and-feeds-triage-2026-10-12.md)):
-    the design above. Until it ships, nothing is released and arming stays
+    the design above. Its server side is built; until the app's side ships
+    and an operator turns the flag on, nothing is released and arming stays
     closed.
 
 ### Release keys (2026-10-26)
@@ -382,10 +421,14 @@ For the source-of-truth triage with tier/owner detail see
     Format and review:
     [`docs/security/release-identities-2026-10-26.md`](docs/security/release-identities-2026-10-26.md).
 -   **What they are for:** the dead-man switch release
-    ([`docs/security/deadman-release-design-2026-10-24.md`](docs/security/deadman-release-design-2026-10-24.md)),
-    which is not built yet. You can create release keys, publish their public
-    half, save a recovery file and compare a safety code with someone, but
-    arming a switch stays closed, so nothing is encrypted for these keys yet.
+    ([`docs/security/deadman-release-design-2026-10-24.md`](docs/security/deadman-release-design-2026-10-24.md)).
+    Its server side is built: a switch armed in the release format seals its
+    message's key to the current release keys of each person named and to the
+    owner's own, and the API checks every copy against the keys published
+    here. You can create release keys, publish their public half, save a
+    recovery file and compare a safety code with someone, but arming stays
+    closed on every deployment until an operator turns
+    `BLACKOUT_DEADMAN_RELEASES` on, so nothing is encrypted for these keys yet.
 -   **Lose the device, lose the keys.** The private keys live only on the
     devices that made them or loaded a recovery file, and in the recovery
     files you save. A device that is lost, reset, or whose browser deletes

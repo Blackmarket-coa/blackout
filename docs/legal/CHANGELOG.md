@@ -26,6 +26,57 @@ should be described as a published privacy policy until that review lands.
 
 ---
 
+## 2026-10-29 — Dead-man releases: what the server keeps, the bot's notice, the export
+
+**Why this entry exists:** a new category of data the server keeps, and a new
+plaintext post by the bot. The server side of the dead-man switch release
+([`docs/security/release-envelope-2026-10-26.md`](../security/release-envelope-2026-10-26.md))
+is built: a switch can hold a message encrypted on the owner's device for the
+people named, sealed to their release keys. Arming such a switch stays closed on
+every deployment until an operator turns `BLACKOUT_DEADMAN_RELEASES` on, which
+no deployment, compose or env file does.
+
+### Added
+
+-   **The server keeps, for a switch in the release format,** the encrypted
+    message and a commitment to its key, one sealed copy of the key per person
+    named and one for the owner, each with the owner's signature, the public
+    release key the owner signed with, the account ids of the people named, the
+    timer and the owner's label
+    ([`packages/api/src/services/deadmanReleases.ts`](../../packages/api/src/services/deadmanReleases.ts),
+    migration 106). It cannot read the message. It can see who armed what for
+    whom, which of three padded sizes the message is, every check-in, when the
+    switch fires and who fetched their copy. Cancelling removes the message and
+    the copies from its database (backups aside); 365 days after a switch fires
+    they are removed and the rows stay, saying what the switch was and whom it
+    was for.
+-   **The bot posts a notice in a room that is not encrypted.** When a release
+    switch fires, the Blackout bot makes, once per person, a "Blackout notices"
+    room, invites them as a direct message, and posts one fixed sentence with
+    the release's id: nothing of the message, nobody's name, not the owner's
+    label. The room is a plaintext service room like the others
+    [`TRUST.md`](../../TRUST.md) §1 lists, and the sentence says so. The server
+    keeps, per notice, the room, how many attempts were made, the last error and
+    when it was sent or given up after 30 days. Whether a notice reaches anyone
+    depends on the homeserver and the person's client; the release does not
+    ([`packages/api/src/services/deadmanReleaseNotifier.ts`](../../packages/api/src/services/deadmanReleaseNotifier.ts)).
+-   **The data export lists** a release switch's format, when it fired and its
+    notice counts under `deadmanSwitches`, and the releases given to the person,
+    each with their own sealed copy and the owner's public key at arming, under
+    `deadmanReleases` (`account.deadmanReleases` in the self-service export).
+    [`TRUST.md`](../../TRUST.md) §2 says so.
+-   **Deleting an account** removes the sealed copies of its unfired release
+    switches with their content; a fired one keeps its content, the copies for
+    the people it named and the public key it was signed with, until the 365
+    days end, so that what was released stays checkable. As a person named on
+    others' switches, the account's copies are removed, a notice still owed to
+    it is dropped, and its notice rows forget their room.
+
+### Not changed
+
+-   Switches that exist today change status when they fire, as before; nothing
+    is released, posted or sent for them.
+
 ## 2026-10-26 — Release keys: what the server keeps of them, and the export
 
 **Why this entry exists:** a new category of data the server keeps. Release keys
