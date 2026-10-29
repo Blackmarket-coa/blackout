@@ -27,8 +27,9 @@ import type { ReleaseComparison } from './recoveryFile';
 /**
  * `current`: the comparison counts, and if a signer was given it is the key
  * compared. `other_key`: the release in hand was signed by a key that is not
- * the one compared, whatever the comparison's state. `stale`: compare again.
- * `none`: never compared.
+ * the one compared, whatever the comparison's state, once there is one.
+ * `stale`: compare again. `none`: never compared, whatever signed the
+ * release; it is answered before any other rule.
  */
 export type ReleaseComparisonState = 'current' | 'other_key' | 'stale' | 'none';
 
@@ -54,8 +55,9 @@ export type ReleaseComparisonStateInput = {
 /**
  * Whether a comparison counts now, and, given the signer of a release in
  * hand, whether that release was signed by the key compared: `current` only
- * when both hold. This is the one function that decides whether a screen may
- * say "signed with a key you compared".
+ * when both hold. With no comparison the answer is `none`, before the signer
+ * or anything else is looked at. This is the one function that decides
+ * whether a screen may say "signed with a key you compared".
  */
 export const releaseComparisonState = (
     input: ReleaseComparisonStateInput
