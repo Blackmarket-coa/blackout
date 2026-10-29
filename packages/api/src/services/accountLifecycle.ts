@@ -72,7 +72,8 @@ export interface AccountExport {
      */
     deadmanSwitches: Array<{
         id: string;
-        roomId: string;
+        /** A legacy switch's room; a release switch has none. */
+        roomId?: string;
         status: string;
         headline?: string;
         checkInIntervalSeconds: number;

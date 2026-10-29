@@ -3,9 +3,9 @@
 // Most tables are regular: table name = snake_case(mapName), keyed by `id`,
 // reflection maps fields ↔ columns. The exceptions (composite/non-id keys, the
 // renamed webhook-audit table, and the nested coalition-aid location) are
-// declared explicitly. The MUTATOR_SPECS table says, for each of the 127
-// InMemoryDb mutators, whether a write-through is a targeted upsert of the
-// returned record or a (rarer) resync of the affected map(s).
+// declared explicitly. The MUTATOR_SPECS table says, for each InMemoryDb
+// mutator, whether a write-through is a targeted upsert of the returned record
+// or a (rarer) resync of the affected map(s).
 
 import { camelToSnake, type Row, type TableDescriptor } from './pgWriter';
 
@@ -76,6 +76,16 @@ const OVERRIDES: Record<string, DescriptorOverride> = {
     },
     widgetAlertTokens: { keyOf: (r) => String(r.secretHash), conflictColumns: ['secret_hash'] },
     canopyDirectoryEntries: { keyOf: (r) => String(r.canopyId), conflictColumns: ['canopy_id'] },
+    // One row per release switch and account (migration 106), keyed as the
+    // store keys them: neither id holds a ':'.
+    deadmanReleaseWraps: {
+        keyOf: (r) => `${r.switchId}:${r.recipientAccountId}`,
+        conflictColumns: ['switch_id', 'recipient_account_id'],
+    },
+    deadmanReleaseNotices: {
+        keyOf: (r) => `${r.switchId}:${r.recipientAccountId}`,
+        conflictColumns: ['switch_id', 'recipient_account_id'],
+    },
     // Composite key: one greeting row per (room, user) join — no `id` column.
     denGreetings: {
         keyOf: (r) => `${r.roomId}:${r.userId}`,
@@ -395,6 +405,8 @@ const ALL_MAP_NAMES = [
     'forumPosts',
     'deadDrops',
     'deadmanSwitches',
+    'deadmanReleaseWraps',
+    'deadmanReleaseNotices',
     'releaseIdentities',
     'moderationActions',
     'creatorStreamAuth',
@@ -562,7 +574,7 @@ const upsert = (map: string): MutatorSpec => ({ kind: 'upsert', map });
 const resync = (...maps: string[]): MutatorSpec => ({ kind: 'resync', maps });
 
 /**
- * Maps each of the 127 InMemoryDb mutators to its write-through. `upsert`
+ * Maps each InMemoryDb mutator to its write-through. `upsert`
  * persists the method's returned record; `resync` reconciles a map after a
  * delete / bulk-revoke / consume. The `reset*ForTest` seams are intentionally
  * absent — postgres mode never calls them.
@@ -620,6 +632,13 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
     updateDeadmanSwitch: upsert('deadmanSwitches'),
     // Account deletion. A targeted upsert, not a resync: see the store method.
     eraseDeadmanSwitch: upsert('deadmanSwitches'),
+    // Arming and re-sealing write one copy each; removal blanks one, as a
+    // targeted upsert, never a resync.
+    putDeadmanReleaseWrap: upsert('deadmanReleaseWraps'),
+    eraseDeadmanReleaseWrap: upsert('deadmanReleaseWraps'),
+    // The sweep writes a notice with the trigger; the notifier updates it.
+    createDeadmanReleaseNotice: upsert('deadmanReleaseNotices'),
+    updateDeadmanReleaseNotice: upsert('deadmanReleaseNotices'),
     // Publishing supersedes the current identity (its own upsert, issued
     // first by publishReleaseIdentity) and then adds the new one.
     supersedeReleaseIdentity: upsert('releaseIdentities'),

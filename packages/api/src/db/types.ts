@@ -880,10 +880,18 @@ export interface DeadDropRecord {
 
 export type DeadmanSwitchStatus = 'armed' | 'grace' | 'triggered' | 'cancelled';
 
+/**
+ * `legacy`: armed before the release format, with whatever payload the caller
+ * sent. `release-v1`: a release envelope, sealed on the owner's device
+ * (`docs/security/release-envelope-2026-10-26.md`). Migration 106.
+ */
+export type DeadmanSwitchReleaseFormat = 'legacy' | 'release-v1';
+
 export interface DeadmanSwitchRecord {
     id: UUID;
     ownerId: UUID;
-    roomId: string;
+    /** A legacy switch's room, any string; a release switch has none. */
+    roomId?: string;
     status: DeadmanSwitchStatus;
     checkInIntervalSeconds: number;
     gracePeriodSeconds: number;
@@ -901,6 +909,56 @@ export interface DeadmanSwitchRecord {
      * migration 102.
      */
     backlogGraceStartedAt?: string;
+    /** Absent on a row from before migration 106, which is `legacy`. */
+    releaseFormat?: DeadmanSwitchReleaseFormat;
+    /** When a release switch fired. A legacy switch never records it. */
+    releasedAt?: string;
+    createdAt: string;
+    updatedAt: string;
+}
+
+/**
+ * One sealed copy of a release switch's content key: the owner's own, or one
+ * recipient's, with the owner's signature over it, as the owner's device sent
+ * it and the API checked it. Re-sealing replaces a recipient's row. Cancel,
+ * account deletion and the release's removal after 365 days blank the copy
+ * and the signature; the row keeps whom it was for. Keyed by switch and
+ * account. Migration 106.
+ */
+export interface DeadmanReleaseWrapRecord {
+    switchId: string;
+    recipientAccountId: string;
+    /** The identity the copy is sealed to, 64 lowercase hex digits. */
+    recipientFingerprint: string;
+    /** 1180 bytes, base64; empty once removed. */
+    sealedKey: string;
+    /** Ed25519, base64; empty once removed. */
+    signature: string;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export type DeadmanReleaseNoticeStatus = 'pending' | 'sent' | 'failed';
+
+/**
+ * The bot's notice to one recipient of one fired release switch: written by
+ * the sweep with the trigger, sent by the notifier into the recipient's
+ * standing "Blackout notices" room, retried with backoff for 30 days.
+ * Keyed by switch and account. Migration 106.
+ */
+export interface DeadmanReleaseNoticeRecord {
+    switchId: string;
+    recipientAccountId: string;
+    /** The notices room it was, or will be, posted into. */
+    roomId?: string;
+    status: DeadmanReleaseNoticeStatus;
+    attempts: number;
+    lastError?: string;
+    nextAttemptAt: string;
+    /** When the homeserver accepted it. */
+    sentAt?: string;
+    /** When it stopped being retried. */
+    failedAt?: string;
     createdAt: string;
     updatedAt: string;
 }

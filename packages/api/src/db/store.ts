@@ -27,6 +27,8 @@ import type {
     ModerationActionRecord,
     ChannelRecord,
     DeadDropRecord,
+    DeadmanReleaseNoticeRecord,
+    DeadmanReleaseWrapRecord,
     DeadmanSwitchRecord,
     DeadmanSwitchStatus,
     ReleaseIdentityRecord,
@@ -199,6 +201,10 @@ const DB_FILE_PATH = resolve(
 // before the cutoff can still be valid once the cutoff record is pruned.
 const USER_TOKEN_CUTOFF_TTL_MS = 25 * 60 * 60 * 1000;
 
+/** The key of a release switch's per-recipient rows (copies, notices); ids hold no ':'. */
+const releaseRowKey = (switchId: string, recipientAccountId: string): string =>
+    `${switchId}:${recipientAccountId}`;
+
 type PersistedState = {
     users: UserRecord[];
     canopyDirectoryEntries: CanopyDirectoryEntryRecord[];
@@ -214,6 +220,8 @@ type PersistedState = {
     channels: ChannelRecord[];
     deadDrops: DeadDropRecord[];
     deadmanSwitches: DeadmanSwitchRecord[];
+    deadmanReleaseWraps?: DeadmanReleaseWrapRecord[];
+    deadmanReleaseNotices?: DeadmanReleaseNoticeRecord[];
     releaseIdentities: ReleaseIdentityRecord[];
     moderationActions: ModerationActionRecord[];
     creatorStreamAuth: CreatorStreamAuthRecord[];
@@ -384,6 +392,10 @@ class InMemoryDb {
     channels = new Map<string, ChannelRecord>();
     deadDrops = new Map<string, DeadDropRecord>();
     deadmanSwitches = new Map<string, DeadmanSwitchRecord>();
+    /** Sealed copies of release switches' content keys, keyed `${switchId}:${recipientAccountId}`. */
+    deadmanReleaseWraps = new Map<string, DeadmanReleaseWrapRecord>();
+    /** The bot's notices of fired release switches, keyed `${switchId}:${recipientAccountId}`. */
+    deadmanReleaseNotices = new Map<string, DeadmanReleaseNoticeRecord>();
     /** Published release identities, current and superseded, keyed by row id. */
     releaseIdentities = new Map<string, ReleaseIdentityRecord>();
     moderationActions = new Map<string, ModerationActionRecord>();
@@ -2535,6 +2547,143 @@ class InMemoryDb {
         };
         this.deadmanSwitches.set(id, updated);
         return updated;
+    }
+
+    /**
+     * Store one sealed copy of a release switch's content key: arming writes
+     * the owner's and every recipient's, re-sealing replaces one recipient's.
+     * An existing row keeps its `createdAt`.
+     */
+    putDeadmanReleaseWrap(
+        input: Omit<DeadmanReleaseWrapRecord, 'createdAt' | 'updatedAt'>
+    ): DeadmanReleaseWrapRecord {
+        const key = releaseRowKey(input.switchId, input.recipientAccountId);
+        const ts = nowIso();
+        const record: DeadmanReleaseWrapRecord = {
+            ...input,
+            createdAt: this.deadmanReleaseWraps.get(key)?.createdAt ?? ts,
+            updatedAt: ts,
+        };
+        this.deadmanReleaseWraps.set(key, record);
+        return record;
+    }
+
+    getDeadmanReleaseWrap(
+        switchId: string,
+        recipientAccountId: string
+    ): DeadmanReleaseWrapRecord | undefined {
+        return this.deadmanReleaseWraps.get(releaseRowKey(switchId, recipientAccountId));
+    }
+
+    /** Every copy of one switch, the owner's included, blanked ones included. */
+    listDeadmanReleaseWraps(switchId: string): DeadmanReleaseWrapRecord[] {
+        return [...this.deadmanReleaseWraps.values()].filter((row) => row.switchId === switchId);
+    }
+
+    /** Every copy sealed to one account, on anyone's switches. */
+    listDeadmanReleaseWrapsForRecipient(accountId: string): DeadmanReleaseWrapRecord[] {
+        return [...this.deadmanReleaseWraps.values()].filter(
+            (row) => row.recipientAccountId === accountId
+        );
+    }
+
+    /**
+     * Remove one sealed copy and its signature (cancel, account deletion, the
+     * release's removal after 365 days). The row stays, saying whom it was
+     * for, as a targeted upsert, because the Postgres writer has no targeted
+     * delete.
+     */
+    eraseDeadmanReleaseWrap(
+        switchId: string,
+        recipientAccountId: string
+    ): DeadmanReleaseWrapRecord | undefined {
+        const key = releaseRowKey(switchId, recipientAccountId);
+        const record = this.deadmanReleaseWraps.get(key);
+        if (!record) return undefined;
+        const updated: DeadmanReleaseWrapRecord = {
+            ...record,
+            sealedKey: '',
+            signature: '',
+            updatedAt: nowIso(),
+        };
+        this.deadmanReleaseWraps.set(key, updated);
+        return updated;
+    }
+
+    /**
+     * Write the notice owed to one recipient of a fired release switch, due at
+     * `nextAttemptAt`. `undefined` if there already is one: one notice per
+     * recipient per release.
+     */
+    createDeadmanReleaseNotice(input: {
+        switchId: string;
+        recipientAccountId: string;
+        nextAttemptAt: string;
+    }): DeadmanReleaseNoticeRecord | undefined {
+        const key = releaseRowKey(input.switchId, input.recipientAccountId);
+        if (this.deadmanReleaseNotices.has(key)) return undefined;
+        const ts = nowIso();
+        const record: DeadmanReleaseNoticeRecord = {
+            switchId: input.switchId,
+            recipientAccountId: input.recipientAccountId,
+            status: 'pending',
+            attempts: 0,
+            nextAttemptAt: input.nextAttemptAt,
+            createdAt: ts,
+            updatedAt: ts,
+        };
+        this.deadmanReleaseNotices.set(key, record);
+        return record;
+    }
+
+    getDeadmanReleaseNotice(
+        switchId: string,
+        recipientAccountId: string
+    ): DeadmanReleaseNoticeRecord | undefined {
+        return this.deadmanReleaseNotices.get(releaseRowKey(switchId, recipientAccountId));
+    }
+
+    listDeadmanReleaseNotices(switchId: string): DeadmanReleaseNoticeRecord[] {
+        return [...this.deadmanReleaseNotices.values()].filter((row) => row.switchId === switchId);
+    }
+
+    listDeadmanReleaseNoticesForRecipient(accountId: string): DeadmanReleaseNoticeRecord[] {
+        return [...this.deadmanReleaseNotices.values()].filter(
+            (row) => row.recipientAccountId === accountId
+        );
+    }
+
+    /** Pending notices whose next attempt is due at `now`, oldest first. */
+    listDueDeadmanReleaseNotices(now: string): DeadmanReleaseNoticeRecord[] {
+        const at = Date.parse(now);
+        return [...this.deadmanReleaseNotices.values()]
+            .filter((row) => row.status === 'pending' && Date.parse(row.nextAttemptAt) <= at)
+            .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    }
+
+    updateDeadmanReleaseNotice(
+        switchId: string,
+        recipientAccountId: string,
+        patch: Partial<
+            Omit<DeadmanReleaseNoticeRecord, 'switchId' | 'recipientAccountId' | 'createdAt'>
+        >
+    ): DeadmanReleaseNoticeRecord | undefined {
+        const key = releaseRowKey(switchId, recipientAccountId);
+        const existing = this.deadmanReleaseNotices.get(key);
+        if (!existing) return undefined;
+        const next: DeadmanReleaseNoticeRecord = { ...existing, ...patch, updatedAt: nowIso() };
+        this.deadmanReleaseNotices.set(key, next);
+        return next;
+    }
+
+    /**
+     * The account's standing notices room: the room of its newest notice that
+     * has one. One room per account, reused for every release.
+     */
+    findDeadmanNoticeRoom(accountId: string): string | undefined {
+        return this.listDeadmanReleaseNoticesForRecipient(accountId)
+            .filter((row) => row.roomId)
+            .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0]?.roomId;
     }
 
     /** Every release identity the account published, newest first. */
@@ -5762,6 +5911,18 @@ export class FileBackedDb extends InMemoryDb {
         this.channels = new Map((parsed.channels ?? []).map((row) => [row.id, row]));
         this.deadDrops = new Map((parsed.deadDrops ?? []).map((row) => [row.id, row]));
         this.deadmanSwitches = new Map((parsed.deadmanSwitches ?? []).map((row) => [row.id, row]));
+        this.deadmanReleaseWraps = new Map(
+            (parsed.deadmanReleaseWraps ?? []).map((row) => [
+                releaseRowKey(row.switchId, row.recipientAccountId),
+                row,
+            ])
+        );
+        this.deadmanReleaseNotices = new Map(
+            (parsed.deadmanReleaseNotices ?? []).map((row) => [
+                releaseRowKey(row.switchId, row.recipientAccountId),
+                row,
+            ])
+        );
         this.releaseIdentities = new Map(
             (parsed.releaseIdentities ?? []).map((row) => [row.id, row])
         );
@@ -6294,6 +6455,8 @@ export class FileBackedDb extends InMemoryDb {
             channels: [...this.channels.values()],
             deadDrops: [...this.deadDrops.values()],
             deadmanSwitches: [...this.deadmanSwitches.values()],
+            deadmanReleaseWraps: [...this.deadmanReleaseWraps.values()],
+            deadmanReleaseNotices: [...this.deadmanReleaseNotices.values()],
             releaseIdentities: [...this.releaseIdentities.values()],
             moderationActions: [...this.moderationActions.values()],
             creatorStreamAuth: [...this.creatorStreamAuth.values()],
@@ -6796,6 +6959,45 @@ export class FileBackedDb extends InMemoryDb {
 
     override eraseDeadmanSwitch(id: string): DeadmanSwitchRecord | undefined {
         const updated = super.eraseDeadmanSwitch(id);
+        if (updated) this.persist();
+        return updated;
+    }
+
+    override putDeadmanReleaseWrap(
+        input: Omit<DeadmanReleaseWrapRecord, 'createdAt' | 'updatedAt'>
+    ): DeadmanReleaseWrapRecord {
+        const record = super.putDeadmanReleaseWrap(input);
+        this.persist();
+        return record;
+    }
+
+    override eraseDeadmanReleaseWrap(
+        switchId: string,
+        recipientAccountId: string
+    ): DeadmanReleaseWrapRecord | undefined {
+        const updated = super.eraseDeadmanReleaseWrap(switchId, recipientAccountId);
+        if (updated) this.persist();
+        return updated;
+    }
+
+    override createDeadmanReleaseNotice(input: {
+        switchId: string;
+        recipientAccountId: string;
+        nextAttemptAt: string;
+    }): DeadmanReleaseNoticeRecord | undefined {
+        const created = super.createDeadmanReleaseNotice(input);
+        if (created) this.persist();
+        return created;
+    }
+
+    override updateDeadmanReleaseNotice(
+        switchId: string,
+        recipientAccountId: string,
+        patch: Partial<
+            Omit<DeadmanReleaseNoticeRecord, 'switchId' | 'recipientAccountId' | 'createdAt'>
+        >
+    ): DeadmanReleaseNoticeRecord | undefined {
+        const updated = super.updateDeadmanReleaseNotice(switchId, recipientAccountId, patch);
         if (updated) this.persist();
         return updated;
     }

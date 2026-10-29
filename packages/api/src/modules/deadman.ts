@@ -51,7 +51,7 @@ export const recordToOwnerView = (record: DeadmanSwitchRecord): DeadmanSwitchPay
     const payload: DeadmanSwitchPayload = {
         switchId: record.id,
         ownerId: record.ownerId,
-        roomId: record.roomId,
+        roomId: record.roomId ?? null,
         status: record.status,
         checkInIntervalSeconds: record.checkInIntervalSeconds,
         gracePeriodSeconds: record.gracePeriodSeconds,
@@ -87,7 +87,7 @@ export const recordToReleasedSwitch = (record: DeadmanSwitchRecord): DeadmanRele
 // checks ownership first), so they carry the owner's view.
 const envelope = (event: string, record: DeadmanSwitchRecord, senderId: string) => ({
     event,
-    roomId: record.roomId,
+    roomId: record.roomId ?? null,
     senderId,
     occurredAt: new Date().toISOString(),
     payload: recordToOwnerView(record),
