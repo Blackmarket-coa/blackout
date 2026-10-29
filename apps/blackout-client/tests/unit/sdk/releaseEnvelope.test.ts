@@ -63,6 +63,7 @@ import {
     type ReleaseKeySet,
 } from '@blackout/protocol';
 import { ml_kem768 } from '../../../../../packages/blackout-protocol/node_modules/@noble/post-quantum/ml-kem.js';
+import * as encoding from '../../../../../packages/blackout-protocol/src/deaddrop/crypto/encoding';
 import { ALICE, BOB } from '../../../../../packages/blackout-protocol/src/release/testVectors';
 import { RELEASE_ENVELOPE_VECTOR as V } from '../../../../../packages/blackout-protocol/src/release/envelopeVectors';
 
@@ -453,9 +454,12 @@ describe('release envelope vectors, rebuilt by hand', () => {
     });
 
     it('Bob opens his copy, and Alice opens her own', async () => {
+        // The release id and owner shown come from the signed header (P3-M2).
         expect(await openAsBob()).toEqual({
             ok: true,
             text: V.message,
+            releaseId: V.releaseId,
+            ownerAccountId: ALICE.identity.accountId,
             ownerFingerprint: ALICE.fingerprint,
             keySetFingerprint: BOB.fingerprint,
         });
@@ -1005,7 +1009,8 @@ describe('padding and sizes', () => {
         await expect(encrypt('✓'.repeat(21846))).rejects.toMatchObject({ code: 'message' });
     });
 
-    const signedContent = async (padded: Uint8Array) => {
+    /** The vector's header with `padded` as its content under K, and `copy` signed by Alice for it. */
+    const signedContent = async (padded: Uint8Array, copy: ReleaseCopy = V.copies.bob.copy) => {
         const key = await subtle.importKey(
             'raw',
             fromHexString(V.contentKey),
@@ -1025,7 +1030,7 @@ describe('padding and sizes', () => {
             )
         );
         const header = { ...V.header, contentCiphertext: b64(ciphertext) };
-        return { header, copy: await signedByAlice(header, V.copies.bob.copy) };
+        return { header, copy: await signedByAlice(header, copy) };
     };
 
     it('refuses content whose padding is broken, or that is not UTF-8', async () => {
@@ -1056,6 +1061,39 @@ describe('padding and sizes', () => {
         expect(await openAsBob(await signedContent(padded))).toMatchObject({
             ok: true,
             text: 'hand-padded',
+        });
+    });
+
+    it("re-sealing refuses the owner's own copy of a release whose content K does not open (P3-L2)", async () => {
+        // The owner signed a content ciphertext under K whose padding is
+        // broken: K matches the commitment, every check up to K passes, and a
+        // device that re-sealed it would seal a release nobody can read.
+        const noMarker = new Uint8Array(1024).fill(0x41);
+        const { header, copy: ownCopy } = await signedContent(noMarker, V.copies.alice.copy);
+        const attempt = resealReleaseCopy({
+            releaseId: V.releaseId,
+            header,
+            ownCopy,
+            ownerKeySet: vectorKeySet(ALICE),
+            recipient: BOB.identity,
+        });
+        await expect(attempt).rejects.toMatchObject({ code: 'own_copy' });
+        await expect(attempt).rejects.toThrow(/\(content\)/);
+        // The same copy with content that opens re-seals.
+        const good = new Uint8Array(1024);
+        good.set(new TextEncoder().encode('readable'));
+        good[8] = 0x80;
+        const readable = await signedContent(good, V.copies.alice.copy);
+        const copy = await resealReleaseCopy({
+            releaseId: V.releaseId,
+            header: readable.header,
+            ownCopy: readable.copy,
+            ownerKeySet: vectorKeySet(ALICE),
+            recipient: BOB.identity,
+        });
+        expect(await openAsBob({ header: readable.header, copy })).toMatchObject({
+            ok: true,
+            text: 'readable',
         });
     });
 });
@@ -1151,6 +1189,7 @@ describe('building, opening and re-sealing with fresh keys', () => {
         const header = releaseHeaderOf(envelope);
         const newBob = await createReleaseKeySet(bob.identity.accountId);
         const copy = await resealReleaseCopy({
+            releaseId: envelope.releaseId,
             header,
             ownCopy: envelope.copies[0],
             ownerKeySet: owner,
@@ -1193,6 +1232,7 @@ describe('building, opening and re-sealing with fresh keys', () => {
         const header = releaseHeaderOf(envelope);
         const reseal = (input: Partial<Parameters<typeof resealReleaseCopy>[0]>) =>
             resealReleaseCopy({
+                releaseId: envelope.releaseId,
                 header,
                 ownCopy: envelope.copies[0],
                 ownerKeySet: owner,
@@ -1222,6 +1262,63 @@ describe('building, opening and re-sealing with fresh keys', () => {
         // Not to the owner.
         await expect(reseal({ recipient: owner.identity })).rejects.toMatchObject({
             code: 'recipients',
+        });
+    });
+
+    it("re-sealing is bound to the switch: another release's header and own copy are refused before anything is opened (P3-H1)", async () => {
+        // The owner has two releases, A to Bob and B to Carol. A server
+        // answering the owner's view of A with B's header and B's own copy
+        // (both genuine) must not get the device to seal B's key to Bob.
+        const releaseA = await buildReleaseEnvelope({
+            ownerKeySet: owner,
+            recipients: [bob.identity],
+            message: 'A: for Bob only',
+        });
+        const releaseB = await buildReleaseEnvelope({
+            ownerKeySet: owner,
+            recipients: [carol.identity],
+            message: 'B: for Carol only, Bob must never read this',
+        });
+        const verify = vi.spyOn(globalThis.crypto.subtle, 'verify');
+        const decrypt = vi.spyOn(globalThis.crypto.subtle, 'decrypt');
+        try {
+            await expect(
+                resealReleaseCopy({
+                    releaseId: releaseA.releaseId,
+                    header: releaseHeaderOf(releaseB),
+                    ownCopy: releaseB.copies[0],
+                    ownerKeySet: owner,
+                    recipient: bob.identity,
+                })
+            ).rejects.toMatchObject({ code: 'release_mismatch' });
+            // Refused on the ids alone: no signature was checked, nothing opened.
+            expect(verify).not.toHaveBeenCalled();
+            expect(decrypt).not.toHaveBeenCalled();
+        } finally {
+            verify.mockRestore();
+            decrypt.mockRestore();
+        }
+        // With B's own id the same inputs re-seal B, and Bob then reads B:
+        // the binding is to the switch the owner names, nothing else.
+        const copy = await resealReleaseCopy({
+            releaseId: releaseB.releaseId,
+            header: releaseHeaderOf(releaseB),
+            ownCopy: releaseB.copies[0],
+            ownerKeySet: owner,
+            recipient: bob.identity,
+        });
+        expect(
+            await openReleaseCopy({
+                header: releaseHeaderOf(releaseB),
+                copy,
+                ownerIdentity: owner.identity,
+                recipientAccountId: bob.identity.accountId,
+                keySets: [bob],
+            })
+        ).toMatchObject({
+            ok: true,
+            text: 'B: for Carol only, Bob must never read this',
+            releaseId: releaseB.releaseId,
         });
     });
 
@@ -1276,6 +1373,25 @@ describe('when a comparison counts (H1)', () => {
 
     it("is stale for sealing once the owner's own key changed since comparing", () => {
         expect(state({ ownFingerprint: BOB.fingerprint })).toBe('stale');
+    });
+
+    it('is other_key when the release in hand was signed by a key that is not the one compared (P3-M1)', () => {
+        // The signer is the compared key, and the comparison counts: current.
+        expect(state({ signerFingerprint: BOB.fingerprint })).toBe('current');
+        // Another key signed it, served as current or not: never "which you compared".
+        expect(state({ signerFingerprint: ALICE.fingerprint })).toBe('other_key');
+        expect(
+            state({ signerFingerprint: ALICE.fingerprint, currentFingerprint: ALICE.fingerprint })
+        ).toBe('other_key');
+        // Other key outranks stale: the comparison says nothing about this release.
+        expect(state({ signerFingerprint: ALICE.fingerprint, currentFingerprint: null })).toBe(
+            'other_key'
+        );
+        // The compared key signed it, but the comparison no longer counts.
+        expect(state({ signerFingerprint: BOB.fingerprint, currentFingerprint: null })).toBe(
+            'stale'
+        );
+        expect(state({ comparison: null, signerFingerprint: ALICE.fingerprint })).toBe('none');
     });
 
     it('reads fingerprints from verified identities only, never the stated ones', async () => {
@@ -1372,6 +1488,7 @@ describe('the smaller checks, each on its own', () => {
         const carol = await createReleaseKeySet('c9c8c7c6-d5d4-4e3e-8f2f-a1a0b9b8c7c6');
         await expect(
             resealReleaseCopy({
+                releaseId: V.releaseId,
                 header: V.header,
                 ownCopy: V.copies.alice.copy,
                 ownerKeySet: { ...vectorKeySet(ALICE), signingPrivateJwk: carol.signingPrivateJwk },
@@ -1381,6 +1498,7 @@ describe('the smaller checks, each on its own', () => {
         // And says when the copy it was given is someone else's.
         await expect(
             resealReleaseCopy({
+                releaseId: V.releaseId,
                 header: V.header,
                 ownCopy: V.copies.bob.copy,
                 ownerKeySet: vectorKeySet(ALICE),
@@ -1389,12 +1507,27 @@ describe('the smaller checks, each on its own', () => {
         ).rejects.toThrow(/not the owner's own/);
         // The vector's own copy re-seals, to the same identity as before.
         const again = await resealReleaseCopy({
+            releaseId: V.releaseId,
             header: V.header,
             ownCopy: V.copies.alice.copy,
             ownerKeySet: vectorKeySet(ALICE),
             recipient: BOB.identity,
         });
         expect(await openAsBob({ copy: again })).toMatchObject({ ok: true, text: V.message });
+    });
+
+    it("a copy's base64 is measured before it is decoded: a 10 MB sealed copy costs nothing (P3-L5)", () => {
+        const decoding = vi.spyOn(encoding, 'fromBase64');
+        try {
+            const huge = { ...V.copies.bob.copy, sealedKey: 'A'.repeat(10 * 1024 * 1024) };
+            expect(parseReleaseCopy(huge)).toEqual({ ok: false, problem: 'sealed_key' });
+            expect(decoding).not.toHaveBeenCalled();
+            // The spy binds: a copy of the right length is decoded.
+            expect(parseReleaseCopy(V.copies.bob.copy).ok).toBe(true);
+            expect(decoding).toHaveBeenCalled();
+        } finally {
+            decoding.mockRestore();
+        }
     });
 
     it("another account's valid identity served as current counts as nothing", async () => {

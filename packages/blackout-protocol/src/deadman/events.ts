@@ -20,8 +20,9 @@ import type { DeadmanNoticeCounts, DeadmanOwnerRelease, DeadmanReleaseFormat } f
  * account for a switch that has not fired; a fired switch keeps it for the
  * people it named.
  *
- * Switches armed before 2026-10-26 are in the `legacy` format and behave as
- * described above. A switch in the `release-v1` format holds a release
+ * Switches armed before the release migration (PR 3, part 2) are in the
+ * `legacy` format and behave as described above; arming in that format has
+ * been closed since PR 1. A switch in the `release-v1` format holds a release
  * envelope instead (`release/envelope.ts`): when it fires, each recipient can
  * fetch their own sealed copy (`GET /v1/deadman/releases`) and the bot posts
  * a notice that only points (`releases.ts`). Arming answers 409

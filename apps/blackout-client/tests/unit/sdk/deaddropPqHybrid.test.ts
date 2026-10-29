@@ -517,15 +517,15 @@ describe('one hybrid sealing function for dead drops and release copies (hybridS
 
     it('with no transcript, seals exactly as dead-drop v2 always derived it', async () => {
         const { randomness, recipient } = await fixed();
+        // The seal clears the shared secret it was given (best effort), so
+        // the rebuild takes its own copy first.
+        const kemSecret = Uint8Array.from(randomness.encapsulation.sharedSecret);
         const sealed = await hybridSealWith(
             { plaintext, recipientX25519PublicKey: recipient },
             randomness
         );
-        const expected = byHand(
-            new Uint8Array(0),
-            randomness.encapsulation.ciphertext,
-            randomness.encapsulation.sharedSecret
-        );
+        expect(randomness.encapsulation.sharedSecret.every((byte) => byte === 0)).toBe(true);
+        const expected = byHand(new Uint8Array(0), randomness.encapsulation.ciphertext, kemSecret);
         expect(Buffer.from(sealed.ciphertext).equals(expected)).toBe(true);
         expect(Array.from(sealed.ephemeralPublicKey)).toEqual(
             Array.from(randomness.ephemeral.publicKeyBytes)
@@ -537,6 +537,7 @@ describe('one hybrid sealing function for dead drops and release copies (hybridS
 
     it('with a transcript, appends it to the info, and only then', async () => {
         const { randomness, recipient } = await fixed();
+        const kemSecret = Uint8Array.from(randomness.encapsulation.sharedSecret);
         const transcript = Uint8Array.from([1, 2, 3, 4]);
         const sealed = await hybridSealWith(
             { plaintext, recipientX25519PublicKey: recipient, transcript },
@@ -544,11 +545,7 @@ describe('one hybrid sealing function for dead drops and release copies (hybridS
         );
         expect(
             Buffer.from(sealed.ciphertext).equals(
-                byHand(
-                    transcript,
-                    randomness.encapsulation.ciphertext,
-                    randomness.encapsulation.sharedSecret
-                )
+                byHand(transcript, randomness.encapsulation.ciphertext, kemSecret)
             )
         ).toBe(true);
     });

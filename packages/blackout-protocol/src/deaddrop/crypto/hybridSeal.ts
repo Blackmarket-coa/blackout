@@ -21,6 +21,11 @@
  * small-order key makes every shared secret zero, and the hybrid would then
  * rest on ML-KEM alone without anyone knowing. Node's WebCrypto refuses such
  * keys itself, by throwing; the check covers an engine that returns zeros.
+ *
+ * Both shared secrets are cleared once the key is derived, and the derived
+ * key's bytes once WebCrypto has imported them. That is best effort: nothing
+ * in JavaScript says what an engine copied (the envelope review, P3-L3), and
+ * the plaintext and the opened bytes are the caller's to clear.
  */
 
 import { toBase64 } from './encoding';
@@ -49,9 +54,28 @@ export type HybridSealed = {
  */
 export type HybridSealRandomness = {
     ephemeral: { privateKey: CryptoKey; publicKeyBytes: Uint8Array };
-    /** An ML-KEM-768 encapsulation to the recipient's key. */
+    /** An ML-KEM-768 encapsulation to the recipient's key; its shared secret is cleared by the seal. */
     encapsulation: KemEncapsulation;
     nonce: Uint8Array;
+};
+
+/** Derive the AEAD key and import it, clearing the secrets and the key bytes (best effort). */
+const importDerivedKey = async (input: {
+    ecSecret: Uint8Array;
+    pqSecret: Uint8Array;
+    ephemeralX25519Pub: Uint8Array;
+    pqCiphertext: Uint8Array;
+    transcript?: Uint8Array;
+}): Promise<CryptoKey> => {
+    let keyBytes: Uint8Array | undefined;
+    try {
+        keyBytes = await deriveHybridAeadKey(input);
+        return await importAesGcmKey(keyBytes);
+    } finally {
+        input.ecSecret.fill(0);
+        input.pqSecret.fill(0);
+        keyBytes?.fill(0);
+    }
 };
 
 export type HybridSealErrorCode = 'zero_shared_secret';
@@ -100,14 +124,13 @@ export const hybridSealWith = async (
         input.recipientX25519PublicKey
     );
     refuseZero(ecSecret);
-    const keyBytes = await deriveHybridAeadKey({
+    const key = await importDerivedKey({
         ecSecret,
         pqSecret: randomness.encapsulation.sharedSecret,
         ephemeralX25519Pub: randomness.ephemeral.publicKeyBytes,
         pqCiphertext: randomness.encapsulation.ciphertext,
         transcript: input.transcript,
     });
-    const key = await importAesGcmKey(keyBytes);
     const ciphertext = new Uint8Array(
         await subtle().encrypt(
             { name: 'AES-GCM', iv: randomness.nonce as unknown as BufferSource },
@@ -171,14 +194,13 @@ export const hybridOpen = async (input: {
     const ecSecret = await deriveSharedSecret(input.recipientPrivateKey, ephemeral);
     refuseZero(ecSecret);
     const pqSecret = await kem.decapsulate(input.sealed.kemCiphertext, input.recipientPqSecretKey);
-    const keyBytes = await deriveHybridAeadKey({
+    const key = await importDerivedKey({
         ecSecret,
         pqSecret,
         ephemeralX25519Pub: input.sealed.ephemeralPublicKey,
         pqCiphertext: input.sealed.kemCiphertext,
         transcript: input.transcript,
     });
-    const key = await importAesGcmKey(keyBytes);
     return new Uint8Array(
         await subtle().decrypt(
             { name: 'AES-GCM', iv: input.sealed.nonce as unknown as BufferSource },

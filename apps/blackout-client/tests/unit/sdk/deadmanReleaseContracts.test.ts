@@ -1,7 +1,8 @@
 /**
  * The dead-man release's wire contracts (`packages/blackout-protocol/src/deadman/`):
- * the notice says nothing about anyone and points with exactly two fields,
- * and a release switch, which has no room, is still a dead-man envelope.
+ * the notice says nothing about anyone and points with exactly two fields, a
+ * release id of the release id's form only (P3-L4), and a release switch,
+ * which has no room, is still a dead-man envelope.
  * docs/security/release-envelope-2026-10-26.md §11; design §5.
  */
 import { describe, expect, it } from 'vitest';
@@ -26,19 +27,33 @@ describe('the notice', () => {
     });
 
     it('points with a schema version and a release id, and nothing else', () => {
-        const pointer = { schemaVersion: DEADMAN_NOTICE_SCHEMA_VERSION, releaseId: 'r-1' };
+        const releaseId = '7e1f0d2c-3b4a-4596-8a7b-6c5d4e3f2a1b';
+        const pointer = { schemaVersion: DEADMAN_NOTICE_SCHEMA_VERSION, releaseId };
         expect(parseDeadmanNoticePointer(pointer)).toEqual(pointer);
         for (const bad of [
             { ...pointer, ownerId: 'someone' },
-            { schemaVersion: 2, releaseId: 'r-1' },
+            { schemaVersion: 2, releaseId },
             { schemaVersion: 1, releaseId: '' },
             { schemaVersion: 1, releaseId: 'x'.repeat(65) },
             { schemaVersion: 1 },
             [pointer],
             null,
-            'r-1',
+            releaseId,
         ]) {
             expect(parseDeadmanNoticePointer(bad)).toBeNull();
+        }
+    });
+
+    it("points only with a string of the release id's form: the room it is read from is the homeserver's (P3-L4)", () => {
+        for (const releaseId of [
+            '../x',
+            '7E1F0D2C-3B4A-4596-8A7B-6C5D4E3F2A1B',
+            'r-1',
+            '7e1f0d2c-3b4a-1596-8a7b-6c5d4e3f2a1b',
+            '7e1f0d2c3b4a45968a7b6c5d4e3f2a1b',
+            `7e1f0d2c-3b4a-4596-8a7b-6c5d4e3f2a1b${'\n'}`,
+        ]) {
+            expect(parseDeadmanNoticePointer({ schemaVersion: 1, releaseId })).toBeNull();
         }
     });
 });
