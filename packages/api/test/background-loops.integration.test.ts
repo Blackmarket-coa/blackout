@@ -3,7 +3,8 @@
  * stop it on shutdown, and the tick registry lets that shutdown wait for work
  * already running. Memory mode, default env: the loops that are on by default
  * are the scheduled-message and creator-content dispatchers, the external-reply
- * retention sweep, the expired-auth-rows prune and the dead-man sweep.
+ * retention sweep, the expired-auth-rows prune, the dead-man sweep and, beside
+ * it, the dead-man release notifier.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -25,6 +26,7 @@ const { isCoalitionExternalRetentionSchedulerRunning } = await import(
     '../src/services/coalitionExternalRetentionScheduler'
 );
 const { isDeadmanSweepSchedulerRunning } = await import('../src/services/deadmanSweepScheduler');
+const { isDeadmanReleaseNotifierRunning } = await import('../src/services/deadmanReleaseNotifier');
 const { isAuthRowsPruneSchedulerRunning } = await import('../src/services/authRowsPruneScheduler');
 
 const running = () => ({
@@ -33,6 +35,7 @@ const running = () => ({
     externalRetention: isCoalitionExternalRetentionSchedulerRunning(),
     authRowsPrune: isAuthRowsPruneSchedulerRunning(),
     deadmanSweep: isDeadmanSweepSchedulerRunning(),
+    deadmanReleaseNotifier: isDeadmanReleaseNotifierRunning(),
 });
 const all = (value: boolean) => ({
     scheduledMessages: value,
@@ -40,6 +43,7 @@ const all = (value: boolean) => ({
     externalRetention: value,
     authRowsPrune: value,
     deadmanSweep: value,
+    deadmanReleaseNotifier: value,
 });
 
 test('the loops handle starts the default loops and stops every one of them', async () => {

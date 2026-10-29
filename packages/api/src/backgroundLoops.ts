@@ -292,19 +292,32 @@ export function startBackgroundLoops(): BackgroundLoopsHandle {
     // (it backs a first-party safety feature); set BLACKOUT_DEADMAN_SWEEP=0 to
     // disable, or BLACKOUT_DEADMAN_SWEEP_INTERVAL_SECONDS for a custom cadence.
     if (process.env.BLACKOUT_DEADMAN_SWEEP !== '0') {
-        const intervalSeconds = Number.parseInt(
-            process.env.BLACKOUT_DEADMAN_SWEEP_INTERVAL_SECONDS ?? '',
-            10
+        launch(
+            import('./services/deadmanSweepScheduler'),
+            ({ deadmanSweepIntervalMs, startDeadmanSweepScheduler }) => {
+                const intervalMs = deadmanSweepIntervalMs();
+                const loop = startDeadmanSweepScheduler(intervalMs);
+                log.info('deadman_sweep_scheduler_started', { intervalMs });
+                return loop;
+            }
         );
-        const intervalMs =
-            Number.isFinite(intervalSeconds) && intervalSeconds > 0
-                ? intervalSeconds * 1000
-                : undefined;
-        launch(import('./services/deadmanSweepScheduler'), ({ startDeadmanSweepScheduler }) => {
-            const loop = startDeadmanSweepScheduler(intervalMs);
-            log.info('deadman_sweep_scheduler_started', { intervalMs });
-            return loop;
-        });
+        // The release notifier runs beside the sweep, at its cadence: it
+        // sends the pointer-only notices the sweep's trigger of a release
+        // switch wrote (docs/security/deadman-release-design-2026-10-24.md
+        // §5). Same gate: a deployment that runs no sweep fires nothing, so
+        // it has nothing to notify.
+        launch(
+            Promise.all([
+                import('./services/deadmanSweepScheduler'),
+                import('./services/deadmanReleaseNotifier'),
+            ]),
+            ([{ deadmanSweepIntervalMs }, { startDeadmanReleaseNotifier }]) => {
+                const intervalMs = deadmanSweepIntervalMs();
+                const loop = startDeadmanReleaseNotifier(intervalMs);
+                log.info('deadman_release_notifier_started', { intervalMs });
+                return loop;
+            }
+        );
     }
 
     // FBM → Matrix bridge tombstone sweeper. Purges expired digital-product
