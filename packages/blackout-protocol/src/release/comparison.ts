@@ -11,7 +11,10 @@
  * identity served as that account's current one since comparing. When
  * sealing, the owner's own identity must also still be the one the
  * comparison was made with: the recipient's device compared that key, and
- * will count a release signed by another one as unconfirmed.
+ * will count a release signed by another one as unconfirmed. When judging a
+ * release in hand, the key that signed it must be the one compared: a
+ * comparison that counts says nothing about a release signed by another key
+ * (the independent review of the envelope, P3-M1).
  *
  * Every fingerprint here is one the device computed from an identity it
  * verified, never one a server stated.
@@ -21,7 +24,13 @@ import type { ReleaseIdentityDirectoryEntry } from './contracts';
 import { verifyReleaseIdentity } from './identity';
 import type { ReleaseComparison } from './recoveryFile';
 
-export type ReleaseComparisonState = 'current' | 'stale' | 'none';
+/**
+ * `current`: the comparison counts, and if a signer was given it is the key
+ * compared. `other_key`: the release in hand was signed by a key that is not
+ * the one compared, whatever the comparison's state. `stale`: compare again.
+ * `none`: never compared.
+ */
+export type ReleaseComparisonState = 'current' | 'other_key' | 'stale' | 'none';
 
 export type ReleaseComparisonStateInput = {
     /** This device's comparison with the account, if it has one. */
@@ -34,14 +43,31 @@ export type ReleaseComparisonStateInput = {
     seenSinceComparison?: readonly string[];
     /** When sealing: this device's own current fingerprint, which must be the one compared. */
     ownFingerprint?: string;
+    /**
+     * When judging a release in hand: the fingerprint that signed it
+     * (`ReleaseOpenResult.ownerFingerprint`, computed from the identity that
+     * verified). It must be the one compared, or the state is `other_key`.
+     */
+    signerFingerprint?: string;
 };
 
-/** Whether a comparison counts now: `current`, `stale` (compare again), or `none`. */
+/**
+ * Whether a comparison counts now, and, given the signer of a release in
+ * hand, whether that release was signed by the key compared: `current` only
+ * when both hold. This is the one function that decides whether a screen may
+ * say "signed with a key you compared".
+ */
 export const releaseComparisonState = (
     input: ReleaseComparisonStateInput
 ): ReleaseComparisonState => {
     const comparison = input.comparison;
     if (!comparison) return 'none';
+    if (
+        input.signerFingerprint !== undefined &&
+        input.signerFingerprint !== comparison.fingerprint
+    ) {
+        return 'other_key';
+    }
     if (input.ownFingerprint !== undefined && input.ownFingerprint !== comparison.ownFingerprint) {
         return 'stale';
     }

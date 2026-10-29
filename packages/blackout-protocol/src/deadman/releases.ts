@@ -18,7 +18,12 @@
  */
 
 import type { ReleaseIdentity } from '../release/identity';
-import type { ReleaseCopy, ReleaseEnvelope, ReleaseHeader } from '../release/envelope';
+import {
+    RELEASE_ID_PATTERN,
+    type ReleaseCopy,
+    type ReleaseEnvelope,
+    type ReleaseHeader,
+} from '../release/envelope';
 
 /** Switches armed before the release format, and switches armed in it. */
 export const DEADMAN_RELEASE_FORMAT = 'release-v1' as const;
@@ -123,7 +128,12 @@ export type DeadmanNoticePointer = {
     releaseId: string;
 };
 
-/** The pointer a notice carries, or null when `value` is not exactly one. */
+/**
+ * The pointer a notice carries, or null when `value` is not exactly one. The
+ * notice is read from an unencrypted room the homeserver controls, so the
+ * release id it points with has to have a release id's form
+ * (`RELEASE_ID_PATTERN`) before a client puts it anywhere (review, P3-L4).
+ */
 export const parseDeadmanNoticePointer = (value: unknown): DeadmanNoticePointer | null => {
     if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
     const keys = Object.keys(value);
@@ -132,8 +142,7 @@ export const parseDeadmanNoticePointer = (value: unknown): DeadmanNoticePointer 
         keys.length !== 2 ||
         candidate.schemaVersion !== DEADMAN_NOTICE_SCHEMA_VERSION ||
         typeof candidate.releaseId !== 'string' ||
-        candidate.releaseId.length === 0 ||
-        candidate.releaseId.length > 64
+        !RELEASE_ID_PATTERN.test(candidate.releaseId)
     ) {
         return null;
     }
