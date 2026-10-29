@@ -342,6 +342,14 @@ export const matrixClient = {
             state_key?: string;
             content: Record<string, unknown>;
         }>;
+        /** Matrix ids to invite as the room is created. */
+        invite?: string[];
+        /**
+         * Mark those invites as a direct message (`is_direct` on each invite
+         * event; Synapse copies it there, `handlers/room.py`), so the invitee's
+         * client lists the room with their direct messages.
+         */
+        isDirect?: boolean;
     }) {
         const hs = homeserver();
         const token = botToken();
@@ -370,6 +378,8 @@ export const matrixClient = {
         if (input.topic) body.topic = input.topic;
         if (input.creationContent) body.creation_content = input.creationContent;
         if (input.powerLevelOverride) body.power_level_content_override = input.powerLevelOverride;
+        if (input.invite && input.invite.length > 0) body.invite = input.invite;
+        if (input.isDirect) body.is_direct = true;
 
         let response: Response;
         try {
@@ -558,24 +568,51 @@ export const matrixClient = {
      * invitation-token redemption flow: when an invite is bound to a room,
      * we issue this call as the bot so the newly-registered account sees
      * the room in their invites list on first login.
+     *
+     * With `isDirect`, the invite is marked as a direct message. The
+     * `/invite` endpoint takes only a user id and a reason, so such an invite
+     * sets the membership through the state endpoint instead
+     * (`PUT .../state/m.room.member/{userId}` with `membership: invite` and
+     * `is_direct`), which Synapse routes through the same membership update
+     * with the content kept (`rest/client/room.py`).
      */
-    async inviteToRoom(roomId: string, userId: string, reason?: string) {
+    async inviteToRoom(
+        roomId: string,
+        userId: string,
+        reason?: string,
+        options: { isDirect?: boolean } = {}
+    ) {
         const hs = homeserver();
         const token = botToken();
         if (!hs || !token) {
             return { ok: false as const, reason: 'matrix_not_configured' as const };
         }
-        const response = await fetch(
-            `${hs}/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/invite`,
-            {
-                method: 'POST',
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(reason ? { user_id: userId, reason } : { user_id: userId }),
-            }
-        );
+        const response = options.isDirect
+            ? await fetch(
+                  `${hs}/_matrix/client/v3/rooms/${encodeURIComponent(
+                      roomId
+                  )}/state/m.room.member/${encodeURIComponent(userId)}`,
+                  {
+                      method: 'PUT',
+                      headers: {
+                          Authorization: `Bearer ${token}`,
+                          'Content-Type': 'application/json',
+                      },
+                      body: JSON.stringify({
+                          membership: 'invite',
+                          is_direct: true,
+                          ...(reason ? { reason } : {}),
+                      }),
+                  }
+              )
+            : await fetch(`${hs}/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/invite`, {
+                  method: 'POST',
+                  headers: {
+                      Authorization: `Bearer ${token}`,
+                      'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify(reason ? { user_id: userId, reason } : { user_id: userId }),
+              });
         let detail: string | undefined;
         if (!response.ok) {
             try {
