@@ -1,7 +1,18 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import type { ReleaseIdentity } from '@blackout/protocol';
+import type {
+    DeadmanNoticeCounts,
+    DeadmanReleaseFormat,
+    DeadmanReleasedCopy,
+    ReleaseIdentity,
+} from '@blackout/protocol';
 import { db } from '../db/store';
 import type { UserRecord } from '../db/types';
+import {
+    blankReleaseWraps,
+    isReleaseSwitch,
+    noticeCounts,
+    releasedCopiesFor,
+} from './deadmanReleases';
 import { recordToReleaseIdentity } from './releaseIdentities';
 import { matrixUserIdFor } from './userIdentity';
 
@@ -68,7 +79,8 @@ export interface AccountExport {
     }>;
     /**
      * Dead-man switches this user owns. Recipients are other people's ids, so
-     * they are counted rather than listed.
+     * they are counted rather than listed; a release switch's sealed copies
+     * are theirs too, and are not here.
      */
     deadmanSwitches: Array<{
         id: string;
@@ -83,7 +95,20 @@ export interface AccountExport {
         releaseAt: string;
         recipientCount: number;
         createdAt: string;
+        releaseFormat: DeadmanReleaseFormat;
+        /** When a release switch fired. */
+        releasedAt?: string;
+        /** A fired release switch's notices, counted. */
+        notices?: DeadmanNoticeCounts;
     }>;
+    /**
+     * Releases given to this user: fired release switches that sealed a copy
+     * to them, each with the header, the owner's identity at arming and this
+     * user's own copy, as `GET /v1/deadman/releases` gives them. A switch
+     * that has not fired is not here: before the trigger a recipient learns
+     * nothing of it.
+     */
+    deadmanReleases: DeadmanReleasedCopy[];
     /**
      * Release identities this user published, current and replaced: public
      * keys only. The private halves were never sent to the server.
@@ -213,7 +238,13 @@ export const exportUserData = (userId: string): AccountExport | null => {
             releaseAt: sw.releaseAt,
             recipientCount: sw.recipients.length,
             createdAt: sw.createdAt,
+            releaseFormat: sw.releaseFormat ?? 'legacy',
+            ...(sw.releasedAt ? { releasedAt: sw.releasedAt } : {}),
+            ...(isReleaseSwitch(sw) && sw.status === 'triggered'
+                ? { notices: noticeCounts(sw.id) }
+                : {}),
         }));
+    const deadmanReleases = releasedCopiesFor(userId);
 
     const releaseIdentities: AccountExport['releaseIdentities'] = db
         .listReleaseIdentitiesForAccount(userId)
@@ -247,6 +278,7 @@ export const exportUserData = (userId: string): AccountExport | null => {
         moderationActions,
         scheduledMessages,
         deadmanSwitches,
+        deadmanReleases,
         releaseIdentities,
         refreshTokensCount,
         passwordResetTokensCount,
@@ -312,8 +344,35 @@ export const confirmAccountDeletion = (
     // Dead-man switches: cancel the ones that have not fired and remove what
     // the owner put in them, so none fires for an account that is gone. One
     // that has fired stays readable to the people it named; its label goes.
+    // A release switch that has not fired loses its sealed copies with its
+    // content; a fired one keeps its content, the owner's identity it was
+    // signed with (E13) and the recipients' copies, and only the owner's own
+    // copy goes, since nothing can be re-sealed after the trigger and nobody
+    // is left to open it.
     for (const sw of db.listDeadmanSwitchesForOwner(record.userId)) {
+        const fired = sw.status === 'triggered';
         db.eraseDeadmanSwitch(sw.id);
+        if (!isReleaseSwitch(sw)) continue;
+        if (fired) db.eraseDeadmanReleaseWrap(sw.id, record.userId);
+        else blankReleaseWraps(sw.id);
+    }
+    // As a recipient: the copies sealed to this account on other people's
+    // switches go, fired or not (nobody is left to open them; the owner's
+    // view then shows no copy held for this recipient), a notice still to be
+    // sent to this account ends, and every notice row of theirs forgets the
+    // room that tied the account to a Matrix id. (This account's own copies
+    // on its own switches went above.)
+    for (const wrap of db.listDeadmanReleaseWrapsForRecipient(record.userId)) {
+        db.eraseDeadmanReleaseWrap(wrap.switchId, wrap.recipientAccountId);
+    }
+    const goneAt = new Date().toISOString();
+    for (const notice of db.listDeadmanReleaseNoticesForRecipient(record.userId)) {
+        db.updateDeadmanReleaseNotice(notice.switchId, notice.recipientAccountId, {
+            roomId: undefined,
+            ...(notice.status === 'pending'
+                ? { status: 'failed', failedAt: goneAt, lastError: 'recipient_gone' }
+                : {}),
+        });
     }
     // Invitation admissions (the use an account-number sign-up spent) hold the
     // account's Matrix id, so they go with it, claimed or not. The redemption

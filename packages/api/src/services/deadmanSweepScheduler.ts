@@ -25,6 +25,18 @@ import { BACKLOG_TOLERANCE_FLOOR_MS, backlogToleranceMs } from './backlogToleran
 
 export const DEFAULT_INTERVAL_MS = 30 * 1000; // 30 seconds
 
+/**
+ * The sweep's cadence as this deployment configures it:
+ * `BLACKOUT_DEADMAN_SWEEP_INTERVAL_SECONDS`, or the default. The notifier
+ * runs at the same cadence, and `GET /v1/deadman/limits` derives the backlog
+ * tolerance the arming form states from it, so the text matches what the
+ * sweep does.
+ */
+export const deadmanSweepIntervalMs = (): number => {
+    const seconds = Number.parseInt(process.env.BLACKOUT_DEADMAN_SWEEP_INTERVAL_SECONDS ?? '', 10);
+    return Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : DEFAULT_INTERVAL_MS;
+};
+
 let timer: ReturnType<typeof setInterval> | null = null;
 
 /** Run one sweep pass. Returns the number of switches whose status advanced. */
