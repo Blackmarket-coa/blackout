@@ -480,13 +480,20 @@ test('a fired release switch without its rows is caught up: a crash between the 
     const frank = await freshPerson();
     const record = await armFor(await freshPerson(), [frank.keySet.identity]);
     const at = soon();
-    // The status write landed, the rows did not.
+    // The status write landed, the rows did not. Another switch naming Frank
+    // is armed and has not fired: it is owed nothing.
     db.updateDeadmanSwitch(record.id, { status: 'triggered', releasedAt: at.toISOString() });
     assert.equal(db.listDeadmanReleaseNotices(record.id).length, 0);
+    const armedOnly = await armFor(await freshPerson(), [frank.keySet.identity]);
     matrix.clearCalls();
     const result = await runDeadmanReleaseNotifier({ now: at });
     assert.deepEqual(result, { caughtUp: 1, due: 1, sent: 1, retried: 0, failed: 0 });
     assert.equal(db.getDeadmanReleaseNotice(record.id, frank.user.id)?.status, 'sent');
+    assert.equal(
+        db.listDeadmanReleaseNotices(armedOnly.id).length,
+        0,
+        'nothing for an unfired switch'
+    );
     assert.equal(matrix.creates.length, 1);
     // A legacy switch, a cancelled release and one whose content was removed are not.
     const owner = await freshPerson();

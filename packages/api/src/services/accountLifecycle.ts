@@ -347,21 +347,20 @@ export const confirmAccountDeletion = (
     // A release switch that has not fired loses its sealed copies with its
     // content; a fired one keeps its content, the owner's identity it was
     // signed with (E13) and the recipients' copies, and only the owner's own
-    // copy goes, since nothing can be re-sealed after the trigger and nobody
-    // is left to open it.
+    // copy goes (below, with every copy sealed to this account), since
+    // nothing can be re-sealed after the trigger and nobody is left to open
+    // it.
     for (const sw of db.listDeadmanSwitchesForOwner(record.userId)) {
         const fired = sw.status === 'triggered';
         db.eraseDeadmanSwitch(sw.id);
-        if (!isReleaseSwitch(sw)) continue;
-        if (fired) db.eraseDeadmanReleaseWrap(sw.id, record.userId);
-        else blankReleaseWraps(sw.id);
+        if (!fired && isReleaseSwitch(sw)) blankReleaseWraps(sw.id);
     }
-    // As a recipient: the copies sealed to this account on other people's
-    // switches go, fired or not (nobody is left to open them; the owner's
-    // view then shows no copy held for this recipient), a notice still to be
-    // sent to this account ends, and every notice row of theirs forgets the
-    // room that tied the account to a Matrix id. (This account's own copies
-    // on its own switches went above.)
+    // Every copy sealed to this account goes, fired or not: its own copies on
+    // its own switches, and the copies on other people's switches (nobody is
+    // left to open them; the owner's view then shows no copy held for this
+    // recipient). A notice still to be sent to this account ends, and every
+    // notice row of theirs forgets the room that tied the account to a Matrix
+    // id.
     for (const wrap of db.listDeadmanReleaseWrapsForRecipient(record.userId)) {
         db.eraseDeadmanReleaseWrap(wrap.switchId, wrap.recipientAccountId);
     }

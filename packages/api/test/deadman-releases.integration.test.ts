@@ -607,6 +607,22 @@ test('after the trigger each recipient reads their own copy and nothing of anyon
         headers: headers(bob, 'deadman.write'),
     });
     assert.equal(narrowed.status, 403);
+
+    // The owner's event feed records the arm and the trigger with no room: the
+    // field is there and null, as the protocol's envelopes have it.
+    const feed = await app.request('/v1/deadman/events', { headers: headers(alice) });
+    assert.equal(feed.status, 200);
+    const events = (
+        (await feed.json()) as Array<{ type: string; payload: Record<string, unknown> }>
+    ).filter((e) => e.payload.switchId === envelope.releaseId);
+    assert.deepEqual(
+        events.map((e) => e.type),
+        ['deadman.switch.armed', 'deadman.switch.triggered']
+    );
+    for (const event of events) {
+        assert.ok('roomId' in event.payload, `${event.type} carries a roomId field`);
+        assert.equal(event.payload.roomId, null);
+    }
 });
 
 test('re-sealing replaces one recipient’s copy after their key changed, and refuses everything else', async () => {
@@ -1129,6 +1145,36 @@ test('a release whose content is gone while a copy is still held is not served, 
     const view = await ownerView(owner.user, envelope.releaseId);
     assert.equal(view.release, undefined);
     assert.equal(view.status, 'triggered');
+
+    // The other half: the copies blanked (the removal does them first) while
+    // the content is still there. A blank copy is not served as a copy.
+    const other = await build(owner.keySet, [recipient.keySet.identity], 'second message');
+    assert.equal((await arm(owner.user, armBody(other))).status, 201);
+    sweepAt(firesAt);
+    assert.ok((await releasesFor(recipient.user)).some((r) => r.releaseId === other.releaseId));
+    blankReleaseWraps(other.releaseId);
+    assert.notEqual(db.getDeadmanSwitch(other.releaseId)?.encryptedPayload, '');
+    const served = await releasesFor(recipient.user);
+    assert.ok(
+        !served.some((r) => r.releaseId === other.releaseId),
+        'a blank copy is served to nobody'
+    );
+    assert.ok(!JSON.stringify(served).includes('"sealedKey":""'));
+
+    // A stored release whose owner identity does not have an identity's shape
+    // (only a corrupted store writes one) is served to nobody rather than as
+    // an identity with missing fields.
+    const third = await build(owner.keySet, [recipient.keySet.identity], 'third message');
+    assert.equal((await arm(owner.user, armBody(third))).status, 201);
+    sweepAt(firesAt);
+    const { header: thirdHeader } = JSON.parse(
+        db.getDeadmanSwitch(third.releaseId)!.encryptedPayload
+    ) as { header: unknown };
+    db.updateDeadmanSwitch(third.releaseId, {
+        encryptedPayload: JSON.stringify({ header: thirdHeader, ownerIdentity: { bogus: true } }),
+    });
+    assert.ok(!(await releasesFor(recipient.user)).some((r) => r.releaseId === third.releaseId));
+    assert.equal((await ownerView(owner.user, third.releaseId)).release, undefined);
 
     // The removal finishes the job once, and then has nothing to do.
     const onTheDay = new Date(firesAt.getTime() + DEADMAN_RELEASE_RETENTION_MS);
