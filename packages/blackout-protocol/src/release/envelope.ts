@@ -538,7 +538,10 @@ const fatalUtf8 = new TextDecoder('utf-8', { fatal: true });
 
 /**
  * Decrypt a release's content with K, checking the padding and that the
- * text is UTF-8 within the cap. Throws on any failure.
+ * text is UTF-8 within the cap. Throws on any failure. The padded plaintext
+ * and the unpadded copy are cleared once the text is a string, best effort
+ * (P3-L3); the string itself cannot be, whether it is shown or, when the
+ * owner's device checks the content before re-sealing (P3-L2), dropped.
  */
 export const decryptReleaseContent = async (
     input: ReleaseHeader,
@@ -565,11 +568,17 @@ export const decryptReleaseContent = async (
             asBufferSource(ciphertext)
         )
     );
-    const bytes = unpad(padded);
-    if (bytes.length === 0 || bytes.length > RELEASE_MESSAGE_MAX_BYTES) {
-        throw new Error('release envelope: the message is empty or over the cap');
+    let bytes: Uint8Array | undefined;
+    try {
+        bytes = unpad(padded);
+        if (bytes.length === 0 || bytes.length > RELEASE_MESSAGE_MAX_BYTES) {
+            throw new Error('release envelope: the message is empty or over the cap');
+        }
+        return fatalUtf8.decode(bytes);
+    } finally {
+        padded.fill(0);
+        bytes?.fill(0);
     }
-    return fatalUtf8.decode(bytes);
 };
 
 const assertMlKem768 = (): void => {
@@ -1048,6 +1057,8 @@ export const resealReleaseCopy = async (input: ResealReleaseCopyInput): Promise<
     try {
         // The content must open under K too (P3-L2): otherwise the device
         // would seal, to a new key, a release nobody can read, and say nothing.
+        // The decryptor clears its buffers; the text it returns is a string,
+        // dropped here, which nothing can clear (P3-L3).
         try {
             await decryptReleaseContent(parsedHeader, contentKey);
         } catch {

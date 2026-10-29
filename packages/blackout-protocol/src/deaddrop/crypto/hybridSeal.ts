@@ -22,10 +22,11 @@
  * rest on ML-KEM alone without anyone knowing. Node's WebCrypto refuses such
  * keys itself, by throwing; the check covers an engine that returns zeros.
  *
- * Both shared secrets are cleared once the key is derived, and the derived
- * key's bytes once WebCrypto has imported them. That is best effort: nothing
- * in JavaScript says what an engine copied (the envelope review, P3-L3), and
- * the plaintext and the opened bytes are the caller's to clear.
+ * Both shared secrets, and the concatenation of them the KDF is fed
+ * (`deriveHybridAeadKey`), are cleared once the key is derived, and the
+ * derived key's bytes once WebCrypto has imported them. That is best effort:
+ * nothing in JavaScript says what an engine copied (the envelope review,
+ * P3-L3), and the plaintext and the opened bytes are the caller's to clear.
  */
 
 import { toBase64 } from './encoding';
