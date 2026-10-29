@@ -5,8 +5,9 @@
  * comparison does not count now (H1) and an owner key the directory does not
  * list as current, saying which key the directory served (P3-M3); re-sealing
  * opens the owner's own copy and sends one new copy, and refuses an owner view
- * that is not the switch's (P3-H1); the release list refuses an entry whose
- * unsigned ids differ from its header's (P3-M2). Against a fake API.
+ * that is not the switch's (P3-H1); the release list refuses an entry that is
+ * not one, or whose unsigned ids differ from its header's (P3-M2). Against a
+ * fake API.
  */
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {
@@ -388,7 +389,8 @@ describe('resealRecipient', () => {
         // Alice has release A to Bob and release B to Carol. A hostile server
         // answers GET /switches/A with B's header and B's own copy, both
         // genuine, hoping Alice's device seals B's key to Bob under her
-        // signature. Nothing may be signed or sent.
+        // signature. Nothing may be signed and no copy sent: the owner's view
+        // is read first (that GET is what is being checked), and nothing after.
         const carol = await createReleaseKeySet('c1c2c3c4-d1d2-4e1e-af1f-a1a2a3a4a5a6');
         const releaseA = await buildReleaseEnvelope({
             ownerKeySet: vectorKeySet(ALICE),
@@ -457,7 +459,7 @@ describe('the read calls', () => {
         ]);
     });
 
-    it("refuses a released copy whose unsigned release id or owner differ from its header's (P3-M2)", async () => {
+    it("refuses a released copy whose unsigned release id or owner differ from its header's, and an entry that is not one (P3-M2)", async () => {
         const envelope = await buildReleaseEnvelope({
             ownerKeySet: vectorKeySet(ALICE),
             recipients: [BOB.identity],
@@ -490,5 +492,27 @@ describe('the read calls', () => {
             code: 'server_mismatch',
         });
         await expect(list({})).rejects.toMatchObject({ code: 'server_mismatch' });
+        // Entries that are not entries. Two absent ids are not an agreement:
+        // each of these has no header id and no top-level id to differ, and
+        // a check that only compared the two let them all through (the
+        // second reading of P3-M2).
+        const nonEntries: unknown[] = [
+            null,
+            {},
+            'x',
+            42,
+            [],
+            { header: {} },
+            { header: { releaseId: undefined, ownerAccountId: undefined } },
+            { ...released, header: undefined, releaseId: undefined, ownerAccountId: undefined },
+            { ...released, header: { v: 1 }, releaseId: undefined, ownerAccountId: undefined },
+            { ...released, header: [] },
+            { ...released, header: { ...released.header, releaseId: 7 }, releaseId: 7 },
+        ];
+        for (const nonEntry of nonEntries) {
+            await expect(list({ releases: [released, nonEntry] })).rejects.toMatchObject({
+                code: 'server_mismatch',
+            });
+        }
     });
 });

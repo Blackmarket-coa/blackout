@@ -7,13 +7,11 @@ import {
     type DeadmanLimits,
     type DeadmanReleaseArmRequest,
     type DeadmanReleaseResealRequest,
-    type DeadmanReleasedCopy,
     type DeadmanReleasesResponse,
     type DeadmanSwitchArmedEvent,
     type DeadmanSwitchPayload,
     type ReleaseComparison,
     type ReleaseComparisonState,
-    type ReleaseHeader,
     type ReleaseIdentity,
     type ReleaseKeySet,
 } from '@blackout/protocol';
@@ -103,7 +101,11 @@ export type ReleaseActionErrorCode =
     | 'not_a_release'
     /** The owner's view served for a switch is not that switch, or its header not that release. */
     | 'release_mismatch'
-    /** A released copy's unsigned top-level fields differ from its signed header's. */
+    /**
+     * The release list is not a list, an entry in it is not an object with a
+     * signed header carrying both ids, or its unsigned top-level fields
+     * differ from its header's.
+     */
     | 'server_mismatch';
 
 export class ReleaseActionError extends Error {
@@ -137,9 +139,28 @@ export class ReleaseActionError extends Error {
     }
 }
 
-/** The signed header's two ids, read without trusting the entry's shape. */
-const headerIds = (header: unknown): { releaseId?: unknown; ownerAccountId?: unknown } =>
-    typeof header === 'object' && header !== null ? (header as Partial<ReleaseHeader>) : {};
+/** A plain object: not null, not an array. */
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+    typeof value === 'object' && value !== null && !Array.isArray(value);
+
+/**
+ * Whether a released entry is one at all, and describes itself as its signed
+ * header does: an object whose `header` is an object carrying a string
+ * `releaseId` and a string `ownerAccountId`, each repeated by the entry's
+ * top-level field of that name. Two absent ids are not an agreement: `null`,
+ * `{}`, a string, and an entry with no ids on either side are refused, not
+ * passed on as releases (the envelope review's second reading of P3-M2).
+ */
+const releasedEntryIsConsistent = (entry: unknown): boolean => {
+    if (!isRecord(entry) || !isRecord(entry.header)) return false;
+    const { releaseId, ownerAccountId } = entry.header;
+    return (
+        typeof releaseId === 'string' &&
+        typeof ownerAccountId === 'string' &&
+        releaseId === entry.releaseId &&
+        ownerAccountId === entry.ownerAccountId
+    );
+};
 
 const isNotFound = (cause: unknown): boolean =>
     cause instanceof BlackoutSdkError && cause.status === 404;
@@ -213,7 +234,8 @@ export const createDeadmanReleaseActions = (client: ApiClient) => {
          * The releases given to the caller: fired release switches that name
          * them, each with the caller's own copy only. Each entry's top-level
          * `releaseId` and `ownerAccountId` are the server's unsigned duplicates
-         * of the signed header's; an entry where they differ is refused
+         * of the signed header's; an entry that is not an object with a header
+         * carrying both as strings, or where they differ, is refused
          * (`server_mismatch`), and a screen shows only what `openReleaseCopy`
          * returns from the header, never the duplicates (P3-M2). Open one with
          * `openReleaseCopy`; then, before saying who sent it, call
@@ -236,15 +258,11 @@ export const createDeadmanReleaseActions = (client: ApiClient) => {
                     "Blackout's server did not answer with a list of releases."
                 );
             }
-            for (const entry of releases as DeadmanReleasedCopy[]) {
-                const header = headerIds(entry?.header);
-                if (
-                    header.releaseId !== entry?.releaseId ||
-                    header.ownerAccountId !== entry?.ownerAccountId
-                ) {
+            for (const entry of releases as unknown[]) {
+                if (!releasedEntryIsConsistent(entry)) {
                     throw new ReleaseActionError(
                         'server_mismatch',
-                        "Blackout's server described a release differently from its signed header."
+                        "Blackout's server listed a release without a signed header, or described it differently from its header."
                     );
                 }
             }
@@ -312,7 +330,8 @@ export const createDeadmanReleaseActions = (client: ApiClient) => {
             }
             if (
                 owned.switchId !== switchId ||
-                headerIds(owned.release.header).releaseId !== switchId
+                !isRecord(owned.release.header) ||
+                owned.release.header.releaseId !== switchId
             ) {
                 throw new ReleaseActionError(
                     'release_mismatch',
