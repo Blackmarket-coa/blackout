@@ -512,9 +512,11 @@ export const encryptReleaseContentWith = async (
     ) {
         throw new Error('release envelope: wrong content key or nonce length');
     }
-    const { padded } = pad(encodeReleaseMessage(fields.text), 'bucket');
-    const key = await importAesGcmKey(randomness.contentKey);
+    const message = encodeReleaseMessage(fields.text);
+    let padded: Uint8Array | undefined;
     try {
+        padded = pad(message, 'bucket').padded;
+        const key = await importAesGcmKey(randomness.contentKey);
         const ciphertext = new Uint8Array(
             await subtleCrypto().encrypt(
                 {
@@ -528,9 +530,11 @@ export const encryptReleaseContentWith = async (
         );
         return { nonce: randomness.nonce, ciphertext };
     } finally {
-        // The padded text, best effort (P3-L3); the caller's `text` is a
-        // string and cannot be cleared.
-        padded.fill(0);
+        // The message's UTF-8 bytes (`pad` copies them into the padded
+        // buffer) and the padded text, best effort (P3-L3); the caller's
+        // `text` is a string and cannot be cleared.
+        message.fill(0);
+        padded?.fill(0);
     }
 };
 
@@ -1004,11 +1008,14 @@ export type ResealReleaseCopyInput = {
  * header and own copy, both genuine, and have the owner's device seal that
  * release's key to a person named only on the first (review, P3-H1). K then
  * comes from the owner's own copy, opened with the owner's key set after
- * every check a recipient makes, the content's decryption included (its
- * signature under the owner's own identity, the wrap, the commitment, the
- * content's padding and UTF-8), so a server cannot make the owner re-seal
- * another key, and a release whose content it corrupted in storage is not
- * re-sealed as if it could be read. Refused when the owner's key set is not
+ * every check a recipient makes (its signature under the owner's own
+ * identity, the wrap, the commitment, and the content's decryption, padding
+ * and UTF-8, P3-L2), so a server cannot make the owner re-seal another key.
+ * A ciphertext a server changed in storage is refused by the signature,
+ * which covers the content's hash; the content check refuses what the
+ * owner's own key signed over content that does not open under K (a client
+ * bug, or the key's holder), so the device does not re-seal, as readable, a
+ * release nobody can read. Refused when the owner's key set is not
  * the one the header names: an owner who replaced their keys arms again.
  * Nothing on the device says who was named on a release (E7): that the
  * recipient is one of them is the API's check, and PR 4's own record.
@@ -1055,8 +1062,11 @@ export const resealReleaseCopy = async (input: ResealReleaseCopyInput): Promise<
     }
     const contentKey = unwrapped.contentKey;
     try {
-        // The content must open under K too (P3-L2): otherwise the device
-        // would seal, to a new key, a release nobody can read, and say nothing.
+        // The content must open under K too (P3-L2). A ciphertext the server
+        // changed never gets here: the signature, over the content's hash,
+        // refused it in unwrapCopy. This refuses content the owner's own key
+        // signed that does not open or unpad under K, so the device does not
+        // seal, to a new key, a release nobody can read, and say nothing.
         // The decryptor clears its buffers; the text it returns is a string,
         // dropped here, which nothing can clear (P3-L3).
         try {
