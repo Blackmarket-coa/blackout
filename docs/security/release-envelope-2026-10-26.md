@@ -15,7 +15,7 @@ envelope what the release-identities record is to the identity.
 
 **Status, 2026-10-26:** written and reviewed (§13) before the build. PR 3 is
 built on two stacked branches, so that the cryptography can be reviewed apart
-from the plumbing: `-v44`, the protocol and the SDK (§14), and `-v45`, the
+from the plumbing: `-v44`, the protocol and the SDK (§14), and `-v46`, the
 API, the migration, the notifier and the documents it changes. Nothing here
 makes a release possible: arming stays closed until PR 4 turns
 `BLACKOUT_DEADMAN_RELEASES` on, and that flag is set nowhere.
