@@ -1809,8 +1809,9 @@ test('an overlapping tick does not send a notice twice or make a second room', a
         if (url.includes('/createRoom')) await gate;
         return stubFetch(input, init);
     }) as typeof fetch;
+    let first: ReturnType<typeof runDeadmanReleaseNotifier> | undefined;
     try {
-        const first = runDeadmanReleaseNotifier({ now: at });
+        first = runDeadmanReleaseNotifier({ now: at });
         // Let the first tick reach the homeserver before the second starts.
         await new Promise((resolve) => setTimeout(resolve, 20));
         // A bounded wait: without the in-flight guard the second tick would
@@ -1824,6 +1825,10 @@ test('an overlapping tick does not send a notice twice or make a second room', a
         release();
         assert.equal((await first).sent, 1);
     } finally {
+        // Released whatever the assertions said, so that a failure here does
+        // not leave this notice in flight under the tests after it.
+        release();
+        await within(5000, first ?? Promise.resolve());
         globalThis.fetch = matrix.fetch;
     }
     assert.equal(matrix.creates.length, 1);
