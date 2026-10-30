@@ -1296,7 +1296,19 @@ class OidcProvider:
         #   Tokens. If the Logout Token is encrypted, it SHOULD replicate the
         #   iss (issuer) claim in the JWT Header Parameters, as specified in
         #   Section 5.3 of [JWT].
-        alg_values = metadata.get("id_token_signing_alg_values_supported", ["RS256"])
+        # And sec. 2.6, step 2:
+        #   Additionally, an alg with the value none MUST NOT be used for
+        #   Logout Tokens.
+        # A provider may list "none" for ID tokens, which the code flow permits,
+        # so it is dropped here. Anyone can POST to this endpoint, and an
+        # unsigned token naming a session's sid would otherwise end it. If
+        # nothing is left, every token is refused. (Blackout fork patch, see
+        # PATCHES.md, 2026-10-30.)
+        alg_values = [
+            alg
+            for alg in metadata.get("id_token_signing_alg_values_supported", ["RS256"])
+            if alg != "none"
+        ]
 
         # As per sec. 2.6:
         #    3. Validate the iss, aud, and iat Claims in the same way they are

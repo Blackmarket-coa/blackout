@@ -629,3 +629,26 @@ reconciliation with upstream; after this they match upstream's for authlib.
     3600 s lifetime. They pass under 1.6.12 and 1.9.1. Upstream has removed
     experimental MSC3861 (its config now refuses
     `experimental_features.msc3861`), so an upstream sync brings no coverage.
+
+## 2026-10-30 back-channel logout refuses unsigned logout tokens
+
+A fork patch with no upstream counterpart: element-hq/synapse `develop` at
+`cc172f7` (2026-10-30) still passes the provider's list unchanged. Record:
+`docs/security/dependency-advisories-server-desktop-2026-10-30.md` (repository
+root).
+
+- `synapse/handlers/oidc.py` (`OidcProvider.handle_backchannel_logout`): `none`
+  is dropped from the provider's `id_token_signing_alg_values_supported`
+  before the logout token is verified, as OIDC Back-Channel Logout 1.0 sec.
+  2.6 step 2 requires ("an alg with the value none MUST NOT be used for Logout
+  Tokens"). Before this, when a provider listed `none` (OIDC Discovery allows
+  it for ID tokens in the code flow), anyone could POST an unsigned logout
+  token to `/_synapse/client/oidc/backchannel_logout` and end any session
+  whose `sid` they knew. When the provider lists only `none`, every logout
+  token is now refused. ID token verification is unchanged.
+- `tests/blackout_runtime/test_backchannel_logout_alg.py`: an unsigned logout
+  token is refused when `none` is listed, and a signed one still ends the
+  session; with only `none` listed, both are refused. Both tests fail on the
+  code before this patch. The file sits in the fork's own test directory but
+  uses helpers from `tests/rest/client/test_auth.py` and
+  `tests/test_utils/oidc.py`, so check it after any sync that touches those.
