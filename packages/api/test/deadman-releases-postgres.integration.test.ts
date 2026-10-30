@@ -141,6 +141,21 @@ test('a release switch, its copies and its notices survive a restart; it has no 
             attempts: 1,
             sentAt: '2026-01-01T01:11:00.000Z',
         });
+        // Bob's release identities, the first replaced: listed by account
+        // through the index after hydration and after a refresh, as every arm
+        // and re-seal reads them.
+        const identityRow = (fingerprint: string) => ({
+            id: randomUUID(),
+            accountId: bob,
+            formatVersion: 1,
+            signingKey: 'public-signing-key',
+            x25519Key: 'public-agreement-key',
+            mlkem768Key: 'public-kem-key',
+            signature: 'signature',
+            fingerprint,
+        });
+        store1.publishReleaseIdentity(identityRow('e1'.repeat(32)));
+        const bobsKey = store1.publishReleaseIdentity(identityRow('e2'.repeat(32)));
         await store1.drain();
 
         const row = await switchRow(pg, sw.id);
@@ -209,6 +224,12 @@ test('a release switch, its copies and its notices survive a restart; it has no 
             1,
             'listed by recipient after hydration'
         );
+        assert.equal(
+            store2.listReleaseIdentitiesForAccount(bob).length,
+            2,
+            'identities listed by account after hydration'
+        );
+        assert.equal(store2.getCurrentReleaseIdentity(bob)?.id, bobsKey.id);
 
         // A wholesale refresh of the mirror (the listener's reconnect, a peer's
         // table resync) rebuilds both indexes with the rows.
@@ -234,6 +255,12 @@ test('a release switch, its copies and its notices survive a restart; it has no 
             2,
             'switches listed by owner after a refresh'
         );
+        assert.equal(
+            store2.listReleaseIdentitiesForAccount(bob).length,
+            2,
+            'identities listed by account after a refresh'
+        );
+        assert.equal(store2.getCurrentReleaseIdentity(bob)?.id, bobsKey.id);
         assert.equal(store2.getDeadmanReleaseWrap(sw.id, bob)?.sealedKey, 'bob-copy');
     } finally {
         await pg.close?.();

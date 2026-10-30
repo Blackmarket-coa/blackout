@@ -314,6 +314,20 @@ export const switchGroupers = (): Record<SwitchGroup, (row: DeadmanSwitchRecord)
     owner: (row) => row.ownerId,
 });
 
+/**
+ * The grouping of release identities: by account, which every arm and re-seal
+ * reads once per copy before the signatures and again after them (the
+ * recipients' current identities and the owner's), and every publish reads.
+ * Erased rows have no account and group under `''`, which nothing lists.
+ */
+export type IdentityGroup = 'account';
+export const identityGroupers = (): Record<
+    IdentityGroup,
+    (row: ReleaseIdentityRecord) => string
+> => ({
+    account: (row) => row.accountId,
+});
+
 /** A fresh empty map of the same kind as `map`, so an indexed map stays indexed. */
 const freshMapLike = <M extends Map<string, unknown>>(map: M): M =>
     (map instanceof GroupedMap ? map.fresh() : new Map()) as M;
@@ -514,8 +528,8 @@ class InMemoryDb {
     deadmanReleaseNotices = new GroupedMap<DeadmanReleaseNoticeRecord, ReleaseRowGroup>(
         releaseRowGroupers<DeadmanReleaseNoticeRecord>()
     );
-    /** Published release identities, current and superseded, keyed by row id. */
-    releaseIdentities = new Map<string, ReleaseIdentityRecord>();
+    /** Published release identities, current and superseded, keyed by row id, grouped by account. */
+    releaseIdentities = new GroupedMap<ReleaseIdentityRecord, IdentityGroup>(identityGroupers());
     moderationActions = new Map<string, ModerationActionRecord>();
     creatorStreamAuth = new Map<string, CreatorStreamAuthRecord>();
     streams = new Map<string, StreamRecord>();
@@ -2805,10 +2819,13 @@ class InMemoryDb {
 
     /** Every release identity the account published, newest first. */
     listReleaseIdentitiesForAccount(accountId: string): ReleaseIdentityRecord[] {
-        // Erased rows have no account; nothing finds them by one.
+        // Erased rows have no account; nothing finds them by one. Through the
+        // by-account index: a filter over every identity row, once per copy
+        // twice per arm, grew with everyone's identities (round 4 of part 2's
+        // review).
         if (!accountId) return [];
-        return [...this.releaseIdentities.values()]
-            .filter((record) => record.accountId === accountId)
+        return this.releaseIdentities
+            .inGroup('account', accountId)
             .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt) || b.id.localeCompare(a.id));
     }
 
@@ -6047,7 +6064,9 @@ export class FileBackedDb extends InMemoryDb {
                 row,
             ])
         );
-        this.releaseIdentities = new Map(
+        // Grouped by account as in memory, so the index is rebuilt with the rows.
+        this.releaseIdentities = new GroupedMap<ReleaseIdentityRecord, IdentityGroup>(
+            identityGroupers(),
             (parsed.releaseIdentities ?? []).map((row) => [row.id, row])
         );
         this.moderationActions = new Map(

@@ -366,14 +366,15 @@ const currentOwnerIdentity = (
 
 /**
  * Whether the identities the signatures were checked against are still the
- * current ones, read again after the awaits: the owner's current identity is
- * the row the verifier was built from (one replaced meanwhile is
- * `owner_identity_changed`, one erased by the owner's deletion
- * `owner_identity_missing`), and each recipient's current identity is still
- * the copy's (the recipient's own refusals). Without this a recipient who
- * rotated during the verification got a held copy sealed to a replaced key,
- * and one who deleted their account a held copy that their deletion's
- * blanking pass had already run past (round 3 of part 2's review).
+ * current ones, read again after the awaits of an arm or a re-seal: the
+ * owner's current identity is the row the verifier was built from (one
+ * replaced meanwhile is `owner_identity_changed`, one erased by the owner's
+ * deletion `owner_identity_missing`), and each recipient's current identity
+ * is still the copy's (the recipient's own refusals). Without this a
+ * recipient who rotated during the verification got a held copy sealed to a
+ * replaced key, and one who deleted their account a held copy that their
+ * deletion's blanking pass had already run past (round 3 of part 2's review
+ * for arming, round 4 for re-sealing).
  */
 const identitiesStillCurrent = (
     ownerId: string,
@@ -570,7 +571,14 @@ export type ResealReleaseOutcome =
  * switch's recipients, names that account's current identity, and its
  * signature verifies over the stored header under the owner's identity named
  * there, which must still be the owner's current one (otherwise the owner
- * arms again, E14). The switch is read again after the signature awaited.
+ * arms again, E14). After the signature awaited, the switch is read again (a
+ * cancel meanwhile wins), and so are the owner's and the recipient's current
+ * identities, as on arming: without that a recipient who rotated during the
+ * verification got a copy sealed to the key they had just replaced, and one
+ * whose account deletion ran meanwhile, which blanks every copy sealed to the
+ * account and erases its identities, got a fresh held copy written after
+ * the blanking pass (round 4 of part 2's review). On one API process; across
+ * replicas the mirror is eventually consistent (§15).
  */
 export const resealReleaseCopy = async (input: {
     ownerId: string;
@@ -624,6 +632,8 @@ export const resealReleaseCopy = async (input: {
 
     const again = readSwitch();
     if (!again.ok) return again.outcome;
+    const identitiesAgain = identitiesStillCurrent(input.ownerId, owner.recordId, [copy]);
+    if (identitiesAgain) return identitiesAgain;
     db.putDeadmanReleaseWrap({
         switchId: again.record.id,
         recipientAccountId: copy.recipientAccountId,
