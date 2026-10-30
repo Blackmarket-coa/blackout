@@ -2070,3 +2070,55 @@ test('a key change or a deletion during a re-seal’s verification is seen befor
     assert.equal(resealed.kind, 'resealed');
     assert.equal(copyOf(steady).sealedKey, steady.copy.sealedKey);
 });
+
+test('a known trade-off, pinned (decision 18): ten accounts that each fire five releases naming one person keep every other owner from naming them, 409 recipient_limit, until the removal at least 365 days after they fired; the person cannot clear it', async () => {
+    // The bound of 50 held releases naming one person from everyone counts a
+    // fired release until its removal, so a few accounts can fill one
+    // person's 50 in a day (ten at the arming rate of decision 18, each with
+    // published release keys) and hold them for 365 days. Which bound replaces
+    // it is the operator's decision; this pins what it does now (round 5 of
+    // part 2's review).
+    const target = await freshPerson();
+    const filled: string[] = [];
+    for (let o = 0; o < 10; o += 1) {
+        const namer = await freshPerson();
+        for (let i = 0; i < 5; i += 1) {
+            const envelope = await build(namer.keySet, [target.keySet.identity], `fill ${o} ${i}`);
+            assert.equal((await arm(namer.user, armBody(envelope))).status, 201, `${o}/${i}`);
+            filled.push(envelope.releaseId);
+        }
+    }
+    const firesAt = FIRES_AT();
+    sweepAt(firesAt);
+    assert.ok(filled.every((id) => db.getDeadmanSwitch(id)?.status === 'triggered'));
+    assert.equal((await releasesFor(target.user)).length, 50);
+    assert.equal(heldReleasesNaming(target.user.id).total, 50);
+
+    // A genuine owner naming the person is refused; the owner sees the 409.
+    const genuine = await freshPerson();
+    const armGenuine = async (identity: ReleaseIdentity) =>
+        arm(genuine.user, armBody(await build(genuine.keySet, [identity])));
+    const refused = await errorOf(await armGenuine(target.keySet.identity), 409, 'recipient_limit');
+    assert.equal(refused.recipientAccountId, target.user.id);
+
+    // The person cannot clear it: new release keys change nothing, and a
+    // release that names them is not theirs to cancel.
+    const rotated = await protocol.createReleaseKeySet(target.user.id);
+    publish(rotated);
+    await errorOf(await armGenuine(rotated.identity), 409, 'recipient_limit');
+    const cancelled = await app.request(`/v1/deadman/switches/${filled[0]}/cancel`, {
+        method: 'POST',
+        headers: headers(target.user),
+    });
+    assert.equal(cancelled.status, 404);
+    assert.equal(db.getDeadmanSwitch(filled[0])?.status, 'triggered');
+
+    // A day before the removal it still holds; at the sweep's first pass on
+    // or after 365 days the releases are removed and the person can be named.
+    const day = 24 * 60 * 60 * 1000;
+    sweepAt(new Date(firesAt.getTime() + DEADMAN_RELEASE_RETENTION_MS - day));
+    await errorOf(await armGenuine(rotated.identity), 409, 'recipient_limit');
+    sweepAt(new Date(firesAt.getTime() + DEADMAN_RELEASE_RETENTION_MS));
+    assert.equal(heldReleasesNaming(target.user.id).total, 0);
+    assert.equal((await armGenuine(rotated.identity)).status, 201);
+});

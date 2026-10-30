@@ -117,7 +117,11 @@ export const isReleaseSwitch = (record: DeadmanSwitchRecord): boolean =>
 export const wrapIsHeld = (wrap: DeadmanReleaseWrapRecord): boolean =>
     wrap.sealedKey !== '' && wrap.signature !== '';
 
-/** When the API removes a release's content and copies: 365 days after it fired. */
+/**
+ * When a release's content and copies become due for removal: 365 days after
+ * it fired. The sweep removes them at its first pass on or after this time,
+ * while a sweep runs (`removeExpiredReleases`).
+ */
 export const removesAt = (releasedAt: string): string =>
     new Date(Date.parse(releasedAt) + DEADMAN_RELEASE_RETENTION_MS).toISOString();
 
