@@ -1182,8 +1182,8 @@ message, and nothing here makes a release happen on time (§10, R12).
     switch lacks (§11's catch-up), then sends up to 50 due notices, oldest
     first, one at a time; a row for a release switch that has not fired is not
     due and is left alone (P3b-L1). For each: the recipient's standing room is
-    reused from an earlier notice, or made by the bot (`createRoom` with `name:
-"Blackout notices"`, `visibility: private`, `preset: public_chat`,
+    reused from an earlier notice, or made by the bot (`createRoom` with
+    `name: "Blackout notices"`, `visibility: private`, `preset: public_chat`,
     `encrypted: false`, `initial_state` holding an invite-only
     `m.room.join_rules`, the person invited with `is_direct`, `events_default`
     and `invite` at 50: §11 says why that preset; and `room_alias_name`, the
@@ -1240,37 +1240,38 @@ message, and nothing here makes a release happen on time (§10, R12).
     mirror. Where the deletion runs in another process, as
     `deploy/docker/production` always has it (the loops in `worker`,
     `BLACKOUT_BACKGROUND_WORKERS_DISABLED=1` on `app`), every notifier write is
-    also conditional in Postgres (`updateDeadmanReleaseNoticeIf`: `ON CONFLICT
-... DO UPDATE ... WHERE status = 'pending'`, or `WHERE room_id =` the room a
-    row is moved off), so a deletion the API process committed first stands in
-    the database whenever its change notification reaches the worker; until it
-    does, the worker's mirror and its tick's count say sent, and a deletion that
-    commits after the worker's write lands over it, as its own full-row write
-    (no room; `failed` with `recipient_gone`, for a notice the homeserver
-    accepted, unless the API process had already seen it sent). Round 5 of the
-    review: the worker's full-row upsert landed over the API's committed
-    deletion whenever the notification came after the send answered, and
-    Postgres ended `sent` with the room. Each call has `NOTICE_CALL_TIMEOUT_MS`,
-    30 s, to answer, and one that does not is that notice's retry
-    (`matrix_<call>_timeout`) with its request aborted: the ticks do not
-    overlap, so without that one connection the homeserver accepted and never
-    answered held every due notice for undici's default of five minutes; every
-    one of the seven calls a notice can make (state, create, alias lookup,
-    whoami, state of the room found, re-invite or a create without the alias,
-    send) hands its signal to `fetch` (round 3: as first fixed, only
-    createRoom's abort was pinned by a test). A tick is still a sequence: 50
-    notices whose every call times out take about 25 minutes, a homeserver that
-    answers each call just inside the 30 s can hold one notice about three and a
-    half minutes and a tick of 50 about three hours (§11), and the worker's
-    shutdown waits for a tick in flight only up to its own bound. An in-flight
-    set keeps an overlapping tick off a notice, and the interval does not start
-    a tick while the previous one runs; a stop ends a tick after the notice in
-    hand. Logs carry counts, and for a throw that is not a homeserver call the
-    error's message; never who or where. A row another process ended while a
-    tick had it in hand is counted as it ended: `failed`, or, if it was sent
-    there, `elsewhere`, beside an overlapping tick's skip (round 4: every such
-    row was counted `failed`, so with two notifiers during a leader handover one
-    tick's log said failed for notices the other had delivered).
+    also conditional in Postgres (`updateDeadmanReleaseNoticeIf`:
+    `ON CONFLICT ... DO UPDATE ... WHERE status = 'pending'`, or
+    `WHERE room_id =` the room a row is moved off), so a deletion the API
+    process committed first stands in the database whenever its change
+    notification reaches the worker; until it does, the worker's mirror and its
+    tick's count say sent, and a deletion that commits after the worker's write
+    lands over it, as its own full-row write (no room; `failed` with
+    `recipient_gone`, for a notice the homeserver accepted, unless the API
+    process had already seen it sent). Round 5 of the review: the worker's
+    full-row upsert landed over the API's committed deletion whenever the
+    notification came after the send answered, and Postgres ended `sent` with
+    the room. Each call has `NOTICE_CALL_TIMEOUT_MS`, 30 s, to answer, and one
+    that does not is that notice's retry (`matrix_<call>_timeout`) with its
+    request aborted: the ticks do not overlap, so without that one connection
+    the homeserver accepted and never answered held every due notice for
+    undici's default of five minutes; every one of the seven calls a notice can
+    make (state, create, alias lookup, whoami, state of the room found,
+    re-invite or a create without the alias, send) hands its signal to `fetch`
+    (round 3: as first fixed, only createRoom's abort was pinned by a test). A
+    tick is still a sequence: 50 notices whose every call times out take about
+    25 minutes, a homeserver that answers each call just inside the 30 s can
+    hold one notice about three and a half minutes and a tick of 50 about three
+    hours (§11), and the worker's shutdown waits for a tick in flight only up to
+    its own bound. An in-flight set keeps an overlapping tick off a notice, and
+    the interval does not start a tick while the previous one runs; a stop ends
+    a tick after the notice in hand. Logs carry counts, and for a throw that is
+    not a homeserver call the error's message; never who or where. A row another
+    process ended while a tick had it in hand is counted as it ended: `failed`,
+    or, if it was sent there, `elsewhere`, beside an overlapping tick's skip
+    (round 4: every such row was counted `failed`, so with two notifiers during
+    a leader handover one tick's log said failed for notices the other had
+    delivered).
 -   **Account deletion** (`accountLifecycle.ts`): an unfired release switch
     of the account's loses its copies with its content; a fired one keeps its
     content, the owner's identity it was signed with (E13) and the recipients'
@@ -2830,24 +2831,25 @@ table at the end of this section.
     recorded) landed over the app's committed `failed` / `recipient_gone` / no
     room: in the verifiers' probe on PGlite, Postgres ended `sent` with
     `!created-1`, and a replica booting then read it so. Done: a conditional
-    notice write in the store, `updateDeadmanReleaseNoticeIf(switch, recipient,
-expected, patch)`, applied in the mirror only while the row holds `expected`
-    and carried into Postgres as `INSERT ... ON CONFLICT ... DO UPDATE ... WHERE
-deadman_release_notices.<col> = $n` (a guard taken from the call's arguments
-    by its mutator spec, passed through the write-behind queue to
-    `upsertRecord`; a guard field with no column or value throws rather than
-    drop the condition; every other mutator is unchanged). Every write the
-    notifier makes uses it: `status = 'pending'` for the room, the re-invite
-    stamp, sent, retry and every end, and `room_id =` the old room for the rows
-    moved off a purged one. What it leaves, stated in §15, the notifier's header
-    and the deletion texts: until the app's notification arrives the worker's
-    mirror and its tick's count say sent; a deletion that commits after the
-    worker's write lands over it as its own full-row write, which leaves no room
-    and, unless the app had already seen the row sent, `failed` with
-    `recipient_gone` for a notice the homeserver accepted; and a notice whose
-    send was in flight when the deletion landed can still arrive (now said in
-    the deletion screen, `KNOWN_LIMITATIONS.md`'s deletion paragraph and the
-    changelog). Tests: the new
+    notice write in the store,
+    `updateDeadmanReleaseNoticeIf(switch, recipient, expected, patch)`, applied
+    in the mirror only while the row holds `expected` and carried into Postgres
+    as
+    `INSERT ... ON CONFLICT ... DO UPDATE ... WHERE deadman_release_notices.<col> = $n`
+    (a guard taken from the call's arguments by its mutator spec, passed through
+    the write-behind queue to `upsertRecord`; a guard field with no column or
+    value throws rather than drop the condition; every other mutator is
+    unchanged). Every write the notifier makes uses it: `status = 'pending'` for
+    the room, the re-invite stamp, sent, retry and every end, and `room_id =`
+    the old room for the rows moved off a purged one. What it leaves, stated in
+    §15, the notifier's header and the deletion texts: until the app's
+    notification arrives the worker's mirror and its tick's count say sent; a
+    deletion that commits after the worker's write lands over it as its own
+    full-row write, which leaves no room and, unless the app had already seen
+    the row sent, `failed` with `recipient_gone` for a notice the homeserver
+    accepted; and a notice whose send was in flight when the deletion landed can
+    still arrive (now said in the deletion screen, `KNOWN_LIMITATIONS.md`'s
+    deletion paragraph and the changelog). Tests: the new
     `deadman-release-notices-postgres.integration.test.ts`, the worker's real
     notifier on PGlite beside a second store as the API process: test 1 runs
     eight variants (the room known, made in the attempt, or purged and replaced;

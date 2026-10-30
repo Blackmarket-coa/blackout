@@ -50,16 +50,16 @@ no deployment, compose or env file does.
     whom, which of three padded sizes the message is, every check-in, when the
     switch fires and who fetched their copy. What one account can make it keep
     is bounded: 20 release switches with content held, 10 arms in 24 hours, 5
-    held releases naming one person from one owner and 50 from everyone (`GET
-/v1/deadman/limits` reports each; exact on one API server against requests
-    sent at once; across several replicas a burst of requests can exceed them by
-    up to its own size until the replicas' queued writes reach each other). The
-    bound of 50 can be filled on purpose: ten accounts with release keys, five
-    arms each in a day, keep every other owner from naming that person (the
-    owner is refused, 409 `recipient_limit`, and sees it) while those switches
-    stay armed and for at least 365 days after they fire, and neither the person
-    nor anyone else can clear it through the app or the API; which bound
-    replaces it is an open decision
+    held releases naming one person from one owner and 50 from everyone
+    (`GET /v1/deadman/limits` reports each; exact on one API server against
+    requests sent at once; across several replicas a burst of requests can
+    exceed them by up to its own size until the replicas' queued writes reach
+    each other). The bound of 50 can be filled on purpose: ten accounts with
+    release keys, five arms each in a day, keep every other owner from naming
+    that person (the owner is refused, 409 `recipient_limit`, and sees it) while
+    those switches stay armed and for at least 365 days after they fire, and
+    neither the person nor anyone else can clear it through the app or the API;
+    which bound replaces it is an open decision
     ([`release-envelope-2026-10-26.md`](../security/release-envelope-2026-10-26.md),
     decision 18). The rows of a cancelled switch stay, blank. Cancelling removes
     the message and the copies from its database (backups aside; across several
