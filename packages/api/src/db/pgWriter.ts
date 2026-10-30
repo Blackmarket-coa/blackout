@@ -132,32 +132,65 @@ export function rowToRecord(plan: TablePlan, row: Row): Record<string, unknown> 
         : defaultFromRow(deserialized);
 }
 
-export function buildUpsertSql(plan: TablePlan, columns: string[]): string {
+/**
+ * `INSERT ... ON CONFLICT ... DO UPDATE`. With `guardColumns`, the update
+ * applies only where the stored row's columns equal the values that follow
+ * the record's in the parameters (`DO UPDATE ... WHERE`): a compare-and-set,
+ * so a write does not land over a row another process changed meanwhile.
+ */
+export function buildUpsertSql(
+    plan: TablePlan,
+    columns: string[],
+    guardColumns: string[] = []
+): string {
     const conflict = plan.descriptor.conflictColumns;
+    const table = plan.descriptor.tableName;
     const placeholders = columns.map((_, i) => `$${i + 1}`).join(', ');
     const updates = columns.filter((c) => !conflict.includes(c)).map((c) => `${c} = EXCLUDED.${c}`);
     const doClause = updates.length > 0 ? `DO UPDATE SET ${updates.join(', ')}` : 'DO NOTHING';
+    const guard =
+        updates.length > 0 && guardColumns.length > 0
+            ? ` WHERE ${guardColumns
+                  .map((c, i) => `${table}.${c} = $${columns.length + i + 1}`)
+                  .join(' AND ')}`
+            : '';
     return (
-        `INSERT INTO ${plan.descriptor.tableName} (${columns.join(
-            ', '
-        )}) VALUES (${placeholders}) ` + `ON CONFLICT (${conflict.join(', ')}) ${doClause}`
+        `INSERT INTO ${table} (${columns.join(', ')}) VALUES (${placeholders}) ` +
+        `ON CONFLICT (${conflict.join(', ')}) ${doClause}${guard}`
     );
 }
 
-/** Insert-or-update a single record. */
+/**
+ * Insert-or-update a single record. With `guard` (record fields and the
+ * values the stored row must still hold), an existing row is updated only if
+ * it holds them; each guard field must have a column and a value, or nothing
+ * is written and this throws, rather than drop the condition.
+ */
 export async function upsertRecord(
     client: PgClient,
     plan: TablePlan,
-    record: Record<string, unknown>
+    record: Record<string, unknown>,
+    guard?: Record<string, unknown>
 ): Promise<void> {
     const row = recordToRow(plan, record);
     const columns = Object.keys(row);
     if (columns.length === 0) return;
-    const sql = buildUpsertSql(plan, columns);
-    await client.query(
-        sql,
-        columns.map((c) => row[c])
-    );
+    const guardRow = guard ? recordToRow(plan, guard) : {};
+    const guardColumns = Object.keys(guardRow);
+    if (
+        guard &&
+        (guardColumns.length !== Object.keys(guard).length ||
+            guardColumns.some((c) => guardRow[c] === null))
+    ) {
+        throw new Error(
+            `upsert guard on ${plan.descriptor.tableName} names a field with no column or value`
+        );
+    }
+    const sql = buildUpsertSql(plan, columns, guardColumns);
+    await client.query(sql, [
+        ...columns.map((c) => row[c]),
+        ...guardColumns.map((c) => guardRow[c]),
+    ]);
 }
 
 /** Load every row of a table and write it into the in-memory map via keyOf. */

@@ -568,9 +568,24 @@ export const TABLE_DESCRIPTORS: TableDescriptor[] = ALL_MAP_NAMES.map((mapName) 
     };
 });
 
-export type MutatorSpec = { kind: 'upsert'; map: string } | { kind: 'resync'; maps: string[] };
+export type MutatorSpec =
+    | {
+          kind: 'upsert';
+          map: string;
+          /**
+           * For a conditional mutator: the record fields, from the call's
+           * arguments, that the stored row must still hold for the Postgres
+           * update to apply (`upsertRecord`'s guard).
+           */
+          guardOf?: (args: unknown[]) => Record<string, unknown>;
+      }
+    | { kind: 'resync'; maps: string[] };
 
 const upsert = (map: string): MutatorSpec => ({ kind: 'upsert', map });
+const upsertGuarded = (
+    map: string,
+    guardOf: (args: unknown[]) => Record<string, unknown>
+): MutatorSpec => ({ kind: 'upsert', map, guardOf });
 const resync = (...maps: string[]): MutatorSpec => ({ kind: 'resync', maps });
 
 /**
@@ -639,6 +654,15 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
     // The sweep writes a notice with the trigger; the notifier updates it.
     createDeadmanReleaseNotice: upsert('deadmanReleaseNotices'),
     updateDeadmanReleaseNotice: upsert('deadmanReleaseNotices'),
+    // The notifier's writes: applied in Postgres only while the stored row
+    // still holds what the notifier read (`status = 'pending'`, or the room it
+    // moves rows off), so a row another process ended meanwhile, an account
+    // deletion on the API process while the worker sends, is not written back
+    // (P3b-L14 across processes, round 5 of part 2's review).
+    updateDeadmanReleaseNoticeIf: upsertGuarded(
+        'deadmanReleaseNotices',
+        (args) => args[2] as Record<string, unknown>
+    ),
     // Publishing supersedes the current identity (its own upsert, issued
     // first by publishReleaseIdentity) and then adds the new one.
     supersedeReleaseIdentity: upsert('releaseIdentities'),

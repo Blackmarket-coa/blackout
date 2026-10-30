@@ -14,7 +14,13 @@ import type { StoreChangeTransport } from './pgNotify';
 import { resyncMap, snakeToCamel, upsertRecord, type TablePlan } from './pgWriter';
 
 type WriteOp =
-    | { kind: 'upsert'; mapName: string; record: Record<string, unknown> }
+    | {
+          kind: 'upsert';
+          mapName: string;
+          record: Record<string, unknown>;
+          /** Fields the stored row must still hold for the update to apply (`upsertRecord`). */
+          guard?: Record<string, unknown>;
+      }
     | { kind: 'resync'; mapName: string };
 
 export type MapAccessor = (mapName: string) => Map<string, Record<string, unknown>> | undefined;
@@ -37,8 +43,12 @@ export class WriteBehindQueue {
         return this.pending;
     }
 
-    enqueueUpsert(mapName: string, record: Record<string, unknown>): void {
-        this.schedule({ kind: 'upsert', mapName, record });
+    enqueueUpsert(
+        mapName: string,
+        record: Record<string, unknown>,
+        guard?: Record<string, unknown>
+    ): void {
+        this.schedule({ kind: 'upsert', mapName, record, ...(guard ? { guard } : {}) });
     }
 
     enqueueResync(mapName: string): void {
@@ -62,7 +72,7 @@ export class WriteBehindQueue {
                 const client = await this.pool.connect();
                 try {
                     if (op.kind === 'upsert') {
-                        await upsertRecord(client, plan, op.record);
+                        await upsertRecord(client, plan, op.record, op.guard);
                     } else {
                         const map = this.getMap(op.mapName);
                         if (map) await resyncMap(client, plan, map);

@@ -2808,6 +2808,35 @@ class InMemoryDb {
     }
 
     /**
+     * `updateDeadmanReleaseNotice`, only while the row still holds `expected`
+     * (each field compared as stored; a guard value is never `undefined`):
+     * the updated row, or `undefined` when it no longer holds them. In
+     * Postgres mode the write carries the same condition into the database
+     * (`ON CONFLICT ... DO UPDATE ... WHERE`), so a row another process ended
+     * after this one last read it is not written back over (round 5 of part
+     * 2's review).
+     */
+    updateDeadmanReleaseNoticeIf(
+        switchId: string,
+        recipientAccountId: string,
+        expected: Partial<Pick<DeadmanReleaseNoticeRecord, 'status' | 'roomId'>>,
+        patch: Partial<
+            Omit<DeadmanReleaseNoticeRecord, 'switchId' | 'recipientAccountId' | 'createdAt'>
+        >
+    ): DeadmanReleaseNoticeRecord | undefined {
+        const key = releaseRowKey(switchId, recipientAccountId);
+        const existing = this.deadmanReleaseNotices.get(key);
+        if (!existing) return undefined;
+        for (const [field, value] of Object.entries(expected)) {
+            if (value === undefined) return undefined;
+            if (existing[field as keyof typeof expected] !== value) return undefined;
+        }
+        const next: DeadmanReleaseNoticeRecord = { ...existing, ...patch, updatedAt: nowIso() };
+        this.deadmanReleaseNotices.set(key, next);
+        return next;
+    }
+
+    /**
      * The account's standing notices room: the room of its newest notice that
      * has one. One room per account, reused for every release.
      */
@@ -7145,6 +7174,24 @@ export class FileBackedDb extends InMemoryDb {
         return updated;
     }
 
+    override updateDeadmanReleaseNoticeIf(
+        switchId: string,
+        recipientAccountId: string,
+        expected: Partial<Pick<DeadmanReleaseNoticeRecord, 'status' | 'roomId'>>,
+        patch: Partial<
+            Omit<DeadmanReleaseNoticeRecord, 'switchId' | 'recipientAccountId' | 'createdAt'>
+        >
+    ): DeadmanReleaseNoticeRecord | undefined {
+        const updated = super.updateDeadmanReleaseNoticeIf(
+            switchId,
+            recipientAccountId,
+            expected,
+            patch
+        );
+        if (updated) this.persist();
+        return updated;
+    }
+
     override supersedeReleaseIdentity(id: string, at: string): ReleaseIdentityRecord | undefined {
         const updated = super.supersedeReleaseIdentity(id, at);
         if (updated) this.persist();
@@ -8691,7 +8738,11 @@ export class PostgresBackedDb extends InMemoryDb {
                 if (queue) {
                     if (spec.kind === 'upsert') {
                         if (result && typeof result === 'object') {
-                            queue.enqueueUpsert(spec.map, result as Record<string, unknown>);
+                            queue.enqueueUpsert(
+                                spec.map,
+                                result as Record<string, unknown>,
+                                spec.guardOf?.(args)
+                            );
                         }
                     } else {
                         for (const m of spec.maps) queue.enqueueResync(m);
