@@ -175,11 +175,13 @@ signedjson = "^1.1.0"
 # hostname-verified TLS connection fails. Upstream's lock is also on 24.2.0.
 service-identity = ">=24.2.0"
 # Twisted 18.9 introduces some logger improvements that the structured
-# logger utilises. 26.4.0 is the newest final release and fixes
-# GHSA-grgv-6hw6-v9g4 (twisted.names); GHSA-3476-c5c2-fr73, GHSA-53xc-49m8-p798
-# and GHSA-cwm5-jh59-mwxr are fixed only in the 26.10.0 pre-release, which is
-# not locked. See docs/security/synapse-dependencies-triage-2026-10-25.md
-# (repository root).
+# logger utilises. 26.4.0, the version locked, fixes GHSA-grgv-6hw6-v9g4
+# (twisted.names). Four High advisories against it are fixed in 26.10.0, a
+# final release since 2026-10-30 that is not locked yet: GHSA-3476-c5c2-fr73,
+# GHSA-53xc-49m8-p798, GHSA-cwm5-jh59-mwxr and GHSA-vpp8-g58w-m8mp (HTTP/2).
+# .trivyignore ignores all four until 2026-11-30. See
+# docs/security/dependency-advisories-server-desktop-2026-10-30.md and
+# docs/security/synapse-dependencies-triage-2026-10-25.md (repository root).
 Twisted = {extras = ["tls"], version = ">=26.4.0"}
 treq = ">=15.1"
 # Modern cryptography releases require a recent pyOpenSSL for compatibility.
