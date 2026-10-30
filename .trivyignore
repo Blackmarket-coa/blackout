@@ -41,3 +41,17 @@ GHSA-53xc-49m8-p798
 CVE-2026-115776
 GHSA-cwm5-jh59-mwxr
 CVE-2026-115778
+
+# Twisted 26.4.0: HTTP/2 "rapid reset" CPU exhaustion in twisted.web._http2
+# (published 2026-10-29, no CVE). Fixed in 26.10.0rc1; 26.10.0 final was
+# published on 2026-10-30 and is not locked yet. No Blackout listener can speak
+# HTTP/2: Twisted switches to H2Connection only when TLS ALPN negotiates "h2"
+# and the h2 and priority packages import, and neither package is in
+# poetry.lock or the image (twisted.web.http.H2_ENABLED is False there).
+# Synapse's TLS context sets no ALPN, every shipped listener is tls: false, and
+# nginx reaches Synapse with proxy_pass http:// (Twisted has no cleartext
+# HTTP/2). Remove this entry,
+# with the three above, when Twisted 26.10.0 is locked; it expires on
+# 2026-11-30 so the gate fails again if that has not happened. Record:
+# docs/security/dependency-advisories-server-desktop-2026-10-30.md.
+GHSA-vpp8-g58w-m8mp exp:2026-11-30
