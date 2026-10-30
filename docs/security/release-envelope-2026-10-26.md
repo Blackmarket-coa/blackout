@@ -474,11 +474,13 @@ gracePeriodSeconds, label?, envelope }`, nothing else (no `roomId`, no
 `BLACKOUT_DEADMAN_RELEASES` is on): the caller is the header's owner; the
 owner's current identity in the directory has the header's fingerprint; every
 other copy names an account on this server that is not the owner, whose
-current identity has the copy's fingerprint (an unknown account, one without
-an identity, an identity the account replaced and one it never published are
-each refused with their own code); every signature verifies under the
-owner's identity; the release id is unused; the timer and label are in
-bounds; at most a fixed number of live release switches per owner. **These
+current identity has the copy's fingerprint (an unknown account and one
+without an identity are refused as `unknown_recipient`, an identity the
+account replaced as `recipient_identity_superseded`, one it never published
+as `recipient_identity_unknown`: three codes, as §15 has them); every
+signature verifies under the owner's identity; the release id is unused; the
+timer and label are in bounds; at most a fixed number of release switches
+per owner whose content is still held (§15, decision 4). **These
 catch client bugs, not a hostile server**, which would skip them.
 
 **On re-sealing** (`POST /v1/deadman/switches/:id/reseal`): the caller owns
@@ -1904,9 +1906,9 @@ armingUnavailableReason: 'sweep_off'` (`releases_off` comes first when
     first pass on or after it, while a sweep runs; the Retention bullet says
     "at its first sweep pass on or after".
 -   **P3b-L13. Three record sentences were not exactly what the code does.**
-    (a) §8's "each refused with their own code" is as §15 has it: an unknown
-    account and one without an identity share `unknown_recipient` (§8 is
-    part 1's section and is left; §15 is the API's statement). (b) The flag
+    (a) §8's "each refused with their own code" said four; an unknown account
+    and one without an identity share `unknown_recipient`, so §8 now names the
+    three codes as §15 has them. (b) The flag
     parses `1` or `true` in any casing, surrounding whitespace ignored; §15,
     the service's comment and `.env.example` say so, and test 1 pins `TRUE`,
     `true` and `1 ` as on and `yes` and `on` as off. (c) The 1 MiB cap is
@@ -1952,7 +1954,8 @@ armingUnavailableReason: 'sweep_off'` (`releases_off` comes first when
 8.  §15, "answers 409 before the body is read"; the module's comment; test
     1's title. The body cap runs first. Now "before the body is parsed", with
     the cap named first.
-9.  §8, "each refused with their own code". Three codes, as §15 has it.
+9.  §8, "each refused with their own code". Three codes, as §15 has it; §8
+    names them now.
 10. §15 and `.env.example`, "on only for `1` or `true`". Any casing and
     surrounding whitespace; both say so.
 11. §15, "no copy is written to a cancelled switch"; §10's "cancel removes
