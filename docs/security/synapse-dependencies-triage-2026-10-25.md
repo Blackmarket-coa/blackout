@@ -473,3 +473,21 @@ short `JWT_SECRET` keeps working and logs the warning.
 With the pins moved, the Trivy gate's `skip-dirs` is removed and the gate
 scans the whole tree. Not verified: a Docker build of the image, and the
 service against a running Synapse or Postgres.
+
+## 2026-10-30: authlib past 1.7, and a fourth Twisted High
+
+Two entries above have changed. The detail is in
+`dependency-advisories-server-desktop-2026-10-30.md`.
+
+-   **The authlib `<1.7` bound is gone.** Three new advisories (one Critical,
+    two High) are fixed only in 1.9.0 and 1.9.1, so the fork now locks 1.9.1,
+    as upstream does since `b20ae98` (#20415). The integer-`sub` question
+    above was settled upstream's way. An integer `sub` from the userinfo
+    endpoint still logs in; one inside a signed id_token is refused, as
+    joserfc requires. `test_map_userinfo_to_user` carries upstream's change.
+-   **Twisted 26.4.0 has a fourth High fixed only in 26.10.0rc1:**
+    GHSA-vpp8-g58w-m8mp, HTTP/2 rapid reset. No Blackout listener can speak
+    HTTP/2, so it joins the three above in `.trivyignore`, with an expiry of
+    2026-11-30. **Twisted 26.10.0 final was published on 2026-10-30.** The
+    plan for all four entries is to lock it in its own change and then delete
+    them.
