@@ -493,30 +493,30 @@ screen. **Verdict:** not proposed; recorded so the trade is on paper.
     created by the bot and not end-to-end encrypted, because the bot cannot
     encrypt, and a room whose state said "encrypted" around a plaintext post
     would overstate what it is. The homeserver's backstop
-    (`encryption_enabled_by_default_for_room_type: invite`, set by every
-    in-repo template) adds `m.room.encryption` to every `private_chat` room
-    after the client's `initial_state`, so the bot creates the room with the
-    `public_chat` preset, which that setting leaves alone, and an invite-only
-    join rule in `initial_state`, which Synapse sends in place of the preset's
-    public one; its visibility is `private` _(as first built the room used
-    `private_chat` and the fork encrypted it: part 2's independent review,
-    P3b-M1)_. It carries an alias, an HMAC of the person's Matrix id under
-    a key derived from the API's secret, so that a room the homeserver made
-    after the bot stopped waiting for it is found again rather than made
-    twice _(round 3 of that review; where the alias cannot be used, or names
-    a room the homeserver abandoned before its first event (round 4), the
-    room is made without it, and a slow create can then leave an extra, empty
-    room, as `release-envelope-2026-10-26.md` §11 says)_. The room is not in
-    the public room list; its alias is in the homeserver's alias directory.
-    The person is
-    invited as a direct message (`is_direct`), and
-    their power level is below the room's `events_default` so nothing can be
-    typed there. One `m.text` per recipient per release. An
-    `m.notice` would be silent: the default rule `.m.rule.suppress_notices`
-    drops it (`apps/blackout-server/rust/src/push/base_rules.rs:80-91`). The
-    FBM delivery's pointer is an `m.notice` posted before the buyer is invited,
-    so it notifies nobody; only its invite does. An `m.text` in a two-member
-    room notifies (`.m.rule.room_one_to_one`, `:300-314`).
+    (`encryption_enabled_by_default_for_room_type: invite`, set by every in-repo
+    template) adds `m.room.encryption` to every `private_chat` room after the
+    client's `initial_state`, so the bot creates the room with the `public_chat`
+    preset, which that setting leaves alone, and an invite-only join rule in
+    `initial_state`, which Synapse sends in place of the preset's public one;
+    its visibility is `private` _(as first built the room used `private_chat`
+    and the fork encrypted it: part 2's independent review, P3b-M1)_. It carries
+    an alias, an HMAC of the person's Matrix id under a key derived from the
+    API's secret, so that a room the homeserver made after the bot stopped
+    waiting for it is found again rather than made twice _(round 3 of that
+    review; where the alias cannot be used, or names a room the homeserver
+    abandoned part way, before its first event (round 4) or before the bot's
+    join or the power levels (round 5), the room is made without it, and a slow
+    create can then leave an extra, empty room, as
+    `release-envelope-2026-10-26.md` §11 says)_. The room is not in the public
+    room list; its alias is in the homeserver's alias directory. The person is
+    invited as a direct message (`is_direct`), and their power level is below
+    the room's `events_default` so nothing can be typed there. One `m.text` per
+    recipient per release. An `m.notice` would be silent: the default rule
+    `.m.rule.suppress_notices` drops it
+    (`apps/blackout-server/rust/src/push/base_rules.rs:80-91`). The FBM
+    delivery's pointer is an `m.notice` posted before the buyer is invited, so
+    it notifies nobody; only its invite does. An `m.text` in a two-member room
+    notifies (`.m.rule.room_one_to_one`, `:300-314`).
 3.  **Push** happens only through the person's own Matrix pushers. The app's
     native push registration asks for `event_id_only`
     (`apps/blackout-client/src/platform/NotificationTokenBroker.tsx:58`), so

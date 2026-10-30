@@ -249,11 +249,12 @@ export const DataRetentionSection: React.FC = () => {
                     of other people&apos;s releases sealed to you are removed (where the server runs
                     as several replicas, one sealed to you in the moment your deletion is still
                     reaching another replica can stay until that release is cancelled or removed),
-                    and a notice still owed to you is dropped. The public half of your release keys
-                    is removed from Blackout&apos;s database, except the copy kept with a release
-                    switch of yours that has already fired, which goes with that release; copies in
-                    any backups the operator keeps are not removed; the private keys on your devices
-                    and in your recovery files stay there until you remove them.
+                    and a notice still owed to you is dropped (one the bot was already sending can
+                    still arrive). The public half of your release keys is removed from
+                    Blackout&apos;s database, except the copy kept with a release switch of yours
+                    that has already fired, which goes with that release; copies in any backups the
+                    operator keeps are not removed; the private keys on your devices and in your
+                    recovery files stay there until you remove them.
                 </small>
                 {deleteStage === 'idle' && (
                     <div>

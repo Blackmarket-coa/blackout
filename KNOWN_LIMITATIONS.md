@@ -335,7 +335,8 @@ For the source-of-truth triage with tier/owner detail see
     API runs as several replicas, one that someone seals to you on another
     replica in the moment your deletion is still reaching it can stay until
     that release is cancelled or removed), a notice still owed to you is
-    dropped, and the record of each notice (its status and attempts) stays,
+    dropped (one the bot was already sending at that moment can still
+    arrive), and the record of each notice (its status and attempts) stays,
     with its room forgotten. It
     removes the release keys you published (their public halves), except the
     copy kept with a release switch of yours that has already fired, which goes
@@ -390,10 +391,12 @@ For the source-of-truth triage with tier/owner detail see
     room can still leave you an extra, empty "Blackout notices" room with an
     invite, one per such attempt. A homeserver that stops partway through
     making the room (a restart or an error at the wrong moment) leaves that
-    address naming a room with nothing in it; the bot waits one retry for it
-    (30 seconds or more) and then makes your room without the address, and a
-    homeserver that was only very slow leaves you an extra room the same
-    way.
+    address naming a room it never finishes: with nothing in it, or without
+    the bot in it, or without the settings that keep you from posting there.
+    The bot uses a room at that address only once it is finished and the bot
+    is in it; otherwise it waits one retry (at least 30 seconds after it first
+    looked) and then makes your room without the address, and a homeserver
+    that was only that slow leaves you an extra room the same way.
     A fixed sentence, "There is something new for you in Blackout. Open
     Blackout to see it. This room is not end-to-end encrypted, so please
     don't reply here.", and the release's id, and nothing else: not who armed
@@ -416,7 +419,8 @@ For the source-of-truth triage with tier/owner detail see
     with you first, and the server cannot tell whether they did. The API
     bounds it: one account can name you on at most 5 held releases, and
     everyone together on at most 50 (`GET /v1/deadman/limits`; a release is
-    held from arming until 365 days after it fires). The bounds hold on one
+    held from arming until it is removed, at the server's first sweep at
+    least 365 days after it fires). The bounds hold on one
     API server against requests sent all at once. A deployment running
     several API replicas can exceed each: a replica sees another's arms only
     once that replica's queued database writes have gone through, one after
@@ -428,6 +432,21 @@ For the source-of-truth triage with tier/owner detail see
     invites you back, once per notice. You cannot yet refuse an owner, and
     release keys cannot be unpublished, so the only way to stop being named is
     to delete your account.
+-   **The bound of 50 can be used to stop others naming you.** Ten accounts on
+    this server, each with release keys, can fill your 50 in one day, by naming
+    you on five release switches each. From then on anyone else who names you on
+    a release switch is refused (they see the refusal, 409 `recipient_limit`,
+    and can tell it is not their own bound if they named you fewer than five
+    times), for as long as those accounts keep their switches armed by checking
+    in, and for at least 365 days after the switches fire; deleting those
+    accounts does not free the places of switches that have fired, since a fired
+    release stays for the people it named. Neither you nor anyone else can clear
+    it through the app or the API: new release keys change nothing, you cannot
+    cancel someone else's switch, and no administrator route removes a release
+    (short of an operator editing the database). Which bound replaces this is an
+    open decision for the operator
+    ([`docs/security/release-envelope-2026-10-26.md`](docs/security/release-envelope-2026-10-26.md),
+    decision 18).
 -   **What the server can do with a release.** It keeps the timer and the
     sealed copies, so whoever runs or compels it can hold a release back,
     delay it, or give the people named their copies early; nobody is told. As
@@ -460,7 +479,8 @@ For the source-of-truth triage with tier/owner detail see
     removal), about 7 MiB of encrypted headers and up to about 2.3 MiB of
     sealed copies at the largest sizes; can arm at most 10 in any 24 hours;
     and can name one person on at most 5 held releases, who can be named on at
-    most 50 from everyone. `GET /v1/deadman/limits` reports each. The bounds
+    most 50 from everyone (which a few accounts can fill: above).
+    `GET /v1/deadman/limits` reports each. The bounds
     hold on one API server against requests sent all at once; across several
     API replicas a burst can exceed each by up to its own size until the
     replicas' queued writes have reached each other (above). An owner whose 20

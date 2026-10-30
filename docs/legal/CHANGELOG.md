@@ -44,26 +44,32 @@ no deployment, compose or env file does.
     release key the owner signed with, the account ids of the people named, the
     timer and the owner's label
     ([`packages/api/src/services/deadmanReleases.ts`](../../packages/api/src/services/deadmanReleases.ts),
-    migration 106). It cannot read the message, as long as the owner compared
-    a safety code with each person named and nobody's app code was altered (in
-    a web browser the server supplies that code). It can see who armed what for
+    migration 106). It cannot read the message, as long as the owner compared a
+    safety code with each person named and nobody's app code was altered (in a
+    web browser the server supplies that code). It can see who armed what for
     whom, which of three padded sizes the message is, every check-in, when the
     switch fires and who fetched their copy. What one account can make it keep
     is bounded: 20 release switches with content held, 10 arms in 24 hours, 5
-    held releases naming one person from one owner and 50 from everyone
-    (`GET /v1/deadman/limits` reports each; exact on one API server against
-    requests sent at once; across several replicas a burst of requests can
-    exceed them by up to its own size until the replicas' queued writes reach
-    each other). The rows of
-    a cancelled switch stay, blank. Cancelling removes the message and
-    the copies from its database (backups aside; across several API replicas a
-    re-seal on another replica in the moment the cancel reaches it can leave
-    one copy on the cancelled switch, given to nobody, until it is cancelled
-    again); 365 days after a switch fires they are removed, at the sweep's
-    first pass after that, and the rows stay, saying what the switch was, whom
-    it was for and the fingerprint of the key each copy was sealed to, and, for
-    each notice, its status and attempts, and its room until that person
-    deletes their account.
+    held releases naming one person from one owner and 50 from everyone (`GET
+/v1/deadman/limits` reports each; exact on one API server against requests
+    sent at once; across several replicas a burst of requests can exceed them by
+    up to its own size until the replicas' queued writes reach each other). The
+    bound of 50 can be filled on purpose: ten accounts with release keys, five
+    arms each in a day, keep every other owner from naming that person (the
+    owner is refused, 409 `recipient_limit`, and sees it) while those switches
+    stay armed and for at least 365 days after they fire, and neither the person
+    nor anyone else can clear it through the app or the API; which bound
+    replaces it is an open decision
+    ([`release-envelope-2026-10-26.md`](../security/release-envelope-2026-10-26.md),
+    decision 18). The rows of a cancelled switch stay, blank. Cancelling removes
+    the message and the copies from its database (backups aside; across several
+    API replicas a re-seal on another replica in the moment the cancel reaches
+    it can leave one copy on the cancelled switch, given to nobody, until it is
+    cancelled again); 365 days after a switch fires they are removed, at the
+    sweep's first pass after that, and the rows stay, saying what the switch
+    was, whom it was for and the fingerprint of the key each copy was sealed to,
+    and, for each notice, its status and attempts, and its room until that
+    person deletes their account.
 -   **The bot posts a notice in a room that is not encrypted.** When a release
     switch fires, the Blackout bot makes, once per person, a "Blackout notices"
     room, invites them as a direct message, and posts one fixed sentence with
@@ -97,8 +103,9 @@ no deployment, compose or env file does.
     it named with no removal date). As a person named on others' switches, the
     account's copies are removed (across several API replicas one sealed to it
     in the moment the deletion reaches another replica can stay until that
-    release is cancelled or removed), a notice still owed to it is dropped,
-    and its notice rows forget their room. The export of an account includes
+    release is cancelled or removed), a notice still owed to it is dropped
+    (one the bot was already sending can still arrive), and its notice rows
+    forget their room. The export of an account includes
     the notice rows about it (`deadmanNotices`), for fired switches.
 
 ### Not changed
@@ -124,8 +131,8 @@ Arming a switch is still closed, so nothing is encrypted for them yet.
     who looks up whom. Deleting the account removes them: for each one a row
     stays with no keys and no account, saying only when it was published and
     replaced. (A copy of the one a release switch was signed with stays with
-    that switch once it has fired, until 365 days after: the 2026-10-29 entry
-    above.)
+    that switch once it has fired, until it is removed at the first sweep 365
+    days or more after: the 2026-10-29 entry above.)
 -   **The private half never reaches the server.** It stays on the devices
     that made it or loaded a recovery file, and in the recovery files the
     person saves; signing out does not remove it from a device. The app's
