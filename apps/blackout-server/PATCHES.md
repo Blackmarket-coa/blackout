@@ -703,18 +703,36 @@ root).
 A fork patch with no upstream counterpart (upstream's `synapse/config/jwt.py`
 at `cc172f7` reads the secret verbatim). Recorded after the second review of
 `docs/security/dependency-advisories-server-desktop-2026-10-30.md` (repository
-root).
+root), and rewritten after the third, which found that the first version
+imported a string secret only and so missed a secret given as a JWK.
 
 - `synapse/config/jwt.py` (`JWTConfig._check_hmac_secret`): when JWT login is
-  enabled with an `HS*` algorithm, the secret is imported with authlib's
-  `OctKey.import_key`, as authlib's HMAC algorithms import it for every token.
-  A `ValueError` (an empty secret, or one containing PEM or SSH key text
-  anywhere) becomes a `ConfigError` at `jwt_config.secret`. Before this, under
-  authlib 1.9.1, such a homeserver started and answered every JWT login with
-  500; under 1.6.12 an empty secret accepted tokens anyone could sign
-  (GHSA-8m4g-j4wp-wgcg). Asymmetric algorithms and disabled JWT login are not
-  checked. No Blackout template enables `jwt_config`.
-- `tests/blackout_runtime/test_jwt_secret_config.py`: the four refused
-  secrets for HS256, HS384 and HS512; a plain secret, a PEM for RS256, and an
-  empty secret with JWT login disabled still parse. It fails on the code
-  before this patch.
+  enabled with HS256, HS384 or HS512:
+  - an empty or missing secret (`""`, `null`, an empty mapping) is refused
+    outright, on any authlib version;
+  - then the check makes `JwtHandler`'s own call,
+    `JsonWebToken([algorithm]).decode(token, key=secret)`, once, with a token
+    signed with the empty HMAC key. authlib prepares the secret as it does
+    for each login: a mapping or `{...}` text is read as a JWK, and a key set
+    is searched by `kid`, so the check tries each `kid` the set names. The
+    secret passes only when authlib reports a bad signature. Any other
+    exception (authlib 1.9.x's `ValueError` for an empty key or one holding
+    PEM or SSH key text anywhere, an empty key set, JSON text that does not
+    parse) becomes a `ConfigError` at `jwt_config.secret`, and so does a
+    token that verifies, because then the secret works as the empty key.
+- Before this, under authlib 1.9.1, such a homeserver started and answered
+  every JWT login with 500; under 1.6.12 an empty secret, or a JWK with an
+  empty `k`, accepted tokens anyone could sign (GHSA-8m4g-j4wp-wgcg). Under
+  1.6.12 the check still refuses every empty-key form. PEM or SSH key text is
+  refused wherever it appears only under the locked `>=1.9.1`; 1.6.12 refuses
+  only a string secret that starts with it, and uses any other as an HMAC
+  key. Asymmetric algorithms and disabled JWT login are not checked. No
+  Blackout template enables `jwt_config`.
+- `tests/blackout_runtime/test_jwt_secret_config.py`: fourteen refused
+  secrets for each of HS256, HS384 and HS512, among them a JWK mapping and
+  JWK JSON text with an empty `k` or a PEM `k`; four accepted ones (a plain
+  secret, a JWK mapping, JWK JSON text, a two-key set); a PEM for RS256 and
+  an empty secret with JWT login disabled still parse; and `/login` with
+  each key of the accepted set returns 200. On the first version of this
+  patch (`5bad47c`) the JWK forms were not refused, and the two-key set was
+  (`Missing required field: "k"`), although the handler can use it.
