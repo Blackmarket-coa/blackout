@@ -11,7 +11,10 @@
 #   - brace-expansion GHSA-mh99-v99m-4gvg is here and in pnpm.auditConfig, but
 #     osv-scanner.toml dropped it once the overrides cleared it. Neither Trivy
 #     nor pnpm audit reports it without these entries (checked 2026-10-30), so
-#     both are dead and left for their own removal.
+#     both are dead and left for their own removal. Until then they would hide
+#     a regression below the override pins from Trivy and pnpm audit (only the
+#     OSV gates would catch it), and the comment below names versions the
+#     lockfile no longer has.
 # Record: docs/security/dependency-advisories-2026-10-30.md.
 
 # react-router RSC-mode CSRF bypass. The client is a Vite SPA using

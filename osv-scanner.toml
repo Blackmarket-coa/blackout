@@ -62,29 +62,33 @@ reason = "No fixed version exists (all versions <=2.0.2 affected). Build-time on
 # There is nothing to bump to: OSV lists 4.2.0 through 4.3.1, the latest
 # release, as affected, and names no fixed version.
 #
-# Does not apply to our usage. deepmerge runs only at build time, on input
-# written in this repo:
+# Does not apply to our usage. deepmerge runs only at build time, on
+# repo-authored objects and dependency constants, never attacker input:
 #   - @vanilla-extract/css 1.20.1 (apps/blackout-client, packages/ui, and the
 #     vanilla-extract vite plugin): `style([...])` merges the style objects of
-#     our own `.css.ts(x)` files while vite evaluates them in Node. A nested key
-#     of a merged rule could be poisoned, but only by those repo-authored
-#     objects. No deepmerge code ships in the client bundle (checked against a
-#     production build's JS and its source maps).
+#     our own `.css.ts(x)` files, built from repo code and constants such as
+#     folds' `config` and `color`, while vite evaluates them in Node. A nested
+#     key of a merged rule could be poisoned, but only by those objects, and no
+#     tracked `.css.ts(x)` file contains `__proto__`, JSON.parse or fetch. No
+#     deepmerge code ships in the client bundle (checked against a production
+#     build's JS and its source maps).
 #   - workbox-build 7.4.0 -> @rollup/plugin-node-resolve 15.3.1, which merges
 #     only its own constant defaults.
 # Not mirrored in .trivyignore or pnpm.auditConfig: GitHub rates it Low, so
 # Trivy's HIGH/CRITICAL gate and `pnpm audit --audit-level high` pass on it.
 #
-# Plan: @vanilla-extract/css 1.21.3 (2026-10-08) dropped deepmerge, so moving
-# to it removes the first path; it is a CSS-compiler bump, so it gets its own
-# change and a visual check. The second path has no deepmerge-free release
-# (@rollup/plugin-node-resolve 16.0.3, which workbox-build 7.4.1 requires,
-# still depends on it). ignoreUntil forces a re-check for either. Record:
+# Plan: @vanilla-extract/css 1.21.3 (2026-10-08) replaced deepmerge with
+# deepmerge-ts ^8.0.2, so moving to it removes the first path but brings in a
+# different merge library, which that change must look at too. It is a
+# CSS-compiler bump, so it gets its own change and a visual check. The second
+# path has no deepmerge-free release (@rollup/plugin-node-resolve 16.0.3, which
+# workbox-build 7.4.1 requires, still depends on it). ignoreUntil forces a
+# re-check for either. Record:
 # docs/security/dependency-advisories-2026-10-30.md.
 [[IgnoredVulns]]
 id = "GHSA-gcqx-w48m-w2h4"
 ignoreUntil = 2027-01-28
-reason = "No fixed version exists (4.2.0-4.3.1 affected). Build-time only: vanilla-extract merges the repo's own style objects, rollup's node-resolve its own defaults; none of it ships in the client bundle."
+reason = "No fixed version exists (4.2.0-4.3.1 affected). Build-time only: vanilla-extract merges our .css.ts style objects (repo code and dependency constants), rollup's node-resolve its own defaults; none of it ships in the client bundle."
 
 # The braces stack-exhaustion ignore (GHSA-vfj7-8cjw-p6xm / CVE-2026-93687)
 # used to sit here. GitHub withdrew that advisory on 2026-10-23 ("not a

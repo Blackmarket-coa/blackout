@@ -14,7 +14,9 @@ changes no lockfile. It reported 4 advisories in 3 packages:
 `develop` (`ff7d08b`) fails the same way: the same scanner, run locally on
 develop's `pnpm-lock.yaml` and `osv-scanner.toml`, prints those four rows and
 nothing else. `security.yml`'s **Dependency vulnerability audit** job runs the
-same osv-scanner step on the same lockfile, so it fails too.
+same osv-scanner step on the same lockfile, so it fails too wherever it runs
+(its `pull_request` trigger is path-filtered; see
+[the react-router section](#react-router-ignore-ghsa-qwww-vcr4-c8h2-lapses-2026-10-31t0000z)).
 
 Three of the advisories were published on 2026-10-28 between 21:05 and 21:10
 UTC. deepmerge's is older: NVD published it on 2026-09-18, but GitHub reviewed
@@ -28,16 +30,23 @@ are Low or Moderate, so neither Trivy's CRITICAL/HIGH gate nor
     4.0.4**: bumps to the smallest fixed release on each line. Neither advisory
     is reachable here, but both have a fix, so the house rule applies: bump,
     don't triage.
--   **deepmerge has no fixed release.** It runs only at build time, on objects
-    written in this repo, and none of it ships in the client bundle. It gets one
-    `[[IgnoredVulns]]` entry with `ignoreUntil = 2027-01-28` (90 days).
--   **The react-router ignore was not touched.** It stops applying at
-    **2026-10-31T00:00 UTC**, not on 2026-11-01 (measured, below). From then on
-    both osv-scanner gates are red on every branch. A react-router 7.x release
-    now fixes it without React 19. See
+-   **deepmerge has no fixed release.** It runs only at build time, on
+    repo-authored objects and dependency constants, and none of it ships in the
+    client bundle. It gets one `[[IgnoredVulns]]` entry with
+    `ignoreUntil = 2027-01-28` (90 days).
+-   **The react-router ignore was not touched, and its reason is false.** The
+    entry's `reason` says the fix "requires React 19 migration". It does not:
+    react-router 7.18.2 fixes the advisory and peers `react >=18`. Every OSV
+    scan prints that reason while the entry applies.
+-   **The entry stops applying at 2026-10-31T00:00Z on CI**, not on 2026-11-01
+    (measured, below). The cutoff is local midnight on the host that runs the
+    scan, and GitHub's runners use UTC. From then on `ci.yml`'s audit is red on
+    every push and PR. `security.yml`'s is red wherever that workflow runs:
+    pushes to `develop`, merge-group checks, and PRs inside its path filter.
+    See
     [the react-router section](#react-router-ignore-ghsa-qwww-vcr4-c8h2-lapses-2026-10-31t0000z).
--   **So this branch passes the OSV gates only until 2026-10-31T00:00 UTC.**
-    Its local scan exits 0 now. A scan that starts at or after that moment
+-   **So this branch passes the OSV gates only until 2026-10-31T00:00Z.** Its
+    local scan in UTC exits 0 now. A scan that starts at or after that moment
     fails on it with one row, react-router 7.18.0. The operator needs to choose
     one of the react-router options before this branch is pushed. Its OSV
     result must not be presented as green after that time.
@@ -83,13 +92,13 @@ so.
 
 ## Summary
 
-| Advisory                              | Package              | GHSA severity | Was    | Now    | Reachable here                                        |
-| ------------------------------------- | -------------------- | ------------- | ------ | ------ | ----------------------------------------------------- |
-| GHSA-rmxm-3fg6-px4f (CVE-2026-118663) | @hono/node-server    | Moderate      | 2.0.10 | 2.1.3  | No: no `serveStatic` anywhere                         |
-| GHSA-3cmx-xjww-583x (CVE-2026-118258) | i18next-http-backend | Low           | 4.0.2  | 4.0.4  | No: `{{lng}}` is in the path, not the query (PoC run) |
-| GHSA-9jhj-wvmw-cfx5 (CVE-2026-115730) | i18next-http-backend | Low           | 4.0.2  | 4.0.4  | No: no `{{ns}}` in the template (PoC run)             |
-| GHSA-gcqx-w48m-w2h4 (CVE-2026-93753)  | deepmerge            | Low           | 4.3.1  | 4.3.1  | No: build time only, repo-authored input; ignored     |
-| GHSA-qwww-vcr4-c8h2 (existing ignore) | react-router         | High          | 7.18.0 | 7.18.0 | Not reassessed; ignore lapses 2026-10-31T00:00Z       |
+| Advisory                              | Package              | GHSA severity | Was    | Now    | Reachable here                                                      |
+| ------------------------------------- | -------------------- | ------------- | ------ | ------ | ------------------------------------------------------------------- |
+| GHSA-rmxm-3fg6-px4f (CVE-2026-118663) | @hono/node-server    | Moderate      | 2.0.10 | 2.1.3  | No: no `serveStatic` anywhere                                       |
+| GHSA-3cmx-xjww-583x (CVE-2026-118258) | i18next-http-backend | Low           | 4.0.2  | 4.0.4  | No: `{{lng}}` is in the path, not the query (PoC run)               |
+| GHSA-9jhj-wvmw-cfx5 (CVE-2026-115730) | i18next-http-backend | Low           | 4.0.2  | 4.0.4  | No: no `{{ns}}` in the template (PoC run)                           |
+| GHSA-gcqx-w48m-w2h4 (CVE-2026-93753)  | deepmerge            | Low           | 4.3.1  | 4.3.1  | No: build time only, repo objects and dependency constants; ignored |
+| GHSA-qwww-vcr4-c8h2 (existing ignore) | react-router         | High          | 7.18.0 | 7.18.0 | Not reassessed; reason false; ignore lapses 2026-10-31T00:00Z on CI |
 
 OSV `/v1/query` returns no advisories for @hono/node-server 2.1.3, 2.1.4 or
 2.1.5, for i18next-http-backend 4.0.4 through 4.0.7, or for react-router
@@ -313,8 +322,8 @@ GHSA-qwww-vcr4-c8h2 for react-router 7.18.0.
         `@vanilla-extract/compiler` / `@vanilla-extract/integration`.
     -   **workbox-build 7.4.0 → @rollup/plugin-node-resolve 15.3.1**, under
         `vite-plugin-pwa` (a devDependency of the client).
--   **Our tree:** not reachable. Both paths run at build time, on input written
-    in this repo.
+-   **Our tree:** not reachable. Both paths run at build time, on repo-authored
+    objects and dependency constants. Neither is attacker input.
     -   **vanilla-extract.** The one call is
         `deepmerge.all(styleRules, { arrayMerge })` in `composedStyle()`
         (`dist/vanilla-extract-css.esm.js:386`), which backs `style([...])`. It
@@ -322,8 +331,13 @@ GHSA-qwww-vcr4-c8h2 for react-router 7.18.0.
         `.css.tsx` files in Node, during `vite build` or `vite dev`.
     -   That call can hit the nested case above. The top-level rule it returns
         is not poisoned. A nested key can be, but only by the style objects it
-        is given, and those are written in this repo. None of the 118 tracked
-        `.css.ts` / `.css.tsx` files contains `__proto__` or `JSON.parse`.
+        is given. Those are repo-authored objects and dependency constants. Of
+        the 118 tracked `.css.ts` / `.css.tsx` files, 116 import from
+        `@vanilla-extract/css`, 69 use constants from `folds` (`config`,
+        `color`, `toRem`, `DefaultReset` and others), and 21 import from
+        `@blackout/design` (`packages/design`, in this repo). None of the 118
+        contains `__proto__`, `JSON.parse` or `fetch(`, so nothing parsed or
+        fetched reaches the merge.
     -   **The shipped client bundle has no deepmerge code.** I checked the
         production build (`pnpm --filter @blackout/client build` on this branch):
         -   None of the 163 `.js` / `.mjs` files in `dist` contains deepmerge's
@@ -342,8 +356,11 @@ GHSA-qwww-vcr4-c8h2 for react-router 7.18.0.
         (`dist/es/index.js:1059`). That is build time too, and the client's PWA
         config uses `strategies: 'injectManifest'`.
 -   **Why not option (a), removing the dependent:**
-    -   @vanilla-extract/css **1.21.3** (2026-10-08) dropped deepmerge, so a bump
-        would remove the first path.
+    -   @vanilla-extract/css **1.21.3** (2026-10-08) replaced deepmerge with
+        **deepmerge-ts `^8.0.2`**, a different merge library. A bump would
+        remove the first path, but bring in a new merge implementation, not a
+        patched deepmerge. OSV `/v1/query` returns nothing for deepmerge-ts
+        8.0.2 (its latest release, 2026-08-21) today.
     -   It would not clear the advisory. @rollup/plugin-node-resolve 16.0.3, the
         latest, still depends on deepmerge, and workbox-build 7.4.1 requires
         `^16.0.3`.
@@ -354,7 +371,8 @@ GHSA-qwww-vcr4-c8h2 for react-router 7.18.0.
 -   **Outcome:** one `[[IgnoredVulns]]` entry in `osv-scanner.toml`, in the
     image-size entry's style: what, why it does not apply, the paths, and the
     plan. `ignoreUntil = 2027-01-28`, 90 days out, which the scanner treats as
-    lapsing at 00:00 that day (see the next section).
+    lapsing at local midnight starting that day on the scanning host, 00:00Z on
+    CI (see the next section).
     -   It is not mirrored in `.trivyignore` or `pnpm.auditConfig.ignoreGhsas`.
         Trivy's gate is CRITICAL/HIGH with `ignore-unfixed`, and
         `pnpm audit --prod --audit-level high` reports it as "1 low" and passes.
@@ -364,7 +382,9 @@ GHSA-qwww-vcr4-c8h2 for react-router 7.18.0.
         the advisory, those gates should fail and prompt a fresh look.
 -   **Plan:**
     1. Move `@vanilla-extract/css` to ≥ 1.21.3 in its own change, with a visual
-       check of the client.
+       check of the client. That swaps deepmerge for deepmerge-ts `^8.0.2` on
+       this path, so that change should also look at deepmerge-ts's own
+       `__proto__` handling and advisories.
     2. Watch `@rollup/plugin-node-resolve` / `workbox-build` for a release
        without deepmerge, and deepmerge for a fix.
     3. Re-check by 2027-01-28. The entry should be deleted once neither path
@@ -372,35 +392,51 @@ GHSA-qwww-vcr4-c8h2 for react-router 7.18.0.
 -   **Source:** OSV and GitHub advisory files; deepmerge 4.3.1 source; PoC
     runs (top level and nested); `@vanilla-extract/css` 1.20.1 `dist`; the
     npm registry for
-    `@vanilla-extract/css`, `@rollup/plugin-node-resolve` and `workbox-build`;
-    the client build's `dist`.
+    `@vanilla-extract/css`, `deepmerge-ts`, `@rollup/plugin-node-resolve` and
+    `workbox-build`; the client build's `dist`.
 
 ## react-router ignore (GHSA-qwww-vcr4-c8h2): lapses 2026-10-31T00:00Z
 
 **Not changed here.** Renewing the ignore, or doing the migration it defers, is
 the operator's decision. This section records when it lapses, what happens
-then, and one fact the entry does not reflect.
+then, and that the entry's reason is false.
 
 -   **When it lapses (measured).** osv-scanner v2.3.3 treats `ignoreUntil` as
-    the moment the date begins, not the end of that day.
+    the moment the date begins, not the end of that day, in the local time of
+    the host that runs the scan.
     -   In a scratch copy of this branch, at 20:01 UTC on 2026-10-30, the entry
         with `ignoreUntil = 2026-10-30` no longer applied. The scan exited 1 and
         printed `osv-scanner.toml has unused ignores: GHSA-qwww-vcr4-c8h2` plus
         the row react-router 7.18.0, CVSS 7.1, fixed version 7.18.2.
     -   With `2026-10-31`, the entry's real value, it still applied.
-    -   So **the entry stops applying at 2026-10-31T00:00 UTC**, a few hours
-        after this record was written, not on 2026-11-01. I tested only in UTC,
-        which is what GitHub's runners use.
+    -   **The date begins at local midnight.** At 21:19 UTC on 2026-10-30, on
+        the unmodified branch, the scan exited 0 with `TZ=UTC` and with
+        `TZ=America/Los_Angeles`. It exited 1, with the unused-ignore line and
+        the react-router row, with `TZ=Etc/GMT-3` (UTC+3, local time 00:19 on
+        10-31) and with `TZ=Pacific/Kiritimati` (UTC+14).
+    -   So **the entry stops applying at 2026-10-31T00:00Z on CI**, a few hours
+        after this record was written, not on 2026-11-01. GitHub's hosted
+        runners use UTC, and neither `ci.yml` nor `security.yml` sets `TZ`.
+    -   A developer's scan east of UTC already fails before that moment, and
+        one west of UTC passes for some hours after it. So near the date a
+        local scan can disagree with CI.
 -   **What happens if nothing is done:**
-    -   From then on, `ci.yml`'s **Dependency audit** and `security.yml`'s
-        **Dependency vulnerability audit** (its osv-scanner step) fail on every
-        PR and on `develop`. With this branch, the failure is that one row.
+    -   From then on, `ci.yml`'s **Dependency audit** fails on every push and
+        every PR, because `ci.yml` runs on all pushes and on PRs to any branch.
+    -   `security.yml`'s **Dependency vulnerability audit** (its osv-scanner
+        step) fails wherever that workflow runs: pushes to `develop`, `master`
+        or `main`, merge-group checks, and PRs that touch its
+        `pull_request.paths` (`apps/**`, `packages/**`, `infra/**`,
+        `deploy/**`, `pnpm-lock.yaml`, `package.json`, `osv-scanner.toml` and a
+        few others). This branch touches four of those paths, so its PR runs
+        it. A PR outside them does not.
+    -   With this branch, the failure is that one row.
     -   Neither Trivy nor `pnpm audit` reports it then: `.trivyignore` and
         `pnpm.auditConfig.ignoreGhsas` list GHSA-qwww-vcr4-c8h2 with no expiry.
         (Trivy is red on develop for other reasons; see Verification.)
     -   So only the OSV gates enforce the deadline.
--   **The entry's premise is out of date.** The entry's comment, its `reason`,
-    the matching `.trivyignore` comment and
+-   **The entry's reason is false.** The entry's comment, its `reason` ("Fix
+    requires React 19 migration"), the matching `.trivyignore` comment and
     `docs/migrations/react-19-and-react-router-8.md` all say the fix is
     react-router 8, whose whole line requires React ≥ 19.2.7. But:
     -   OSV and GitHub now list two fixed ranges: **7.12.0 → 7.18.2** and 8.0.0 →
@@ -414,12 +450,21 @@ then, and one fact the entry does not reflect.
         The scanner's own row says so (fixed 7.18.2).
     -   GitHub's file was last modified 2026-08-07, two weeks after the ignore was
         written (2026-07-25). I did not check when the 7.x range was added.
+    -   Re-checked at 21:19 UTC on 2026-10-30: the OSV record (modified
+        2026-09-10) still has both ranges, the registry peers for 7.18.0 to
+        7.18.5 are all `react >=18` / `react-dom >=18`, `version-7` is
+        7.18.5, and OSV `/v1/query` returns nothing for 7.18.2 or 7.18.5.
+    -   Until the entry lapses, every OSV scan prints this `reason` in its
+        "filtered out because" line, so each green run repeats the false
+        statement.
 -   **The choices** (none taken here):
     1. Bump react-router to ≥ 7.18.2 and delete the three ignores. 7.18.3 to
        7.18.5 also change URL and redirect validation, action-origin validation
        and route matching, so read those before taking 7.18.5.
-    2. Renew the ignore, with a new date and a corrected rationale.
-    3. Do nothing: both OSV gates are red from 2026-10-31T00:00Z.
+    2. Renew the ignore, with a new date and a corrected rationale: the
+       current `reason` is false and would be printed again on every run.
+    3. Do nothing: from 2026-10-31T00:00Z `ci.yml`'s audit is red on every push
+       and PR, and `security.yml`'s wherever it runs.
 
 ---
 
@@ -429,8 +474,12 @@ then, and one fact the entry does not reflect.
    open, and `docs/migrations/react-19-and-react-router-8.md` still describes
    React 19 as the only fix.
 2. **`ignoreUntil` lapses at the start of its date.** The image-size entries
-   (`2026-11-30`) stop applying at 2026-11-30T00:00Z. Anyone setting a date
-   should count to the day before.
+   (`2026-11-30`) stop applying at 2026-11-30T00:00Z on CI. The cutoff is
+   local midnight on the host that runs the scan, which is 00:00Z on CI, so a
+   scan east of UTC sees an entry lapse hours early (measured in the
+   react-router section). The header of `osv-scanner.toml` ("after that date
+   the scanner reports the finding again") is a day late. Anyone setting a
+   date should count to the day before.
 3. **Only one API test runs `@hono/node-server`, with one request.**
    `production-app-sigterm` starts the real `serve()` through `start-app`,
    sends one `GET /health` and checks the SIGTERM drain. Every other suite goes
@@ -462,19 +511,33 @@ then, and one fact the entry does not reflect.
    react-router. `pnpm audit --json` over the whole tree (1,520 packages),
    with GHSA-mh99 taken out of `ignoreGhsas`, reports only deepmerge (low) and
    the three ignored highs. Both entries are left in place, and
-   `.trivyignore`'s header now says so. Removing them is a separate change.
+   `.trivyignore`'s header now says so. While they stay, a regression below
+   the override pins is hidden from Trivy and `pnpm audit`, and only the OSV
+   gates would still catch it. That is the reason `osv-scanner.toml` gives for
+   removing its own copy. Removing them is a separate change.
 8. **The image-size entries' premise is out of date too.** Their comments and
    `reason` say no fixed version exists. OSV now lists both advisories as
    fixed in **2.0.3** (records modified 2026-09-24). image-size 2.0.3 and
    2.0.4 were published on 2026-09-14, and Trivy's row shows `2.0.3` as fixed.
    The lockfile has image-size 1.2.1, from metro 0.83.5 (`image-size ^1.0.2`).
-   On the registry, metro **0.83.8** (2026-08-19, the `0.83-stable` tag)
-   declares no image-size dependency, nor do the metro-core, metro-config,
-   metro-file-map and metro-transform-worker 0.83.8 manifests I read. It is
-   inside `@react-native/community-cli-plugin` 0.82.1's `^0.83.1`. So a metro
-   update may remove image-size, and both ignores, before they lapse at
-   2026-11-30T00:00Z. Not tried here, and the other metro-\* packages were not
-   checked.
+   `pnpm why image-size -r` traces it to `legacy/blackout-web` and
+   `packages/ui`, through react-native 0.82.1 →
+   `@react-native/community-cli-plugin` 0.82.1 → metro.
+    - On the registry, metro **0.83.8** (2026-08-19, the `0.83-stable` tag)
+      declares no image-size dependency.
+    - Neither do the 13 metro-\* packages it pulls in, directly or through
+      each other, all at 0.83.8: babel-transformer, cache, cache-key, config,
+      core, file-map, minify-terser, resolver, runtime, source-map,
+      symbolicate, transform-plugins and transform-worker. None of the 14
+      manifests lists image-size in `dependencies`, `optionalDependencies` or
+      `peerDependencies`.
+    - 0.83.8 is inside `@react-native/community-cli-plugin` 0.82.1's
+      `^0.83.1`.
+    - So a metro update should remove image-size, and both ignores with it,
+      before they lapse at 2026-11-30T00:00Z. The update was not tried here,
+      so whether the resolved tree then loses image-size is not verified.
+    - Until then, every OSV scan prints the false "No fixed version exists"
+      `reason` for both entries, as it prints react-router's.
 
 ## Corrected after review
 
@@ -495,13 +558,40 @@ repeat the first and third, and this section is their correction.
 3. **"`deepmerge.all([src])` (vanilla-extract's call shape): not
    poisoned."** Only the top level of that call is safe. A nested key can be
    poisoned (deepmerge section). The conclusion, not reachable, stands: the
-   inputs are this repo's own style objects. The `osv-scanner.toml` comment,
+   inputs are repo-authored objects and dependency constants (see the second
+   list below). The `osv-scanner.toml` comment,
    which said deepmerge sets the prototype of "the object deepmerge returns",
    now says the merged object at that position.
 4. **`.trivyignore`'s header** said it mirrors the accepted-risk set in
    `osv-scanner.toml` and `pnpm.auditConfig`. The lists already differed (the
    Twisted entries, the brace-expansion entries), and the deepmerge entry
    widened the gap. The header now says what is mirrored where, and why.
+
+A second review, of `26e6ce5`, found five more statements that were
+inaccurate or incomplete. They are corrected above. The commit message of
+`79b2791` repeats the second, third and fourth, and that of `26e6ce5` the
+fourth; this list is their correction:
+
+1. **"Both osv-scanner gates are red on every branch"** and **"fail on every
+   PR"** were true only of `ci.yml`'s audit, which runs on every push and PR.
+   `security.yml`'s `pull_request` trigger is path-filtered. The Result
+   section and the react-router section now name that filter.
+2. **"The entry stops applying at 2026-10-31T00:00 UTC"** is the moment on
+   CI. The cutoff is local midnight on the scanning host (measured in the
+   react-router section; item 2 of "Found outside the gates").
+3. **"@vanilla-extract/css 1.21.3 dropped deepmerge."** It replaced it with
+   deepmerge-ts `^8.0.2`. The deepmerge section, its plan and the
+   `osv-scanner.toml` comment now say so.
+4. **"On input written in this repo."** The merged style objects also take
+   constants from `folds`. Neither is attacker input, so the conclusion
+   stands. The record, the `osv-scanner.toml` comment and the entry's
+   `reason` now say "repo-authored objects and dependency constants" or the
+   equivalent.
+5. **The react-router entry's premise was called "out of date".** Its reason
+   is false, and every OSV run prints it. The record now says so. The entry
+   is still unchanged. Item 7 (what the dead brace-expansion entries hide)
+   and item 8 (all 14 metro manifests checked) of "Found outside the gates"
+   were also completed.
 
 ## Verification
 
@@ -518,8 +608,9 @@ All runs are local, on this branch unless the row says otherwise, with Node
 | this branch                                                  | exit 0: "No issues found", 4 filtered, no unused-ignore line                                           |
 | this branch, react-router `ignoreUntil` set to today (probe) | exit 1: unused ignore GHSA-qwww-vcr4-c8h2; 1 row, react-router 7.18.0 (what CI sees from 10-31 00:00Z) |
 
-The exit 0 holds only until **2026-10-31T00:00Z**. From then on, a scan of
-this branch gives the probe's result.
+The exit 0 holds only until **2026-10-31T00:00Z** on a UTC host such as CI's
+runners (earlier on a host east of UTC). From then on, a scan of this branch
+gives the probe's result.
 
 `pnpm audit --prod --audit-level high` (security.yml): exit 0, "4
 vulnerabilities found, 1 low | 3 high (3 ignored)". The low one is deepmerge
@@ -529,10 +620,10 @@ vulnerabilities found, 1 low | 3 high (3 ignored)". The low one is deepmerge
 **Gates:**
 
 The gates below ran on the tree committed as `a147f5c`, the dependency commit.
-The two commits after it change only this document, comments and one entry in
+The three commits after it change only this document, comments and one entry in
 `osv-scanner.toml`, and the header comment of `.trivyignore`. Only the scans
-read those two files. The re-runs after the corrections are in the second
-table.
+read those two files. The re-runs after each review are in the tables after
+this one.
 
 | Gate                     | Command                                                                                                                             | Result                                                                                                                                                                                                                                                           |
 | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -571,9 +662,31 @@ corrected tree):
 The API and client suites were not re-run either, apart from the one test
 above. No code, manifest or lockfile changed.
 
+**Re-runs after the second review** (2026-10-30, 21:18 to 21:30 UTC). The
+change is to this document, the deepmerge entry's comment and `reason` in
+`osv-scanner.toml`, and the header comment of `.trivyignore`:
+
+| Gate             | Command                                                                                              | Result                                                                                        |
+| ---------------- | ---------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| OSV scan         | osv-scanner v2.3.3 (sha256 matches `osv-scanner_SHA256SUMS`), `TZ=UTC`                               | exit 0: "No issues found", 4 filtered, the new deepmerge `reason` printed                     |
+| OSV, UTC+3       | the same, `TZ=Etc/GMT-3`                                                                             | exit 1: unused ignore GHSA-qwww-vcr4-c8h2; 1 row, react-router 7.18.0, CVSS 7.1, fixed 7.18.2 |
+| OSV probe        | `TZ=UTC`, scratch copy with the react-router `ignoreUntil` set to `2026-10-30`                       | exit 1, the same row                                                                          |
+| OSV, time zones  | unmodified tree at 21:19 UTC, `TZ` = `UTC`, `America/Los_Angeles`, `Etc/GMT-3`, `Pacific/Kiritimati` | exit 0, 0, 1, 1 (react-router section)                                                        |
+| Trivy            | v0.69.3, `security.yml`'s flags, on a copy of the tracked files, DB of 2026-10-30T19:07Z             | exit 1 with the same 6 findings, none in `pnpm-lock.yaml`; the edited header parses           |
+| registry and OSV | react-router, `@vanilla-extract/css`, deepmerge-ts, metro and 13 metro-\* manifests, image-size      | as in the sections above                                                                      |
+| prettier         | `prettier --check` (lint-staged runs `prettier --write` on commit)                                   | pass                                                                                          |
+| gitleaks         | `gitleaks dir` on the three files; `gitleaks git --log-opts="origin/develop..HEAD"`                  | no leaks                                                                                      |
+
+The OSV exit 0 again holds only until 2026-10-31T00:00Z in UTC.
+
 **Not verified:**
 
--   CI itself: nothing was pushed. Every result above is a local run.
+-   CI itself: nothing was pushed. Every result above is a local run. That
+    GitHub's hosted runners scan in UTC was not checked on a runner; neither
+    workflow sets `TZ`.
+-   The metro 0.83.8 update was not tried, so it is not shown that the
+    resolved tree then drops image-size. Only the 14 manifests were read.
+-   deepmerge-ts was checked only against OSV, not read.
 -   The client e2e smoke (`CI=1 pnpm e2e`) was not run. Playwright 1.58.2
     expects Chromium build 1208, and this machine has 1243. The Chromium check
     above drove 1243 directly through `playwright-core` and looked only at the
@@ -585,4 +698,4 @@ above. No code, manifest or lockfile changed.
     The 500 fallback path (an error while writing a response) was not
     triggered.
 -   The vanilla-extract `vite dev` path was not inspected beyond the call site.
-    It runs the same `composedStyle` on the same repo-authored objects.
+    It runs the same `composedStyle` on the same objects.
