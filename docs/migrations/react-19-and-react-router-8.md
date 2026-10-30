@@ -2,6 +2,8 @@
 
 **Status:** Planned — not started. **Owner:** _TBD_. **Created:** 2026-07-25 (pre-launch audit follow-up).
 
+> **2026-10-30: no longer a security fix.** The advisory that motivated this plan (GHSA-qwww-vcr4-c8h2) is now also fixed on the 7.x line: OSV and GitHub list **react-router 7.18.2** (2026-07-28) as fixed, and it peers `react >=18`. The client moved to 7.18.2 and the three ignores are gone (`docs/security/dependency-advisories-2026-10-30.md`). Between 7.18.0 and 7.18.2 only the RSC server entry changed, which the client does not load. "Why" below is kept as written in July; fact 2 still holds for react-router **8**, but it no longer blocks the fix. Do this migration, if at all, on its own merits.
+
 ## Why
 
 The pre-launch audit flagged a react-router advisory (GHSA-qwww-vcr4-c8h2, "RSC-mode CSRF bypass"), fixed in **react-router 8**. Two facts shape this work:
@@ -42,7 +44,7 @@ Recommendation: **A if available, else B.** Do not pursue C for this reason alon
 6. **Build** (`pnpm --filter @blackout/client build`) and **bundle-size** check (CI `MAX_BUNDLE_KB`).
 7. **Run the app** (this is the step typecheck/units can't replace): boot the client against a homeserver and click through the shell, rooms, calls, settings, and the `folds`-heavy surfaces. Watch the console for React 19 ref/effect warnings.
 8. **Visual + e2e**: run `pnpm e2e:visual` (regenerate baselines only after human review) and the Playwright smoke/state-explosion suites.
-9. **Remove the advisory ignores** for GHSA-qwww-vcr4-c8h2 from `osv-scanner.toml`, `.trivyignore`, and `pnpm.auditConfig` once react-router 8 is in.
+9. ~~**Remove the advisory ignores** for GHSA-qwww-vcr4-c8h2 from `osv-scanner.toml`, `.trivyignore`, and `pnpm.auditConfig` once react-router 8 is in.~~ Done 2026-10-30 with react-router 7.18.2.
 
 ## Verification gates (all must pass)
 
@@ -54,4 +56,4 @@ Recommendation: **A if available, else B.** Do not pursue C for this reason alon
 
 ## Rollback
 
-The change is confined to `apps/blackout-client` deps + call-site fixups (+ the `folds` decision). If runtime issues surface post-merge, revert the React/react-router bump commit; the advisory ignores remain valid until 2026-10-31.
+The change is confined to `apps/blackout-client` deps + call-site fixups (+ the `folds` decision). If runtime issues surface post-merge, revert the React/react-router bump commit; staying on react-router 7.18.2 or later keeps the advisory fixed.

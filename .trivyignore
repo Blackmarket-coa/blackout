@@ -17,11 +17,6 @@
 #     lockfile no longer has.
 # Record: docs/security/dependency-advisories-2026-10-30.md.
 
-# react-router RSC-mode CSRF bypass. The client is a Vite SPA using
-# react-router in library mode only (no RSC), so it does not apply. The fix
-# (react-router 8) requires a React 18->19 migration, tracked separately.
-GHSA-qwww-vcr4-c8h2
-
 # brace-expansion ReDoS. The tree resolves to 1.1.16/2.1.2/5.0.8, all at or
 # above the maintainer's per-line security patches (1.1.12/2.0.2/5.0.8); OSV's
 # affected-versions list for the 1.x line tops out at 1.1.11, so 1.1.16 is

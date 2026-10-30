@@ -16,7 +16,7 @@ develop's `pnpm-lock.yaml` and `osv-scanner.toml`, prints those four rows and
 nothing else. `security.yml`'s **Dependency vulnerability audit** job runs the
 same osv-scanner step on the same lockfile, so it fails too wherever it runs
 (its `pull_request` trigger is path-filtered; see
-[the react-router section](#react-router-ignore-ghsa-qwww-vcr4-c8h2-lapses-2026-10-31t0000z)).
+[the react-router section](#react-router-7180--7182-appsblackout-client)).
 
 Three of the advisories were published on 2026-10-28 between 21:05 and 21:10
 UTC. deepmerge's is older: NVD published it on 2026-09-18, but GitHub reviewed
@@ -34,25 +34,23 @@ are Low or Moderate, so neither Trivy's CRITICAL/HIGH gate nor
     repo-authored objects and dependency constants, and none of it ships in the
     client bundle. It gets one `[[IgnoredVulns]]` entry with
     `ignoreUntil = 2027-01-28` (90 days).
--   **The react-router ignore was not touched, and its reason is false.** The
-    entry's `reason` says the fix "requires React 19 migration". It does not:
-    react-router 7.18.2 fixes the advisory and peers `react >=18`. Every OSV
-    scan prints that reason while the entry applies.
--   **The entry stops applying at 2026-10-31T00:00Z on CI**, not on 2026-11-01
-    (measured, below). The cutoff is local midnight on the host that runs the
-    scan, and GitHub's runners use UTC. From then on `ci.yml`'s audit is red on
-    every push and PR. `security.yml`'s is red wherever that workflow runs:
-    pushes to `develop`, merge-group checks, and PRs inside its path filter.
-    See
-    [the react-router section](#react-router-ignore-ghsa-qwww-vcr4-c8h2-lapses-2026-10-31t0000z).
--   **So this branch passes the OSV gates only until 2026-10-31T00:00Z.** Its
-    local scan in UTC exits 0 now. A scan that starts at or after that moment
-    fails on it with one row, react-router 7.18.0. The operator needs to choose
-    one of the react-router options before this branch is pushed. Its OSV
-    result must not be presented as green after that time.
+-   **react-router 7.18.0 → 7.18.2**, and its ignore removed from
+    `osv-scanner.toml`, `.trivyignore` and `pnpm.auditConfig.ignoreGhsas`.
+    This was added after the third review. The entry's `reason` said the fix
+    "requires React 19 migration". It does not: react-router 7.18.2 fixes the
+    advisory and peers `react >=18`. Between 7.18.0 and 7.18.2 only the RSC
+    server entry changes, and the client never loads it. The entry would have
+    stopped applying at 2026-10-31T00:00Z on CI, not on 2026-11-01 (measured),
+    turning `ci.yml`'s audit red on every push and PR. See
+    [the react-router section](#react-router-7180--7182-appsblackout-client).
+-   **So this branch's OSV result no longer depends on that date.** The scan
+    exits 0 in UTC, UTC+3 and UTC+14 (Verification). The next `ignoreUntil` to
+    lapse is image-size's, at 2026-11-30T00:00Z on CI (item 8 of "Found outside
+    the gates").
 
-The lockfile moves exactly those two packages. Nothing was added to
-`.trivyignore` or `pnpm.auditConfig.ignoreGhsas`. `.trivyignore`'s header now
+The lockfile moves exactly those three packages. Nothing was added to
+`.trivyignore` or `pnpm.auditConfig.ignoreGhsas`, and react-router's entry
+left both. `.trivyignore`'s header now
 says which accepted advisories are mirrored where.
 
 ---
@@ -98,11 +96,11 @@ so.
 | GHSA-3cmx-xjww-583x (CVE-2026-118258) | i18next-http-backend | Low           | 4.0.2  | 4.0.4  | No: `{{lng}}` is in the path, not the query (PoC run)               |
 | GHSA-9jhj-wvmw-cfx5 (CVE-2026-115730) | i18next-http-backend | Low           | 4.0.2  | 4.0.4  | No: no `{{ns}}` in the template (PoC run)                           |
 | GHSA-gcqx-w48m-w2h4 (CVE-2026-93753)  | deepmerge            | Low           | 4.3.1  | 4.3.1  | No: build time only, repo objects and dependency constants; ignored |
-| GHSA-qwww-vcr4-c8h2 (existing ignore) | react-router         | High          | 7.18.0 | 7.18.0 | Not reassessed; reason false; ignore lapses 2026-10-31T00:00Z on CI |
+| GHSA-qwww-vcr4-c8h2 (existing ignore) | react-router         | High          | 7.18.0 | 7.18.2 | No: RSC mode only, the client uses library mode; ignore removed     |
 
 OSV `/v1/query` returns no advisories for @hono/node-server 2.1.3, 2.1.4 or
 2.1.5, for i18next-http-backend 4.0.4 through 4.0.7, or for react-router
-7.18.5. It still returns GHSA-gcqx-w48m-w2h4 for deepmerge 4.3.1 and
+7.18.2 or 7.18.5. It still returns GHSA-gcqx-w48m-w2h4 for deepmerge 4.3.1, and
 GHSA-qwww-vcr4-c8h2 for react-router 7.18.0.
 
 ---
@@ -395,15 +393,66 @@ GHSA-qwww-vcr4-c8h2 for react-router 7.18.0.
     `@vanilla-extract/css`, `deepmerge-ts`, `@rollup/plugin-node-resolve` and
     `workbox-build`; the client build's `dist`.
 
-## react-router ignore (GHSA-qwww-vcr4-c8h2): lapses 2026-10-31T00:00Z
+## react-router: 7.18.0 → 7.18.2 (apps/blackout-client)
 
-**Not changed here.** Renewing the ignore, or doing the migration it defers, is
-the operator's decision. This section records when it lapses, what happens
-then, and that the entry's reason is false.
+**Bumped after the third review, and the ignore removed from all three
+lists.** The first three versions of this record left the entry alone as the
+operator's decision. But its stated reason was false, a patch release fixes the
+advisory without changing any code the client runs, and the entry was hours
+from lapsing on CI. So this change takes the fix (choice 1 at the end of this
+section) rather than renewing a false reason or letting every PR go red.
 
--   **When it lapses (measured).** osv-scanner v2.3.3 treats `ignoreUntil` as
-    the moment the date begins, not the end of that day, in the local time of
-    the host that runs the scan.
+-   **The advisory.** GHSA-qwww-vcr4-c8h2, "RSC Mode CSRF Bypass Allows Action
+    Execution Before 400 Response", High (CVSS 7.1). OSV (record modified
+    2026-09-10) and GitHub list two fixed ranges: **7.12.0 → 7.18.2** and
+    8.0.0 → 8.3.0.
+-   **Not reachable here, before or after.** The client uses react-router in
+    library mode only: 129 `from 'react-router'` imports across
+    `apps/blackout-client/src` and `tests`, no subpath import and no
+    `@react-router/*` package. The vulnerable code is the RSC server entry,
+    `dist/*/index-react-server.{js,mjs}`, which the package's `exports` serve
+    only under the `react-server` condition. Vite's browser build does not set
+    that condition.
+-   **The entry's reason was false.** The entry's comment, its `reason` ("Fix
+    requires React 19 migration"), the matching `.trivyignore` comment and
+    `docs/migrations/react-19-and-react-router-8.md` all said the fix is
+    react-router 8, whose whole line requires React ≥ 19.2.7. But react-router
+    **7.18.2** (2026-07-28) fixes it and peers `react >=18` /
+    `react-dom >=18`, as do 7.18.3 to 7.18.5 (7.18.5, of 2026-10-27, is npm's
+    `version-7` tag). GitHub's advisory file was last modified 2026-08-07, two
+    weeks after the ignore was written (2026-07-25). I did not check when the
+    7.x range was added. While the entry applied, every OSV scan printed the
+    false `reason` in its "filtered out because" line.
+-   **What 7.18.2 changes.** Its changelog has one entry, "Harden RSC CSRF
+    codepaths" (#15353), the PR the advisory cites. 7.18.1's says "No
+    changes". Both tarballs match the registry's `sha512`. With the version
+    string and the hash-named chunk files and their CommonJS variables
+    (`chunk-XXXXXXXX`, `_chunkXXXXXXXX`) normalised, **60 of the 64 files under
+    `dist/` are byte-identical**. The four that differ are
+    `index-react-server.{js,mjs}` in `development/` and `production/`. In their
+    action path, a failed origin check now turns the request into a `GET`
+    inside the `catch`, so the action does not run. Every module the client
+    loads (`index`, `dom-export` and the shared chunks) is the same code as
+    before.
+-   **Why 7.18.2 and not 7.18.5.** The same rule as the other two bumps: the
+    smallest fixed release. 7.18.3 to 7.18.5 change code the client does run.
+    7.18.3 adds URL validation on client-side navigations and redirects and
+    changes route matching for long paths. 7.18.4 changes when
+    `document.startViewTransition` is called. 7.18.5 changes turbo-stream
+    decoding and route-manifest processing. Some of that is hardening worth
+    having, but it changes behaviour, so it belongs in its own change, with a
+    run of the client's navigation (item 1 of "Found outside the gates").
+-   **The lockfile** moves only react-router, 7.18.0 → 7.18.2: the
+    `apps/blackout-client` importer entry, the `packages:` entry and the
+    snapshot, whose dependencies (`cookie`, `set-cookie-parser`) are
+    unchanged. The lockfile's integrity for 7.18.2 is the registry's.
+-   **Removed:** the `[[IgnoredVulns]]` entry in `osv-scanner.toml`, the line
+    in `.trivyignore` and the entry in `pnpm.auditConfig.ignoreGhsas`, each
+    with its comment. `docs/migrations/react-19-and-react-router-8.md` now
+    says the advisory no longer depends on that migration.
+-   **When the entry would have lapsed (measured before the bump).**
+    osv-scanner v2.3.3 treats `ignoreUntil` as the moment the date begins, not
+    the end of that day, in the local time of the host that runs the scan.
     -   In a scratch copy of this branch, at 20:01 UTC on 2026-10-30, the entry
         with `ignoreUntil = 2026-10-30` no longer applied. The scan exited 1 and
         printed `osv-scanner.toml has unused ignores: GHSA-qwww-vcr4-c8h2` plus
@@ -414,65 +463,39 @@ then, and that the entry's reason is false.
         `TZ=America/Los_Angeles`. It exited 1, with the unused-ignore line and
         the react-router row, with `TZ=Etc/GMT-3` (UTC+3, local time 00:19 on
         10-31) and with `TZ=Pacific/Kiritimati` (UTC+14).
-    -   So **the entry stops applying at 2026-10-31T00:00Z on CI**, a few hours
-        after this record was written, not on 2026-11-01. GitHub's hosted
+    -   So **the entry would have stopped applying at 2026-10-31T00:00Z on
+        CI**, a few hours after this record was first written, not on
+        2026-11-01. GitHub's hosted
         runners use UTC, and neither `ci.yml` nor `security.yml` sets `TZ`.
-    -   A developer's scan east of UTC already fails before that moment, and
-        one west of UTC passes for some hours after it. So near the date a
-        local scan can disagree with CI.
--   **What happens if nothing is done:**
-    -   From then on, `ci.yml`'s **Dependency audit** fails on every push and
-        every PR, because `ci.yml` runs on all pushes and on PRs to any branch.
-    -   `security.yml`'s **Dependency vulnerability audit** (its osv-scanner
-        step) fails wherever that workflow runs: pushes to `develop`, `master`
-        or `main`, merge-group checks, and PRs that touch its
-        `pull_request.paths` (`apps/**`, `packages/**`, `infra/**`,
-        `deploy/**`, `pnpm-lock.yaml`, `package.json`, `osv-scanner.toml` and a
-        few others). This branch touches four of those paths, so its PR runs
-        it. A PR outside them does not.
-    -   With this branch, the failure is that one row.
-    -   Neither Trivy nor `pnpm audit` reports it then: `.trivyignore` and
-        `pnpm.auditConfig.ignoreGhsas` list GHSA-qwww-vcr4-c8h2 with no expiry.
-        (Trivy is red on develop for other reasons; see Verification.)
-    -   So only the OSV gates enforce the deadline.
--   **The entry's reason is false.** The entry's comment, its `reason` ("Fix
-    requires React 19 migration"), the matching `.trivyignore` comment and
-    `docs/migrations/react-19-and-react-router-8.md` all say the fix is
-    react-router 8, whose whole line requires React ≥ 19.2.7. But:
-    -   OSV and GitHub now list two fixed ranges: **7.12.0 → 7.18.2** and 8.0.0 →
-        8.3.0.
-    -   react-router **7.18.2** (2026-07-28) is a patch release whose only
-        changelog entry is "Harden RSC CSRF codepaths" (#15353), the PR the
-        advisory cites.
-    -   7.18.2 through **7.18.5** (2026-10-27, npm's `version-7` tag) peer
-        `react >=18`. OSV returns no advisories for 7.18.5.
-    -   So a patch bump inside 7.x, without React 19, now clears this advisory.
-        The scanner's own row says so (fixed 7.18.2).
-    -   GitHub's file was last modified 2026-08-07, two weeks after the ignore was
-        written (2026-07-25). I did not check when the 7.x range was added.
-    -   Re-checked at 21:19 UTC on 2026-10-30: the OSV record (modified
-        2026-09-10) still has both ranges, the registry peers for 7.18.0 to
-        7.18.5 are all `react >=18` / `react-dom >=18`, `version-7` is
-        7.18.5, and OSV `/v1/query` returns nothing for 7.18.2 or 7.18.5.
-    -   Until the entry lapses, every OSV scan prints this `reason` in its
-        "filtered out because" line, so each green run repeats the false
-        statement.
--   **The choices** (none taken here):
-    1. Bump react-router to ≥ 7.18.2 and delete the three ignores. 7.18.3 to
-       7.18.5 also change URL and redirect validation, action-origin validation
-       and route matching, so read those before taking 7.18.5.
-    2. Renew the ignore, with a new date and a corrected rationale: the
-       current `reason` is false and would be printed again on every run.
-    3. Do nothing: from 2026-10-31T00:00Z `ci.yml`'s audit is red on every push
-       and PR, and `security.yml`'s wherever it runs.
+    -   A developer's scan east of UTC failed before that moment, and one
+        west of UTC would have passed for some hours after it. So near the date
+        a local scan can disagree with CI.
+-   **What would have happened without a change.** From 2026-10-31T00:00Z,
+    `ci.yml`'s **Dependency audit** would have failed on every push and every
+    PR, since `ci.yml` runs on all pushes and on PRs to any branch.
+    `security.yml`'s **Dependency vulnerability audit** (its osv-scanner step)
+    would have failed wherever that workflow runs: pushes to `develop`,
+    `master` or `main`, merge-group checks, and PRs that touch its
+    `pull_request.paths` (`apps/**`, `packages/**`, `infra/**`, `deploy/**`,
+    `pnpm-lock.yaml`, `package.json`, `osv-scanner.toml` and a few others).
+    Neither Trivy nor `pnpm audit` would have reported it, because
+    `.trivyignore` and `pnpm.auditConfig.ignoreGhsas` listed the GHSA with no
+    expiry. Only the OSV gates enforced the deadline.
+-   **The choices** this record's third version listed were: (1) bump to
+    ≥ 7.18.2 and delete the three ignores; (2) renew the ignore with a new date
+    and a corrected reason; (3) do nothing and let the OSV gates go red. This
+    change takes (1), at exactly 7.18.2.
 
 ---
 
 ## Found outside the gates (not changed here)
 
-1. **A react-router 7.x fix exists**, per the section above. The decision is
-   open, and `docs/migrations/react-19-and-react-router-8.md` still describes
-   React 19 as the only fix.
+1. **react-router 7.18.3 to 7.18.5 are not taken.** They add client-side URL
+   validation on navigations and redirects and change route matching, view
+   transitions and turbo-stream decoding (react-router section). Moving to
+   7.18.5 is a separate change that should run the client's navigation, not
+   only its unit suite. (This item used to say a 7.x fix existed and the
+   decision was open; this change took 7.18.2.)
 2. **`ignoreUntil` lapses at the start of its date.** The image-size entries
    (`2026-11-30`) stop applying at 2026-11-30T00:00Z on CI. The cutoff is
    local midnight on the host that runs the scan, which is 00:00Z on CI, so a
@@ -508,9 +531,10 @@ then, and that the entry's reason is false.
    scanner reports it without the entry. Trivy 0.69.3 on this branch's
    `pnpm-lock.yaml` with no ignore file, with and without
    `--include-dev-deps`, reports only deepmerge, image-size ×2 and
-   react-router. `pnpm audit --json` over the whole tree (1,520 packages),
-   with GHSA-mh99 taken out of `ignoreGhsas`, reports only deepmerge (low) and
-   the three ignored highs. Both entries are left in place, and
+   react-router (measured before the react-router bump). `pnpm audit --json`
+   over the whole tree (1,520 packages), with GHSA-mh99 taken out of
+   `ignoreGhsas`, reports only deepmerge (low) and the three highs ignored at
+   the time. Both entries are left in place, and
    `.trivyignore`'s header now says so. While they stay, a regression below
    the override pins is hidden from Trivy and `pnpm audit`, and only the OSV
    gates would still catch it. That is the reason `osv-scanner.toml` gives for
@@ -537,7 +561,8 @@ then, and that the entry's reason is false.
       before they lapse at 2026-11-30T00:00Z. The update was not tried here,
       so whether the resolved tree then loses image-size is not verified.
     - Until then, every OSV scan prints the false "No fixed version exists"
-      `reason` for both entries, as it prints react-router's.
+      `reason` for both entries, as it printed react-router's until this
+      change.
 
 ## Corrected after review
 
@@ -593,13 +618,26 @@ fourth; this list is their correction:
    and item 8 (all 14 metro manifests checked) of "Found outside the gates"
    were also completed.
 
+## Changed after the third review
+
+A third review, of `1ba075a`, found no error in the record but one problem it
+had left in place: the branch passed the OSV gates only until
+2026-10-31T00:00Z, on an ignore whose reason was false, while a fix that needs
+no React 19 existed. This change takes that fix (react-router section): 7.18.2,
+the three ignores removed, and `docs/migrations/react-19-and-react-router-8.md`
+updated. The record's Result, Summary, react-router section, items 1, 7 and 8
+of "Found outside the gates" and Verification now describe the tree after the
+bump. The measurements made before it are kept and marked as such.
+
 ## Verification
 
 All runs are local, on this branch unless the row says otherwise, with Node
 22.22.0 and pnpm 9.15.4 (the pinned `packageManager`). Commands are as in
 `ci.yml` and `security.yml`. The suites ran one at a time.
 
-**Scans** (osv-scanner v2.3.3, `--lockfile=pnpm-lock.yaml`, 2026-10-30):
+**Scans before the react-router bump** (osv-scanner v2.3.3,
+`--lockfile=pnpm-lock.yaml`, 2026-10-30; the scans after it are in the last
+table):
 
 | Tree                                                         | Result                                                                                                 |
 | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
@@ -608,14 +646,15 @@ All runs are local, on this branch unless the row says otherwise, with Node
 | this branch                                                  | exit 0: "No issues found", 4 filtered, no unused-ignore line                                           |
 | this branch, react-router `ignoreUntil` set to today (probe) | exit 1: unused ignore GHSA-qwww-vcr4-c8h2; 1 row, react-router 7.18.0 (what CI sees from 10-31 00:00Z) |
 
-The exit 0 holds only until **2026-10-31T00:00Z** on a UTC host such as CI's
-runners (earlier on a host east of UTC). From then on, a scan of this branch
-gives the probe's result.
+Before the react-router bump, that exit 0 held only until
+**2026-10-31T00:00Z** on a UTC host such as CI's runners (earlier on a host
+east of UTC). From then on, a scan of that tree gives the probe's result.
 
-`pnpm audit --prod --audit-level high` (security.yml): exit 0, "4
-vulnerabilities found, 1 low | 3 high (3 ignored)". The low one is deepmerge
-(`--json`); the three ignored are image-size ×2 and react-router. The root
-`guard:audit-clean` script (`--audit-level moderate`) also exits 0.
+`pnpm audit --prod --audit-level high` (security.yml), before the
+react-router bump: exit 0, "4 vulnerabilities found, 1 low | 3 high (3
+ignored)". The low one is deepmerge (`--json`); the three ignored were
+image-size ×2 and react-router. The root `guard:audit-clean` script
+(`--audit-level moderate`) also exited 0. After the bump: see the last table.
 
 **Gates:**
 
@@ -677,7 +716,29 @@ change is to this document, the deepmerge entry's comment and `reason` in
 | prettier         | `prettier --check` (lint-staged runs `prettier --write` on commit)                                   | pass                                                                                          |
 | gitleaks         | `gitleaks dir` on the three files; `gitleaks git --log-opts="origin/develop..HEAD"`                  | no leaks                                                                                      |
 
-The OSV exit 0 again holds only until 2026-10-31T00:00Z in UTC.
+The OSV exit 0 again held only until 2026-10-31T00:00Z in UTC, before the
+react-router bump.
+
+**Re-runs after the react-router bump** (2026-10-30, 21:46 to 21:56 UTC, on
+the tree with react-router 7.18.2 and the three ignores removed):
+
+| Gate                | Command                                                                                                                    | Result                                                                                                                                                                  |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| lockfile            | `pnpm install --lockfile-only --ignore-scripts`, then `pnpm install --frozen-lockfile --ignore-scripts`                    | only react-router moves (react-router section); installed version 7.18.2; the lockfile's integrity is the registry's                                                    |
+| OSV scan            | osv-scanner v2.3.3, `--lockfile=pnpm-lock.yaml`, with `TZ=UTC`, `TZ=Etc/GMT-3` and `TZ=Pacific/Kiritimati` (already 10-31) | exit 0 in all three: "No issues found", 3 filtered (deepmerge, image-size ×2), no unused-ignore line                                                                    |
+| OSV query           | `/v1/query` for react-router 7.18.2                                                                                        | no advisories                                                                                                                                                           |
+| pnpm audit          | `pnpm audit --prod --audit-level high`; `pnpm run guard:audit-clean`                                                       | exit 0 both: "3 vulnerabilities found, 1 low \| 2 high (2 ignored)"; the two are image-size                                                                             |
+| Trivy               | v0.69.3, `security.yml`'s flags, on a copy of the tracked files, DB of 2026-10-30T19:07Z                                   | exit 1 with the same 6 findings as develop, none in `pnpm-lock.yaml` (0): authlib ×3 and twisted in `poetry.lock`, zip ×2 in the desktop `Cargo.lock`                   |
+| workspace builds    | `pnpm --filter @blackout/core run build`, `… @blackout/design run build`                                                   | pass                                                                                                                                                                    |
+| client types        | `pnpm --filter @blackout/client typecheck`                                                                                 | pass                                                                                                                                                                    |
+| client unit         | `pnpm --filter @blackout/client exec vitest run tests/unit src`                                                            | 516 files; 3504 passed, 3 skipped (develop `ff7d08b`: the same)                                                                                                         |
+| client smoke        | `pnpm --filter @blackout/client test:integration`                                                                          | 3 files; 13 / 13                                                                                                                                                        |
+| client build + size | `pnpm --filter @blackout/client build`; `du -sk --exclude='*.map' dist`                                                    | pass; 25,308 KB ≤ `MAX_BUNDLE_KB` 29,696; the vendor chunk sets `__reactRouterVersion` to `7.18.2` and no chunk contains `7.18.0`                                       |
+| client in Chromium  | scratch script: the built `dist` under `vite preview`, headless Chromium 1243, a fresh context per route                   | `/`, `/login`, `/register`, `/home/`, `/messages/`, `/communities`, an unknown path and `/embed`: each stays on its path, `#root` mounts, router 7.18.2, no page errors |
+| prettier            | `prettier --check` on the changed files                                                                                    | pass                                                                                                                                                                    |
+
+The API suites were not re-run: react-router is a client dependency only, and
+nothing under `packages/` resolves it.
 
 **Not verified:**
 
@@ -687,6 +748,9 @@ The OSV exit 0 again holds only until 2026-10-31T00:00Z in UTC.
 -   The metro 0.83.8 update was not tried, so it is not shown that the
     resolved tree then drops image-size. Only the 14 manifests were read.
 -   deepmerge-ts was checked only against OSV, not read.
+-   The react-router bump was checked by the tarball diff, the client's unit
+    and smoke suites, its build and the Chromium route check above, all while
+    signed out. No signed-in navigation was driven.
 -   The client e2e smoke (`CI=1 pnpm e2e`) was not run. Playwright 1.58.2
     expects Chromium build 1208, and this machine has 1243. The Chromium check
     above drove 1243 directly through `playwright-core` and looked only at the
