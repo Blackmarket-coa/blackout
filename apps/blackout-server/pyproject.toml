@@ -274,10 +274,14 @@ pysaml2 = { version = ">=4.5.0", optional = true }
 # signature bypass), GHSA-7vr2-2fgp-9w7p and GHSA-8m4g-j4wp-wgcg (High, HMAC key
 # confusion and empty HMAC keys) and the five lower advisories published with
 # them. Since 1.7.0 authlib validates id_token claims with joserfc, which rejects
-# a `sub` that is not a string; an integer `sub` from the userinfo endpoint is
-# still accepted (tests/handlers/test_oidc.py, test_map_userinfo_to_user, as
-# upstream changed it in #20415). Upstream's lock is on 1.9.1. Capped below
-# 1.10, which has not been released or checked. See
+# a `sub` that is not a string. synapse/handlers/oidc.py validates any id_token
+# the provider sends, even with user_profile_method: userinfo_endpoint, so an
+# integer `sub` in an id_token now fails the login. An integer `sub` from the
+# userinfo endpoint still maps when no id_token is sent (scopes without
+# `openid`, or a plain OAuth2 provider; tests/handlers/test_oidc.py,
+# test_map_userinfo_to_user, as upstream changed it in #20415). Upstream's lock
+# is on 1.9.1. Capped below 1.10, which has not been released or checked. See
+# "The claim-type checks" in
 # docs/security/dependency-advisories-server-desktop-2026-10-30.md (repository
 # root).
 authlib = { version = ">=1.9.1,<1.10", optional = true }

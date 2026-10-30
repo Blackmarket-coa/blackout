@@ -588,8 +588,14 @@ reconciliation with upstream; after this they match upstream's for authlib.
 - `tests/handlers/test_oidc.py` (`test_map_userinfo_to_user`): the integer
   `sub` case now arrives from the userinfo endpoint
   (`_user_profile_method = "userinfo_endpoint"`, `scope=""`, so the fake
-  provider issues no id_token), as in upstream. A provider that returns an
-  integer id from its userinfo endpoint (GitHub-style OAuth2) still maps.
+  provider issues no id_token), as in upstream. An integer id from the
+  userinfo endpoint (GitHub-style OAuth2) still maps when the provider sends
+  no id_token: scopes without `openid`, or a plain OAuth2 provider. With the
+  `openid` scope the provider's id_token carries the same `sub`, and
+  `oidc.py` validates any id_token it is sent, even with
+  `user_profile_method: userinfo_endpoint`, so that login is refused with
+  `invalid_token` (qualified after the third review; this bullet said the
+  integer id "still maps" without the condition).
 - Behaviour change (corrected 2026-10-30; the first version of this entry
   named the integer `sub` alone). Since 1.7.0 authlib validates an id_token's
   registered claims with joserfc, which type-checks each one present (RFC
