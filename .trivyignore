@@ -28,19 +28,23 @@ GHSA-w3rx-r6r6-pgpr
 CVE-2025-71330
 
 # Twisted 26.4.0 (apps/blackout-server/poetry.lock): three HIGH denial-of-service
-# advisories whose only fix is the 26.10.0rc1 pre-release (2026-10-22), which is
-# not locked. Each is in a protocol implementation Synapse never imports:
-# twisted.words.xish (XMPP XML stream), twisted.words.protocols.irc, and
-# twisted.conch.telnet; the manhole uses twisted.conch.manhole_ssh, not telnet.
-# Remove these three entries when Twisted 26.10.0 final is locked. CVE aliases
-# listed because Trivy matches by CVE. Record:
-# docs/security/synapse-dependencies-triage-2026-10-25.md. Review by 2026-12-31.
-GHSA-3476-c5c2-fr73
-CVE-2026-115775
-GHSA-53xc-49m8-p798
-CVE-2026-115776
-GHSA-cwm5-jh59-mwxr
-CVE-2026-115778
+# advisories, fixed in the 26.10.0rc1 pre-release (2026-10-22) and in 26.10.0
+# final (published 2026-10-30), neither of which is locked yet. Each is in a
+# protocol implementation Synapse never imports: twisted.words.xish (XMPP XML
+# stream), twisted.words.protocols.irc, and twisted.conch.telnet; the manhole
+# uses twisted.conch.manhole_ssh, not telnet. Remove these three entries, with
+# the HTTP/2 one below, when Twisted 26.10.0 is locked. Since 2026-10-30 they
+# expire on 2026-11-30 with it, so all four come back together; before that
+# they had only a prose review date (2026-12-31). CVE aliases listed because
+# Trivy matches by CVE. Records:
+# docs/security/synapse-dependencies-triage-2026-10-25.md and
+# docs/security/dependency-advisories-server-desktop-2026-10-30.md.
+GHSA-3476-c5c2-fr73 exp:2026-11-30
+CVE-2026-115775 exp:2026-11-30
+GHSA-53xc-49m8-p798 exp:2026-11-30
+CVE-2026-115776 exp:2026-11-30
+GHSA-cwm5-jh59-mwxr exp:2026-11-30
+CVE-2026-115778 exp:2026-11-30
 
 # Twisted 26.4.0: HTTP/2 "rapid reset" CPU exhaustion in twisted.web._http2
 # (published 2026-10-29, no CVE). Fixed in 26.10.0rc1; 26.10.0 final was
@@ -48,10 +52,14 @@ CVE-2026-115778
 # HTTP/2: Twisted switches to H2Connection only when TLS ALPN negotiates "h2"
 # and the h2 and priority packages import, and neither package is in
 # poetry.lock or the image (twisted.web.http.H2_ENABLED is False there).
-# Synapse's TLS context sets no ALPN, every shipped listener is tls: false, and
-# nginx reaches Synapse with proxy_pass http:// (Twisted has no cleartext
-# HTTP/2). Remove this entry,
-# with the three above, when Twisted 26.10.0 is locked; it expires on
-# 2026-11-30 so the gate fails again if that has not happened. Record:
+# Synapse's TLS context sets no ALPN, so a tls: true listener stays on
+# HTTP/1.1 too; the image's built-in config has one on 8448 unless
+# SYNAPSE_NO_TLS is set. infra/single-server-baseline, the stack that runs
+# this image, mounts its own config with tls: false on 8008, and nginx reaches
+# Synapse with proxy_pass http:// (Twisted has no cleartext HTTP/2). The
+# deploy/docker/blackout-backend stack runs the upstream image, not this
+# poetry.lock. Remove this entry, with the three above, when Twisted 26.10.0 is
+# locked; it expires on 2026-11-30 so the gate fails again if that has not
+# happened. Record:
 # docs/security/dependency-advisories-server-desktop-2026-10-30.md.
 GHSA-vpp8-g58w-m8mp exp:2026-11-30
