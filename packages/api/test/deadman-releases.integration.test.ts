@@ -49,6 +49,8 @@ const {
 const { computeDeadlines } = await import('../src/services/deadmanScheduler');
 const {
     DEADMAN_RELEASE_RETENTION_MS,
+    armRateState,
+    armReleaseSwitch,
     blankReleaseWraps,
     heldReleaseSwitchCount,
     heldReleasesNaming,
@@ -1699,13 +1701,15 @@ test('the 365-day removal lists each release’s copies by switch: a pass over r
     assert.equal(db.listDeadmanReleaseWraps(ids[1499]).length, 3, 'the index is intact');
 });
 
-test('a person’s copies and notices are listed through the index, not a scan: the per-recipient bounds and the room lookup cost that person’s rows', () => {
-    // The per-recipient bounds are read once per copy on every arm, the
-    // release read and account deletion list a person's copies, and the
-    // notifier looks a person's room up; a scan of every copy row for each
-    // (round 2 of the independent review of part 2) grew with everyone's
-    // switches. Here 1,500 other people's switches, and seven that name one
-    // person: three with content held, two cancelled, two the person owns.
+test('a person’s copies, notices and switches are listed through the index, not a scan: the per-recipient bounds, the owner’s bounds and the room lookup cost that person’s rows', () => {
+    // The per-recipient bounds are read twice per copy on every arm, the
+    // owner's two bounds twice per arm, the release read and account deletion
+    // list a person's copies, and the notifier looks a person's room up; a
+    // scan of every copy row for each (round 2 of the independent review of
+    // part 2), or of every switch row for the owner's bounds (round 3), grew
+    // with everyone's switches. Here 1,500 other people's switches, and seven
+    // that name one person: three with content held, two cancelled, two the
+    // person owns.
     const victim = randomUUID();
     const releasedAt = new Date(Date.now() - 1000).toISOString();
     const seed = (
@@ -1769,7 +1773,7 @@ test('a person’s copies and notices are listed through the index, not a scan: 
     }
 
     const iterators = ['values', 'entries', 'keys', 'forEach', Symbol.iterator] as const;
-    const maps = [db.deadmanReleaseWraps, db.deadmanReleaseNotices].map(
+    const maps = [db.deadmanReleaseWraps, db.deadmanReleaseNotices, db.deadmanSwitches].map(
         (map) => map as unknown as Record<string | symbol, unknown>
     );
     const saved = maps.flatMap((map) => iterators.map((name) => [map, name, map[name]] as const));
@@ -1784,6 +1788,9 @@ test('a person’s copies and notices are listed through the index, not a scan: 
     let copies: number;
     let notices: number;
     let room: string | undefined;
+    let owned: number;
+    let heldCount: number;
+    let rate: ReturnType<typeof armRateState>;
     let elapsedMs: number;
     try {
         const started = performance.now();
@@ -1791,6 +1798,10 @@ test('a person’s copies and notices are listed through the index, not a scan: 
         copies = db.listDeadmanReleaseWrapsForRecipient(victim).length;
         notices = db.listDeadmanReleaseNoticesForRecipient(victim).length;
         room = db.findDeadmanNoticeRoom(victim);
+        // The owner's two bounds, as each arm reads them twice.
+        owned = db.listDeadmanSwitchesForOwner(victim).length;
+        heldCount = heldReleaseSwitchCount(victim);
+        rate = armRateState(victim, new Date());
         elapsedMs = performance.now() - started;
     } finally {
         for (const [map, name] of saved) delete map[name];
@@ -1806,7 +1817,10 @@ test('a person’s copies and notices are listed through the index, not a scan: 
     assert.equal(copies, 7, 'every copy sealed to the person, blanked ones included');
     assert.equal(notices, 2);
     assert.equal(room, '!room-1:test.local', 'the newest notice’s room');
-    assert.equal(walks, 0, 'neither the copies map nor the notices map was iterated');
+    assert.equal(owned, 2, 'the switches the person owns');
+    assert.equal(heldCount, 2, 'both of them armed, content held');
+    assert.deepEqual(rate, { ok: true }, 'two arms in the window, under the rate');
+    assert.equal(walks, 0, 'none of the copies, notices or switches maps was iterated');
     assert.ok(
         elapsedMs < 200,
         `listing one person’s rows among 1,500 switches took ${elapsedMs} ms`
@@ -1836,4 +1850,76 @@ test('a recipient whose account was deleted before the trigger gets no notice ro
         pending: 1,
         failed: 0,
     });
+});
+
+test('a key change or a deletion during an arm’s verification is seen before the rows are written: the owner’s and every recipient’s identity is read again after the awaits', async () => {
+    // The identities were read before the signature awaits and not again
+    // (round 3 of part 2's review): a recipient who rotated during the
+    // verification got a held copy sealed to a replaced key, and one who
+    // deleted their account a held copy their deletion's blanking pass had
+    // already run past. `armReleaseSwitch` runs synchronously up to its first
+    // await, so a change made right after the call is made during the awaits.
+    const during = async (
+        owner: Awaited<ReturnType<typeof freshPerson>>,
+        recipient: Awaited<ReturnType<typeof freshPerson>>,
+        change: () => void
+    ) => {
+        const envelope = await build(owner.keySet, [recipient.keySet.identity]);
+        const arming = armReleaseSwitch({
+            ownerId: owner.user.id,
+            input: { checkInIntervalSeconds: 60, gracePeriodSeconds: 0, envelope },
+        });
+        change();
+        const outcome = await arming;
+        assert.equal(db.getDeadmanSwitch(envelope.releaseId), undefined, 'no switch written');
+        assert.equal(db.listDeadmanReleaseWraps(envelope.releaseId).length, 0, 'no copy written');
+        return outcome;
+    };
+
+    // The recipient publishes new keys during the verification.
+    const owner = await freshPerson();
+    const rotating = await freshPerson();
+    const newRecipientKeys = await protocol.createReleaseKeySet(rotating.user.id);
+    assert.deepEqual(await during(owner, rotating, () => publish(newRecipientKeys)), {
+        kind: 'recipient_identity_superseded',
+        recipientAccountId: rotating.user.id,
+    });
+
+    // The recipient's keys are erased during it, as their account deletion erases them.
+    const leaving = await freshPerson();
+    assert.deepEqual(
+        await during(owner, leaving, () => {
+            for (const identity of db.listReleaseIdentitiesForAccount(leaving.user.id)) {
+                db.eraseReleaseIdentity(identity.id);
+            }
+        }),
+        { kind: 'unknown_recipient', recipientAccountId: leaving.user.id }
+    );
+
+    // The owner publishes new keys during it: the header names the replaced ones.
+    const steady = await freshPerson();
+    const rotatingOwner = await freshPerson();
+    const newOwnerKeys = await protocol.createReleaseKeySet(rotatingOwner.user.id);
+    assert.deepEqual(await during(rotatingOwner, steady, () => publish(newOwnerKeys)), {
+        kind: 'owner_identity_changed',
+    });
+
+    // The owner's keys are erased during it.
+    const erasedOwner = await freshPerson();
+    assert.deepEqual(
+        await during(erasedOwner, steady, () => {
+            for (const identity of db.listReleaseIdentitiesForAccount(erasedOwner.user.id)) {
+                db.eraseReleaseIdentity(identity.id);
+            }
+        }),
+        { kind: 'owner_identity_missing' }
+    );
+
+    // With nothing changing during the awaits the same arm is accepted.
+    const envelope = await build(owner.keySet, [steady.keySet.identity]);
+    const armed = await armReleaseSwitch({
+        ownerId: owner.user.id,
+        input: { checkInIntervalSeconds: 60, gracePeriodSeconds: 0, envelope },
+    });
+    assert.equal(armed.kind, 'armed');
 });

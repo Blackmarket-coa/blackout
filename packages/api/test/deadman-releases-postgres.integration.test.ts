@@ -167,6 +167,14 @@ test('a release switch, its copies and its notices survive a restart; it has no 
         assert.equal(hydrated?.status, 'triggered');
         assert.equal(store2.getDeadmanSwitch(legacy.id)?.releaseFormat, 'legacy');
         assert.equal(store2.getDeadmanSwitch(legacy.id)?.roomId, '!room:test.local');
+        assert.deepEqual(
+            store2
+                .listDeadmanSwitchesForOwner(owner)
+                .map((s) => s.id)
+                .sort(),
+            [sw.id, legacy.id].sort(),
+            'both switches listed by owner after hydration'
+        );
 
         const bobsCopy = store2.getDeadmanReleaseWrap(sw.id, bob);
         assert.equal(bobsCopy?.sealedKey, 'bob-copy');
@@ -220,6 +228,11 @@ test('a release switch, its copies and its notices survive a restart; it has no 
             store2.listDeadmanReleaseNoticesForRecipient(bob).length,
             1,
             'notices listed by recipient after a refresh'
+        );
+        assert.equal(
+            store2.listDeadmanSwitchesForOwner(owner).length,
+            2,
+            'switches listed by owner after a refresh'
         );
         assert.equal(store2.getDeadmanReleaseWrap(sw.id, bob)?.sealedKey, 'bob-copy');
     } finally {

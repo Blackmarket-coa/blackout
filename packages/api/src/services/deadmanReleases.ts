@@ -356,10 +356,39 @@ export type OwnerIdentityRefusal =
  */
 const currentOwnerIdentity = (
     ownerId: string
-): { ok: true; identity: ReleaseIdentity } | { ok: false; refusal: OwnerIdentityRefusal } => {
+):
+    | { ok: true; identity: ReleaseIdentity; recordId: string }
+    | { ok: false; refusal: OwnerIdentityRefusal } => {
     const current = db.getCurrentReleaseIdentity(ownerId);
     if (!current) return { ok: false, refusal: { kind: 'owner_identity_missing' } };
-    return { ok: true, identity: recordToReleaseIdentity(current) };
+    return { ok: true, identity: recordToReleaseIdentity(current), recordId: current.id };
+};
+
+/**
+ * Whether the identities the signatures were checked against are still the
+ * current ones, read again after the awaits: the owner's current identity is
+ * the row the verifier was built from (one replaced meanwhile is
+ * `owner_identity_changed`, one erased by the owner's deletion
+ * `owner_identity_missing`), and each recipient's current identity is still
+ * the copy's (the recipient's own refusals). Without this a recipient who
+ * rotated during the verification got a held copy sealed to a replaced key,
+ * and one who deleted their account a held copy that their deletion's
+ * blanking pass had already run past (round 3 of part 2's review).
+ */
+const identitiesStillCurrent = (
+    ownerId: string,
+    ownerRecordId: string,
+    copies: ReleaseEnvelope['copies']
+): OwnerIdentityRefusal | RecipientRefusal | null => {
+    const owner = db.getCurrentReleaseIdentity(ownerId);
+    if (!owner) return { kind: 'owner_identity_missing' };
+    if (owner.id !== ownerRecordId) return { kind: 'owner_identity_changed' };
+    for (const copy of copies) {
+        if (copy.recipientAccountId === ownerId) continue;
+        const state = recipientIdentityState(copy.recipientAccountId, copy.recipientFingerprint);
+        if (state !== 'current') return refuseRecipient(state, copy.recipientAccountId);
+    }
+    return null;
 };
 
 /**
@@ -412,17 +441,20 @@ export type ArmReleaseOutcome =
  * (`recipient_limit`); every signature verifies under the owner's identity,
  * which also refuses a header naming another identity than the owner's
  * current one; and, after the signatures awaited, the release id is still
- * free and every bound still has room. The writes follow with no await
+ * free, every bound still has room, and the owner's and every recipient's
+ * current identity is still the one checked. The writes follow with no await
  * between, the copies first and the switch last, so a crash between them
  * leaves copies without a switch, which nothing lists or serves, rather than
  * a switch without copies, which would fire and release to nobody. The bounds
- * are checked twice on purpose: before the signatures, so a refused arm costs
- * no verification, and after them, because a burst of arms that all passed
- * the first checks against the same counts resumes here one at a time, and
- * nothing yields between the second check and the writes, so on one replica
- * exactly the bound passes (round 2 of part 2's review); across replicas the
- * store is eventually consistent and a bound can be exceeded within its
- * refresh window.
+ * and the identities are checked twice on purpose: before the signatures, so
+ * a refused arm costs no verification, and after them, because a burst of
+ * arms that all passed the first checks against the same counts resumes here
+ * one at a time, a recipient may have rotated or deleted during the awaits,
+ * and nothing yields between the second check and the writes, so on one
+ * replica exactly the bound passes and every copy written is sealed to a
+ * current key (rounds 2 and 3 of part 2's review); across replicas the store
+ * is eventually consistent and a bound can be exceeded within its refresh
+ * window.
  */
 export const armReleaseSwitch = async (input: {
     ownerId: string;
@@ -480,6 +512,8 @@ export const armReleaseSwitch = async (input: {
             return { kind: 'recipient_limit', recipientAccountId };
         }
     }
+    const identitiesAgain = identitiesStillCurrent(input.ownerId, owner.recordId, envelope.copies);
+    if (identitiesAgain) return identitiesAgain;
     const lastCheckInAt = now.toISOString();
     const { triggerAt, releaseAt } = computeDeadlines({
         lastCheckInAt,

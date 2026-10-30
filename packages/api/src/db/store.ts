@@ -308,6 +308,12 @@ export const releaseRowGroupers = <
     recipient: (row) => row.recipientAccountId,
 });
 
+/** The grouping of dead-man switches: by owner, which every arm reads twice (the held cap and the rate). */
+export type SwitchGroup = 'owner';
+export const switchGroupers = (): Record<SwitchGroup, (row: DeadmanSwitchRecord) => string> => ({
+    owner: (row) => row.ownerId,
+});
+
 /** A fresh empty map of the same kind as `map`, so an indexed map stays indexed. */
 const freshMapLike = <M extends Map<string, unknown>>(map: M): M =>
     (map instanceof GroupedMap ? map.fresh() : new Map()) as M;
@@ -498,7 +504,8 @@ class InMemoryDb {
     forumPosts = new Map<string, ForumPostRecord>();
     channels = new Map<string, ChannelRecord>();
     deadDrops = new Map<string, DeadDropRecord>();
-    deadmanSwitches = new Map<string, DeadmanSwitchRecord>();
+    /** Dead-man switches by id, grouped by owner (the arming bounds list an owner's switches twice per arm). */
+    deadmanSwitches = new GroupedMap<DeadmanSwitchRecord, SwitchGroup>(switchGroupers());
     /** Sealed copies of release switches' content keys, keyed `${switchId}:${recipientAccountId}`, grouped by switch and by recipient. */
     deadmanReleaseWraps = new GroupedMap<DeadmanReleaseWrapRecord, ReleaseRowGroup>(
         releaseRowGroupers<DeadmanReleaseWrapRecord>()
@@ -2601,8 +2608,9 @@ class InMemoryDb {
         return this.deadmanSwitches.get(id);
     }
 
+    /** Every switch one account owns, release and legacy: an indexed lookup, not a scan. */
     listDeadmanSwitchesForOwner(ownerId: string): DeadmanSwitchRecord[] {
-        return [...this.deadmanSwitches.values()].filter((entry) => entry.ownerId === ownerId);
+        return this.deadmanSwitches.inGroup('owner', ownerId);
     }
 
     listDeadmanSwitchesForRecipient(recipient: string): DeadmanSwitchRecord[] {
@@ -6019,7 +6027,11 @@ export class FileBackedDb extends InMemoryDb {
         this.forumPosts = new Map((parsed.forumPosts ?? []).map((row) => [row.id, row]));
         this.channels = new Map((parsed.channels ?? []).map((row) => [row.id, row]));
         this.deadDrops = new Map((parsed.deadDrops ?? []).map((row) => [row.id, row]));
-        this.deadmanSwitches = new Map((parsed.deadmanSwitches ?? []).map((row) => [row.id, row]));
+        // Grouped by owner as in memory, so the index is rebuilt with the rows.
+        this.deadmanSwitches = new GroupedMap<DeadmanSwitchRecord, SwitchGroup>(
+            switchGroupers(),
+            (parsed.deadmanSwitches ?? []).map((row) => [row.id, row])
+        );
         // Indexed by switch and by recipient as in memory, so both indexes are rebuilt with the rows.
         this.deadmanReleaseWraps = new GroupedMap<DeadmanReleaseWrapRecord, ReleaseRowGroup>(
             releaseRowGroupers<DeadmanReleaseWrapRecord>(),
