@@ -545,12 +545,13 @@ needs both; `other_key` means another key signed it.
     directory's answer is the server's word, whatever its shape:
     `releaseDirectoryFingerprints` computes every fingerprint from an
     identity it verified, and an answer that is not an entry, or that lists
-    more replaced identities than the API keeps for one account in all
-    (`RELEASE_IDENTITY_STORAGE_LIMIT`, 1,000; each costs a signature check
-    and two key checks, about 0.6 ms here), counts as nothing, refused before
-    any of them is verified, so the comparison is `stale` and the SDK refuses
-    as its contract says rather than passing on a `TypeError` (the fourth
-    reading).
+    more identities, the current one and the replaced together, than the API
+    keeps for one account in all (`RELEASE_IDENTITY_STORAGE_LIMIT`, 1,000;
+    each costs a signature check and two key checks, about 0.6 ms here),
+    counts as nothing, refused before any of them is verified, so the
+    comparison is `stale` and the SDK refuses as its contract says rather
+    than passing on a `TypeError` (the fourth reading; the fifth made the
+    bound count the current identity).
 -   **Where the third clause is fed from (independent review, P3-M3).** The
     reads that decide what is sealed are the SDK's own, and they report what
     they saw: a refusal (`ReleaseActionError`, `recipient_comparison` or
@@ -822,8 +823,8 @@ of the release-identities record and the questions below.
     required, `null` being the sealing use) and
     `releaseDirectoryFingerprints`, which computes every fingerprint from an
     identity it verified for that account, and counts an answer that is not
-    an entry, or that lists more replaced identities than the API keeps, as
-    nothing (§9).
+    an entry, or that lists more identities, current and replaced together,
+    than the API keeps for one account, as nothing (§9).
 -   **The wire contracts**, `deadman/releases.ts`: the arming and re-sealing
     bodies, the release read, the owner's view of a release, notice counts,
     the limits, the notice's fixed body, room name and pointer
@@ -835,21 +836,24 @@ of the release-identities record and the questions below.
     `createDeadmanReleaseActions(client)` with `armReleaseSwitch`,
     `resealRecipient`, `listReleases` and `getLimits`. Arming and re-sealing
     read the directory fresh for the owner and every recipient, and refuse
-    (`ReleaseActionError`, naming the account and the fingerprint the
-    directory served, P3-M3) **before sending the envelope or the copy**
-    unless the owner's key is the directory's current one and every
+    (`ReleaseActionError`; `recipient_comparison` and `owner_key_not_current`
+    name the account and the fingerprint the directory served, P3-M3;
+    `recipient_identity` names the account alone, and
+    `owner_key_not_published` neither) **before sending the envelope or the
+    copy** unless the owner's key is the directory's current one and every
     recipient's comparison is `current`; the directory reads are sent first,
     and tell the server whom the owner is about to name (C14). They send
     only the envelope, the timer and the label, or one copy. Arming returns
     the release id and whom the envelope was sealed to (`sealedTo`, P3-H1);
     re-sealing refuses an owner view whose switch id or header is not the
-    switch's (`release_mismatch`, P3-H1); the release list refuses an entry
-    that is not an object with a header carrying both ids as strings of
-    their form, and one whose unsigned ids are not its header's
-    (`server_mismatch`, P3-M2); a directory answer that is not an entry gets
-    the refusal the contract names (`recipient_comparison`,
-    `owner_key_not_published` or `owner_key_not_current`), not a `TypeError`
-    (the fourth reading). The routes they call are the second branch's.
+    switch's, a header that is not an object included (`release_mismatch`,
+    P3-H1); the release list refuses an entry that is not an object with a
+    header carrying both ids as strings of their form, and one whose unsigned
+    ids are not its header's (`server_mismatch`, P3-M2); a directory answer
+    that is not an entry gets the refusal the contract names
+    (`recipient_comparison`, `owner_key_not_published` or
+    `owner_key_not_current`), not a `TypeError` (the fourth reading). The
+    routes they call are the second branch's.
 -   **E17, found while building.** WebCrypto's `getRandomValues` fills at most
     65,536 bytes per call and throws `QuotaExceededError` past that, and
     `randomBytes` asked for its whole length in one call. `pad()` builds
@@ -877,11 +881,13 @@ of the release-identities record and the questions below.
     copy still opens (E14); the comparison rule, the signer included and
     the sealing use as an explicit `null`; each smaller check on its own,
     the base64 length pre-check, the directory answer's shape and the cap
-    on replaced identities included);
-    `releaseEnvelopeActions.test.ts`, 16 (the SDK against a fake API: what
+    on the identities an entry lists included);
+    `releaseEnvelopeActions.test.ts`, 17 (the SDK against a fake API: what
     arming sends and returns, every refusal before it sends and what each
     reports, a directory answer that is not an entry, the swapped owner
-    view, and the release list's refusals, ids of the wrong form included);
+    view and one whose header is not an object or whose ids are not the
+    switch's, and the release list's refusals, ids of the wrong form
+    included);
     `deadmanReleaseContracts.test.ts`, 5; `deaddropPqHybrid.test.ts`, 36 (6
     new, for the shared function, two of which also assert the ML-KEM
     secret cleared when the seal refuses); `deaddropCrypto.test.ts`, 11 (2
@@ -893,10 +899,13 @@ of the release-identities record and the questions below.
     restores the file after each run); each time at least one test failed.
     The review's fixes added 12 more, a second reading of those fixes two
     more, a third reading two more and a fourth reading six more, each
-    removed once the same way (the table in "Independent review,
+    removed once the same way, and a fifth reading ran two more: the exact
+    bound it gave the cap, and a guard inside P3-H1's check that none of the
+    runs before had taken out alone (the table in "Independent review,
     2026-10-29").
     Two survived at first, the verifier's and the decryptor's own parsing,
-    which only a direct call reaches, and each has a direct test now. Three
+    which only a direct call reaches, and each has a direct test now; the
+    fifth reading's guard survived the same way until it added one. Three
     checks were removed instead, because another check always made them
     and no test could tell them apart: the decryptor's padded-length check
     (the header's parse makes it), the unwrap's 32-byte check on K (the
@@ -1022,9 +1031,10 @@ to them.
     a server cannot forge a header for A that carries B's content.
     `resealRecipient` passes `switchId` through and refuses
     (`ReleaseActionError`, `release_mismatch`) when the owner view's
-    `switchId`, or its header's `releaseId`, is not `switchId`, before the
-    directory is read, anything is signed or the copy is sent (the owner's
-    view is read first: that one `GET` is what is being checked).
+    `switchId`, or its header's `releaseId`, is not `switchId`, or its
+    header is not an object at all, before the directory is read, anything
+    is signed or the copy is sent (the owner's view is read first: that one
+    `GET` is what is being checked).
     `armReleaseSwitch` returns, next to the armed event, the release id and
     `sealedTo` (each copy's account id and fingerprint, the owner's own
     first) from the envelope it built, so a client can keep its own record
@@ -1032,19 +1042,27 @@ to them.
     owner's view, which is the server's word. §8 and §10 say so; the comment
     at `resealReleaseCopy` says what is bound and what is not.
 -   **Tests.** `releaseEnvelope.test.ts`: "re-sealing is bound to the switch:
-    another release's header and own copy are refused before anything is
-    opened (P3-H1)": two envelopes from one owner, A to Bob and B to Carol;
-    B's header and own copy with A's id are refused with WebCrypto's `verify`
-    and `decrypt` spied and never called; with B's own id the same inputs
-    re-seal B and Bob reads B. `releaseEnvelopeActions.test.ts`: "refuses,
-    before reading the directory or signing, an owner view that is another
-    release's (P3-H1)": a fake API answering `GET /switches/A` with B's
-    release, as the review's probe did, gives `ReleaseActionError`
-    `release_mismatch`, no copy is sent (no `POST`) and only the switch was
-    read (two `GET`s, one per call; the test's `sent()` counts `POST`s);
-    another switch's id with A's own release is refused; the honest view of
-    A re-seals A. The arming test checks `sealedTo` and that the release id
-    returned is the envelope's, not the one the server answered with.
+    another release's header and own copy are refused before any signature
+    is checked or anything is opened, and the same inputs under the right id
+    are verified, opened and re-sealed (P3-H1)": two envelopes from one
+    owner, A to Bob and B to Carol; B's header and own copy with A's id are
+    refused with WebCrypto's `verify` and `decrypt` spied and never called;
+    with B's own id, under the same spies, the same inputs re-seal B, both
+    spies are called (so they are known to bind; the fifth reading) and Bob
+    reads B. `releaseEnvelopeActions.test.ts`: "refuses, before reading the
+    directory or signing, an owner view that is another release's (P3-H1)":
+    a fake API answering `GET /switches/A` with B's release, as the review's
+    probe did, gives `ReleaseActionError` `release_mismatch`, no copy is
+    sent (no `POST`) and only the switch was read (two `GET`s, one per call;
+    the test's `sent()` counts `POST`s); another switch's id with A's own
+    release is refused; the honest view of A re-seals A. "refuses, with
+    release_mismatch and not a TypeError, an owner view whose header is not
+    an object, or whose ids are not the switch's (the fifth reading)": a
+    header that is `null` or a string, a header whose release id is a number
+    and a view with no switch id each give `ReleaseActionError`
+    `release_mismatch`, no `POST` and one `GET`; the honest view re-seals.
+    The arming test checks `sealedTo` and that the release id returned is
+    the envelope's, not the one the server answered with.
 -   **Still open.** The device-side record and the refusal to re-seal a
     release to an account not on it are PR 4's (below); the fourth reading
     replayed the two moves the binding does not close, and "Still open"
@@ -1285,38 +1303,41 @@ newer key once and then put the compared one back found
 ### Every new check removed once
 
 Each row: the check taken out, the one test file run against the mutated
-source, and what failed (the files now pass 108, 16, 5 and 36; the rows
-from the first three readings give each file's count at their time: 105,
-14 or 15, 36). All twenty-two were caught (twelve from the review's fixes,
-two from the second reading's, two from the third's, six from the
-fourth's); the sources were restored and checked unchanged after the run
-(the diff for the first two readings, a byte-for-byte comparison for the
-third and fourth).
+source, and what failed (the files now pass 108, 17, 5 and 36; the rows
+from the first four readings give each file's count at their time: 105 or
+108, 14 to 16, 36). All twenty-four were caught (twelve from the review's
+fixes, two from the second reading's, two from the third's, six from the
+fourth's, two from the fifth's, one of them a guard inside P3-H1's check
+that the runs before had never taken out alone); the sources were restored
+and checked unchanged after the run (the diff for the first two readings, a
+byte-for-byte comparison since).
 
-| Check removed                                                                                     | Test file                         | Result                                                |
-| ------------------------------------------------------------------------------------------------- | --------------------------------- | ----------------------------------------------------- |
-| P3-H1, `resealReleaseCopy`: the `release_mismatch` check                                          | `releaseEnvelope.test.ts`         | 1 failed, 104 passed: the switch binding              |
-| P3-H1, `resealRecipient`: the switch id and header check                                          | `releaseEnvelopeActions.test.ts`  | 1 failed, 13 passed: the swapped view                 |
-| P3-H1, `armReleaseSwitch`: `sealedTo` returned empty                                              | `releaseEnvelopeActions.test.ts`  | 1 failed, 13 passed: what arming sends                |
-| P3-M1, `releaseComparisonState`: the `other_key` branch                                           | `releaseEnvelope.test.ts`         | 1 failed, 104 passed: the signer case                 |
-| P3-M2, `openReleaseCopy`: the header's ids in the result                                          | `releaseEnvelope.test.ts`         | 2 failed, 103 passed: Bob opens; P3-H1                |
-| P3-M2, `listReleases`: the comparison with the header                                             | `releaseEnvelopeActions.test.ts`  | 1 failed, 13 passed: the release list                 |
-| P3-M3, the recipient refusal's `servedFingerprint`                                                | `releaseEnvelopeActions.test.ts`  | 2 failed, 12 passed: never compared; stale            |
-| P3-M3, the owner refusal's `servedFingerprint`                                                    | `releaseEnvelopeActions.test.ts`  | 1 failed, 13 passed: the owner's key                  |
-| P3-L2, `resealReleaseCopy`: the content decryption                                                | `releaseEnvelope.test.ts`         | 1 failed, 104 passed: content K does not open         |
-| P3-L3, the seal's clearing of the ML-KEM secret (no test was asked)                               | `deaddropPqHybrid.test.ts`        | 1 failed, 35 passed: the rebuild's note               |
-| P3-L4, `parseDeadmanNoticePointer`: the pattern (old length check back)                           | `deadmanReleaseContracts.test.ts` | 1 failed, 4 passed: the id's form                     |
-| P3-L5, `decodeCanonicalBase64`: the length check before decoding                                  | `releaseEnvelope.test.ts`         | 1 failed, 104 passed: the 10 MB copy                  |
-| Second reading, `listReleases`: the entry's shape (round 1's `!==` alone put back)                | `releaseEnvelopeActions.test.ts`  | 1 failed, 13 passed: `null` came back as a release    |
-| Second reading, `listReleases`: the string requirement on the header's ids alone                  | `releaseEnvelopeActions.test.ts`  | 1 failed, 13 passed: a header with no ids came back   |
-| Third reading, `listReleases`: the release id's form (`RELEASE_ID_PATTERN`)                       | `releaseEnvelopeActions.test.ts`  | 1 failed, 14 passed: `../x` came back as a release    |
-| Third reading, `listReleases`: the owner's account id's form                                      | `releaseEnvelopeActions.test.ts`  | 1 failed, 14 passed: `<script>` came back as owner    |
-| Fourth reading, `releaseComparisonState`: `undefined` taken as the sealing marker too (`!= null`) | `releaseEnvelope.test.ts`         | 1 failed, 107 passed: a signer left out was `current` |
-| Fourth reading, `releaseDirectoryFingerprints`: the entry-is-an-object check                      | `releaseEnvelope.test.ts`         | 1 failed, 107 passed: `null` threw a `TypeError`      |
-| Fourth reading, `releaseDirectoryFingerprints`: the `superseded`-is-an-array check                | `releaseEnvelope.test.ts`         | 1 failed, 107 passed: `undefined` threw a `TypeError` |
-| Fourth reading, `checkOwnerKey`: the owner entry's shape                                          | `releaseEnvelopeActions.test.ts`  | 1 failed, 15 passed: `null` threw a `TypeError`       |
-| Fourth reading, `releaseDirectoryFingerprints`: the cap on replaced identities                    | `releaseEnvelope.test.ts`         | 1 failed, 107 passed: 1,001 identities were verified  |
-| Fourth reading, `hybridSealWith`: the secrets cleared only once a key was derived (the old form)  | `deaddropPqHybrid.test.ts`        | 2 failed, 34 passed: the zero refusal; the bad nonce  |
+| Check removed                                                                                     | Test file                         | Result                                                         |
+| ------------------------------------------------------------------------------------------------- | --------------------------------- | -------------------------------------------------------------- |
+| P3-H1, `resealReleaseCopy`: the `release_mismatch` check                                          | `releaseEnvelope.test.ts`         | 1 failed, 104 passed: the switch binding                       |
+| P3-H1, `resealRecipient`: the switch id and header check                                          | `releaseEnvelopeActions.test.ts`  | 1 failed, 13 passed: the swapped view                          |
+| P3-H1, `armReleaseSwitch`: `sealedTo` returned empty                                              | `releaseEnvelopeActions.test.ts`  | 1 failed, 13 passed: what arming sends                         |
+| P3-M1, `releaseComparisonState`: the `other_key` branch                                           | `releaseEnvelope.test.ts`         | 1 failed, 104 passed: the signer case                          |
+| P3-M2, `openReleaseCopy`: the header's ids in the result                                          | `releaseEnvelope.test.ts`         | 2 failed, 103 passed: Bob opens; P3-H1                         |
+| P3-M2, `listReleases`: the comparison with the header                                             | `releaseEnvelopeActions.test.ts`  | 1 failed, 13 passed: the release list                          |
+| P3-M3, the recipient refusal's `servedFingerprint`                                                | `releaseEnvelopeActions.test.ts`  | 2 failed, 12 passed: never compared; stale                     |
+| P3-M3, the owner refusal's `servedFingerprint`                                                    | `releaseEnvelopeActions.test.ts`  | 1 failed, 13 passed: the owner's key                           |
+| P3-L2, `resealReleaseCopy`: the content decryption                                                | `releaseEnvelope.test.ts`         | 1 failed, 104 passed: content K does not open                  |
+| P3-L3, the seal's clearing of the ML-KEM secret (no test was asked)                               | `deaddropPqHybrid.test.ts`        | 1 failed, 35 passed: the rebuild's note                        |
+| P3-L4, `parseDeadmanNoticePointer`: the pattern (old length check back)                           | `deadmanReleaseContracts.test.ts` | 1 failed, 4 passed: the id's form                              |
+| P3-L5, `decodeCanonicalBase64`: the length check before decoding                                  | `releaseEnvelope.test.ts`         | 1 failed, 104 passed: the 10 MB copy                           |
+| Second reading, `listReleases`: the entry's shape (round 1's `!==` alone put back)                | `releaseEnvelopeActions.test.ts`  | 1 failed, 13 passed: `null` came back as a release             |
+| Second reading, `listReleases`: the string requirement on the header's ids alone                  | `releaseEnvelopeActions.test.ts`  | 1 failed, 13 passed: a header with no ids came back            |
+| Third reading, `listReleases`: the release id's form (`RELEASE_ID_PATTERN`)                       | `releaseEnvelopeActions.test.ts`  | 1 failed, 14 passed: `../x` came back as a release             |
+| Third reading, `listReleases`: the owner's account id's form                                      | `releaseEnvelopeActions.test.ts`  | 1 failed, 14 passed: `<script>` came back as owner             |
+| Fourth reading, `releaseComparisonState`: `undefined` taken as the sealing marker too (`!= null`) | `releaseEnvelope.test.ts`         | 1 failed, 107 passed: a signer left out was `current`          |
+| Fourth reading, `releaseDirectoryFingerprints`: the entry-is-an-object check                      | `releaseEnvelope.test.ts`         | 1 failed, 107 passed: `null` threw a `TypeError`               |
+| Fourth reading, `releaseDirectoryFingerprints`: the `superseded`-is-an-array check                | `releaseEnvelope.test.ts`         | 1 failed, 107 passed: `undefined` threw a `TypeError`          |
+| Fourth reading, `checkOwnerKey`: the owner entry's shape                                          | `releaseEnvelopeActions.test.ts`  | 1 failed, 15 passed: `null` threw a `TypeError`                |
+| Fourth reading, `releaseDirectoryFingerprints`: the cap on replaced identities                    | `releaseEnvelope.test.ts`         | 1 failed, 107 passed: 1,001 identities were verified           |
+| Fourth reading, `hybridSealWith`: the secrets cleared only once a key was derived (the old form)  | `deaddropPqHybrid.test.ts`        | 2 failed, 34 passed: the zero refusal; the bad nonce           |
+| Fifth reading, `resealRecipient`: the header-is-an-object guard alone, the rest of the check kept | `releaseEnvelopeActions.test.ts`  | 1 failed, 16 passed: a `null` header threw a `TypeError`       |
+| Fifth reading, `releaseDirectoryFingerprints`: the current identity not counted toward the cap    | `releaseEnvelope.test.ts`         | 1 failed, 107 passed: 1,000 beside a current one were verified |
 
 ### Second reading of the fixes, 2026-10-29
 
@@ -1390,19 +1411,23 @@ table above.
     anything by an entry's id before opening it. Both ids must now match
     their forms (`RELEASE_ID_PATTERN`, `RELEASE_ACCOUNT_ID_PATTERN`); the
     P3-M2 test has a case for each, and each pattern was removed once.
-2.  **`releaseComparisonState` skips the signer rule when
-    `signerFingerprint` is `undefined`.** That is the sealing use by design,
-    where no release is in hand; but the same optional field is what the
-    `listReleases` doc tells PR 4 to pass when judging a release, and a
-    caller that forwarded a failed open's (absent) `ownerFingerprint` would
-    get `current` for a release signed by another key. In typed code the
-    `ok: false` branch of `ReleaseOpenResult` has no `ownerFingerprint`, so
-    that takes a cast, and a failed open has no text to show, so the
+2.  **`releaseComparisonState` skipped the signer rule when
+    `signerFingerprint` was `undefined`.** That was the sealing use by
+    design, where no release is in hand; but the same optional field was
+    what the `listReleases` doc told PR 4 to pass when judging a release,
+    and a caller that forwarded a failed open's (absent) `ownerFingerprint`
+    would get `current` for a release signed by another key. In typed code
+    the `ok: false` branch of `ReleaseOpenResult` has no `ownerFingerprint`,
+    so that takes a cast, and a failed open has no text to show, so the
     exposure is a wrong status line on a caller bug. Kept as one function,
-    as P3-M1 settled; the field's doc in `comparison.ts`, the `listReleases`
-    doc and P3-M1 above now say the signer is the `ok` result's
-    `ownerFingerprint`, a string, that a failed open's state is never asked,
-    and that leaving the field out, or `undefined`, is the sealing use.
+    as P3-M1 settled. This reading left the field optional, and had the
+    field's doc in `comparison.ts`, the `listReleases` doc and P3-M1 above
+    say that the signer is the `ok` result's `ownerFingerprint`, a string,
+    that a failed open's state is never asked, and that leaving the field
+    out, or `undefined`, was the sealing use. The fourth reading's item 1,
+    below, reversed that last part: the field is required, `null` alone is
+    the sealing use, and `undefined` is `other_key`; the three places say
+    so now.
 3.  **The design's sentence was left untrue with no pointer.** The review's
     claim 2 named this record's §10 and the design's §3 table cell and §4(a)
     verdict, "only the named recipients can read it"; §10 was qualified,
@@ -1470,7 +1495,10 @@ for PR 4, as below; the six new checks are in the table above.
     `string | null`; `null`, written out, is the sealing use (the SDK passes
     it), and anything else that is not the compared fingerprint, `undefined`
     through a cast included, is `other_key`. The one behaviour change is for
-    `undefined`, which was `current` and is `other_key`. Test:
+    `undefined`, which skipped the signer rule and fell through to the
+    remaining ones, so the answer was whatever they gave (`current`, or
+    `stale` when the comparison no longer counted), and is `other_key` now
+    once there is a comparison; with none it is `none`, as before. Test:
     `releaseEnvelope.test.ts`, "takes the sealing use only as an explicit
     null". §9, P3-M1 above, `comparison.ts` and the `listReleases` doc say
     so.
@@ -1506,7 +1534,10 @@ for PR 4, as below; the six new checks are in the table above.
     `releaseEnvelope.test.ts`, "refuses, before verifying any of them, an
     entry listing more replaced identities than the API keeps":
     `verifyReleaseIdentity` spied, 1,001 replaced, never called; two
-    replaced, called three times, so the spy is known to bind.
+    replaced, called three times, so the spy is known to bind. The bound as
+    this reading set it, more than 1,000 as replaced, was one looser than
+    the invariant it cites, since an honest entry's current identity is one
+    of the 1,000; the fifth reading's item 3, below, counts it.
 4.  **P3-L3's "cleared by the seal" held only on the derive-and-import
     path** (reported twice: as a fix-quality gap and as the unqualified
     claim on `HybridSealRandomness.encapsulation`). `refuseZero` threw
@@ -1571,6 +1602,81 @@ for PR 4, as below; the six new checks are in the table above.
     X25519 leg is the verified identity's, its ML-KEM leg whatever
     encapsulation the caller passed, as its own doc says; true of
     `sealReleaseCopy`, half-true of the vectors-only form. §14 says so.
+
+### Fifth reading of the fixes, 2026-10-30
+
+The fourth reading's fixes were verified in turn, independently: each check
+they added was taken out once more, the review's attacks and the readings'
+were replayed against the fixed SDK and protocol functions, and this record
+was read against the code a fifth time. Seven reports came back. Six are
+about this part's code, tests and this record, none a defect in what is
+sealed or sent, and each is fixed as below; the two new mutation rows are in
+the table above. The seventh is the API half's: the wire type's doc on
+`switchId` in `events.ts` still reads "server-issued", while the P3-H1
+binding compares the owner view's `switchId` with its header's `releaseId`,
+so a release switch's id must be the release id the device chose (decision
+1), and the API must store it as such; that is for the merge of the two
+halves to check, and is not changed here.
+
+1.  **One guard in `resealRecipient` was not pinned.** The P3-H1 check
+    refuses an owner view whose `switchId` or header's `releaseId` is not
+    the switch's and, between the two, a header that is not an object at
+    all; with that guard alone taken out the actions file stayed green (16
+    of 16), because every test's header was an object, and a `null` header
+    would have thrown a `TypeError` from reading its `releaseId` in place
+    of the SDK's own `ReleaseActionError`, the form §14 promises for a
+    malformed directory answer. HEAD refused each shape correctly (the
+    verifier's replay: a `null` header, a string header, a numeric
+    `releaseId`, no `switchId`, all `release_mismatch` with no `POST`); the
+    gap was a test's. Test:
+    `releaseEnvelopeActions.test.ts`, "refuses, with release_mismatch and
+    not a TypeError, an owner view whose header is not an object, or whose
+    ids are not the switch's": those four views, each `ReleaseActionError`
+    `release_mismatch`, no `POST`, one `GET`; the honest view re-seals. With
+    the guard taken out the `null` header fails it with "expected TypeError:
+    Cannot read properties of null … to be an instance of
+    ReleaseActionError" (1 failed, 16 passed).
+2.  **The P3-H1 protocol test's spies were not shown to bind.** It asserted
+    WebCrypto's `verify` and `decrypt` were never called on the refusal and
+    restored both spies before the honest re-seal ran, so nothing in the
+    test showed they would have been called on the success path (a spy on
+    the wrong object passes as well). The mutation was killed by the
+    `release_mismatch` assertion alone; only the "before anything is
+    opened" half was unproven. The honest re-seal now runs under the same
+    spies and the test asserts both were called, the way the P3-L5 test
+    does for `fromBase64`; its name says what it shows.
+3.  **The cap on listed identities was one looser than the invariant it
+    cites.** `RELEASE_IDENTITY_STORAGE_LIMIT` bounds an account's
+    identities in all, current and replaced, so an honest entry has at most
+    999 replaced beside a current one; the fourth reading refused only more
+    than 1,000 as replaced, so 1,000 replaced beside a current one, 1,001
+    in all, was verified. No honest entry changes hands and the cost bound
+    moves by one identity; a precision fix. `releaseDirectoryFingerprints`
+    now counts the current identity, when the entry has one, toward the
+    limit and refuses when the two together exceed it. The test's numbers
+    are the boundary: 1,000 replaced beside a current one, refused, nothing
+    verified; 999 beside one, verified, 1,000 checks; 1,000 with no current
+    one, verified. With the fourth reading's form put back the first case
+    is verified (1 failed, 107 passed); with the cap removed, the same. §9,
+    §14 and `comparison.ts` say "current and replaced together".
+4.  **Three sentences of this record were out of date or over-general.**
+    The third reading's item 2 said, in the present tense, that leaving the
+    signer out was the sealing use, which the fourth reading reversed; it
+    now says what that reading did and points at the fourth's item 1. The
+    fourth reading's item 1 said `undefined` "was `current`"; before the
+    fix it skipped the signer rule and fell through to the remaining ones,
+    so a stale comparison gave `stale`, and the item says so. §14's SDK
+    bullet said every refusal names the account and the fingerprint the
+    directory served; only `recipient_comparison` and
+    `owner_key_not_current` carry the fingerprint, `recipient_identity`
+    names the account alone, and `owner_key_not_published`,
+    `release_mismatch`, `not_a_release` and `server_mismatch` name neither,
+    as `ReleaseActionError`'s own doc says; the bullet is exact now.
+5.  **The rest of the section, re-read.** The counts in §14 and the table
+    (twenty-four checks removed; 17 tests in the actions file) and the
+    sentences on the cap and on P3-H1's tests were brought to what the code
+    and the tests do; the four readings were not found to contradict one
+    another elsewhere.
 
 ### Still open
 
