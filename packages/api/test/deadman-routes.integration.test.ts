@@ -76,7 +76,7 @@ const listAs = async (headers: Record<string, string>, scope: 'owner' | 'recipie
     return ((await res.json()) as Listed).switches;
 };
 
-test('arming is refused with 409 arming_unavailable before the body is read, and writes nothing', async () => {
+test('arming is refused with 409 arming_unavailable before the body is parsed, and writes nothing', async () => {
     const owner = `owner-${randomUUID()}`;
     const before = db.deadmanSwitches.size;
 

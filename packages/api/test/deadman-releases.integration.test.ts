@@ -47,8 +47,14 @@ const {
     sweepOverdueDeadmanSwitches,
 } = await import('../src/modules/deadman');
 const { computeDeadlines } = await import('../src/services/deadmanScheduler');
-const { DEADMAN_RELEASE_RETENTION_MS, blankReleaseWraps, noticeCounts, removeExpiredReleases } =
-    await import('../src/services/deadmanReleases');
+const {
+    DEADMAN_RELEASE_RETENTION_MS,
+    blankReleaseWraps,
+    heldReleaseSwitchCount,
+    heldReleasesNaming,
+    noticeCounts,
+    removeExpiredReleases,
+} = await import('../src/services/deadmanReleases');
 const lifecycle = await import('../src/services/accountLifecycle');
 
 // The API configures no KEM provider; only this test's own sealing needs one.
@@ -206,7 +212,7 @@ const bob = seedUser(BOB.identity.accountId, 'bob-vector');
 publish(vectorKeySet(ALICE));
 publish(vectorKeySet(BOB));
 
-test('with the flag off, arming is refused with 409 before the body is read and nothing is written; reads still answer', async () => {
+test('with the flag off, arming is refused with 409 before the body is parsed and nothing is written; reads still answer', async () => {
     const envelope = await build(vectorKeySet(ALICE), [BOB.identity]);
     delete process.env.BLACKOUT_DEADMAN_RELEASES;
     try {
@@ -415,7 +421,7 @@ test('the body is checked for its shape before anything else: the legacy body, a
     }
     assert.equal(db.getDeadmanSwitch(envelope.releaseId), undefined);
 
-    // Over the route's body cap: refused before the body is read.
+    // Over the route's body cap: refused by the cap's middleware, which runs first.
     const huge = await arm(
         alice,
         armBody(envelope, { label: 'x'.repeat(RELEASE_ARM_MAX_BODY_BYTES) })
@@ -759,6 +765,117 @@ test('at most 5 held releases from one owner may name one person, and 50 from ev
             .status,
         201
     );
+});
+
+/** Arm every envelope at once, as a hostile client would; the answers tallied by status and code. */
+const burst = async (
+    arms: Array<{ owner: User; envelope: Awaited<ReturnType<typeof build>> }>
+): Promise<{ tally: Record<string, number>; refused: ErrorBody[] }> => {
+    const responses = await Promise.all(
+        arms.map(async ({ owner, envelope }) => ({
+            envelope,
+            res: await arm(owner, armBody(envelope)),
+        }))
+    );
+    const tally: Record<string, number> = {};
+    const refused: ErrorBody[] = [];
+    for (const { envelope, res } of responses) {
+        let key = '201';
+        if (res.status !== 201) {
+            const body = (await res.json()) as ErrorBody;
+            refused.push(body);
+            key = `${res.status} ${body.code}`;
+            assert.equal(db.getDeadmanSwitch(envelope.releaseId), undefined, 'nothing written');
+            assert.equal(db.listDeadmanReleaseWraps(envelope.releaseId).length, 0);
+        }
+        tally[key] = (tally[key] ?? 0) + 1;
+    }
+    return { tally, refused };
+};
+
+test('arms sent at once at the edge of each bound: exactly the bound passes and the rest are refused with its code', async () => {
+    // Every bound is read before the signatures are verified and again right
+    // before the rows are written, with nothing yielding between the second
+    // read and the writes. Without the second read, a burst of arms that all
+    // passed the first read against the same counts all write (round 2 of the
+    // independent review of part 2: 30 at once from one owner armed 30 against
+    // a rate of 10 and a cap of 20; 100 at once naming one person armed 100
+    // against a bound of 5). The sequential tests above cannot see that.
+
+    // The rate: 30 at once from a fresh owner, six people so that no
+    // per-recipient bound is reached first.
+    const owner = await freshPerson();
+    const people: Awaited<ReturnType<typeof freshPerson>>[] = [];
+    for (let i = 0; i < 6; i += 1) people.push(await freshPerson());
+    const rateArms = [];
+    for (let i = 0; i < 30; i += 1) {
+        rateArms.push({
+            owner: owner.user,
+            envelope: await build(owner.keySet, [people[i % 6].keySet.identity], `rate ${i}`),
+        });
+    }
+    const rate = await burst(rateArms);
+    assert.deepEqual(rate.tally, { '201': 10, '429 release_arm_rate_limited': 20 });
+    assert.equal(heldReleaseSwitchCount(owner.user.id), 10);
+
+    // The held cap: an owner at 19 (sequentially, arms backdated out of the
+    // rate window), then 15 at once naming the one person with room left.
+    const capped = await freshPerson();
+    const four = [people[0], people[1], people[2], people[3]];
+    for (let i = 0; i < 19; i += 1) {
+        const envelope = await build(capped.keySet, [four[i % 4].keySet.identity], `held ${i}`);
+        assert.equal((await arm(capped.user, armBody(envelope))).status, 201, `arm ${i}`);
+        if (i === 9) backdateArms(capped.user.id);
+    }
+    backdateArms(capped.user.id);
+    const capArms = [];
+    for (let i = 0; i < 15; i += 1) {
+        capArms.push({
+            owner: capped.user,
+            envelope: await build(capped.keySet, [four[3].keySet.identity], `cap ${i}`),
+        });
+    }
+    const cap = await burst(capArms);
+    assert.deepEqual(cap.tally, { '201': 1, '409 release_switch_limit': 14 });
+    assert.equal(heldReleaseSwitchCount(capped.user.id), 20);
+
+    // Naming one person from one owner: 15 at once.
+    const namer = await freshPerson();
+    const victim = await freshPerson();
+    const nameArms = [];
+    for (let i = 0; i < 15; i += 1) {
+        nameArms.push({
+            owner: namer.user,
+            envelope: await build(namer.keySet, [victim.keySet.identity], `name ${i}`),
+        });
+    }
+    const named = await burst(nameArms);
+    assert.deepEqual(named.tally, { '201': 5, '409 recipient_limit': 10 });
+    assert.ok(named.refused.every((body) => body.recipientAccountId === victim.user.id));
+    assert.equal(heldReleasesNaming(victim.user.id).total, 5);
+
+    // Naming one person from everyone: at 45 from nine owners, ten more owners
+    // arm at once; the bound spans owners, so only the second read can hold it.
+    const popular = await freshPerson();
+    for (let o = 0; o < 9; o += 1) {
+        const one = await freshPerson();
+        for (let i = 0; i < 5; i += 1) {
+            const envelope = await build(one.keySet, [popular.keySet.identity], `p ${o} ${i}`);
+            assert.equal((await arm(one.user, armBody(envelope))).status, 201, `${o}/${i}`);
+        }
+    }
+    assert.equal(heldReleasesNaming(popular.user.id).total, 45);
+    const allArms = [];
+    for (let o = 0; o < 10; o += 1) {
+        const one = await freshPerson();
+        allArms.push({
+            owner: one.user,
+            envelope: await build(one.keySet, [popular.keySet.identity], `all ${o}`),
+        });
+    }
+    const all = await burst(allArms);
+    assert.deepEqual(all.tally, { '201': 5, '409 recipient_limit': 5 });
+    assert.equal(heldReleasesNaming(popular.user.id).total, 50);
 });
 
 test('after the trigger each recipient reads their own copy and nothing of anyone else’s; the owner and strangers read none; the legacy views never list it', async () => {
@@ -1580,6 +1697,120 @@ test('the 365-day removal lists each release’s copies by switch: a pass over r
     assert.equal(walks, 0, 'neither the copies map nor the notices map was iterated');
     assert.ok(elapsedMs < 2000, `a no-op pass over 1,500 removed releases took ${elapsedMs} ms`);
     assert.equal(db.listDeadmanReleaseWraps(ids[1499]).length, 3, 'the index is intact');
+});
+
+test('a person’s copies and notices are listed through the index, not a scan: the per-recipient bounds and the room lookup cost that person’s rows', () => {
+    // The per-recipient bounds are read once per copy on every arm, the
+    // release read and account deletion list a person's copies, and the
+    // notifier looks a person's room up; a scan of every copy row for each
+    // (round 2 of the independent review of part 2) grew with everyone's
+    // switches. Here 1,500 other people's switches, and seven that name one
+    // person: three with content held, two cancelled, two the person owns.
+    const victim = randomUUID();
+    const releasedAt = new Date(Date.now() - 1000).toISOString();
+    const seed = (
+        ownerId: string,
+        recipient: string,
+        content: string,
+        status: 'armed' | 'triggered' | 'cancelled'
+    ) => {
+        const id = randomUUID();
+        for (const account of [ownerId, recipient]) {
+            db.putDeadmanReleaseWrap({
+                switchId: id,
+                recipientAccountId: account,
+                recipientFingerprint: 'ab'.repeat(32),
+                sealedKey: content === '' ? '' : 'sealed',
+                signature: content === '' ? '' : 'signed',
+            });
+        }
+        db.createDeadmanSwitch({
+            id,
+            ownerId,
+            status,
+            checkInIntervalSeconds: 3600,
+            gracePeriodSeconds: 0,
+            lastCheckInAt: releasedAt,
+            triggerAt: releasedAt,
+            releaseAt: releasedAt,
+            recipients: [recipient],
+            encryptedPayload: content,
+            releaseFormat: 'release-v1',
+            ...(status === 'triggered' ? { releasedAt } : {}),
+        });
+        return id;
+    };
+    const held = '{"header":{},"ownerIdentity":{}}';
+    for (let i = 0; i < 1500; i += 1) seed(randomUUID(), randomUUID(), held, 'triggered');
+    const namers = [randomUUID(), randomUUID(), randomUUID()];
+    const naming = [
+        seed(namers[0], victim, held, 'armed'),
+        seed(namers[0], victim, held, 'triggered'),
+        seed(namers[1], victim, held, 'armed'),
+        seed(namers[2], victim, '', 'cancelled'),
+        seed(namers[2], victim, '', 'cancelled'),
+        seed(victim, randomUUID(), held, 'armed'),
+        seed(victim, randomUUID(), held, 'armed'),
+    ];
+    for (const [index, switchId] of [naming[1], naming[0]].entries()) {
+        db.createDeadmanReleaseNotice({
+            switchId,
+            recipientAccountId: victim,
+            nextAttemptAt: releasedAt,
+        });
+        const row = db.updateDeadmanReleaseNotice(switchId, victim, {
+            roomId: `!room-${index}:test.local`,
+        })!;
+        // The second is the newer by a clear second, not by the same millisecond.
+        db.deadmanReleaseNotices.set(`${switchId}:${victim}`, {
+            ...row,
+            updatedAt: new Date(Date.parse(releasedAt) + (index + 1) * 1000).toISOString(),
+        });
+    }
+
+    const iterators = ['values', 'entries', 'keys', 'forEach', Symbol.iterator] as const;
+    const maps = [db.deadmanReleaseWraps, db.deadmanReleaseNotices].map(
+        (map) => map as unknown as Record<string | symbol, unknown>
+    );
+    const saved = maps.flatMap((map) => iterators.map((name) => [map, name, map[name]] as const));
+    let walks = 0;
+    for (const [map, name, original] of saved) {
+        map[name] = function walk(this: unknown, ...args: unknown[]) {
+            walks += 1;
+            return (original as (...a: unknown[]) => unknown).apply(this, args);
+        };
+    }
+    let counts: ReturnType<typeof heldReleasesNaming>;
+    let copies: number;
+    let notices: number;
+    let room: string | undefined;
+    let elapsedMs: number;
+    try {
+        const started = performance.now();
+        counts = heldReleasesNaming(victim);
+        copies = db.listDeadmanReleaseWrapsForRecipient(victim).length;
+        notices = db.listDeadmanReleaseNoticesForRecipient(victim).length;
+        room = db.findDeadmanNoticeRoom(victim);
+        elapsedMs = performance.now() - started;
+    } finally {
+        for (const [map, name] of saved) delete map[name];
+    }
+    assert.equal(counts.total, 3, 'held, not owned, cancelled ones not counted');
+    assert.deepEqual(
+        [...counts.fromOwner.entries()].sort(),
+        [
+            [namers[0], 2],
+            [namers[1], 1],
+        ].sort()
+    );
+    assert.equal(copies, 7, 'every copy sealed to the person, blanked ones included');
+    assert.equal(notices, 2);
+    assert.equal(room, '!room-1:test.local', 'the newest notice’s room');
+    assert.equal(walks, 0, 'neither the copies map nor the notices map was iterated');
+    assert.ok(
+        elapsedMs < 200,
+        `listing one person’s rows among 1,500 switches took ${elapsedMs} ms`
+    );
 });
 
 test('a recipient whose account was deleted before the trigger gets no notice row; the others do', async () => {

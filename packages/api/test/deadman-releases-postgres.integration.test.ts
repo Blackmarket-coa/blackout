@@ -196,9 +196,14 @@ test('a release switch, its copies and its notices survive a restart; it has no 
             1,
             'listed by switch after hydration'
         );
+        assert.equal(
+            store2.listDeadmanReleaseNoticesForRecipient(bob).length,
+            1,
+            'listed by recipient after hydration'
+        );
 
         // A wholesale refresh of the mirror (the listener's reconnect, a peer's
-        // table resync) rebuilds the by-switch index with the rows.
+        // table resync) rebuilds both indexes with the rows.
         await (store2 as unknown as { rehydrateAll(): Promise<void> }).rehydrateAll();
         assert.equal(
             store2.listDeadmanReleaseWraps(sw.id).length,
@@ -206,6 +211,16 @@ test('a release switch, its copies and its notices survive a restart; it has no 
             'copies listed by switch after a refresh'
         );
         assert.equal(store2.listDeadmanReleaseNotices(sw.id).length, 1);
+        assert.deepEqual(
+            store2.listDeadmanReleaseWrapsForRecipient(bob).map((w) => w.switchId),
+            [sw.id],
+            'copies listed by recipient after a refresh'
+        );
+        assert.equal(
+            store2.listDeadmanReleaseNoticesForRecipient(bob).length,
+            1,
+            'notices listed by recipient after a refresh'
+        );
         assert.equal(store2.getDeadmanReleaseWrap(sw.id, bob)?.sealedKey, 'bob-copy');
     } finally {
         await pg.close?.();

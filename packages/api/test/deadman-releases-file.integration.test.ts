@@ -61,6 +61,11 @@ test('a release switch, its copies and its notices survive a restart of the file
     assert.equal(afterArming.getDeadmanReleaseWrap(sw.id, bob)?.sealedKey, 'bob-copy');
     assert.equal(afterArming.getDeadmanReleaseWrap(sw.id, owner)?.signature, 'owner-signature');
     assert.equal(afterArming.listDeadmanReleaseWraps(sw.id).length, 2);
+    assert.deepEqual(
+        afterArming.listDeadmanReleaseWrapsForRecipient(bob).map((w) => w.switchId),
+        [sw.id],
+        'listed by recipient after a restart'
+    );
 
     // Re-sealing replaces a copy and keeps the row's createdAt.
     const first = db.getDeadmanReleaseWrap(sw.id, bob)!;

@@ -28,7 +28,12 @@
  * owner in any 24 hours, and per recipient at most
  * `DEADMAN_MAX_HELD_RELEASES_PER_RECIPIENT_FROM_OWNER` held releases naming
  * them from one owner and `DEADMAN_MAX_HELD_RELEASES_PER_RECIPIENT` from
- * everyone. `GET /limits` reports each.
+ * everyone. `GET /limits` reports each. Each bound is checked before the
+ * signatures, so a refused arm costs no verification, and again after them
+ * with nothing yielding before the writes, so on one replica the bounds hold
+ * against arms sent at once; across replicas the store is eventually
+ * consistent and each can be exceeded within its refresh window. The bounds
+ * are on content: the rows of a cancelled release switch stay (§15).
  */
 import {
     DEADMAN_LABEL_MAX_LENGTH,
@@ -264,7 +269,8 @@ export const armRateState = (
  * the copy itself is still held is not asked: a blanked copy on a switch
  * whose content is held means the recipient deleted their account, and
  * nobody names a deleted account, or a removal half done, whose content goes
- * on the next pass.
+ * on the next pass. The copies are listed by recipient through the store's
+ * index, so this costs the rows that name the person, not every copy row.
  */
 export const heldReleasesNaming = (
     recipientAccountId: string
@@ -356,6 +362,23 @@ const currentOwnerIdentity = (
     return { ok: true, identity: recordToReleaseIdentity(current) };
 };
 
+/**
+ * The owner's two bounds, in the order the route answers them: room for one
+ * more release switch with content held, then the 24-hour arming rate. Run
+ * before the signatures and again right before the writes.
+ */
+const ownerBoundsRefusal = (
+    ownerId: string,
+    now: Date
+): { kind: 'held_limit' } | { kind: 'rate_limited'; retryAfterSeconds: number } | null => {
+    if (heldReleaseSwitchCount(ownerId) >= DEADMAN_MAX_HELD_RELEASE_SWITCHES) {
+        return { kind: 'held_limit' };
+    }
+    const rate = armRateState(ownerId, now);
+    if (!rate.ok) return { kind: 'rate_limited', retryAfterSeconds: rate.retryAfterSeconds };
+    return null;
+};
+
 export type ArmReleaseInput = {
     checkInIntervalSeconds: number;
     gracePeriodSeconds: number;
@@ -389,12 +412,17 @@ export type ArmReleaseOutcome =
  * (`recipient_limit`); every signature verifies under the owner's identity,
  * which also refuses a header naming another identity than the owner's
  * current one; and, after the signatures awaited, the release id is still
- * free. The writes follow with no await between, the copies first and the
- * switch last, so a crash between them leaves copies without a switch, which
- * nothing lists or serves, rather than a switch without copies, which would
- * fire and release to nobody. Each bound is checked once, before the
- * signatures: two arms racing on one replica can exceed a bound by one, and
- * across replicas by more within the store's refresh window.
+ * free and every bound still has room. The writes follow with no await
+ * between, the copies first and the switch last, so a crash between them
+ * leaves copies without a switch, which nothing lists or serves, rather than
+ * a switch without copies, which would fire and release to nobody. The bounds
+ * are checked twice on purpose: before the signatures, so a refused arm costs
+ * no verification, and after them, because a burst of arms that all passed
+ * the first checks against the same counts resumes here one at a time, and
+ * nothing yields between the second check and the writes, so on one replica
+ * exactly the bound passes (round 2 of part 2's review); across replicas the
+ * store is eventually consistent and a bound can be exceeded within its
+ * refresh window.
  */
 export const armReleaseSwitch = async (input: {
     ownerId: string;
@@ -409,11 +437,8 @@ export const armReleaseSwitch = async (input: {
     const timerProblem = validateReleaseTimer(input.input);
     if (timerProblem) return { kind: 'invalid', message: timerProblem };
     const now = input.now ?? new Date();
-    if (heldReleaseSwitchCount(input.ownerId) >= DEADMAN_MAX_HELD_RELEASE_SWITCHES) {
-        return { kind: 'held_limit' };
-    }
-    const rate = armRateState(input.ownerId, now);
-    if (!rate.ok) return { kind: 'rate_limited', retryAfterSeconds: rate.retryAfterSeconds };
+    const ownerBounds = ownerBoundsRefusal(input.ownerId, now);
+    if (ownerBounds) return ownerBounds;
     const owner = currentOwnerIdentity(input.ownerId);
     if (!owner.ok) return owner.refusal;
 
@@ -442,9 +467,19 @@ export const armReleaseSwitch = async (input: {
         }
     }
 
-    // The signatures awaited; the id is checked now and the rows written at
-    // once, so two arms with one id cannot both write (on one replica).
+    // The signatures awaited; from here to the writes nothing yields, so what
+    // is checked now is what is written against (on one replica): the id is
+    // still free, so two arms with one id cannot both write, and every bound
+    // still has room, so a burst of arms that all passed the checks above
+    // against the same counts is let through one at a time until the bound.
     if (db.getDeadmanSwitch(envelope.releaseId)) return { kind: 'id_taken' };
+    const boundsAgain = ownerBoundsRefusal(input.ownerId, now);
+    if (boundsAgain) return boundsAgain;
+    for (const recipientAccountId of recipients) {
+        if (!recipientHasRoom(input.ownerId, recipientAccountId)) {
+            return { kind: 'recipient_limit', recipientAccountId };
+        }
+    }
     const lastCheckInAt = now.toISOString();
     const { triggerAt, releaseAt } = computeDeadlines({
         lastCheckInAt,

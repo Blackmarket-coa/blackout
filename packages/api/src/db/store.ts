@@ -206,59 +206,76 @@ const releaseRowKey = (switchId: string, recipientAccountId: string): string =>
     `${switchId}:${recipientAccountId}`;
 
 /**
- * A map whose rows are also indexed under a second key, kept in step by every
- * `set`, `delete` and `clear`, so that listing the rows of one group costs the
- * size of that group and not of the map. The release switches' copies and
- * notices are grouped by switch: the sweep's 365-day removal and the
- * notifier's catch-up list them for every fired release switch on every tick,
- * for ever, and a scan of the whole map each time grew quadratic (independent
- * review of PR 3 part 2, P3b-M4). The Postgres store fills maps through
- * `set` (`hydrateMap`, a peer's row refresh) and replaces them wholesale on a
- * table refresh, which makes a fresh map of the same kind (`fresh()`), so the
+ * A map whose rows are also indexed under further keys, one index per
+ * grouping, kept in step by every `set`, `delete` and `clear`, so that
+ * listing the rows of one group costs the size of that group and not of the
+ * map. The release switches' copies and notices are grouped by switch and by
+ * recipient account: the sweep's 365-day removal and the notifier's catch-up
+ * list them by switch for every fired release switch on every tick, for ever,
+ * and the arming bounds, the release read, the notifier's room lookup and
+ * account deletion list them by recipient; a scan of the whole map each time
+ * grew quadratic (independent review of PR 3 part 2, P3b-M4; the by-recipient
+ * index after its round 2). The Postgres store fills maps through `set`
+ * (`hydrateMap`, a peer's row refresh) and replaces them wholesale on a table
+ * refresh, which makes a fresh map of the same kind (`fresh()`), so every
  * index is rebuilt wherever the map is.
  *
+ * A row re-`set` under its key keeps its place in each group it was in, as
+ * `Map.set` keeps the key's place; it moves only if a grouping of it changed.
  * Entries are added after `super()` returns: `Map`'s constructor would call
  * the overridden `set` before the fields it needs exist.
  */
-export class GroupedMap<V> extends Map<string, V> {
-    private readonly groups = new Map<string, Set<string>>();
+export class GroupedMap<V, G extends string = string> extends Map<string, V> {
+    private readonly groups = new Map<G, Map<string, Set<string>>>();
 
     constructor(
-        private readonly groupOf: (value: V) => string,
+        private readonly groupers: Record<G, (value: V) => string>,
         entries?: Iterable<readonly [string, V]>
     ) {
         super();
+        for (const by of Object.keys(groupers) as G[]) this.groups.set(by, new Map());
         if (entries) for (const [key, value] of entries) this.set(key, value);
     }
 
     override set(key: string, value: V): this {
         const previous = super.get(key);
-        if (previous !== undefined) this.ungroup(key, this.groupOf(previous));
         super.set(key, value);
-        const group = this.groupOf(value);
-        let keys = this.groups.get(group);
-        if (!keys) {
-            keys = new Set();
-            this.groups.set(group, keys);
+        for (const by of Object.keys(this.groupers) as G[]) {
+            const group = this.groupers[by](value);
+            if (previous !== undefined) {
+                const was = this.groupers[by](previous);
+                if (was === group) continue;
+                this.ungroup(by, key, was);
+            }
+            const index = this.groups.get(by)!;
+            let keys = index.get(group);
+            if (!keys) {
+                keys = new Set();
+                index.set(group, keys);
+            }
+            keys.add(key);
         }
-        keys.add(key);
         return this;
     }
 
     override delete(key: string): boolean {
         const previous = super.get(key);
-        if (previous !== undefined) this.ungroup(key, this.groupOf(previous));
+        if (previous !== undefined) {
+            for (const by of Object.keys(this.groupers) as G[]) {
+                this.ungroup(by, key, this.groupers[by](previous));
+            }
+        }
         return super.delete(key);
     }
 
     override clear(): void {
         super.clear();
-        this.groups.clear();
+        for (const index of this.groups.values()) index.clear();
     }
 
-    /** The rows of one group, in insertion order; the cost is the group's size. */
-    inGroup(group: string): V[] {
-        const keys = this.groups.get(group);
+    /** The rows of one group under one grouping, in insertion order; the cost is the group's size. */
+    inGroup(by: G, group: string): V[] {
+        const keys = this.groups.get(by)?.get(group);
         if (!keys) return [];
         const rows: V[] = [];
         for (const key of keys) {
@@ -268,18 +285,28 @@ export class GroupedMap<V> extends Map<string, V> {
         return rows;
     }
 
-    /** An empty map with the same grouping, for a wholesale refresh. */
-    fresh(): GroupedMap<V> {
-        return new GroupedMap<V>(this.groupOf);
+    /** An empty map with the same groupings, for a wholesale refresh. */
+    fresh(): GroupedMap<V, G> {
+        return new GroupedMap<V, G>(this.groupers);
     }
 
-    private ungroup(key: string, group: string): void {
-        const keys = this.groups.get(group);
+    private ungroup(by: G, key: string, group: string): void {
+        const index = this.groups.get(by);
+        const keys = index?.get(group);
         if (!keys) return;
         keys.delete(key);
-        if (keys.size === 0) this.groups.delete(group);
+        if (keys.size === 0) index!.delete(group);
     }
 }
+
+/** The groupings of a release switch's per-recipient rows (copies, notices): by switch and by recipient account. */
+export type ReleaseRowGroup = 'switch' | 'recipient';
+export const releaseRowGroupers = <
+    V extends { switchId: string; recipientAccountId: string }
+>(): Record<ReleaseRowGroup, (row: V) => string> => ({
+    switch: (row) => row.switchId,
+    recipient: (row) => row.recipientAccountId,
+});
 
 /** A fresh empty map of the same kind as `map`, so an indexed map stays indexed. */
 const freshMapLike = <M extends Map<string, unknown>>(map: M): M =>
@@ -472,10 +499,14 @@ class InMemoryDb {
     channels = new Map<string, ChannelRecord>();
     deadDrops = new Map<string, DeadDropRecord>();
     deadmanSwitches = new Map<string, DeadmanSwitchRecord>();
-    /** Sealed copies of release switches' content keys, keyed `${switchId}:${recipientAccountId}`, grouped by switch. */
-    deadmanReleaseWraps = new GroupedMap<DeadmanReleaseWrapRecord>((row) => row.switchId);
-    /** The bot's notices of fired release switches, keyed `${switchId}:${recipientAccountId}`, grouped by switch. */
-    deadmanReleaseNotices = new GroupedMap<DeadmanReleaseNoticeRecord>((row) => row.switchId);
+    /** Sealed copies of release switches' content keys, keyed `${switchId}:${recipientAccountId}`, grouped by switch and by recipient. */
+    deadmanReleaseWraps = new GroupedMap<DeadmanReleaseWrapRecord, ReleaseRowGroup>(
+        releaseRowGroupers<DeadmanReleaseWrapRecord>()
+    );
+    /** The bot's notices of fired release switches, keyed `${switchId}:${recipientAccountId}`, grouped by switch and by recipient. */
+    deadmanReleaseNotices = new GroupedMap<DeadmanReleaseNoticeRecord, ReleaseRowGroup>(
+        releaseRowGroupers<DeadmanReleaseNoticeRecord>()
+    );
     /** Published release identities, current and superseded, keyed by row id. */
     releaseIdentities = new Map<string, ReleaseIdentityRecord>();
     moderationActions = new Map<string, ModerationActionRecord>();
@@ -2657,14 +2688,12 @@ class InMemoryDb {
 
     /** Every copy of one switch, the owner's included, blanked ones included: an indexed lookup, not a scan. */
     listDeadmanReleaseWraps(switchId: string): DeadmanReleaseWrapRecord[] {
-        return this.deadmanReleaseWraps.inGroup(switchId);
+        return this.deadmanReleaseWraps.inGroup('switch', switchId);
     }
 
-    /** Every copy sealed to one account, on anyone's switches. */
+    /** Every copy sealed to one account, on anyone's switches, blanked ones included: an indexed lookup, not a scan. */
     listDeadmanReleaseWrapsForRecipient(accountId: string): DeadmanReleaseWrapRecord[] {
-        return [...this.deadmanReleaseWraps.values()].filter(
-            (row) => row.recipientAccountId === accountId
-        );
+        return this.deadmanReleaseWraps.inGroup('recipient', accountId);
     }
 
     /**
@@ -2725,13 +2754,12 @@ class InMemoryDb {
 
     /** Every notice of one switch: an indexed lookup, not a scan. */
     listDeadmanReleaseNotices(switchId: string): DeadmanReleaseNoticeRecord[] {
-        return this.deadmanReleaseNotices.inGroup(switchId);
+        return this.deadmanReleaseNotices.inGroup('switch', switchId);
     }
 
+    /** Every notice owed or sent to one account: an indexed lookup, not a scan. */
     listDeadmanReleaseNoticesForRecipient(accountId: string): DeadmanReleaseNoticeRecord[] {
-        return [...this.deadmanReleaseNotices.values()].filter(
-            (row) => row.recipientAccountId === accountId
-        );
+        return this.deadmanReleaseNotices.inGroup('recipient', accountId);
     }
 
     /** Pending notices whose next attempt is due at `now`, oldest first. */
@@ -5992,16 +6020,16 @@ export class FileBackedDb extends InMemoryDb {
         this.channels = new Map((parsed.channels ?? []).map((row) => [row.id, row]));
         this.deadDrops = new Map((parsed.deadDrops ?? []).map((row) => [row.id, row]));
         this.deadmanSwitches = new Map((parsed.deadmanSwitches ?? []).map((row) => [row.id, row]));
-        // Indexed by switch as in memory, so the index is rebuilt with the rows.
-        this.deadmanReleaseWraps = new GroupedMap<DeadmanReleaseWrapRecord>(
-            (row) => row.switchId,
+        // Indexed by switch and by recipient as in memory, so both indexes are rebuilt with the rows.
+        this.deadmanReleaseWraps = new GroupedMap<DeadmanReleaseWrapRecord, ReleaseRowGroup>(
+            releaseRowGroupers<DeadmanReleaseWrapRecord>(),
             (parsed.deadmanReleaseWraps ?? []).map((row) => [
                 releaseRowKey(row.switchId, row.recipientAccountId),
                 row,
             ])
         );
-        this.deadmanReleaseNotices = new GroupedMap<DeadmanReleaseNoticeRecord>(
-            (row) => row.switchId,
+        this.deadmanReleaseNotices = new GroupedMap<DeadmanReleaseNoticeRecord, ReleaseRowGroup>(
+            releaseRowGroupers<DeadmanReleaseNoticeRecord>(),
             (parsed.deadmanReleaseNotices ?? []).map((row) => [
                 releaseRowKey(row.switchId, row.recipientAccountId),
                 row,
