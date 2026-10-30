@@ -688,6 +688,11 @@ invite`, set by every in-repo template, adds `m.room.encryption` to every
     both pass the alias check, and the second's alias write then fails
     after the homeserver gave it a room id but before any event, so that room
     has nobody in it and nobody invited (`handlers/room.py`, `create_room`).
+    The bot's own id comes from whoami; one the homeserver refused leaves
+    the client's derived id (`@<MATRIX_BOT_LOCALPART or blackout>:<domain>`)
+    cached for the process, and if that is not the bot's, every room found
+    through an alias looks like another account's and is replaced by one
+    without the alias, the behaviour before it.
     A room the homeserver no longer has is replaced once per person: every
     row of theirs that pointed at it moves to the replacement (P3b-L3).
 -   **The notice:** an `m.text` (an `m.notice` would be silent under

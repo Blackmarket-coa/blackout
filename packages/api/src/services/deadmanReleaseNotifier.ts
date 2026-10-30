@@ -450,8 +450,9 @@ const makeRoom = async (
     if (!found.ok) return { kind: 'retry', reason: `matrix_alias_${found.reason}` };
     const bot = await guarded('whoami', callTimeoutMs, (signal) => matrix.botUserId({ signal }));
     if (!stillPending(key)) return RECIPIENT_GONE;
-    if (!bot) return { kind: 'retry', reason: 'matrix_whoami_unknown' };
-    const room = await checkRoom(found.roomId, current, mxid, matrix, callTimeoutMs, bot);
+    // No id (no homeserver configured, which the create would already have
+    // answered) matches no creator, so the room is not taken as the bot's.
+    const room = await checkRoom(found.roomId, current, mxid, matrix, callTimeoutMs, bot ?? '');
     if (room.kind === 'unusable') return withoutAlias();
     if (room.kind !== 'ok') return room;
     return { roomId: found.roomId };
