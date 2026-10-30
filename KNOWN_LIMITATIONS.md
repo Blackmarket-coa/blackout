@@ -326,17 +326,20 @@ For the source-of-truth triage with tier/owner detail see
     It cancels your dead-man switches that have not fired and removes what you
     put in them, a release switch's sealed copies included. A release switch
     that has already fired stays readable to the people it named, with the
-    public release key it was signed with, until 365 days after it fired; a
-    switch armed before Blackout could release messages (every switch that
-    exists today) keeps its payload for the people it named with no removal
-    date, because a release is not taken back. Either way its label is
-    removed. Copies of other people's
-    releases sealed to you are removed, a notice still owed to you is dropped,
-    and the record of each notice (its status and attempts) stays, with its
-    room forgotten. It
+    public release key it was signed with, until at least 365 days after it
+    fired (it is removed at the server's first sweep after that); a switch
+    armed before Blackout could release messages (every switch that exists
+    today) keeps its payload for the people it named with no removal date,
+    because a release is not taken back. Either way its label is removed.
+    Copies of other people's releases sealed to you are removed (where the
+    API runs as several replicas, one that someone seals to you on another
+    replica in the moment your deletion is still reaching it can stay until
+    that release is cancelled or removed), a notice still owed to you is
+    dropped, and the record of each notice (its status and attempts) stays,
+    with its room forgotten. It
     removes the release keys you published (their public halves), except the
     copy kept with a release switch of yours that has already fired, which goes
-    with that release 365 days after it fired; the fingerprint of the key each
+    with that release; the fingerprint of the key each
     sealed copy was made for stays on the blanked copy rows. The private keys
     on your devices and in your recovery files stay until you remove them. It
     does not yet deactivate your Matrix account, and your
@@ -375,16 +378,22 @@ For the source-of-truth triage with tier/owner detail see
     a room's state says, and the room is created so that the homeserver's
     encryption backstop (above) does not mark it encrypted (the `public_chat`
     preset with an invite-only join rule; the backstop keys on the preset).
-    The bot makes one such room for you and reuses it. The room has an
-    address made from your Matrix id under a secret the server keeps, so
-    nobody without that secret can work it out from your Matrix id or tell
-    from it whose room it is; it is there so that a room the
-    homeserver finished making after the bot stopped waiting is found again
-    rather than made twice. Where the homeserver refuses that address, where
-    it names a room that is gone or that the bot did not make, or where the
+    The bot makes one such room for you and reuses it. The room is not in the
+    homeserver's public room list. It has an address made from your Matrix id
+    under a secret the server keeps, so nobody without that secret can work
+    it out from your Matrix id or tell from it whose room it is; it is there
+    so that a room the homeserver finished making after the bot stopped
+    waiting is found again rather than made twice. Where the homeserver
+    refuses that address, where it names a room that is gone or that the bot
+    did not make, where the server has the bot's own id wrong, or where the
     server's secret changed in between, a homeserver that is slow to make the
     room can still leave you an extra, empty "Blackout notices" room with an
-    invite, one per such attempt.
+    invite, one per such attempt. A homeserver that stops partway through
+    making the room (a restart or an error at the wrong moment) leaves that
+    address naming a room with nothing in it; the bot waits one retry for it
+    (30 seconds or more) and then makes your room without the address, and a
+    homeserver that was only very slow leaves you an extra room the same
+    way.
     A fixed sentence, "There is something new for you in Blackout. Open
     Blackout to see it. This room is not end-to-end encrypted, so please
     don't reply here.", and the release's id, and nothing else: not who armed
@@ -436,12 +445,16 @@ For the source-of-truth triage with tier/owner detail see
     public key kept with it and every sealed copy from its database (a
     deployment running no sweep removes nothing). The record of the switch
     stays: whom it named and the fingerprint of the key each copy was sealed
-    to, the owner's label and timing, when it fired, and each notice's room,
-    status and attempts until that person deletes their account; the switch
-    stays in the owner's list as fired, with how many notices were sent. Save
-    the message before then if you need it after. Cancelling a release switch
-    removes its encrypted message and every copy; backups keep them until
-    they expire.
+    to, the owner's label and timing, when it fired, and each notice's status
+    and attempts, and its room until that person deletes their account; the
+    switch stays in the owner's list as fired, with how many notices were
+    sent. Save the message before then if you need it after. Cancelling a
+    release switch removes its encrypted message and every copy; backups keep
+    them until they expire. Where the API runs as several replicas, a re-seal
+    the owner's device makes on another replica in the moment the cancel is
+    reaching it can leave one sealed copy on the cancelled switch, given to
+    nobody (a cancelled switch is never released), until it is cancelled
+    again.
 -   **Bounds.** One account can have at most 20 release switches whose
     content the server still holds (armed, in grace, or fired until the
     removal), about 7 MiB of encrypted headers and up to about 2.3 MiB of
@@ -481,10 +494,10 @@ For the source-of-truth triage with tier/owner detail see
     have not fired and removes their payloads and labels, and a release
     switch's sealed copies; a switch that has already fired keeps what it
     holds for the people it named, because a release is not taken back: a
-    release switch its encrypted message until 365 days after it fired, a
-    switch armed before releases (every switch that exists today) its payload
-    with no removal date. Where the deployment keeps database backups, they
-    hold a removed payload until they expire.
+    release switch its encrypted message until at least 365 days after it
+    fired, a switch armed before releases (every switch that exists today)
+    its payload with no removal date. Where the deployment keeps database
+    backups, they hold a removed payload until they expire.
 -   If the server reaches your switch more than 15 minutes (by default) after
     it was due, because its background loops were down, it does not fire the
     switch then: the switch goes to grace with at least 72 hours left from

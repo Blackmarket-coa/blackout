@@ -503,9 +503,12 @@ screen. **Verdict:** not proposed; recorded so the trade is on paper.
     P3b-M1)_. It carries an alias, an HMAC of the person's Matrix id under
     a key derived from the API's secret, so that a room the homeserver made
     after the bot stopped waiting for it is found again rather than made
-    twice _(round 3 of that review; where the alias cannot be used the room
-    is made without it, and a slow create can then leave an extra, empty
-    room, as `release-envelope-2026-10-26.md` §11 says)_. The person is
+    twice _(round 3 of that review; where the alias cannot be used, or names
+    a room the homeserver abandoned before its first event (round 4), the
+    room is made without it, and a slow create can then leave an extra, empty
+    room, as `release-envelope-2026-10-26.md` §11 says)_. The room is not in
+    the public room list; its alias is in the homeserver's alias directory.
+    The person is
     invited as a direct message (`is_direct`), and
     their power level is below the room's `events_default` so nothing can be
     typed there. One `m.text` per recipient per release. An
@@ -556,7 +559,9 @@ screen. **Verdict:** not proposed; recorded so the trade is on paper.
     (`KNOWN_LIMITATIONS.md`).
 -   The notifier runs beside the sweep in the background-loop leader, with
     Matrix transaction id `deadman-release-<switch>-<recipient>`, so a resend
-    after a crash is deduplicated the way scheduled messages are.
+    after a crash is deduplicated the way scheduled messages are, for as long
+    as the homeserver keeps the id (30 to 60 minutes, or 24 hours for a bot
+    token with a device: `release-envelope-2026-10-26.md` §11).
 -   A late notice is still sent, unlike a scheduled message reached late
     (`expired_overdue`): the release has happened and the notice only points
     at it. It is retried with backoff for 30 days, then recorded as failed for

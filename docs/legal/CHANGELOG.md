@@ -56,11 +56,14 @@ no deployment, compose or env file does.
     exceed them by up to its own size until the replicas' queued writes reach
     each other). The rows of
     a cancelled switch stay, blank. Cancelling removes the message and
-    the copies from its database (backups aside); 365 days after a switch fires
-    they are removed, at the sweep's first pass after that, and the rows stay,
-    saying what the switch was, whom it was for and the fingerprint of the key
-    each copy was sealed to, and, for each notice, its room, status and attempts
-    until that person deletes their account.
+    the copies from its database (backups aside; across several API replicas a
+    re-seal on another replica in the moment the cancel reaches it can leave
+    one copy on the cancelled switch, given to nobody, until it is cancelled
+    again); 365 days after a switch fires they are removed, at the sweep's
+    first pass after that, and the rows stay, saying what the switch was, whom
+    it was for and the fingerprint of the key each copy was sealed to, and, for
+    each notice, its status and attempts, and its room until that person
+    deletes their account.
 -   **The bot posts a notice in a room that is not encrypted.** When a release
     switch fires, the Blackout bot makes, once per person, a "Blackout notices"
     room, invites them as a direct message, and posts one fixed sentence with
@@ -86,14 +89,17 @@ no deployment, compose or env file does.
     [`TRUST.md`](../../TRUST.md) §2 says so.
 -   **Deleting an account** removes the sealed copies of its unfired release
     switches with their content; a fired one keeps its content, the copies for
-    the people it named and the public key it was signed with, until the 365
-    days end, and only the owner's own copy and the label go, so that what was
+    the people it named and the public key it was signed with, until they are
+    removed at the first sweep 365 days or more after it fired, and only the
+    owner's own copy and the label go, so that what was
     released stays checkable (a switch armed before
     releases, every switch that exists today, keeps its payload for the people
     it named with no removal date). As a person named on others' switches, the
-    account's copies are removed, a notice still owed to it is dropped, and its
-    notice rows forget their room. The export of an account includes the
-    notice rows about it (`deadmanNotices`), for fired switches.
+    account's copies are removed (across several API replicas one sealed to it
+    in the moment the deletion reaches another replica can stay until that
+    release is cancelled or removed), a notice still owed to it is dropped,
+    and its notice rows forget their room. The export of an account includes
+    the notice rows about it (`deadmanNotices`), for fired switches.
 
 ### Not changed
 
