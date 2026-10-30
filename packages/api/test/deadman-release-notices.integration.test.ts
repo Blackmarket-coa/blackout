@@ -10,10 +10,12 @@
  * retried with backoff for 30 days and then recorded; a missing recipient or
  * release ends the notice, a switch not yet fired is waited for; a fired
  * switch without rows is caught up; overlapping ticks make one room per
- * person and send nothing twice; a deletion during a send stands. The
- * homeserver is the test stub: what Synapse does with each call is read in
- * the fork, not run here (the preset's effect on encryption was run against
- * the fork's own code by the independent review, P3b-M1).
+ * person and send nothing twice; a deletion during any homeserver call stands,
+ * with nothing written over the ended row; a call that never answers ends at
+ * the call timeout as that notice's retry. The homeserver is the test stub:
+ * what Synapse does with each call is read in the fork, not run here (the
+ * preset's effect on encryption was run against the fork's own code by the
+ * independent review, P3b-M1).
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -40,6 +42,7 @@ const protocol = await import('@blackout/protocol');
 const { sweepOverdueDeadmanSwitches, recordToOwnerView } = await import('../src/modules/deadman');
 const { armReleaseSwitch } = await import('../src/services/deadmanReleases');
 const {
+    NOTICE_BACKOFF_FIRST_MS,
     NOTICE_BACKOFF_MAX_MS,
     NOTICE_RETRY_WINDOW_MS,
     isDeadmanReleaseNotifierRunning,
@@ -885,6 +888,242 @@ test('an account deletion that lands during a send stands: the row stays failed 
     assert.equal(ended.lastError, 'ended_meanwhile', 'not overwritten');
     assert.equal(ended.sentAt, undefined);
     assert.ok(db.getUserById(standing.user.id), 'the account is still there');
+
+    // A deletion during a send the homeserver then refuses: the retry is not
+    // written over the ended row either (round 2 of part 2's review: the row
+    // read `matrix_send_status_500`, attempts 1 and a new backoff where the
+    // deletion had written `recipient_gone`).
+    const refused = await freshPerson();
+    const fourth = await released(await freshPerson(), [refused.keySet.identity]);
+    const rowBefore = db.getDeadmanReleaseNotice(fourth.record.id, refused.user.id)!;
+    let release4!: () => void;
+    const gate4 = new Promise<void>((resolve) => {
+        release4 = resolve;
+    });
+    matrix.sendStatus = 500;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url =
+            typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+        if (url.includes('/send/')) await gate4;
+        return stubFetch(input, init);
+    }) as typeof fetch;
+    try {
+        const tick = runDeadmanReleaseNotifier({ now: fourth.at });
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        const issued = lifecycle.requestAccountDeletion({ userId: refused.user.id })!;
+        assert.equal(lifecycle.confirmAccountDeletion(issued.token, refused.user.id).kind, 'ok');
+        release4();
+        assert.deepEqual(await within(5000, tick), {
+            caughtUp: 0,
+            due: 1,
+            sent: 0,
+            retried: 0,
+            failed: 1,
+        });
+    } finally {
+        matrix.sendStatus = 200;
+        globalThis.fetch = matrix.fetch;
+    }
+    const kept = db.getDeadmanReleaseNotice(fourth.record.id, refused.user.id)!;
+    assert.equal(kept.status, 'failed');
+    assert.equal(kept.lastError, 'recipient_gone', 'the refusal is not written over the deletion');
+    assert.equal(kept.attempts, 0, 'no attempt counted on the ended row');
+    assert.equal(kept.nextAttemptAt, rowBefore.nextAttemptAt, 'no backoff written');
+    assert.equal(kept.roomId, undefined);
+});
+
+test('a deletion that lands while the room is being found or made is seen before anything is recorded: no room on the row, no re-invite, no send', async () => {
+    // The row is read again after each homeserver call in find-or-make (round
+    // 2 of part 2's review: a deletion during createRoom put the new room on
+    // the row the deletion had ended, and the notice was sent into it).
+    const stubFetch = matrix.fetch;
+    const parkWhile = (match: (url: string, init?: RequestInit) => boolean) => {
+        let release!: () => void;
+        const gate = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+            const url =
+                typeof input === 'string'
+                    ? input
+                    : input instanceof URL
+                    ? input.toString()
+                    : input.url;
+            if (match(url, init)) await gate;
+            return stubFetch(input, init);
+        }) as typeof fetch;
+        return release;
+    };
+    const deleteDuring = async (
+        tick: Promise<unknown>,
+        person: { user: User },
+        release: () => void
+    ) => {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        const issued = lifecycle.requestAccountDeletion({ userId: person.user.id })!;
+        assert.equal(lifecycle.confirmAccountDeletion(issued.token, person.user.id).kind, 'ok');
+        release();
+        return within(5000, tick);
+    };
+    const ended = { caughtUp: 0, due: 1, sent: 0, retried: 0, failed: 1 };
+
+    // During createRoom: the room is made (the homeserver was asked) but is
+    // not recorded on the row, and nothing is sent into it.
+    const first = await freshPerson();
+    const one = await released(await freshPerson(), [first.keySet.identity]);
+    matrix.clearCalls();
+    try {
+        const tick = runDeadmanReleaseNotifier({ now: one.at });
+        const release = parkWhile((url) => url.includes('/createRoom'));
+        assert.deepEqual(await deleteDuring(tick, first, release), ended);
+    } finally {
+        globalThis.fetch = matrix.fetch;
+    }
+    const createdFor = db.getDeadmanReleaseNotice(one.record.id, first.user.id)!;
+    assert.equal(createdFor.status, 'failed');
+    assert.equal(createdFor.lastError, 'recipient_gone');
+    assert.equal(createdFor.roomId, undefined, 'the room made during the deletion is not recorded');
+    assert.equal(createdFor.attempts, 0);
+    assert.equal(matrix.creates.length, 1, 'the homeserver was asked before the deletion landed');
+    assert.equal(matrix.sendsTo(matrix.creates[0].roomId).length, 0, 'nothing sent into it');
+
+    // During the state read of an existing room: a second release to someone
+    // whose room exists, deleted while the room's state is being read.
+    const second = await freshPerson();
+    const owner = await freshPerson();
+    const earlier = await released(owner, [second.keySet.identity]);
+    assert.equal((await runDeadmanReleaseNotifier({ now: earlier.at })).sent, 1);
+    const roomId = db.getDeadmanReleaseNotice(earlier.record.id, second.user.id)!.roomId!;
+    const later = await released(await freshPerson(), [second.keySet.identity]);
+    matrix.clearCalls();
+    try {
+        const tick = runDeadmanReleaseNotifier({ now: later.at });
+        const release = parkWhile((url) => url.includes('/_synapse/admin/v1/rooms/'));
+        assert.deepEqual(await deleteDuring(tick, second, release), ended);
+    } finally {
+        globalThis.fetch = matrix.fetch;
+    }
+    const readFor = db.getDeadmanReleaseNotice(later.record.id, second.user.id)!;
+    assert.equal(readFor.status, 'failed');
+    assert.equal(readFor.lastError, 'recipient_gone');
+    assert.equal(readFor.roomId, undefined);
+    assert.equal(matrix.stateReads.length, 1, 'the state was read');
+    assert.equal(matrix.sendsTo(roomId).length, 0, 'nothing sent into the existing room');
+    assert.equal(matrix.creates.length, 0);
+
+    // During the re-invite of someone who left: the invite goes to the
+    // homeserver, is not recorded on the row, and nothing is sent.
+    const third = await freshPerson();
+    const thirdOwner = await freshPerson();
+    const before = await released(thirdOwner, [third.keySet.identity]);
+    assert.equal((await runDeadmanReleaseNotifier({ now: before.at })).sent, 1);
+    const thirdRoom = db.getDeadmanReleaseNotice(before.record.id, third.user.id)!.roomId!;
+    setMembership(thirdRoom, matrixUserIdFor(third.user.id)!, 'leave');
+    const after = await released(await freshPerson(), [third.keySet.identity]);
+    matrix.clearCalls();
+    try {
+        const tick = runDeadmanReleaseNotifier({ now: after.at });
+        const release = parkWhile((url) => url.includes('/state/m.room.member/'));
+        assert.deepEqual(await deleteDuring(tick, third, release), ended);
+    } finally {
+        globalThis.fetch = matrix.fetch;
+    }
+    const invitedFor = db.getDeadmanReleaseNotice(after.record.id, third.user.id)!;
+    assert.equal(invitedFor.status, 'failed');
+    assert.equal(invitedFor.lastError, 'recipient_gone');
+    assert.equal(invitedFor.reinvitedAt, undefined, 'the re-invite is not recorded');
+    assert.equal(invitedFor.roomId, undefined);
+    assert.equal(matrix.invites.length, 1, 'the invite went to the homeserver');
+    assert.equal(matrix.sendsTo(thirdRoom).length, 0);
+
+    // While a notice waits for the person's slot: the slot's holder has its
+    // createRoom parked, the deletion lands, and the waiting notice reads the
+    // ended row once it holds the slot, so it makes no homeserver call of its
+    // own (without that read it would make a second room for the deleted
+    // account before its own re-read ended it).
+    const fourth = await freshPerson();
+    const pairA = await released(await freshPerson(), [fourth.keySet.identity]);
+    const pairB = await released(await freshPerson(), [fourth.keySet.identity]);
+    const now = new Date(Math.max(pairA.at.getTime(), pairB.at.getTime()));
+    matrix.clearCalls();
+    let results: unknown;
+    try {
+        const release = parkWhile((url) => url.includes('/createRoom'));
+        const tickA = runDeadmanReleaseNotifier({ now });
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        const tickB = runDeadmanReleaseNotifier({ now });
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        const issued = lifecycle.requestAccountDeletion({ userId: fourth.user.id })!;
+        assert.equal(lifecycle.confirmAccountDeletion(issued.token, fourth.user.id).kind, 'ok');
+        release();
+        results = await within(5000, Promise.all([tickA, tickB]));
+    } finally {
+        globalThis.fetch = matrix.fetch;
+    }
+    assert.notEqual(results, 'pending', 'both ticks finished');
+    const [resultA, resultB] = results as Array<{ failed: number; sent: number }>;
+    assert.equal(resultA.failed + resultB.failed, 2, 'both notices ended');
+    assert.equal(resultA.sent + resultB.sent, 0);
+    for (const record of [pairA.record, pairB.record]) {
+        const row = db.getDeadmanReleaseNotice(record.id, fourth.user.id)!;
+        assert.equal(row.status, 'failed');
+        assert.equal(row.lastError, 'recipient_gone');
+        assert.equal(row.roomId, undefined);
+    }
+    assert.equal(matrix.creates.length, 1, 'the waiting notice asked for no room of its own');
+    assert.equal(matrix.sends.length, 0);
+});
+
+test('a homeserver call that never answers ends at the call timeout as that notice’s retry, and the next notice is not held behind it', async () => {
+    // The ticks do not overlap, so a hung call would hold every due notice
+    // for undici's five minutes (round 2 of part 2's review); each call has
+    // NOTICE_CALL_TIMEOUT_MS, here shortened, and its request is aborted.
+    const slow = await freshPerson();
+    const quick = await freshPerson();
+    const first = await released(await freshPerson(), [slow.keySet.identity]);
+    const second = await released(await freshPerson(), [quick.keySet.identity]);
+    matrix.clearCalls();
+    const slowMxid = matrixUserIdFor(slow.user.id)!;
+    const stubFetch = matrix.fetch;
+    let release!: () => void;
+    const never = new Promise<void>((resolve) => {
+        release = resolve;
+    });
+    let abortedSignal: AbortSignal | undefined;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url =
+            typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+        if (url.includes('/createRoom') && String(init?.body).includes(slowMxid)) {
+            abortedSignal = init?.signal ?? undefined;
+            await never;
+        }
+        return stubFetch(input, init);
+    }) as typeof fetch;
+    const now = new Date(Math.max(first.at.getTime(), second.at.getTime()));
+    try {
+        const started = performance.now();
+        const result = await within(5000, runDeadmanReleaseNotifier({ now, callTimeoutMs: 100 }));
+        const elapsedMs = performance.now() - started;
+        assert.deepEqual(result, { caughtUp: 0, due: 2, sent: 1, retried: 1, failed: 0 });
+        assert.ok(elapsedMs < 3000, `the tick took ${elapsedMs} ms`);
+    } finally {
+        release();
+        globalThis.fetch = matrix.fetch;
+    }
+    const held = db.getDeadmanReleaseNotice(first.record.id, slow.user.id)!;
+    assert.equal(held.status, 'pending');
+    assert.equal(held.attempts, 1);
+    assert.equal(held.lastError, 'matrix_create_timeout');
+    assert.equal(held.roomId, undefined, 'no room recorded for a call that never answered');
+    assert.equal(
+        held.nextAttemptAt,
+        new Date(now.getTime() + NOTICE_BACKOFF_FIRST_MS).toISOString(),
+        'the retry is backed off as any failure is'
+    );
+    assert.ok(abortedSignal?.aborted, 'the request was aborted through its signal');
+    const sent = db.getDeadmanReleaseNotice(second.record.id, quick.user.id)!;
+    assert.equal(sent.status, 'sent', 'the next notice was not held behind the hung call');
+    assert.equal(matrix.sends.length, 1);
 });
 
 test('without a homeserver configured every attempt is a retry, and says so', async () => {

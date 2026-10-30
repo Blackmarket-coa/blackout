@@ -44,9 +44,22 @@
  * deciding, so two notices for one person in overlapping ticks make one room;
  * the interval's tick does not start while the previous one runs. When the
  * homeserver no longer has a person's room, the replacement is recorded on
- * every one of their rows that pointed at the old one. Before a notice is
- * marked sent the row and the account are read again: a deletion that landed
- * during the send has already ended the row, and that stands.
+ * every one of their rows that pointed at the old one. The row is read again
+ * after every homeserver call and before anything is written to it: a
+ * deletion that landed while the room was being found or made, or during the
+ * send, has already ended the row with `recipient_gone`, and that stands
+ * whatever the call answered (no room is recorded on it, no re-invite, no
+ * send, no attempt, no later error over its reason); a row ended any other
+ * way meanwhile is left as it is.
+ *
+ * Each homeserver call has `NOTICE_CALL_TIMEOUT_MS` to answer; one that does
+ * not is that notice's retry (`matrix_<call>_timeout`) and its request is
+ * aborted. Without that, one connection the homeserver accepted and never
+ * answered would hold the tick, and with it every other due notice, for
+ * undici's default of five minutes, since the ticks do not overlap. A tick is
+ * still a sequence: 50 notices whose every call times out take about 25
+ * minutes, and the worker's shutdown waits for a tick in flight only up to
+ * its own bound (`backgroundTicks.ts`).
  *
  * Matrix transaction id `deadman-release-<switch>-<recipient>`, so a resend
  * soon after a crash is deduplicated (the homeserver keeps transaction ids
@@ -76,6 +89,8 @@ export const NOTICE_BACKOFF_MAX_MS = 6 * 60 * 60 * 1000;
 export const NOTICE_RETRY_WINDOW_MS = DEADMAN_NOTICE_RETRY_DAYS * 24 * 60 * 60 * 1000;
 /** Notices one tick sends at most: a bound on homeserver calls per tick. */
 export const NOTICES_PER_TICK = 50;
+/** How long one homeserver call may take before it is this notice's retry (`matrix_<call>_timeout`). */
+export const NOTICE_CALL_TIMEOUT_MS = 30 * 1000;
 
 /**
  * The notices room's join rule, sent in `initial_state` so that Synapse does
@@ -170,14 +185,55 @@ class NoticeCallThrew extends Error {
     }
 }
 
-/** Run one homeserver call for a notice; a throw (a network error, say) is that notice's retry. */
-const guarded = async <T>(call: string, run: () => Promise<T>): Promise<T> => {
+/**
+ * Run one homeserver call for a notice: a throw (a network error, say) is that
+ * notice's retry, and so is a call that has not answered after `timeoutMs`,
+ * whose request is aborted through the signal handed to it. The race does not
+ * rely on the signal being honoured: a call that ignores it still ends here.
+ */
+const guarded = async <T>(
+    call: string,
+    timeoutMs: number,
+    run: (signal: AbortSignal) => Promise<T>
+): Promise<T> => {
+    const controller = new AbortController();
+    let timedOut = false;
+    const timer = setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+    }, timeoutMs);
     try {
-        return await run();
+        return await Promise.race([
+            run(controller.signal),
+            new Promise<never>((_, reject) => {
+                controller.signal.addEventListener(
+                    'abort',
+                    () => reject(new Error(`matrix_${call}_timeout`)),
+                    { once: true }
+                );
+            }),
+        ]);
     } catch {
-        throw new NoticeCallThrew({ kind: 'retry', reason: `matrix_${call}_network_error` });
+        throw new NoticeCallThrew({
+            kind: 'retry',
+            reason: timedOut ? `matrix_${call}_timeout` : `matrix_${call}_network_error`,
+        });
+    } finally {
+        clearTimeout(timer);
     }
 };
+
+/** The row as it stands, or `undefined` once it is no longer pending (a deletion ended it, say). */
+const stillPending = (key: {
+    switchId: string;
+    recipientAccountId: string;
+}): DeadmanReleaseNoticeRecord | undefined => {
+    const row = db.getDeadmanReleaseNotice(key.switchId, key.recipientAccountId);
+    return row && row.status === 'pending' ? row : undefined;
+};
+
+/** The recipient is gone: the row was ended meanwhile, and nothing more is recorded on it. */
+const RECIPIENT_GONE: Step = { kind: 'failed', reason: 'recipient_gone' };
 
 /** Whether the person is in the room or invited to it, from the room's current state. */
 const membershipOf = (
@@ -191,21 +247,30 @@ const membershipOf = (
 
 /**
  * Find or make the person's standing room, and make sure they are invited or
- * in it. Under the recipient's slot, with the row read again first.
+ * in it. Under the recipient's slot, with the row read again first, and again
+ * after each homeserver call: a row that a deletion ended while a call was in
+ * flight gets nothing recorded on it (not the room made for it, not the
+ * re-invite), and the notice ends as `recipient_gone` without a send.
  */
 const resolveRoom = async (
     notice: DeadmanReleaseNoticeRecord,
     mxid: string,
-    matrix: MatrixForNotices
+    matrix: MatrixForNotices,
+    callTimeoutMs: number
 ): Promise<{ roomId: string } | Step> => {
     const key = { switchId: notice.switchId, recipientAccountId: notice.recipientAccountId };
     // Read again: a notice for the same person that held the slot before this
-    // one may have made or replaced the room meanwhile.
-    const current = db.getDeadmanReleaseNotice(key.switchId, key.recipientAccountId) ?? notice;
+    // one may have made or replaced the room meanwhile, and a deletion may
+    // have ended the row while this one waited for the slot.
+    const current = stillPending(key);
+    if (!current) return RECIPIENT_GONE;
     let roomId = current.roomId ?? db.findDeadmanNoticeRoom(notice.recipientAccountId);
     let deadRoom: string | undefined;
     if (roomId) {
-        const state = await guarded('state', () => matrix.getRoomStateAdmin(roomId!));
+        const state = await guarded('state', callTimeoutMs, (signal) =>
+            matrix.getRoomStateAdmin(roomId!, { signal })
+        );
+        if (!stillPending(key)) return RECIPIENT_GONE;
         if (!state.ok) {
             if ('status' in state && state.status === 404) {
                 // The room is gone (purged, say): make another, below.
@@ -220,9 +285,10 @@ const resolveRoom = async (
                 // Left, declined, or never got the invite: invite again, as a
                 // direct message, so the notice has someone to reach. Once per
                 // notice: a later attempt of this notice does not invite again.
-                const invited = await guarded('invite', () =>
-                    matrix.inviteToRoom(roomId!, mxid, undefined, { isDirect: true })
+                const invited = await guarded('invite', callTimeoutMs, (signal) =>
+                    matrix.inviteToRoom(roomId!, mxid, undefined, { isDirect: true, signal })
                 );
+                if (!stillPending(key)) return RECIPIENT_GONE;
                 if (!invited.ok) {
                     const reason =
                         'reason' in invited ? invited.reason : `status_${invited.status}`;
@@ -235,8 +301,9 @@ const resolveRoom = async (
         }
     }
     if (!roomId) {
-        const created = await guarded('create', () =>
+        const created = await guarded('create', callTimeoutMs, (signal) =>
             matrix.createRoom({
+                signal,
                 name: DEADMAN_NOTICE_ROOM_NAME,
                 // Out of every directory, and genuinely unencrypted: see the
                 // header for why `public_chat` with an invite-only join rule.
@@ -251,6 +318,10 @@ const resolveRoom = async (
                 powerLevelOverride: { events_default: 50, invite: 50 },
             })
         );
+        // The row, read again before the room is recorded on it: a deletion
+        // that landed during the create has ended it and forgotten its rooms,
+        // and this one is not written back (the room itself stands, empty).
+        if (!stillPending(key)) return RECIPIENT_GONE;
         if (!created.ok) return { kind: 'retry', reason: `matrix_create_${created.reason}` };
         roomId = created.roomId;
         // Recorded before the send, so a crash here does not make a second room.
@@ -279,20 +350,22 @@ const resolveRoom = async (
 const attempt = async (
     notice: DeadmanReleaseNoticeRecord,
     record: DeadmanSwitchRecord,
-    matrix: MatrixForNotices
+    matrix: MatrixForNotices,
+    callTimeoutMs: number
 ): Promise<Step> => {
     const wrap = db.getDeadmanReleaseWrap(notice.switchId, notice.recipientAccountId);
     const mxid = matrixUserIdFor(notice.recipientAccountId);
-    if (!wrap || !wrapIsHeld(wrap) || !mxid) return { kind: 'failed', reason: 'recipient_gone' };
+    if (!wrap || !wrapIsHeld(wrap) || !mxid) return RECIPIENT_GONE;
 
     const room = await withRoomSlot(notice.recipientAccountId, () =>
-        resolveRoom(notice, mxid, matrix)
+        resolveRoom(notice, mxid, matrix, callTimeoutMs)
     );
     if (!('roomId' in room)) return room;
 
-    const sent = await guarded('send', () =>
+    const sent = await guarded('send', callTimeoutMs, (signal) =>
         matrix.sendEvent(room.roomId, noticeContent(record.id), {
             txnId: noticeTxnId(record.id, notice.recipientAccountId),
+            signal,
         })
     );
     if (!sent.ok) {
@@ -317,7 +390,8 @@ const awaitsTrigger = (record: DeadmanSwitchRecord | undefined): boolean =>
 const processOne = async (
     notice: DeadmanReleaseNoticeRecord,
     now: Date,
-    matrix: MatrixForNotices
+    matrix: MatrixForNotices,
+    callTimeoutMs: number
 ): Promise<Step> => {
     const record = db.getDeadmanSwitch(notice.switchId);
     // Only a release switch that fired has `releasedAt`; an empty payload is
@@ -331,7 +405,7 @@ const processOne = async (
         return { kind: 'failed', reason: 'retry_window_over' };
     }
     try {
-        return await attempt(notice, record, matrix);
+        return await attempt(notice, record, matrix, callTimeoutMs);
     } catch (err) {
         if (err instanceof NoticeCallThrew) return err.step;
         // Not a homeserver call: still this notice's failure, not the tick's.
@@ -346,10 +420,11 @@ const processOne = async (
  * notice and recorded on its row; nothing here throws for one bad notice.
  */
 export const runDeadmanReleaseNotifier = async (
-    options: { now?: Date; matrix?: MatrixForNotices } = {}
+    options: { now?: Date; matrix?: MatrixForNotices; callTimeoutMs?: number } = {}
 ): Promise<NotifierResult> => {
     const now = options.now ?? new Date();
     const matrix = options.matrix ?? matrixClient;
+    const callTimeoutMs = options.callTimeoutMs ?? NOTICE_CALL_TIMEOUT_MS;
     const generation = stopGeneration;
     const result: NotifierResult = { caughtUp: 0, due: 0, sent: 0, retried: 0, failed: 0 };
 
@@ -374,16 +449,18 @@ export const runDeadmanReleaseNotifier = async (
         if (inFlight.has(key)) continue;
         inFlight.add(key);
         try {
-            const step = await processOne(notice, now, matrix);
+            const step = await processOne(notice, now, matrix, callTimeoutMs);
             const at = new Date().toISOString();
-            if (step.kind === 'sent') {
-                // The row and the account, read again: a deletion that landed
-                // during the send has ended the row (`recipient_gone`) and
-                // that stands; an account gone another way ends it here.
-                const row = db.getDeadmanReleaseNotice(notice.switchId, notice.recipientAccountId);
-                if (!row || row.status !== 'pending') {
-                    result.failed += 1;
-                } else if (!db.getUserById(notice.recipientAccountId)) {
+            // The row, read again before anything is written to it: a deletion
+            // that landed while this notice was in flight has ended the row
+            // (`recipient_gone`), and that stands whatever the step was; a row
+            // ended any other way meanwhile is left as it is, so no later
+            // error, attempt or backoff is written over the reason it ended.
+            if (!stillPending(notice)) {
+                result.failed += 1;
+            } else if (step.kind === 'sent') {
+                // The account, read again: one gone another way ends it here.
+                if (!db.getUserById(notice.recipientAccountId)) {
                     db.updateDeadmanReleaseNotice(notice.switchId, notice.recipientAccountId, {
                         status: 'failed',
                         failedAt: at,
@@ -438,7 +515,9 @@ export const runDeadmanReleaseNotifier = async (
  * handle. The timer is `.unref()`'d so it never keeps the process alive alone.
  * A tick that outlives the interval is not overlapped by the next one (as
  * `authRowsPruneScheduler.ts` does): the tick is asynchronous, so without this
- * a slow homeserver would stack ticks.
+ * a slow homeserver would stack ticks. The other side of that: a slow tick
+ * holds every due notice behind it, which is why each call it makes is bounded
+ * by `NOTICE_CALL_TIMEOUT_MS` (the header says what that leaves).
  */
 export const startDeadmanReleaseNotifier = (
     intervalMs: number = DEFAULT_INTERVAL_MS

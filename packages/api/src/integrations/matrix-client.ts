@@ -365,6 +365,8 @@ export const matrixClient = {
          * client lists the room with their direct messages.
          */
         isDirect?: boolean;
+        /** Aborts the request (a caller's timeout); the abort surfaces as `network_error`. */
+        signal?: AbortSignal;
     }) {
         const hs = homeserver();
         const token = botToken();
@@ -405,6 +407,7 @@ export const matrixClient = {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify(body),
+                ...(input.signal ? { signal: input.signal } : {}),
             });
         } catch (error) {
             return {
@@ -595,13 +598,15 @@ export const matrixClient = {
         roomId: string,
         userId: string,
         reason?: string,
-        options: { isDirect?: boolean } = {}
+        /** `signal` aborts the request (a caller's timeout); the abort throws, as a network error does. */
+        options: { isDirect?: boolean; signal?: AbortSignal } = {}
     ) {
         const hs = homeserver();
         const token = botToken();
         if (!hs || !token) {
             return { ok: false as const, reason: 'matrix_not_configured' as const };
         }
+        const signal = options.signal ? { signal: options.signal } : {};
         const response = options.isDirect
             ? await fetch(
                   `${hs}/_matrix/client/v3/rooms/${encodeURIComponent(
@@ -618,6 +623,7 @@ export const matrixClient = {
                           is_direct: true,
                           ...(reason ? { reason } : {}),
                       }),
+                      ...signal,
                   }
               )
             : await fetch(`${hs}/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/invite`, {
@@ -627,6 +633,7 @@ export const matrixClient = {
                       'Content-Type': 'application/json',
                   },
                   body: JSON.stringify(reason ? { user_id: userId, reason } : { user_id: userId }),
+                  ...signal,
               });
         let detail: string | undefined;
         if (!response.ok) {
@@ -809,7 +816,11 @@ export const matrixClient = {
      * Fails closed: a missing or malformed `state` array is a failure, never
      * an empty room.
      */
-    async getRoomStateAdmin(roomId: string) {
+    async getRoomStateAdmin(
+        roomId: string,
+        /** `signal` aborts the request (a caller's timeout); the abort surfaces as `network_error`. */
+        options: { signal?: AbortSignal } = {}
+    ) {
         const hs = homeserver();
         const token = botToken();
         if (!hs || !token) {
@@ -819,7 +830,10 @@ export const matrixClient = {
         try {
             response = await fetch(
                 `${hs}/_synapse/admin/v1/rooms/${encodeURIComponent(roomId)}/state`,
-                { headers: { Authorization: `Bearer ${token}` } }
+                {
+                    headers: { Authorization: `Bearer ${token}` },
+                    ...(options.signal ? { signal: options.signal } : {}),
+                }
             );
         } catch (error) {
             return {
@@ -1219,7 +1233,8 @@ export const matrixClient = {
         // Any JSON-serializable event content; it is only stringified below, so
         // typed message objects (e.g. the chat-bridge forwarders) are accepted.
         content: object,
-        options: { eventType?: string; txnId?: string } = {}
+        /** `signal` aborts the request (a caller's timeout); the abort throws, as a network error does. */
+        options: { eventType?: string; txnId?: string; signal?: AbortSignal } = {}
     ) {
         const hs = homeserver();
         const token = botToken();
@@ -1239,6 +1254,7 @@ export const matrixClient = {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify(content),
+                ...(options.signal ? { signal: options.signal } : {}),
             }
         );
         let eventId: string | undefined;
