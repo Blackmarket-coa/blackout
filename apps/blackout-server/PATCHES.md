@@ -611,6 +611,20 @@ reconciliation with upstream; after this they match upstream's for authlib.
   does not catch, so with such a `jwt_config.secret` every JWT login
   answered 500. The fork now refuses that secret at startup: see "2026-10-30
   JWT login refuses an HMAC secret authlib cannot use" below.
+- Behaviour change in MSC3861's client assertions (recorded after the third
+  review). authlib 1.9.1 signs `client_secret_jwt` and `private_key_jwt`
+  assertions with joserfc, which refuses a JWK whose `alg` is not the
+  assertion's RS256; 1.6.12 ignored `alg`. A homeserver with such a JWK
+  started and answered every authenticated request with 503. joserfc also
+  refuses to sign with an empty `client_secret`, but that path never ran:
+  `MSC3861DelegatedAuth` asserts the secret is truthy, so such a homeserver
+  stopped during setup on either version. The fork now refuses both when the
+  config loads: see "2026-10-30 MSC3861 refuses a client credential that
+  cannot sign" below. A `client_secret` that starts with `-----BEGIN ` and
+  does not parse as a key goes the other way: 1.6.12 refused to sign with it,
+  and 1.9.1 signs with it and emits joserfc's `SecurityWarning`. It is this
+  homeserver's own secret for signing its requests, not a key it verifies
+  tokens with, so that was left.
 - Behaviour change in provider metadata validation (`_validate_metadata` in
   `synapse/handlers/oidc.py`, recorded after the second review). authlib
   1.8.0 rewrote `is_secure_transport`, which `validate_issuer`,
@@ -645,7 +659,9 @@ reconciliation with upstream; after this they match upstream's for authlib.
     MSC3861 introspection request with `private_key_jwt` and with
     `client_secret_jwt`, and checks the posted assertion without authlib: the
     RS256 or HS256 signature, `kid`, `iss`, `sub`, `aud`, `jti` and the
-    3600 s lifetime. They pass under 1.6.12 and 1.9.1. Upstream has removed
+    3600 s lifetime. They pass under 1.6.12 and 1.9.1 because their JWK has
+    no `alg` member; with `"alg": "RS512"` 1.9.1 does not sign at all (see the
+    MSC3861 entry below, which adds those cases). Upstream has removed
     experimental MSC3861 (its config now refuses
     `experimental_features.msc3861`), so an upstream sync brings no coverage.
 
@@ -736,3 +752,46 @@ imported a string secret only and so missed a secret given as a JWK.
   each key of the accepted set returns 200. On the first version of this
   patch (`5bad47c`) the JWK forms were not refused, and the two-key set was
   (`Missing required field: "k"`), although the handler can use it.
+
+## 2026-10-30 MSC3861 refuses a client credential that cannot sign
+
+A fork patch with no upstream counterpart. Upstream removed experimental
+MSC3861 in `v1.157.0` (2026-07-21), replacing it with
+`matrix_authentication_service` and a shared secret; `develop` at `cc172f7`
+refuses `experimental_features.msc3861`. Every upstream release up to
+`v1.164.1` locks authlib 1.6.12 or older, and `develop` moved to 1.9.1 only
+with `b20ae98` (2026-10-27), so upstream never ran MSC3861 under joserfc and
+there is nothing to port. Recorded after the third review of
+`docs/security/dependency-advisories-server-desktop-2026-10-30.md` (repository
+root).
+
+- `synapse/config/experimental.py` (`_check_private_key_jwk`, called from
+  `MSC3861._check_client_auth_method` for `private_key_jwt`): a JWK whose
+  `alg` is set and is not `RS256` is refused with a `ConfigError` at
+  `experimental_features.msc3861.jwk`, on any authlib version.
+  `PrivateKeyJWTWithKid.sign` (`synapse/api/auth/msc3861_delegated.py`)
+  signs RS256, and from 1.7.0 authlib signs through joserfc, whose
+  `Key.check_alg` refuses such a key. Then the check signs one assertion
+  with `private_key_jwt_sign` and the same arguments `sign` passes, and turns
+  any exception into the same `ConfigError`. That also refuses, on both
+  versions, a JWK that is public only, is not RSA, or has `use: enc` or
+  `key_ops` without `sign`; none of them could ever sign. Before this, each
+  of these let the homeserver start and then answer every authenticated
+  request with 503 `Unable to introspect the access token`, the alg case
+  under 1.9.1 only. Keep `_check_private_key_jwk` in step with
+  `PrivateKeyJWTWithKid.sign`.
+- Same validator: an empty `client_secret` is refused like a missing one
+  (`not self.client_secret`, was `is None`) for `client_secret_post`,
+  `client_secret_basic` and `client_secret_jwt`. `MSC3861DelegatedAuth`
+  already asserted it truthy, so such a homeserver stopped during setup with
+  `AssertionError: No client_secret provided`, on both authlib versions; it
+  now stops with the config path. Under `python -O`, which no Blackout image
+  uses, the assertion would be gone and authlib 1.9.1 would refuse to sign
+  `client_secret_jwt` on every request.
+- `tests/blackout_runtime/test_msc3861_client_assertion.py`: a JWK naming
+  RS384, RS512, PS256 or ES256 is refused at `experimental_features.msc3861.jwk`;
+  so are a public JWK, `use: enc`, `key_ops: ["verify"]` and an EC key; an
+  RSA JWK with no `alg`, `alg: RS256`, `use: sig` or `key_ops: ["sign"]` is
+  accepted; an empty secret is refused for each of the three methods; and
+  an `alg: RS256`, `use: sig` JWK still sends a verified RS256 assertion.
+  The alg and empty-secret refusals fail on the code before this patch.

@@ -10,6 +10,13 @@ Each test drives a real introspection request, takes the posted
 ``client_assertion`` and checks it independently of authlib: the signature
 with ``cryptography`` or ``hmac``, and the header and claims as JSON.
 
+The fork's config check (``synapse/config/experimental.py``) refuses at
+startup what cannot sign: a JWK whose ``alg`` is not RS256, which joserfc
+refuses for an RS256 assertion, a JWK that cannot sign at all, and an empty
+client secret. Before it, the first made every authenticated request answer
+503 under authlib 1.9.1, the second did so under any version, and the third
+stopped the homeserver with an AssertionError.
+
 Record: docs/security/dependency-advisories-server-desktop-2026-10-30.md
 (repository root).
 """
@@ -21,16 +28,18 @@ import hashlib
 import hmac
 import json
 import time
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, List, Tuple
 from unittest.mock import AsyncMock, Mock
 from urllib.parse import parse_qs
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.asymmetric import padding, rsa
+from cryptography.hazmat.primitives.asymmetric import ec, padding, rsa
 
 from twisted.test.proto_helpers import MemoryReactor
 
+from synapse.config import ConfigError
+from synapse.config.homeserver import HomeServerConfig
 from synapse.server import HomeServer
 from synapse.util import Clock
 
@@ -38,8 +47,8 @@ from synapse.util import Clock
 # this module's namespace, and that suite already runs on its own.
 import tests.handlers.test_oauth_delegation as delegation_tests
 from tests.test_utils import FakeResponse
-from tests.unittest import HomeserverTestCase, skip_unless
-from tests.utils import HAS_AUTHLIB, checked_cast
+from tests.unittest import HomeserverTestCase, TestCase, skip_unless
+from tests.utils import HAS_AUTHLIB, checked_cast, default_config
 
 ASSERTION_TYPE = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer"
 KID = "blackout-test-kid"
@@ -175,6 +184,16 @@ class PrivateKeyJwtTestCase(_ClientAssertionTestCase):
 
 
 @skip_unless(HAS_AUTHLIB, "requires authlib")
+class PrivateKeyJwtWithRs256AlgTestCase(PrivateKeyJwtTestCase):
+    """A JWK that names RS256, the assertion's algorithm, still signs."""
+
+    client_auth = {
+        "client_auth_method": "private_key_jwt",
+        "jwk": {**_private_jwk(_SIGNING_KEY), "alg": "RS256", "use": "sig"},
+    }
+
+
+@skip_unless(HAS_AUTHLIB, "requires authlib")
 class ClientSecretJwtTestCase(_ClientAssertionTestCase):
     client_auth = {
         "client_auth_method": "client_secret_jwt",
@@ -196,3 +215,101 @@ class ClientSecretJwtTestCase(_ClientAssertionTestCase):
         # And the check above is a real one.
         wrong = hmac.new(b"another-secret", signing_input, hashlib.sha256)
         self.assertFalse(hmac.compare_digest(signature, wrong.digest()))
+
+
+def _public_jwk(key: rsa.RSAPrivateKey) -> Dict[str, str]:
+    jwk = _private_jwk(key)
+    return {name: jwk[name] for name in ("kty", "kid", "n", "e")}
+
+
+def _ec_private_jwk() -> Dict[str, str]:
+    key = ec.generate_private_key(ec.SECP256R1())
+    public = key.public_key().public_numbers()
+    return {
+        "kty": "EC",
+        "kid": KID,
+        "crv": "P-256",
+        "x": _b64url_uint(public.x),
+        "y": _b64url_uint(public.y),
+        "d": _b64url_uint(key.private_numbers().private_value),
+    }
+
+
+@skip_unless(HAS_AUTHLIB, "requires authlib")
+class ClientCredentialConfigTestCase(TestCase):
+    """What cannot sign the client assertion is refused when the config loads."""
+
+    def _parse(self, client_auth: Dict[str, Any]) -> HomeServerConfig:
+        config_dict = {
+            **default_config("test"),
+            "public_baseurl": delegation_tests.BASE_URL,
+            "enable_registration": False,
+            "experimental_features": {
+                "msc3861": {
+                    "enabled": True,
+                    "issuer": delegation_tests.ISSUER,
+                    "client_id": delegation_tests.CLIENT_ID,
+                    **client_auth,
+                }
+            },
+        }
+        config = HomeServerConfig()
+        config.parse_config_dict(config_dict, "", "")
+        return config
+
+    def test_jwk_for_another_algorithm_is_refused(self) -> None:
+        for alg in ("RS384", "RS512", "PS256", "ES256"):
+            with self.subTest(alg=alg):
+                with self.assertRaises(ConfigError) as cm:
+                    self._parse(
+                        {
+                            "client_auth_method": "private_key_jwt",
+                            "jwk": {**_private_jwk(_SIGNING_KEY), "alg": alg},
+                        }
+                    )
+                self.assertEqual(cm.exception.path, ("experimental", "msc3861", "jwk"))
+                self.assertIn(alg, cm.exception.msg)
+
+    def test_jwk_that_cannot_sign_is_refused(self) -> None:
+        jwks = {
+            "public key only": _public_jwk(_SIGNING_KEY),
+            "use enc": {**_private_jwk(_SIGNING_KEY), "use": "enc"},
+            "key_ops verify": {**_private_jwk(_SIGNING_KEY), "key_ops": ["verify"]},
+            "EC key": _ec_private_jwk(),
+        }
+        for label, jwk in jwks.items():
+            with self.subTest(jwk=label):
+                with self.assertRaises(ConfigError) as cm:
+                    self._parse({"client_auth_method": "private_key_jwt", "jwk": jwk})
+                self.assertEqual(cm.exception.path, ("experimental", "msc3861", "jwk"))
+
+    def test_jwk_that_can_sign_is_accepted(self) -> None:
+        extras: List[Dict[str, Any]] = [
+            {},
+            {"alg": "RS256"},
+            {"use": "sig"},
+            {"key_ops": ["sign"]},
+        ]
+        for extra in extras:
+            with self.subTest(extra=extra):
+                config = self._parse(
+                    {
+                        "client_auth_method": "private_key_jwt",
+                        "jwk": {**_private_jwk(_SIGNING_KEY), **extra},
+                    }
+                )
+                self.assertIsNotNone(config.experimental.msc3861.jwk)
+
+    def test_empty_client_secret_is_refused(self) -> None:
+        for method in (
+            "client_secret_post",
+            "client_secret_basic",
+            "client_secret_jwt",
+        ):
+            with self.subTest(method=method):
+                with self.assertRaises(ConfigError) as cm:
+                    self._parse({"client_auth_method": method, "client_secret": ""})
+                self.assertEqual(
+                    cm.exception.path,
+                    ("experimental", "msc3861", "client_auth_method"),
+                )
