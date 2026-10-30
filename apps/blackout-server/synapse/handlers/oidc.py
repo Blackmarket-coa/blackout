@@ -1327,7 +1327,12 @@ class OidcProvider:
                 claims_cls=LogoutToken,
                 claims_options=claims_options,
             )
-        except JoseError:
+        except (JoseError, ValueError):
+            # authlib raises ValueError, not a JoseError, for a key it cannot
+            # use: a kid the provider's JWKS does not have, or an HS* header
+            # naming an RSA or EC key. Anyone can send such a token, and sec.
+            # 2.8 answers an invalid request, or a logout that failed, with
+            # 400. (Blackout fork patch, see PATCHES.md, 2026-10-30.)
             logger.exception("Invalid logout_token")
             raise SynapseError(400, "Invalid logout_token")
 

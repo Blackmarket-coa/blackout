@@ -5,6 +5,11 @@ tokens, but a provider may list it in ``id_token_signing_alg_values_supported``
 for ID tokens, and that list is what the logout token is checked against. The
 fork drops ``none`` from it in ``OidcProvider.handle_backchannel_logout``.
 
+A logout token whose key authlib cannot use (a kid the JWKS does not have, or
+an HS* header naming the provider's EC key) raises ValueError rather than
+JoseError. The fork answers that with 400, as sec. 2.8 asks, where it used to
+escape as a 500.
+
 Records: docs/security/dependency-advisories-server-desktop-2026-10-30.md
 (repository root) and PATCHES.md, 2026-10-30.
 """
@@ -12,6 +17,8 @@ Records: docs/security/dependency-advisories-server-desktop-2026-10-30.md
 from __future__ import annotations
 
 import base64
+import hashlib
+import hmac
 import json
 from http import HTTPStatus
 from typing import Any, ContextManager, Dict, List
@@ -98,6 +105,41 @@ class UnsignedLogoutTokenTestCase(HomeserverTestCase):
         }
         return f"{_b64url_json(header)}.{_b64url_json(claims)}."
 
+    def _logout_claims(
+        self, server: FakeOidcServer, grant: FakeAuthorizationGrant
+    ) -> Dict[str, Any]:
+        return {
+            "iss": server.issuer,
+            "aud": grant.client_id,
+            "iat": int(self.clock.time()),
+            "jti": "forged-logout-token",
+            "events": {BACKCHANNEL_LOGOUT_EVENT: {}},
+            "sid": grant.sid,
+            "sub": grant.userinfo["sub"],
+        }
+
+    def _forged_logout_token(
+        self, server: FakeOidcServer, grant: FakeAuthorizationGrant, alg: str, kid: str
+    ) -> str:
+        """A logout token that is not signed with any key the provider has.
+
+        For HS256 the signature is an HMAC with a made-up secret; for any
+        other alg it is 64 zero bytes. authlib fails on the key before it
+        compares a signature.
+        """
+        signing_input = (
+            f"{_b64url_json({'alg': alg, 'kid': kid})}."
+            f"{_b64url_json(self._logout_claims(server, grant))}"
+        )
+        if alg == "HS256":
+            signature = hmac.new(
+                b"guessed-key", signing_input.encode("ascii"), hashlib.sha256
+            ).digest()
+        else:
+            signature = b"\x00" * 64
+        encoded = base64.urlsafe_b64encode(signature).rstrip(b"=").decode("ascii")
+        return f"{signing_input}.{encoded}"
+
     @override_config(
         {
             "oidc_providers": [
@@ -163,3 +205,45 @@ class UnsignedLogoutTokenTestCase(HomeserverTestCase):
                 channel = self._submit(token)
                 self.assertEqual(channel.code, HTTPStatus.BAD_REQUEST, channel.result)
         self.assertEqual(self._whoami(access_token), HTTPStatus.OK)
+
+    @override_config(
+        {
+            "oidc_providers": [
+                auth_tests.oidc_config(
+                    id="oidc",
+                    with_localpart_template=True,
+                    backchannel_logout_enabled=True,
+                )
+            ]
+        }
+    )
+    def test_logout_token_with_unusable_key_is_refused_with_400(self) -> None:
+        """A key authlib cannot use is a 400, not a 500, and ends no session."""
+        server = self.helper.fake_oidc_server()
+        with self._advertise(server, ["ES256", "HS256"]):
+            login_resp, grant = self.helper.login_via_oidc(
+                server, "john", with_sid=True
+            )
+            access_token: str = login_resp["access_token"]
+            kid = server.get_jwks()["keys"][0]["kid"]
+
+            with server.patch_homeserver(hs=self.hs):
+                for alg, token_kid in (
+                    # The provider's kid is an EC key, which has no "k".
+                    ("HS256", kid),
+                    ("HS256", "no-such-kid"),
+                    ("ES256", "no-such-kid"),
+                ):
+                    with self.subTest(alg=alg, kid=token_kid):
+                        channel = self._submit(
+                            self._forged_logout_token(server, grant, alg, token_kid)
+                        )
+                        self.assertEqual(
+                            channel.code, HTTPStatus.BAD_REQUEST, channel.result
+                        )
+                        self.assertEqual(self._whoami(access_token), HTTPStatus.OK)
+
+            # The session still ends on a signed logout token.
+            channel = self._submit(server.generate_logout_token(grant))
+            self.assertEqual(channel.code, HTTPStatus.OK, channel.result)
+            self.assertEqual(self._whoami(access_token), HTTPStatus.UNAUTHORIZED)

@@ -652,3 +652,29 @@ root).
   code before this patch. The file sits in the fork's own test directory but
   uses helpers from `tests/rest/client/test_auth.py` and
   `tests/test_utils/oidc.py`, so check it after any sync that touches those.
+
+## 2026-10-30 back-channel logout answers 400 for a key authlib cannot use
+
+A fork patch with no upstream counterpart (element-hq/synapse `develop` at
+`cc172f7` catches only `JoseError` here). Recorded after the second review of
+`docs/security/dependency-advisories-server-desktop-2026-10-30.md` (repository
+root).
+
+- `synapse/handlers/oidc.py` (`OidcProvider.handle_backchannel_logout`):
+  `except (JoseError, ValueError)` where it was `except JoseError`. authlib
+  raises `ValueError`, not a `JoseError`, when it cannot use a key for the
+  token: a `kid` the provider's JWKS lacks (`Invalid JSON Web Key Set`), or
+  an HS\* header whose `kid` names an RSA or EC key
+  (`Missing required field: "k"`). Anyone can POST such a token, and it
+  escaped as a 500 with `M_UNKNOWN`. OIDC Back-Channel Logout 1.0 sec. 2.8 asks for 400 when the
+  request is invalid or the logout failed. No session was ended before or
+  after; the change is the status code.
+- Not changed: `_verify_jwt` still reloads the JWKS once after any
+  `ValueError` from the first decode, so each such token makes one request to
+  the provider's `jwks_uri`, and each invalid token still logs a traceback
+  (`logger.exception`). The record says why that was left.
+- `tests/blackout_runtime/test_backchannel_logout_alg.py`
+  (`test_logout_token_with_unusable_key_is_refused_with_400`): HS256 with the
+  provider's EC `kid`, and HS256 and ES256 with an unknown `kid`, each get 400
+  and leave the session alone; a signed token still ends it. The test fails
+  on the code before this patch (500).
