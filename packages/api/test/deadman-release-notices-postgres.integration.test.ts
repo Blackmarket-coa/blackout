@@ -45,7 +45,9 @@ const { PGlite } = await import('@electric-sql/pglite');
 const protocol = await import('@blackout/protocol');
 const { sweepOverdueDeadmanSwitches } = await import('../src/modules/deadman');
 const { armReleaseSwitch } = await import('../src/services/deadmanReleases');
-const { runDeadmanReleaseNotifier } = await import('../src/services/deadmanReleaseNotifier');
+const { NOTICE_RETRY_WINDOW_MS, runDeadmanReleaseNotifier } = await import(
+    '../src/services/deadmanReleaseNotifier'
+);
 
 protocol.setKemProvider(protocol.mlKem768Provider);
 
@@ -170,43 +172,47 @@ const urlOf = (input: RequestInfo | URL): string =>
 test('an account deletion the API process committed while the worker had a notice in hand stands in Postgres, whenever its change notification reaches the worker', async () => {
     type Variant = {
         name: string;
-        /** An earlier notice made the person's room; `purged`: the homeserver has since lost it. */
-        room: 'none' | 'known' | 'purged';
-        /** The homeserver call the deletion lands during. */
-        park: 'send' | 'create';
+        /**
+         * An earlier notice made the person's room (`known`); the homeserver
+         * has since lost it (`purged`); or the person has left it (`left`).
+         */
+        room: 'none' | 'known' | 'purged' | 'left';
+        /** The homeserver call the deletion lands during; `none`: before the tick. */
+        park: 'send' | 'create' | 'invite' | 'none';
         /** The notification reaches the worker while that call is in flight, not after. */
-        early: boolean;
+        early?: boolean;
+        /** The parked send is refused, so the worker records a retry. */
+        refused?: boolean;
+        /** The tick comes after the retry window, so the worker ends the row itself. */
+        late?: boolean;
     };
     const variants: Variant[] = [
-        {
-            name: 'room known, during the send, told after',
-            room: 'known',
-            park: 'send',
-            early: false,
-        },
+        { name: 'room known, during the send, told after', room: 'known', park: 'send' },
         {
             name: 'room known, during the send, told during',
             room: 'known',
             park: 'send',
             early: true,
         },
-        {
-            name: 'room made now, during the send, told after',
-            room: 'none',
-            park: 'send',
-            early: false,
-        },
-        {
-            name: 'room made now, during the create, told after',
-            room: 'none',
-            park: 'create',
-            early: false,
-        },
+        { name: 'room made now, during the send, told after', room: 'none', park: 'send' },
+        { name: 'room made now, during the create, told after', room: 'none', park: 'create' },
         {
             name: 'room purged and replaced now, during the create, told after',
             room: 'purged',
             park: 'create',
-            early: false,
+        },
+        {
+            name: 'room known, during a send the homeserver refuses, told after',
+            room: 'known',
+            park: 'send',
+            refused: true,
+        },
+        { name: 'person left, during the re-invite, told after', room: 'left', park: 'invite' },
+        {
+            name: 'before a tick after the retry window, told after',
+            room: 'known',
+            park: 'none',
+            late: true,
         },
     ];
     for (const variant of variants) {
@@ -228,6 +234,17 @@ test('an account deletion the API process committed while the worker had a notic
             );
             assert.ok(sent.room_id, variant.name);
             if (variant.room === 'purged') matrix.purgeRoom(sent.room_id);
+            if (variant.room === 'left') {
+                const state = matrix.rooms.get(sent.room_id) as Array<{
+                    type: string;
+                    state_key?: string;
+                    content?: Record<string, unknown>;
+                }>;
+                matrix.rooms.set(sent.room_id, [
+                    ...state.filter((e) => !(e.type === 'm.room.member' && e.state_key === mxid)),
+                    { type: 'm.room.member', state_key: mxid, content: { membership: 'leave' } },
+                ]);
+            }
         }
         const notice = await release(recipient);
         await worker.drain();
@@ -245,7 +262,11 @@ test('an account deletion the API process committed while the worker had a notic
             const hit =
                 variant.park === 'send'
                     ? url.includes('/send/') && url.includes(notice.switchId)
-                    : url.includes('/createRoom') && String(init?.body).includes(mxid);
+                    : variant.park === 'create'
+                    ? url.includes('/createRoom') && String(init?.body).includes(mxid)
+                    : variant.park === 'invite'
+                    ? url.includes('/state/m.room.member/')
+                    : false;
             if (hit && !parked) {
                 parked = true;
                 await gate;
@@ -257,10 +278,7 @@ test('an account deletion the API process committed while the worker had a notic
                 deliverToWorker(row.switchId, recipient.id);
             }
         };
-        try {
-            const tick = runDeadmanReleaseNotifier({ now: notice.at });
-            for (let i = 0; i < 200 && !parked; i += 1) await new Promise((r) => setTimeout(r, 10));
-            assert.ok(parked, `${variant.name}: the call was reached`);
+        const deleteAndCheck = async () => {
             deleteOnApp(app, recipient.id);
             await app.drain();
             assert.deepEqual(
@@ -268,19 +286,38 @@ test('an account deletion the API process committed while the worker had a notic
                 { status: 'failed', last_error: 'recipient_gone', room_id: null },
                 `${variant.name}: the app committed the deletion`
             );
-            if (variant.early) {
+        };
+        try {
+            if (variant.park === 'none') {
+                await deleteAndCheck();
+                const after = new Date(notice.at.getTime() + NOTICE_RETRY_WINDOW_MS + 1000);
+                assert.equal((await runDeadmanReleaseNotifier({ now: after })).failed, 1);
                 tellWorker();
                 await settle();
-            }
-            open();
-            await tick;
-            if (!variant.early) {
-                tellWorker();
-                await settle();
+            } else {
+                const tick = runDeadmanReleaseNotifier({ now: notice.at });
+                for (let i = 0; i < 200 && !parked; i += 1) {
+                    await new Promise((r) => setTimeout(r, 10));
+                }
+                assert.ok(parked, `${variant.name}: the call was reached`);
+                await deleteAndCheck();
+                if (variant.early) {
+                    tellWorker();
+                    await settle();
+                }
+                if (variant.refused) matrix.sendStatus = 500;
+                open();
+                await tick;
+                matrix.sendStatus = 200;
+                if (!variant.early) {
+                    tellWorker();
+                    await settle();
+                }
             }
             await worker.drain();
         } finally {
             open();
+            matrix.sendStatus = 200;
             globalThis.fetch = matrix.fetch;
         }
 
