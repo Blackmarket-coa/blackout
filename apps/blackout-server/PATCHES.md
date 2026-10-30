@@ -588,10 +588,44 @@ reconciliation with upstream; after this they match upstream's for authlib.
 - `tests/handlers/test_oidc.py` (`test_map_userinfo_to_user`): the integer
   `sub` case now arrives from the userinfo endpoint
   (`_user_profile_method = "userinfo_endpoint"`, `scope=""`, so the fake
-  provider issues no id_token), as in upstream. Since 1.7.0 authlib validates
-  id_token claims with joserfc, which rejects a `sub` that is not a string
-  (RFC 7519 StringOrURI; OIDC Core requires a string). A provider that puts an
-  integer `sub` in a signed id_token is now refused with `invalid_token`; one
-  that returns an integer id from its userinfo endpoint (GitHub-style OAuth2)
-  still maps. `synapse/handlers/oidc.py` is unchanged, and so is every claim
-  check it asks for (`iss`, `aud`, `exp`, `nonce`, `at_hash`, signature).
+  provider issues no id_token), as in upstream. A provider that returns an
+  integer id from its userinfo endpoint (GitHub-style OAuth2) still maps.
+- Behaviour change (corrected 2026-10-30; the first version of this entry
+  named the integer `sub` alone). Since 1.7.0 authlib validates an id_token's
+  registered claims with joserfc, which type-checks each one present (RFC
+  7519). An id_token is now refused with `invalid_token` when its `sub` or
+  `jti` is not a string, or when its `aud` is neither a string nor a list of
+  strings (`["<client_id>", 5]` is refused even with a matching `azp`). A
+  non-string `iss` is refused too, as it was before, because `oidc.py` always
+  checks `iss` against the issuer. No probe case that 1.6.12 refused is
+  accepted by 1.9.1 (the record lists them). JWT login
+  (`synapse/handlers/jwt.py`) and the back-channel logout token validate with
+  authlib.jose's `JWTClaims`, so they are unchanged: both still accept an
+  integer `jti`.
+- The id_token checks in `synapse/handlers/oidc.py`, which this entry does not
+  change: the signature, with whatever algorithms the provider lists in
+  `id_token_signing_alg_values_supported`, so an unsigned id_token passes when
+  the list has `none` (OIDC allows that for a token fetched from the token
+  endpoint); `iss` against the issuer; `exp`, `nbf` and `iat` with 120 s of
+  leeway; `nonce`; `at_hash`. `aud` is checked only through authlib's `azp`
+  rule: when `aud` is anything but this client id (or a one-element list of
+  it), `azp` must equal the client id, and when it does, `aud` is not
+  compared at all. OIDC Core 3.1.3.7 step 3 asks for that comparison; neither
+  authlib version makes it, and upstream does not ask for it. The record says
+  why neither gap was patched here.
+- Tests added in the fork's own directory on 2026-10-30, after the bump,
+  because the two paths joserfc rewrote had no test. They use helpers from
+  `tests/handlers/test_oidc.py`, `tests/handlers/test_oauth_delegation.py`
+  and `tests/test_utils/oidc.py`; check them after any sync that touches
+  those.
+  - `tests/blackout_runtime/test_oidc_claim_types.py`: an id_token with an
+    integer `sub`, an integer `jti`, or `aud: ["<client_id>", 5]` with a
+    matching `azp`, renders `invalid_token`; a string `jti` still logs in.
+    These fail under authlib 1.6.12, which accepted all three.
+  - `tests/blackout_runtime/test_msc3861_client_assertion.py`: sends an
+    MSC3861 introspection request with `private_key_jwt` and with
+    `client_secret_jwt`, and checks the posted assertion without authlib: the
+    RS256 or HS256 signature, `kid`, `iss`, `sub`, `aud`, `jti` and the
+    3600 s lifetime. They pass under 1.6.12 and 1.9.1. Upstream has removed
+    experimental MSC3861 (its config now refuses
+    `experimental_features.msc3861`), so an upstream sync brings no coverage.
