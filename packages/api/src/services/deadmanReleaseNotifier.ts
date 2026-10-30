@@ -37,35 +37,64 @@
  * removed, never a release), ends the notice at once. A row for a release
  * switch that has not fired yet (a store from a crash) is left alone until it
  * does. A person who left or declined their room is invited again, at most
- * once per notice. Logs carry counts only.
+ * once per notice. Logs carry counts, and for a throw that is not a
+ * homeserver call the error's message; never who or where.
  *
  * One room per person: a per-recipient slot serialises finding or making the
  * room, and a notice that waited for the slot reads the room again before
  * deciding, so two notices for one person in overlapping ticks make one room;
- * the interval's tick does not start while the previous one runs. When the
- * homeserver no longer has a person's room, the replacement is recorded on
- * every one of their rows that pointed at the old one. The row is read again
- * after every homeserver call and before anything is written to it: a
- * deletion that landed while the room was being found or made, or during the
- * send, has already ended the row with `recipient_gone`, and that stands
- * whatever the call answered (no room is recorded on it, no re-invite, no
- * send, no attempt, no later error over its reason); a row ended any other
- * way meanwhile is left as it is.
+ * the interval's tick does not start while the previous one runs. The room
+ * also carries an alias, `#blackout-notices-<hmac>:<server>`: 128 bits of an
+ * HMAC over the person's Matrix id under a key derived from the API's
+ * `JWT_SECRET_PRIMARY` (`noticeRoomAliasLocalpart`). Nobody without the
+ * secret can compute it, so the directory does not tell anyone who has a
+ * notices room; the person sees it as the room's address. The homeserver
+ * refuses a second room with a taken alias before it makes one
+ * (`M_ROOM_IN_USE`), so a `createRoom` it finished after this side stopped
+ * waiting, or one another API process made first, is found through the alias
+ * on the next attempt instead of being made again (as first fixed, each such
+ * attempt left the person one more empty "Blackout notices" room with an
+ * invite: round 3 of part 2's review). What that leaves (`makeRoom`): a
+ * secret rotation between a create that timed out and its retry changes the
+ * alias, so that room is not found and another is made; a homeserver that
+ * refuses the alias itself (an alias policy, or an appservice's namespace),
+ * or an alias naming a room that is gone or that the bot did not make, gets a
+ * room without an alias, and a create of that room which times out after the
+ * homeserver made it leaves one more room, as before the alias; and two
+ * processes making one person's room at the same moment both pass the
+ * homeserver's alias check, and the second's alias write then fails after
+ * the homeserver gave it a room id but before any event, so that room has
+ * nobody in it and nobody invited. When the homeserver no longer has a
+ * person's room, the replacement is recorded on every one of their rows that
+ * pointed at the old one. The row is read again after every homeserver call
+ * and before anything is written to it: a deletion that landed while the room
+ * was being found or made, or during the send, has already ended the row with
+ * `recipient_gone`, and that stands whatever the call answered (no room is
+ * recorded on it, no re-invite, no send, no attempt, no later error over its
+ * reason); a row ended any other way meanwhile is left as it is.
  *
  * Each homeserver call has `NOTICE_CALL_TIMEOUT_MS` to answer; one that does
  * not is that notice's retry (`matrix_<call>_timeout`) and its request is
  * aborted. Without that, one connection the homeserver accepted and never
  * answered would hold the tick, and with it every other due notice, for
  * undici's default of five minutes, since the ticks do not overlap. A tick is
- * still a sequence: 50 notices whose every call times out take about 25
- * minutes, and the worker's shutdown waits for a tick in flight only up to
- * its own bound (`backgroundTicks.ts`).
+ * still a sequence, and a notice makes up to seven calls in turn (the state
+ * of a known room, a create, the alias lookup, the bot's own id (cached once
+ * the homeserver has answered it), the state of the room found, a re-invite
+ * or a create without the alias, the send). So a homeserver that answers nothing holds a tick of
+ * 50 notices for about 25 minutes, each notice ending at its first call's
+ * timeout; one that answers slowly rather than not at all, in just under the
+ * timeout each time, can hold one notice for up to seven timeouts (three and
+ * a half minutes) and a tick of 50 for about three hours, with every notice
+ * due beyond the 50 waiting for the next tick. The worker's shutdown waits
+ * for a tick in flight only up to its own bound (`backgroundTicks.ts`).
  *
  * Matrix transaction id `deadman-release-<switch>-<recipient>`, so a resend
  * soon after a crash is deduplicated (the homeserver keeps transaction ids
  * for a while, not for ever). Not through `botPostingGate.ts`: this is the
  * bot's own post into its own room, not a post in a user's name.
  */
+import { createHmac } from 'node:crypto';
 import {
     DEADMAN_NOTICE_BODY,
     DEADMAN_NOTICE_POINTER_FIELD,
@@ -77,9 +106,10 @@ import { db } from '../db/store';
 import type { DeadmanReleaseNoticeRecord, DeadmanSwitchRecord } from '../db/types';
 import { matrixClient } from '../integrations/matrix-client';
 import { log } from '../telemetry/logger';
+import { readAuthRuntimeConfig } from './auth';
 import { trackBackgroundTick } from './backgroundTicks';
 import { isReleaseSwitch, wrapIsHeld, writeReleaseNotices } from './deadmanReleases';
-import { matrixUserIdFor } from './userIdentity';
+import { homeserverDomain, matrixUserIdFor } from './userIdentity';
 
 export const DEFAULT_INTERVAL_MS = 30 * 1000;
 /** The first retry waits this long; each further one doubles it, up to the cap. */
@@ -103,6 +133,32 @@ export const NOTICE_ROOM_JOIN_RULE = {
     content: { join_rule: 'invite' },
 } as const;
 
+/** The notices room's alias localpart starts with this; the rest is `noticeRoomAliasLocalpart`'s HMAC. */
+export const NOTICE_ROOM_ALIAS_PREFIX = 'blackout-notices-';
+
+/**
+ * The localpart of a person's notices-room alias: the prefix and 128 bits of
+ * an HMAC over their Matrix id, keyed by a key derived for this purpose from
+ * `JWT_SECRET_PRIMARY`. Stable for one person on one secret, so a create the
+ * homeserver finished after this side stopped waiting is found by it; not
+ * computable without the secret, so the alias directory does not tell anyone
+ * whether a person has a notices room. The Matrix id, not the account id: the
+ * room's own membership already ties the room to the Matrix id, and account
+ * deletion forgets the rooms on the account's rows (`accountLifecycle.ts`),
+ * which an alias over the account id would undo for whoever holds the secret.
+ */
+export const noticeRoomAliasLocalpart = (mxid: string): string => {
+    const purposeKey = createHmac('sha256', readAuthRuntimeConfig().signingSecret)
+        .update('blackout-deadman-notice-room-alias')
+        .digest();
+    const digest = createHmac('sha256', purposeKey).update(mxid).digest('hex');
+    return `${NOTICE_ROOM_ALIAS_PREFIX}${digest.slice(0, 32)}`;
+};
+
+/** The full alias, `#<localpart>:<server name>`, as the directory is asked for it. */
+export const noticeRoomAlias = (mxid: string): string =>
+    `#${noticeRoomAliasLocalpart(mxid)}:${homeserverDomain()}`;
+
 /** Why a notice stopped being retried before the window closed. */
 export type NoticeTerminalReason = 'recipient_gone' | 'release_unavailable' | 'retry_window_over';
 
@@ -113,7 +169,12 @@ export const noticeBackoffMs = (attempts: number): number =>
 /** The homeserver calls the notifier makes, so a test can hand it a stand-in. */
 export type MatrixForNotices = Pick<
     typeof matrixClient,
-    'createRoom' | 'getRoomStateAdmin' | 'inviteToRoom' | 'sendEvent'
+    | 'botUserId'
+    | 'createRoom'
+    | 'getRoomStateAdmin'
+    | 'inviteToRoom'
+    | 'resolveRoomAlias'
+    | 'sendEvent'
 >;
 
 export interface NotifierResult {
@@ -246,11 +307,163 @@ const membershipOf = (
 };
 
 /**
+ * What a room's state says: usable (the person invited or in it), not usable
+ * (gone from the homeserver, or, for a room found through the alias, not one
+ * the bot made), or a step for the notice.
+ */
+type RoomCheck = { kind: 'ok' } | { kind: 'unusable' } | Step;
+
+/**
+ * Read a room's state and make sure the person is invited to it or in it:
+ * one who left, declined, or never got the invite is invited again, as a
+ * direct message, at most once per notice (a later attempt of this notice
+ * does not invite again). `unusable` is the homeserver's 404 (purged, say)
+ * and, when `madeBy` is given (a room found through the person's alias),
+ * a room whose `m.room.create` another account sent: a room an admin shut
+ * down with a replacement has its aliases moved to the replacement, which the
+ * bot is not in. A room with no `m.room.create` yet is one the homeserver is
+ * still making: retried. The row is read again after each call, as
+ * `resolveRoom` says.
+ */
+const checkRoom = async (
+    roomId: string,
+    current: DeadmanReleaseNoticeRecord,
+    mxid: string,
+    matrix: MatrixForNotices,
+    callTimeoutMs: number,
+    madeBy?: string
+): Promise<RoomCheck> => {
+    const key = { switchId: current.switchId, recipientAccountId: current.recipientAccountId };
+    const state = await guarded('state', callTimeoutMs, (signal) =>
+        matrix.getRoomStateAdmin(roomId, { signal })
+    );
+    if (!stillPending(key)) return RECIPIENT_GONE;
+    if (!state.ok) {
+        if ('status' in state && state.status === 404) return { kind: 'unusable' };
+        return { kind: 'retry', reason: `matrix_state_${state.reason}` };
+    }
+    if (madeBy !== undefined) {
+        const creation = state.state.find((e) => e.type === 'm.room.create');
+        if (!creation) return { kind: 'retry', reason: 'matrix_alias_room_not_ready' };
+        if (creation.sender !== madeBy) return { kind: 'unusable' };
+    }
+    const membership = membershipOf(state.state, mxid);
+    if (membership !== 'join' && membership !== 'invite' && !current.reinvitedAt) {
+        const invited = await guarded('invite', callTimeoutMs, (signal) =>
+            matrix.inviteToRoom(roomId, mxid, undefined, { isDirect: true, signal })
+        );
+        if (!stillPending(key)) return RECIPIENT_GONE;
+        if (!invited.ok) {
+            const reason = 'reason' in invited ? invited.reason : `status_${invited.status}`;
+            return { kind: 'retry', reason: `matrix_invite_${reason}` };
+        }
+        db.updateDeadmanReleaseNotice(key.switchId, key.recipientAccountId, {
+            reinvitedAt: new Date().toISOString(),
+        });
+    }
+    return { kind: 'ok' };
+};
+
+/** The create the homeserver refused for the alias alone: its alias policy forbids the bot (403), or an appservice holds the namespace (`M_EXCLUSIVE`). */
+const aliasRefused = (created: { status?: number; errcode?: string }): boolean =>
+    created.status === 403 || created.errcode === 'M_EXCLUSIVE';
+
+/**
+ * Ask the homeserver for the person's room: the `public_chat` preset with an
+ * invite-only join rule (the header says why), out of every directory, the
+ * person invited as a direct message, and power levels under which only the
+ * bot posts or invites. With the person's alias, so that a create this side
+ * never saw the answer for is found, not made again; without it only as the
+ * fallback `makeRoom` describes.
+ */
+const createNoticeRoom = (
+    mxid: string,
+    matrix: MatrixForNotices,
+    callTimeoutMs: number,
+    withAlias: boolean
+) =>
+    guarded('create', callTimeoutMs, (signal) =>
+        matrix.createRoom({
+            signal,
+            name: DEADMAN_NOTICE_ROOM_NAME,
+            ...(withAlias ? { aliasLocalpart: noticeRoomAliasLocalpart(mxid) } : {}),
+            visibility: 'private',
+            preset: 'public_chat',
+            encrypted: false,
+            initialState: [NOTICE_ROOM_JOIN_RULE],
+            invite: [mxid],
+            isDirect: true,
+            // Only the bot (the creator, at 100) posts or invites; the person
+            // joins at 0 and cannot type there.
+            powerLevelOverride: { events_default: 50, invite: 50 },
+        })
+    );
+
+/**
+ * Make the person's room when no row knows one, or find the one the
+ * homeserver already made for them. The create names the person's alias. If
+ * the homeserver answers that the alias is taken (`M_ROOM_IN_USE`, which it
+ * checks before it makes a room, so it made none), the alias is resolved,
+ * fresh rather than from the client's process cache (a purge frees an alias
+ * and a later room can take it), and the room it names is used if the bot
+ * made it (its `m.room.create` is the bot's), with the person invited again
+ * as `checkRoom` does. Two cases fall back to a room without an alias, the
+ * behaviour before the alias, rather than leave the person without notices
+ * for the retry window: the homeserver refuses the alias itself (an alias
+ * policy, or an appservice's namespace), or the alias names a room that is
+ * gone or that the bot did not make. A fallback room is found again through
+ * the rows, as every room is, but a create of one that times out is not found
+ * afterwards. The row is read again after every call, and a row a deletion
+ * ended meanwhile gets nothing recorded on it.
+ */
+const makeRoom = async (
+    current: DeadmanReleaseNoticeRecord,
+    mxid: string,
+    matrix: MatrixForNotices,
+    callTimeoutMs: number
+): Promise<{ roomId: string } | Step> => {
+    const key = { switchId: current.switchId, recipientAccountId: current.recipientAccountId };
+    const withoutAlias = async (): Promise<{ roomId: string } | Step> => {
+        const plain = await createNoticeRoom(mxid, matrix, callTimeoutMs, false);
+        if (!stillPending(key)) return RECIPIENT_GONE;
+        if (!plain.ok) return { kind: 'retry', reason: `matrix_create_${plain.reason}` };
+        return { roomId: plain.roomId };
+    };
+    const created = await createNoticeRoom(mxid, matrix, callTimeoutMs, true);
+    // The row, read again before the room is recorded on it: a deletion that
+    // landed during the create has ended it and forgotten its rooms, and this
+    // one is not written back (the room itself stands, empty).
+    if (!stillPending(key)) return RECIPIENT_GONE;
+    if (created.ok) return { roomId: created.roomId };
+    const refusal = {
+        status: 'status' in created ? created.status : undefined,
+        errcode: 'errcode' in created ? created.errcode : undefined,
+    };
+    if (refusal.errcode !== 'M_ROOM_IN_USE') {
+        if (aliasRefused(refusal)) return withoutAlias();
+        return { kind: 'retry', reason: `matrix_create_${created.reason}` };
+    }
+    const found = await guarded('alias', callTimeoutMs, (signal) =>
+        matrix.resolveRoomAlias(noticeRoomAlias(mxid), { signal, cache: false })
+    );
+    if (!stillPending(key)) return RECIPIENT_GONE;
+    if (!found.ok) return { kind: 'retry', reason: `matrix_alias_${found.reason}` };
+    const bot = await guarded('whoami', callTimeoutMs, (signal) => matrix.botUserId({ signal }));
+    if (!stillPending(key)) return RECIPIENT_GONE;
+    if (!bot) return { kind: 'retry', reason: 'matrix_whoami_unknown' };
+    const room = await checkRoom(found.roomId, current, mxid, matrix, callTimeoutMs, bot);
+    if (room.kind === 'unusable') return withoutAlias();
+    if (room.kind !== 'ok') return room;
+    return { roomId: found.roomId };
+};
+
+/**
  * Find or make the person's standing room, and make sure they are invited or
  * in it. Under the recipient's slot, with the row read again first, and again
  * after each homeserver call: a row that a deletion ended while a call was in
  * flight gets nothing recorded on it (not the room made for it, not the
- * re-invite), and the notice ends as `recipient_gone` without a send.
+ * re-invite), and the notice ends as `recipient_gone` without a send. A room
+ * no row knows is made, or found through the person's alias, by `makeRoom`.
  */
 const resolveRoom = async (
     notice: DeadmanReleaseNoticeRecord,
@@ -267,63 +480,19 @@ const resolveRoom = async (
     let roomId = current.roomId ?? db.findDeadmanNoticeRoom(notice.recipientAccountId);
     let deadRoom: string | undefined;
     if (roomId) {
-        const state = await guarded('state', callTimeoutMs, (signal) =>
-            matrix.getRoomStateAdmin(roomId!, { signal })
-        );
-        if (!stillPending(key)) return RECIPIENT_GONE;
-        if (!state.ok) {
-            if ('status' in state && state.status === 404) {
-                // The room is gone (purged, say): make another, below.
-                deadRoom = roomId;
-                roomId = undefined;
-            } else {
-                return { kind: 'retry', reason: `matrix_state_${state.reason}` };
-            }
-        } else {
-            const membership = membershipOf(state.state, mxid);
-            if (membership !== 'join' && membership !== 'invite' && !current.reinvitedAt) {
-                // Left, declined, or never got the invite: invite again, as a
-                // direct message, so the notice has someone to reach. Once per
-                // notice: a later attempt of this notice does not invite again.
-                const invited = await guarded('invite', callTimeoutMs, (signal) =>
-                    matrix.inviteToRoom(roomId!, mxid, undefined, { isDirect: true, signal })
-                );
-                if (!stillPending(key)) return RECIPIENT_GONE;
-                if (!invited.ok) {
-                    const reason =
-                        'reason' in invited ? invited.reason : `status_${invited.status}`;
-                    return { kind: 'retry', reason: `matrix_invite_${reason}` };
-                }
-                db.updateDeadmanReleaseNotice(key.switchId, key.recipientAccountId, {
-                    reinvitedAt: new Date().toISOString(),
-                });
-            }
+        const known = await checkRoom(roomId, current, mxid, matrix, callTimeoutMs);
+        if (known.kind === 'unusable') {
+            // The room is gone (purged, say): make another, below.
+            deadRoom = roomId;
+            roomId = undefined;
+        } else if (known.kind !== 'ok') {
+            return known;
         }
     }
     if (!roomId) {
-        const created = await guarded('create', callTimeoutMs, (signal) =>
-            matrix.createRoom({
-                signal,
-                name: DEADMAN_NOTICE_ROOM_NAME,
-                // Out of every directory, and genuinely unencrypted: see the
-                // header for why `public_chat` with an invite-only join rule.
-                visibility: 'private',
-                preset: 'public_chat',
-                encrypted: false,
-                initialState: [NOTICE_ROOM_JOIN_RULE],
-                invite: [mxid],
-                isDirect: true,
-                // Only the bot (the creator, at 100) posts or invites; the person
-                // joins at 0 and cannot type there.
-                powerLevelOverride: { events_default: 50, invite: 50 },
-            })
-        );
-        // The row, read again before the room is recorded on it: a deletion
-        // that landed during the create has ended it and forgotten its rooms,
-        // and this one is not written back (the room itself stands, empty).
-        if (!stillPending(key)) return RECIPIENT_GONE;
-        if (!created.ok) return { kind: 'retry', reason: `matrix_create_${created.reason}` };
-        roomId = created.roomId;
+        const made = await makeRoom(current, mxid, matrix, callTimeoutMs);
+        if (!('roomId' in made)) return made;
+        roomId = made.roomId;
         // Recorded before the send, so a crash here does not make a second room.
         db.updateDeadmanReleaseNotice(key.switchId, key.recipientAccountId, { roomId });
         if (deadRoom) {
@@ -431,7 +600,8 @@ export const runDeadmanReleaseNotifier = async (
     // Catch-up: a crash between a trigger's status write and its rows loses
     // nothing, since a fired release switch with a held copy and no row is
     // treated as due (§5, "Sending it"). The copies are listed by switch, an
-    // indexed lookup, so this costs the fired switches and their copies.
+    // indexed lookup, so this costs every switch row once and the fired
+    // switches' copies.
     for (const record of db.listAllDeadmanSwitches()) {
         if (!record.releasedAt || record.encryptedPayload === '') continue;
         result.caughtUp += writeReleaseNotices(record, record.releasedAt);
@@ -504,7 +674,8 @@ export const runDeadmanReleaseNotifier = async (
     }
 
     if (result.caughtUp + result.due > 0) {
-        // Counts only: never who, never where.
+        // Counts only: never who, never where. (The two warnings above carry
+        // a thrown error's message beside them, nothing else.)
         log.info('deadman_release_notices_tick', { ...result });
     }
     return result;

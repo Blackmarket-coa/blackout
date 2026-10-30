@@ -3,9 +3,14 @@
  * `docs/security/deadman-release-design-2026-10-24.md` §5): `createRoom`
  * sends the invite list and `is_direct` only when asked, and `inviteToRoom`
  * with `isDirect` sets the membership through the state endpoint, since
- * `/invite` takes no `is_direct`. What Synapse does with each is read in the
- * fork, not run here (`handlers/room.py` copies `is_direct` onto each invite
- * event; `rest/client/room.py` hands a member state PUT's content to
+ * `/invite` takes no `is_direct`. Also what the notifier's alias needs:
+ * `createRoom` sends `room_alias_name` and surfaces a refusal's Matrix error
+ * code, `resolveRoomAlias` can skip its process cache, and `botUserId` hands
+ * a signal to whoami and caches nothing when the request was aborted. What
+ * Synapse does with each is read in the fork, not run here
+ * (`handlers/room.py` copies `is_direct` onto each invite event and refuses a
+ * taken alias with `M_ROOM_IN_USE` before it makes a room;
+ * `rest/client/room.py` hands a member state PUT's content to
  * `update_membership`).
  */
 import test from 'node:test';
@@ -101,6 +106,104 @@ test('createRoom sends the invite list and is_direct only when asked, the preset
     assert.equal(calls[0].body.is_direct, undefined);
 });
 
+test('createRoom sends an alias as room_alias_name and surfaces a refusal’s Matrix error code; resolveRoomAlias can skip its cache and carries a signal', async () => {
+    calls.length = 0;
+    const withAlias = await matrixClient.createRoom({
+        encrypted: false,
+        visibility: 'private',
+        preset: 'public_chat',
+        aliasLocalpart: 'blackout-notices-0123456789abcdef0123456789abcdef',
+    });
+    assert.equal(withAlias.ok, true);
+    assert.equal(
+        calls[0].body.room_alias_name,
+        'blackout-notices-0123456789abcdef0123456789abcdef'
+    );
+
+    // A taken alias: Synapse answers 400 M_ROOM_IN_USE before making a room.
+    const plainFetch = globalThis.fetch;
+    globalThis.fetch = (async () =>
+        new Response(
+            JSON.stringify({ errcode: 'M_ROOM_IN_USE', error: 'Room alias already taken' }),
+            { status: 400, headers: { 'content-type': 'application/json' } }
+        )) as typeof fetch;
+    try {
+        const refused = await matrixClient.createRoom({
+            encrypted: false,
+            aliasLocalpart: 'taken',
+        });
+        assert.deepEqual(refused, {
+            ok: false,
+            status: 400,
+            reason: 'create_rejected',
+            errcode: 'M_ROOM_IN_USE',
+            detail: '{"errcode":"M_ROOM_IN_USE","error":"Room alias already taken"}',
+        });
+    } finally {
+        globalThis.fetch = plainFetch;
+    }
+    // A refusal whose body is not JSON has no code, and the text stands.
+    globalThis.fetch = (async () =>
+        new Response('gateway timeout', { status: 504 })) as typeof fetch;
+    try {
+        const refused = await matrixClient.createRoom({ encrypted: false });
+        assert.deepEqual(refused, {
+            ok: false,
+            status: 504,
+            reason: 'create_rejected',
+            errcode: undefined,
+            detail: 'gateway timeout',
+        });
+    } finally {
+        globalThis.fetch = plainFetch;
+    }
+
+    // The alias directory: cached by default, asked every time with
+    // `cache: false`, and the request carries the caller's signal.
+    const signals: Array<AbortSignal | undefined> = [];
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url =
+            typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+        calls.push({ url, method: (init?.method ?? 'GET').toUpperCase(), body: {} });
+        signals.push(init?.signal ?? undefined);
+        return new Response(JSON.stringify({ room_id: `!alias-${calls.length}:test.local` }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+        });
+    }) as typeof fetch;
+    try {
+        calls.length = 0;
+        const fresh1 = await matrixClient.resolveRoomAlias('#moving:test.local', { cache: false });
+        const fresh2 = await matrixClient.resolveRoomAlias('#moving:test.local', { cache: false });
+        assert.equal(calls.length, 2, 'asked twice: nothing cached');
+        assert.match(calls[0].url, /\/directory\/room\/%23moving%3Atest\.local$/);
+        assert.deepEqual(
+            [fresh1, fresh2].map((r) => (r.ok ? r.roomId : r.reason)),
+            ['!alias-1:test.local', '!alias-2:test.local'],
+            'each answer is the directory’s, not the first one again'
+        );
+        const controller = new AbortController();
+        await matrixClient.resolveRoomAlias('#moving:test.local', {
+            cache: false,
+            signal: controller.signal,
+        });
+        assert.equal(signals[2], controller.signal, 'the signal is handed to fetch');
+
+        calls.length = 0;
+        const cached1 = await matrixClient.resolveRoomAlias('#stable:test.local');
+        const cached2 = await matrixClient.resolveRoomAlias('#stable:test.local');
+        assert.equal(calls.length, 1, 'cached by default, as the community rooms want');
+        assert.equal(cached1.ok && cached1.roomId, cached2.ok && cached2.roomId);
+        // A fresh lookup does not write the cache either.
+        calls.length = 0;
+        await matrixClient.resolveRoomAlias('#other:test.local', { cache: false });
+        await matrixClient.resolveRoomAlias('#other:test.local');
+        assert.equal(calls.length, 2, 'the fresh lookup left nothing for the cached one');
+    } finally {
+        globalThis.fetch = plainFetch;
+    }
+});
+
 test('inviteToRoom with isDirect sets the membership through the state endpoint; without it, /invite as before', async () => {
     calls.length = 0;
     const direct = await matrixClient.inviteToRoom(
@@ -135,4 +238,44 @@ test('inviteToRoom with isDirect sets the membership through the state endpoint;
     calls.length = 0;
     await matrixClient.inviteToRoom('!room:test.local', '@bob:test.local', 'a reason');
     assert.deepEqual(calls[0].body, { user_id: '@bob:test.local', reason: 'a reason' });
+});
+
+test('botUserId hands its signal to whoami, and an aborted request caches nothing, so the next call asks again', async () => {
+    const plainFetch = globalThis.fetch;
+    const signals: Array<AbortSignal | undefined> = [];
+    let answer: 'hang' | 'answer' = 'hang';
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url =
+            typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+        assert.match(url, /\/_matrix\/client\/v3\/account\/whoami$/);
+        signals.push(init?.signal ?? undefined);
+        if (answer === 'hang') {
+            // Settles only when the caller aborts, as fetch does.
+            return new Promise<Response>((_, reject) => {
+                init?.signal?.addEventListener('abort', () => reject(new Error('aborted')), {
+                    once: true,
+                });
+            });
+        }
+        return new Response(JSON.stringify({ user_id: '@notices-bot:test.local' }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+        });
+    }) as typeof fetch;
+    try {
+        const controller = new AbortController();
+        const asking = matrixClient.botUserId({ signal: controller.signal });
+        controller.abort();
+        assert.equal(await asking, undefined, 'an aborted whoami answers nothing');
+        assert.equal(signals[0], controller.signal, 'the signal is handed to fetch');
+        // Not the derived fallback, kept for the process: the next call asks.
+        answer = 'answer';
+        assert.equal(await matrixClient.botUserId(), '@notices-bot:test.local');
+        assert.equal(signals.length, 2);
+        // And that answer is cached.
+        assert.equal(await matrixClient.botUserId(), '@notices-bot:test.local');
+        assert.equal(signals.length, 2);
+    } finally {
+        globalThis.fetch = plainFetch;
+    }
 });

@@ -10,12 +10,22 @@
  *     `sends`, answered with `sendStatus`.
  * And, for the bot's own rooms (the dead-man release notifier):
  *   - `POST /_matrix/client/v3/createRoom` → recorded in `creates`; a new room
- *     `!created-<n>:<domain>` is added to `rooms` with the bot joined and each
- *     invitee invited, answered with `createStatus`;
+ *     `!created-<n>:<domain>` is added to `rooms` with the bot's
+ *     `m.room.create`, the bot joined and each invitee invited, answered with
+ *     `createStatus`; a `room_alias_name` is recorded in `aliases` as
+ *     `#<name>:<domain>`, one already taken is refused 400 `M_ROOM_IN_USE`, as
+ *     Synapse refuses it before making a room (`handlers/room.py`, "Room alias
+ *     already taken"), and while `aliasRefusal` is set any alias is refused
+ *     with it (an alias policy or an appservice's namespace); refusals are
+ *     recorded in `createRefusals`;
+ *   - `GET  /_matrix/client/v3/directory/room/{alias}` → `{ room_id }` from
+ *     `aliases`, or 404;
  *   - `PUT  /_matrix/client/v3/rooms/{room}/state/m.room.member/{user}` and
  *     `POST /_matrix/client/v3/rooms/{room}/invite` → recorded in `invites`;
  *     the member's state in `rooms` becomes `invite`, answered with
  *     `inviteStatus`.
+ * `purgeRoom` removes a room and its aliases, as Synapse's purge does
+ * (`storage/databases/main/purge_events.py` deletes `room_aliases`).
  * Anything else goes to `fallback` (default: an empty JSON 200).
  *
  * Set `MATRIX_HOMESERVER_DOMAIN` to the stub's domain so `matrixUserIdFor`
@@ -26,6 +36,7 @@ export interface StubStateEvent {
     type: string;
     state_key?: string;
     content?: Record<string, unknown>;
+    sender?: string;
 }
 
 export interface StubSend {
@@ -41,6 +52,12 @@ export interface StubCreate {
     roomId: string;
 }
 
+/** A `createRoom` the stub refused, with the Matrix error code it answered. */
+export interface StubCreateRefusal {
+    body: Record<string, unknown>;
+    errcode: string;
+}
+
 export interface StubInvite {
     roomId: string;
     userId: string;
@@ -53,22 +70,37 @@ export interface MatrixStub {
     domain: string;
     botUserId: string;
     rooms: Map<string, StubStateEvent[] | number>;
+    /** Room aliases (`#name:domain`) to room ids, as the homeserver's directory. */
+    aliases: Map<string, string>;
     sends: StubSend[];
     creates: StubCreate[];
+    /** Creates refused with a Matrix error code (a taken alias). Cleared with the calls. */
+    createRefusals: StubCreateRefusal[];
     invites: StubInvite[];
     stateReads: string[];
+    /** Alias lookups, the alias as asked. Cleared with the calls. */
+    aliasReads: string[];
     sendStatus: number;
     createStatus: number;
     inviteStatus: number;
+    /**
+     * When set, a create naming any alias is refused with this status and
+     * Matrix error code and makes no room, as a homeserver whose
+     * `alias_creation_rules` forbid the bot answers 403, or one whose
+     * appservice holds the namespace 400 `M_EXCLUSIVE` (`handlers/directory.py`).
+     */
+    aliasRefusal: { status: number; errcode: string } | null;
     /** Runs when a room's state is read, before the answer goes back. */
     onStateRead: ((roomId: string) => void) | null;
     fetch: typeof fetch;
-    /** Forget recorded calls (rooms are kept). */
+    /** Forget recorded calls (rooms and aliases are kept). */
     clearCalls(): void;
     /** Matrix id of a username on the stub's domain. */
     mxid(username: string): string;
     /** Sends into one room. */
     sendsTo(roomId: string): StubSend[];
+    /** Remove a room and every alias pointing at it, as a purge does. */
+    purgeRoom(roomId: string): void;
 }
 
 export const memberEvent = (userId: string, membership = 'join'): StubStateEvent => ({
@@ -107,6 +139,7 @@ const urlOf = (input: RequestInfo | URL): string =>
 const ADMIN_STATE_RE = /\/_synapse\/admin\/v1\/rooms\/([^/?]+)\/state(?:\?|$)/;
 const SEND_RE = /\/_matrix\/client\/v3\/rooms\/([^/]+)\/send\/([^/]+)\/([^/?]+)/;
 const CREATE_RE = /\/_matrix\/client\/v3\/createRoom(?:\?|$)/;
+const DIRECTORY_RE = /\/_matrix\/client\/v3\/directory\/room\/([^/?]+)(?:\?|$)/;
 const MEMBER_STATE_RE = /\/_matrix\/client\/v3\/rooms\/([^/]+)\/state\/m\.room\.member\/([^/?]+)/;
 const INVITE_RE = /\/_matrix\/client\/v3\/rooms\/([^/]+)\/invite(?:\?|$)/;
 
@@ -129,23 +162,35 @@ export function createMatrixStub(
         domain,
         botUserId: `@${options.botLocalpart ?? 'blackout'}:${domain}`,
         rooms: new Map(),
+        aliases: new Map(),
         sends: [],
         creates: [],
+        createRefusals: [],
         invites: [],
         stateReads: [],
+        aliasReads: [],
         sendStatus: 200,
         createStatus: 200,
         inviteStatus: 200,
+        aliasRefusal: null,
         onStateRead: null,
         fetch: (async () => json({})) as typeof fetch,
         clearCalls() {
             stub.sends.length = 0;
             stub.creates.length = 0;
+            stub.createRefusals.length = 0;
             stub.invites.length = 0;
             stub.stateReads.length = 0;
+            stub.aliasReads.length = 0;
         },
         mxid: (username: string) => `@${username}:${domain}`,
         sendsTo: (roomId: string) => stub.sends.filter((s) => s.roomId === roomId),
+        purgeRoom(roomId: string) {
+            stub.rooms.delete(roomId);
+            for (const [alias, target] of [...stub.aliases.entries()]) {
+                if (target === roomId) stub.aliases.delete(alias);
+            }
+        },
     };
 
     stub.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -189,15 +234,47 @@ export function createMatrixStub(
                 return json({ errcode: 'M_UNKNOWN' }, stub.createStatus);
             }
             const body = parseBody(init);
+            const alias =
+                typeof body.room_alias_name === 'string'
+                    ? `#${body.room_alias_name}:${domain}`
+                    : undefined;
+            if (alias && stub.aliases.has(alias)) {
+                // Synapse checks the alias before it makes the room, and makes none.
+                stub.createRefusals.push({ body, errcode: 'M_ROOM_IN_USE' });
+                return json({ errcode: 'M_ROOM_IN_USE', error: 'Room alias already taken' }, 400);
+            }
+            if (alias && stub.aliasRefusal) {
+                // Synapse makes a room id before the alias is refused, but no
+                // event in it: nothing anyone can see, so none here.
+                const { status, errcode } = stub.aliasRefusal;
+                stub.createRefusals.push({ body, errcode });
+                return json({ errcode, error: 'Not allowed to create alias' }, status);
+            }
             createdRooms += 1;
             const roomId = `!created-${createdRooms}:${domain}`;
             const invited = Array.isArray(body.invite) ? (body.invite as string[]) : [];
             stub.rooms.set(roomId, [
+                {
+                    type: 'm.room.create',
+                    state_key: '',
+                    sender: stub.botUserId,
+                    content: { room_version: '10' },
+                },
                 memberEvent(stub.botUserId),
                 ...invited.map((userId) => memberEvent(userId, 'invite')),
             ]);
+            if (alias) stub.aliases.set(alias, roomId);
             stub.creates.push({ body, roomId });
             return json({ room_id: roomId }, stub.createStatus);
+        }
+        const directoryMatch = DIRECTORY_RE.exec(url);
+        if (directoryMatch && method === 'GET') {
+            const alias = decodeURIComponent(directoryMatch[1]);
+            stub.aliasReads.push(alias);
+            const roomId = stub.aliases.get(alias);
+            if (!roomId)
+                return json({ errcode: 'M_NOT_FOUND', error: 'Room alias not found' }, 404);
+            return json({ room_id: roomId, servers: [domain] });
         }
         const memberMatch = MEMBER_STATE_RE.exec(url);
         if (memberMatch && method === 'PUT') {

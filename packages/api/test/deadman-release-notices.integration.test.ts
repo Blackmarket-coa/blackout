@@ -12,10 +12,14 @@
  * switch without rows is caught up; overlapping ticks make one room per
  * person and send nothing twice; a deletion during any homeserver call stands,
  * with nothing written over the ended row; a call that never answers ends at
- * the call timeout as that notice's retry. The homeserver is the test stub:
- * what Synapse does with each call is read in the fork, not run here (the
- * preset's effect on encryption was run against the fork's own code by the
- * independent review, P3b-M1).
+ * the call timeout as that notice's retry, its request aborted; a room the
+ * homeserver finished after the call timed out is found by its alias on the
+ * retry, not made again, and a room is made without the alias when the alias
+ * is refused or names a room that is gone or not the bot's. The homeserver
+ * is the test stub: what Synapse does with each call is read in the fork,
+ * not run here (the preset's effect on encryption was run against the fork's
+ * own code by the independent review, P3b-M1; the stub refuses a taken alias
+ * before making a room, as `handlers/room.py` does).
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -47,12 +51,15 @@ const {
     NOTICE_RETRY_WINDOW_MS,
     isDeadmanReleaseNotifierRunning,
     noticeBackoffMs,
+    noticeRoomAlias,
+    noticeRoomAliasLocalpart,
     runDeadmanReleaseNotifier,
     startDeadmanReleaseNotifier,
     stopDeadmanReleaseNotifier,
 } = await import('../src/services/deadmanReleaseNotifier');
 const { computeDeadlines } = await import('../src/services/deadmanScheduler');
 const { matrixUserIdFor } = await import('../src/services/userIdentity');
+const { matrixClient } = await import('../src/integrations/matrix-client');
 const lifecycle = await import('../src/services/accountLifecycle');
 
 /** Resolve to `pending` if `work` has not settled within `ms`: a bounded wait that fails instead of hanging. */
@@ -219,7 +226,7 @@ test('the sweep writes one pending notice per recipient with the trigger, none f
     assert.equal((await runDeadmanReleaseNotifier({ now: at })).sent, 2);
 });
 
-test('the notifier makes a direct room the homeserver’s backstop leaves unencrypted (public_chat, invite-only) that the person cannot post in, and sends one m.text with the fixed body and the pointer, nothing else', async () => {
+test('the notifier asks for a direct room with the body the homeserver’s backstop leaves unencrypted (public_chat, an invite-only join rule in initial_state) that the person cannot post in, with the person’s alias, and sends one m.text with the fixed body and the pointer, nothing else', async () => {
     matrix.clearCalls();
     const owner = await freshPerson();
     const carol = await freshPerson();
@@ -236,13 +243,16 @@ test('the notifier makes a direct room the homeserver’s backstop leaves unencr
     // `encryption_enabled_by_default_for_room_type: invite` from adding
     // m.room.encryption (it keys on the preset, not the join rule), and the
     // join rule in initial_state is what Synapse sends in place of the
-    // preset's public one; `private` keeps it out of the directory.
+    // preset's public one; `private` keeps it out of the directory. What the
+    // homeserver then does with this body is read in the fork, and was run
+    // against it by the review, not by this stub.
     assert.deepEqual(bobsRoom.body, {
         visibility: 'private',
         preset: 'public_chat',
         initial_state: [
             { type: 'm.room.join_rules', state_key: '', content: { join_rule: 'invite' } },
         ],
+        room_alias_name: noticeRoomAliasLocalpart(bobMxid),
         name: 'Blackout notices',
         power_level_content_override: { events_default: 50, invite: 50 },
         invite: [bobMxid],
@@ -252,6 +262,16 @@ test('the notifier makes a direct room the homeserver’s backstop leaves unencr
         !JSON.stringify(bobsRoom.body).includes('m.room.encryption'),
         'no encryption event of the bot’s own either: it cannot encrypt'
     );
+    // The alias: the prefix and 128 bits of an HMAC over the Matrix id under
+    // a key derived from the server's secret, so it is stable per person,
+    // differs per person, and carries neither the id nor anything computable
+    // without the secret.
+    assert.match(String(bobsRoom.body.room_alias_name), /^blackout-notices-[0-9a-f]{32}$/);
+    assert.equal(noticeRoomAliasLocalpart(bobMxid), noticeRoomAliasLocalpart(bobMxid));
+    assert.notEqual(noticeRoomAliasLocalpart(bobMxid), noticeRoomAliasLocalpart(carolMxid));
+    assert.ok(!String(bobsRoom.body.room_alias_name).includes(bob.user.username));
+    assert.equal(noticeRoomAlias(bobMxid), `#${noticeRoomAliasLocalpart(bobMxid)}:test.local`);
+    assert.equal(matrix.aliases.get(noticeRoomAlias(bobMxid)), bobsRoom.roomId);
     assert.ok(matrix.creates.some((c) => (c.body.invite as string[]).includes(carolMxid)));
     assert.equal(matrix.invites.length, 0, 'the invite travels with the creation');
 
@@ -358,8 +378,8 @@ test('a person who left or declined their room is invited again, as a direct mes
     assert.equal(matrix.sendsTo(roomId).length, 1);
     assert.equal(db.getDeadmanReleaseNotice(record.id, bob.user.id)?.status, 'sent');
 
-    // A room the homeserver no longer has is replaced.
-    matrix.rooms.delete(roomId);
+    // A room the homeserver no longer has is replaced (a purge frees its alias too).
+    matrix.purgeRoom(roomId);
     matrix.clearCalls();
     const replaced = await released(await freshPerson(), [bob.keySet.identity]);
     assert.equal((await runDeadmanReleaseNotifier({ now: replaced.at })).sent, 1);
@@ -748,7 +768,7 @@ test('a purged room is replaced once per person: every notice row that pointed a
     }
     assert.equal(db.getDeadmanReleaseNotice(b.record.id, carol.user.id)!.roomId, roomX);
     // X is purged. A third notice replaces it...
-    matrix.rooms.delete(roomX);
+    matrix.purgeRoom(roomX);
     const c = await released(
         await freshPerson(),
         [carol.keySet.identity],
@@ -1124,6 +1144,558 @@ test('a homeserver call that never answers ends at the call timeout as that noti
     const sent = db.getDeadmanReleaseNotice(second.record.id, quick.user.id)!;
     assert.equal(sent.status, 'sent', 'the next notice was not held behind the hung call');
     assert.equal(matrix.sends.length, 1);
+    // Left pending, but not for the later tests' ticks.
+    db.updateDeadmanReleaseNotice(first.record.id, slow.user.id, {
+        nextAttemptAt: new Date(Date.now() + NOTICE_RETRY_WINDOW_MS).toISOString(),
+    });
+
+    // The other calls the same way: the state read of a known room, the
+    // re-invite of someone who left, the send, and the alias lookup after a
+    // taken alias (round 3 of part 2's review: only createRoom's abort was
+    // pinned, and a state read or send without its signal kept its socket).
+    const parkAndAbort = async (
+        person: { user: User },
+        releaseOf: Awaited<ReturnType<typeof released>>,
+        match: (url: string, init?: RequestInit) => boolean,
+        expectedReason: string
+    ) => {
+        let signal: AbortSignal | undefined;
+        let unpark!: () => void;
+        const parked = new Promise<void>((resolve) => {
+            unpark = resolve;
+        });
+        globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+            const url =
+                typeof input === 'string'
+                    ? input
+                    : input instanceof URL
+                    ? input.toString()
+                    : input.url;
+            if (match(url, init)) {
+                signal = init?.signal ?? undefined;
+                await parked;
+            }
+            return stubFetch(input, init);
+        }) as typeof fetch;
+        try {
+            const result = await within(
+                5000,
+                runDeadmanReleaseNotifier({ now: releaseOf.at, callTimeoutMs: 100 })
+            );
+            assert.deepEqual(result, { caughtUp: 0, due: 1, sent: 0, retried: 1, failed: 0 });
+        } finally {
+            unpark();
+            globalThis.fetch = matrix.fetch;
+        }
+        const row = db.getDeadmanReleaseNotice(releaseOf.record.id, person.user.id)!;
+        assert.equal(row.status, 'pending');
+        assert.equal(row.lastError, expectedReason);
+        assert.ok(signal?.aborted, `${expectedReason}: the request was aborted through its signal`);
+        // Left pending for the next tick, not for this test's later cases.
+        db.updateDeadmanReleaseNotice(row.switchId, row.recipientAccountId, {
+            nextAttemptAt: new Date(Date.now() + NOTICE_RETRY_WINDOW_MS).toISOString(),
+        });
+    };
+    // The state read: a person whose room exists.
+    const known = await freshPerson();
+    assert.equal(
+        (
+            await runDeadmanReleaseNotifier({
+                now: (await released(await freshPerson(), [known.keySet.identity])).at,
+            })
+        ).sent,
+        1
+    );
+    const knownRoom = db.findDeadmanNoticeRoom(known.user.id)!;
+    await parkAndAbort(
+        known,
+        await released(await freshPerson(), [known.keySet.identity]),
+        (url) => url.includes(`/_synapse/admin/v1/rooms/${encodeURIComponent(knownRoom)}/state`),
+        'matrix_state_timeout'
+    );
+    // The re-invite: the person left their room.
+    setMembership(knownRoom, matrixUserIdFor(known.user.id)!, 'leave');
+    await parkAndAbort(
+        known,
+        await released(await freshPerson(), [known.keySet.identity]),
+        (url) => url.includes('/state/m.room.member/'),
+        'matrix_invite_timeout'
+    );
+    setMembership(knownRoom, matrixUserIdFor(known.user.id)!, 'join');
+    // The send.
+    await parkAndAbort(
+        known,
+        await released(await freshPerson(), [known.keySet.identity]),
+        (url) => url.includes('/send/'),
+        'matrix_send_timeout'
+    );
+    // The alias lookup: a person whose alias is taken by a room no row knows.
+    const taken = await freshPerson();
+    const takenMxid = matrixUserIdFor(taken.user.id)!;
+    matrix.aliases.set(noticeRoomAlias(takenMxid), '!elsewhere:test.local');
+    await parkAndAbort(
+        taken,
+        await released(await freshPerson(), [taken.keySet.identity]),
+        (url) => url.includes('/directory/room/'),
+        'matrix_alias_timeout'
+    );
+    // The bot's own id, asked once the alias names a room: the client caches
+    // the answer for the process, so a stand-in whose whoami never answers.
+    let whoamiSignal: AbortSignal | undefined;
+    const whoamiNeverAnswers = {
+        ...matrixClient,
+        botUserId: (options: { signal?: AbortSignal } = {}) => {
+            whoamiSignal = options.signal;
+            return new Promise<string | undefined>(() => {});
+        },
+    };
+    const asking = await released(await freshPerson(), [taken.keySet.identity]);
+    const asked = await within(
+        5000,
+        runDeadmanReleaseNotifier({
+            now: asking.at,
+            matrix: whoamiNeverAnswers,
+            callTimeoutMs: 100,
+        })
+    );
+    assert.deepEqual(asked, { caughtUp: 0, due: 1, sent: 0, retried: 1, failed: 0 });
+    assert.equal(
+        db.getDeadmanReleaseNotice(asking.record.id, taken.user.id)!.lastError,
+        'matrix_whoami_timeout'
+    );
+    assert.ok(
+        whoamiSignal?.aborted,
+        'matrix_whoami_timeout: the request was aborted through its signal'
+    );
+    for (const row of db.listDeadmanReleaseNoticesForRecipient(taken.user.id)) {
+        db.updateDeadmanReleaseNotice(row.switchId, row.recipientAccountId, {
+            nextAttemptAt: new Date(Date.now() + NOTICE_RETRY_WINDOW_MS).toISOString(),
+        });
+    }
+    matrix.aliases.delete(noticeRoomAlias(takenMxid));
+});
+
+test('a createRoom the homeserver finished after the call timed out is found by the room’s alias on the retry: one room per person, fresh from the directory', async () => {
+    // As first fixed, a create that timed out on this side while the
+    // homeserver made the room left the person one more empty "Blackout
+    // notices" room with a standing invite per such attempt (round 3 of part
+    // 2's review, the verifiers' scenario D). Now the room carries the
+    // person's alias, the homeserver refuses a second room with it, and the
+    // retry resolves the alias instead.
+    const erin = await freshPerson();
+    const erinMxid = matrixUserIdFor(erin.user.id)!;
+    const one = await released(await freshPerson(), [erin.keySet.identity]);
+    const two = await released(await freshPerson(), [erin.keySet.identity], one.at);
+    matrix.clearCalls();
+    const stubFetch = matrix.fetch;
+    const roomsFor = () =>
+        [...matrix.rooms.entries()]
+            .filter(
+                ([, state]) =>
+                    Array.isArray(state) &&
+                    state.some((e) => e.type === 'm.room.member' && e.state_key === erinMxid)
+            )
+            .map(([id]) => id);
+    // The homeserver makes the room, then answers after the call timed out.
+    const slowSuccessfulCreate = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url =
+            typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+        const response = await stubFetch(input, init);
+        if (url.includes('/createRoom') && response.ok) {
+            await new Promise((resolve) => setTimeout(resolve, 150));
+        }
+        return response;
+    }) as typeof fetch;
+    globalThis.fetch = slowSuccessfulCreate;
+    let first;
+    try {
+        first = await runDeadmanReleaseNotifier({ now: one.at, callTimeoutMs: 40 });
+    } finally {
+        globalThis.fetch = matrix.fetch;
+    }
+    // The first notice's create timed out; the second, in the same tick, was
+    // refused the alias and found the room.
+    assert.deepEqual(first, { caughtUp: 0, due: 2, sent: 1, retried: 1, failed: 0 });
+    assert.equal(matrix.creates.length, 1, 'the homeserver made one room');
+    assert.deepEqual(
+        matrix.createRefusals.map((r) => r.errcode),
+        ['M_ROOM_IN_USE'],
+        'the second create was refused the alias, and made no room'
+    );
+    const roomA = matrix.creates[0].roomId;
+    assert.deepEqual(roomsFor(), [roomA]);
+    assert.deepEqual(matrix.aliasReads, [noticeRoomAlias(erinMxid)]);
+    const rows = [one, two].map((r) => db.getDeadmanReleaseNotice(r.record.id, erin.user.id)!);
+    assert.deepEqual(rows.map((r) => r.status).sort(), ['pending', 'sent']);
+    assert.equal(rows.find((r) => r.status === 'pending')!.lastError, 'matrix_create_timeout');
+    assert.equal(rows.find((r) => r.status === 'sent')!.roomId, roomA);
+    assert.equal(matrix.sendsTo(roomA).length, 1);
+
+    // The retry: the row that timed out knows no room, but the person's other
+    // row does, so it is reused; no create at all.
+    matrix.clearCalls();
+    const retryAt = new Date(one.at.getTime() + NOTICE_BACKOFF_FIRST_MS);
+    assert.equal((await runDeadmanReleaseNotifier({ now: retryAt })).sent, 1);
+    assert.equal(matrix.creates.length + matrix.createRefusals.length, 0);
+    assert.deepEqual(roomsFor(), [roomA], 'still one room');
+    assert.equal(matrix.sendsTo(roomA).length, 1);
+    for (const r of [one, two]) {
+        assert.equal(db.getDeadmanReleaseNotice(r.record.id, erin.user.id)!.roomId, roomA);
+    }
+
+    // One person, one notice, the create times out: the retry's create is
+    // refused the alias, and the alias is resolved to the room.
+    const fay = await freshPerson();
+    const fayMxid = matrixUserIdFor(fay.user.id)!;
+    const fays = await released(await freshPerson(), [fay.keySet.identity]);
+    matrix.clearCalls();
+    globalThis.fetch = slowSuccessfulCreate;
+    try {
+        assert.deepEqual(await runDeadmanReleaseNotifier({ now: fays.at, callTimeoutMs: 40 }), {
+            caughtUp: 0,
+            due: 1,
+            sent: 0,
+            retried: 1,
+            failed: 0,
+        });
+    } finally {
+        globalThis.fetch = matrix.fetch;
+    }
+    const faysRoom = matrix.creates[0].roomId;
+    assert.equal(db.getDeadmanReleaseNotice(fays.record.id, fay.user.id)!.roomId, undefined);
+    matrix.clearCalls();
+    const faysRetry = new Date(fays.at.getTime() + NOTICE_BACKOFF_FIRST_MS);
+    assert.equal((await runDeadmanReleaseNotifier({ now: faysRetry })).sent, 1);
+    assert.equal(matrix.creates.length, 0, 'no second room');
+    assert.deepEqual(
+        matrix.createRefusals.map((r) => r.errcode),
+        ['M_ROOM_IN_USE']
+    );
+    assert.deepEqual(matrix.aliasReads, [noticeRoomAlias(fayMxid)]);
+    assert.deepEqual(matrix.stateReads, [faysRoom], 'the room found is checked for the person');
+    const faysRow = db.getDeadmanReleaseNotice(fays.record.id, fay.user.id)!;
+    assert.equal(faysRow.status, 'sent');
+    assert.equal(faysRow.roomId, faysRoom);
+    assert.equal(matrix.sendsTo(faysRoom).length, 1);
+
+    // After a purge the alias is free and a later timed-out create takes it
+    // again: the retry resolves the alias fresh from the directory, not from
+    // the client's process cache, which would still name the purged room.
+    matrix.purgeRoom(faysRoom);
+    const again = await released(
+        await freshPerson(),
+        [fay.keySet.identity],
+        new Date(faysRetry.getTime() + 1000)
+    );
+    matrix.clearCalls();
+    globalThis.fetch = slowSuccessfulCreate;
+    try {
+        assert.equal(
+            (await runDeadmanReleaseNotifier({ now: again.at, callTimeoutMs: 40 })).retried,
+            1
+        );
+    } finally {
+        globalThis.fetch = matrix.fetch;
+    }
+    assert.equal(matrix.stateReads[0], faysRoom, 'the purged room answered 404');
+    const roomC = matrix.creates[0].roomId;
+    assert.notEqual(roomC, faysRoom);
+    matrix.clearCalls();
+    const againRetry = new Date(again.at.getTime() + NOTICE_BACKOFF_FIRST_MS);
+    assert.equal((await runDeadmanReleaseNotifier({ now: againRetry })).sent, 1);
+    assert.equal(matrix.creates.length, 0, 'no second room after the purge either');
+    assert.deepEqual(
+        matrix.createRefusals.map((r) => r.errcode),
+        ['M_ROOM_IN_USE']
+    );
+    assert.deepEqual(matrix.aliasReads, [noticeRoomAlias(fayMxid)], 'the directory was asked');
+    const movedRow = db.getDeadmanReleaseNotice(again.record.id, fay.user.id)!;
+    assert.equal(movedRow.status, 'sent');
+    assert.equal(movedRow.roomId, roomC);
+    assert.equal(
+        db.getDeadmanReleaseNotice(fays.record.id, fay.user.id)!.roomId,
+        roomC,
+        'the earlier row that pointed at the purged room moved to the replacement'
+    );
+    assert.equal(matrix.sendsTo(roomC).length, 1);
+});
+
+test('when the alias cannot be used the room is made without it: an alias the homeserver refuses, or one naming a room that is gone or that the bot did not make; a room the homeserver is still making is waited for', async () => {
+    const stubFetch = matrix.fetch;
+    let createPosts = 0;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url =
+            typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+        if (url.includes('/createRoom')) createPosts += 1;
+        return stubFetch(input, init);
+    }) as typeof fetch;
+    const roomWithout = (personMxid: string) => {
+        const plain = matrix.creates.filter(
+            (c) =>
+                (c.body.invite as string[]).includes(personMxid) &&
+                c.body.room_alias_name === undefined
+        );
+        assert.equal(plain.length, 1, 'one room made without the alias');
+        return plain[0].roomId;
+    };
+    try {
+        // The homeserver refuses the alias itself: a policy that forbids the
+        // bot (403), or an appservice's namespace (400 M_EXCLUSIVE).
+        for (const refusal of [
+            { status: 403, errcode: 'M_UNKNOWN' },
+            { status: 400, errcode: 'M_EXCLUSIVE' },
+        ]) {
+            const person = await freshPerson();
+            const personMxid = matrixUserIdFor(person.user.id)!;
+            const release = await released(await freshPerson(), [person.keySet.identity]);
+            matrix.clearCalls();
+            createPosts = 0;
+            matrix.aliasRefusal = refusal;
+            try {
+                assert.equal((await runDeadmanReleaseNotifier({ now: release.at })).sent, 1);
+            } finally {
+                matrix.aliasRefusal = null;
+            }
+            assert.deepEqual(
+                matrix.createRefusals.map((r) => [r.errcode, typeof r.body.room_alias_name]),
+                [[refusal.errcode, 'string']],
+                'the create with the alias was refused'
+            );
+            assert.equal(createPosts, 2);
+            const room = roomWithout(personMxid);
+            assert.equal(
+                db.getDeadmanReleaseNotice(release.record.id, person.user.id)!.roomId,
+                room
+            );
+            assert.equal(matrix.sendsTo(room).length, 1);
+            assert.equal(matrix.aliases.has(noticeRoomAlias(personMxid)), false);
+        }
+
+        // Any other refusal is the notice's retry, with no second create.
+        const refused = await freshPerson();
+        const refusedRelease = await released(await freshPerson(), [refused.keySet.identity]);
+        matrix.clearCalls();
+        createPosts = 0;
+        matrix.createStatus = 500;
+        try {
+            assert.equal((await runDeadmanReleaseNotifier({ now: refusedRelease.at })).retried, 1);
+        } finally {
+            matrix.createStatus = 200;
+        }
+        assert.equal(createPosts, 1, 'a 500 is not taken for an alias refusal');
+        assert.equal(
+            db.getDeadmanReleaseNotice(refusedRelease.record.id, refused.user.id)!.lastError,
+            'matrix_create_create_rejected'
+        );
+        db.updateDeadmanReleaseNotice(refusedRelease.record.id, refused.user.id, {
+            nextAttemptAt: new Date(Date.now() + NOTICE_RETRY_WINDOW_MS).toISOString(),
+        });
+
+        // The alias names a room the homeserver answers 404 for (one that
+        // lost its room and kept its alias).
+        const gil = await freshPerson();
+        const gilMxid = matrixUserIdFor(gil.user.id)!;
+        matrix.aliases.set(noticeRoomAlias(gilMxid), '!purged-but-aliased:test.local');
+        const gils = await released(await freshPerson(), [gil.keySet.identity]);
+        matrix.clearCalls();
+        assert.equal((await runDeadmanReleaseNotifier({ now: gils.at })).sent, 1);
+        assert.deepEqual(
+            matrix.createRefusals.map((r) => r.errcode),
+            ['M_ROOM_IN_USE']
+        );
+        assert.deepEqual(matrix.aliasReads, [noticeRoomAlias(gilMxid)]);
+        assert.deepEqual(matrix.stateReads, ['!purged-but-aliased:test.local']);
+        const gilsRoom = roomWithout(gilMxid);
+        assert.equal(db.getDeadmanReleaseNotice(gils.record.id, gil.user.id)!.roomId, gilsRoom);
+        assert.equal(matrix.sendsTo(gilsRoom).length, 1);
+        matrix.aliases.delete(noticeRoomAlias(gilMxid));
+
+        // The alias names a room another account made: an admin who shut the
+        // person's room down with a replacement moves its aliases there, and
+        // the person is in it, but the bot is not and could not post.
+        const hal = await freshPerson();
+        const halMxid = matrixUserIdFor(hal.user.id)!;
+        const shutdown = '!shutdown-replacement:test.local';
+        matrix.rooms.set(shutdown, [
+            { type: 'm.room.create', state_key: '', sender: '@admin:test.local', content: {} },
+            memberEvent('@admin:test.local'),
+            memberEvent(halMxid),
+        ]);
+        matrix.aliases.set(noticeRoomAlias(halMxid), shutdown);
+        const hals = await released(await freshPerson(), [hal.keySet.identity]);
+        matrix.clearCalls();
+        assert.equal((await runDeadmanReleaseNotifier({ now: hals.at })).sent, 1);
+        assert.deepEqual(matrix.stateReads, [shutdown]);
+        assert.equal(matrix.sendsTo(shutdown).length, 0, 'nothing sent into the admin’s room');
+        assert.equal(matrix.invites.length, 0, 'nobody invited into it');
+        const halsRoom = roomWithout(halMxid);
+        assert.equal(db.getDeadmanReleaseNotice(hals.record.id, hal.user.id)!.roomId, halsRoom);
+        assert.equal(matrix.sendsTo(halsRoom).length, 1);
+        matrix.aliases.delete(noticeRoomAlias(halMxid));
+
+        // The alias names a room with no m.room.create yet: the homeserver
+        // has taken the alias for a create still in progress. Retried, with
+        // no other room made; once the room is there it is used.
+        const ida = await freshPerson();
+        const idaMxid = matrixUserIdFor(ida.user.id)!;
+        const making = '!being-made:test.local';
+        matrix.rooms.set(making, []);
+        matrix.aliases.set(noticeRoomAlias(idaMxid), making);
+        const idas = await released(await freshPerson(), [ida.keySet.identity]);
+        matrix.clearCalls();
+        assert.equal((await runDeadmanReleaseNotifier({ now: idas.at })).retried, 1);
+        const waiting = db.getDeadmanReleaseNotice(idas.record.id, ida.user.id)!;
+        assert.equal(waiting.lastError, 'matrix_alias_room_not_ready');
+        assert.equal(waiting.roomId, undefined);
+        assert.equal(matrix.creates.length, 0, 'no room made beside it');
+        matrix.rooms.set(making, [
+            { type: 'm.room.create', state_key: '', sender: matrix.botUserId, content: {} },
+            memberEvent(matrix.botUserId),
+            memberEvent(idaMxid, 'invite'),
+        ]);
+        matrix.clearCalls();
+        const idasRetry = new Date(idas.at.getTime() + NOTICE_BACKOFF_FIRST_MS);
+        assert.equal((await runDeadmanReleaseNotifier({ now: idasRetry })).sent, 1);
+        assert.equal(matrix.creates.length, 0);
+        assert.equal(matrix.invites.length, 0, 'the person was invited by the create itself');
+        assert.equal(db.getDeadmanReleaseNotice(idas.record.id, ida.user.id)!.roomId, making);
+        assert.equal(matrix.sendsTo(making).length, 1);
+        matrix.aliases.delete(noticeRoomAlias(idaMxid));
+    } finally {
+        globalThis.fetch = matrix.fetch;
+    }
+});
+
+test('a deletion that lands during the alias lookup, the bot’s id or a create without the alias is seen before anything more is asked or recorded', async () => {
+    // Finding or making a room no row knows reads the row again after each
+    // of its calls too (round 3 of part 2's review), as test 14 shows for the
+    // create, the state read and the re-invite.
+    const stubFetch = matrix.fetch;
+    const gateFor = () => {
+        let release!: () => void;
+        const gate = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        return { gate, release };
+    };
+    const parkFetch = (
+        match: (url: string, init?: RequestInit) => boolean,
+        gate: Promise<void>
+    ) => {
+        globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+            const url =
+                typeof input === 'string'
+                    ? input
+                    : input instanceof URL
+                    ? input.toString()
+                    : input.url;
+            if (match(url, init)) await gate;
+            return stubFetch(input, init);
+        }) as typeof fetch;
+    };
+    const deleteDuring = async (
+        tick: Promise<unknown>,
+        person: { user: User },
+        release: () => void
+    ) => {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        const issued = lifecycle.requestAccountDeletion({ userId: person.user.id })!;
+        assert.equal(lifecycle.confirmAccountDeletion(issued.token, person.user.id).kind, 'ok');
+        release();
+        return within(5000, tick);
+    };
+    const ended = { caughtUp: 0, due: 1, sent: 0, retried: 0, failed: 1 };
+    const endedRow = (switchId: string, accountId: string) => {
+        const row = db.getDeadmanReleaseNotice(switchId, accountId)!;
+        assert.equal(row.status, 'failed');
+        assert.equal(row.lastError, 'recipient_gone');
+        assert.equal(row.roomId, undefined, 'no room recorded on the ended row');
+        assert.equal(row.attempts, 0);
+    };
+    // A room the bot made that holds the person's alias, as a create the
+    // homeserver finished after the call timed out leaves it.
+    const aliasedRoomFor = (personMxid: string, roomId: string) => {
+        matrix.rooms.set(roomId, [
+            { type: 'm.room.create', state_key: '', sender: matrix.botUserId, content: {} },
+            memberEvent(matrix.botUserId),
+            memberEvent(personMxid, 'invite'),
+        ]);
+        matrix.aliases.set(noticeRoomAlias(personMxid), roomId);
+    };
+
+    // During the alias lookup: neither the bot's id nor the room the alias
+    // names is asked for, and nothing is sent. (The bot's id is counted on a
+    // stand-in, since the client answers it from its cache once known.)
+    const first = await freshPerson();
+    aliasedRoomFor(matrixUserIdFor(first.user.id)!, '!timed-out-1:test.local');
+    const one = await released(await freshPerson(), [first.keySet.identity]);
+    matrix.clearCalls();
+    let botIdAsked = 0;
+    const countingWhoami = {
+        ...matrixClient,
+        botUserId: async () => {
+            botIdAsked += 1;
+            return matrix.botUserId;
+        },
+    };
+    try {
+        const { gate, release } = gateFor();
+        const tick = runDeadmanReleaseNotifier({ now: one.at, matrix: countingWhoami });
+        parkFetch((url) => url.includes('/directory/room/'), gate);
+        assert.deepEqual(await deleteDuring(tick, first, release), ended);
+    } finally {
+        globalThis.fetch = matrix.fetch;
+    }
+    endedRow(one.record.id, first.user.id);
+    assert.equal(matrix.aliasReads.length, 1, 'the alias was asked for');
+    assert.equal(botIdAsked, 0, 'the bot’s id was not asked for');
+    assert.deepEqual(matrix.stateReads, [], 'the room it names was not read');
+    assert.equal(matrix.sends.length, 0);
+
+    // During the bot's own id (a stand-in, since the client caches it).
+    const second = await freshPerson();
+    aliasedRoomFor(matrixUserIdFor(second.user.id)!, '!timed-out-2:test.local');
+    const two = await released(await freshPerson(), [second.keySet.identity]);
+    matrix.clearCalls();
+    {
+        const { gate, release } = gateFor();
+        const waitingWhoami = {
+            ...matrixClient,
+            botUserId: async () => {
+                await gate;
+                return matrix.botUserId;
+            },
+        };
+        const tick = runDeadmanReleaseNotifier({ now: two.at, matrix: waitingWhoami });
+        assert.deepEqual(await deleteDuring(tick, second, release), ended);
+    }
+    endedRow(two.record.id, second.user.id);
+    assert.deepEqual(matrix.stateReads, [], 'the room the alias names was not read');
+    assert.equal(matrix.sends.length, 0);
+
+    // During a create without the alias, the alias refused: the room is made
+    // (the homeserver was asked) but not recorded, and nothing is sent.
+    const third = await freshPerson();
+    const three = await released(await freshPerson(), [third.keySet.identity]);
+    matrix.clearCalls();
+    matrix.aliasRefusal = { status: 403, errcode: 'M_UNKNOWN' };
+    try {
+        const { gate, release } = gateFor();
+        const tick = runDeadmanReleaseNotifier({ now: three.at });
+        parkFetch(
+            (url, init) =>
+                url.includes('/createRoom') && !String(init?.body).includes('room_alias_name'),
+            gate
+        );
+        assert.deepEqual(await deleteDuring(tick, third, release), ended);
+    } finally {
+        matrix.aliasRefusal = null;
+        globalThis.fetch = matrix.fetch;
+    }
+    endedRow(three.record.id, third.user.id);
+    assert.equal(matrix.createRefusals.length, 1, 'the create with the alias was refused');
+    assert.equal(matrix.creates.length, 1, 'the one without it was made');
+    assert.equal(matrix.sendsTo(matrix.creates[0].roomId).length, 0, 'nothing sent into it');
 });
 
 test('without a homeserver configured every attempt is a retry, and says so', async () => {

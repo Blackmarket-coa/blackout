@@ -17,6 +17,8 @@ export interface RoomStateEvent {
     type: string;
     state_key?: string;
     content?: Record<string, unknown>;
+    /** Who sent the event, as the homeserver reports it (`m.room.create`'s is the room's creator). */
+    sender?: string;
 }
 
 // Cache the bot's resolved MXID across calls — `whoami` is a network round-trip
@@ -33,17 +35,21 @@ export const matrixClient = {
      * Exposed so the client can invite the bot into a den (the only actor with
      * power to do so) before the server force-joins it. Falls back to deriving
      * `@${MATRIX_BOT_LOCALPART|blackout}:${domain}` if whoami is unavailable.
+     * `signal` aborts the whoami request (a caller's timeout); an aborted one
+     * answers `undefined` and caches nothing, so the derived fallback is not
+     * kept for the process because one request was cut short.
      */
-    async botUserId(): Promise<string | undefined> {
+    async botUserId(options: { signal?: AbortSignal } = {}): Promise<string | undefined> {
         if (botUserIdCache) return botUserIdCache;
         const token = botToken();
         const hs = homeserver();
         if (!hs || !token) return undefined;
-        const who = await matrixClient.whoami(token);
+        const who = await matrixClient.whoami(token, options);
         if (who.ok && who.userId) {
             botUserIdCache = who.userId;
             return botUserIdCache;
         }
+        if (options.signal?.aborted) return undefined;
         const localpart = (process.env.MATRIX_BOT_LOCALPART ?? 'blackout').replace(/^@+/, '');
         botUserIdCache = `@${localpart}:${homeserverDomain()}`;
         return botUserIdCache;
@@ -139,7 +145,11 @@ export const matrixClient = {
      * to learn which user it belongs to. Used by `POST /v1/auth/matrix/exchange`
      * to bridge a Matrix login into a Blackout API JWT.
      */
-    async whoami(accessToken: string) {
+    async whoami(
+        accessToken: string,
+        /** `signal` aborts the request (a caller's timeout); the abort surfaces as `network_error`. */
+        options: { signal?: AbortSignal } = {}
+    ) {
         const hs = homeserver();
         if (!hs) {
             return { ok: false as const, reason: 'matrix_not_configured' as const };
@@ -152,6 +162,7 @@ export const matrixClient = {
         try {
             response = await fetch(`${hs}/_matrix/client/v3/account/whoami`, {
                 headers: { Authorization: `Bearer ${accessToken}` },
+                ...(options.signal ? { signal: options.signal } : {}),
             });
         } catch (error) {
             return {
@@ -258,23 +269,32 @@ export const matrixClient = {
 
     /**
      * Resolve a room alias (`#bugs:domain`) to its room id (`!abc:domain`) via the
-     * client directory API. Cached for the process lifetime — aliases are stable.
+     * client directory API. Cached for the process lifetime by default, since
+     * the community rooms' aliases are stable; `cache: false` asks the
+     * homeserver every time and caches nothing, for an alias that can move
+     * (the dead-man notifier's per-person room alias: a purge frees it and a
+     * later room can take it). `signal` aborts the request (a caller's
+     * timeout); the abort surfaces as `network_error`.
      * Used by the bug-report widget pipeline to target the `#bugs` room without
      * hardcoding a room id in deploys that only know the human-readable alias.
      */
-    async resolveRoomAlias(alias: string) {
+    async resolveRoomAlias(alias: string, options: { signal?: AbortSignal; cache?: boolean } = {}) {
         const hs = homeserver();
         const token = botToken();
         if (!hs || !token) {
             return { ok: false as const, reason: 'matrix_not_configured' as const };
         }
-        const cached = roomAliasCache.get(alias);
+        const useCache = options.cache ?? true;
+        const cached = useCache ? roomAliasCache.get(alias) : undefined;
         if (cached) return { ok: true as const, roomId: cached };
         let response: Response;
         try {
             response = await fetch(
                 `${hs}/_matrix/client/v3/directory/room/${encodeURIComponent(alias)}`,
-                { headers: { Authorization: `Bearer ${token}` } }
+                {
+                    headers: { Authorization: `Bearer ${token}` },
+                    ...(options.signal ? { signal: options.signal } : {}),
+                }
             );
         } catch (error) {
             return {
@@ -294,7 +314,7 @@ export const matrixClient = {
         if (!json.room_id) {
             return { ok: false as const, status: response.status, reason: 'no_room_id' as const };
         }
-        roomAliasCache.set(alias, json.room_id);
+        if (useCache) roomAliasCache.set(alias, json.room_id);
         return { ok: true as const, status: response.status, roomId: json.room_id };
     },
 
@@ -418,15 +438,21 @@ export const matrixClient = {
         }
         if (!response.ok) {
             let detail: string | undefined;
+            let errcode: string | undefined;
             try {
                 detail = await response.text();
+                // The Matrix error code, when the body is one (`M_ROOM_IN_USE`
+                // for a taken `room_alias_name`, which a caller can act on).
+                const parsed = JSON.parse(detail) as { errcode?: unknown };
+                if (typeof parsed?.errcode === 'string') errcode = parsed.errcode;
             } catch {
-                /* ignore body-read failure */
+                /* ignore body-read or parse failure: the status and text stand */
             }
             return {
                 ok: false as const,
                 status: response.status,
                 reason: 'create_rejected' as const,
+                errcode,
                 detail,
             };
         }
