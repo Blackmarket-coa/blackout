@@ -105,10 +105,11 @@ const nothing = (): ReleaseDirectoryFingerprints => ({ current: null, superseded
  * for another account or whose `superseded` is not an array counts as
  * nothing, as does an identity that fails its check (a malformed answer is a
  * refusal, never a thrown `TypeError`). So does an entry listing more
- * replaced identities than the API keeps for one account in all
- * (`RELEASE_IDENTITY_STORAGE_LIMIT`), refused before any of them is
- * verified: each costs a signature check and two key checks, and an honest
- * server cannot serve more (the envelope review's fourth reading).
+ * identities, the current one and the replaced together, than the API keeps
+ * for one account in all (`RELEASE_IDENTITY_STORAGE_LIMIT`), refused before
+ * any of them is verified: each costs a signature check and two key checks,
+ * and an honest server cannot serve more (the envelope review's fourth
+ * reading; its fifth made the bound count the current identity).
  */
 export const releaseDirectoryFingerprints = async (
     entry: unknown,
@@ -116,9 +117,11 @@ export const releaseDirectoryFingerprints = async (
 ): Promise<ReleaseDirectoryFingerprints> => {
     if (!isRecord(entry) || entry.accountId !== accountId) return nothing();
     const replaced: unknown = entry.superseded;
-    if (!Array.isArray(replaced) || replaced.length > RELEASE_IDENTITY_STORAGE_LIMIT) {
-        return nothing();
-    }
+    if (!Array.isArray(replaced)) return nothing();
+    // The current identity, when the entry has one, is among those the API
+    // keeps, so beside it an honest entry lists at most the limit less one.
+    const hasCurrent = entry.current !== null && entry.current !== undefined;
+    if (replaced.length + (hasCurrent ? 1 : 0) > RELEASE_IDENTITY_STORAGE_LIMIT) return nothing();
     let current: string | null = null;
     if (isRecord(entry.current)) {
         const check = await verifyReleaseIdentity(entry.current.identity, { accountId });

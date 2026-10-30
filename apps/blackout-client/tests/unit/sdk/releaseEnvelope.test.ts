@@ -1267,7 +1267,7 @@ describe('building, opening and re-sealing with fresh keys', () => {
         });
     });
 
-    it("re-sealing is bound to the switch: another release's header and own copy are refused before anything is opened (P3-H1)", async () => {
+    it("re-sealing is bound to the switch: another release's header and own copy are refused before any signature is checked or anything is opened, and the same inputs under the right id are verified, opened and re-sealed (P3-H1)", async () => {
         // The owner has two releases, A to Bob and B to Carol. A server
         // answering the owner's view of A with B's header and B's own copy
         // (both genuine) must not get the device to seal B's key to Bob.
@@ -1281,6 +1281,9 @@ describe('building, opening and re-sealing with fresh keys', () => {
             recipients: [carol.identity],
             message: 'B: for Carol only, Bob must never read this',
         });
+        // WebCrypto's verify (the own copy's signature) and decrypt (the wrap,
+        // the content) are spied across the refusal and the re-seal that
+        // follows it, so that "never called" is known to mean something.
         const verify = vi.spyOn(globalThis.crypto.subtle, 'verify');
         const decrypt = vi.spyOn(globalThis.crypto.subtle, 'decrypt');
         try {
@@ -1296,32 +1299,36 @@ describe('building, opening and re-sealing with fresh keys', () => {
             // Refused on the ids alone: no signature was checked, nothing opened.
             expect(verify).not.toHaveBeenCalled();
             expect(decrypt).not.toHaveBeenCalled();
+            // With B's own id the same inputs re-seal B through the spied
+            // functions: the spies bind, and the refusal above came before
+            // either was reached. Bob then reads B: the binding is to the
+            // switch the owner names, nothing else.
+            const copy = await resealReleaseCopy({
+                releaseId: releaseB.releaseId,
+                header: releaseHeaderOf(releaseB),
+                ownCopy: releaseB.copies[0],
+                ownerKeySet: owner,
+                recipient: bob.identity,
+            });
+            expect(verify).toHaveBeenCalled();
+            expect(decrypt).toHaveBeenCalled();
+            expect(
+                await openReleaseCopy({
+                    header: releaseHeaderOf(releaseB),
+                    copy,
+                    ownerIdentity: owner.identity,
+                    recipientAccountId: bob.identity.accountId,
+                    keySets: [bob],
+                })
+            ).toMatchObject({
+                ok: true,
+                text: 'B: for Carol only, Bob must never read this',
+                releaseId: releaseB.releaseId,
+            });
         } finally {
             verify.mockRestore();
             decrypt.mockRestore();
         }
-        // With B's own id the same inputs re-seal B, and Bob then reads B:
-        // the binding is to the switch the owner names, nothing else.
-        const copy = await resealReleaseCopy({
-            releaseId: releaseB.releaseId,
-            header: releaseHeaderOf(releaseB),
-            ownCopy: releaseB.copies[0],
-            ownerKeySet: owner,
-            recipient: bob.identity,
-        });
-        expect(
-            await openReleaseCopy({
-                header: releaseHeaderOf(releaseB),
-                copy,
-                ownerIdentity: owner.identity,
-                recipientAccountId: bob.identity.accountId,
-                keySets: [bob],
-            })
-        ).toMatchObject({
-            ok: true,
-            text: 'B: for Carol only, Bob must never read this',
-            releaseId: releaseB.releaseId,
-        });
     });
 
     it('makes a new release id each time, a version 4 UUID', () => {
@@ -1601,37 +1608,55 @@ describe('the smaller checks, each on its own', () => {
         });
     });
 
-    it('refuses, before verifying any of them, an entry listing more replaced identities than the API keeps (the fourth reading)', async () => {
-        // Each replaced identity costs a signature check and two key checks,
-        // about 0.6 ms here; a hostile server could list any number. The API
-        // keeps at most RELEASE_IDENTITY_STORAGE_LIMIT identities for an
-        // account in all, so more than that as replaced is refused as nothing
-        // without a single check.
+    it('refuses, before verifying any of them, an entry listing more identities, current and replaced together, than the API keeps (the fourth and fifth readings)', async () => {
+        // Each identity costs a signature check and two key checks, about
+        // 0.6 ms here; a hostile server could list any number. The API keeps
+        // at most RELEASE_IDENTITY_STORAGE_LIMIT identities for an account in
+        // all, the current one among them, so an entry listing more than that,
+        // current and replaced counted together, is refused as nothing without
+        // a single check: beside a current identity, the limit less one as
+        // replaced is the most an honest server can serve.
         const verifying = vi.spyOn(identityModule, 'verifyReleaseIdentity');
         try {
             const replaced = { identity: BOB.identity, fingerprint: 'stated', publishedAt: 'x' };
-            const entry = {
+            const listing = (count: number, current: typeof replaced | null) => ({
                 accountId: BOB.identity.accountId,
                 matrixId: null,
-                current: replaced,
-                superseded: Array.from(
-                    { length: RELEASE_IDENTITY_STORAGE_LIMIT + 1 },
-                    () => replaced
-                ),
-            };
-            expect(await releaseDirectoryFingerprints(entry, BOB.identity.accountId)).toEqual({
-                current: null,
-                superseded: [],
+                current,
+                superseded: Array.from({ length: count }, () => replaced),
             });
-            expect(verifying).not.toHaveBeenCalled();
-            // The spy binds: an entry within the bound is verified, each identity once.
+            // The limit as replaced beside a current one: one over the bound.
             expect(
                 await releaseDirectoryFingerprints(
-                    { ...entry, superseded: [replaced, replaced] },
+                    listing(RELEASE_IDENTITY_STORAGE_LIMIT, replaced),
                     BOB.identity.accountId
                 )
-            ).toEqual({ current: BOB.fingerprint, superseded: [BOB.fingerprint, BOB.fingerprint] });
-            expect(verifying).toHaveBeenCalledTimes(3);
+            ).toEqual({ current: null, superseded: [] });
+            expect(verifying).not.toHaveBeenCalled();
+            // The spy binds, and the bound is exact: one fewer as replaced
+            // beside the current one is verified, each identity once.
+            expect(
+                await releaseDirectoryFingerprints(
+                    listing(RELEASE_IDENTITY_STORAGE_LIMIT - 1, replaced),
+                    BOB.identity.accountId
+                )
+            ).toEqual({
+                current: BOB.fingerprint,
+                superseded: Array(RELEASE_IDENTITY_STORAGE_LIMIT - 1).fill(BOB.fingerprint),
+            });
+            expect(verifying).toHaveBeenCalledTimes(RELEASE_IDENTITY_STORAGE_LIMIT);
+            // With no current identity the limit itself may be listed as replaced.
+            verifying.mockClear();
+            expect(
+                await releaseDirectoryFingerprints(
+                    listing(RELEASE_IDENTITY_STORAGE_LIMIT, null),
+                    BOB.identity.accountId
+                )
+            ).toEqual({
+                current: null,
+                superseded: Array(RELEASE_IDENTITY_STORAGE_LIMIT).fill(BOB.fingerprint),
+            });
+            expect(verifying).toHaveBeenCalledTimes(RELEASE_IDENTITY_STORAGE_LIMIT);
         } finally {
             verifying.mockRestore();
         }

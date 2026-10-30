@@ -486,6 +486,61 @@ describe('resealRecipient', () => {
             `/v1/deadman/switches/${releaseA.releaseId}/reseal`,
         ]);
     });
+
+    it("refuses, with release_mismatch and not a TypeError, an owner view whose header is not an object, or whose ids are not the switch's (the fifth reading)", async () => {
+        // The owner's view is the server's answer, whatever its shape. A
+        // header that is null or a string, a header whose release id is a
+        // number and a view with no switch id are each refused as another
+        // switch's, before the directory is read or anything is signed, with
+        // the SDK's own error and not a TypeError from reading `releaseId`
+        // off a null header; no copy is sent. The guard that makes the null
+        // case a refusal was the one check no test had pinned.
+        const release = await buildReleaseEnvelope({
+            ownerKeySet: vectorKeySet(ALICE),
+            recipients: [BOB.identity],
+            message: 'x',
+        });
+        const honest = {
+            switchId: release.releaseId,
+            release: {
+                header: releaseHeaderOf(release),
+                ownerIdentity: ALICE.identity,
+                ownCopy: release.copies[0],
+                sealedTo: [],
+            },
+        };
+        const withHeader = (header: unknown) => ({
+            ...honest,
+            release: { ...honest.release, header },
+        });
+        const malformed: unknown[] = [
+            withHeader(null),
+            withHeader('x'),
+            withHeader({ ...honest.release.header, releaseId: 7 }),
+            { release: honest.release },
+        ];
+        const reseal = (api: ReturnType<typeof fakeApi>) =>
+            createDeadmanReleaseActions(api.client).resealRecipient(release.releaseId, {
+                ownerKeySet: vectorKeySet(ALICE),
+                recipient: { accountId: BOB.identity.accountId, comparison: bobComparison() },
+            });
+        for (const view of malformed) {
+            const api = fakeApi(directory(), view);
+            const attempt = reseal(api);
+            await expect(attempt).rejects.toBeInstanceOf(ReleaseActionError);
+            await expect(attempt).rejects.toMatchObject({ code: 'release_mismatch' });
+            expect(api.sent()).toEqual([]);
+            expect(api.requests.map((request) => `${request.method} ${request.path}`)).toEqual([
+                `GET /v1/deadman/switches/${release.releaseId}`,
+            ]);
+        }
+        // The honest view re-seals, so the cases above are refusals of shape.
+        const api = fakeApi(directory(), honest);
+        await reseal(api);
+        expect(api.sent().map((request) => request.path)).toEqual([
+            `/v1/deadman/switches/${release.releaseId}/reseal`,
+        ]);
+    });
 });
 
 describe('the read calls', () => {
