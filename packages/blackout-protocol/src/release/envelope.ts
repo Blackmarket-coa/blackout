@@ -492,6 +492,9 @@ export const encodeReleaseMessage = (text: string): Uint8Array => {
     if (typeof text !== 'string' || text.length === 0) fail('message', 'the message is empty');
     const bytes = utf8Encode(text);
     if (bytes.length > RELEASE_MESSAGE_MAX_BYTES) {
+        // The whole message was encoded to measure it; that copy is cleared
+        // before the refusal, best effort (P3-L3). The string cannot be.
+        bytes.fill(0);
         fail('message', `the message is longer than ${RELEASE_MESSAGE_MAX_BYTES} bytes`);
     }
     return bytes;
@@ -531,8 +534,10 @@ export const encryptReleaseContentWith = async (
         return { nonce: randomness.nonce, ciphertext };
     } finally {
         // The message's UTF-8 bytes (`pad` copies them into the padded
-        // buffer) and the padded text, best effort (P3-L3); the caller's
-        // `text` is a string and cannot be cleared.
+        // buffer) and the padded text, best effort (P3-L3); a message over
+        // the cap never gets here, and `encodeReleaseMessage` clears its
+        // bytes itself before refusing. The caller's `text` is a string and
+        // cannot be cleared.
         message.fill(0);
         padded?.fill(0);
     }
@@ -939,7 +944,8 @@ export type ReleaseOpenResult =
  * header's; the signature verifies; the X25519 output is not zero; the wrap
  * opens; K matches the commitment; the content opens, is padded and is
  * UTF-8. Whether the owner's key is one this device compared, and the
- * comparison still counts, is `releaseComparisonState`'s, and the caller's.
+ * comparison still counts, is `releaseComparisonState`'s, given this
+ * result's `ownerFingerprint` as `signerFingerprint`, and the caller's.
  */
 export const openReleaseCopy = async (input: OpenReleaseCopyInput): Promise<ReleaseOpenResult> => {
     const header = parseReleaseHeader(input.header);

@@ -22,11 +22,15 @@
  * rest on ML-KEM alone without anyone knowing. Node's WebCrypto refuses such
  * keys itself, by throwing; the check covers an engine that returns zeros.
  *
- * Both shared secrets, and the concatenation of them the KDF is fed
- * (`deriveHybridAeadKey`), are cleared once the key is derived, and the
- * derived key's bytes once WebCrypto has imported them. That is best effort:
- * nothing in JavaScript says what an engine copied (the envelope review,
- * P3-L3), and the plaintext and the opened bytes are the caller's to clear.
+ * Both shared secrets are cleared when the seal, or the open, returns or
+ * throws, whichever comes first: the key is derived, or the X25519 output
+ * was all zeros, or the decapsulation threw, or the nonce was wrong, and
+ * the secrets that existed by then are filled with zeros either way (a
+ * `finally`). The concatenation of them the KDF is fed is cleared by
+ * `deriveHybridAeadKey` once the KDF has run, and the derived key's bytes
+ * once WebCrypto has imported them. That is best effort: nothing in
+ * JavaScript says what an engine copied (the envelope review, P3-L3), and
+ * the plaintext and the opened bytes are the caller's to clear.
  */
 
 import { toBase64 } from './encoding';
@@ -50,17 +54,26 @@ export type HybridSealed = {
 };
 
 /**
- * The randomness one seal consumes. `hybridSeal` draws it fresh; it is a
- * parameter of `hybridSealWith` only so that fixed test vectors can be made.
+ * The randomness one seal consumes. `hybridSeal` draws it fresh, for dead
+ * drops; `hybridSealWith` takes it as a parameter, for release copies, whose
+ * `sealReleaseCopy` draws it (`release/envelope.ts`), and for the fixed test
+ * vectors, which supply it.
  */
 export type HybridSealRandomness = {
     ephemeral: { privateKey: CryptoKey; publicKeyBytes: Uint8Array };
-    /** An ML-KEM-768 encapsulation to the recipient's key; its shared secret is cleared by the seal. */
+    /**
+     * An ML-KEM-768 encapsulation to the recipient's key. The seal fills its
+     * shared secret with zeros whether it succeeds or throws (best effort).
+     */
     encapsulation: KemEncapsulation;
     nonce: Uint8Array;
 };
 
-/** Derive the AEAD key and import it, clearing the secrets and the key bytes (best effort). */
+/**
+ * Derive the AEAD key and import it, clearing the key's bytes once imported
+ * (best effort). The two secrets are the caller's to clear, in the `finally`
+ * that also covers the paths which throw before this is reached.
+ */
 const importDerivedKey = async (input: {
     ecSecret: Uint8Array;
     pqSecret: Uint8Array;
@@ -73,8 +86,6 @@ const importDerivedKey = async (input: {
         keyBytes = await deriveHybridAeadKey(input);
         return await importAesGcmKey(keyBytes);
     } finally {
-        input.ecSecret.fill(0);
-        input.pqSecret.fill(0);
         keyBytes?.fill(0);
     }
 };
@@ -108,7 +119,11 @@ const refuseZero = (sharedSecret: Uint8Array): void => {
     }
 };
 
-/** Seal with the randomness given. Production code calls `hybridSeal`. */
+/**
+ * Seal with the randomness given. Dead drops call `hybridSeal`, which draws
+ * it; release copies call this through `sealReleaseCopy`, which draws it
+ * itself; the fixed test vectors supply it.
+ */
 export const hybridSealWith = async (
     input: {
         plaintext: Uint8Array;
@@ -117,34 +132,44 @@ export const hybridSealWith = async (
     },
     randomness: HybridSealRandomness
 ): Promise<HybridSealed> => {
-    if (randomness.nonce.length !== HYBRID_SEAL_NONCE_BYTES) {
-        throw new Error(`hybrid seal: the nonce must be ${HYBRID_SEAL_NONCE_BYTES} bytes`);
+    const pqSecret = randomness.encapsulation.sharedSecret;
+    let ecSecret: Uint8Array | undefined;
+    try {
+        if (randomness.nonce.length !== HYBRID_SEAL_NONCE_BYTES) {
+            throw new Error(`hybrid seal: the nonce must be ${HYBRID_SEAL_NONCE_BYTES} bytes`);
+        }
+        ecSecret = await deriveSharedSecret(
+            randomness.ephemeral.privateKey,
+            input.recipientX25519PublicKey
+        );
+        refuseZero(ecSecret);
+        const key = await importDerivedKey({
+            ecSecret,
+            pqSecret,
+            ephemeralX25519Pub: randomness.ephemeral.publicKeyBytes,
+            pqCiphertext: randomness.encapsulation.ciphertext,
+            transcript: input.transcript,
+        });
+        const ciphertext = new Uint8Array(
+            await subtle().encrypt(
+                { name: 'AES-GCM', iv: randomness.nonce as unknown as BufferSource },
+                key,
+                input.plaintext as unknown as BufferSource
+            )
+        );
+        return {
+            ephemeralPublicKey: randomness.ephemeral.publicKeyBytes,
+            kemCiphertext: randomness.encapsulation.ciphertext,
+            nonce: randomness.nonce,
+            ciphertext,
+        };
+    } finally {
+        // Both shared secrets, on every path: the key derived, or a bad
+        // nonce or an all-zero X25519 output thrown before it (best effort,
+        // P3-L3). The ML-KEM secret is the caller's buffer.
+        ecSecret?.fill(0);
+        pqSecret.fill(0);
     }
-    const ecSecret = await deriveSharedSecret(
-        randomness.ephemeral.privateKey,
-        input.recipientX25519PublicKey
-    );
-    refuseZero(ecSecret);
-    const key = await importDerivedKey({
-        ecSecret,
-        pqSecret: randomness.encapsulation.sharedSecret,
-        ephemeralX25519Pub: randomness.ephemeral.publicKeyBytes,
-        pqCiphertext: randomness.encapsulation.ciphertext,
-        transcript: input.transcript,
-    });
-    const ciphertext = new Uint8Array(
-        await subtle().encrypt(
-            { name: 'AES-GCM', iv: randomness.nonce as unknown as BufferSource },
-            key,
-            input.plaintext as unknown as BufferSource
-        )
-    );
-    return {
-        ephemeralPublicKey: randomness.ephemeral.publicKeyBytes,
-        kemCiphertext: randomness.encapsulation.ciphertext,
-        nonce: randomness.nonce,
-        ciphertext,
-    };
 };
 
 /**
@@ -192,21 +217,31 @@ export const hybridOpen = async (input: {
 }): Promise<Uint8Array> => {
     const kem = getKemProvider();
     const ephemeral = await importRecipientPublicKey(toBase64(input.sealed.ephemeralPublicKey));
-    const ecSecret = await deriveSharedSecret(input.recipientPrivateKey, ephemeral);
-    refuseZero(ecSecret);
-    const pqSecret = await kem.decapsulate(input.sealed.kemCiphertext, input.recipientPqSecretKey);
-    const key = await importDerivedKey({
-        ecSecret,
-        pqSecret,
-        ephemeralX25519Pub: input.sealed.ephemeralPublicKey,
-        pqCiphertext: input.sealed.kemCiphertext,
-        transcript: input.transcript,
-    });
-    return new Uint8Array(
-        await subtle().decrypt(
-            { name: 'AES-GCM', iv: input.sealed.nonce as unknown as BufferSource },
-            key,
-            input.sealed.ciphertext as unknown as BufferSource
-        )
-    );
+    let ecSecret: Uint8Array | undefined;
+    let pqSecret: Uint8Array | undefined;
+    try {
+        ecSecret = await deriveSharedSecret(input.recipientPrivateKey, ephemeral);
+        refuseZero(ecSecret);
+        pqSecret = await kem.decapsulate(input.sealed.kemCiphertext, input.recipientPqSecretKey);
+        const key = await importDerivedKey({
+            ecSecret,
+            pqSecret,
+            ephemeralX25519Pub: input.sealed.ephemeralPublicKey,
+            pqCiphertext: input.sealed.kemCiphertext,
+            transcript: input.transcript,
+        });
+        return new Uint8Array(
+            await subtle().decrypt(
+                { name: 'AES-GCM', iv: input.sealed.nonce as unknown as BufferSource },
+                key,
+                input.sealed.ciphertext as unknown as BufferSource
+            )
+        );
+    } finally {
+        // Whichever secrets exist by now, on every path: the key derived, or
+        // an all-zero X25519 output refused or the decapsulation thrown
+        // before it (best effort, P3-L3).
+        ecSecret?.fill(0);
+        pqSecret?.fill(0);
+    }
 };
