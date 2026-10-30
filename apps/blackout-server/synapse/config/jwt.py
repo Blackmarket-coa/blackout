@@ -17,7 +17,7 @@ from typing import Any
 from synapse.types import JsonDict
 from synapse.util.check_dependencies import check_requirements
 
-from ._base import Config
+from ._base import Config, ConfigError
 
 
 class JWTConfig(Config):
@@ -37,6 +37,7 @@ class JWTConfig(Config):
             self.jwt_issuer = jwt_config.get("issuer")
             self.jwt_audiences = jwt_config.get("audiences")
             check_requirements("jwt")
+            self._check_hmac_secret()
         else:
             self.jwt_enabled = False
             self.jwt_secret = None
@@ -44,3 +45,25 @@ class JWTConfig(Config):
             self.jwt_subject_claim = None
             self.jwt_issuer = None
             self.jwt_audiences = None
+
+    def _check_hmac_secret(self) -> None:
+        """Refuse an HS* secret that authlib would refuse on every login.
+
+        From authlib 1.9.0 an HMAC key that is empty, or that contains PEM or
+        SSH key text anywhere, raises ValueError when a token is verified.
+        JwtHandler does not catch that, so every JWT login would answer 500.
+        Import the key here, as authlib's HMAC algorithms do, and stop at
+        startup instead. (Blackout fork patch, see PATCHES.md, 2026-10-30.)
+        """
+        if not self.jwt_enabled or not str(self.jwt_algorithm).startswith("HS"):
+            return
+
+        from authlib.jose import OctKey
+
+        try:
+            OctKey.import_key(self.jwt_secret)
+        except ValueError as e:
+            raise ConfigError(
+                f"jwt_config.secret cannot be used as an {self.jwt_algorithm} key: {e}",
+                ("jwt_config", "secret"),
+            )

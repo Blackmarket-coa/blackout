@@ -598,10 +598,29 @@ reconciliation with upstream; after this they match upstream's for authlib.
   strings (`["<client_id>", 5]` is refused even with a matching `azp`). A
   non-string `iss` is refused too, as it was before, because `oidc.py` always
   checks `iss` against the issuer. No probe case that 1.6.12 refused is
-  accepted by 1.9.1 (the record lists them). JWT login
-  (`synapse/handlers/jwt.py`) and the back-channel logout token validate with
-  authlib.jose's `JWTClaims`, so they are unchanged: both still accept an
-  integer `jti`.
+  accepted by 1.9.1 (the record lists them).
+- Behaviour change in JWT login (`synapse/handlers/jwt.py`) and the
+  back-channel logout token (corrected after a second review; this entry used
+  to say both were unchanged). They validate with authlib.jose's `JWTClaims`,
+  not joserfc, so an integer `jti` is still accepted. But since 1.9.0 a
+  boolean `exp`, `nbf` or `iat` is refused in both; 1.6.12 accepted
+  `iat: true` and `nbf: true`. And authlib's `OctKey` now refuses an HMAC key
+  that contains `-----BEGIN `, `---- BEGIN `, `ssh-rsa `, `ssh-dss `,
+  `ssh-ed25519 ` or `ecdsa-sha2-` anywhere (1.9.0; 1.6.12 checked only the
+  start), or that is empty (1.9.1). It raises `ValueError`, which `jwt.py`
+  does not catch, so with such a `jwt_config.secret` every JWT login
+  answered 500. The fork now refuses that secret at startup: see "2026-10-30
+  JWT login refuses an HMAC secret authlib cannot use" below.
+- Behaviour change in provider metadata validation (`_validate_metadata` in
+  `synapse/handlers/oidc.py`, recorded after the second review). authlib
+  1.8.0 rewrote `is_secure_transport`, which `validate_issuer`,
+  `validate_authorization_endpoint`, `validate_token_endpoint` and
+  `validate_jwks_uri` use. 1.6.12 accepted `https://` and the prefixes
+  `http://localhost:` and `http://127.0.0.1:`. 1.9.1 accepts `https://` with
+  a host, and `http://` to any loopback host, with or without a port
+  (`http://localhost/`, `http://127.0.0.1/`, `http://[::1]:8080/`). An
+  `https://` URL with no host is now refused. Only loopback hosts are
+  loosened, so no fork check was added.
 - The id_token checks in `synapse/handlers/oidc.py`, which this entry does not
   change: the signature, with whatever algorithms the provider lists in
   `id_token_signing_alg_values_supported`, so an unsigned id_token passes when
@@ -678,3 +697,24 @@ root).
   provider's EC `kid`, and HS256 and ES256 with an unknown `kid`, each get 400
   and leave the session alone; a signed token still ends it. The test fails
   on the code before this patch (500).
+
+## 2026-10-30 JWT login refuses an HMAC secret authlib cannot use
+
+A fork patch with no upstream counterpart (upstream's `synapse/config/jwt.py`
+at `cc172f7` reads the secret verbatim). Recorded after the second review of
+`docs/security/dependency-advisories-server-desktop-2026-10-30.md` (repository
+root).
+
+- `synapse/config/jwt.py` (`JWTConfig._check_hmac_secret`): when JWT login is
+  enabled with an `HS*` algorithm, the secret is imported with authlib's
+  `OctKey.import_key`, as authlib's HMAC algorithms import it for every token.
+  A `ValueError` (an empty secret, or one containing PEM or SSH key text
+  anywhere) becomes a `ConfigError` at `jwt_config.secret`. Before this, under
+  authlib 1.9.1, such a homeserver started and answered every JWT login with
+  500; under 1.6.12 an empty secret accepted tokens anyone could sign
+  (GHSA-8m4g-j4wp-wgcg). Asymmetric algorithms and disabled JWT login are not
+  checked. No Blackout template enables `jwt_config`.
+- `tests/blackout_runtime/test_jwt_secret_config.py`: the four refused
+  secrets for HS256, HS384 and HS512; a plain secret, a PEM for RS256, and an
+  empty secret with JWT login disabled still parse. It fails on the code
+  before this patch.
