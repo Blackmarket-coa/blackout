@@ -485,9 +485,18 @@ Two entries above have changed. The detail is in
     above was settled upstream's way. An integer `sub` from the userinfo
     endpoint still logs in; one inside a signed id_token is refused, as
     joserfc requires. `test_map_userinfo_to_user` carries upstream's change.
--   **Twisted 26.4.0 has a fourth High fixed only in 26.10.0rc1:**
-    GHSA-vpp8-g58w-m8mp, HTTP/2 rapid reset. No Blackout listener can speak
-    HTTP/2, so it joins the three above in `.trivyignore`, with an expiry of
-    2026-11-30. **Twisted 26.10.0 final was published on 2026-10-30.** The
-    plan for all four entries is to lock it in its own change and then delete
-    them.
+    joserfc also refuses an id_token whose `jti` is not a string, or whose
+    `aud` holds a non-string. The 2026-10-30 record lists the whole change.
+-   **Twisted 26.4.0 has a fourth High:** GHSA-vpp8-g58w-m8mp, HTTP/2 rapid
+    reset, fixed in 26.10.0rc1. No Blackout listener can speak HTTP/2, so it
+    joins the three above in `.trivyignore`, with an expiry of 2026-11-30.
+    **Twisted 26.10.0 final was published on 2026-10-30.** It fixes all four.
+    The plan is to lock it in its own change before 2026-11-30, then delete
+    the four entries.
+-   **The three Twisted entries above now expire on 2026-11-30 too.** The
+    [Twisted section](#twisted-three-highs-fixed-only-in-a-pre-release) gives
+    them a review date of 2026-12-31, which was only prose: Trivy would have
+    gone on ignoring them after it. Each now carries `exp:2026-11-30`, on its
+    GHSA and CVE lines both, so all four Twisted entries come back together.
+    Their `.trivyignore` comment no longer calls the pre-release their only
+    fix.
