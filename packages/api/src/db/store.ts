@@ -205,6 +205,86 @@ const USER_TOKEN_CUTOFF_TTL_MS = 25 * 60 * 60 * 1000;
 const releaseRowKey = (switchId: string, recipientAccountId: string): string =>
     `${switchId}:${recipientAccountId}`;
 
+/**
+ * A map whose rows are also indexed under a second key, kept in step by every
+ * `set`, `delete` and `clear`, so that listing the rows of one group costs the
+ * size of that group and not of the map. The release switches' copies and
+ * notices are grouped by switch: the sweep's 365-day removal and the
+ * notifier's catch-up list them for every fired release switch on every tick,
+ * for ever, and a scan of the whole map each time grew quadratic (independent
+ * review of PR 3 part 2, P3b-M4). The Postgres store fills maps through
+ * `set` (`hydrateMap`, a peer's row refresh) and replaces them wholesale on a
+ * table refresh, which makes a fresh map of the same kind (`fresh()`), so the
+ * index is rebuilt wherever the map is.
+ *
+ * Entries are added after `super()` returns: `Map`'s constructor would call
+ * the overridden `set` before the fields it needs exist.
+ */
+export class GroupedMap<V> extends Map<string, V> {
+    private readonly groups = new Map<string, Set<string>>();
+
+    constructor(
+        private readonly groupOf: (value: V) => string,
+        entries?: Iterable<readonly [string, V]>
+    ) {
+        super();
+        if (entries) for (const [key, value] of entries) this.set(key, value);
+    }
+
+    override set(key: string, value: V): this {
+        const previous = super.get(key);
+        if (previous !== undefined) this.ungroup(key, this.groupOf(previous));
+        super.set(key, value);
+        const group = this.groupOf(value);
+        let keys = this.groups.get(group);
+        if (!keys) {
+            keys = new Set();
+            this.groups.set(group, keys);
+        }
+        keys.add(key);
+        return this;
+    }
+
+    override delete(key: string): boolean {
+        const previous = super.get(key);
+        if (previous !== undefined) this.ungroup(key, this.groupOf(previous));
+        return super.delete(key);
+    }
+
+    override clear(): void {
+        super.clear();
+        this.groups.clear();
+    }
+
+    /** The rows of one group, in insertion order; the cost is the group's size. */
+    inGroup(group: string): V[] {
+        const keys = this.groups.get(group);
+        if (!keys) return [];
+        const rows: V[] = [];
+        for (const key of keys) {
+            const row = super.get(key);
+            if (row !== undefined) rows.push(row);
+        }
+        return rows;
+    }
+
+    /** An empty map with the same grouping, for a wholesale refresh. */
+    fresh(): GroupedMap<V> {
+        return new GroupedMap<V>(this.groupOf);
+    }
+
+    private ungroup(key: string, group: string): void {
+        const keys = this.groups.get(group);
+        if (!keys) return;
+        keys.delete(key);
+        if (keys.size === 0) this.groups.delete(group);
+    }
+}
+
+/** A fresh empty map of the same kind as `map`, so an indexed map stays indexed. */
+const freshMapLike = <M extends Map<string, unknown>>(map: M): M =>
+    (map instanceof GroupedMap ? map.fresh() : new Map()) as M;
+
 type PersistedState = {
     users: UserRecord[];
     canopyDirectoryEntries: CanopyDirectoryEntryRecord[];
@@ -392,10 +472,10 @@ class InMemoryDb {
     channels = new Map<string, ChannelRecord>();
     deadDrops = new Map<string, DeadDropRecord>();
     deadmanSwitches = new Map<string, DeadmanSwitchRecord>();
-    /** Sealed copies of release switches' content keys, keyed `${switchId}:${recipientAccountId}`. */
-    deadmanReleaseWraps = new Map<string, DeadmanReleaseWrapRecord>();
-    /** The bot's notices of fired release switches, keyed `${switchId}:${recipientAccountId}`. */
-    deadmanReleaseNotices = new Map<string, DeadmanReleaseNoticeRecord>();
+    /** Sealed copies of release switches' content keys, keyed `${switchId}:${recipientAccountId}`, grouped by switch. */
+    deadmanReleaseWraps = new GroupedMap<DeadmanReleaseWrapRecord>((row) => row.switchId);
+    /** The bot's notices of fired release switches, keyed `${switchId}:${recipientAccountId}`, grouped by switch. */
+    deadmanReleaseNotices = new GroupedMap<DeadmanReleaseNoticeRecord>((row) => row.switchId);
     /** Published release identities, current and superseded, keyed by row id. */
     releaseIdentities = new Map<string, ReleaseIdentityRecord>();
     moderationActions = new Map<string, ModerationActionRecord>();
@@ -2575,9 +2655,9 @@ class InMemoryDb {
         return this.deadmanReleaseWraps.get(releaseRowKey(switchId, recipientAccountId));
     }
 
-    /** Every copy of one switch, the owner's included, blanked ones included. */
+    /** Every copy of one switch, the owner's included, blanked ones included: an indexed lookup, not a scan. */
     listDeadmanReleaseWraps(switchId: string): DeadmanReleaseWrapRecord[] {
-        return [...this.deadmanReleaseWraps.values()].filter((row) => row.switchId === switchId);
+        return this.deadmanReleaseWraps.inGroup(switchId);
     }
 
     /** Every copy sealed to one account, on anyone's switches. */
@@ -2643,8 +2723,9 @@ class InMemoryDb {
         return this.deadmanReleaseNotices.get(releaseRowKey(switchId, recipientAccountId));
     }
 
+    /** Every notice of one switch: an indexed lookup, not a scan. */
     listDeadmanReleaseNotices(switchId: string): DeadmanReleaseNoticeRecord[] {
-        return [...this.deadmanReleaseNotices.values()].filter((row) => row.switchId === switchId);
+        return this.deadmanReleaseNotices.inGroup(switchId);
     }
 
     listDeadmanReleaseNoticesForRecipient(accountId: string): DeadmanReleaseNoticeRecord[] {
@@ -5911,13 +5992,16 @@ export class FileBackedDb extends InMemoryDb {
         this.channels = new Map((parsed.channels ?? []).map((row) => [row.id, row]));
         this.deadDrops = new Map((parsed.deadDrops ?? []).map((row) => [row.id, row]));
         this.deadmanSwitches = new Map((parsed.deadmanSwitches ?? []).map((row) => [row.id, row]));
-        this.deadmanReleaseWraps = new Map(
+        // Indexed by switch as in memory, so the index is rebuilt with the rows.
+        this.deadmanReleaseWraps = new GroupedMap<DeadmanReleaseWrapRecord>(
+            (row) => row.switchId,
             (parsed.deadmanReleaseWraps ?? []).map((row) => [
                 releaseRowKey(row.switchId, row.recipientAccountId),
                 row,
             ])
         );
-        this.deadmanReleaseNotices = new Map(
+        this.deadmanReleaseNotices = new GroupedMap<DeadmanReleaseNoticeRecord>(
+            (row) => row.switchId,
             (parsed.deadmanReleaseNotices ?? []).map((row) => [
                 releaseRowKey(row.switchId, row.recipientAccountId),
                 row,
@@ -8609,7 +8693,9 @@ export class PostgresBackedDb extends InMemoryDb {
         const client = await this.pool.connect();
         try {
             for (const [mapName, plan] of this.plans) {
-                const fresh: MutableMap = new Map();
+                // The same kind of map as the one replaced, so an indexed map
+                // (GroupedMap) comes back indexed.
+                const fresh = freshMapLike(this.mapByName(mapName));
                 const res = await client.query<Record<string, unknown>>(
                     `SELECT * FROM ${plan.descriptor.tableName}`
                 );
@@ -8654,7 +8740,7 @@ export class PostgresBackedDb extends InMemoryDb {
                         this.mapByName(payload.m).set(plan.descriptor.keyOf(record), record);
                     }
                 } else if (payload.op === 'r') {
-                    const fresh: MutableMap = new Map();
+                    const fresh = freshMapLike(this.mapByName(payload.m));
                     const res = await client.query<Record<string, unknown>>(
                         `SELECT * FROM ${plan.descriptor.tableName}`
                     );

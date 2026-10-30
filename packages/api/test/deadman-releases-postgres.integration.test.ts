@@ -136,6 +136,7 @@ test('a release switch, its copies and its notices survive a restart; it has no 
         );
         store1.updateDeadmanReleaseNotice(sw.id, bob, {
             roomId: '!notices:test.local',
+            reinvitedAt: '2026-01-01T01:10:45.000Z',
             status: 'sent',
             attempts: 1,
             sentAt: '2026-01-01T01:11:00.000Z',
@@ -181,10 +182,31 @@ test('a release switch, its copies and its notices survive a restart; it has no 
         const notice = store2.getDeadmanReleaseNotice(sw.id, bob);
         assert.equal(notice?.status, 'sent');
         assert.equal(notice?.roomId, '!notices:test.local');
+        assert.equal(
+            notice?.reinvitedAt,
+            '2026-01-01T01:10:45.000Z',
+            'the re-invite marker has a column'
+        );
         assert.equal(notice?.attempts, 1);
         assert.equal(notice?.sentAt, '2026-01-01T01:11:00.000Z');
         assert.equal(store2.findDeadmanNoticeRoom(bob), '!notices:test.local');
         assert.equal(store2.listDueDeadmanReleaseNotices('2026-02-01T00:00:00.000Z').length, 0);
+        assert.equal(
+            store2.listDeadmanReleaseNotices(sw.id).length,
+            1,
+            'listed by switch after hydration'
+        );
+
+        // A wholesale refresh of the mirror (the listener's reconnect, a peer's
+        // table resync) rebuilds the by-switch index with the rows.
+        await (store2 as unknown as { rehydrateAll(): Promise<void> }).rehydrateAll();
+        assert.equal(
+            store2.listDeadmanReleaseWraps(sw.id).length,
+            2,
+            'copies listed by switch after a refresh'
+        );
+        assert.equal(store2.listDeadmanReleaseNotices(sw.id).length, 1);
+        assert.equal(store2.getDeadmanReleaseWrap(sw.id, bob)?.sealedKey, 'bob-copy');
     } finally {
         await pg.close?.();
     }

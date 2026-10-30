@@ -110,6 +110,27 @@ export interface AccountExport {
      */
     deadmanReleases: DeadmanReleasedCopy[];
     /**
+     * The bot's notices to this user about fired release switches that named
+     * them, as the server keeps them: the release they point at, the standing
+     * room they went or were to go to, whether the person was invited again
+     * for it, status, attempts, the last error and when it was sent or given
+     * up. Only for switches that have fired: a row for a switch that has not
+     * (a store from a crash) would tell the person of a switch before its
+     * release, which the release read never does.
+     */
+    deadmanNotices: Array<{
+        switchId: string;
+        roomId?: string;
+        reinvitedAt?: string;
+        status: string;
+        attempts: number;
+        lastError?: string;
+        nextAttemptAt: string;
+        sentAt?: string;
+        failedAt?: string;
+        createdAt: string;
+    }>;
+    /**
      * Release identities this user published, current and replaced: public
      * keys only. The private halves were never sent to the server.
      */
@@ -245,6 +266,21 @@ export const exportUserData = (userId: string): AccountExport | null => {
                 : {}),
         }));
     const deadmanReleases = releasedCopiesFor(userId);
+    const deadmanNotices: AccountExport['deadmanNotices'] = db
+        .listDeadmanReleaseNoticesForRecipient(userId)
+        .filter((notice) => db.getDeadmanSwitch(notice.switchId)?.releasedAt)
+        .map((notice) => ({
+            switchId: notice.switchId,
+            ...(notice.roomId ? { roomId: notice.roomId } : {}),
+            ...(notice.reinvitedAt ? { reinvitedAt: notice.reinvitedAt } : {}),
+            status: notice.status,
+            attempts: notice.attempts,
+            ...(notice.lastError ? { lastError: notice.lastError } : {}),
+            nextAttemptAt: notice.nextAttemptAt,
+            ...(notice.sentAt ? { sentAt: notice.sentAt } : {}),
+            ...(notice.failedAt ? { failedAt: notice.failedAt } : {}),
+            createdAt: notice.createdAt,
+        }));
 
     const releaseIdentities: AccountExport['releaseIdentities'] = db
         .listReleaseIdentitiesForAccount(userId)
@@ -279,6 +315,7 @@ export const exportUserData = (userId: string): AccountExport | null => {
         scheduledMessages,
         deadmanSwitches,
         deadmanReleases,
+        deadmanNotices,
         releaseIdentities,
         refreshTokensCount,
         passwordResetTokensCount,

@@ -951,6 +951,12 @@ export interface DeadmanReleaseNoticeRecord {
     recipientAccountId: string;
     /** The notices room it was, or will be, posted into. */
     roomId?: string;
+    /**
+     * When the bot invited the person to that room again for this notice,
+     * because they had left or declined it. At most once per notice: a later
+     * attempt of the same notice does not invite again.
+     */
+    reinvitedAt?: string;
     status: DeadmanReleaseNoticeStatus;
     attempts: number;
     lastError?: string;

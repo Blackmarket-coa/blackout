@@ -43,12 +43,14 @@ CREATE INDEX IF NOT EXISTS idx_deadman_release_wraps_recipient
   ON deadman_release_wraps (recipient_account_id);
 
 -- One notice per fired release switch and recipient: the room it went to,
--- attempts, the last error, when it was sent, or when it stopped being retried
--- (30 days after it was written).
+-- when the bot invited the person to it again for this notice (at most once
+-- per notice), attempts, the last error, when it was sent, or when it stopped
+-- being retried (30 days after it was written).
 CREATE TABLE IF NOT EXISTS deadman_release_notices (
   switch_id TEXT NOT NULL,
   recipient_account_id TEXT NOT NULL,
   room_id TEXT,
+  reinvited_at TIMESTAMPTZ,
   status VARCHAR(16) NOT NULL,
   attempts INTEGER NOT NULL DEFAULT 0,
   last_error TEXT,
