@@ -677,6 +677,10 @@ invite`, set by every in-repo template, adds `m.room.encryption` to every
     transaction ids for a while, not for ever). A notice is "sent" only once
     the homeserver accepted it. It is retried with backoff for 30 days from
     the release, then recorded as failed; the logs carry counts, not who.
+    Each homeserver call has 30 s to answer (`NOTICE_CALL_TIMEOUT_MS`); one
+    that does not is that notice's retry (`matrix_<call>_timeout`) and its
+    request is aborted, since the ticks do not overlap and a hung call would
+    otherwise hold every other due notice for undici's five-minute default.
     It does not go through `botPostingGate.ts`: it is the bot's own post into
     its own room.
 -   **What the owner sees:** when the switch fired, how many recipients were
@@ -697,8 +701,15 @@ invite`, set by every in-repo template, adds `m.room.encryption` to every
     at most 20 release switches per owner whose content is held, armed, in
     grace or fired until the removal; at most 10 arms per owner in any 24
     hours; at most 5 held releases naming one person from one owner and 50
-    from everyone. So one person receives at most 50 notices in any 365 days,
-    each with at most one re-invite. A recipient cannot yet refuse an owner
+    from everyone. Each bound is read before the signatures are verified and
+    again right before the rows are written, with nothing yielding between,
+    so on one API process the bounds hold against arms sent at once (as first
+    fixed they were read once, before the signature awaits, and a burst of N
+    arms passed every one: round 2 of the review); across API replicas the
+    store is eventually consistent, and each bound can be exceeded by what
+    lands within its refresh window, typically under a second. So, on one
+    process, one person receives at most 50 notices in any 365 days, each
+    with at most one re-invite. A recipient cannot yet refuse an owner
     (decision 19).
 -   **Who learns what from a notice:** the homeserver, nothing new; Apple or
     Google, that a notification came (the app registers `event_id_only`
@@ -956,17 +967,23 @@ message, and nothing here makes a release happen on time (§10, R12).
     the fingerprint and compares it, so the service makes no comparison of
     its own); then, after those awaits, the release id is still free (409
     `release_id_taken`, an existence answer for any switch's id, accepted and
-    explained at `SWITCH_NOT_FOUND` in the module: P3b-L7, decision 22) and
-    the rows are written with no await between, in the mirror: the copies
-    first, one row per account, and then the switch, id = release id, no
-    room, `release-v1`, the recipients' account ids, the label. In Postgres
-    mode each row is its own write-behind upsert, committed after the 201 in
-    that order, so a crash between them leaves copies no switch names, which
-    nothing lists or serves, and never a switch without copies, which would
-    fire and release to nobody; nothing detects the orphaned copies (P3b-L5).
-    On one replica two arms with one id cannot both write; across replicas
-    the store is eventually consistent and the window applies (P3b-L6). The
-    answer is the armed event with the owner's view.
+    explained at `SWITCH_NOT_FOUND` in the module: P3b-L7, decision 22), and
+    every bound still has room, each read again (round 2 of the review: read
+    once before the signature awaits, a burst of N arms passed every bound);
+    then the rows are written with no await between, in the mirror: the
+    copies first, one row per account, and then the switch, id = release id,
+    no room, `release-v1`, the recipients' account ids, the label. In
+    Postgres mode each row is its own write-behind upsert, committed after
+    the 201 in that order, so a crash between them leaves copies no switch
+    names, which nothing lists or serves, and never a switch without copies,
+    which would fire and release to nobody; a copy's upsert that failed twice
+    and was dropped (`db_write_behind_failed`, `writeBehindQueue.ts`) while
+    the switch's succeeded leaves the same switch without that copy with no
+    crash; nothing detects the orphaned copies or the missing one (P3b-L5).
+    On one replica two arms with one id cannot both write and the bounds
+    hold against arms sent at once; across replicas the store is eventually
+    consistent and the window applies to both (P3b-L6). The answer is the
+    armed event with the owner's view.
 -   **The owner's view** carries `releaseFormat`, `releasedAt` once fired,
     `release` (the header, the owner's identity, the owner's own copy, and
     whom each held copy is sealed to with its fingerprint) while the content
@@ -1060,20 +1077,37 @@ public_chat`, `encrypted: false`, `initial_state` holding an invite-only
     recipient whose account is gone (`recipient_gone`) or a release that is
     not there to point at (`release_unavailable`: cancelled, removed, or
     never a release) ends the notice at once, and a notice that ends for a
-    gone recipient forgets its room. Before a notice is marked sent, the row
-    and the account are read again: a deletion that landed during the send
-    has ended the row and that stands, and an account gone another way ends
-    it (P3b-L14). An in-flight set keeps an overlapping tick off a notice,
-    and the interval does not start a tick while the previous one runs; a
-    stop ends a tick after the notice in hand. Logs carry counts only.
+    gone recipient forgets its room. The row is read again after every
+    homeserver call and before anything is written to it: a deletion that
+    landed while the room was being found or made, or during the send, has
+    ended the row with `recipient_gone`, and that stands whatever the call
+    answered (the room made for a deleted account is not recorded on the
+    row, no re-invite is, nothing is sent, and no later error, attempt or
+    backoff is written over the reason the row ended); a row ended any other
+    way meanwhile is left as it is; and the account is read again before a
+    row is marked sent, so one gone another way ends it (P3b-L14, and its
+    round 2: as first fixed only the `sent` branch read the row again, so a
+    deletion during `createRoom` put the new room on the ended row and a
+    deletion during a send the homeserver refused was written over with the
+    refusal). Each call has `NOTICE_CALL_TIMEOUT_MS`, 30 s, to answer, and
+    one that does not is that notice's retry (`matrix_<call>_timeout`) with
+    its request aborted: the ticks do not overlap, so without that one
+    connection the homeserver accepted and never answered held every due
+    notice for undici's default of five minutes; a tick is still a sequence,
+    so 50 notices whose every call times out take about 25 minutes, and the
+    worker's shutdown waits for a tick in flight only up to its own bound.
+    An in-flight set keeps an overlapping tick off a notice, and the interval
+    does not start a tick while the previous one runs; a stop ends a tick
+    after the notice in hand. Logs carry counts only.
 -   **Account deletion** (`accountLifecycle.ts`): an unfired release switch
     of the account's loses its copies with its content; a fired one keeps its
     content, the owner's identity it was signed with (E13) and the recipients'
     copies, and only the owner's own copy goes, since nothing is re-sealed
     after the trigger and nobody is left to open it. As a recipient: the
     account's copies on others' switches go, fired or not; its pending notices
-    end with `recipient_gone`, and a notice whose send was in flight when the
-    deletion landed stays `failed` (P3b-L14); every notice row of its forgets
+    end with `recipient_gone`, and a notice whose homeserver call was in
+    flight when the deletion landed stays `failed` with that reason, with no
+    room, re-invite or attempt recorded on it (P3b-L14); every notice row of its forgets
     the room that tied the account to a Matrix id; the switch keeps the
     account id among its recipients, as legacy switches do. What stays after
     a blank, named here because the user-facing texts name it too: each
@@ -1096,35 +1130,51 @@ public_chat`, `encrypted: false`, `initial_state` holding an invite-only
     that is not JSON, since the parse says so, and the format check covers a
     legacy payload that is. A notice row's status at send time is checked
     now, since the review's P3b-L14 found a deletion could land during the
-    send. Each bound of P3b-H1 is checked once, before the signatures: two
-    arms racing on one replica can exceed one by one, across replicas by more
-    within the refresh window; the held cap is what bounds the content one
-    account can make the server keep.
+    send. Each bound of P3b-H1 is checked twice on purpose: before the
+    signatures, so a refused arm costs no verification, and again with
+    nothing yielding before the writes, so on one replica exactly the bound
+    passes a burst of arms (round 2 of the review: checked once, a burst of
+    N passed every bound, and "two arms racing can exceed one by one" was
+    not true, since N racing exceeded it by N − 1); across replicas by what
+    lands within the refresh window. The held cap is what bounds the content
+    one account can make the server keep; the rows are not bounded: a
+    cancelled release switch's row and its blanked copy rows stay, so an
+    account that arms and cancels at the rate adds up to 10 switch rows and
+    650 blanked copy rows a day for good, about 230 KB a day as JSON in the
+    mirror at 64 recipients and a full label (about 11 KB at one recipient),
+    which decision 24 asks about. The per-recipient bounds are read once per
+    copy per arm through the store's by-recipient index (round 2: as first
+    fixed, a scan of every copy row per copy).
 -   **Tests** (`packages/api/test/`): `deadman-releases.integration.test.ts`,
-    21 (the flag off and on, and every spelling; the sweep switched off; the
+    23 (the flag off and on, and every spelling; the sweep switched off; the
     body's shape and cap; every refusal in order, including a copy re-signed
     by a third party; the arming rate; the held cap at its edge, fired
     switches counted and bytes held flat; the per-recipient bounds, 5 and
-    50; each recipient's isolation before and after the trigger and the
+    50; arms sent at once at the edge of each bound; each recipient's
+    isolation before and after the trigger and the
     opening with the recipient's keys; re-sealing, its refusals, the race
     with a cancel and its body cap; cancel; the 365-day removal and its
     idempotence; the removal's indexed second pass; content gone while a copy
     is held; legacy switches unchanged, a legacy payload that looks like
     release JSON included; the limits; the export, notice rows included;
-    deletion of an owner and of a recipient, before and after the trigger);
-    `deadman-release-notices.integration.test.ts`, 21 (the rows the sweep
+    deletion of an owner and of a recipient, before and after the trigger;
+    a person's rows listed through the by-recipient index);
+    `deadman-release-notices.integration.test.ts`, 23 (the rows the sweep
     writes; the room's creation body and the send's body and transaction id;
     what the notice never carries; room reuse; re-invite, once per notice;
     the replaced room, once per person; each retry and its backoff; a thrown
     call per step; the 30-day window; catch-up, and its indexed cost; a gone
     recipient; a release that is not there; a switch not yet fired; a
-    deletion during a send, and a row ended during one; no homeserver
+    deletion during a send, during a send the homeserver refuses, and a row
+    ended during one; a deletion while the room is found or made, under each
+    call; a call that never answers, ended at the timeout; no homeserver
     configured; the overlapping tick, with a bounded wait; two notices for
     one person in overlapping ticks; the interval's running guard; the
     per-tick cap; the stop mid-tick; start and stop);
     `deadman-releases-postgres.integration.test.ts`, 3 (PGlite: a restart,
     `room_id` NULL, `reinvited_at`, a legacy row reading `legacy`, the
-    by-switch index after hydration and after a wholesale refresh, a blanked
+    by-switch and by-recipient indexes after hydration and after a wholesale
+    refresh, a blanked
     copy and a cleared room in Postgres, the down migration refused and then
     run);
     `deadman-releases-file.integration.test.ts`, 1;
@@ -1148,7 +1198,11 @@ public_chat`, `encrypted: false`, `initial_state` holding an invite-only
     branch another line always made, the owner's own copy on a fired switch
     at the owner's deletion, which the loop over every copy sealed to the
     account blanks anyway, so the branch was removed. The second run: 110 of
-    110 killed.
+    110 killed. The review's forty checks and round 2's seventeen (the second
+    table in the review section) were each removed once too; round 2's one
+    survivor, the row read once the recipient's slot is held, was given the
+    case that tells it apart (a notice waiting for a deleted person's slot
+    makes no room of its own) and then failed as the rest did.
 -   **Secret scanners.** Part 2 adds no vector and no key material: its tests
     import PR 2's vectors by path and make every other key in the test
     process. gitleaks over the branch's commits finds nothing, so
@@ -1187,7 +1241,14 @@ that records what the API sends.
     base64; 20 of them measured at 6.7 MiB) plus up to 65 sealed copies of
     about 1.8 KB each, so about 6.7 MiB of headers and up to about 2.3 MiB of
     copies per account, held for up to 365 days after firing, in Postgres and
-    in every replica's mirror.
+    in every replica's mirror. It bounds content, not rows: a cancelled
+    release switch's row and its blanked copy rows (recipient id, fingerprint,
+    timestamps) stay for good, so arming and cancelling at the rate of
+    decision 18 adds up to 10 switch rows and 650 copy rows a day, about
+    230 KB a day as JSON at 64 recipients and a full label, about 11 KB at
+    one recipient (decision 24). The bounds hold on one API process against
+    arms sent at once; across replicas each can be exceeded by what lands
+    within the store's refresh window.
 5.  The header is signed inside each copy's signature rather than once
     (E7); recipients learn they read the same text only by comparing.
 6.  Transferable signatures, held by the server from arming (C15, E8).
@@ -1248,6 +1309,13 @@ that records what the API sends.
     have been told it after the trigger.
 23. (Part 2, after its review.) The export of an account includes the notice
     rows about it, for fired switches only (P3b-L8).
+24. (Part 2, after its review's round 2.) The rows of a cancelled release
+    switch (the switch row with whom it named, the label and timing, and one
+    blanked copy row per account with the fingerprint of the key it was
+    sealed to) are never deleted, as no dead-man row is; at the arming rate
+    that is up to 10 switch rows and 650 copy rows a day per account, for
+    good. Keep them, as the record of what was armed, or let a cancelled
+    release switch's rows be deleted after some time.
 
 ## Not verified here
 
@@ -1632,10 +1700,13 @@ Each finding was then fixed or explained as below, on this branch, in the
 commits after `18b928b189`. Tests named here are in `packages/api/test/` and
 run one file at a time under `BLACKOUT_DB_MODE=memory`; every new check was
 taken out once, the one test file that pins it run, and the source restored
-(§14's scratch runner, outside the repository; the table is at the end of
+(§14's scratch runner, outside the repository; the tables are at the end of
 this section), and each time at least one test failed. The design document,
 `TRUST.md`, `KNOWN_LIMITATIONS.md`, `THREAT_MODEL.md`, the legal changelog
 and the deletion screen are edited here too; the trust page is regenerated.
+The fixes then had a second pass from the same verifiers, who replayed the
+attacks against them and read every sentence they changed; what that pass
+found, and what was done about each, is under "Round 2" below.
 
 ### High
 
@@ -1667,6 +1738,13 @@ storage of about 10 MB per account" was false.
     what the cap bounds, with the measured numbers; §11 and
     `KNOWN_LIMITATIONS.md` say what one account can do to another's notices
     room and that a recipient cannot yet refuse an owner (decisions 17–19).
+    (e) Round 2: every bound is read again right before the rows are written,
+    with nothing yielding between; as first fixed each was read once, before
+    the signature awaits, and a burst of N arms sent at once passed every one
+    (the verifiers' replay: 30 at once from one owner armed 30 against a rate
+    of 10 and a cap of 20; 100 at once naming one person armed 100 against 5;
+    ten owners at once took a person from 49 to 59 against 50), so every "at
+    most" sentence was true of arms made one after another only.
 -   **Tests.** `deadman-releases.integration.test.ts`: "at most 10 release
     arms in any 24 hours: the 11th is 429 with Retry-After, and fits again a
     day after the first" (the header equals the body, about a day; a
@@ -1683,7 +1761,13 @@ storage of about 10 MB per account" was false.
     refused with the same code, message and fields). `GET /limits` asserts
     every bound. `deadman-release-notices.integration.test.ts`: "a person
     who left is invited again at most once per notice: a retry of the same
-    notice does not invite again".
+    notice does not invite again". Round 2: "arms sent at once at the edge of
+    each bound: exactly the bound passes and the rest are refused with its
+    code" (30 at once from a fresh owner: 10 armed, 20 refused 429; 15 at
+    once at 19 held: 1 armed, 14 refused 409 `release_switch_limit`; 15 at
+    once naming one person: 5 and 10 `recipient_limit`; a person at 45 from
+    nine owners, ten more owners at once: 5 and 5; nothing written for any
+    refused arm).
 -   **Run.** The review's probe (`review/arming-resealing/probe2.mts`),
     re-run against this branch with one address per account: the rate, "10
     armed, then 429 release_arm_rate_limited retry-after=86400"; the cap,
@@ -1694,7 +1778,23 @@ storage of about 10 MB per account" was false.
     6.7 MiB", unchanged, and after the +365-day removal "held 0, content
     0.0 MiB; next arm 201"; the per-recipient bounds, "201 ×5, 409
     recipient_limit" from one owner and "50 armed, then 409 recipient_limit"
-    from eleven; the growth stops where the bounds say.
+    from eleven; the growth stops where the bounds say, for arms made one
+    after another. Round 2, the verifiers' concurrent scenarios re-run
+    against the re-check (`fix/round2/probe-h1-round2.mts`, in scratch): "30
+    concurrent arms, one owner, 30 people, held 0 before: 201 ×10, 429
+    release_arm_rate_limited ×20; after: switches 10 (held 10), content 3.35
+    MiB" where before the re-check it read 201 ×30 and 10.06 MiB; "at 19
+    held, 10 concurrent arms: 201 ×1, 409 release_switch_limit ×9; held 20"
+    (before: 201 ×2, held 21); "30 concurrent arms all naming one person: 201
+    ×5, 409 recipient_limit ×25; victim's notice rows 5" (before: 201 ×30,
+    notice rows 30); "victim named on 49, 10 owners arm at once: 201 ×1, 409
+    recipient_limit ×9; now named on 50" (before: 201 ×10, named on 59); "100
+    concurrent arms, one owner, all naming one person: 201 ×5, 409
+    recipient_limit ×95 in 123 ms; victim's notice rows 5" (before: 201 ×100,
+    notice rows 100). The row residue, measured in the same run: ten
+    arm-and-cancel a day of 64 recipients and a 280-character label leave 10
+    switch rows and 650 blanked copy rows, 228 KiB of JSON, per day, with
+    content and copies at 0.
 -   **Still open.** A recipient-side refusal of an owner that the notifier
     and the release read honour (decision 19); whether 20, 10, 5 and 50 are
     the numbers the operator wants (decisions 17, 18).
@@ -1748,7 +1848,11 @@ history_visibility, join_rules(invite), member, name, power_levels]` with
     `private_chat` with `encrypted: false` the same way for the vendor space
     and its rooms, so those are encrypted by the backstop too; a space holds
     hierarchy state only, which Matrix never encrypts, and the rooms are
-    disclosed in `TRUST.md` §1 as plaintext service rooms. Left as it is
+    disclosed in `TRUST.md` §1 as plaintext service rooms. So do
+    `services/coalitionSpaces.ts` (a space, with an explicit join rule in
+    `initialState`) and `services/discordServerImport.ts` (imported rooms,
+    which their comment says are not meant to hold conversation): three
+    sites, not one, each marked encrypted by the backstop. Left as they are
     here; the `encrypted` doc now warns the next caller.
 
 **P3b-M2. The deletion screen and `KNOWN_LIMITATIONS.md` said a fired switch
@@ -1797,7 +1901,12 @@ for every fired release from its first firing.
     map of the same kind (`freshMapLike`). The half-removal repair test is
     unchanged and passes: nothing skips a removed switch, each just costs its
     own copies. The catch-up uses the same listing, so a tick over N fired
-    releases costs their copies, not N scans.
+    releases costs their copies, not N scans. Round 2: the copies and the
+    notices are grouped by recipient account as well (`GroupedMap` takes a
+    grouping per index), so the per-recipient bounds, read once per copy on
+    every arm, the release read, account deletion and the notifier's room
+    lookup cost that person's rows; as first fixed each was a scan of every
+    copy row, up to 64 per arm.
 -   **Tests.** `deadman-releases.integration.test.ts`: "the 365-day removal
     lists each release's copies by switch: a pass over releases already
     removed does not scan the copies": 1,500 removed releases with three
@@ -1913,7 +2022,10 @@ armingUnavailableReason: 'sweep_off'` (`releases_off` comes first when
     the service's comment and `.env.example` say so, and test 1 pins `TRUE`,
     `true` and `1 ` as on and `yes` and `on` as off. (c) The 1 MiB cap is
     middleware and runs first; §15, the module's comment and the test's
-    title say "before the body is parsed", not "before the body is read".
+    title say "before the body is parsed", not "before the body is read"
+    (round 2: this entry claimed the title had changed when it had not; test
+    1 and PR 1's test in `deadman-routes.integration.test.ts` are renamed
+    now, and the one comment in the test file that said "read" too).
 -   **P3b-L14. A deletion during an in-flight send marked the notice `sent`.**
     Done: before marking sent the notifier reads the row again and never
     overwrites a row that is no longer pending, and reads the account again
@@ -1921,10 +2033,123 @@ armingUnavailableReason: 'sweep_off'` (`releases_off` comes first when
     account deletion that lands during a send stands" (the deletion through
     `confirmAccountDeletion` during a parked send; an account deleted another
     way with its rows untouched; a row ended during the send while the
-    account exists: none marked sent).
+    account exists: none marked sent). Round 2: only the `sent` branch read
+    the row again, so a deletion during a send the homeserver then refused
+    was written over with the refusal (`matrix_send_status_500`, attempts 1,
+    a new backoff), and a deletion during `createRoom` or the state read was
+    not seen in find-or-make, which recorded the new room on the ended row
+    and sent into it. Now the row is read again after every homeserver call
+    and before any write to it, whatever the step was; the tests are below.
 -   **P3b-L15. The in-flight mutant was killed by a hang.** Done: the overlap
     test races the second tick against a timer and asserts its result, so
     the mutant fails an assertion (the table below).
+
+### Round 2: what the verifiers found in the fixes
+
+The verifiers replayed every attack against the fixed branch and read every
+sentence the fixes changed. Eleven residuals, each fixed or explained here;
+the tests and the mutation table for them are at the end of this section.
+
+-   **The bounds held for sequential arms only (High as raised).** Every
+    bound was read before the signature awaits and the rows were written
+    after them, so N arms sent at once all read the pre-burst counts: 30 at
+    once from one owner armed 30 (rate 10, cap 20, 10 MiB held); 150 from one
+    address armed 120 (the global limiter's 120 a minute) and 40 MiB; 100 at
+    once naming one person armed 100 against 5; ten owners at once took a
+    person from 49 named to 59 against 50. Sequential bursts saw each other's
+    writes, so growth was no longer unbounded, but each "at most" in the
+    records, `KNOWN_LIMITATIONS.md`, `TRUST.md`, `THREAT_MODEL.md` and the
+    changelog was overstated by the size of a burst, and the recipient-side
+    number, a promise to the person named, by 24×. Done: `armReleaseSwitch`
+    reads every bound again after the signature awaits, beside the id check,
+    with nothing yielding before the writes, so on one replica exactly the
+    bound passes a burst; the sentences now say so, and what replicas can do.
+    Test: "arms sent at once at the edge of each bound: exactly the bound
+    passes and the rest are refused with its code". Run: the verifiers'
+    probe, re-run (below).
+-   **A deletion during find-or-make was not seen (Low).** `resolveRoom`
+    recorded the new room on the row after `createRoom` or the state read
+    without reading the row's status, so a deletion that landed meanwhile had
+    its ended row given a room again, undoing "every notice row of theirs
+    forgets the room", and the invite and the send went into a room made for
+    a deleted account. Done: the row is read again after each homeserver call
+    in find-or-make; a row no longer pending ends the notice as
+    `recipient_gone` with nothing recorded on it (the room the homeserver made
+    stands, empty). Test: "a deletion that lands while the room is being
+    found or made is seen before anything is recorded: no room on the row, no
+    re-invite, no send" (during `createRoom`, during the state read of an
+    existing room, during the re-invite of someone who left).
+-   **A refused send after a deletion overwrote the ended row (Low).** The
+    `retry` branch wrote `lastError`, `attempts` and `nextAttemptAt`
+    unconditionally, so the row said `matrix_send_status_500` where the
+    deletion had written `recipient_gone`. Done: the row is read again before
+    any branch writes; one no longer pending is counted as failed and left as
+    it is. Test: test 13's fourth case (a send the homeserver refuses with
+    500 during a deletion: `recipient_gone`, attempts 0, the backoff
+    unchanged).
+-   **The running guard serialised every notice behind a call with no
+    timeout (Low).** `matrix-client.ts` set no timeout on any request, so a
+    homeserver that accepted a connection and never answered held one notice
+    for undici's default (300 s on Node 22 / undici 6), the tick's loop is
+    sequential, and no other tick starts meanwhile; before the guard an
+    overlapping tick carried the other due notices. Done: each of the
+    notifier's four calls has `NOTICE_CALL_TIMEOUT_MS`, 30 s, through a race
+    that does not rely on the client honouring it, and an `AbortSignal` the
+    four `matrix-client.ts` calls now pass to `fetch`, so the request is
+    aborted and the notice is a retry with `matrix_<call>_timeout`. What
+    remains, stated in the header, §11, §15 and `KNOWN_LIMITATIONS.md`: a tick
+    is a sequence, so 50 notices whose every call times out take about 25
+    minutes. Test: "a homeserver call that never answers ends at the call
+    timeout as that notice's retry, and the next notice is not held behind
+    it" (a `createRoom` parked for ever, the tick done within the shortened
+    timeout, the row's reason, the signal aborted, the other notice sent).
+-   **The per-recipient bound scanned the copies map (Low).**
+    `listDeadmanReleaseWrapsForRecipient` filtered every copy row, once per
+    copy per arm, so an envelope of 64 copies cost 64 scans of every copy on
+    the server, on the request path; the `GroupedMap` indexed by switch only.
+    Done: `GroupedMap` takes one grouping per index, and the copies and the
+    notices are grouped by switch and by recipient; the file store's hydrate
+    and the Postgres store's refresh rebuild both. Test: "a person's copies
+    and notices are listed through the index, not a scan: the per-recipient
+    bounds and the room lookup cost that person's rows" (1,500 other
+    switches, seven naming one person, every iterator of both maps spied and
+    called 0 times, the counts right); the Postgres and file tests assert the
+    by-recipient listing after a restart and a wholesale refresh.
+-   **The row residue under the rate was unstated (Low).** The held cap
+    bounds content and the rate bounds arms, but rows are never deleted, so
+    arm-and-cancel adds up to 10 switch rows and 650 blanked copy rows a day
+    per account for good; the Bounds bullet, decision 4 and §15 stated the
+    content bound only. Done: each now says the row figure (about 230 KB a
+    day as JSON at 64 recipients and a full label, about 11 KB at one
+    recipient), and decision 24 asks whether a cancelled release switch's
+    rows may be deleted.
+-   **`KNOWN_LIMITATIONS.md` said a deleted account's notice rows keep their
+    room (Medium as a claim).** The deletion paragraph said "the record of
+    each notice (its room, status and attempts) stays"; `accountLifecycle.ts`
+    clears the room on every notice row of the deleted recipient, and the
+    changelog and §15 said so. Done: "its status and attempts, with its room
+    forgotten".
+-   **Test 1's title still said "before the body is read" (Low).** The
+    record's L13 entry said the title had been changed; it had not, and PR
+    1's test in `deadman-routes.integration.test.ts` and one comment in the
+    test file said the same. Done: both titles and the comment say "parsed";
+    the pre-existing quotation in `deadman-and-feeds-triage-2026-10-12.md` is
+    a record of what that test was called then and is left.
+-   **"Never a switch without copies" was true of a crash only (Low).** A
+    copy's write-behind upsert that fails twice is dropped
+    (`db_write_behind_failed`) while the switch's, queued after it, may
+    succeed: a switch without that copy, with no crash, and nothing detects
+    it. Done: §15 and the Durability bullet say so. A sweep-time check that a
+    fired switch's held copies cover its recipients was not built.
+-   **The "Not this PR's" note named one of three `private_chat` +
+    `encrypted: false` sites (Low).** Done: `coalitionSpaces.ts` and
+    `discordServerImport.ts` are named beside `vendorRooms.ts`.
+-   **The record and user-facing sentences stated the bounds flatly.** Done
+    with the first item: §11, §15, decision 4, the service's comments,
+    `KNOWN_LIMITATIONS.md` (Who can name you, Bounds), `TRUST.md` §1,
+    `THREAT_MODEL.md` and the changelog say the bounds hold on one API
+    process against arms sent at once and can be exceeded across replicas by
+    what lands within the store's refresh window.
 
 ### Claims that were not true, and what they say now
 
@@ -1972,6 +2197,32 @@ armingUnavailableReason: 'sweep_off'` (`releases_off` comes first when
     removed". Except the copy kept with a fired release switch; it says so.
 16. `KNOWN_LIMITATIONS.md`'s Retention bullet and the legal changelog, by
     omission: what stays after the removal. Both say it now.
+17. (Round 2.) §11, §15, decision 4, `deadmanReleases.ts`,
+    `KNOWN_LIMITATIONS.md`, `TRUST.md`, `THREAT_MODEL.md` and the changelog:
+    "at most 20 / 10 / 5 / 50", and "two arms racing on one replica can
+    exceed a bound by one". True of arms made one after another; a burst of
+    N exceeded each by N − 1. Now every bound is read again before the
+    writes, and each sentence says on one process, and what replicas can do.
+18. (Round 2.) `KNOWN_LIMITATIONS.md`'s deletion paragraph: "the record of
+    each notice (its room, status and attempts) stays". The code forgets the
+    room. Now "its status and attempts, with its room forgotten".
+19. (Round 2.) Test 1's title and PR 1's test: "before the body is read"; the
+    L13 entry above said the title had been changed. Both renamed to
+    "parsed", and the entry says what happened.
+20. (Round 2.) §15 and `KNOWN_LIMITATIONS.md`: "never a switch without
+    copies", of a crash. A copy's upsert dropped after its retry leaves one
+    with no crash; both say so.
+21. (Round 2.) §15's "its pending notices end with `recipient_gone`" and the
+    notifier's header, "a deletion that landed during the send has already
+    ended the row, and that stands": not when the homeserver then refused the
+    send, and not when the deletion landed during `createRoom`. Now the row
+    is read again after every call and before any write, and both say so.
+22. (Round 2.) The notifier's header and §15 described the running guard
+    without its consequence: one hung call held every notice for five
+    minutes. Now each call ends at 30 s, and both say what a tick can still
+    take.
+23. (Round 2.) The M1 note above named one other `private_chat` +
+    `encrypted: false` site; there are three. It names them.
 
 ### Raised and refuted
 
@@ -2019,9 +2270,9 @@ ends the row while the account exists.
 | H1(b): the Retry-After header on the 429                                                  | `deadman-releases.integration.test.ts`          | test 6: at most 10 release arms in any 24 hours: the 11th is 429 with Retry-Af…  |
 | H1(e): /limits reports every bound                                                        | `deadman-releases.integration.test.ts`          | test 14: GET /limits says what the arming form may say, from the deployment’s o… |
 | L4: arming closed where the sweep is off                                                  | `deadman-releases.integration.test.ts`          | test 2: with the sweep switched off in the API’s own environment, arming is re…  |
-| L4: /limits says why                                                                      | `deadman-releases.integration.test.ts`          | test 1: with the flag off, arming is refused with 409 before the body is read …  |
+| L4: /limits says why                                                                      | `deadman-releases.integration.test.ts`          | test 1: with the flag off, arming is refused with 409 before the body is parsed… |
 | L4: the 409 names the sweep                                                               | `deadman-releases.integration.test.ts`          | test 2: with the sweep switched off in the API’s own environment, arming is re…  |
-| the route refuses while arming is closed                                                  | `deadman-releases.integration.test.ts`          | test 1: with the flag off, arming is refused with 409 before the body is read …  |
+| the route refuses while arming is closed                                                  | `deadman-releases.integration.test.ts`          | test 1: with the flag off, arming is refused with 409 before the body is parsed… |
 | L5: the copies are written before the switch (the switch first, as first built)           | `deadman-releases.integration.test.ts`          | test 3: with the flag on, an owner arms a release switch: the row, one copy pe…  |
 | L8: only fired switches’ notice rows are exported                                         | `deadman-releases.integration.test.ts`          | test 15: the export lists an owner’s release switches without any copy, and a r… |
 | L8: the notice rows are exported                                                          | `deadman-releases.integration.test.ts`          | test 15: the export lists an owner’s release switches without any copy, and a r… |
@@ -2045,6 +2296,36 @@ ends the row while the account exists.
 | H1(d): re-invite at most once per notice                                                  | `deadman-release-notices.integration.test.ts`   | test 11: a person who left is invited again at most once per notice: a retry of… |
 | H1(d): the re-invite is recorded on the row                                               | `deadman-release-notices.integration.test.ts`   | test 10: a homeserver call that throws is that notice’s attempt: counted, backe… |
 
+Round 2's checks, the same way (`fix/mut/spec-round2.py`, in scratch; the
+test numbers are the files' after round 2: releases 23, notices 23, Postgres
+3, file 1). Seventeen checks; sixteen caught on the first run, and the
+seventeenth, the row read once the recipient's slot is held, survived
+because every later call re-reads the row, so a test that only looked at the
+row could not tell it apart; it is observable (without it a notice that
+waited for a deleted person's slot makes one more room for them before its
+own re-read ends it), so test 14 gained that case and the mutant then failed
+it. The sources were restored after each run and the diff checked unchanged.
+
+| Check removed                                                                    | Test file                                       | What failed                                                                      |
+| -------------------------------------------------------------------------------- | ----------------------------------------------- | -------------------------------------------------------------------------------- |
+| H1 round 2: the held cap and the rate are read again before the writes           | `deadman-releases.integration.test.ts`          | test 9: arms sent at once at the edge of each bound: exactly the bound passes a… |
+| H1 round 2: the held cap is read again (the rate still is)                       | `deadman-releases.integration.test.ts`          | test 9                                                                           |
+| H1 round 2: the rate is read again (the held cap still is)                       | `deadman-releases.integration.test.ts`          | test 9                                                                           |
+| H1 round 2: the per-recipient bounds are read again before the writes            | `deadman-releases.integration.test.ts`          | test 9                                                                           |
+| index: copies listed by recipient through the index, not a scan                  | `deadman-releases.integration.test.ts`          | test 22: a person’s copies and notices are listed through the index, not a scan… |
+| index: notices listed by recipient through the index, not a scan                 | `deadman-releases.integration.test.ts`          | test 22                                                                          |
+| index: the file store rebuilds the by-recipient index on hydrate                 | `deadman-releases-file.integration.test.ts`     | test 1: a release switch, its copies and its notices survive a restart of the …  |
+| index: a wholesale refresh of the Postgres mirror keeps every grouping           | `deadman-releases-postgres.integration.test.ts` | test 1: a release switch, its copies and its notices survive a restart; it has…  |
+| L14 round 2: the row is read again after the state read                          | `deadman-release-notices.integration.test.ts`   | test 14: a deletion that lands while the room is being found or made is seen b…  |
+| L14 round 2: the row is read again after the re-invite, before it is recorded    | `deadman-release-notices.integration.test.ts`   | test 14                                                                          |
+| L14 round 2: the row is read again after createRoom, before the room is recorded | `deadman-release-notices.integration.test.ts`   | test 14                                                                          |
+| L14 round 2: a retry or failure is not written over a row ended meanwhile        | `deadman-release-notices.integration.test.ts`   | test 13: an account deletion that lands during a send stands: the row stays fai… |
+| L14 round 2: the row is read again once the slot is held (survived, then caught) | `deadman-release-notices.integration.test.ts`   | test 14, its fourth case                                                         |
+| timeout: a homeserver call that never answers ends at the call timeout           | `deadman-release-notices.integration.test.ts`   | test 15: a homeserver call that never answers ends at the call timeout as that … |
+| timeout: the row says the call timed out                                         | `deadman-release-notices.integration.test.ts`   | test 15                                                                          |
+| timeout: the signal is handed to createRoom so the request is aborted            | `deadman-release-notices.integration.test.ts`   | test 15                                                                          |
+| timeout: matrix-client passes the signal to the createRoom request               | `deadman-release-notices.integration.test.ts`   | test 15                                                                          |
+
 ### Still open
 
 -   **A recipient-side refusal of an owner** (decision 19), which the
@@ -2053,6 +2334,11 @@ ends the row while the account exists.
     release keys can do to another's notices room, within the bounds.
 -   **Fired legacy switches' payloads** are held with no removal date
     (decision 20); extending the 365-day removal to them is the operator's.
+-   **The rows of cancelled release switches** stay for good (decision 24);
+    deleting them after some time is the operator's.
+-   **Across API replicas** the bounds hold only up to what lands within the
+    store's refresh window; a conditional write in Postgres would close that
+    and was not built (P3b-L6).
 -   **The device-side record of a release's recipients** (part 1's review,
     PR 4) stands as before.
 -   What the review did not verify stands: Postgres end to end through the

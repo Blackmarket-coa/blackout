@@ -51,7 +51,10 @@ no deployment, compose or env file does.
     switch fires and who fetched their copy. What one account can make it keep
     is bounded: 20 release switches with content held, 10 arms in 24 hours, 5
     held releases naming one person from one owner and 50 from everyone
-    (`GET /v1/deadman/limits` reports each). Cancelling removes the message and
+    (`GET /v1/deadman/limits` reports each; exact on one API server against
+    requests sent at once, and exceeded across several replicas only by what
+    they take in within the moment their store takes to refresh). The rows of
+    a cancelled switch stay, blank. Cancelling removes the message and
     the copies from its database (backups aside); 365 days after a switch fires
     they are removed, at the sweep's first pass after that, and the rows stay,
     saying what the switch was, whom it was for and the fingerprint of the key

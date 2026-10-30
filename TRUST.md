@@ -122,7 +122,9 @@ Encryption claims are only worth something with the exceptions attached.
     [`release-envelope-2026-10-26.md`](docs/security/release-envelope-2026-10-26.md)
     §11). Any account with release keys can name you on a switch, within
     bounds the API enforces (5 held releases naming you from one account, 50
-    from everyone); you cannot yet refuse an owner. No deployment can arm such
+    from everyone: exact on one API server against requests sent at once, and
+    exceeded across several replicas only by what they take in within the
+    moment their store takes to refresh); you cannot yet refuse an owner. No deployment can arm such
     a switch yet: arming is refused until an operator turns
     `BLACKOUT_DEADMAN_RELEASES` on, and no deployment file does.
 -   **Scheduled messages.** When you schedule a message, you hand its text to the

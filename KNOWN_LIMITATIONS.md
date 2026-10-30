@@ -331,7 +331,8 @@ For the source-of-truth triage with tier/owner detail see
     exists today) keeps its payload for the people it named with no removal
     date, because a release is not taken back. Copies of other people's
     releases sealed to you are removed, a notice still owed to you is dropped,
-    and the record of each notice (its room, status and attempts) stays. It
+    and the record of each notice (its status and attempts) stays, with its
+    room forgotten. It
     removes the release keys you published (their public halves), except the
     copy kept with a release switch of yours that has already fired, which goes
     with that release 365 days after it fired; the fingerprint of the key each
@@ -380,7 +381,10 @@ For the source-of-truth triage with tier/owner detail see
     message. Anyone who sees your notifications, and your email provider if
     the homeserver emails you about unread messages, can see that you got one.
     The bot retries a notice the homeserver refuses for 30 days, then records
-    it as failed; whether a notice reaches you depends on the homeserver and
+    it as failed, and gives up on a call the homeserver does not answer within
+    30 seconds the same way (it sends one notice at a time, so a homeserver
+    that answers nothing holds every notice due behind it, each for up to 30
+    seconds); whether a notice reaches you depends on the homeserver and
     your client, and the release does not: it is released when the API's own
     store says so, and the view the next PR adds reads that store.
 -   **Who can name you, and what that does to your notices room.** Any
@@ -389,7 +393,11 @@ For the source-of-truth triage with tier/owner detail see
     with you first, and the server cannot tell whether they did. The API
     bounds it: one account can name you on at most 5 held releases, and
     everyone together on at most 50 (`GET /v1/deadman/limits`; a release is
-    held from arming until 365 days after it fires). Each one that fires puts
+    held from arming until 365 days after it fires). The bounds hold on one
+    API server against requests sent all at once; a deployment running
+    several API replicas can exceed each by what the replicas take in within
+    the moment their store takes to refresh, typically under a second. Each
+    one that fires puts
     one notice in your notices room, and if you left that room the bot
     invites you back, once per notice. You cannot yet refuse an owner, and
     release keys cannot be unpublished, so the only way to stop being named is
@@ -422,15 +430,25 @@ For the source-of-truth triage with tier/owner detail see
     removal), about 7 MiB of encrypted headers and up to about 2.3 MiB of
     sealed copies at the largest sizes; can arm at most 10 in any 24 hours;
     and can name one person on at most 5 held releases, who can be named on at
-    most 50 from everyone. `GET /v1/deadman/limits` reports each. An owner
-    whose 20 switches all fired cannot arm again until the oldest is removed;
-    cancelling an unfired one frees its place.
+    most 50 from everyone. `GET /v1/deadman/limits` reports each. The bounds
+    hold on one API server against requests sent all at once; several API
+    replicas can exceed each by what they take in within the moment their
+    store takes to refresh. An owner whose 20 switches all fired cannot arm
+    again until the oldest is removed; cancelling an unfired one frees its
+    place. These bound content, not rows: a cancelled release switch leaves
+    its row (whom it named, the label and timing) and one blanked copy row
+    per person named (account id, key fingerprint, timestamps) for good, so
+    arming and cancelling at the rate adds up to 10 switch rows and 650 copy
+    rows a day to the database.
 -   **Durability.** In Postgres mode the API answers before its writes commit
     (a write-behind queue, drained on shutdown), so a crash in that window can
     lose the newest rows. Arming writes a switch's sealed copies first and the
     switch last, so what such a crash leaves is copies no switch names, which
     nothing lists or serves, rather than a switch that fires with copies
-    missing; nothing detects the orphaned copies.
+    missing; nothing detects the orphaned copies. A copy's write that fails
+    twice is dropped (`db_write_behind_failed` in the logs) while the switch's
+    may succeed, which leaves a switch missing that copy with no crash;
+    nothing detects that either.
 -   The switches that exist were armed through the API before this. Their
     payload is whatever was sent: the server never decrypts it and cannot
     tell whether it is ciphertext. Recipients named by Blackout account id
