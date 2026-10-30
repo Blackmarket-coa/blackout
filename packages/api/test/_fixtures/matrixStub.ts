@@ -10,9 +10,9 @@
  *     `sends`, answered with `sendStatus`.
  * And, for the bot's own rooms (the dead-man release notifier):
  *   - `POST /_matrix/client/v3/createRoom` → recorded in `creates`; a new room
- *     `!created-<n>:<domain>` is added to `rooms` with the bot's
- *     `m.room.create`, the bot joined and each invitee invited, answered with
- *     `createStatus`; a `room_alias_name` is recorded in `aliases` as
+ *     `!created-<n>:<domain>` is added to `rooms` with the state the fork's
+ *     create leaves (`createdRoomState`), answered with `createStatus`; a
+ *     `room_alias_name` is recorded in `aliases` as
  *     `#<name>:<domain>`, one already taken is refused 400 `M_ROOM_IN_USE`, as
  *     Synapse refuses it before making a room (`handlers/room.py`, "Room alias
  *     already taken"), and while `aliasRefusal` is set any alias is refused
@@ -126,6 +126,63 @@ export const powerLevelsEvent = (content: Record<string, unknown>): StubStateEve
     state_key: '',
     content,
 });
+
+/**
+ * The state a completed `createRoom` leaves, as the fork writes it
+ * (`handlers/room.py`, `_send_events_for_new_room`): the creator's
+ * `m.room.create`, the creator's join, then one batch with the power levels
+ * (Synapse's defaults with the body's `power_level_content_override` over
+ * them), the canonical alias, the preset's join rule and history visibility
+ * unless `initial_state` has its own, the `initial_state`, and the name; then
+ * the invites. A create abandoned part way leaves a prefix of this.
+ */
+export const createdRoomState = (
+    creator: string,
+    body: Record<string, unknown> = {},
+    alias?: string
+): StubStateEvent[] => {
+    const initial = (
+        Array.isArray(body.initial_state) ? body.initial_state : []
+    ) as StubStateEvent[];
+    const invited = (Array.isArray(body.invite) ? body.invite : []) as string[];
+    const has = (type: string) =>
+        initial.some((e) => e.type === type && (e.state_key ?? '') === '');
+    const preset = typeof body.preset === 'string' ? body.preset : 'private_chat';
+    const override = (body.power_level_content_override ?? {}) as Record<string, unknown>;
+    return [
+        { type: 'm.room.create', state_key: '', sender: creator, content: { room_version: '10' } },
+        memberEvent(creator),
+        powerLevelsEvent({
+            users: { [creator]: 100 },
+            users_default: 0,
+            events_default: 0,
+            state_default: 50,
+            ban: 50,
+            kick: 50,
+            redact: 50,
+            invite: 50,
+            ...override,
+        }),
+        ...(alias ? [{ type: 'm.room.canonical_alias', state_key: '', content: { alias } }] : []),
+        ...(has('m.room.join_rules')
+            ? []
+            : [joinRulesEvent(preset === 'public_chat' ? 'public' : 'invite')]),
+        ...(has('m.room.history_visibility')
+            ? []
+            : [
+                  {
+                      type: 'm.room.history_visibility',
+                      state_key: '',
+                      content: { history_visibility: 'shared' },
+                  },
+              ]),
+        ...initial.map((e) => ({ ...e, state_key: e.state_key ?? '' })),
+        ...(typeof body.name === 'string'
+            ? [{ type: 'm.room.name', state_key: '', content: { name: body.name } }]
+            : []),
+        ...invited.map((userId) => memberEvent(userId, 'invite')),
+    ];
+};
 
 const json = (body: unknown, status = 200): Response =>
     new Response(JSON.stringify(body), {
@@ -252,17 +309,7 @@ export function createMatrixStub(
             }
             createdRooms += 1;
             const roomId = `!created-${createdRooms}:${domain}`;
-            const invited = Array.isArray(body.invite) ? (body.invite as string[]) : [];
-            stub.rooms.set(roomId, [
-                {
-                    type: 'm.room.create',
-                    state_key: '',
-                    sender: stub.botUserId,
-                    content: { room_version: '10' },
-                },
-                memberEvent(stub.botUserId),
-                ...invited.map((userId) => memberEvent(userId, 'invite')),
-            ]);
+            stub.rooms.set(roomId, createdRoomState(stub.botUserId, body, alias));
             if (alias) stub.aliases.set(alias, roomId);
             stub.creates.push({ body, roomId });
             return json({ room_id: roomId }, stub.createStatus);

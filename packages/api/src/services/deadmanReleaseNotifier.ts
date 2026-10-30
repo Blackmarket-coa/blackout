@@ -56,15 +56,25 @@
  * on the next attempt instead of being made again (as first fixed, each such
  * attempt left the person one more empty "Blackout notices" room with an
  * invite: round 3 of part 2's review). The homeserver writes the alias after
- * it makes the room id and before it sends any event (`handlers/room.py`,
- * `create_room`), so a room found through the alias with no `m.room.create` is
- * taken for a create still in progress and retried once; still without one at
- * the notice's next attempt (one backoff later, 30 s at the least), it is
- * taken for a create the homeserver abandoned between the two (a restart, or a
- * failure sending the first events), which leaves the alias naming a room with
- * no events for good, and the room is made without the alias (as first fixed
- * it was retried for the whole window, and every later notice to that person
- * with it: round 4 of part 2's review). What the alias leaves (`makeRoom`): a
+ * it makes the room id and before it sends any event, and then writes the room
+ * in steps (`handlers/room.py`, `create_room` and `_send_events_for_new_room`:
+ * `m.room.create` alone, the creator's join, then one batch with the power
+ * levels and the rest, then the invites). So a room found through the alias
+ * that is not yet the whole room the create makes (no `m.room.create`; or the
+ * bot's, without the bot's own join or without power levels that keep the
+ * person from posting and inviting) is taken for a create still in progress
+ * and retried once; still so at the notice's next attempt, which is due one
+ * backoff (30 s at the least) after that first look was recorded, it is taken
+ * for a create the homeserver abandoned part way (a restart, or a failure
+ * between those writes), which leaves the alias naming that incomplete room
+ * for good, and the room is made without the alias. (As first fixed a room
+ * with no events was retried for the whole window, and every later notice to
+ * that person with it: round 4 of part 2's review. As round 4 left it, a room
+ * with the create alone was taken as the bot's and its re-invite refused,
+ * `M_NOT_JOINED`, for the window, a room with the create and the bot's join
+ * was used with no power levels, and the retry was timed from the tick's
+ * start, so after a long tick the second look could come seconds after the
+ * first: round 5.) What the alias leaves (`makeRoom`): a
  * secret rotation between a create that timed out and its retry changes the
  * alias, so that room is not found and another is made; a homeserver that
  * refuses the alias itself (an alias policy, or an appservice's namespace), an
@@ -84,7 +94,20 @@
  * ended the row with `recipient_gone`, and that stands whatever the call
  * answered (no room is recorded on it, no re-invite, no send, no attempt, no
  * later error over its reason); a row ended any other way meanwhile is left as
- * it is.
+ * it is. That read is this process's mirror. Where the deletion runs in
+ * another process (the API process, with the loops in a worker of their own,
+ * as `deploy/docker/production` runs them), every write here is also
+ * conditional in Postgres (`updateDeadmanReleaseNoticeIf`: applied only while
+ * the stored row is still pending, or still names the room it is being moved
+ * off), so a deletion the other process committed first stands in the
+ * database whenever its change notification reaches this one; until it does,
+ * this process's mirror and its tick's count say sent. A deletion that commits
+ * after this process's write lands over it, as its own write: no room, and,
+ * unless the deleting process had already seen the row sent, `failed` with
+ * `recipient_gone` for a notice the homeserver accepted, as on one process
+ * when the deletion lands during the send (round 5 of part 2's review: the
+ * notifier's full-row write landed over the deletion's, and Postgres ended
+ * `sent` with the room).
  *
  * Each homeserver call has `NOTICE_CALL_TIMEOUT_MS` to answer; one that does
  * not is that notice's retry (`matrix_<call>_timeout`) and its request is
@@ -155,6 +178,12 @@ export const NOTICE_ROOM_JOIN_RULE = {
     state_key: '',
     content: { join_rule: 'invite' },
 } as const;
+
+/**
+ * The power levels the create asks for: only the bot (the creator, at 100)
+ * posts or invites; the person joins at 0 and cannot type there.
+ */
+export const NOTICE_ROOM_POWER_LEVELS = { events_default: 50, invite: 50 } as const;
 
 /** The notices room's alias localpart starts with this; the rest is `noticeRoomAliasLocalpart`'s HMAC. */
 export const NOTICE_ROOM_ALIAS_PREFIX = 'blackout-notices-';
@@ -330,7 +359,7 @@ const stillPending = (key: {
 /** The recipient is gone: the row was ended meanwhile, and nothing more is recorded on it. */
 const RECIPIENT_GONE: Step = { kind: 'failed', reason: 'recipient_gone' };
 
-/** A room found through the alias with no `m.room.create` yet: retried once (`checkRoom`). */
+/** A room found through the alias that is not yet the room the create makes: retried once (`checkRoom`). */
 export const ALIAS_ROOM_NOT_READY = 'matrix_alias_room_not_ready';
 
 /** Whether the person is in the room or invited to it, from the room's current state. */
@@ -341,6 +370,36 @@ const membershipOf = (
     const event = state.find((e) => e.type === 'm.room.member' && e.state_key === userId);
     const membership = event?.content?.membership;
     return typeof membership === 'string' ? membership : undefined;
+};
+
+type StateEvent = { type: string; state_key?: string; content?: Record<string, unknown> };
+
+const levelOf = (value: unknown): number | undefined =>
+    typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+
+/**
+ * Whether a room the bot created, found through the alias, is the whole room
+ * its create makes: the bot joined, and power levels under which the person
+ * can neither post nor invite. The fork's `createRoom` writes the room in
+ * steps (`handlers/room.py`, `_send_events_for_new_room`): `m.room.create`
+ * alone, then the creator's join through `update_membership`, then one batch
+ * with the power levels, the join rule, the history visibility, the
+ * `initial_state` and the name, then the invites. A create the homeserver
+ * abandoned after the first or the second leaves, for good, a room the bot
+ * cannot invite into (it is not joined: `M_NOT_JOINED`) or one with no power
+ * levels, where the person at the default 0 could post and invite anyone
+ * (round 5 of part 2's review).
+ */
+const aliasRoomComplete = (state: StateEvent[], bot: string, mxid: string): boolean => {
+    if (membershipOf(state, bot) !== 'join') return false;
+    const levels = state.find(
+        (e) => e.type === 'm.room.power_levels' && (e.state_key ?? '') === ''
+    )?.content;
+    if (!levels) return false;
+    const users = levels.users as Record<string, unknown> | undefined;
+    const person = levelOf(users?.[mxid]) ?? levelOf(levels.users_default) ?? 0;
+    // Absent fields are 0 in Matrix's event auth.
+    return person < (levelOf(levels.events_default) ?? 0) && person < (levelOf(levels.invite) ?? 0);
 };
 
 /**
@@ -358,14 +417,19 @@ type RoomCheck = { kind: 'ok' } | { kind: 'unusable' } | Step;
  * and, when `madeBy` is given (a room found through the person's alias),
  * a room whose `m.room.create` another account sent: a room an admin shut
  * down with a replacement has its aliases moved to the replacement, which the
- * bot is not in. A room found through the alias with no `m.room.create` is
- * taken for one the homeserver is still making, and retried
- * (`ALIAS_ROOM_NOT_READY`), once: if this notice's previous attempt already
- * found it so, one backoff ago, it is taken for a create the homeserver
- * abandoned after writing the alias, which never completes, and is
- * `unusable` (round 4 of part 2's review: retried for the window, it stopped
- * that person's notices for good). The row is read again after each call, as
- * `resolveRoom` says.
+ * bot is not in. A room found through the alias that is not yet the whole
+ * room the create makes (no `m.room.create`, or the bot's with no join by
+ * the bot or no power levels that keep the person from posting and inviting:
+ * `aliasRoomComplete`) is taken for one the homeserver is still making, and
+ * retried (`ALIAS_ROOM_NOT_READY`), once: if this notice's previous attempt
+ * already found it so, at least one backoff earlier (the retry is timed from
+ * when that attempt was recorded), it is taken for a create the homeserver
+ * abandoned part way, which never completes, and is `unusable` (round 4 of
+ * part 2's review for a room with no events: retried for the window, it
+ * stopped that person's notices for good; round 5 for one with the create
+ * alone, where the re-invite was refused for the window, and one with the
+ * create and the bot's join, which was used with no power levels). The row
+ * is read again after each call, as `resolveRoom` says.
  */
 const checkRoom = async (
     roomId: string,
@@ -386,11 +450,11 @@ const checkRoom = async (
     }
     if (madeBy !== undefined) {
         const creation = state.state.find((e) => e.type === 'm.room.create');
-        if (!creation) {
+        if (creation && creation.sender !== madeBy) return { kind: 'unusable' };
+        if (!creation || !aliasRoomComplete(state.state, madeBy, mxid)) {
             if (current.lastError === ALIAS_ROOM_NOT_READY) return { kind: 'unusable' };
             return { kind: 'retry', reason: ALIAS_ROOM_NOT_READY };
         }
-        if (creation.sender !== madeBy) return { kind: 'unusable' };
     }
     const membership = membershipOf(state.state, mxid);
     if (membership !== 'join' && membership !== 'invite' && !current.reinvitedAt) {
@@ -402,9 +466,12 @@ const checkRoom = async (
             const reason = 'reason' in invited ? invited.reason : `status_${invited.status}`;
             return { kind: 'retry', reason: `matrix_invite_${reason}` };
         }
-        db.updateDeadmanReleaseNotice(key.switchId, key.recipientAccountId, {
-            reinvitedAt: new Date().toISOString(),
-        });
+        db.updateDeadmanReleaseNoticeIf(
+            key.switchId,
+            key.recipientAccountId,
+            { status: 'pending' },
+            { reinvitedAt: new Date().toISOString() }
+        );
     }
     return { kind: 'ok' };
 };
@@ -439,9 +506,7 @@ const createNoticeRoom = (
             initialState: [NOTICE_ROOM_JOIN_RULE],
             invite: [mxid],
             isDirect: true,
-            // Only the bot (the creator, at 100) posts or invites; the person
-            // joins at 0 and cannot type there.
-            powerLevelOverride: { events_default: 50, invite: 50 },
+            powerLevelOverride: { ...NOTICE_ROOM_POWER_LEVELS },
         })
     );
 
@@ -542,20 +607,38 @@ const resolveRoom = async (
         const made = await makeRoom(current, mxid, matrix, callTimeoutMs);
         if (!('roomId' in made)) return made;
         roomId = made.roomId;
-        // Recorded before the send, so a crash here does not make a second room.
-        db.updateDeadmanReleaseNotice(key.switchId, key.recipientAccountId, { roomId });
+        // Recorded before the send, so a crash here does not make a second
+        // room. Every write here is conditional (`updateDeadmanReleaseNoticeIf`):
+        // in Postgres it lands only on a row still as this process read it.
+        db.updateDeadmanReleaseNoticeIf(
+            key.switchId,
+            key.recipientAccountId,
+            { status: 'pending' },
+            { roomId }
+        );
         if (deadRoom) {
             // Every row of this person's that still points at the room the
             // homeserver no longer has moves to the replacement, so a later
-            // notice does not replace it again.
+            // notice does not replace it again; a row whose room a deletion
+            // forgot meanwhile is not given one back.
             for (const row of db.listDeadmanReleaseNoticesForRecipient(notice.recipientAccountId)) {
                 if (row.roomId === deadRoom) {
-                    db.updateDeadmanReleaseNotice(row.switchId, row.recipientAccountId, { roomId });
+                    db.updateDeadmanReleaseNoticeIf(
+                        row.switchId,
+                        row.recipientAccountId,
+                        { roomId: deadRoom },
+                        { roomId }
+                    );
                 }
             }
         }
     } else if (current.roomId !== roomId) {
-        db.updateDeadmanReleaseNotice(key.switchId, key.recipientAccountId, { roomId });
+        db.updateDeadmanReleaseNoticeIf(
+            key.switchId,
+            key.recipientAccountId,
+            { status: 'pending' },
+            { roomId }
+        );
     }
     return { roomId };
 };
@@ -641,6 +724,14 @@ export const runDeadmanReleaseNotifier = async (
     options: { now?: Date; matrix?: MatrixForNotices; callTimeoutMs?: number } = {}
 ): Promise<NotifierResult> => {
     const now = options.now ?? new Date();
+    // The tick's clock: `now` moved on by the time the tick has taken. A
+    // retry is timed from when its step is recorded, not from the tick's
+    // start, so a notice whose attempt came late in a long tick (behind a call
+    // that ran to its timeout, say) still waits a whole backoff before its
+    // next one (round 5 of part 2's review: timed from the start, the second
+    // look at an alias room could come seconds after the first).
+    const startedAt = Date.now();
+    const clock = (): number => now.getTime() + (Date.now() - startedAt);
     const matrix = options.matrix ?? matrixClient;
     const callTimeoutMs = options.callTimeoutMs ?? NOTICE_CALL_TIMEOUT_MS;
     const generation = stopGeneration;
@@ -686,49 +777,72 @@ export const runDeadmanReleaseNotifier = async (
             // ended any other way meanwhile is left as it is, so no later
             // error, attempt or backoff is written over the reason it ended.
             // It is counted as it ended: one another process sent is not this
-            // tick's failure (round 4 of part 2's review).
+            // tick's failure (round 4 of part 2's review). That read is this
+            // process's mirror; in Postgres each write below also carries the
+            // condition into the database (`updateDeadmanReleaseNoticeIf`), so
+            // a deletion another process committed before this one saw it is
+            // not written over either (round 5).
             const ended = db.getDeadmanReleaseNotice(notice.switchId, notice.recipientAccountId);
+            const pending = { status: 'pending' } as const;
             if (!ended || ended.status !== 'pending') {
                 if (ended?.status === 'sent') result.elsewhere += 1;
                 else result.failed += 1;
             } else if (step.kind === 'sent') {
                 // The account, read again: one gone another way ends it here.
                 if (!db.getUserById(notice.recipientAccountId)) {
-                    db.updateDeadmanReleaseNotice(notice.switchId, notice.recipientAccountId, {
-                        status: 'failed',
-                        failedAt: at,
-                        lastError: 'recipient_gone',
-                        roomId: undefined,
-                    });
+                    db.updateDeadmanReleaseNoticeIf(
+                        notice.switchId,
+                        notice.recipientAccountId,
+                        pending,
+                        {
+                            status: 'failed',
+                            failedAt: at,
+                            lastError: 'recipient_gone',
+                            roomId: undefined,
+                        }
+                    );
                     result.failed += 1;
                 } else {
-                    db.updateDeadmanReleaseNotice(notice.switchId, notice.recipientAccountId, {
-                        status: 'sent',
-                        attempts: notice.attempts + 1,
-                        sentAt: at,
-                        lastError: undefined,
-                    });
+                    db.updateDeadmanReleaseNoticeIf(
+                        notice.switchId,
+                        notice.recipientAccountId,
+                        pending,
+                        {
+                            status: 'sent',
+                            attempts: notice.attempts + 1,
+                            sentAt: at,
+                            lastError: undefined,
+                        }
+                    );
                     result.sent += 1;
                 }
             } else if (step.kind === 'retry') {
                 const attempts = notice.attempts + 1;
-                db.updateDeadmanReleaseNotice(notice.switchId, notice.recipientAccountId, {
-                    attempts,
-                    lastError: step.reason,
-                    nextAttemptAt: new Date(
-                        now.getTime() + noticeBackoffMs(attempts)
-                    ).toISOString(),
-                });
+                db.updateDeadmanReleaseNoticeIf(
+                    notice.switchId,
+                    notice.recipientAccountId,
+                    pending,
+                    {
+                        attempts,
+                        lastError: step.reason,
+                        nextAttemptAt: new Date(clock() + noticeBackoffMs(attempts)).toISOString(),
+                    }
+                );
                 result.retried += 1;
             } else {
-                db.updateDeadmanReleaseNotice(notice.switchId, notice.recipientAccountId, {
-                    status: 'failed',
-                    failedAt: at,
-                    lastError: step.reason,
-                    // A notice that ends for a recipient who is gone forgets
-                    // the room that tied the account to a Matrix id.
-                    ...(step.reason === 'recipient_gone' ? { roomId: undefined } : {}),
-                });
+                db.updateDeadmanReleaseNoticeIf(
+                    notice.switchId,
+                    notice.recipientAccountId,
+                    pending,
+                    {
+                        status: 'failed',
+                        failedAt: at,
+                        lastError: step.reason,
+                        // A notice that ends for a recipient who is gone forgets
+                        // the room that tied the account to a Matrix id.
+                        ...(step.reason === 'recipient_gone' ? { roomId: undefined } : {}),
+                    }
+                );
                 result.failed += 1;
             }
         } finally {

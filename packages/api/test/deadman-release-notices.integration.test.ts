@@ -27,7 +27,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash, createHmac, randomUUID } from 'node:crypto';
 import { generateTestJwtSecret } from './_fixtures/secrets';
-import { createMatrixStub, memberEvent } from './_fixtures/matrixStub';
+import { createMatrixStub, createdRoomState, memberEvent } from './_fixtures/matrixStub';
 import type { ReleaseIdentity, ReleaseKeySet } from '@blackout/protocol';
 import type { DeadmanSwitchRecord } from '../src/db/types';
 
@@ -70,6 +70,45 @@ const within = <T>(ms: number, work: Promise<T>): Promise<T | 'pending'> =>
         work,
         new Promise<'pending'>((resolve) => setTimeout(() => resolve('pending'), ms)),
     ]);
+
+/** When a notice row is next due, or the latest of several rows. */
+const dueAt = (...rows: Array<{ switchId: string; accountId: string }>): Date =>
+    new Date(
+        Math.max(
+            ...rows.map(({ switchId, accountId }) =>
+                Date.parse(db.getDeadmanReleaseNotice(switchId, accountId)!.nextAttemptAt)
+            )
+        )
+    );
+
+/** One tick at `now`, and how long it ran in real time. */
+const timedTick = async (
+    now: Date,
+    options: Omit<Parameters<typeof runDeadmanReleaseNotifier>[0] & object, 'now'> = {}
+) => {
+    const started = Date.now();
+    const result = await runDeadmanReleaseNotifier({ now, ...options });
+    return { result, tookMs: Date.now() - started };
+};
+
+/**
+ * A retry is due one backoff after it was recorded, on the tick's clock (its
+ * `now` moved on by the time the tick has run): no earlier than `now` plus
+ * the backoff, and no later than that plus the tick's run time (round 5 of
+ * part 2's review: it was timed from the tick's start).
+ */
+const assertDueOneBackoffLater = (
+    nextAttemptAt: string,
+    now: Date,
+    backoffMs: number,
+    tookMs: number
+) => {
+    const offset = Date.parse(nextAttemptAt) - now.getTime();
+    assert.ok(
+        offset >= backoffMs && offset <= backoffMs + tookMs,
+        `due ${offset} ms after the tick's now; expected ${backoffMs} to ${backoffMs + tookMs}`
+    );
+};
 
 protocol.setKemProvider(protocol.mlKem768Provider);
 
@@ -434,8 +473,9 @@ test('a homeserver failure is retried with backoff, 30 s doubling to 6 h, and no
     const { record, at } = await released(await freshPerson(), [dave.keySet.identity]);
     matrix.clearCalls();
     matrix.createStatus = 500;
+    const row = { switchId: record.id, accountId: dave.user.id };
     try {
-        const first = await runDeadmanReleaseNotifier({ now: at });
+        const { result: first, tookMs: firstTook } = await timedTick(at);
         assert.deepEqual(first, {
             caughtUp: 0,
             due: 1,
@@ -449,17 +489,18 @@ test('a homeserver failure is retried with backoff, 30 s doubling to 6 h, and no
         assert.equal(notice.attempts, 1);
         assert.equal(notice.lastError, 'matrix_create_create_rejected');
         assert.equal(notice.roomId, undefined, 'no room was made');
-        assert.equal(notice.nextAttemptAt, new Date(at.getTime() + 30_000).toISOString());
+        assertDueOneBackoffLater(notice.nextAttemptAt, at, 30_000, firstTook);
         assert.equal(matrix.sends.length, 0);
 
         // Not due until then.
         const early = await runDeadmanReleaseNotifier({ now: new Date(at.getTime() + 29_000) });
         assert.equal(early.due, 0);
-        const second = await runDeadmanReleaseNotifier({ now: new Date(at.getTime() + 30_000) });
+        const secondAt = dueAt(row);
+        const { result: second, tookMs: secondTook } = await timedTick(secondAt);
         assert.equal(second.retried, 1);
         notice = db.getDeadmanReleaseNotice(record.id, dave.user.id)!;
         assert.equal(notice.attempts, 2);
-        assert.equal(notice.nextAttemptAt, new Date(at.getTime() + 90_000).toISOString());
+        assertDueOneBackoffLater(notice.nextAttemptAt, secondAt, 60_000, secondTook);
     } finally {
         matrix.createStatus = 200;
     }
@@ -467,14 +508,15 @@ test('a homeserver failure is retried with backoff, 30 s doubling to 6 h, and no
     // The room is made, but the send fails.
     matrix.sendStatus = 500;
     try {
-        const third = await runDeadmanReleaseNotifier({ now: new Date(at.getTime() + 90_000) });
+        const thirdAt = dueAt(row);
+        const { result: third, tookMs: thirdTook } = await timedTick(thirdAt);
         assert.equal(third.retried, 1);
         const notice = db.getDeadmanReleaseNotice(record.id, dave.user.id)!;
         assert.equal(notice.attempts, 3);
         assert.equal(notice.lastError, 'matrix_send_status_500');
         assert.ok(notice.roomId, 'the room is recorded before the send');
         assert.equal(notice.status, 'pending');
-        assert.equal(notice.nextAttemptAt, new Date(at.getTime() + 90_000 + 120_000).toISOString());
+        assertDueOneBackoffLater(notice.nextAttemptAt, thirdAt, 120_000, thirdTook);
         assert.equal(matrix.creates.length, 1);
     } finally {
         matrix.sendStatus = 200;
@@ -488,7 +530,7 @@ test('a homeserver failure is retried with backoff, 30 s doubling to 6 h, and no
     const sendsBefore = matrix.sendsTo(roomId).length;
     assert.equal(sendsBefore, 1);
     try {
-        const fourth = await runDeadmanReleaseNotifier({ now: new Date(at.getTime() + 210_000) });
+        const fourth = await runDeadmanReleaseNotifier({ now: dueAt(row) });
         assert.equal(fourth.retried, 1);
         assert.equal(
             db.getDeadmanReleaseNotice(record.id, dave.user.id)?.lastError,
@@ -500,9 +542,7 @@ test('a homeserver failure is retried with backoff, 30 s doubling to 6 h, and no
     }
 
     // Then it goes through, with the same room and the same transaction id.
-    const fifth = await runDeadmanReleaseNotifier({
-        now: new Date(at.getTime() + 210_000 + 480_000),
-    });
+    const fifth = await runDeadmanReleaseNotifier({ now: dueAt(row) });
     assert.equal(fifth.sent, 1);
     const sent = db.getDeadmanReleaseNotice(record.id, dave.user.id)!;
     assert.equal(sent.status, 'sent');
@@ -527,11 +567,11 @@ test('30 days after the release a notice still pending is recorded as failed, an
     try {
         assert.equal((await runDeadmanReleaseNotifier({ now: at })).retried, 1);
         const lastTry = new Date(at.getTime() + NOTICE_RETRY_WINDOW_MS - 1);
-        const stillOpen = await runDeadmanReleaseNotifier({ now: lastTry });
+        const { result: stillOpen, tookMs } = await timedTick(lastTry);
         assert.equal(stillOpen.retried, 1, 'retried until the window closes');
         // Due again after its backoff, which is now past the window.
         const nextDue = db.getDeadmanReleaseNotice(record.id, erin.user.id)!.nextAttemptAt;
-        assert.equal(nextDue, new Date(lastTry.getTime() + noticeBackoffMs(2)).toISOString());
+        assertDueOneBackoffLater(nextDue, lastTry, noticeBackoffMs(2), tookMs);
         const closed = await runDeadmanReleaseNotifier({ now: new Date(Date.parse(nextDue)) });
         assert.deepEqual(closed, {
             caughtUp: 0,
@@ -715,8 +755,10 @@ test('a homeserver call that throws is that notice’s attempt: counted, backed 
         }) as typeof fetch;
     // The re-invite throws.
     globalThis.fetch = throwing('/state/m.room.member/');
+    let throwingTook = 0;
     try {
-        const tick = await runDeadmanReleaseNotifier({ now: at });
+        const { result: tick, tookMs } = await timedTick(at);
+        throwingTook = tookMs;
         assert.deepEqual(tick, {
             caughtUp: 0,
             due: 2,
@@ -732,7 +774,7 @@ test('a homeserver call that throws is that notice’s attempt: counted, backed 
     assert.equal(daves.status, 'pending');
     assert.equal(daves.attempts, 1);
     assert.equal(daves.lastError, 'matrix_invite_network_error');
-    assert.equal(daves.nextAttemptAt, new Date(at.getTime() + 30_000).toISOString());
+    assertDueOneBackoffLater(daves.nextAttemptAt, at, 30_000, throwingTook);
     assert.equal(daves.reinvitedAt, undefined, 'a thrown invite is not an invite');
     assert.equal(db.getDeadmanReleaseNotice(erins.record.id, erin.user.id)?.status, 'sent');
     assert.equal(matrix.sendsTo(roomId).length, 0, 'no send after the thrown invite');
@@ -762,7 +804,10 @@ test('a homeserver call that throws is that notice’s attempt: counted, backed 
         'matrix_create_network_error'
     );
     // Then both go through.
-    const later = new Date(retryAt.getTime() + 60_000);
+    const later = dueAt(
+        { switchId: second.record.id, accountId: dave.user.id },
+        { switchId: fays.record.id, accountId: fay.user.id }
+    );
     const done = await runDeadmanReleaseNotifier({ now: later });
     assert.equal(done.sent, 2);
     assert.equal(db.getDeadmanReleaseNotice(second.record.id, dave.user.id)?.status, 'sent');
@@ -1184,10 +1229,11 @@ test('a homeserver call that never answers ends at the call timeout as that noti
         return stubFetch(input, init);
     }) as typeof fetch;
     const now = new Date(Math.max(first.at.getTime(), second.at.getTime()));
+    let elapsedMs = 0;
     try {
         const started = performance.now();
         const result = await within(5000, runDeadmanReleaseNotifier({ now, callTimeoutMs: 100 }));
-        const elapsedMs = performance.now() - started;
+        elapsedMs = performance.now() - started;
         assert.deepEqual(result, {
             caughtUp: 0,
             due: 2,
@@ -1206,11 +1252,8 @@ test('a homeserver call that never answers ends at the call timeout as that noti
     assert.equal(held.attempts, 1);
     assert.equal(held.lastError, 'matrix_create_timeout');
     assert.equal(held.roomId, undefined, 'no room recorded for a call that never answered');
-    assert.equal(
-        held.nextAttemptAt,
-        new Date(now.getTime() + NOTICE_BACKOFF_FIRST_MS).toISOString(),
-        'the retry is backed off as any failure is'
-    );
+    // The retry is backed off as any failure is, from when it was recorded.
+    assertDueOneBackoffLater(held.nextAttemptAt, now, NOTICE_BACKOFF_FIRST_MS, elapsedMs + 1);
     assert.ok(abortedSignal?.aborted, 'the request was aborted through its signal');
     const sent = db.getDeadmanReleaseNotice(second.record.id, quick.user.id)!;
     assert.equal(sent.status, 'sent', 'the next notice was not held behind the hung call');
@@ -1412,7 +1455,10 @@ test('a createRoom the homeserver finished after the call timed out is found by 
     // The retry: the row that timed out knows no room, but the person's other
     // row does, so it is reused; no create at all.
     matrix.clearCalls();
-    const retryAt = new Date(one.at.getTime() + NOTICE_BACKOFF_FIRST_MS);
+    const retryAt = dueAt(
+        { switchId: one.record.id, accountId: erin.user.id },
+        { switchId: two.record.id, accountId: erin.user.id }
+    );
     assert.equal((await runDeadmanReleaseNotifier({ now: retryAt })).sent, 1);
     assert.equal(matrix.creates.length + matrix.createRefusals.length, 0);
     assert.deepEqual(roomsFor(), [roomA], 'still one room');
@@ -1443,7 +1489,7 @@ test('a createRoom the homeserver finished after the call timed out is found by 
     const faysRoom = matrix.creates[0].roomId;
     assert.equal(db.getDeadmanReleaseNotice(fays.record.id, fay.user.id)!.roomId, undefined);
     matrix.clearCalls();
-    const faysRetry = new Date(fays.at.getTime() + NOTICE_BACKOFF_FIRST_MS);
+    const faysRetry = dueAt({ switchId: fays.record.id, accountId: fay.user.id });
     assert.equal((await runDeadmanReleaseNotifier({ now: faysRetry })).sent, 1);
     assert.equal(matrix.creates.length, 0, 'no second room');
     assert.deepEqual(
@@ -1480,7 +1526,7 @@ test('a createRoom the homeserver finished after the call timed out is found by 
     const roomC = matrix.creates[0].roomId;
     assert.notEqual(roomC, faysRoom);
     matrix.clearCalls();
-    const againRetry = new Date(again.at.getTime() + NOTICE_BACKOFF_FIRST_MS);
+    const againRetry = dueAt({ switchId: again.record.id, accountId: fay.user.id });
     assert.equal((await runDeadmanReleaseNotifier({ now: againRetry })).sent, 1);
     assert.equal(matrix.creates.length, 0, 'no second room after the purge either');
     assert.deepEqual(
@@ -1627,13 +1673,15 @@ test('when the alias cannot be used the room is made without it: an alias the ho
         assert.equal(waiting.lastError, 'matrix_alias_room_not_ready');
         assert.equal(waiting.roomId, undefined);
         assert.equal(matrix.creates.length, 0, 'no room made beside it');
-        matrix.rooms.set(making, [
-            { type: 'm.room.create', state_key: '', sender: matrix.botUserId, content: {} },
-            memberEvent(matrix.botUserId),
-            memberEvent(idaMxid, 'invite'),
-        ]);
+        matrix.rooms.set(
+            making,
+            createdRoomState(matrix.botUserId, {
+                invite: [idaMxid],
+                power_level_content_override: { events_default: 50, invite: 50 },
+            })
+        );
         matrix.clearCalls();
-        const idasRetry = new Date(idas.at.getTime() + NOTICE_BACKOFF_FIRST_MS);
+        const idasRetry = dueAt({ switchId: idas.record.id, accountId: ida.user.id });
         assert.equal((await runDeadmanReleaseNotifier({ now: idasRetry })).sent, 1);
         assert.equal(matrix.creates.length, 0);
         assert.equal(matrix.invites.length, 0, 'the person was invited by the create itself');
@@ -1694,11 +1742,13 @@ test('a deletion that lands during the alias lookup, the bot’s id or a create 
     // A room the bot made that holds the person's alias, as a create the
     // homeserver finished after the call timed out leaves it.
     const aliasedRoomFor = (personMxid: string, roomId: string) => {
-        matrix.rooms.set(roomId, [
-            { type: 'm.room.create', state_key: '', sender: matrix.botUserId, content: {} },
-            memberEvent(matrix.botUserId),
-            memberEvent(personMxid, 'invite'),
-        ]);
+        matrix.rooms.set(
+            roomId,
+            createdRoomState(matrix.botUserId, {
+                invite: [personMxid],
+                power_level_content_override: { events_default: 50, invite: 50 },
+            })
+        );
         matrix.aliases.set(noticeRoomAlias(personMxid), roomId);
     };
 
@@ -2095,74 +2145,121 @@ test('a stop mid-tick ends the tick after the notice in hand; the rest stay pend
     assert.equal((await runDeadmanReleaseNotifier({ now: at })).sent, 1);
 });
 
-test('a room found through the alias that still has no m.room.create at the notice’s next attempt is taken for a create the homeserver abandoned: a room is made without the alias, and later notices reuse it', async () => {
+test('a room found through the alias that is still not the whole room the create makes at the notice’s next attempt (no events, the create alone, the create and the bot’s join, or power levels that let the person post) is taken for a create the homeserver abandoned: a room is made without the alias, nobody is invited into it, and later notices reuse the new room', async () => {
     // The homeserver writes the alias after it makes the room id and before
-    // it sends any event (`handlers/room.py`, `create_room`), so a restart or
-    // a failure between the two leaves the alias naming a room with no events
-    // for good. Retried as a room still being made, that stopped every notice
-    // to the person for the whole window (round 4 of part 2's review).
+    // it sends any event (`handlers/room.py`, `create_room`), and then writes
+    // the room in steps (`_send_events_for_new_room`: m.room.create alone,
+    // the creator's join, then one batch with the power levels and the rest).
+    // A restart or a failure between any two leaves the alias naming that
+    // prefix for good. Retried as a room still being made, the empty one
+    // stopped every notice to the person for the whole window (round 4 of
+    // part 2's review); the create alone was taken as the bot's and its
+    // re-invite refused for the window (M_NOT_JOINED), and the create with
+    // the bot's join was used with no power levels (round 5).
     pushEarlierRowsOut();
-    const mo = await freshPerson();
-    const moMxid = matrixUserIdFor(mo.user.id)!;
-    const abandoned = '!abandoned:test.local';
-    matrix.rooms.set(abandoned, []);
-    matrix.aliases.set(noticeRoomAlias(moMxid), abandoned);
-    const first = await released(await freshPerson(), [mo.keySet.identity]);
+    const bot = matrix.botUserId;
+    const create = { type: 'm.room.create', state_key: '', sender: bot, content: {} };
+    const shapes: Array<[string, (personMxid: string) => Array<Record<string, unknown>>]> = [
+        ['no events', () => []],
+        ['the create alone', () => [create]],
+        ['the create and the bot’s join', () => [create, memberEvent(bot)]],
+        [
+            'power levels that let the person post',
+            (personMxid) => [
+                create,
+                memberEvent(bot),
+                {
+                    type: 'm.room.power_levels',
+                    state_key: '',
+                    content: { users: { [bot]: 100 }, users_default: 0, invite: 50 },
+                },
+                memberEvent(personMxid, 'invite'),
+            ],
+        ],
+    ];
+    for (const [index, [shape, stateFor]] of shapes.entries()) {
+        const mo = await freshPerson();
+        const moMxid = matrixUserIdFor(mo.user.id)!;
+        const abandoned = `!abandoned-${index}:test.local`;
+        matrix.rooms.set(abandoned, stateFor(moMxid) as never);
+        matrix.aliases.set(noticeRoomAlias(moMxid), abandoned);
+        const first = await released(await freshPerson(), [mo.keySet.identity]);
+        const row = { switchId: first.record.id, accountId: mo.user.id };
 
-    // The first look: taken for a create still in progress, retried, and
-    // nothing made beside it.
-    matrix.clearCalls();
-    assert.deepEqual(await runDeadmanReleaseNotifier({ now: first.at }), {
-        caughtUp: 0,
-        due: 1,
-        sent: 0,
-        retried: 1,
-        failed: 0,
-        elsewhere: 0,
-    });
-    assert.equal(
-        db.getDeadmanReleaseNotice(first.record.id, mo.user.id)!.lastError,
-        'matrix_alias_room_not_ready'
+        // The first look: taken for a create still in progress, retried, and
+        // nothing made beside it, nobody invited into it.
+        matrix.clearCalls();
+        assert.deepEqual(
+            await runDeadmanReleaseNotifier({ now: first.at }),
+            { caughtUp: 0, due: 1, sent: 0, retried: 1, failed: 0, elsewhere: 0 },
+            shape
+        );
+        assert.equal(
+            db.getDeadmanReleaseNotice(first.record.id, mo.user.id)!.lastError,
+            'matrix_alias_room_not_ready',
+            shape
+        );
+        assert.equal(matrix.creates.length, 0, `${shape}: no room made beside it yet`);
+        assert.equal(matrix.invites.length, 0, `${shape}: nobody invited into it`);
+
+        // One backoff later it is still so: a room without the alias.
+        matrix.clearCalls();
+        assert.deepEqual(
+            await runDeadmanReleaseNotifier({ now: dueAt(row) }),
+            { caughtUp: 0, due: 1, sent: 1, retried: 0, failed: 0, elsewhere: 0 },
+            shape
+        );
+        assert.deepEqual(
+            matrix.createRefusals.map((r) => r.errcode),
+            ['M_ROOM_IN_USE'],
+            `${shape}: the alias was still taken`
+        );
+        assert.deepEqual(matrix.stateReads, [abandoned], shape);
+        assert.equal(matrix.creates.length, 1, shape);
+        assert.equal(matrix.invites.length, 0, `${shape}: no re-invite into the abandoned room`);
+        const [plain] = matrix.creates;
+        assert.equal(plain.body.room_alias_name, undefined, `${shape}: made without the alias`);
+        assert.deepEqual(plain.body.invite, [moMxid]);
+        const sent = db.getDeadmanReleaseNotice(first.record.id, mo.user.id)!;
+        assert.equal(sent.status, 'sent', shape);
+        assert.equal(sent.roomId, plain.roomId, shape);
+        assert.equal(matrix.sendsTo(plain.roomId).length, 1, shape);
+        assert.equal(matrix.sendsTo(abandoned).length, 0, shape);
+
+        // A later release to the person reuses that room through the rows: no
+        // create, no alias lookup, no wait.
+        const later = await released(await freshPerson(), [mo.keySet.identity]);
+        matrix.clearCalls();
+        assert.equal((await runDeadmanReleaseNotifier({ now: later.at })).sent, 1, shape);
+        assert.equal(matrix.creates.length + matrix.createRefusals.length, 0, shape);
+        assert.equal(matrix.aliasReads.length, 0, shape);
+        assert.equal(
+            db.getDeadmanReleaseNotice(later.record.id, mo.user.id)!.roomId,
+            plain.roomId,
+            shape
+        );
+        assert.equal(matrix.sendsTo(plain.roomId).length, 1, shape);
+        matrix.aliases.delete(noticeRoomAlias(moMxid));
+    }
+
+    // The whole room, found through the alias, is used at the first look.
+    const whole = await freshPerson();
+    const wholeMxid = matrixUserIdFor(whole.user.id)!;
+    const complete = '!complete-through-alias:test.local';
+    matrix.rooms.set(
+        complete,
+        createdRoomState(bot, {
+            invite: [wholeMxid],
+            power_level_content_override: { events_default: 50, invite: 50 },
+        })
     );
-    assert.equal(matrix.creates.length, 0, 'no room made beside it yet');
-
-    // One backoff later it still has no m.room.create: a room without the alias.
+    matrix.aliases.set(noticeRoomAlias(wholeMxid), complete);
+    const wholes = await released(await freshPerson(), [whole.keySet.identity]);
     matrix.clearCalls();
-    const retryAt = new Date(first.at.getTime() + NOTICE_BACKOFF_FIRST_MS);
-    assert.deepEqual(await runDeadmanReleaseNotifier({ now: retryAt }), {
-        caughtUp: 0,
-        due: 1,
-        sent: 1,
-        retried: 0,
-        failed: 0,
-        elsewhere: 0,
-    });
-    assert.deepEqual(
-        matrix.createRefusals.map((r) => r.errcode),
-        ['M_ROOM_IN_USE'],
-        'the alias was still taken'
-    );
-    assert.deepEqual(matrix.stateReads, [abandoned]);
-    assert.equal(matrix.creates.length, 1);
-    const [plain] = matrix.creates;
-    assert.equal(plain.body.room_alias_name, undefined, 'made without the alias');
-    assert.deepEqual(plain.body.invite, [moMxid]);
-    const sent = db.getDeadmanReleaseNotice(first.record.id, mo.user.id)!;
-    assert.equal(sent.status, 'sent');
-    assert.equal(sent.roomId, plain.roomId);
-    assert.equal(matrix.sendsTo(plain.roomId).length, 1);
-    assert.equal(matrix.sendsTo(abandoned).length, 0);
-
-    // A later release to the person reuses that room through the rows: no
-    // create, no alias lookup, no wait.
-    const later = await released(await freshPerson(), [mo.keySet.identity]);
-    matrix.clearCalls();
-    assert.equal((await runDeadmanReleaseNotifier({ now: later.at })).sent, 1);
-    assert.equal(matrix.creates.length + matrix.createRefusals.length, 0);
-    assert.equal(matrix.aliasReads.length, 0);
-    assert.equal(db.getDeadmanReleaseNotice(later.record.id, mo.user.id)!.roomId, plain.roomId);
-    assert.equal(matrix.sendsTo(plain.roomId).length, 1);
-    matrix.aliases.delete(noticeRoomAlias(moMxid));
+    assert.equal((await runDeadmanReleaseNotifier({ now: wholes.at })).sent, 1);
+    assert.equal(matrix.creates.length, 0);
+    assert.equal(db.getDeadmanReleaseNotice(wholes.record.id, whole.user.id)!.roomId, complete);
+    matrix.aliases.delete(noticeRoomAlias(wholeMxid));
 });
 
 test('a notice another process sent while this tick had it in hand is counted as another’s, not as failed, and left as it is', async () => {
@@ -2211,4 +2308,95 @@ test('a notice another process sent while this tick had it in hand is counted as
     assert.equal(row.lastError, undefined);
     assert.equal(row.roomId, '!the-other-process:test.local', 'nothing of this tick’s recorded');
     assert.equal(matrix.sends.length, 0, 'this tick sent nothing');
+});
+
+test('a retry is timed from when it was recorded, not from the tick’s start: after a long tick the second look at a room found through the alias still comes a whole backoff after the first', async () => {
+    // As round 4 built it the retry was timed from the tick's start, so a
+    // notice reached late in a tick (here behind a create that ran to the
+    // call timeout) could be due again as it was written, and its second
+    // look at a room still being made came seconds after the first, which
+    // took a create merely in progress for an abandoned one (round 5 of
+    // part 2's review).
+    pushEarlierRowsOut();
+    const callTimeoutMs = 300;
+    const held = await freshPerson();
+    const heldMxid = matrixUserIdFor(held.user.id)!;
+    const late = await freshPerson();
+    const lateMxid = matrixUserIdFor(late.user.id)!;
+    const at = soon();
+    const heldRelease = await released(await freshPerson(), [held.keySet.identity], at);
+    await new Promise((resolve) => setTimeout(resolve, 5)); // the late row after the held one
+    const lateRelease = await released(await freshPerson(), [late.keySet.identity], at);
+    const lateRow = { switchId: lateRelease.record.id, accountId: late.user.id };
+    const inProgress = '!still-being-made:test.local';
+    matrix.rooms.set(inProgress, []);
+    matrix.aliases.set(noticeRoomAlias(lateMxid), inProgress);
+    const looks: number[] = [];
+    matrix.onStateRead = (roomId) => {
+        if (roomId === inProgress) looks.push(Date.now());
+    };
+    const stubFetch = matrix.fetch;
+    let release!: () => void;
+    const never = new Promise<void>((resolve) => {
+        release = resolve;
+    });
+    let hangOnce = true;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url =
+            typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+        if (url.includes('/createRoom') && String(init?.body).includes(heldMxid) && hangOnce) {
+            hangOnce = false;
+            await never; // the homeserver never answers this one
+        }
+        return stubFetch(input, init);
+    }) as typeof fetch;
+    try {
+        // The first tick: the held create runs to its timeout, then the late
+        // notice's first look finds the alias room with no events.
+        matrix.clearCalls();
+        const first = await runDeadmanReleaseNotifier({ now: at, callTimeoutMs });
+        assert.deepEqual(first, {
+            caughtUp: 0,
+            due: 2,
+            sent: 0,
+            retried: 2,
+            failed: 0,
+            elsewhere: 0,
+        });
+        assert.equal(looks.length, 1);
+        const waiting = db.getDeadmanReleaseNotice(lateRow.switchId, lateRow.accountId)!;
+        assert.equal(waiting.lastError, 'matrix_alias_room_not_ready');
+        assert.ok(
+            Date.parse(waiting.nextAttemptAt) >=
+                at.getTime() + callTimeoutMs + NOTICE_BACKOFF_FIRST_MS,
+            'due a backoff after the look, which came after the hung call’s timeout'
+        );
+
+        // When the old timing would have had it due, it is not: no second look.
+        const oldTiming = new Date(at.getTime() + NOTICE_BACKOFF_FIRST_MS);
+        assert.equal((await runDeadmanReleaseNotifier({ now: oldTiming, callTimeoutMs })).due, 0);
+        assert.equal(looks.length, 1, 'no second look at the old time');
+
+        // At its own time: the second look, a whole backoff after the first on
+        // the tick's clock, and the room is made without the alias.
+        matrix.clearCalls();
+        const second = await runDeadmanReleaseNotifier({ now: dueAt(lateRow), callTimeoutMs });
+        assert.equal(second.sent, 2, 'both notices, the held one’s create answered this time');
+        assert.equal(looks.length, 2);
+        const done = db.getDeadmanReleaseNotice(lateRow.switchId, lateRow.accountId)!;
+        assert.equal(done.status, 'sent');
+        const plain = matrix.creates.find((c) => (c.body.invite as string[]).includes(lateMxid));
+        assert.ok(plain, 'a room made for the late notice');
+        assert.equal(plain.body.room_alias_name, undefined, 'without the alias');
+        assert.equal(done.roomId, plain.roomId);
+        assert.equal(
+            db.getDeadmanReleaseNotice(heldRelease.record.id, held.user.id)!.status,
+            'sent'
+        );
+    } finally {
+        release();
+        globalThis.fetch = matrix.fetch;
+        matrix.onStateRead = null;
+        matrix.aliases.delete(noticeRoomAlias(lateMxid));
+    }
 });
