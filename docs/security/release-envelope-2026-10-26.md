@@ -1023,7 +1023,8 @@ message, and nothing here makes a release happen on time (§10, R12).
     refused with its own code as before the awaits (round 3: read once, so a
     recipient who rotated during the verification got a held copy sealed to
     a replaced key, and one who deleted their account a held copy their
-    deletion's blanking pass had already run past); then the rows are written with no await between, in the mirror: the
+    deletion's blanking pass had already run past); then the rows are written
+    with no await between, in the mirror: the
     copies first, one row per account, and then the switch, id = release id,
     no room, `release-v1`, the recipients' account ids, the label. In
     Postgres mode each row is its own write-behind upsert, committed after
@@ -1175,7 +1176,8 @@ public_chat`, `encrypted: false`, `initial_state` holding an invite-only
     of the account's loses its copies with its content; a fired one keeps its
     content, the owner's identity it was signed with (E13) and the recipients'
     copies, and only the owner's own copy and the label go, since nothing is
-    re-sealed after the trigger and nobody is left to open it. As a recipient: the
+    re-sealed after the trigger and nobody is left to open it. As a recipient:
+    the
     account's copies on others' switches go, fired or not; its pending notices
     end with `recipient_gone`, and a notice whose homeserver call was in
     flight when the deletion landed stays `failed` with that reason, with no
@@ -1208,7 +1210,8 @@ public_chat`, `encrypted: false`, `initial_state` holding an invite-only
     passes a burst of arms (round 2 of the review: checked once, a burst of
     N passed every bound, and "two arms racing can exceed one by one" was
     not true, since N racing exceeded it by N − 1); across replicas by up to
-    the size of a burst, until the replicas' write-behind queues drain (§11). The held cap is what bounds the content
+    the size of a burst, until the replicas' write-behind queues drain (§11).
+    The held cap is what bounds the content
     one account can make the server keep; the rows are not bounded: a
     cancelled release switch's row and its blanked copy rows stay, so an
     account that arms and cancels at the rate adds up to 10 switch rows and
@@ -1361,7 +1364,8 @@ records what the API sends.
 12. (Part 2.) When an owner deletes their account, a fired release keeps its
     content, the owner's identity and the recipients' copies until the 365
     days end, and only the owner's own copy and the label go; an unfired one
-    loses everything. A deleted recipient's copies go at once, fired or not (§15).
+    loses everything. A deleted recipient's copies go at once, fired or not
+    (§15).
 13. (Part 2.) Re-sealing is not gated on `BLACKOUT_DEADMAN_RELEASES`: a
     switch armed while the flag was on stays its owner's to keep sealed to
     current keys (§13, §15).
@@ -2073,7 +2077,8 @@ a tick that outlived it.
     with `matrix_<call>_network_error`; anything else that throws inside one
     notice is logged (counts and the error string only) and retried as
     `notifier_threw`. `inviteToRoom`'s answer is unchanged (round 2 added an
-    optional `signal`): its eight callers read its `{ ok, status }` shape. Test: "a homeserver call that throws is
+    optional `signal`): its eight callers read its `{ ok, status }` shape. Test:
+    "a homeserver call that throws is
     that notice's attempt: counted, backed off, and the tick goes on to the
     next notice" (the invite, the state read and the create each thrown in
     turn; attempts, `lastError`, the backoff; the other due notice sent).
@@ -2282,7 +2287,8 @@ section.
     invite; nothing recorded it, and the retry, and any other notice for the
     person in that tick, made another: under a homeserver that kept
     answering `createRoom` after 30 s, one empty "Blackout notices" invite
-    per attempt, about 130 over the retry window by the verifiers' count, while `TRUST.md`, §11,
+    per attempt, about 130 over the retry window by the verifiers' count, while
+    `TRUST.md`, §11,
     decision 14 and `KNOWN_LIMITATIONS.md` said one room per person. Done:
     the room is created with an alias, an HMAC of the person's Matrix id
     under a key derived from `JWT_SECRET_PRIMARY`; Synapse refuses a taken
@@ -2670,7 +2676,8 @@ The sources were restored after each run and the diff checked unchanged.
     refresh of the two tables under a real transport, the write-behind crash
     window (from the code), anything against a real Synapse beyond the
     review's scratch run of the fork (the alias's behaviour included: read
-    in the fork, run only against the stub), and whether a deployment ever runs the
+    in the fork, run only against the stub), and whether a deployment ever runs
+    the
     sweep with `BLACKOUT_DEADMAN_SWEEP=0` after releases fired (the API now
     refuses to arm there; nothing can make an existing release's removal run).
 -   An aside from the review, outside this PR: `GET /v1/deadman/releases`

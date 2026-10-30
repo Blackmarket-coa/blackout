@@ -376,8 +376,9 @@ For the source-of-truth triage with tier/owner detail see
     encryption backstop (above) does not mark it encrypted (the `public_chat`
     preset with an invite-only join rule; the backstop keys on the preset).
     The bot makes one such room for you and reuses it. The room has an
-    address made from your Matrix id under a secret the server keeps (nobody
-    without it can work out whether you have one), so that a room the
+    address made from your Matrix id under a secret the server keeps, so
+    nobody without that secret can work it out from your Matrix id or tell
+    from it whose room it is; it is there so that a room the
     homeserver finished making after the bot stopped waiting is found again
     rather than made twice. Where the homeserver refuses that address, where
     it names a room that is gone or that the bot did not make, or where the
@@ -449,7 +450,8 @@ For the source-of-truth triage with tier/owner detail see
     most 50 from everyone. `GET /v1/deadman/limits` reports each. The bounds
     hold on one API server against requests sent all at once; across several
     API replicas a burst can exceed each by up to its own size until the
-    replicas' queued writes have reached each other (above). An owner whose 20 switches all fired cannot arm
+    replicas' queued writes have reached each other (above). An owner whose 20
+    switches all fired cannot arm
     again until the oldest is removed; cancelling an unfired one frees its
     place. These bound content, not rows: a cancelled release switch leaves
     its row (whom it named, the label and timing) and one blanked copy row

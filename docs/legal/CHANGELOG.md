@@ -69,7 +69,8 @@ no deployment, compose or env file does.
     homeserver finished making after the bot stopped waiting is found rather
     than made again; in the cases
     [`KNOWN_LIMITATIONS.md`](../../KNOWN_LIMITATIONS.md) lists a slow
-    homeserver can still leave an extra, empty one): nothing of the message, nobody's name, not the owner's
+    homeserver can still leave an extra, empty one): nothing of the message,
+    nobody's name, not the owner's
     label. The room is a plaintext service room like the others
     [`TRUST.md`](../../TRUST.md) §1 lists, created so that the homeserver does
     not mark it encrypted (the bot cannot encrypt, so its post is plaintext
@@ -86,7 +87,8 @@ no deployment, compose or env file does.
 -   **Deleting an account** removes the sealed copies of its unfired release
     switches with their content; a fired one keeps its content, the copies for
     the people it named and the public key it was signed with, until the 365
-    days end, and only the owner's own copy and the label go, so that what was released stays checkable (a switch armed before
+    days end, and only the owner's own copy and the label go, so that what was
+    released stays checkable (a switch armed before
     releases, every switch that exists today, keeps its payload for the people
     it named with no removal date). As a person named on others' switches, the
     account's copies are removed, a notice still owed to it is dropped, and its

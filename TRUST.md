@@ -13,7 +13,8 @@ export; sections 1 and 2 updated 2026-10-29 with the dead-man release notice and
 the releases given to a person in the export; section 1 updated 2026-10-30 with
 how the notices room is made unencrypted and kept to one per person, the
 safety-code condition on "never reaches the server readable", and the bounds on
-who can name you, exact on one API server and not across replicas. Changes to anything here are
+who can name you, exact on one API server and not across replicas. Changes
+to anything here are
 recorded in the [policy changelog](docs/legal/CHANGELOG.md).
 
 ---
@@ -131,7 +132,8 @@ Encryption claims are only worth something with the exceptions attached.
     from everyone: exact on one API server against requests sent at once;
     across several replicas a burst of requests can exceed them by up to its
     own size until the replicas' queued writes reach each other); you cannot
-    yet refuse an owner. No deployment can arm such a switch yet: arming is refused until an operator turns
+    yet refuse an owner. No deployment can arm such a switch yet: arming is
+    refused until an operator turns
     `BLACKOUT_DEADMAN_RELEASES` on, and no deployment file does.
 -   **Scheduled messages.** When you schedule a message, you hand its text to the
     Blackout API. The API stores it as plaintext until it is sent, then clears it,
