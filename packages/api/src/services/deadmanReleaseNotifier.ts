@@ -3,42 +3,43 @@
  * release switch (`docs/security/deadman-release-design-2026-10-24.md` §5;
  * `release-envelope-2026-10-26.md` §11).
  *
- * The sweep writes one `deadman_release_notices` row per recipient as it
- * fires a release switch; this loop, beside it, sends them. Each notice is an
- * `m.text` in the recipient's standing "Blackout notices" room, a room the
- * bot creates once per account, with the person invited as a direct message
- * and power levels under which only the bot posts or invites. The room is
- * **not end-to-end encrypted**, and is made so deliberately: the bot is a
- * plain HTTP client with no Megolm implementation and cannot encrypt, so the
- * notice is plaintext whatever the room's state says, and a room whose state
- * says "encrypted" around a plaintext post would overstate what the room is.
- * The homeserver's backstop (`encryption_enabled_by_default_for_room_type:
+ * The sweep writes one `deadman_release_notices` row per recipient as it fires
+ * a release switch; this loop, beside it, sends them. Each notice is an
+ * `m.text` in the recipient's standing "Blackout notices" room, a room the bot
+ * creates once per account, with the person invited as a direct message and
+ * power levels under which only the bot posts or invites. The room is **not
+ * end-to-end encrypted**, and is made so deliberately: the bot is a plain HTTP
+ * client with no Megolm implementation and cannot encrypt, so the notice is
+ * plaintext whatever the room's state says, and a room whose state says
+ * "encrypted" around a plaintext post would overstate what the room is. The
+ * homeserver's backstop (`encryption_enabled_by_default_for_room_type:
  * invite`, set by every in-repo template) adds `m.room.encryption` to every
  * `private_chat` room after the client's `initial_state`, so the room is
  * created with the `public_chat` preset, which that setting leaves alone, and
- * an explicit invite-only join rule in `initial_state`, which Synapse sends
- * in place of the preset's public one (`handlers/room.py`,
- * `_send_events_for_new_room`); its visibility is `private`, so it is in no
- * directory. `public_chat` also sends no `m.room.guest_access` event (guests
- * cannot join, which is wanted) and leaves the power to invite at 50, which
- * the override sets anyway. Under `all`, which no template sets, the
- * backstop would encrypt this preset too. The notice carries a fixed body and
- * a pointer to the release id, and nothing else: not the owner, not the
- * label, not anyone else named, no time, no content. An `m.notice` would be
- * silent under `.m.rule.suppress_notices`.
+ * an explicit invite-only join rule in `initial_state`, which Synapse sends in
+ * place of the preset's public one (`handlers/room.py`,
+ * `_send_events_for_new_room`); its visibility is `private`, so it is not in
+ * the public room list (its alias, below, is in the homeserver's alias
+ * directory, which does not say whose it is). `public_chat` also sends no
+ * `m.room.guest_access` event (guests cannot join, which is wanted) and leaves
+ * the power to invite at 50, which the override sets anyway. Under `all`,
+ * which no template sets, the backstop would encrypt this preset too. The
+ * notice carries a fixed body and a pointer to the release id, and nothing
+ * else: not the owner, not the label, not anyone else named, no time, no
+ * content. An `m.notice` would be silent under `.m.rule.suppress_notices`.
  *
- * What "sent" means: the homeserver accepted the event. Whether it reaches
- * the person is the homeserver's (and their client's) business; the release
- * itself is the API's own store, and the app's "Released to you" view works
- * without a notice. A failed or thrown homeserver call is that notice's
- * attempt, retried with backoff (30 s, doubling to 6 h) for 30 days from the
- * release, then recorded as failed for the operator; a recipient whose
- * account is gone, or a release that is not there to point at (cancelled,
- * removed, never a release), ends the notice at once. A row for a release
- * switch that has not fired yet (a store from a crash) is left alone until it
- * does. A person who left or declined their room is invited again, at most
- * once per notice. Logs carry counts, and for a throw that is not a
- * homeserver call the error's message; never who or where.
+ * What "sent" means: the homeserver accepted the event. Whether it reaches the
+ * person is the homeserver's (and their client's) business; the release itself
+ * is the API's own store, and the app's "Released to you" view works without a
+ * notice. A failed or thrown homeserver call is that notice's attempt, retried
+ * with backoff (30 s, doubling to 6 h) for 30 days from the release, then
+ * recorded as failed for the operator; a recipient whose account is gone, or a
+ * release that is not there to point at (cancelled, removed, never a release),
+ * ends the notice at once. A row for a release switch that has not fired yet
+ * (a store from a crash) is left alone until it does. A person who left or
+ * declined their room is invited again, at most once per notice. Logs carry
+ * counts, and for a throw that is not a homeserver call the error's message;
+ * never who or where.
  *
  * One room per person: a per-recipient slot serialises finding or making the
  * room, and a notice that waited for the slot reads the room again before
@@ -46,53 +47,75 @@
  * the interval's tick does not start while the previous one runs. The room
  * also carries an alias, `#blackout-notices-<hmac>:<server>`: 128 bits of an
  * HMAC over the person's Matrix id under a key derived from the API's
- * `JWT_SECRET_PRIMARY` (`noticeRoomAliasLocalpart`). Nobody without the
- * secret can compute it, so the directory does not tell anyone who has a
+ * `JWT_SECRET_PRIMARY` (`noticeRoomAliasLocalpart`). Nobody without the secret
+ * can compute it, so the alias directory does not tell anyone who has a
  * notices room; the person sees it as the room's address. The homeserver
  * refuses a second room with a taken alias before it makes one
  * (`M_ROOM_IN_USE`), so a `createRoom` it finished after this side stopped
  * waiting, or one another API process made first, is found through the alias
  * on the next attempt instead of being made again (as first fixed, each such
  * attempt left the person one more empty "Blackout notices" room with an
- * invite: round 3 of part 2's review). What that leaves (`makeRoom`): a
+ * invite: round 3 of part 2's review). The homeserver writes the alias after
+ * it makes the room id and before it sends any event (`handlers/room.py`,
+ * `create_room`), so a room found through the alias with no `m.room.create` is
+ * taken for a create still in progress and retried once; still without one at
+ * the notice's next attempt (one backoff later, 30 s at the least), it is
+ * taken for a create the homeserver abandoned between the two (a restart, or a
+ * failure sending the first events), which leaves the alias naming a room with
+ * no events for good, and the room is made without the alias (as first fixed
+ * it was retried for the whole window, and every later notice to that person
+ * with it: round 4 of part 2's review). What the alias leaves (`makeRoom`): a
  * secret rotation between a create that timed out and its retry changes the
  * alias, so that room is not found and another is made; a homeserver that
- * refuses the alias itself (an alias policy, or an appservice's namespace),
- * or an alias naming a room that is gone or that the bot did not make, gets a
- * room without an alias, and a create of that room which times out after the
- * homeserver made it leaves one more room, as before the alias; and two
- * processes making one person's room at the same moment both pass the
- * homeserver's alias check, and the second's alias write then fails after
- * the homeserver gave it a room id but before any event, so that room has
- * nobody in it and nobody invited. When the homeserver no longer has a
- * person's room, the replacement is recorded on every one of their rows that
- * pointed at the old one. The row is read again after every homeserver call
- * and before anything is written to it: a deletion that landed while the room
- * was being found or made, or during the send, has already ended the row with
- * `recipient_gone`, and that stands whatever the call answered (no room is
- * recorded on it, no re-invite, no send, no attempt, no later error over its
- * reason); a row ended any other way meanwhile is left as it is.
+ * refuses the alias itself (an alias policy, or an appservice's namespace), an
+ * alias naming a room that is gone, that the bot did not make or that the
+ * homeserver abandoned, and a wrong id for the bot (below), each get a room
+ * without an alias, and a create of that room which times out after the
+ * homeserver made it leaves one more room, as before the alias; a create still
+ * in progress after a whole backoff is taken for an abandoned one, and leaves
+ * one more room the same way; and two processes making one person's room at
+ * the same moment both pass the homeserver's alias check, and the second's
+ * alias write then fails after the homeserver gave it a room id but before any
+ * event, so that room has nobody in it and nobody invited. When the homeserver
+ * no longer has a person's room, the replacement is recorded on every one of
+ * their rows that pointed at the old one. The row is read again after every
+ * homeserver call and before anything is written to it: a deletion that landed
+ * while the room was being found or made, or during the send, has already
+ * ended the row with `recipient_gone`, and that stands whatever the call
+ * answered (no room is recorded on it, no re-invite, no send, no attempt, no
+ * later error over its reason); a row ended any other way meanwhile is left as
+ * it is.
  *
  * Each homeserver call has `NOTICE_CALL_TIMEOUT_MS` to answer; one that does
  * not is that notice's retry (`matrix_<call>_timeout`) and its request is
  * aborted. Without that, one connection the homeserver accepted and never
  * answered would hold the tick, and with it every other due notice, for
  * undici's default of five minutes, since the ticks do not overlap. A tick is
- * still a sequence, and a notice makes up to seven calls in turn (the state
- * of a known room, a create, the alias lookup, the bot's own id (cached once
- * the homeserver has answered it), the state of the room found, a re-invite
- * or a create without the alias, the send). So a homeserver that answers nothing holds a tick of
- * 50 notices for about 25 minutes, each notice ending at its first call's
- * timeout; one that answers slowly rather than not at all, in just under the
- * timeout each time, can hold one notice for up to seven timeouts (three and
- * a half minutes) and a tick of 50 for about three hours, with every notice
- * due beyond the 50 waiting for the next tick. The worker's shutdown waits
- * for a tick in flight only up to its own bound (`backgroundTicks.ts`).
+ * still a sequence, and a notice makes up to seven calls in turn (the state of
+ * a known room, a create, the alias lookup, the bot's own id, the state of the
+ * room found, a re-invite or a create without the alias, the send). The bot's
+ * id is cached for the process after the first whoami that is not cut short,
+ * by this loop or any other caller in the API, a failed one included (a
+ * refusal or a network error): that one caches the client's derived
+ * `@<MATRIX_BOT_LOCALPART or blackout>:<domain>`, and if that is not the
+ * bot's, every room found through an alias looks like another account's and is
+ * replaced by one without it. So a homeserver that answers nothing holds a
+ * tick of 50 notices for about 25 minutes, each notice ending at its first
+ * call's timeout; one that answers slowly rather than not at all, in just
+ * under the timeout each time, can hold one notice for up to seven timeouts
+ * (three and a half minutes) and a tick of 50 for about three hours, with
+ * every notice due beyond the 50 waiting for the next tick. The worker's
+ * shutdown waits for a tick in flight only up to its own bound
+ * (`backgroundTicks.ts`).
  *
  * Matrix transaction id `deadman-release-<switch>-<recipient>`, so a resend
- * soon after a crash is deduplicated (the homeserver keeps transaction ids
- * for a while, not for ever). Not through `botPostingGate.ts`: this is the
- * bot's own post into its own room, not a post in a user's name.
+ * soon after a crash, or a retry of a send the homeserver accepted after the
+ * call's timeout, is deduplicated for as long as the homeserver keeps the id:
+ * 30 to 60 minutes in its memory for a token without a device (one minted
+ * through the admin API; lost on a homeserver restart), and 24 hours in its
+ * database for one with a device (a `/login` token: `event_txn_id_device_id`).
+ * Not through `botPostingGate.ts`: this is the bot's own post into its own
+ * room, not a post in a user's name.
  */
 import { createHmac } from 'node:crypto';
 import {
@@ -180,14 +203,25 @@ export type MatrixForNotices = Pick<
 export interface NotifierResult {
     /** Rows written for fired release switches that lacked them (a crash between trigger and rows). */
     caughtUp: number;
-    /** Notices that were due this tick. */
+    /** Notices that were due this tick (at most `NOTICES_PER_TICK`; a stop mid-tick leaves the rest uncounted below). */
     due: number;
-    /** Accepted by the homeserver. */
+    /** Accepted by the homeserver for this tick's attempt. */
     sent: number;
     /** Failed this tick and left pending for a later attempt. */
     retried: number;
-    /** Ended without a send: the window closed, the recipient is gone, or the release is not there. */
+    /**
+     * Ended without a send: the window closed, the recipient is gone, or the
+     * release is not there; or found ended so (an account deletion, another
+     * process) when this tick finished with it.
+     */
     failed: number;
+    /**
+     * Due, but another tick had it: one an overlapping tick in this process
+     * holds (skipped), or one found sent by another process (two notifiers
+     * during a leader handover, say) when this tick finished with it. Nothing
+     * is written to them here, and they are not counted as sent or failed.
+     */
+    elsewhere: number;
 }
 
 /** The notice's content: the fixed body and the pointer, nothing else. */
@@ -296,6 +330,9 @@ const stillPending = (key: {
 /** The recipient is gone: the row was ended meanwhile, and nothing more is recorded on it. */
 const RECIPIENT_GONE: Step = { kind: 'failed', reason: 'recipient_gone' };
 
+/** A room found through the alias with no `m.room.create` yet: retried once (`checkRoom`). */
+export const ALIAS_ROOM_NOT_READY = 'matrix_alias_room_not_ready';
+
 /** Whether the person is in the room or invited to it, from the room's current state. */
 const membershipOf = (
     state: Array<{ type: string; state_key?: string; content?: Record<string, unknown> }>,
@@ -321,8 +358,13 @@ type RoomCheck = { kind: 'ok' } | { kind: 'unusable' } | Step;
  * and, when `madeBy` is given (a room found through the person's alias),
  * a room whose `m.room.create` another account sent: a room an admin shut
  * down with a replacement has its aliases moved to the replacement, which the
- * bot is not in. A room with no `m.room.create` yet is one the homeserver is
- * still making: retried. The row is read again after each call, as
+ * bot is not in. A room found through the alias with no `m.room.create` is
+ * taken for one the homeserver is still making, and retried
+ * (`ALIAS_ROOM_NOT_READY`), once: if this notice's previous attempt already
+ * found it so, one backoff ago, it is taken for a create the homeserver
+ * abandoned after writing the alias, which never completes, and is
+ * `unusable` (round 4 of part 2's review: retried for the window, it stopped
+ * that person's notices for good). The row is read again after each call, as
  * `resolveRoom` says.
  */
 const checkRoom = async (
@@ -344,7 +386,10 @@ const checkRoom = async (
     }
     if (madeBy !== undefined) {
         const creation = state.state.find((e) => e.type === 'm.room.create');
-        if (!creation) return { kind: 'retry', reason: 'matrix_alias_room_not_ready' };
+        if (!creation) {
+            if (current.lastError === ALIAS_ROOM_NOT_READY) return { kind: 'unusable' };
+            return { kind: 'retry', reason: ALIAS_ROOM_NOT_READY };
+        }
         if (creation.sender !== madeBy) return { kind: 'unusable' };
     }
     const membership = membershipOf(state.state, mxid);
@@ -370,8 +415,9 @@ const aliasRefused = (created: { status?: number; errcode?: string }): boolean =
 
 /**
  * Ask the homeserver for the person's room: the `public_chat` preset with an
- * invite-only join rule (the header says why), out of every directory, the
- * person invited as a direct message, and power levels under which only the
+ * invite-only join rule (the header says why), out of the public room list
+ * (`visibility: private`; the alias, when given, is in the alias directory),
+ * the person invited as a direct message, and power levels under which only the
  * bot posts or invites. With the person's alias, so that a create this side
  * never saw the answer for is found, not made again; without it only as the
  * fallback `makeRoom` describes.
@@ -407,11 +453,13 @@ const createNoticeRoom = (
  * fresh rather than from the client's process cache (a purge frees an alias
  * and a later room can take it), and the room it names is used if the bot
  * made it (its `m.room.create` is the bot's), with the person invited again
- * as `checkRoom` does. Two cases fall back to a room without an alias, the
- * behaviour before the alias, rather than leave the person without notices
- * for the retry window: the homeserver refuses the alias itself (an alias
- * policy, or an appservice's namespace), or the alias names a room that is
- * gone or that the bot did not make. A fallback room is found again through
+ * as `checkRoom` does, and a room still being made waited for once. Two
+ * cases fall back to a room without an alias, the behaviour before the
+ * alias, rather than leave the person without notices for the retry window:
+ * the homeserver refuses the alias itself (an alias policy, or an
+ * appservice's namespace), or the alias names a room that is gone, that the
+ * bot did not make, or that still has no `m.room.create` at this notice's
+ * second look (a create the homeserver abandoned). A fallback room is found again through
  * the rows, as every room is, but a create of one that times out is not found
  * afterwards. The row is read again after every call, and a row a deletion
  * ended meanwhile gets nothing recorded on it.
@@ -596,7 +644,14 @@ export const runDeadmanReleaseNotifier = async (
     const matrix = options.matrix ?? matrixClient;
     const callTimeoutMs = options.callTimeoutMs ?? NOTICE_CALL_TIMEOUT_MS;
     const generation = stopGeneration;
-    const result: NotifierResult = { caughtUp: 0, due: 0, sent: 0, retried: 0, failed: 0 };
+    const result: NotifierResult = {
+        caughtUp: 0,
+        due: 0,
+        sent: 0,
+        retried: 0,
+        failed: 0,
+        elsewhere: 0,
+    };
 
     // Catch-up: a crash between a trigger's status write and its rows loses
     // nothing, since a fired release switch with a held copy and no row is
@@ -617,7 +672,10 @@ export const runDeadmanReleaseNotifier = async (
     for (const notice of due) {
         if (generation !== stopGeneration) break;
         const key = `${notice.switchId}:${notice.recipientAccountId}`;
-        if (inFlight.has(key)) continue;
+        if (inFlight.has(key)) {
+            result.elsewhere += 1;
+            continue;
+        }
         inFlight.add(key);
         try {
             const step = await processOne(notice, now, matrix, callTimeoutMs);
@@ -627,8 +685,12 @@ export const runDeadmanReleaseNotifier = async (
             // (`recipient_gone`), and that stands whatever the step was; a row
             // ended any other way meanwhile is left as it is, so no later
             // error, attempt or backoff is written over the reason it ended.
-            if (!stillPending(notice)) {
-                result.failed += 1;
+            // It is counted as it ended: one another process sent is not this
+            // tick's failure (round 4 of part 2's review).
+            const ended = db.getDeadmanReleaseNotice(notice.switchId, notice.recipientAccountId);
+            if (!ended || ended.status !== 'pending') {
+                if (ended?.status === 'sent') result.elsewhere += 1;
+                else result.failed += 1;
             } else if (step.kind === 'sent') {
                 // The account, read again: one gone another way ends it here.
                 if (!db.getUserById(notice.recipientAccountId)) {
