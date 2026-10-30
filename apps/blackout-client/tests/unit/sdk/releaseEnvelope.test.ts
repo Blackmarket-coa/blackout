@@ -20,6 +20,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import {
     HybridSealError,
     NULL_KEM_PROVIDER,
+    RELEASE_IDENTITY_STORAGE_LIMIT,
     RELEASE_MESSAGE_MAX_BYTES,
     RELEASE_PADDED_SIZES,
     ReleaseEnvelopeError,
@@ -64,6 +65,7 @@ import {
 } from '@blackout/protocol';
 import { ml_kem768 } from '../../../../../packages/blackout-protocol/node_modules/@noble/post-quantum/ml-kem.js';
 import * as encoding from '../../../../../packages/blackout-protocol/src/deaddrop/crypto/encoding';
+import * as identityModule from '../../../../../packages/blackout-protocol/src/release/identity';
 import { ALICE, BOB } from '../../../../../packages/blackout-protocol/src/release/testVectors';
 import { RELEASE_ENVELOPE_VECTOR as V } from '../../../../../packages/blackout-protocol/src/release/envelopeVectors';
 
@@ -1348,6 +1350,8 @@ describe('when a comparison counts (H1)', () => {
             supersededFingerprints: [],
             seenSinceComparison: [BOB.fingerprint],
             ownFingerprint: ALICE.fingerprint,
+            // The sealing use, written out: no release in hand.
+            signerFingerprint: null,
             ...overrides,
         });
 
@@ -1392,6 +1396,20 @@ describe('when a comparison counts (H1)', () => {
             'stale'
         );
         expect(state({ comparison: null, signerFingerprint: ALICE.fingerprint })).toBe('none');
+    });
+
+    it('takes the sealing use only as an explicit null: a signer left out is other_key, not current (the fourth reading)', () => {
+        // The field is required, so typed code cannot leave it out; a caller
+        // that forwards a failed open's absent ownerFingerprint through a
+        // cast, or forgets the field the same way, must not get "which you
+        // compared" for a release it cannot vouch for.
+        const forgotten = { signerFingerprint: undefined } as unknown as Partial<
+            Parameters<typeof releaseComparisonState>[0]
+        >;
+        expect(state(forgotten)).toBe('other_key');
+        expect(state({ signerFingerprint: '' })).toBe('other_key');
+        // Only null is the sealing use.
+        expect(state({ signerFingerprint: null })).toBe('current');
     });
 
     it('reads fingerprints from verified identities only, never the stated ones', async () => {
@@ -1541,6 +1559,82 @@ describe('the smaller checks, each on its own', () => {
             current: null,
             superseded: [],
         });
+    });
+
+    it('a directory answer that is not an entry counts as nothing, and does not throw (the fourth reading)', async () => {
+        // The entry is the server's answer. Each of these made the function
+        // throw a raw TypeError ("entry.superseded is not iterable", "Cannot
+        // read properties of null") that the SDK passed on in place of its
+        // own refusal; each is now nothing, so the SDK refuses as for a key
+        // it does not know.
+        const nothing = { current: null, superseded: [] };
+        const withReplaced = (superseded: unknown) => ({
+            accountId: BOB.identity.accountId,
+            matrixId: null,
+            current: { identity: BOB.identity, fingerprint: 'stated', publishedAt: 'x' },
+            superseded,
+        });
+        for (const shape of [undefined, null, 42, {}, 'abc']) {
+            expect(
+                await releaseDirectoryFingerprints(withReplaced(shape), BOB.identity.accountId)
+            ).toEqual(nothing);
+        }
+        for (const entry of [null, undefined, 'x', 42, [], { accountId: BOB.identity.accountId }]) {
+            expect(await releaseDirectoryFingerprints(entry, BOB.identity.accountId)).toEqual(
+                nothing
+            );
+        }
+        // A current that is not an entry, or a replaced one that is not,
+        // counts as nothing, while the well-formed ones beside it count.
+        expect(
+            await releaseDirectoryFingerprints(
+                { ...withReplaced([null, 'x', { identity: BOB.identity }]), current: 'x' },
+                BOB.identity.accountId
+            )
+        ).toEqual({ current: null, superseded: [BOB.fingerprint] });
+        // The well-formed entry still counts, so the cases above are refusals of shape.
+        expect(
+            await releaseDirectoryFingerprints(withReplaced([]), BOB.identity.accountId)
+        ).toEqual({
+            current: BOB.fingerprint,
+            superseded: [],
+        });
+    });
+
+    it('refuses, before verifying any of them, an entry listing more replaced identities than the API keeps (the fourth reading)', async () => {
+        // Each replaced identity costs a signature check and two key checks,
+        // about 0.6 ms here; a hostile server could list any number. The API
+        // keeps at most RELEASE_IDENTITY_STORAGE_LIMIT identities for an
+        // account in all, so more than that as replaced is refused as nothing
+        // without a single check.
+        const verifying = vi.spyOn(identityModule, 'verifyReleaseIdentity');
+        try {
+            const replaced = { identity: BOB.identity, fingerprint: 'stated', publishedAt: 'x' };
+            const entry = {
+                accountId: BOB.identity.accountId,
+                matrixId: null,
+                current: replaced,
+                superseded: Array.from(
+                    { length: RELEASE_IDENTITY_STORAGE_LIMIT + 1 },
+                    () => replaced
+                ),
+            };
+            expect(await releaseDirectoryFingerprints(entry, BOB.identity.accountId)).toEqual({
+                current: null,
+                superseded: [],
+            });
+            expect(verifying).not.toHaveBeenCalled();
+            // The spy binds: an entry within the bound is verified, each identity once.
+            expect(
+                await releaseDirectoryFingerprints(
+                    { ...entry, superseded: [replaced, replaced] },
+                    BOB.identity.accountId
+                )
+            ).toEqual({ current: BOB.fingerprint, superseded: [BOB.fingerprint, BOB.fingerprint] });
+            expect(verifying).toHaveBeenCalledTimes(3);
+        } finally {
+            verifying.mockRestore();
+        }
     });
 
     it('the verifier checks the form of a copy it is handed, parsed or not', async () => {

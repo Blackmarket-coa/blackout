@@ -179,8 +179,10 @@ export const createDeadmanReleaseActions = (client: ApiClient) => {
     /** The owner's key set, refused unless the directory serves it as the owner's current identity. */
     const checkOwnerKey = async (ownerKeySet: ReleaseKeySet): Promise<void> => {
         const accountId = ownerKeySet.identity.accountId;
-        const mine = await identities.getMine();
-        if (!mine.current) {
+        // The server's answer, whatever it is: an answer that is not an entry
+        // is one that lists no identity, not a thrown TypeError.
+        const mine: unknown = await identities.getMine();
+        if (!isRecord(mine) || !mine.current) {
             throw new ReleaseActionError(
                 'owner_key_not_published',
                 'Your release keys are not published, so nobody could check what you sign.'
@@ -221,6 +223,8 @@ export const createDeadmanReleaseActions = (client: ApiClient) => {
             supersededFingerprints: served.superseded,
             seenSinceComparison: recipient.seenSinceComparison,
             ownFingerprint,
+            // The sealing use: no release is in hand, so no signer to judge.
+            signerFingerprint: null,
         });
         if (state !== 'current' || !entry.current) {
             throw new ReleaseActionError(
@@ -254,10 +258,11 @@ export const createDeadmanReleaseActions = (client: ApiClient) => {
          * counts now, and only then may a screen say "signed with a key you
          * compared" (P3-M1). That one function decides; `other_key` means
          * another key signed it, `stale` that the comparison must be made
-         * again. A failed open has no signer and nothing to show, so its state
-         * is never asked: `signerFingerprint` left out, or `undefined`, is the
-         * sealing use, where no release is in hand and the signer rule is not
-         * applied.
+         * again. The field is required: `null`, written out, is the sealing
+         * use (this module's own, where no release is in hand), and anything
+         * else that is not the compared fingerprint is `other_key`, so a
+         * failed open's absent signer, which has nothing to show anyway,
+         * cannot be read as "which you compared".
          */
         listReleases: async (): Promise<DeadmanReleasesResponse> => {
             const response = await client<DeadmanReleasesResponse>({

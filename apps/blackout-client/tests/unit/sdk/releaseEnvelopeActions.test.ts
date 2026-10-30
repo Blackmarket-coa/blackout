@@ -3,7 +3,9 @@
  * arming sends only the envelope, the timer and the label, and refuses, before
  * the envelope is sent (the directory is read first), a recipient whose
  * comparison does not count now (H1) and an owner key the directory does not
- * list as current, saying which key the directory served (P3-M3); re-sealing
+ * list as current, saying which key the directory served (P3-M3), and a
+ * directory answer that is not an entry gets that refusal, not a TypeError
+ * (the fourth reading); re-sealing
  * opens the owner's own copy and sends one new copy, and refuses an owner view
  * that is not the switch's (P3-H1); the release list refuses an entry that is
  * not one, whose ids are not of the id forms, or whose unsigned ids differ
@@ -195,7 +197,7 @@ describe('armReleaseSwitch', () => {
             aliceNow = await createReleaseKeySet(ALICE.identity.accountId);
         });
 
-        /** The refusal, with nothing sent; returns the error so its details can be checked. */
+        /** The refusal, with no envelope sent (the directory is read first); returns the error so its details can be checked. */
         const refusal = async (
             entries: Map<string, ReleaseIdentityDirectoryEntry>,
             input: Record<string, unknown>,
@@ -302,6 +304,45 @@ describe('armReleaseSwitch', () => {
             const nothing = await refusal(strangers, {}, 'owner_key_not_current');
             expect(nothing.servedFingerprint).toBeNull();
         });
+
+        it('a directory answer that is not an entry, with the refusal the contract names and not a TypeError (the fourth reading)', async () => {
+            // A hostile or buggy server answering a directory read with
+            // something that is not an entry made the protocol function throw
+            // a raw TypeError, which the SDK passed on. Each is now the
+            // ReleaseActionError the contract promises, and no envelope is sent.
+            const bobEntry = entryFor(BOB.identity.accountId, BOB.identity);
+            for (const shape of [
+                { ...bobEntry, superseded: undefined },
+                { ...bobEntry, superseded: null },
+                { ...bobEntry, superseded: 42 },
+                { ...bobEntry, superseded: {} },
+                { ...bobEntry, current: 'x' },
+                'x',
+            ]) {
+                const entries = directory();
+                entries.set(BOB.identity.accountId, shape as ReleaseIdentityDirectoryEntry);
+                const error = await refusal(entries, {}, 'recipient_comparison', 'stale');
+                expect(error.accountId).toBe(BOB.identity.accountId);
+                // Nothing verified, so nothing was served that counts.
+                expect(error.servedFingerprint).toBeNull();
+            }
+            // The owner's own entry, likewise.
+            for (const shape of [
+                null,
+                'x',
+                { ...entryFor(ALICE.identity.accountId, ALICE.identity), superseded: undefined },
+            ]) {
+                const entries = directory();
+                entries.set('me', shape as ReleaseIdentityDirectoryEntry);
+                await refusal(
+                    entries,
+                    {},
+                    shape === null || shape === 'x'
+                        ? 'owner_key_not_published'
+                        : 'owner_key_not_current'
+                );
+            }
+        });
     });
 });
 
@@ -351,7 +392,7 @@ describe('resealRecipient', () => {
         ).toMatchObject({ ok: true, text: 'Kept for Bob' });
     });
 
-    it('refuses a switch that holds no release, and a stale comparison, sending nothing', async () => {
+    it('refuses a switch that holds no release, and a stale comparison, sending no copy', async () => {
         const noRelease = fakeApi(directory(), { switchId: 'x' });
         await expect(
             createDeadmanReleaseActions(noRelease.client).resealRecipient('x', {

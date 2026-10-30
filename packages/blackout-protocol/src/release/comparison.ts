@@ -20,16 +20,16 @@
  * verified, never one a server stated.
  */
 
-import type { ReleaseIdentityDirectoryEntry } from './contracts';
+import { RELEASE_IDENTITY_STORAGE_LIMIT } from './contracts';
 import { verifyReleaseIdentity } from './identity';
 import type { ReleaseComparison } from './recoveryFile';
 
 /**
- * `current`: the comparison counts, and if a signer was given it is the key
- * compared. `other_key`: the release in hand was signed by a key that is not
- * the one compared, whatever the comparison's state, once there is one.
- * `stale`: compare again. `none`: never compared, whatever signed the
- * release; it is answered before any other rule.
+ * `current`: the comparison counts, and if a release is in hand it was
+ * signed by the key compared. `other_key`: the release in hand was signed by
+ * a key that is not the one compared, whatever the comparison's state, once
+ * there is one. `stale`: compare again. `none`: never compared, whatever
+ * signed the release; it is answered before any other rule.
  */
 export type ReleaseComparisonState = 'current' | 'other_key' | 'stale' | 'none';
 
@@ -45,15 +45,18 @@ export type ReleaseComparisonStateInput = {
     /** When sealing: this device's own current fingerprint, which must be the one compared. */
     ownFingerprint?: string;
     /**
-     * When judging a release in hand: the fingerprint that signed it, the
-     * `ownerFingerprint` of an `ok` `ReleaseOpenResult` (computed from the
-     * identity that verified), always a string. It must be the one compared,
-     * or the state is `other_key`. Left out, or `undefined`, means the
-     * sealing use, where no release is in hand, and this rule is not
-     * applied: a failed open has no signer and nothing to show, so its state
-     * is never asked for (the envelope review's third reading).
+     * Which of the two uses this is, written out. When judging a release in
+     * hand: the fingerprint that signed it, the `ownerFingerprint` of an `ok`
+     * `ReleaseOpenResult` (computed from the identity that verified), a
+     * string, which must be the one compared or the state is `other_key`.
+     * When sealing, where no release is in hand: `null`, and the signer rule
+     * is not applied. The field is required so that a caller judging a
+     * release cannot leave it out by accident and get `current` for a release
+     * another key signed (the envelope review's fourth reading); anything
+     * that is neither `null` nor the compared fingerprint, a failed open's
+     * absent signer forced through a cast included, is `other_key`.
      */
-    signerFingerprint?: string;
+    signerFingerprint: string | null;
 };
 
 /**
@@ -68,10 +71,7 @@ export const releaseComparisonState = (
 ): ReleaseComparisonState => {
     const comparison = input.comparison;
     if (!comparison) return 'none';
-    if (
-        input.signerFingerprint !== undefined &&
-        input.signerFingerprint !== comparison.fingerprint
-    ) {
+    if (input.signerFingerprint !== null && input.signerFingerprint !== comparison.fingerprint) {
         return 'other_key';
     }
     if (input.ownFingerprint !== undefined && input.ownFingerprint !== comparison.ownFingerprint) {
@@ -92,24 +92,42 @@ export type ReleaseDirectoryFingerprints = {
     superseded: string[];
 };
 
+/** A plain object: not null, not an array. */
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+    typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const nothing = (): ReleaseDirectoryFingerprints => ({ current: null, superseded: [] });
+
 /**
  * The fingerprints of a directory entry's identities, each computed from an
- * identity that passed `verifyReleaseIdentity` for `accountId`. An entry for
- * another account, and an identity that fails its check, count as nothing.
+ * identity that passed `verifyReleaseIdentity` for `accountId`. The entry is
+ * the server's answer, whatever it is: an entry that is not an object, is
+ * for another account or whose `superseded` is not an array counts as
+ * nothing, as does an identity that fails its check (a malformed answer is a
+ * refusal, never a thrown `TypeError`). So does an entry listing more
+ * replaced identities than the API keeps for one account in all
+ * (`RELEASE_IDENTITY_STORAGE_LIMIT`), refused before any of them is
+ * verified: each costs a signature check and two key checks, and an honest
+ * server cannot serve more (the envelope review's fourth reading).
  */
 export const releaseDirectoryFingerprints = async (
-    entry: ReleaseIdentityDirectoryEntry,
+    entry: unknown,
     accountId: string
 ): Promise<ReleaseDirectoryFingerprints> => {
-    if (entry.accountId !== accountId) return { current: null, superseded: [] };
+    if (!isRecord(entry) || entry.accountId !== accountId) return nothing();
+    const replaced: unknown = entry.superseded;
+    if (!Array.isArray(replaced) || replaced.length > RELEASE_IDENTITY_STORAGE_LIMIT) {
+        return nothing();
+    }
     let current: string | null = null;
-    if (entry.current) {
+    if (isRecord(entry.current)) {
         const check = await verifyReleaseIdentity(entry.current.identity, { accountId });
         current = check.ok ? check.fingerprint : null;
     }
     const superseded: string[] = [];
-    for (const replaced of entry.superseded) {
-        const check = await verifyReleaseIdentity(replaced.identity, { accountId });
+    for (const listed of replaced as unknown[]) {
+        const identity = isRecord(listed) ? listed.identity : undefined;
+        const check = await verifyReleaseIdentity(identity, { accountId });
         if (check.ok) superseded.push(check.fingerprint);
     }
     return { current, superseded };
