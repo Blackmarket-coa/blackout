@@ -324,13 +324,20 @@ For the source-of-truth triage with tier/owner detail see
 -   **State:** Deleting your Blackout account removes the account, its sessions
     and linked services, and cancels and erases your unsent scheduled messages.
     It cancels your dead-man switches that have not fired and removes what you
-    put in them, a release switch's sealed copies included; a switch that has
-    already fired stays readable to the people it named, with the public
-    release key it was signed with, until 365 days after it fired. Copies of
-    other people's releases sealed to you are removed, and a notice still owed
-    to you is dropped. It removes the release keys you published (their public
-    halves); the private keys on your devices and in your recovery files stay
-    until you remove them. It does not yet deactivate your Matrix account, and your
+    put in them, a release switch's sealed copies included. A release switch
+    that has already fired stays readable to the people it named, with the
+    public release key it was signed with, until 365 days after it fired; a
+    switch armed before Blackout could release messages (every switch that
+    exists today) keeps its payload for the people it named with no removal
+    date, because a release is not taken back. Copies of other people's
+    releases sealed to you are removed, a notice still owed to you is dropped,
+    and the record of each notice (its room, status and attempts) stays. It
+    removes the release keys you published (their public halves), except the
+    copy kept with a release switch of yours that has already fired, which goes
+    with that release 365 days after it fired; the fingerprint of the key each
+    sealed copy was made for stays on the blanked copy rows. The private keys
+    on your devices and in your recovery files stay until you remove them. It
+    does not yet deactivate your Matrix account, and your
     messages stay in rooms. If an anonymous sign-up used an invitation, the
     record tying that invitation to your Matrix account is removed too. Where
     the inviter's list of who joined through their link includes you, that
@@ -345,7 +352,10 @@ For the source-of-truth triage with tier/owner detail see
 -   **State (2026-10-29):** you can check in and cancel the switches you
     have, from the app or the API. You cannot arm a new one yet: the API
     refuses every arm (409 `arming_unavailable`) until an operator turns
-    `BLACKOUT_DEADMAN_RELEASES` on, which no deployment file does; the app's
+    `BLACKOUT_DEADMAN_RELEASES` on, which no deployment file does, and
+    wherever the API's own environment has the sweep switched off
+    (`BLACKOUT_DEADMAN_SWEEP=0`), since a switch armed there would never fire;
+    `GET /v1/deadman/limits` says which closes it. The app's
     arming form and "Released to you" view are the next PR of
     [`docs/security/deadman-release-design-2026-10-24.md`](docs/security/deadman-release-design-2026-10-24.md).
     The API's side of the release is built
@@ -359,29 +369,68 @@ For the source-of-truth triage with tier/owner detail see
     on a switch for anyone's safety.
 -   **What the bot's notice is.** One message from the Blackout bot in a room
     it makes for you, "Blackout notices", which is **not end-to-end
-    encrypted** (the bot cannot encrypt): a fixed sentence, "There is
-    something new for you in Blackout. Open Blackout to see it. This room is
-    not end-to-end encrypted, so please don't reply here.", and the release's
-    id, and nothing else: not who armed the switch, not their label, not who
-    else was named, nothing of the message. Anyone who sees your
-    notifications, and your email provider if the homeserver emails you about
-    unread messages, can see that you got one. The bot retries a notice the
-    homeserver refuses for 30 days, then records it as failed; whether a
-    notice reaches you depends on the homeserver and your client, and the
-    release does not: it is released when the API's own store says so, and
-    the view the next PR adds reads that store.
+    encrypted**: the bot cannot encrypt, so its message is plaintext whatever
+    a room's state says, and the room is created so that the homeserver's
+    encryption backstop (above) does not mark it encrypted (the `public_chat`
+    preset with an invite-only join rule; the backstop keys on the preset).
+    A fixed sentence, "There is something new for you in Blackout. Open
+    Blackout to see it. This room is not end-to-end encrypted, so please
+    don't reply here.", and the release's id, and nothing else: not who armed
+    the switch, not their label, not who else was named, nothing of the
+    message. Anyone who sees your notifications, and your email provider if
+    the homeserver emails you about unread messages, can see that you got one.
+    The bot retries a notice the homeserver refuses for 30 days, then records
+    it as failed; whether a notice reaches you depends on the homeserver and
+    your client, and the release does not: it is released when the API's own
+    store says so, and the view the next PR adds reads that store.
+-   **Who can name you, and what that does to your notices room.** Any
+    account on this server with release keys can name you on a release switch
+    without your agreement; the design asks the owner to compare a safety code
+    with you first, and the server cannot tell whether they did. The API
+    bounds it: one account can name you on at most 5 held releases, and
+    everyone together on at most 50 (`GET /v1/deadman/limits`; a release is
+    held from arming until 365 days after it fires). Each one that fires puts
+    one notice in your notices room, and if you left that room the bot
+    invites you back, once per notice. You cannot yet refuse an owner, and
+    release keys cannot be unpublished, so the only way to stop being named is
+    to delete your account.
 -   **What the server can do with a release.** It keeps the timer and the
     sealed copies, so whoever runs or compels it can hold a release back,
-    delay it, or give the people named their copies early; nobody is told. It
-    cannot read the message, and cannot forge one or make a copy open for
-    anyone but its recipient. An outage delays a release by its own length
-    plus up to 72 hours (below). [`THREAT_MODEL.md`](THREAT_MODEL.md), R12.
--   **Retention.** 365 days after a release switch fires, Blackout removes the
-    encrypted message and every sealed copy from its database; the switch
+    delay it, or give the people named their copies early; nobody is told. As
+    long as the owner compared a safety code with each person named and
+    nobody's app code was altered, it cannot read the message, and cannot
+    forge one or make a copy open for anyone but its recipient. In a web
+    browser the server supplies that code, and a server made to send altered
+    code could read the message as it is typed; the desktop and mobile apps
+    carry their own copy. Without the comparison, a key the server planted in
+    the directory would let it read the message from arming on, and the API
+    cannot tell. An outage delays a release by its own length plus up to 72
+    hours (below). [`THREAT_MODEL.md`](THREAT_MODEL.md), R12.
+-   **Retention.** At its first sweep pass on or after 365 days after a
+    release switch fired, Blackout removes the encrypted message, the owner's
+    public key kept with it and every sealed copy from its database (a
+    deployment running no sweep removes nothing). The record of the switch
+    stays: whom it named and the fingerprint of the key each copy was sealed
+    to, the owner's label and timing, when it fired, and each notice's room,
+    status and attempts until that person deletes their account; the switch
     stays in the owner's list as fired, with how many notices were sent. Save
     the message before then if you need it after. Cancelling a release switch
     removes its encrypted message and every copy; backups keep them until
     they expire.
+-   **Bounds.** One account can have at most 20 release switches whose
+    content the server still holds (armed, in grace, or fired until the
+    removal), about 7 MiB of encrypted headers and up to about 2.3 MiB of
+    sealed copies at the largest sizes; can arm at most 10 in any 24 hours;
+    and can name one person on at most 5 held releases, who can be named on at
+    most 50 from everyone. `GET /v1/deadman/limits` reports each. An owner
+    whose 20 switches all fired cannot arm again until the oldest is removed;
+    cancelling an unfired one frees its place.
+-   **Durability.** In Postgres mode the API answers before its writes commit
+    (a write-behind queue, drained on shutdown), so a crash in that window can
+    lose the newest rows. Arming writes a switch's sealed copies first and the
+    switch last, so what such a crash leaves is copies no switch names, which
+    nothing lists or serves, rather than a switch that fires with copies
+    missing; nothing detects the orphaned copies.
 -   The switches that exist were armed through the API before this. Their
     payload is whatever was sent: the server never decrypts it and cannot
     tell whether it is ciphertext. Recipients named by Blackout account id
@@ -394,10 +443,12 @@ For the source-of-truth triage with tier/owner detail see
     began removing payloads still holds its payload until you cancel it again
     ("Remove message" in the panel). Deleting your account cancels your switches that
     have not fired and removes their payloads and labels, and a release
-    switch's sealed copies; a switch that has already fired keeps its payload
-    or encrypted message for the people it named, because a release is not
-    taken back. Where the deployment keeps database backups, they hold a
-    removed payload until they expire.
+    switch's sealed copies; a switch that has already fired keeps what it
+    holds for the people it named, because a release is not taken back: a
+    release switch its encrypted message until 365 days after it fired, a
+    switch armed before releases (every switch that exists today) its payload
+    with no removal date. Where the deployment keeps database backups, they
+    hold a removed payload until they expire.
 -   If the server reaches your switch more than 15 minutes (by default) after
     it was due, because its background loops were down, it does not fire the
     switch then: the switch goes to grace with at least 72 hours left from

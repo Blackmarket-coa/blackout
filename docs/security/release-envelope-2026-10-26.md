@@ -22,7 +22,11 @@ makes a release possible: arming stays closed until PR 4 turns
 part 1 had its independent review; its one high finding (re-sealing was not
 bound to the switch being re-sealed), three medium, six low and twelve untrue
 sentences are each fixed or explained in "Independent review, 2026-10-29"
-below, and the sections they touch now say what the code does.
+below, and the sections they touch now say what the code does. **2026-10-30:**
+part 2 had its independent review; its one high finding (the cap of 20 bounded
+live switches, not what the server held), five medium, fifteen low and sixteen
+untrue sentences are each fixed or explained in "Independent review of part 2,
+2026-10-30" below, and §11, §15 and the decisions now say what the code does.
 
 **State read:** the PR 2 branch at `6ae33bc2e2` (#991), on `develop` at
 `8a20ad6a0b`; PR 2 then merged as `e1d4cec964`, which this branch merged. **Read** means a claim rests on the code or a standard; **Run**
@@ -41,25 +45,25 @@ each copy, which is transferable (C15). None of it makes a release happen on
 time: the server keeps the timer, and can hold a release back, delay it or
 bring it forward (§10, R12, which part 2 adds to `THREAT_MODEL.md`).
 
-| ID  | Question or finding                                                                                            | Verified          | Disposition                                                                                                                                                                                                                                                                            |
-| --- | -------------------------------------------------------------------------------------------------------------- | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| E1  | What is sealed to whom: one ciphertext, its key sealed to every recipient and to the owner                     | Read (design)     | Kept; the owner's own copy is what re-sealing opens, and what it costs is stated (§1)                                                                                                                                                                                                  |
-| E2  | The key encapsulation against HPKE's DHKEM and X-Wing                                                          | Read (standards)  | Kept, with a transcript; one sealing function for dead drops and releases (§2)                                                                                                                                                                                                         |
-| E3  | The recipient's public keys must be bound into the wrap key (C5)                                               | Read              | Bound through the recipient's fingerprint in the transcript, with the owner's, the release id and both accounts (§2, §3)                                                                                                                                                               |
-| E4  | An all-zero X25519 output (C8, RFC 9180 §7.1.4)                                                                | Run; test         | Refused on both sides, inside the shared function, so dead drops get the check too (§2)                                                                                                                                                                                                |
-| E5  | New labels must not be confusable with PR 2's                                                                  | Read; test        | Four new NUL-terminated labels, each used in one place; the table of all eight is in §3                                                                                                                                                                                                |
-| E6  | AES-GCM does not commit to its key (C7)                                                                        | Read (literature) | SHA-256 of a label and the content key in every copy's signed bytes, checked before the content is decrypted (§4)                                                                                                                                                                      |
-| E7  | One header every recipient receives alike (C7)                                                                 | Read (analysis)   | The header's fields are in every copy's signature; no separate header signature, and why (§4, §5)                                                                                                                                                                                      |
-| E8  | Signatures are transferable (C15), and the server holds them from arming on                                    | Read (analysis)   | Stated, for the operator: no deniability is claimed anywhere (§5)                                                                                                                                                                                                                      |
-| E9  | One form per value: JSON shapes, base64, ids                                                                   | Read; test        | Exact field sets, canonical base64 at exact lengths, a fixed-length sealed copy, ids by pattern; JSON is never signed (§6)                                                                                                                                                             |
-| E10 | Padding and size                                                                                               | Read; test        | Text up to 64 KiB, padded to 1, 16 or 256 KiB; the API refuses a content ciphertext of any other length (§7)                                                                                                                                                                           |
-| E11 | Identity v1 has no sequence number (decision 19)                                                               | Read              | Nothing is added to the identity; the API checks current identities at arming and re-sealing, the client applies H1 (§9)                                                                                                                                                               |
-| E12 | When a comparison counts (H1)                                                                                  | Read; test        | `releaseComparisonState`: only for the account's current identity, stale once a newer one is seen or the compared one is listed as replaced; when sealing, the owner's own key must not have changed either; for a release in hand, `other_key` unless the key compared signed it (§9) |
-| E13 | A fired release must stay checkable after its owner deletes the account, which erases their release identities | Read              | The owner's identity at arming is kept with the release, and goes with it; the deletion texts say so (§1, §11)                                                                                                                                                                         |
-| E14 | Re-sealing to a recipient's new key does not take back the old copy                                            | Read (analysis)   | Stated: after a lost device, cancel and arm again, which makes a new content key (§10)                                                                                                                                                                                                 |
-| E15 | What a hostile server can and cannot do                                                                        | Read (analysis)   | §10; hold back, delay and bring forward are accepted (design §3) and named as R12, which part 2 adds to `THREAT_MODEL.md`                                                                                                                                                              |
-| E16 | Notices and what they carry (design §5)                                                                        | Read              | A pointer only, in an unencrypted room the bot owns; nothing names the owner, the label, other people or any time (§11)                                                                                                                                                                |
-| E17 | `randomBytes` asked WebCrypto for more than 65,536 bytes at once, so padding to 256 KiB threw                  | Run; test         | Fixed in `randomBytes`, which also fixes dead drops over 16 KiB and PR 2's recovery files past 16 KiB (§14)                                                                                                                                                                            |
+| ID  | Question or finding                                                                                            | Verified          | Disposition                                                                                                                                                                                                                                                                                    |
+| --- | -------------------------------------------------------------------------------------------------------------- | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| E1  | What is sealed to whom: one ciphertext, its key sealed to every recipient and to the owner                     | Read (design)     | Kept; the owner's own copy is what re-sealing opens, and what it costs is stated (§1)                                                                                                                                                                                                          |
+| E2  | The key encapsulation against HPKE's DHKEM and X-Wing                                                          | Read (standards)  | Kept, with a transcript; one sealing function for dead drops and releases (§2)                                                                                                                                                                                                                 |
+| E3  | The recipient's public keys must be bound into the wrap key (C5)                                               | Read              | Bound through the recipient's fingerprint in the transcript, with the owner's, the release id and both accounts (§2, §3)                                                                                                                                                                       |
+| E4  | An all-zero X25519 output (C8, RFC 9180 §7.1.4)                                                                | Run; test         | Refused on both sides, inside the shared function, so dead drops get the check too (§2)                                                                                                                                                                                                        |
+| E5  | New labels must not be confusable with PR 2's                                                                  | Read; test        | Four new NUL-terminated labels, each used in one place; the table of all eight is in §3                                                                                                                                                                                                        |
+| E6  | AES-GCM does not commit to its key (C7)                                                                        | Read (literature) | SHA-256 of a label and the content key in every copy's signed bytes, checked before the content is decrypted (§4)                                                                                                                                                                              |
+| E7  | One header every recipient receives alike (C7)                                                                 | Read (analysis)   | The header's fields are in every copy's signature; no separate header signature, and why (§4, §5)                                                                                                                                                                                              |
+| E8  | Signatures are transferable (C15), and the server holds them from arming on                                    | Read (analysis)   | Stated, for the operator: no deniability is claimed anywhere (§5)                                                                                                                                                                                                                              |
+| E9  | One form per value: JSON shapes, base64, ids                                                                   | Read; test        | Exact field sets, canonical base64 at exact lengths, a fixed-length sealed copy, ids by pattern; JSON is never signed (§6)                                                                                                                                                                     |
+| E10 | Padding and size                                                                                               | Read; test        | Text up to 64 KiB, padded to 1, 16 or 256 KiB; the API refuses a content ciphertext of any other length (§7)                                                                                                                                                                                   |
+| E11 | Identity v1 has no sequence number (decision 19)                                                               | Read              | Nothing is added to the identity; the API checks current identities at arming and re-sealing, the client applies H1 (§9)                                                                                                                                                                       |
+| E12 | When a comparison counts (H1)                                                                                  | Read; test        | `releaseComparisonState`: only for the account's current identity, stale once a newer one is seen or the compared one is listed as replaced; when sealing, the owner's own key must not have changed either; for a release in hand, `other_key` unless the key compared signed it (§9)         |
+| E13 | A fired release must stay checkable after its owner deletes the account, which erases their release identities | Read              | The owner's identity at arming is kept with the release, and goes with it; the deletion texts say so (§1, §11)                                                                                                                                                                                 |
+| E14 | Re-sealing to a recipient's new key does not take back the old copy                                            | Read (analysis)   | Stated: after a lost device, cancel and arm again, which makes a new content key (§10)                                                                                                                                                                                                         |
+| E15 | What a hostile server can and cannot do                                                                        | Read (analysis)   | §10; hold back, delay and bring forward are accepted (design §3) and named as R12, which part 2 adds to `THREAT_MODEL.md`                                                                                                                                                                      |
+| E16 | Notices and what they carry (design §5)                                                                        | Read; run (fork)  | A pointer only, in a room the bot owns and creates so that the homeserver's backstop leaves it unencrypted (`public_chat`, invite-only: part 2's review found the first build's `private_chat` room encrypted by the fork); nothing names the owner, the label, other people or any time (§11) |
+| E17 | `randomBytes` asked WebCrypto for more than 65,536 bytes at once, so padding to 256 KiB threw                  | Run; test         | Fixed in `randomBytes`, which also fixes dead drops over 16 KiB and PR 2's recovery files past 16 KiB (§14)                                                                                                                                                                                    |
 
 ---
 
@@ -629,16 +633,34 @@ longer current.
 
 -   **Rows with the trigger.** When the sweep fires a release switch it
     records `released_at` and writes one row in `deadman_release_notices` for
-    each recipient whose copy is still held. The notifier also treats a fired
-    release switch with a recipient but no row as due, so a crash between the
-    two loses nothing. Legacy switches change status only, as today.
+    each recipient whose copy is still held and lacks one. The notifier also
+    treats a fired release switch with a recipient but no row as due, so a
+    crash between the two loses nothing; a row that exists before its switch
+    fires (the other crash shape) is left alone, neither sent nor ended, and
+    is sent once the switch fires (P3b-L1). Legacy switches change status
+    only, as today.
 -   **The room.** One standing room per account, named "Blackout notices",
-    created by the bot with `encrypted: false` (the bot cannot encrypt), as a
-    private room with the person invited and `is_direct` set, and power
-    levels that let only the bot post or invite (`events_default` and
-    `invite` at 50, the person at 0). An earlier notice's room is reused; a
-    person who left it, or declined it, is invited again, with `is_direct`,
-    when a later notice is due.
+    created by the bot with the `public_chat` preset, an invite-only
+    `m.room.join_rules` in `initial_state` and `visibility: private`, the
+    person invited with `is_direct`, and power levels that let only the bot
+    post or invite (`events_default` and `invite` at 50, the person at 0).
+    The preset and the join rule are what make the room genuinely
+    unencrypted: the homeserver's `encryption_enabled_by_default_for_room_type:
+invite`, set by every in-repo template, adds `m.room.encryption` to every
+    `private_chat` room after the client's `initial_state` and keys on the
+    preset, and `createRoom({ encrypted: false })` only leaves the client's
+    own encryption event out (as first built, with `private_chat`, the fork
+    encrypted the room around the bot's plaintext post: P3b-M1, run on the
+    fork's own code by the review). Under `all`, which no template sets, the
+    backstop would encrypt this preset too. An earlier notice's room is
+    reused; a person who left it, or declined it, is invited again, with
+    `is_direct`, when a later notice is due, at most once per notice
+    (recorded on the row as `reinvited_at`). One room per account holds
+    within one process: a per-recipient slot serialises finding or making
+    the room and a notice that waited reads the room again (P3b-M5), and the
+    interval does not start a tick while one runs. A room the homeserver no
+    longer has is replaced once per person: every row of theirs that pointed
+    at it moves to the replacement (P3b-L3).
 -   **The notice:** an `m.text` (an `m.notice` would be silent under
     `.m.rule.suppress_notices`) with the fixed body "There is something new
     for you in Blackout. Open Blackout to see it. This room is not end-to-end
@@ -657,11 +679,25 @@ longer current.
     its own room.
 -   **What the owner sees:** when the switch fired, how many recipients were
     given access, and how many notices were sent, are pending and failed;
-    never the notice rooms.
--   **Retention.** 365 days after a switch fires, the API removes its content,
-    the owner's identity it kept, and every copy; the notice rows stay, as a
-    record that one was sent. A recipient who wants the message after that
+    never the notice rooms. A recipient who deleted their account drops out
+    of `sealedTo` and their pending notice counts as failed, which tells the
+    owner the account is gone; the identities directory tells any signed-in
+    account the same (P3b-L11).
+-   **Retention.** At its first sweep pass on or after 365 days after a
+    switch fired (while a sweep runs; with none, nothing is removed), the API
+    removes its content, the owner's identity it kept, and every copy. The
+    rows stay: the switch with whom it named, the label and timing; each copy
+    row with the fingerprint of the key it was sealed to; the notice rows as a
+    record that one was sent, with their room until that person deletes their
+    account (P3b-L10, P3b-L12). A recipient who wants the message after that
     has to have saved it.
+-   **What one account can make the server keep or send** is bounded (P3b-H1):
+    at most 20 release switches per owner whose content is held, armed, in
+    grace or fired until the removal; at most 10 arms per owner in any 24
+    hours; at most 5 held releases naming one person from one owner and 50
+    from everyone. So one person receives at most 50 notices in any 365 days,
+    each with at most one re-invite. A recipient cannot yet refuse an owner
+    (decision 19).
 -   **Who learns what from a notice:** the homeserver, nothing new; Apple or
     Google, that a notification came (the app registers `event_id_only`
     pushers); an email provider, the fixed body, for someone with email
@@ -754,8 +790,8 @@ of the release-identities record and the questions below.
 -   **What changed against the design:** the release id is the switch id
     (one id, chosen by the device because it is in the associated data and
     the transcript); the owner's identity is kept with the release (E13); a
-    cap on live release switches per owner bounds storage (decision 4
-    below); the header is signed inside every copy's signature, not
+    cap on release switches per owner whose content is held bounds what the
+    server keeps (decision 4 below, as part 2's review corrected it); the header is signed inside every copy's signature, not
     separately (E7).
 
 ## 14. PR 3 as built, part 1: protocol and SDK (`-v44`)
@@ -881,31 +917,62 @@ message, and nothing here makes a release happen on time (§10, R12).
 -   **Arming**, `POST /v1/deadman/switches`
     (`packages/api/src/modules/deadman.ts`,
     `services/deadmanReleases.ts`): behind `BLACKOUT_DEADMAN_RELEASES`, read
-    per request, on only for `1` or `true`; off, the route answers 409
-    `arming_unavailable` before the body is read, as since PR 1. On, after the
-    capability and a 1 MiB body cap, in this order: the body's shape (format
-    `release-v1`, the timer, an optional label, the envelope, nothing else);
+    per request, on for `1` or `true` in any casing with surrounding
+    whitespace ignored and off for anything else (`yes`, `on`); and behind
+    this process's own `BLACKOUT_DEADMAN_SWEEP` not being `0`, since a switch
+    armed where no sweep runs would never fire (the API cannot see a separate
+    worker's environment, so a deployment that runs the loops elsewhere
+    leaves the variable unset on the API; P3b-L4). The 1 MiB body cap is
+    middleware and runs first, flag off or on: a body over it is 413 whatever
+    the flag says, a body under it is buffered. Then, with arming closed, the
+    route answers 409 `arming_unavailable` with the reason (`releases_off`,
+    or `sweep_off` with its own message) before the body is parsed, so
+    nothing about the request is stored, as since PR 1 (P3b-L13). Open, after
+    the capability, in this order: the body's shape (format `release-v1`, the
+    timer, an optional label, the envelope, nothing else);
     `parseReleaseEnvelope`; the caller is the header's owner (403); the timer
-    and label bounds; at most 20 live release switches per owner (decision 4);
-    the owner has a current identity (409 `owner_identity_missing`); each
-    other copy names an account whose current identity is the copy's (400
-    `unknown_recipient` for an account with no identity, an account that does
-    not exist included; 409 `recipient_identity_superseded` for one the
-    account replaced; 400 `recipient_identity_unknown` for one it never
-    published; each says whose); every signature under the owner's current
-    identity (400 `invalid_release_signature`, saying whose copy), which also
-    refuses a header naming any other identity than the owner's current one
-    (409 `owner_identity_changed`: the verifier computes the fingerprint and
-    compares it, so the service makes no comparison of its own); then, after
-    those awaits, the release id is still free (409 `release_id_taken`) and
-    the rows are written with no await between: the switch, id = release id,
-    no room, `release-v1`, the recipients' account ids, the label; one copy row
-    per account. The answer is the armed event with the owner's view.
+    and label bounds; at most 20 release switches per owner whose content is
+    still held, armed, in grace or fired until the removal (409
+    `release_switch_limit`; decision 4 as corrected, decision 17); at most 10
+    arms per owner in any 24 hours, cancelled ones included (429
+    `release_arm_rate_limited` with `Retry-After` and `retryAfterSeconds`,
+    computed as the identities directory computes its publish limit;
+    decision 18); the owner has a current identity (409
+    `owner_identity_missing`); each other copy names an account whose
+    current identity is the copy's (400 `unknown_recipient` for an account
+    with no identity, an account that does not exist included; 409
+    `recipient_identity_superseded` for one the account replaced; 400
+    `recipient_identity_unknown` for one it never published; each says
+    whose) and which is named on fewer than 5 held releases from this owner
+    and fewer than 50 from everyone (409 `recipient_limit`, saying whose; one
+    code and message for both bounds, so the answer does not say how many
+    others named the person, though an owner below 5 who is refused does
+    learn the person is at 50: decision 18); every signature under the
+    owner's current identity (400 `invalid_release_signature`, saying whose
+    copy), which also refuses a header naming any other identity than the
+    owner's current one (409 `owner_identity_changed`: the verifier computes
+    the fingerprint and compares it, so the service makes no comparison of
+    its own); then, after those awaits, the release id is still free (409
+    `release_id_taken`, an existence answer for any switch's id, accepted and
+    explained at `SWITCH_NOT_FOUND` in the module: P3b-L7, decision 22) and
+    the rows are written with no await between, in the mirror: the copies
+    first, one row per account, and then the switch, id = release id, no
+    room, `release-v1`, the recipients' account ids, the label. In Postgres
+    mode each row is its own write-behind upsert, committed after the 201 in
+    that order, so a crash between them leaves copies no switch names, which
+    nothing lists or serves, and never a switch without copies, which would
+    fire and release to nobody; nothing detects the orphaned copies (P3b-L5).
+    On one replica two arms with one id cannot both write; across replicas
+    the store is eventually consistent and the window applies (P3b-L6). The
+    answer is the armed event with the owner's view.
 -   **The owner's view** carries `releaseFormat`, `releasedAt` once fired,
     `release` (the header, the owner's identity, the owner's own copy, and
     whom each held copy is sealed to with its fingerprint) while the content
     and the owner's own copy are held, and `notices` counts once fired. It
-    never carries the notice rooms or anyone else's copy.
+    never carries the notice rooms or anyone else's copy. A recipient who
+    deleted their account drops out of `sealedTo` and their pending notice
+    counts as `failed`, so the owner can tell; the directory tells anyone the
+    same (P3b-L11).
 -   **Re-sealing**, `POST /v1/deadman/switches/:id/reseal` (64 KiB): the
     caller's own release switch (anything else is the one 404), not fired
     (409 `switch_triggered`), not cancelled (409 `switch_cancelled`), a
@@ -915,9 +982,14 @@ message, and nothing here makes a release happen on time (§10, R12).
     the account's current identity is the copy's; the signature verifies over
     the stored header under the owner's current identity (a header signed by
     a replaced owner identity is `owner_identity_changed`: the owner arms
-    again, E14); the switch is read again after the awaits, so a cancel that
-    landed meanwhile wins and no copy is written to a cancelled switch. Not
-    gated on the flag, which gates arming only (§13).
+    again, E14); the switch is read again after the awaits, so, on one
+    replica, a cancel that landed meanwhile wins and no copy is written to a
+    cancelled switch. Across replicas the store is eventually consistent
+    (LISTEN/NOTIFY, typically sub-second), and a cancel on one replica with a
+    re-seal on another in that window can leave a sealed copy on a cancelled
+    switch: served to nobody, since `releasedCopiesFor` needs `releasedAt`,
+    which a cancelled switch never gets, and blanked by a second cancel
+    (P3b-L6). Not gated on the flag, which gates arming only (§13).
 -   **The release read**, `GET /v1/deadman/releases` (`deadman.read`): each
     fired release switch that sealed a copy to the caller and still holds its
     content, with the header, the owner's identity at arming, when it fired,
@@ -928,57 +1000,91 @@ message, and nothing here makes a release happen on time (§10, R12).
     (`GET /switches?scope=recipient`, `GET /switches/:id`) never show a
     release switch: a recipient gets the same 404 as a stranger.
 -   **Limits**, `GET /v1/deadman/limits` (`deadman.read`): whether arming is
-    open here, the timer bounds, 64 recipients, 64 KiB of text, the three
-    padded sizes, the label length, the cap of 20, the backlog tolerance from
-    the sweep's own configured cadence (`deadmanSweepIntervalMs`), the 72-hour
-    backlog window, 365 days of retention, 30 days of notice retries.
+    open here and, if not, why (`armingUnavailableReason`: `releases_off` or
+    `sweep_off`), the timer bounds, 64 recipients, 64 KiB of text, the three
+    padded sizes, the label length, the four bounds of P3b-H1
+    (`maxHeldReleaseSwitches` 20, `maxArmsPerDay` 10,
+    `maxHeldReleasesPerRecipientFromOwner` 5, `maxHeldReleasesPerRecipient`
+    50), the backlog tolerance from the sweep's own configured cadence
+    (`deadmanSweepIntervalMs`), the 72-hour backlog window, 365 days of
+    retention, 30 days of notice retries.
 -   **Cancel** blanks every copy, the owner's own included, with the content;
     a second cancel blanks what a switch cancelled before this code still
     holds. **The sweep** (`sweepOverdueDeadmanSwitches`) fires a release switch
     by writing `triggered` and `releasedAt` in one update and then one notice
-    row per recipient whose copy is held; a legacy switch changes status only.
-    Each pass also removes the content and every copy of releases that fired
-    365 days ago or more, once; the rows stay, the notice counts stay.
+    row per recipient whose copy is held and lacks one; a legacy switch
+    changes status only. Each pass also removes the content and every copy of
+    releases that fired 365 days ago or more, once; the rows stay, the notice
+    counts stay. The copies and the notices are listed by switch through an
+    index the store keeps (`GroupedMap` in `db/store.ts`: a `Map` whose rows
+    are also grouped by switch, kept in step by every `set`, `delete` and
+    `clear`, rebuilt by the file store's hydrate and kept by the Postgres
+    store's hydration, row refresh and wholesale refresh, which makes a fresh
+    map of the same kind), so a pass over N already-removed releases costs N
+    indexed lookups and not N scans of every copy row (P3b-M4: the first
+    build scanned, 8 s a tick at 10,000 removed releases, and the notifier's
+    catch-up scanned the same way for every fired release for 365 days).
 -   **The notifier**, `services/deadmanReleaseNotifier.ts`, beside the sweep
     at its cadence under the same `BLACKOUT_DEADMAN_SWEEP` gate
     (`backgroundLoops.ts`). Each tick first writes the rows a fired release
     switch lacks (§11's catch-up), then sends up to 50 due notices, oldest
-    first, one at a time. For each: the recipient's standing room is reused
-    from an earlier notice, or made by the bot (`createRoom` with
-    `name: "Blackout notices"`, private, `private_chat`, `encrypted: false`,
-    the person invited with `is_direct`, `events_default` and `invite` at 50)
-    and recorded on the row before anything is sent, so a crash makes no second
-    room; a person whose membership is not `join` or `invite` (left, declined)
-    is invited again through the member state endpoint with `is_direct`; a
-    room the homeserver answers 404 for is replaced. The notice is one
-    `m.text` with `DEADMAN_NOTICE_BODY` and the pointer
-    (`co.bmc.deadman.release`: schema version 1 and the release id, which is
-    the switch id, a lowercase UUID v4), and nothing else, transaction id
+    first, one at a time; a row for a release switch that has not fired is
+    not due and is left alone (P3b-L1). For each: the recipient's standing
+    room is reused from an earlier notice, or made by the bot (`createRoom`
+    with `name: "Blackout notices"`, `visibility: private`, `preset:
+public_chat`, `encrypted: false`, `initial_state` holding an invite-only
+    `m.room.join_rules`, the person invited with `is_direct`, `events_default`
+    and `invite` at 50: §11 says why that preset) and recorded on the row
+    before anything is sent, so a crash makes no second room; finding or
+    making the room happens under a per-recipient slot, with the row and the
+    room read again once the slot is held, so two notices for one person in
+    overlapping ticks make one room (P3b-M5); a person whose membership is
+    not `join` or `invite` (left, declined) is invited again through the
+    member state endpoint with `is_direct`, at most once per notice
+    (`reinvited_at` on the row); a room the homeserver answers 404 for is
+    replaced, and every row of that person's that pointed at it moves to the
+    replacement (P3b-L3). The notice is one `m.text` with
+    `DEADMAN_NOTICE_BODY` and the pointer (`co.bmc.deadman.release`: schema
+    version 1 and the release id, which is the switch id, a lowercase UUID
+    v4), and nothing else, transaction id
     `deadman-release-<switch>-<recipient>`. **What "sent" means:** the
     homeserver accepted the event. Whether it reaches the person is the
     homeserver's and their client's; the release is the API's own store, and
     the release read works without any notice. Every refused homeserver call
-    (create, state read, invite, send; or none configured) is a retry with
-    backoff from 30 s doubling to a 6-hour cap, for 30 days from the release,
-    then `failed` with `retry_window_over`; a recipient whose account is gone
-    (`recipient_gone`) or a release that is not there to point at
-    (`release_unavailable`) ends the notice at once, and a notice that ends for
-    a gone recipient forgets its room. An in-flight set keeps an overlapping
-    tick off a notice; a stop ends a tick after the notice in hand. Logs
-    carry counts only.
+    (create, state read, invite, send; or none configured) and every one that
+    throws (a network error: `matrix_<call>_network_error`) is that notice's
+    attempt, a retry with backoff from 30 s doubling to a 6-hour cap, for 30
+    days from the release, then `failed` with `retry_window_over` (P3b-L2); a
+    recipient whose account is gone (`recipient_gone`) or a release that is
+    not there to point at (`release_unavailable`: cancelled, removed, or
+    never a release) ends the notice at once, and a notice that ends for a
+    gone recipient forgets its room. Before a notice is marked sent, the row
+    and the account are read again: a deletion that landed during the send
+    has ended the row and that stands, and an account gone another way ends
+    it (P3b-L14). An in-flight set keeps an overlapping tick off a notice,
+    and the interval does not start a tick while the previous one runs; a
+    stop ends a tick after the notice in hand. Logs carry counts only.
 -   **Account deletion** (`accountLifecycle.ts`): an unfired release switch
     of the account's loses its copies with its content; a fired one keeps its
     content, the owner's identity it was signed with (E13) and the recipients'
     copies, and only the owner's own copy goes, since nothing is re-sealed
     after the trigger and nobody is left to open it. As a recipient: the
     account's copies on others' switches go, fired or not; its pending notices
-    end with `recipient_gone`; every notice row of its forgets the room that
-    tied the account to a Matrix id; the switch keeps the account id among its
-    recipients, as legacy switches do. **The export** lists a release switch's
-    format, when it fired and its notice counts, never a copy, and the
-    releases given to the account as `GET /releases` gives them
-    (`deadmanReleases`); an unfired switch naming the account is not in its
-    export.
+    end with `recipient_gone`, and a notice whose send was in flight when the
+    deletion landed stays `failed` (P3b-L14); every notice row of its forgets
+    the room that tied the account to a Matrix id; the switch keeps the
+    account id among its recipients, as legacy switches do. What stays after
+    a blank, named here because the user-facing texts name it too: each
+    blanked copy row keeps the account id and the fingerprint of the key it
+    was sealed to (the owner's own row included), and each notice row keeps
+    the account id, status, attempts, last error and timestamps (P3b-L10; the
+    refuted SL-1 is below). **The export** lists a release switch's format,
+    when it fired and its notice counts, never a copy; the releases given to
+    the account as `GET /releases` gives them (`deadmanReleases`); and the
+    notice rows about the account as recipient (`deadmanNotices`: switch,
+    room, re-invite, status, attempts, last error, times), for fired switches
+    only, so an unfired switch naming the account is in no part of its export
+    (P3b-L8).
 -   **Checks not written, because another check always makes them** (as §14
     removed three): the owner's fingerprint against the header, which the
     verifier computes and compares; a recipient account's existence, since an
@@ -986,28 +1092,39 @@ message, and nothing here makes a release happen on time (§10, R12).
     account and deletion blanks its rows); a fired switch's status, since
     `releasedAt` is written with `triggered` and only then; a legacy payload
     that is not JSON, since the parse says so, and the format check covers a
-    legacy payload that is; a notice row's status at send time, which the
-    in-flight set and the leader lock make redundant. The cap on live switches
-    is checked once, before the signatures: two arms racing can exceed it by
-    one, and it bounds storage only.
+    legacy payload that is. A notice row's status at send time is checked
+    now, since the review's P3b-L14 found a deletion could land during the
+    send. Each bound of P3b-H1 is checked once, before the signatures: two
+    arms racing on one replica can exceed one by one, across replicas by more
+    within the refresh window; the held cap is what bounds the content one
+    account can make the server keep.
 -   **Tests** (`packages/api/test/`): `deadman-releases.integration.test.ts`,
-    17 (the flag off and on; the body's shape and cap; every refusal in order,
-    including a copy re-signed by a third party; the live cap; each
-    recipient's isolation before and after the trigger and the opening with
-    the recipient's keys; re-sealing, its refusals, the race with a cancel and
-    its body cap; cancel; the 365-day removal and its idempotence; content
-    gone while a copy is held; legacy switches unchanged, a legacy payload
-    that looks like release JSON included; the limits; the export; deletion of
-    an owner and of a recipient, before and after the trigger);
-    `deadman-release-notices.integration.test.ts`, 13 (the rows the sweep
+    21 (the flag off and on, and every spelling; the sweep switched off; the
+    body's shape and cap; every refusal in order, including a copy re-signed
+    by a third party; the arming rate; the held cap at its edge, fired
+    switches counted and bytes held flat; the per-recipient bounds, 5 and
+    50; each recipient's isolation before and after the trigger and the
+    opening with the recipient's keys; re-sealing, its refusals, the race
+    with a cancel and its body cap; cancel; the 365-day removal and its
+    idempotence; the removal's indexed second pass; content gone while a copy
+    is held; legacy switches unchanged, a legacy payload that looks like
+    release JSON included; the limits; the export, notice rows included;
+    deletion of an owner and of a recipient, before and after the trigger);
+    `deadman-release-notices.integration.test.ts`, 21 (the rows the sweep
     writes; the room's creation body and the send's body and transaction id;
-    what the notice never carries; room reuse; re-invite; the replaced room;
-    each retry and its backoff; the 30-day window; catch-up; a gone recipient;
-    a release that is not there; no homeserver configured; the overlapping
-    tick; the per-tick cap; the stop mid-tick; start and stop);
+    what the notice never carries; room reuse; re-invite, once per notice;
+    the replaced room, once per person; each retry and its backoff; a thrown
+    call per step; the 30-day window; catch-up, and its indexed cost; a gone
+    recipient; a release that is not there; a switch not yet fired; a
+    deletion during a send, and a row ended during one; no homeserver
+    configured; the overlapping tick, with a bounded wait; two notices for
+    one person in overlapping ticks; the interval's running guard; the
+    per-tick cap; the stop mid-tick; start and stop);
     `deadman-releases-postgres.integration.test.ts`, 3 (PGlite: a restart,
-    `room_id` NULL, a legacy row reading `legacy`, a blanked copy and a
-    cleared room in Postgres, the down migration refused and then run);
+    `room_id` NULL, `reinvited_at`, a legacy row reading `legacy`, the
+    by-switch index after hydration and after a wholesale refresh, a blanked
+    copy and a cleared room in Postgres, the down migration refused and then
+    run);
     `deadman-releases-file.integration.test.ts`, 1;
     `matrix-client-direct-invite.integration.test.ts`, 2; `postgres-store`
     (158 descriptors) and `background-loops` (the notifier among the loops)
@@ -1057,8 +1174,18 @@ that records what the API sends.
 3.  The owner's public identity is kept with each release switch, so a fired
     release stays checkable after the owner deletes their account, until it
     is removed after 365 days (E13).
-4.  At most 20 live (armed or in grace) release switches per owner, a bound
-    on storage of about 10 MB per account.
+4.  At most 20 release switches per owner whose content the server still
+    holds: armed, in grace, or fired until the removal 365 days after the
+    trigger. _(Corrected after part 2's review, P3b-H1: as first built the cap
+    counted armed and grace switches only, a fired switch's content was held
+    365 days outside it, and the "bound on storage of about 10 MB per
+    account" written here was false: one account held 20.1 MiB after three
+    rounds of arm-and-fire with the live count at 0.)_ What it bounds: a held
+    switch is at most about 350 KB of header JSON (a 256 KiB ciphertext in
+    base64; 20 of them measured at 6.7 MiB) plus up to 65 sealed copies of
+    about 1.8 KB each, so about 6.7 MiB of headers and up to about 2.3 MiB of
+    copies per account, held for up to 365 days after firing, in Postgres and
+    in every replica's mirror.
 5.  The header is signed inside each copy's signature rather than once
     (E7); recipients learn they read the same text only by comparing.
 6.  Transferable signatures, held by the server from arming (C15, E8).
@@ -1086,6 +1213,39 @@ that records what the API sends.
 16. (Part 2.) A legacy switch's recipient views are unchanged, and a release
     switch is answered there as absent; a release is read through
     `GET /v1/deadman/releases` only.
+17. (Part 2, after its review.) Because the cap of decision 4 counts fired
+    switches until their removal, an owner whose 20 release switches all
+    fired cannot arm another until the oldest is removed, 365 days after it
+    fired; cancelling an unfired one frees its place. Confirm the number, or
+    choose a larger cap or a separate cap for fired switches.
+18. (Part 2, after its review.) At most 10 arms per owner in any 24 hours
+    (429, `Retry-After`); at most 5 held releases naming one person from one
+    owner and 50 from everyone (409 `recipient_limit`, one code for both
+    bounds). The second bound discloses, to an owner below 5 who is refused,
+    that the person is at 50 from everyone; a bound on what everyone
+    together may do to one person cannot avoid that.
+19. (Part 2, after its review.) A person who left or declined their notices
+    room is invited again at most once per notice (decision 8, bounded).
+    A recipient cannot yet refuse an owner: any account with release keys can
+    name them, within the bounds above, and the only way out is to delete
+    the account, since release keys cannot be unpublished (identities
+    record, decision 16). A refusal that the notifier and the release read
+    honour is PR 4's or later; `KNOWN_LIMITATIONS.md` says so meanwhile.
+20. (Part 2, after its review.) The removal after 365 days is not extended to
+    fired legacy switches: their payload is served to the people they named
+    with no removal date, as the design's "existing switches stay as they
+    are" has it, and the deletion screen and `KNOWN_LIMITATIONS.md` now say
+    so (P3b-M2). Extend it to them, or not.
+21. (Part 2, after its review.) Arming is refused with `sweep_off` where the
+    API's own `BLACKOUT_DEADMAN_SWEEP` is `0`, since the API cannot know that
+    a sweep runs anywhere else; a deployment that runs the loops in a separate
+    worker leaves the variable unset on the API (P3b-L4).
+22. (Part 2, after its review.) `release_id_taken` stays an existence answer
+    for any switch's id (P3b-L7): the ids are unguessable, rows are
+    permanent, and the only ways to know an id are to own the switch or to
+    have been told it after the trigger.
+23. (Part 2, after its review.) The export of an account includes the notice
+    rows about it, for fired switches only (P3b-L8).
 
 ## Not verified here
 
@@ -1421,6 +1581,488 @@ after the run.
     ML-KEM beyond `@noble/post-quantum` (PR 2's L7), and whether PR 4 feeds
     `seenSinceComparison` from its own reads, which the SDK's reads now make
     possible for theirs (P3-M3).
+
+## Independent review of part 2, 2026-10-30
+
+An independent review read part 2 of PR 3 (the diff from the part-1 branch,
+`-v44`, to `HEAD` at `18b928b189`: eight commits, 30 files) through six lens reviews (arming and re-sealing, storage
+and lifecycle, the sweep and notifier, the recipient read side, claims and
+documents, tests and mutation), each running probes against the Hono app
+through `app.request` with the Matrix stub, and three verifiers who tried to
+refute every finding ranked Medium or higher; the room's encryption state was
+run against the fork's own Synapse code under twisted.trial, in scratch. It
+reported no critical finding, one high, five medium, fifteen low, sixteen
+sentences in this record, the design, the user-facing documents and the code
+that were not true of the code as it stood, and one finding it refuted. Its
+verdict, as written:
+
+> The API does what §15 says, in the order it says, and the boundary that matters holds everywhere
+> it was probed: a recipient gets their own copy and nothing else, nothing before the trigger;
+> a stranger and a recipient before the trigger get one identical 404 (same body, same headers,
+> timings within noise over 3,000 requests); the owner's view never carries another person's copy
+> or a notices room; the export is produced by the same function as the release read; every log
+> line carries counts; the arm route's refusal codes reveal nothing the identities directory does
+> not already give any signed-in account; and the 17 + 13 + 3 + 1 + 2 tests pass, reach the source
+> and do what their names say. Nothing here lets the server or a recipient read a message, and no
+> finding is Critical. The one High is a bound that is not what the records say it is: the cap of 20
+> counts armed and grace switches only, a fired switch's ~343 KB of header JSON and its copies are
+> held 365 days outside it, and the sweep fires a minimum-timer switch within ~90 s, so one signed-in
+> account with published keys adds about 6.7 MiB of held content per round (measured 6.7 → 13.4 →
+> 20.1 MiB over three rounds with the live count at 0 between them), into Postgres and into every
+> replica's heap, for a year, and sends about 13 undeletable notices a minute to any account that
+> has published keys, which can neither refuse an owner nor unpublish; decision 4's "a bound on
+> storage of about 10 MB per account" is false. Five Mediums follow: the "Blackout notices" room is
+> created end-to-end encrypted by the fork under all three deployable templates (run on the fork's
+> own code: the room's state carries `m.room.encryption`), so the one sentence every recipient
+> reads, four records and a test title say what the code does not do, understating rather than
+> overstating; the deletion screen's "until 365 days after it fired" is false for every switch that
+> exists today, since the removal skips legacy switches and their payload is served for ever; "It
+> cannot read the message" is stated without §10's load-bearing condition in the threat model,
+> `KNOWN_LIMITATIONS.md` and the changelog, and a run with a planted key read the message; the
+> 365-day removal rescans every copy row for every already-removed release on every tick,
+> quadratic and synchronous (8.3–8.8 s per no-op tick at 10,000 removed releases), and the notifier's
+> catch-up has the same shape from the first firing; and an overlapping notifier tick gives one
+> person two standing rooms, against decision 14. Fifteen Lows follow as proposed, unverified; one
+> refuted finding is recorded so it is not raised again; and the record sentences that need to
+> change are listed at the end.
+
+Each finding was then fixed or explained as below, on this branch, in the
+commits after `18b928b189`. Tests named here are in `packages/api/test/` and
+run one file at a time under `BLACKOUT_DB_MODE=memory`; every new check was
+taken out once, the one test file that pins it run, and the source restored
+(§14's scratch runner, outside the repository; the table is at the end of
+this section), and each time at least one test failed. The design document,
+`TRUST.md`, `KNOWN_LIMITATIONS.md`, `THREAT_MODEL.md`, the legal changelog
+and the deletion screen are edited here too; the trust page is regenerated.
+
+### High
+
+**P3b-H1. The cap of 20 bounded live switches, not what the server held.**
+`liveReleaseSwitchCount` counted `armed` and `grace` only; a fired switch's
+header JSON (about 343 KB at the largest message) and its copies were held
+365 days outside it, the sweep fires a minimum-timer switch within about
+90 s, and nothing bounded arms per day or who may be named how often. One
+account with published keys armed 20 switches naming one person, let them
+fire, and armed 20 more: 6.7, 13.4, 20.1 MiB held after three rounds with
+the live count at 0 between them, and 60 notices into a room the person
+could neither refuse nor stop being re-invited to. Decision 4's "a bound on
+storage of about 10 MB per account" was false.
+
+-   **Done.** Four bounds, each in `services/deadmanReleases.ts` and reported
+    by `GET /limits`: (a) the cap of 20 counts every release switch whose
+    content is still held (`releaseContentHeld`: armed, in grace, or fired
+    until the 365-day removal; cancelled and legacy switches do not count),
+    refused 409 `release_switch_limit`; (b) at most 10 arms per owner in any
+    24 hours, cancelled ones included, refused 429 `release_arm_rate_limited`
+    with `Retry-After` and `retryAfterSeconds` computed as the identities
+    directory computes its publish limit; (c) at most 5 held releases naming
+    one person from one owner and 50 from everyone, refused 409
+    `recipient_limit` with the `recipientAccountId`, one code and message for
+    both bounds, checked per copy after the identity state and before any
+    signature; (d) a person who left or declined their room is invited again
+    at most once per notice, recorded on the row (`reinvited_at`, a column
+    added to migration 106, which has run nowhere). Decision 4 and §15 now say
+    what the cap bounds, with the measured numbers; §11 and
+    `KNOWN_LIMITATIONS.md` say what one account can do to another's notices
+    room and that a recipient cannot yet refuse an owner (decisions 17–19).
+-   **Tests.** `deadman-releases.integration.test.ts`: "at most 10 release
+    arms in any 24 hours: the 11th is 429 with Retry-After, and fits again a
+    day after the first" (the header equals the body, about a day; a
+    cancelled arm counts; one more fits once the first is a day old, and only
+    one); "at most 20 release switches per owner with content held: fired
+    ones count until their removal, cancelled and legacy ones do not, and
+    held bytes stop growing" (20 armed, the 21st refused; 19 fired, the
+    bytes held measured before and after five more refused arms and equal;
+    a cancel frees a place; the 365-day removal frees the fired ones'); "at
+    most 5 held releases from one owner may name one person, and 50 from
+    everyone; one code for both" (the 6th from one owner refused, a cancel
+    frees a place, fired ones count, another owner may still name them, the
+    owner may still name someone else; ten owners' 50 accepted and the 51st
+    refused with the same code, message and fields). `GET /limits` asserts
+    every bound. `deadman-release-notices.integration.test.ts`: "a person
+    who left is invited again at most once per notice: a retry of the same
+    notice does not invite again".
+-   **Run.** The review's probe (`review/arming-resealing/probe2.mts`),
+    re-run against this branch with one address per account: the rate, "10
+    armed, then 429 release_arm_rate_limited retry-after=86400"; the cap,
+    with the arms backdated past the rate window so the cap is what is
+    measured, "round 1: armed 20, refused 409 release_switch_limit ×1; held
+    content 6.7 MiB + copies 65 KiB; victims' notice rows [5,5,5,5]", rounds
+    2 and 3 "armed 0, refused 409 release_switch_limit ×21 ... held content
+    6.7 MiB", unchanged, and after the +365-day removal "held 0, content
+    0.0 MiB; next arm 201"; the per-recipient bounds, "201 ×5, 409
+    recipient_limit" from one owner and "50 armed, then 409 recipient_limit"
+    from eleven; the growth stops where the bounds say.
+-   **Still open.** A recipient-side refusal of an owner that the notifier
+    and the release read honour (decision 19); whether 20, 10, 5 and 50 are
+    the numbers the operator wants (decisions 17, 18).
+
+### Medium
+
+**P3b-M1. The "Blackout notices" room was created end-to-end encrypted by
+the homeserver.** The notifier asked for `private_chat` with `encrypted:
+false`, which only leaves the client's own `m.room.encryption` out of
+`initial_state`; under `encryption_enabled_by_default_for_room_type:
+invite`, set by all three deployable templates, the fork adds
+`m.room.encryption` to every `private_chat` room after the client's
+`initial_state` (`handlers/room.py`, `_send_events_for_new_room`). The review
+ran it on the fork's own code: the room's state carried the encryption event
+around the bot's plaintext post, so the notice body, §11, §15, E16, the
+design's §5, `TRUST.md`, `KNOWN_LIMITATIONS.md`, `THREAT_MODEL.md`, the
+notifier's header and a test title said the room was unencrypted when it
+was not (understating what the room was marked as, and showing every
+recipient "Encryption is now enabled" above a plaintext message).
+
+-   **Done.** The room is created with `preset: 'public_chat'`, `visibility:
+'private'` and an explicit `m.room.join_rules` of `invite` in
+    `initialState`, keeping the name, the invite with `is_direct` and the
+    power-level override. Read in the fork: the preset's join rule is sent
+    only when `initial_state` has none (`room.py`, the `if (EventTypes.JoinRules,
+"") not in initial_state` branch); `public_chat` is encrypted only under
+    `all`, which no template sets (`config/room.py`); `public_chat` sends no
+    `m.room.guest_access` event (guests cannot join, which is wanted; the
+    private preset's `can_join` is not) and leaves the invite level at 50,
+    which the override sets anyway; `history_visibility` is `shared` for
+    both presets. The review's scratch run of the fixed body gave `[create,
+history_visibility, join_rules(invite), member, name, power_levels]` with
+    no encryption event; that run is not repeated here (the fork's Python
+    under twisted.trial is not part of this branch's gates), and is what
+    "run (fork)" in E16 refers to. Every sentence about the room now says
+    what it is and why: the notifier's header and the `createRoom` call,
+    `matrix-client.ts`'s doc of `encrypted` (which now says what it does not
+    do), §11, §15, E16, design §5, `TRUST.md` §1 (the default's list names
+    this room as the one invite-only room created unencrypted on purpose,
+    and the bullet says why; `trust.html` regenerated), `KNOWN_LIMITATIONS.md`,
+    `THREAT_MODEL.md` §5, the legal changelog, the test's title and the
+    test file's header. The notice body is unchanged and true.
+-   **Tests.** `deadman-release-notices.integration.test.ts`, test 2 (renamed):
+    the exact `createRoom` body, `preset: 'public_chat'`, `visibility:
+'private'`, `initial_state` holding exactly the invite join rule, the
+    name, the power levels, the invite and `is_direct`, and no
+    `m.room.encryption` anywhere in it.
+    `matrix-client-direct-invite.integration.test.ts`: the notifier's
+    arguments give that body, and a call without `initialState` sends none.
+-   **Not this PR's.** `services/fbmMatrixBridge/vendorRooms.ts` pairs
+    `private_chat` with `encrypted: false` the same way for the vendor space
+    and its rooms, so those are encrypted by the backstop too; a space holds
+    hierarchy state only, which Matrix never encrypts, and the rooms are
+    disclosed in `TRUST.md` §1 as plaintext service rooms. Left as it is
+    here; the `encrypted` doc now warns the next caller.
+
+**P3b-M2. The deletion screen and `KNOWN_LIMITATIONS.md` said a fired switch
+"stays readable to the people it named until 365 days after it fired"; for a
+legacy switch, the only kind that can exist today, the payload is served for
+ever**, since the sweep writes no `releasedAt` for one and the removal skips
+every row without it; and the same file's later paragraph said the opposite
+with no 365 days.
+
+-   **Done.** Both sentences qualified: a release switch that fired stays
+    readable until 365 days after it fired; a switch armed before releases
+    (every switch that exists today) keeps its payload for the people it
+    named with no removal date, because a release is not taken back. The
+    two `KNOWN_LIMITATIONS.md` paragraphs now agree, and the deletion screen
+    (`DataRetentionSection.tsx`) says the same. The removal is not extended
+    to fired legacy switches: the design's "existing switches stay as they
+    are" holds, and decision 20 asks the operator whether to extend it.
+-   **Test.** None of code: a sentence. The existing legacy test asserts the
+    payload is still held two retention periods on.
+
+**P3b-M3. "It cannot read the message" was stated without §10's condition**
+in `THREAT_MODEL.md` R12, `KNOWN_LIMITATIONS.md` and the legal changelog; the
+review's run planted a key in the directory as a recipient's current one,
+armed on unaltered protocol code without the comparison, and the operator
+opened the copy before any trigger.
+
+-   **Done.** One clause in each place, and in `TRUST.md`'s bullet: the
+    server cannot read or forge a message as long as safety codes were
+    compared with each person named and nobody's app code was altered; in a
+    web browser the server supplies that code; without the comparison a key
+    the server planted reads the message from arming on, and the API cannot
+    tell. No code change.
+
+**P3b-M4. `removeExpiredReleases` rescanned every copy row for every
+already-removed release on every tick, for ever** (8.3–8.8 s per no-op tick at
+10,000 removed releases), and the notifier's catch-up scanned the same way
+for every fired release from its first firing.
+
+-   **Done.** `db/store.ts` gains `GroupedMap`, a `Map` whose rows are also
+    indexed under a second key, kept in step by `set`, `delete` and `clear`;
+    the copies and the notices are grouped by switch, so
+    `listDeadmanReleaseWraps` and `listDeadmanReleaseNotices` cost the
+    group's size. The file store's hydrate builds the grouped maps; the
+    Postgres store's hydration and peer row refresh go through `set`, and its
+    wholesale refreshes (`rehydrateAll`, a peer's table resync) make a fresh
+    map of the same kind (`freshMapLike`). The half-removal repair test is
+    unchanged and passes: nothing skips a removed switch, each just costs its
+    own copies. The catch-up uses the same listing, so a tick over N fired
+    releases costs their copies, not N scans.
+-   **Tests.** `deadman-releases.integration.test.ts`: "the 365-day removal
+    lists each release's copies by switch: a pass over releases already
+    removed does not scan the copies": 1,500 removed releases with three
+    copies each; the second pass removes 0, and every iterator of the copies
+    map and of the notices map (`values`, `entries`, `keys`, `forEach`,
+    `Symbol.iterator`), spied, is called 0 times while the pass runs and one
+    release's notices are counted; under 2 s. `deadman-release-notices.integration.test.ts`:
+    "the catch-up lists each fired release's copies by switch": 1,000 fired
+    releases with their notices sent, a tick with a homeserver that throws
+    if touched, result all zero, the copies map not iterated.
+    `deadman-releases-postgres.integration.test.ts` asserts the index after
+    hydration and after `rehydrateAll`; the file test after a restart.
+
+**P3b-M5. An overlapping notifier tick gave one person two standing rooms.**
+The in-flight set was keyed per notice; two notices for one person, both
+due, each found no room and each made one; and the interval did not wait for
+a tick that outlived it.
+
+-   **Done.** `startDeadmanReleaseNotifier`'s tick has a running guard, as
+    `authRowsPruneScheduler.ts` does, so a tick that outlives the interval is
+    not overlapped. Finding or making a person's room happens under a
+    per-recipient slot (a promise chain per account), and a notice that
+    waited reads its row and the person's room again before deciding, so the
+    second notice reuses the first's room. Within one process; the leader
+    lock keeps the loops to one process in Postgres mode, as before.
+-   **Tests.** `deadman-release-notices.integration.test.ts`: "two notices for
+    one person in overlapping ticks make one room: the second waits for the
+    first's room and reuses it" (one `createRoom` while the first is parked,
+    both sent into that room, a bounded wait); "the interval does not start a
+    tick while the previous one runs" (the real `setInterval` at 15 ms with a
+    parked `createRoom`: one tick in flight after ten intervals, both notices
+    sent by later ticks); the existing overlap test now waits a bounded time
+    for the second tick and fails rather than hangs (P3b-L15).
+
+### Low
+
+-   **P3b-L1. A notice row that existed before its switch fired was ended as
+    `release_unavailable`, and the trigger then wrote no row.** Done: a row
+    whose switch is a release switch with content held, not cancelled and not
+    fired is not due and is left alone; the trigger writes rows for
+    recipients lacking one, as before; a cancelled or legacy switch's row
+    still ends `release_unavailable`. Test: "a notice row for a release
+    switch that has not fired is left alone, and is sent once the switch
+    fires" (due 0 and the row untouched before the trigger; one row after it;
+    sent, and the owner's counts read sent 1).
+-   **P3b-L2. A network error on the re-invite threw out of the whole tick.**
+    Done: every homeserver call for one notice (state read, invite, create,
+    send) runs under `guarded`, which turns a throw into that notice's retry
+    with `matrix_<call>_network_error`; anything else that throws inside one
+    notice is logged (counts and the error string only) and retried as
+    `notifier_threw`. `inviteToRoom` itself is unchanged: its eight callers
+    read its `{ ok, status }` shape. Test: "a homeserver call that throws is
+    that notice's attempt: counted, backed off, and the tick goes on to the
+    next notice" (the invite, the state read and the create each thrown in
+    turn; attempts, `lastError`, the backoff; the other due notice sent).
+-   **P3b-L3. A purged room was replaced once per notice pointing at it.**
+    Done: when a 404 room is replaced, every notice row of that person's that
+    pointed at it moves to the replacement. Test: "a purged room is replaced
+    once per person" (the pending notice at X and the newer one both end at Y;
+    one replacement room; two sends into it).
+-   **P3b-L4. Arming and `/limits` ignored `BLACKOUT_DEADMAN_SWEEP`.** Done:
+    `armingAvailability` refuses with 409 `arming_unavailable`, reason
+    `sweep_off` and its own message, where this process's environment has the
+    sweep off, and `/limits` answers `armingAvailable: false,
+armingUnavailableReason: 'sweep_off'` (`releases_off` comes first when
+    both are off). The API's own environment is what it can see
+    (decision 21). Test: "with the sweep switched off in the API's own
+    environment, arming is refused with 409 and /limits says why".
+-   **P3b-L5. The switch row and the copies are N+1 write-behind upserts in
+    Postgres mode.** Done: the copies are written first and the switch last,
+    so a crash between the upserts leaves copies no switch names rather than
+    a switch that fires with copies missing; §15 and `KNOWN_LIMITATIONS.md`
+    say what the window is and that nothing detects the orphaned copies.
+    Test: the arming test spies `createDeadmanSwitch` and asserts both copies
+    are in the store when the switch is written.
+-   **P3b-L6. The race claims held within one process only.** §15 now says so
+    for arming and re-sealing, with what the cross-replica window can leave
+    (a sealed copy on a cancelled switch, served to nobody, blanked by a
+    second cancel). No conditional write was built.
+-   **P3b-L7. `release_id_taken` is an existence answer for any switch id.**
+    Kept; the `SWITCH_NOT_FOUND` comment, §15 and decision 22 say why it is
+    accepted: unguessable ids, permanent rows, ids known only to owners and
+    told recipients, a signed envelope per probe, the status not revealed.
+-   **P3b-L8. The export omitted the notice rows about the account.** Done:
+    `deadmanNotices` on `AccountExport` (switch, room, re-invite, status,
+    attempts, last error, times), for fired switches only, so a crash-shape
+    row for an unfired switch tells the person nothing before the release.
+    Test: the export test asserts the row, its absence for an unfired
+    switch, and the route.
+-   **P3b-L9. The deletion screen's "the public half of your release keys is
+    removed"** now excepts the copy kept with a fired release switch, which
+    goes 365 days after it fired; `KNOWN_LIMITATIONS.md` adds the fingerprint
+    kept on the blanked copy rows.
+-   **P3b-L10. What stays after the removal** is now stated in
+    `KNOWN_LIMITATIONS.md`'s Retention bullet, the legal changelog, §11, §15
+    and the deletion paragraph: whom it named and the fingerprint of the key
+    each copy was sealed to, the label and timing, when it fired, and each
+    notice's room, status and attempts until that person deletes their
+    account. `recipient_fingerprint` is not blanked (the refuted SL-1, below).
+-   **P3b-L11. The owner's view reveals that a named recipient deleted their
+    account** (`sealedTo` shrinks, `notices.failed` rises). Documented in §11
+    and §15; the same fact is public through the identities directory.
+-   **P3b-L12. `releasedAt` and `removesAt` docstrings** now say the first is
+    the server's record of the trigger, the server's word (§10), and the
+    second is when the content becomes due for removal, taken at the sweep's
+    first pass on or after it, while a sweep runs; the Retention bullet says
+    "at its first sweep pass on or after".
+-   **P3b-L13. Three record sentences were not exactly what the code does.**
+    (a) §8's "each refused with their own code" is as §15 has it: an unknown
+    account and one without an identity share `unknown_recipient` (§8 is
+    part 1's section and is left; §15 is the API's statement). (b) The flag
+    parses `1` or `true` in any casing, surrounding whitespace ignored; §15,
+    the service's comment and `.env.example` say so, and test 1 pins `TRUE`,
+    `true` and `1 ` as on and `yes` and `on` as off. (c) The 1 MiB cap is
+    middleware and runs first; §15, the module's comment and the test's
+    title say "before the body is parsed", not "before the body is read".
+-   **P3b-L14. A deletion during an in-flight send marked the notice `sent`.**
+    Done: before marking sent the notifier reads the row again and never
+    overwrites a row that is no longer pending, and reads the account again
+    and ends the notice with `recipient_gone` if it is gone. Test: "an
+    account deletion that lands during a send stands" (the deletion through
+    `confirmAccountDeletion` during a parked send; an account deleted another
+    way with its rows untouched; a row ended during the send while the
+    account exists: none marked sent).
+-   **P3b-L15. The in-flight mutant was killed by a hang.** Done: the overlap
+    test races the second tick against a timer and asserts its result, so
+    the mutant fails an assertion (the table below).
+
+### Claims that were not true, and what they say now
+
+1.  Decision 4, §13, §15, `deadmanReleases.ts` and the protocol's constant:
+    "a bound on storage of about 10 MB per account", "bounds storage only".
+    The cap bounded live switches; fired ones were held outside it. Now the
+    cap counts held content, and decision 4 states the measured numbers.
+2.  §11, §15, E16, P3-L4's comment, design §5, `TRUST.md`, `KNOWN_LIMITATIONS.md`,
+    `THREAT_MODEL.md`, the notifier's header and a test title: the room "is
+    not end-to-end encrypted ... the bot cannot encrypt". The fork encrypted
+    it. Now the room is created so that it is not, and each sentence says how.
+3.  `DataRetentionSection.tsx` and `KNOWN_LIMITATIONS.md`: a fired switch
+    "stays readable ... until 365 days after it fired". True of a release
+    switch; a legacy switch's payload is held with no removal date. Both say
+    so now, and the two `KNOWN_LIMITATIONS.md` paragraphs agree.
+4.  `KNOWN_LIMITATIONS.md`, R12, the legal changelog: "It cannot read the
+    message." Now with §10's condition, and `TRUST.md`'s bullet carries it.
+5.  §11 and decision 14, "one standing room per account"; §15, "a crash makes
+    no second room". One per account per non-overlapping tick, and once per
+    notice after a purge. Now one per person within one process, with the
+    slot, the running guard and the move of rows.
+6.  §11, "a crash between the two loses nothing". A row before the trigger
+    was ended and never re-created. Now left alone and sent after the trigger.
+7.  §15, "every refused homeserver call ... is a retry"; the notifier's
+    "nothing here throws for one bad notice". A thrown invite threw out of
+    the tick. Now every call is guarded per notice.
+8.  §15, "answers 409 before the body is read"; the module's comment; test
+    1's title. The body cap runs first. Now "before the body is parsed", with
+    the cap named first.
+9.  §8, "each refused with their own code". Three codes, as §15 has it.
+10. §15 and `.env.example`, "on only for `1` or `true`". Any casing and
+    surrounding whitespace; both say so.
+11. §15, "no copy is written to a cancelled switch"; §10's "cancel removes
+    them from an honest server's database". Within one process; §15 says
+    what the cross-replica window can leave.
+12. §15, "the rows are written with no await between". In the mirror; the
+    Postgres upserts commit after the answer. §15 says so, and the order is
+    now copies first.
+13. §15, "its pending notices end with `recipient_gone`". Not when the
+    deletion landed during the send. Now it does, and §15 says so.
+14. The protocol's `releasedAt` and `removesAt` docstrings and the Retention
+    bullet. Now the server's word, and the sweep's first pass on or after.
+15. `DataRetentionSection.tsx`, "the public half of your release keys is
+    removed". Except the copy kept with a fired release switch; it says so.
+16. `KNOWN_LIMITATIONS.md`'s Retention bullet and the legal changelog, by
+    omission: what stays after the removal. Both say it now.
+
+### Raised and refuted
+
+**SL-1 (storage lens; Medium as raised).** Account deletion leaves, on each
+blanked copy row, the deleted account's id and the fingerprint of the key the
+copy was sealed to, and on each notice row the account id, status, attempts
+and timestamps. The observable fact holds and is now stated (P3b-L10). The
+harm paths do not: the fingerprint is SHA-256 over bytes that include the
+account id, so a deleted account's fingerprint matches no identity published
+under another account; the server keeps the account id in the switch's
+recipients by decision 12 anyway; identity rows are keyed by random ids and
+blanked without account or fingerprint, so nothing links back; no API serves
+a blanked copy row; and the user-facing sentences are literally true, since a
+hash of the public keys is not "the public half" and cannot be inverted to
+it. Not re-raised; `recipient_fingerprint` is not blanked.
+
+### Every new check removed once
+
+Each row: the check taken out, the one test file run against the mutated
+source, and the test that failed (the files otherwise pass 21, 21, 3 and 1).
+Forty checks, forty caught; the sources were restored and the diff checked
+unchanged after the run. A forty-first mutant, dropping the "is the copy
+still held" test inside the per-recipient count, survived: a cancelled
+switch's content is blanked, so the content test already skipped its copies,
+and the check had no observable effect; it was removed rather than kept
+untested, and the function's comment says what a blanked copy on a held
+switch means. The two mutants of P3b-L14 were first shadowed by each other
+(a deletion removes the account too) and were re-run against a test case that
+ends the row while the account exists.
+
+| Check removed                                                                             | Test file                                       | What failed                                                                      |
+| ----------------------------------------------------------------------------------------- | ----------------------------------------------- | -------------------------------------------------------------------------------- |
+| H1(a): the cap counts held content, fired switches included (the old live count put back) | `deadman-releases.integration.test.ts`          | test 7: at most 20 release switches per owner with content held: fired ones co…  |
+| H1(a): the held cap is checked                                                            | `deadman-releases.integration.test.ts`          | test 7: at most 20 release switches per owner with content held: fired ones co…  |
+| H1(b): the arming rate is checked                                                         | `deadman-releases.integration.test.ts`          | test 6: at most 10 release arms in any 24 hours: the 11th is 429 with Retry-Af…  |
+| H1(b): a cancelled arm still counts toward the rate                                       | `deadman-releases.integration.test.ts`          | test 6: at most 10 release arms in any 24 hours: the 11th is 429 with Retry-Af…  |
+| H1(b): Retry-After says when one more fits                                                | `deadman-releases.integration.test.ts`          | test 6: at most 10 release arms in any 24 hours: the 11th is 429 with Retry-Af…  |
+| H1(c): the per-recipient bounds are checked                                               | `deadman-releases.integration.test.ts`          | test 8: at most 5 held releases from one owner may name one person, and 50 fro…  |
+| H1(c): the 5-from-one-owner bound                                                         | `deadman-releases.integration.test.ts`          | test 8: at most 5 held releases from one owner may name one person, and 50 fro…  |
+| H1(c): the 50-from-everyone bound                                                         | `deadman-releases.integration.test.ts`          | test 8: at most 5 held releases from one owner may name one person, and 50 fro…  |
+| H1(a): the number 20                                                                      | `deadman-releases.integration.test.ts`          | test 7: at most 20 release switches per owner with content held: fired ones co…  |
+| H1(b): the number 10                                                                      | `deadman-releases.integration.test.ts`          | test 6: at most 10 release arms in any 24 hours: the 11th is 429 with Retry-Af…  |
+| H1(c): the number 5                                                                       | `deadman-releases.integration.test.ts`          | test 8: at most 5 held releases from one owner may name one person, and 50 fro…  |
+| H1(c): the number 50                                                                      | `deadman-releases.integration.test.ts`          | test 8: at most 5 held releases from one owner may name one person, and 50 fro…  |
+| H1(b): the Retry-After header on the 429                                                  | `deadman-releases.integration.test.ts`          | test 6: at most 10 release arms in any 24 hours: the 11th is 429 with Retry-Af…  |
+| H1(e): /limits reports every bound                                                        | `deadman-releases.integration.test.ts`          | test 14: GET /limits says what the arming form may say, from the deployment’s o… |
+| L4: arming closed where the sweep is off                                                  | `deadman-releases.integration.test.ts`          | test 2: with the sweep switched off in the API’s own environment, arming is re…  |
+| L4: /limits says why                                                                      | `deadman-releases.integration.test.ts`          | test 1: with the flag off, arming is refused with 409 before the body is read …  |
+| L4: the 409 names the sweep                                                               | `deadman-releases.integration.test.ts`          | test 2: with the sweep switched off in the API’s own environment, arming is re…  |
+| the route refuses while arming is closed                                                  | `deadman-releases.integration.test.ts`          | test 1: with the flag off, arming is refused with 409 before the body is read …  |
+| L5: the copies are written before the switch (the switch first, as first built)           | `deadman-releases.integration.test.ts`          | test 3: with the flag on, an owner arms a release switch: the row, one copy pe…  |
+| L8: only fired switches’ notice rows are exported                                         | `deadman-releases.integration.test.ts`          | test 15: the export lists an owner’s release switches without any copy, and a r… |
+| L8: the notice rows are exported                                                          | `deadman-releases.integration.test.ts`          | test 15: the export lists an owner’s release switches without any copy, and a r… |
+| M4: copies listed by switch through the index, not a scan                                 | `deadman-releases.integration.test.ts`          | test 20: the 365-day removal lists each release’s copies by switch: a pass over… |
+| M4: notices listed by switch through the index, not a scan                                | `deadman-releases.integration.test.ts`          | test 20: the 365-day removal lists each release’s copies by switch: a pass over… |
+| M4: a wholesale refresh of the Postgres mirror keeps the index                            | `deadman-releases-postgres.integration.test.ts` | test 1: a release switch, its copies and its notices survive a restart; it has…  |
+| M4: the file store rebuilds the index on hydrate                                          | `deadman-releases-file.integration.test.ts`     | test 1: a release switch, its copies and its notices survive a restart of the …  |
+| M1: the public_chat preset                                                                | `deadman-release-notices.integration.test.ts`   | test 2: the notifier makes a direct room the homeserver’s backstop leaves unen…  |
+| M1: the invite-only join rule in initial_state                                            | `deadman-release-notices.integration.test.ts`   | test 2: the notifier makes a direct room the homeserver’s backstop leaves unen…  |
+| M5: the interval’s running guard                                                          | `deadman-release-notices.integration.test.ts`   | test 17: the interval does not start a tick while the previous one runs          |
+| M5: the per-recipient slot around find-or-create                                          | `deadman-release-notices.integration.test.ts`   | test 16: two notices for one person in overlapping ticks make one room: the sec… |
+| M5: the room is read again after the slot is acquired                                     | `deadman-release-notices.integration.test.ts`   | test 3: a later release to the same person reuses their room, with no new invi…  |
+| the in-flight guard (P3b-L15: killed by an assertion now, not a hang)                     | `deadman-release-notices.integration.test.ts`   | test 15: an overlapping tick does not send a notice twice or make a second room  |
+| L1: a row for an unfired switch is left alone                                             | `deadman-release-notices.integration.test.ts`   | test 9: a notice row for a release switch that has not fired is left alone, an…  |
+| L1: a cancelled switch’s row is not “awaiting the trigger”                                | `deadman-release-notices.integration.test.ts`   | test 8: a notice for a recipient who is gone, or for a release that is not the…  |
+| L2: a thrown homeserver call is that notice’s retry                                       | `deadman-release-notices.integration.test.ts`   | test 10: a homeserver call that throws is that notice’s attempt: counted, backe… |
+| L2: the throw is caught per notice, not per tick                                          | `deadman-release-notices.integration.test.ts`   | test 10: a homeserver call that throws is that notice’s attempt: counted, backe… |
+| L3: every row pointing at a purged room moves to the replacement                          | `deadman-release-notices.integration.test.ts`   | test 12: a purged room is replaced once per person: every notice row that point… |
+| L14: a row ended during the send is not marked sent                                       | `deadman-release-notices.integration.test.ts`   | test 13: an account deletion that lands during a send stands: the row stays fai… |
+| L14: the account is read again before marking sent                                        | `deadman-release-notices.integration.test.ts`   | test 13: an account deletion that lands during a send stands: the row stays fai… |
+| H1(d): re-invite at most once per notice                                                  | `deadman-release-notices.integration.test.ts`   | test 11: a person who left is invited again at most once per notice: a retry of… |
+| H1(d): the re-invite is recorded on the row                                               | `deadman-release-notices.integration.test.ts`   | test 10: a homeserver call that throws is that notice’s attempt: counted, backe… |
+
+### Still open
+
+-   **A recipient-side refusal of an owner** (decision 19), which the
+    notifier and the release read would honour: PR 4's or later, the
+    operator's. Until then `KNOWN_LIMITATIONS.md` says what any account with
+    release keys can do to another's notices room, within the bounds.
+-   **Fired legacy switches' payloads** are held with no removal date
+    (decision 20); extending the 365-day removal to them is the operator's.
+-   **The device-side record of a release's recipients** (part 1's review,
+    PR 4) stands as before.
+-   What the review did not verify stands: Postgres end to end through the
+    routes (PGlite exercises the store and the migration), the multi-replica
+    refresh of the two tables under a real transport, the write-behind crash
+    window (from the code), anything against a real Synapse beyond the
+    review's scratch run of the fork, and whether a deployment ever runs the
+    sweep with `BLACKOUT_DEADMAN_SWEEP=0` after releases fired (the API now
+    refuses to arm there; nothing can make an existing release's removal run).
+-   An aside from the review, outside this PR: `GET /v1/deadman/releases`
+    answered 200 (empty) to a still-valid token of a deleted account rather
+    than 401; whether the auth middleware checks the user row still exists is
+    worth a look.
 
 ## Sources
 

@@ -44,18 +44,27 @@ no deployment, compose or env file does.
     release key the owner signed with, the account ids of the people named, the
     timer and the owner's label
     ([`packages/api/src/services/deadmanReleases.ts`](../../packages/api/src/services/deadmanReleases.ts),
-    migration 106). It cannot read the message. It can see who armed what for
+    migration 106). It cannot read the message, as long as the owner compared
+    a safety code with each person named and nobody's app code was altered (in
+    a web browser the server supplies that code). It can see who armed what for
     whom, which of three padded sizes the message is, every check-in, when the
-    switch fires and who fetched their copy. Cancelling removes the message and
+    switch fires and who fetched their copy. What one account can make it keep
+    is bounded: 20 release switches with content held, 10 arms in 24 hours, 5
+    held releases naming one person from one owner and 50 from everyone
+    (`GET /v1/deadman/limits` reports each). Cancelling removes the message and
     the copies from its database (backups aside); 365 days after a switch fires
-    they are removed and the rows stay, saying what the switch was and whom it
-    was for.
+    they are removed, at the sweep's first pass after that, and the rows stay,
+    saying what the switch was, whom it was for and the fingerprint of the key
+    each copy was sealed to, and, for each notice, its room, status and attempts
+    until that person deletes their account.
 -   **The bot posts a notice in a room that is not encrypted.** When a release
     switch fires, the Blackout bot makes, once per person, a "Blackout notices"
     room, invites them as a direct message, and posts one fixed sentence with
     the release's id: nothing of the message, nobody's name, not the owner's
     label. The room is a plaintext service room like the others
-    [`TRUST.md`](../../TRUST.md) §1 lists, and the sentence says so. The server
+    [`TRUST.md`](../../TRUST.md) §1 lists, created so that the homeserver does
+    not mark it encrypted (the bot cannot encrypt, so its post is plaintext
+    whatever a room's state says), and the sentence says so. The server
     keeps, per notice, the room, how many attempts were made, the last error and
     when it was sent or given up after 30 days. Whether a notice reaches anyone
     depends on the homeserver and the person's client; the release does not
@@ -68,9 +77,12 @@ no deployment, compose or env file does.
 -   **Deleting an account** removes the sealed copies of its unfired release
     switches with their content; a fired one keeps its content, the copies for
     the people it named and the public key it was signed with, until the 365
-    days end, so that what was released stays checkable. As a person named on
-    others' switches, the account's copies are removed, a notice still owed to
-    it is dropped, and its notice rows forget their room.
+    days end, so that what was released stays checkable (a switch armed before
+    releases, every switch that exists today, keeps its payload for the people
+    it named with no removal date). As a person named on others' switches, the
+    account's copies are removed, a notice still owed to it is dropped, and its
+    notice rows forget their room. The export of an account includes the
+    notice rows about it (`deadmanNotices`), for fired switches.
 
 ### Not changed
 

@@ -40,6 +40,10 @@ one, in a diff, in public.
     `encryption_enabled_by_default_for_room_type: invite`.
 -   CI fails the build if any of that regresses:
     [`check-room-encryption.mjs`](tools/ci/check-room-encryption.mjs).
+-   The one invite-only room the API creates unencrypted on purpose is the
+    Blackout bot's "Blackout notices" room (§1 below): the bot cannot encrypt,
+    so a room marked encrypted around its plaintext post would say something
+    false.
 
 **What a new room is before you choose.** The access chooser sits at the top
 of the New canopy and New den forms, and what it starts on depends on where
@@ -104,14 +108,23 @@ Encryption claims are only worth something with the exceptions attached.
     format fires, the bot makes one "Blackout notices" room per person named,
     invites them, and posts one fixed sentence with the release's id — nothing
     of the message, nobody's name, not the owner's label. The room is not
-    end-to-end encrypted, because the bot cannot encrypt, and the sentence says
-    so. The message itself is encrypted on the owner's device for each person
-    named and never reaches the server readable; the notice only points at it,
-    and whether a notice reaches anyone is the homeserver's doing
+    end-to-end encrypted, on purpose: the bot cannot encrypt, so its post is
+    plaintext whatever a room's state says, and the room is created so that
+    the homeserver's backstop above does not mark it encrypted (the
+    `public_chat` preset with an invite-only join rule; the backstop keys on
+    the preset). The sentence says so. The message itself is encrypted on the
+    owner's device for each person named and never reaches the server
+    readable, as long as the owner compared a safety code with each person
+    named and nobody's app code was altered (in a web browser the server
+    supplies that code); the notice only points at it, and whether a notice
+    reaches anyone is the homeserver's doing
     ([`deadmanReleaseNotifier.ts`](packages/api/src/services/deadmanReleaseNotifier.ts),
     [`release-envelope-2026-10-26.md`](docs/security/release-envelope-2026-10-26.md)
-    §11). No deployment can arm such a switch yet: arming is refused until an
-    operator turns `BLACKOUT_DEADMAN_RELEASES` on, and no deployment file does.
+    §11). Any account with release keys can name you on a switch, within
+    bounds the API enforces (5 held releases naming you from one account, 50
+    from everyone); you cannot yet refuse an owner. No deployment can arm such
+    a switch yet: arming is refused until an operator turns
+    `BLACKOUT_DEADMAN_RELEASES` on, and no deployment file does.
 -   **Scheduled messages.** When you schedule a message, you hand its text to the
     Blackout API. The API stores it as plaintext until it is sent, then clears it,
     and the bot posts it unencrypted under your name. The API refuses to schedule

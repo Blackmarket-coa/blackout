@@ -34,7 +34,12 @@ the limits, the sweep's release and the notifier, the removal after 365 days,
 migration 106, and the documents §8 lists, as that record's §15 describes.
 The residual risk is R12 in `THREAT_MODEL.md`, since R11 was taken by the
 LiveKit webhook before PR 3 landed. The flag is set nowhere; arming stays
-closed until PR 4.
+closed until PR 4. **2026-10-30:** part 2 had its independent review (that
+record's section "Independent review of part 2, 2026-10-30"). It changed §5:
+the notices room is now created so that the homeserver's encryption backstop
+leaves it unencrypted, as this design said it was, which as first built it was
+not; and what one account can make the server keep or send is bounded (that
+record's §15).
 
 The switch may be relied on for someone's physical safety. Every property
 below is stated with its limits, and §7 gives the wording the app may use and
@@ -485,10 +490,19 @@ screen. **Verdict:** not proposed; recorded so the trade is on paper.
 1.  **The Released to you view** in the app is the source of truth. It works
     without a notice.
 2.  **A bot notice** in one standing room per account, "Blackout notices":
-    created by the bot, not end-to-end encrypted because the bot cannot
-    encrypt, the person invited as a direct message (which needs `is_direct`,
-    missing today), and their power level below the room's `events_default` so
-    nothing can be typed there. One `m.text` per recipient per release. An
+    created by the bot and not end-to-end encrypted, because the bot cannot
+    encrypt, and a room whose state said "encrypted" around a plaintext post
+    would overstate what it is. The homeserver's backstop
+    (`encryption_enabled_by_default_for_room_type: invite`, set by every
+    in-repo template) adds `m.room.encryption` to every `private_chat` room
+    after the client's `initial_state`, so the bot creates the room with the
+    `public_chat` preset, which that setting leaves alone, and an invite-only
+    join rule in `initial_state`, which Synapse sends in place of the preset's
+    public one; its visibility is `private` _(as first built the room used
+    `private_chat` and the fork encrypted it: part 2's independent review,
+    P3b-M1)_. The person is invited as a direct message (`is_direct`), and
+    their power level is below the room's `events_default` so nothing can be
+    typed there. One `m.text` per recipient per release. An
     `m.notice` would be silent: the default rule `.m.rule.suppress_notices`
     drops it (`apps/blackout-server/rust/src/push/base_rules.rs:80-91`). The
     FBM delivery's pointer is an `m.notice` posted before the buyer is invited,
