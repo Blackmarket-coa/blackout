@@ -2,13 +2,18 @@
  * The release notices (`docs/security/deadman-release-design-2026-10-24.md`
  * §5; `release-envelope-2026-10-26.md` §11): the sweep writes one row per
  * recipient with the trigger; the notifier makes the recipient's standing
- * "Blackout notices" room (unencrypted, a direct message, the person unable
- * to post), reuses it, invites the person again if they left, and sends one
- * m.text with the fixed body and the pointer, and nothing else; failures are
+ * "Blackout notices" room (the `public_chat` preset with an invite-only join
+ * rule, which the homeserver's encryption backstop leaves unencrypted; a
+ * direct message; the person unable to post), reuses it, invites the person
+ * again if they left, once per notice, and sends one m.text with the fixed
+ * body and the pointer, and nothing else; failures and thrown calls are
  * retried with backoff for 30 days and then recorded; a missing recipient or
- * release ends the notice; a fired switch without rows is caught up; an
- * overlapping tick sends nothing twice. The homeserver is the test stub:
- * what Synapse does with each call is read in the fork, not run here.
+ * release ends the notice, a switch not yet fired is waited for; a fired
+ * switch without rows is caught up; overlapping ticks make one room per
+ * person and send nothing twice; a deletion during a send stands. The
+ * homeserver is the test stub: what Synapse does with each call is read in
+ * the fork, not run here (the preset's effect on encryption was run against
+ * the fork's own code by the independent review, P3b-M1).
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -45,6 +50,14 @@ const {
 } = await import('../src/services/deadmanReleaseNotifier');
 const { computeDeadlines } = await import('../src/services/deadmanScheduler');
 const { matrixUserIdFor } = await import('../src/services/userIdentity');
+const lifecycle = await import('../src/services/accountLifecycle');
+
+/** Resolve to `pending` if `work` has not settled within `ms`: a bounded wait that fails instead of hanging. */
+const within = <T>(ms: number, work: Promise<T>): Promise<T | 'pending'> =>
+    Promise.race([
+        work,
+        new Promise<'pending'>((resolve) => setTimeout(() => resolve('pending'), ms)),
+    ]);
 
 protocol.setKemProvider(protocol.mlKem768Provider);
 
@@ -203,7 +216,7 @@ test('the sweep writes one pending notice per recipient with the trigger, none f
     assert.equal((await runDeadmanReleaseNotifier({ now: at })).sent, 2);
 });
 
-test('the notifier makes an unencrypted direct room the person cannot post in, and sends one m.text with the fixed body and the pointer, nothing else', async () => {
+test('the notifier makes a direct room the homeserver’s backstop leaves unencrypted (public_chat, invite-only) that the person cannot post in, and sends one m.text with the fixed body and the pointer, nothing else', async () => {
     matrix.clearCalls();
     const owner = await freshPerson();
     const carol = await freshPerson();
@@ -216,18 +229,25 @@ test('the notifier makes an unencrypted direct room the person cannot post in, a
     assert.equal(matrix.creates.length, 2, 'one room per recipient');
     const bobsRoom = matrix.creates.find((c) => (c.body.invite as string[]).includes(bobMxid))!;
     assert.ok(bobsRoom);
+    // The exact body. `public_chat` is what keeps the homeserver's
+    // `encryption_enabled_by_default_for_room_type: invite` from adding
+    // m.room.encryption (it keys on the preset, not the join rule), and the
+    // join rule in initial_state is what Synapse sends in place of the
+    // preset's public one; `private` keeps it out of the directory.
     assert.deepEqual(bobsRoom.body, {
         visibility: 'private',
-        preset: 'private_chat',
+        preset: 'public_chat',
+        initial_state: [
+            { type: 'm.room.join_rules', state_key: '', content: { join_rule: 'invite' } },
+        ],
         name: 'Blackout notices',
         power_level_content_override: { events_default: 50, invite: 50 },
         invite: [bobMxid],
         is_direct: true,
     });
-    assert.equal(
-        bobsRoom.body.initial_state,
-        undefined,
-        'no encryption event: the bot cannot encrypt'
+    assert.ok(
+        !JSON.stringify(bobsRoom.body).includes('m.room.encryption'),
+        'no encryption event of the bot’s own either: it cannot encrypt'
     );
     assert.ok(matrix.creates.some((c) => (c.body.invite as string[]).includes(carolMxid)));
     assert.equal(matrix.invites.length, 0, 'the invite travels with the creation');
@@ -527,21 +547,344 @@ test('a notice for a recipient who is gone, or for a release that is not there, 
     );
     assert.equal(matrix.creates.length + matrix.sends.length + matrix.invites.length, 0);
 
-    // A row whose switch is not a fired release (a store from a crash mid-way, say).
+    // A row whose switch was cancelled, and one whose switch is a legacy
+    // switch: never a release, so the notice ends.
     const grace = await freshPerson();
-    const armed = await armFor(await freshPerson(), [grace.keySet.identity]);
+    const cancelled = await armFor(await freshPerson(), [grace.keySet.identity]);
     db.createDeadmanReleaseNotice({
-        switchId: armed.id,
+        switchId: cancelled.id,
+        recipientAccountId: grace.user.id,
+        nextAttemptAt: at.toISOString(),
+    });
+    // Cancelled with its content still there (a store from before cancel
+    // blanked it): still never a release to point at.
+    db.updateDeadmanSwitch(cancelled.id, { status: 'cancelled' });
+    const legacy = seedLegacy((await freshPerson()).user, [grace.user.id]);
+    db.createDeadmanReleaseNotice({
+        switchId: legacy.id,
         recipientAccountId: grace.user.id,
         nextAttemptAt: at.toISOString(),
     });
     const second = await runDeadmanReleaseNotifier({ now: at });
-    assert.equal(second.failed, 1);
-    assert.equal(
-        db.getDeadmanReleaseNotice(armed.id, grace.user.id)?.lastError,
-        'release_unavailable'
-    );
+    assert.deepEqual(second, { caughtUp: 0, due: 2, sent: 0, retried: 0, failed: 2 });
+    for (const id of [cancelled.id, legacy.id]) {
+        assert.equal(db.getDeadmanReleaseNotice(id, grace.user.id)?.status, 'failed');
+        assert.equal(
+            db.getDeadmanReleaseNotice(id, grace.user.id)?.lastError,
+            'release_unavailable'
+        );
+    }
     assert.equal(matrix.sends.length, 0);
+});
+
+test('a notice row for a release switch that has not fired is left alone, and is sent once the switch fires', async () => {
+    // A store from a crash between a notice's write and the switch's: the row
+    // exists before the trigger. It is not due and not ended; when the sweep
+    // fires the switch it is the row the trigger would have written.
+    const heidi = await freshPerson();
+    const armed = await armFor(await freshPerson(), [heidi.keySet.identity]);
+    const at = soon();
+    db.createDeadmanReleaseNotice({
+        switchId: armed.id,
+        recipientAccountId: heidi.user.id,
+        nextAttemptAt: at.toISOString(),
+    });
+    matrix.clearCalls();
+    const before = await runDeadmanReleaseNotifier({ now: at });
+    assert.deepEqual(before, { caughtUp: 0, due: 0, sent: 0, retried: 0, failed: 0 });
+    const untouched = db.getDeadmanReleaseNotice(armed.id, heidi.user.id)!;
+    assert.equal(untouched.status, 'pending');
+    assert.equal(untouched.attempts, 0);
+    assert.equal(untouched.lastError, undefined);
+    assert.equal(matrix.sends.length + matrix.creates.length, 0);
+    assert.deepEqual(recordToOwnerView(db.getDeadmanSwitch(armed.id)!).notices, undefined);
+
+    sweepAt(at);
+    assert.equal(db.getDeadmanSwitch(armed.id)?.status, 'triggered');
+    assert.equal(
+        db.listDeadmanReleaseNotices(armed.id).length,
+        1,
+        'the trigger wrote no second row'
+    );
+    const after = await runDeadmanReleaseNotifier({ now: at });
+    assert.deepEqual(after, { caughtUp: 0, due: 1, sent: 1, retried: 0, failed: 0 });
+    assert.equal(db.getDeadmanReleaseNotice(armed.id, heidi.user.id)?.status, 'sent');
+    assert.deepEqual(recordToOwnerView(db.getDeadmanSwitch(armed.id)!).notices, {
+        total: 1,
+        sent: 1,
+        pending: 0,
+        failed: 0,
+    });
+});
+
+test('a homeserver call that throws is that notice’s attempt: counted, backed off, and the tick goes on to the next notice', async () => {
+    const dave = await freshPerson();
+    const daveMxid = matrixUserIdFor(dave.user.id)!;
+    const first = await released(await freshPerson(), [dave.keySet.identity]);
+    assert.equal((await runDeadmanReleaseNotifier({ now: first.at })).sent, 1);
+    const roomId = db.getDeadmanReleaseNotice(first.record.id, dave.user.id)!.roomId!;
+    setMembership(roomId, daveMxid, 'leave');
+    // Dave's second notice (older row) and Erin's, due in the same tick.
+    const at = new Date(first.at.getTime() + 1000);
+    const second = await released(await freshPerson(), [dave.keySet.identity], at);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    const erin = await freshPerson();
+    const erins = await released(await freshPerson(), [erin.keySet.identity], at);
+    matrix.clearCalls();
+    const stubFetch = matrix.fetch;
+    const throwing = (pattern: string) =>
+        (async (input: RequestInfo | URL, init?: RequestInit) => {
+            const url =
+                typeof input === 'string'
+                    ? input
+                    : input instanceof URL
+                    ? input.toString()
+                    : input.url;
+            if (url.includes(pattern)) throw new TypeError('fetch failed');
+            return stubFetch(input, init);
+        }) as typeof fetch;
+    // The re-invite throws.
+    globalThis.fetch = throwing('/state/m.room.member/');
+    try {
+        const tick = await runDeadmanReleaseNotifier({ now: at });
+        assert.deepEqual(tick, { caughtUp: 0, due: 2, sent: 1, retried: 1, failed: 0 });
+    } finally {
+        globalThis.fetch = matrix.fetch;
+    }
+    const daves = db.getDeadmanReleaseNotice(second.record.id, dave.user.id)!;
+    assert.equal(daves.status, 'pending');
+    assert.equal(daves.attempts, 1);
+    assert.equal(daves.lastError, 'matrix_invite_network_error');
+    assert.equal(daves.nextAttemptAt, new Date(at.getTime() + 30_000).toISOString());
+    assert.equal(daves.reinvitedAt, undefined, 'a thrown invite is not an invite');
+    assert.equal(db.getDeadmanReleaseNotice(erins.record.id, erin.user.id)?.status, 'sent');
+    assert.equal(matrix.sendsTo(roomId).length, 0, 'no send after the thrown invite');
+
+    // The state read throws; then the room creation throws, for someone new.
+    const retryAt = new Date(Date.parse(daves.nextAttemptAt));
+    globalThis.fetch = throwing('/_synapse/admin/v1/rooms/');
+    try {
+        assert.equal((await runDeadmanReleaseNotifier({ now: retryAt })).retried, 1);
+    } finally {
+        globalThis.fetch = matrix.fetch;
+    }
+    assert.equal(
+        db.getDeadmanReleaseNotice(second.record.id, dave.user.id)?.lastError,
+        'matrix_state_network_error'
+    );
+    const fay = await freshPerson();
+    const fays = await released(await freshPerson(), [fay.keySet.identity]);
+    globalThis.fetch = throwing('/createRoom');
+    try {
+        assert.equal((await runDeadmanReleaseNotifier({ now: fays.at })).retried, 1);
+    } finally {
+        globalThis.fetch = matrix.fetch;
+    }
+    assert.equal(
+        db.getDeadmanReleaseNotice(fays.record.id, fay.user.id)?.lastError,
+        'matrix_create_network_error'
+    );
+    // Then both go through.
+    const later = new Date(retryAt.getTime() + 60_000);
+    const done = await runDeadmanReleaseNotifier({ now: later });
+    assert.equal(done.sent, 2);
+    assert.equal(db.getDeadmanReleaseNotice(second.record.id, dave.user.id)?.status, 'sent');
+    assert.ok(db.getDeadmanReleaseNotice(second.record.id, dave.user.id)?.reinvitedAt);
+});
+
+test('a person who left is invited again at most once per notice: a retry of the same notice does not invite again', async () => {
+    const gus = await freshPerson();
+    const gusMxid = matrixUserIdFor(gus.user.id)!;
+    const first = await released(await freshPerson(), [gus.keySet.identity]);
+    assert.equal((await runDeadmanReleaseNotifier({ now: first.at })).sent, 1);
+    const roomId = db.getDeadmanReleaseNotice(first.record.id, gus.user.id)!.roomId!;
+    setMembership(roomId, gusMxid, 'leave');
+    const second = await released(await freshPerson(), [gus.keySet.identity]);
+    matrix.clearCalls();
+    matrix.sendStatus = 500;
+    try {
+        assert.equal((await runDeadmanReleaseNotifier({ now: second.at })).retried, 1);
+    } finally {
+        matrix.sendStatus = 200;
+    }
+    assert.equal(matrix.invites.length, 1, 'invited again once');
+    const row = db.getDeadmanReleaseNotice(second.record.id, gus.user.id)!;
+    assert.ok(row.reinvitedAt, 'the invite is recorded on the row');
+    // They leave again before the retry; the same notice does not invite again.
+    setMembership(roomId, gusMxid, 'leave');
+    const retry = await runDeadmanReleaseNotifier({
+        now: new Date(Date.parse(row.nextAttemptAt)),
+    });
+    assert.equal(retry.sent, 1);
+    assert.equal(matrix.invites.length, 1, 'no second invite for the same notice');
+    assert.equal(matrix.sendsTo(roomId).length, 2);
+    // A later notice is a new one, and invites again, once.
+    const third = await released(await freshPerson(), [gus.keySet.identity]);
+    assert.equal((await runDeadmanReleaseNotifier({ now: third.at })).sent, 1);
+    assert.equal(matrix.invites.length, 2);
+});
+
+test('a purged room is replaced once per person: every notice row that pointed at it moves to the replacement', async () => {
+    const carol = await freshPerson();
+    const carolMxid = matrixUserIdFor(carol.user.id)!;
+    const a = await released(await freshPerson(), [carol.keySet.identity]);
+    matrix.clearCalls();
+    assert.equal((await runDeadmanReleaseNotifier({ now: a.at })).sent, 1);
+    const roomX = db.getDeadmanReleaseNotice(a.record.id, carol.user.id)!.roomId!;
+    // A second notice records room X, but its send is refused: pending, at X.
+    const b = await released(
+        await freshPerson(),
+        [carol.keySet.identity],
+        new Date(a.at.getTime() + 1000)
+    );
+    matrix.sendStatus = 500;
+    try {
+        assert.equal((await runDeadmanReleaseNotifier({ now: b.at })).retried, 1);
+    } finally {
+        matrix.sendStatus = 200;
+    }
+    assert.equal(db.getDeadmanReleaseNotice(b.record.id, carol.user.id)!.roomId, roomX);
+    // X is purged. A third notice replaces it...
+    matrix.rooms.delete(roomX);
+    const c = await released(
+        await freshPerson(),
+        [carol.keySet.identity],
+        new Date(b.at.getTime() + 2000)
+    );
+    matrix.clearCalls();
+    assert.equal((await runDeadmanReleaseNotifier({ now: c.at })).sent, 1);
+    const roomY = db.getDeadmanReleaseNotice(c.record.id, carol.user.id)!.roomId!;
+    assert.notEqual(roomY, roomX);
+    // ...and every row of Carol's that pointed at X points at Y now, so when B
+    // comes due it goes to Y and makes no third room.
+    assert.equal(db.getDeadmanReleaseNotice(a.record.id, carol.user.id)!.roomId, roomY);
+    assert.equal(db.getDeadmanReleaseNotice(b.record.id, carol.user.id)!.roomId, roomY);
+    const bDue = new Date(
+        Date.parse(db.getDeadmanReleaseNotice(b.record.id, carol.user.id)!.nextAttemptAt)
+    );
+    assert.equal((await runDeadmanReleaseNotifier({ now: bDue })).sent, 1);
+    assert.equal(db.getDeadmanReleaseNotice(b.record.id, carol.user.id)!.roomId, roomY);
+    const creates = matrix.creates.filter((x) => (x.body.invite as string[]).includes(carolMxid));
+    assert.equal(creates.length, 1, 'one replacement room');
+    assert.equal(matrix.sendsTo(roomY).length, 2);
+});
+
+test('an account deletion that lands during a send stands: the row stays failed with recipient_gone and is not marked sent', async () => {
+    const leaving = await freshPerson();
+    const { record, at } = await released(await freshPerson(), [leaving.keySet.identity]);
+    matrix.clearCalls();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+        release = resolve;
+    });
+    const stubFetch = matrix.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url =
+            typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+        if (url.includes('/send/')) await gate;
+        return stubFetch(input, init);
+    }) as typeof fetch;
+    try {
+        const tick = runDeadmanReleaseNotifier({ now: at });
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        // The room is made and the send is in flight; the account is deleted.
+        assert.ok(db.getDeadmanReleaseNotice(record.id, leaving.user.id)?.roomId);
+        const issued = lifecycle.requestAccountDeletion({ userId: leaving.user.id })!;
+        assert.equal(lifecycle.confirmAccountDeletion(issued.token, leaving.user.id).kind, 'ok');
+        assert.equal(db.getDeadmanReleaseNotice(record.id, leaving.user.id)?.status, 'failed');
+        release();
+        const result = await within(5000, tick);
+        assert.deepEqual(result, { caughtUp: 0, due: 1, sent: 0, retried: 0, failed: 1 });
+    } finally {
+        globalThis.fetch = matrix.fetch;
+    }
+    const row = db.getDeadmanReleaseNotice(record.id, leaving.user.id)!;
+    assert.equal(row.status, 'failed');
+    assert.equal(row.lastError, 'recipient_gone');
+    assert.equal(row.sentAt, undefined);
+    assert.equal(row.roomId, undefined, 'the room stays forgotten');
+    assert.equal(
+        matrix.sends.filter((s) => s.txnId.includes(record.id)).length,
+        1,
+        'the send did go'
+    );
+
+    // An account that vanished another way during the send, its rows untouched:
+    // the account is read again before the row is marked, and the notice ends.
+    const vanishing = await freshPerson();
+    const second = await released(await freshPerson(), [vanishing.keySet.identity]);
+    let release2!: () => void;
+    const gate2 = new Promise<void>((resolve) => {
+        release2 = resolve;
+    });
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url =
+            typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+        if (url.includes('/send/')) await gate2;
+        return stubFetch(input, init);
+    }) as typeof fetch;
+    try {
+        const tick = runDeadmanReleaseNotifier({ now: second.at });
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        db.deleteUser(vanishing.user.id);
+        assert.equal(
+            db.getDeadmanReleaseNotice(second.record.id, vanishing.user.id)?.status,
+            'pending'
+        );
+        release2();
+        assert.deepEqual(await within(5000, tick), {
+            caughtUp: 0,
+            due: 1,
+            sent: 0,
+            retried: 0,
+            failed: 1,
+        });
+    } finally {
+        globalThis.fetch = matrix.fetch;
+    }
+    const gone = db.getDeadmanReleaseNotice(second.record.id, vanishing.user.id)!;
+    assert.equal(gone.status, 'failed');
+    assert.equal(gone.lastError, 'recipient_gone');
+    assert.equal(gone.roomId, undefined);
+
+    // The row's own word stands even while the account exists: a row ended
+    // during the send, by whatever ended it, is not marked sent over.
+    const standing = await freshPerson();
+    const third = await released(await freshPerson(), [standing.keySet.identity]);
+    let release3!: () => void;
+    const gate3 = new Promise<void>((resolve) => {
+        release3 = resolve;
+    });
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url =
+            typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+        if (url.includes('/send/')) await gate3;
+        return stubFetch(input, init);
+    }) as typeof fetch;
+    try {
+        const tick = runDeadmanReleaseNotifier({ now: third.at });
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        db.updateDeadmanReleaseNotice(third.record.id, standing.user.id, {
+            status: 'failed',
+            failedAt: third.at.toISOString(),
+            lastError: 'ended_meanwhile',
+        });
+        release3();
+        assert.deepEqual(await within(5000, tick), {
+            caughtUp: 0,
+            due: 1,
+            sent: 0,
+            retried: 0,
+            failed: 1,
+        });
+    } finally {
+        globalThis.fetch = matrix.fetch;
+    }
+    const ended = db.getDeadmanReleaseNotice(third.record.id, standing.user.id)!;
+    assert.equal(ended.status, 'failed');
+    assert.equal(ended.lastError, 'ended_meanwhile', 'not overwritten');
+    assert.equal(ended.sentAt, undefined);
+    assert.ok(db.getUserById(standing.user.id), 'the account is still there');
 });
 
 test('without a homeserver configured every attempt is a retry, and says so', async () => {
@@ -580,11 +923,13 @@ test('an overlapping tick does not send a notice twice or make a second room', a
         const first = runDeadmanReleaseNotifier({ now: at });
         // Let the first tick reach the homeserver before the second starts.
         await new Promise((resolve) => setTimeout(resolve, 20));
-        const second = await runDeadmanReleaseNotifier({ now: at });
+        // A bounded wait: without the in-flight guard the second tick would
+        // wait on the first's room slot, and this would fail, not hang.
+        const second = await within(1500, runDeadmanReleaseNotifier({ now: at }));
         assert.deepEqual(
             second,
             { caughtUp: 0, due: 1, sent: 0, retried: 0, failed: 0 },
-            'the second tick left it alone'
+            'the second tick left it alone, and finished'
         );
         release();
         assert.equal((await first).sent, 1);
@@ -594,6 +939,110 @@ test('an overlapping tick does not send a notice twice or make a second room', a
     assert.equal(matrix.creates.length, 1);
     assert.equal(matrix.sends.filter((s) => s.txnId.includes(record.id)).length, 1);
     assert.equal(db.getDeadmanReleaseNotice(record.id, ivan.user.id)?.attempts, 1);
+});
+
+test('two notices for one person in overlapping ticks make one room: the second waits for the first’s room and reuses it', async () => {
+    const jo = await freshPerson();
+    const joMxid = matrixUserIdFor(jo.user.id)!;
+    const one = await released(await freshPerson(), [jo.keySet.identity]);
+    const two = await released(await freshPerson(), [jo.keySet.identity], one.at);
+    assert.equal(
+        db
+            .listDueDeadmanReleaseNotices(one.at.toISOString())
+            .filter((n) => n.recipientAccountId === jo.user.id).length,
+        2
+    );
+    matrix.clearCalls();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+        release = resolve;
+    });
+    const stubFetch = matrix.fetch;
+    let creates = 0;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url =
+            typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+        if (url.includes('/createRoom')) {
+            creates += 1;
+            await gate;
+        }
+        return stubFetch(input, init);
+    }) as typeof fetch;
+    try {
+        const first = runDeadmanReleaseNotifier({ now: one.at });
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        // Tick 1 is inside createRoom for the first notice. Tick 2 takes the
+        // second notice (not in flight) and must wait for Jo's room, not make one.
+        const second = runDeadmanReleaseNotifier({ now: one.at });
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        assert.equal(creates, 1, 'one createRoom in flight, not two');
+        release();
+        const results = await within(5000, Promise.all([first, second]));
+        assert.notEqual(results, 'pending', 'both ticks finished');
+        const [r1, r2] = results as [Awaited<typeof first>, Awaited<typeof second>];
+        assert.equal(r1.sent + r2.sent, 2);
+    } finally {
+        globalThis.fetch = matrix.fetch;
+    }
+    const rooms = matrix.creates.filter((c) => (c.body.invite as string[]).includes(joMxid));
+    assert.equal(rooms.length, 1, 'one room for Jo');
+    const n1 = db.getDeadmanReleaseNotice(one.record.id, jo.user.id)!;
+    const n2 = db.getDeadmanReleaseNotice(two.record.id, jo.user.id)!;
+    assert.equal(n1.status, 'sent');
+    assert.equal(n2.status, 'sent');
+    assert.equal(n1.roomId, rooms[0].roomId);
+    assert.equal(n2.roomId, rooms[0].roomId);
+    assert.equal(matrix.sendsTo(rooms[0].roomId).length, 2);
+});
+
+test('the interval does not start a tick while the previous one runs', async () => {
+    // Two people, two due notices, a createRoom that takes longer than the
+    // interval: without the running guard the second interval tick would start
+    // and park a second createRoom beside the first.
+    const kim = await freshPerson();
+    const lee = await freshPerson();
+    const { at } = await released(await freshPerson(), [kim.keySet.identity, lee.keySet.identity]);
+    for (const person of [kim, lee]) {
+        const notice = db
+            .listDeadmanReleaseNoticesForRecipient(person.user.id)
+            .find((n) => n.status === 'pending')!;
+        db.updateDeadmanReleaseNotice(notice.switchId, notice.recipientAccountId, {
+            nextAttemptAt: new Date(0).toISOString(),
+        });
+    }
+    void at;
+    matrix.clearCalls();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+        release = resolve;
+    });
+    const stubFetch = matrix.fetch;
+    let parked = 0;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url =
+            typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+        if (url.includes('/createRoom')) {
+            parked += 1;
+            await gate;
+        }
+        return stubFetch(input, init);
+    }) as typeof fetch;
+    const loop = startDeadmanReleaseNotifier(15);
+    try {
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        assert.equal(parked, 1, 'one tick in flight after ten intervals');
+        release();
+        for (let i = 0; i < 50 && matrix.sends.length < 2; i += 1) {
+            await new Promise((resolve) => setTimeout(resolve, 20));
+        }
+    } finally {
+        loop.stop();
+        stopDeadmanReleaseNotifier();
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        globalThis.fetch = matrix.fetch;
+    }
+    assert.equal(matrix.sends.length, 2, 'both were sent by later ticks');
+    assert.equal(matrix.creates.length, 2, 'one room each');
 });
 
 test('the notifier starts and stops like the other loops', () => {
@@ -627,6 +1076,77 @@ test('a tick sends at most 50 notices; the rest wait for the next', async () => 
     const second = await runDeadmanReleaseNotifier({ now: at });
     assert.deepEqual(second, { caughtUp: 0, due: 1, sent: 1, retried: 0, failed: 0 });
     assert.equal(matrix.creates.length, 51);
+});
+
+test('the catch-up lists each fired release’s copies by switch: a tick over many fired releases does not scan the copies', async () => {
+    // The notifier's catch-up visits every fired release switch whose content
+    // is held, every tick, for up to 365 days; each visit must be an indexed
+    // lookup of that switch's copies (P3b-M4), not a scan of every copy row.
+    const owner = randomUUID();
+    const firedAt = new Date(Date.now() - 86_400_000).toISOString();
+    for (let i = 0; i < 1000; i += 1) {
+        const id = randomUUID();
+        db.createDeadmanSwitch({
+            id,
+            ownerId: owner,
+            status: 'triggered',
+            checkInIntervalSeconds: 3600,
+            gracePeriodSeconds: 0,
+            lastCheckInAt: firedAt,
+            triggerAt: firedAt,
+            releaseAt: firedAt,
+            recipients: [],
+            encryptedPayload: '{"header":{},"ownerIdentity":{}}',
+            releaseFormat: 'release-v1',
+            releasedAt: firedAt,
+        });
+        for (const account of [owner, randomUUID(), randomUUID()]) {
+            db.putDeadmanReleaseWrap({
+                switchId: id,
+                recipientAccountId: account,
+                recipientFingerprint: 'ab'.repeat(32),
+                sealedKey: 'sealed',
+                signature: 'signed',
+            });
+            if (account !== owner) {
+                db.createDeadmanReleaseNotice({
+                    switchId: id,
+                    recipientAccountId: account,
+                    nextAttemptAt: firedAt,
+                });
+                db.updateDeadmanReleaseNotice(id, account, { status: 'sent', sentAt: firedAt });
+            }
+        }
+    }
+    const wraps = db.deadmanReleaseWraps as unknown as Record<string | symbol, unknown>;
+    const iterators = ['values', 'entries', 'keys', 'forEach', Symbol.iterator] as const;
+    const saved = iterators.map((name) => [name, wraps[name]] as const);
+    let walks = 0;
+    for (const [name, original] of saved) {
+        wraps[name] = function walk(this: unknown, ...args: unknown[]) {
+            walks += 1;
+            return (original as (...a: unknown[]) => unknown).apply(this, args);
+        };
+    }
+    const boom = async () => {
+        throw new Error('the homeserver was touched');
+    };
+    let result: Awaited<ReturnType<typeof runDeadmanReleaseNotifier>>;
+    try {
+        result = await runDeadmanReleaseNotifier({
+            now: new Date(),
+            matrix: {
+                createRoom: boom,
+                getRoomStateAdmin: boom,
+                inviteToRoom: boom,
+                sendEvent: boom,
+            } as never,
+        });
+    } finally {
+        for (const [name] of saved) delete wraps[name];
+    }
+    assert.deepEqual(result, { caughtUp: 0, due: 0, sent: 0, retried: 0, failed: 0 });
+    assert.equal(walks, 0, 'the copies map was not iterated');
 });
 
 test('a stop mid-tick ends the tick after the notice in hand; the rest stay pending for the next leader', async () => {

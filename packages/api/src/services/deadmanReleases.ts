@@ -15,13 +15,27 @@
  * on them (`openReleaseCopy` and `releaseComparisonState` do that work).
  *
  * Arming is closed unless `BLACKOUT_DEADMAN_RELEASES` is on, which it is
- * nowhere until PR 4; the flag gates arming only, so a switch armed while it
+ * nowhere until PR 4, and unless this process's own environment runs the
+ * sweep (`BLACKOUT_DEADMAN_SWEEP` not `0`): a switch armed where no sweep runs
+ * would never fire. The flag gates arming only, so a switch armed while it
  * was on keeps firing, being served and being notified if it is turned off
  * (a flag that could hold a release back would be one more way to do it).
+ *
+ * What one account can make the server keep is bounded (independent review
+ * of part 2, P3b-H1): at most `DEADMAN_MAX_HELD_RELEASE_SWITCHES` release
+ * switches per owner whose content is still held (armed, in grace, or fired
+ * until the 365-day removal), at most `DEADMAN_MAX_ARMS_PER_DAY` arms per
+ * owner in any 24 hours, and per recipient at most
+ * `DEADMAN_MAX_HELD_RELEASES_PER_RECIPIENT_FROM_OWNER` held releases naming
+ * them from one owner and `DEADMAN_MAX_HELD_RELEASES_PER_RECIPIENT` from
+ * everyone. `GET /limits` reports each.
  */
 import {
     DEADMAN_LABEL_MAX_LENGTH,
-    DEADMAN_MAX_LIVE_RELEASE_SWITCHES,
+    DEADMAN_MAX_ARMS_PER_DAY,
+    DEADMAN_MAX_HELD_RELEASES_PER_RECIPIENT,
+    DEADMAN_MAX_HELD_RELEASES_PER_RECIPIENT_FROM_OWNER,
+    DEADMAN_MAX_HELD_RELEASE_SWITCHES,
     DEADMAN_NOTICE_RETRY_DAYS,
     DEADMAN_RELEASE_FORMAT,
     DEADMAN_RELEASE_RETENTION_DAYS,
@@ -60,10 +74,34 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 /** How long a released switch's content and copies are kept. */
 export const DEADMAN_RELEASE_RETENTION_MS = DEADMAN_RELEASE_RETENTION_DAYS * DAY_MS;
 
-/** Whether this deployment arms release switches: `BLACKOUT_DEADMAN_RELEASES`, read per request. */
+/**
+ * Whether this deployment takes release switches: `BLACKOUT_DEADMAN_RELEASES`,
+ * read per request; on for `1` or `true` in any casing, surrounding whitespace
+ * ignored, and off for anything else (`yes` and `on` included).
+ */
 export const releasesEnabled = (): boolean => {
     const value = (process.env.BLACKOUT_DEADMAN_RELEASES ?? '').trim().toLowerCase();
     return value === '1' || value === 'true';
+};
+
+/**
+ * Whether this process's environment runs the dead-man sweep, read as
+ * `backgroundLoops.ts` reads it. A deployment that runs the loops in a
+ * separate worker sets this on the API too (nothing else tells the API that a
+ * sweep runs anywhere), and an API that reads `0` arms nothing: a switch armed
+ * here would never fire, be served or be notified.
+ */
+export const sweepConfigured = (): boolean => process.env.BLACKOUT_DEADMAN_SWEEP !== '0';
+
+export type ArmingUnavailableReason = 'releases_off' | 'sweep_off';
+
+/** Whether arming is open here, and if not, the first reason it is not. */
+export const armingAvailability = ():
+    | { available: true }
+    | { available: false; reason: ArmingUnavailableReason } => {
+    if (!releasesEnabled()) return { available: false, reason: 'releases_off' };
+    if (!sweepConfigured()) return { available: false, reason: 'sweep_off' };
+    return { available: true };
 };
 
 /** A switch armed in the release format; everything else is `legacy`, rows from before 106 included. */
@@ -123,9 +161,9 @@ export const storedRelease = (record: DeadmanSwitchRecord): StoredRelease | null
 const encodeStoredRelease = (release: StoredRelease): string =>
     JSON.stringify({ header: release.header, ownerIdentity: release.ownerIdentity });
 
-/** The bounds the arming form shows, and whether arming is open here. */
+/** The bounds the arming form shows, and whether arming is open here and why not. */
 export const releaseLimits = (sweep: { backlogToleranceMs: number }): DeadmanLimits => ({
-    armingAvailable: releasesEnabled(),
+    ...availabilityFields(),
     checkInIntervalSeconds: {
         min: MIN_CHECK_IN_INTERVAL_SECONDS,
         max: MAX_CHECK_IN_INTERVAL_SECONDS,
@@ -135,12 +173,25 @@ export const releaseLimits = (sweep: { backlogToleranceMs: number }): DeadmanLim
     maxMessageBytes: RELEASE_MESSAGE_MAX_BYTES,
     paddedSizes: [...RELEASE_PADDED_SIZES],
     labelMaxLength: DEADMAN_LABEL_MAX_LENGTH,
-    maxLiveReleaseSwitches: DEADMAN_MAX_LIVE_RELEASE_SWITCHES,
+    maxHeldReleaseSwitches: DEADMAN_MAX_HELD_RELEASE_SWITCHES,
+    maxArmsPerDay: DEADMAN_MAX_ARMS_PER_DAY,
+    maxHeldReleasesPerRecipientFromOwner: DEADMAN_MAX_HELD_RELEASES_PER_RECIPIENT_FROM_OWNER,
+    maxHeldReleasesPerRecipient: DEADMAN_MAX_HELD_RELEASES_PER_RECIPIENT,
     backlogToleranceSeconds: Math.round(sweep.backlogToleranceMs / 1000),
     backlogGraceSeconds: DEADMAN_BACKLOG_GRACE_SECONDS,
     releaseRetentionDays: DEADMAN_RELEASE_RETENTION_DAYS,
     noticeRetryDays: DEADMAN_NOTICE_RETRY_DAYS,
 });
+
+const availabilityFields = (): Pick<
+    DeadmanLimits,
+    'armingAvailable' | 'armingUnavailableReason'
+> => {
+    const availability = armingAvailability();
+    return availability.available
+        ? { armingAvailable: true }
+        : { armingAvailable: false, armingUnavailableReason: availability.reason };
+};
 
 /** The timer and label, in the bounds of today; the message says which is out. */
 export const validateReleaseTimer = (input: {
@@ -168,14 +219,83 @@ export const validateReleaseTimer = (input: {
     return null;
 };
 
-/** Live (armed or in grace) release switches one account has. */
-export const liveReleaseSwitchCount = (ownerId: string): number =>
-    db
+/** A release switch whose content the store still holds: armed, in grace, or fired and not yet removed. */
+export const releaseContentHeld = (record: DeadmanSwitchRecord): boolean =>
+    isReleaseSwitch(record) && record.encryptedPayload !== '';
+
+/**
+ * Release switches of one owner whose content is still held. Cancel and the
+ * 365-day removal blank the content, so a cancelled switch and a removed
+ * release do not count; a fired one does until it is removed. Legacy switches
+ * never count: they are not release switches.
+ */
+export const heldReleaseSwitchCount = (ownerId: string): number =>
+    db.listDeadmanSwitchesForOwner(ownerId).filter(releaseContentHeld).length;
+
+const ARM_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Whether one more arm fits the owner's 24-hour window, counting every release
+ * switch the owner armed in it (cancelled ones included: the arm happened, and
+ * rows are never deleted). When it does not, how long until one does: when the
+ * (n − limit + 1)-th oldest arm leaves the window, as the identities
+ * directory computes its publish limit (`services/releaseIdentities.ts`).
+ */
+export const armRateState = (
+    ownerId: string,
+    now: Date
+): { ok: true } | { ok: false; retryAfterSeconds: number } => {
+    const at = now.getTime();
+    const recent = db
         .listDeadmanSwitchesForOwner(ownerId)
-        .filter(
-            (record) =>
-                isReleaseSwitch(record) && (record.status === 'armed' || record.status === 'grace')
-        ).length;
+        .filter(isReleaseSwitch)
+        .map((record) => Date.parse(record.createdAt))
+        .filter((armedAt) => armedAt > at - ARM_WINDOW_MS)
+        .sort((a, b) => a - b);
+    if (recent.length < DEADMAN_MAX_ARMS_PER_DAY) return { ok: true };
+    const opensAt = recent[recent.length - DEADMAN_MAX_ARMS_PER_DAY] + ARM_WINDOW_MS;
+    return { ok: false, retryAfterSeconds: Math.max(1, Math.ceil((opensAt - at) / 1000)) };
+};
+
+/**
+ * How many held releases name `recipientAccountId`: a copy sealed to them on
+ * a release switch whose content is held and which they do not own (the
+ * owner's own copy names nobody). From one owner, and from everyone. Whether
+ * the copy itself is still held is not asked: a blanked copy on a switch
+ * whose content is held means the recipient deleted their account, and
+ * nobody names a deleted account, or a removal half done, whose content goes
+ * on the next pass.
+ */
+export const heldReleasesNaming = (
+    recipientAccountId: string
+): { fromOwner: Map<string, number>; total: number } => {
+    const fromOwner = new Map<string, number>();
+    let total = 0;
+    for (const wrap of db.listDeadmanReleaseWrapsForRecipient(recipientAccountId)) {
+        const record = db.getDeadmanSwitch(wrap.switchId);
+        if (!record || record.ownerId === recipientAccountId || !releaseContentHeld(record)) {
+            continue;
+        }
+        total += 1;
+        fromOwner.set(record.ownerId, (fromOwner.get(record.ownerId) ?? 0) + 1);
+    }
+    return { fromOwner, total };
+};
+
+/**
+ * Whether one more held release from `ownerId` may name `recipientAccountId`:
+ * at most `DEADMAN_MAX_HELD_RELEASES_PER_RECIPIENT_FROM_OWNER` from this
+ * owner, and `DEADMAN_MAX_HELD_RELEASES_PER_RECIPIENT` from everyone. Which
+ * bound refused is not told apart in the answer: the second would say how many
+ * others have named the person.
+ */
+export const recipientHasRoom = (ownerId: string, recipientAccountId: string): boolean => {
+    const naming = heldReleasesNaming(recipientAccountId);
+    return (
+        (naming.fromOwner.get(ownerId) ?? 0) < DEADMAN_MAX_HELD_RELEASES_PER_RECIPIENT_FROM_OWNER &&
+        naming.total < DEADMAN_MAX_HELD_RELEASES_PER_RECIPIENT
+    );
+};
 
 /**
  * Where a copy's fingerprint stands against its account's directory entry.
@@ -248,7 +368,9 @@ export type ArmReleaseOutcome =
     | { kind: 'invalid_envelope'; problem: ReleaseEnvelopeProblem }
     | { kind: 'not_yours' }
     | { kind: 'invalid'; message: string }
-    | { kind: 'live_limit' }
+    | { kind: 'held_limit' }
+    | { kind: 'rate_limited'; retryAfterSeconds: number }
+    | { kind: 'recipient_limit'; recipientAccountId: string }
     | { kind: 'id_taken' }
     | OwnerIdentityRefusal
     | RecipientRefusal
@@ -257,15 +379,22 @@ export type ArmReleaseOutcome =
 /**
  * Arm a release switch for `ownerId` (§8, "the API, on arming"), in this
  * order: the envelope's form; the caller is its owner; the timer and label
- * are in bounds; the owner has room for one more live release switch; the
- * owner has a current identity; every other copy names an account here
- * whose current identity is the copy's (an account without an identity, a
- * replaced identity and one never published each have their own answer);
- * every signature verifies under the owner's identity, which also refuses a
- * header naming another identity than the owner's current one; and, after
- * the signatures awaited, the release id is still free. The writes follow
- * with no await between. The cap is checked once, before the signatures: a
- * race between two arms can exceed it by one, and it bounds storage only.
+ * are in bounds; the owner has room for one more release switch with content
+ * held (`held_limit`) and has not armed `DEADMAN_MAX_ARMS_PER_DAY` in the
+ * last 24 hours (`rate_limited`, with how long until one fits); the owner
+ * has a current identity; every other copy names an account here whose
+ * current identity is the copy's (an account without an identity, a
+ * replaced identity and one never published each have their own answer) and
+ * which is named on fewer held releases than the per-recipient bounds allow
+ * (`recipient_limit`); every signature verifies under the owner's identity,
+ * which also refuses a header naming another identity than the owner's
+ * current one; and, after the signatures awaited, the release id is still
+ * free. The writes follow with no await between, the copies first and the
+ * switch last, so a crash between them leaves copies without a switch, which
+ * nothing lists or serves, rather than a switch without copies, which would
+ * fire and release to nobody. Each bound is checked once, before the
+ * signatures: two arms racing on one replica can exceed a bound by one, and
+ * across replicas by more within the store's refresh window.
  */
 export const armReleaseSwitch = async (input: {
     ownerId: string;
@@ -279,9 +408,12 @@ export const armReleaseSwitch = async (input: {
 
     const timerProblem = validateReleaseTimer(input.input);
     if (timerProblem) return { kind: 'invalid', message: timerProblem };
-    if (liveReleaseSwitchCount(input.ownerId) >= DEADMAN_MAX_LIVE_RELEASE_SWITCHES) {
-        return { kind: 'live_limit' };
+    const now = input.now ?? new Date();
+    if (heldReleaseSwitchCount(input.ownerId) >= DEADMAN_MAX_HELD_RELEASE_SWITCHES) {
+        return { kind: 'held_limit' };
     }
+    const rate = armRateState(input.ownerId, now);
+    if (!rate.ok) return { kind: 'rate_limited', retryAfterSeconds: rate.retryAfterSeconds };
     const owner = currentOwnerIdentity(input.ownerId);
     if (!owner.ok) return owner.refusal;
 
@@ -290,6 +422,9 @@ export const armReleaseSwitch = async (input: {
         if (copy.recipientAccountId === input.ownerId) continue;
         const state = recipientIdentityState(copy.recipientAccountId, copy.recipientFingerprint);
         if (state !== 'current') return refuseRecipient(state, copy.recipientAccountId);
+        if (!recipientHasRoom(input.ownerId, copy.recipientAccountId)) {
+            return { kind: 'recipient_limit', recipientAccountId: copy.recipientAccountId };
+        }
         recipients.push(copy.recipientAccountId);
     }
 
@@ -308,15 +443,27 @@ export const armReleaseSwitch = async (input: {
     }
 
     // The signatures awaited; the id is checked now and the rows written at
-    // once, so two arms with one id cannot both write.
+    // once, so two arms with one id cannot both write (on one replica).
     if (db.getDeadmanSwitch(envelope.releaseId)) return { kind: 'id_taken' };
-    const now = input.now ?? new Date();
     const lastCheckInAt = now.toISOString();
     const { triggerAt, releaseAt } = computeDeadlines({
         lastCheckInAt,
         checkInIntervalSeconds: input.input.checkInIntervalSeconds,
         gracePeriodSeconds: input.input.gracePeriodSeconds,
     });
+    // The copies first, the switch last: in Postgres each is its own
+    // write-behind upsert, in order, so a crash between them leaves copies
+    // that no switch names (listed and served by nothing) and never a switch
+    // without its copies, which would fire and release to nobody.
+    for (const copy of envelope.copies) {
+        db.putDeadmanReleaseWrap({
+            switchId: envelope.releaseId,
+            recipientAccountId: copy.recipientAccountId,
+            recipientFingerprint: copy.recipientFingerprint,
+            sealedKey: copy.sealedKey,
+            signature: copy.signature,
+        });
+    }
     const record = db.createDeadmanSwitch({
         id: envelope.releaseId,
         ownerId: input.ownerId,
@@ -332,15 +479,6 @@ export const armReleaseSwitch = async (input: {
         ...(input.input.label === undefined ? {} : { headline: input.input.label }),
         releaseFormat: DEADMAN_RELEASE_FORMAT,
     });
-    for (const copy of envelope.copies) {
-        db.putDeadmanReleaseWrap({
-            switchId: record.id,
-            recipientAccountId: copy.recipientAccountId,
-            recipientFingerprint: copy.recipientFingerprint,
-            sealedKey: copy.sealedKey,
-            signature: copy.signature,
-        });
-    }
     return { kind: 'armed', record, envelope };
 };
 

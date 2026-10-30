@@ -318,6 +318,21 @@ export const matrixClient = {
      * Those rooms are disclosed as server-visible in TRUST.md rather than being
      * quietly encrypted. Paths that post on a user's behalf must go through
      * `services/botPostingGate.ts`, which refuses encrypted rooms.
+     *
+     * `encrypted: false` only leaves the client's `m.room.encryption` event out
+     * of `initial_state`. It does not stop the homeserver's own backstop: under
+     * `encryption_enabled_by_default_for_room_type: invite`, which every
+     * in-repo homeserver template sets, Synapse adds `m.room.encryption` to
+     * every room created with the `private_chat` or `trusted_private_chat`
+     * preset, after whatever `initial_state` the client sent
+     * (`apps/blackout-server/synapse/handlers/room.py`, `_send_events_for_new_room`;
+     * `KNOWN_LIMITATIONS.md`, the backstop entry). A room that must stay
+     * unencrypted on such a homeserver has to be created with `preset:
+     * 'public_chat'`, which the backstop leaves alone under `invite`, and an
+     * explicit `m.room.join_rules` of `invite` in `initialState`, which Synapse
+     * sends in place of the preset's public join rule (the dead-man release
+     * notifier does this; independent review of PR 3 part 2, P3b-M1). Under
+     * `all`, which no template sets, the backstop encrypts every preset.
      */
     async createRoom(input: {
         aliasLocalpart?: string;

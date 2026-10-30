@@ -3,6 +3,7 @@ import type { Context } from 'hono';
 import { z } from 'zod';
 import {
     DEADMAN_EVENT_NAMES,
+    DEADMAN_MAX_ARMS_PER_DAY,
     DEADMAN_RELEASE_ERRORS,
     DEADMAN_RELEASE_FORMAT,
     type DeadmanReleasedSwitch,
@@ -15,13 +16,13 @@ import { readJsonBody } from '../middleware/validate';
 import { BACKLOG_TOLERANCE_FLOOR_MS, backlogToleranceMs } from '../services/backlogTolerance';
 import {
     armReleaseSwitch,
+    armingAvailability,
     blankReleaseWraps,
     isReleaseSwitch,
     ownerReleaseView,
     recordReleaseTrigger,
     releaseLimits,
     releasedCopiesFor,
-    releasesEnabled,
     removeExpiredReleases,
     resealReleaseCopy,
     type ArmReleaseOutcome,
@@ -41,15 +42,30 @@ import type { FeatureModule } from './types';
  * off the server does not take releases, and a legacy arm would only store
  * something it cannot release to anyone: triggering changes a status, and
  * nobody is told. So the only honest answer is this one, given before the
- * body is read so that nothing about the request is stored and every caller
- * gets the same reply. With it on, the route takes the release format only
- * (`services/deadmanReleases.ts`).
+ * body is parsed so that nothing about the request is stored. The 1 MiB body
+ * cap is middleware and runs first, flag off or on: a body over it is
+ * answered 413 whatever the flag says, and a body under it is buffered and
+ * then, with the flag off, answered 409 unread. With it on, the route takes
+ * the release format only (`services/deadmanReleases.ts`).
+ *
+ * The same 409 is given, with its own reason and message, where this
+ * process's environment runs no sweep (`BLACKOUT_DEADMAN_SWEEP=0`,
+ * `armingAvailability`): a switch armed there would never fire.
  */
 export const ARMING_UNAVAILABLE = {
     code: DEADMAN_RELEASE_ERRORS.armingUnavailable,
+    reason: 'releases_off',
     message:
         'Arming is not available: Blackout cannot release a message to anyone yet. ' +
         'Existing switches can be checked in and cancelled.',
+} as const;
+
+export const ARMING_UNAVAILABLE_NO_SWEEP = {
+    code: DEADMAN_RELEASE_ERRORS.armingUnavailable,
+    reason: 'sweep_off',
+    message:
+        'Arming is not available: this deployment runs no dead-man sweep, so a switch ' +
+        'armed here would never fire. Existing switches can be checked in and cancelled.',
 } as const;
 
 /**
@@ -76,6 +92,18 @@ const resealSchema = z.strictObject({ copy: z.record(z.string(), z.unknown()) })
  * triggered all get this same status and body. A 403 for "exists, not yours"
  * next to a 404 for "does not exist" would let anyone holding an id learn
  * whether a switch exists, and let a recipient follow one before release.
+ *
+ * One route does say whether an id exists: arming answers 409
+ * `release_id_taken` for any switch's id, anyone's, in any status, since the
+ * release id is the switch id and two switches cannot share one. Accepted
+ * (independent review of part 2, P3b-L7): ids are UUID v4, so none is found by
+ * guessing; rows are never deleted, so existence is constant once an id is
+ * known; the only ways to know one are to own the switch or to have been told
+ * it, which a recipient is after the trigger; the probe costs a fully signed
+ * envelope under the caller's current identity and is under the global
+ * limiter; and the status is not revealed. Scoping the 409 to the caller's own
+ * ids would turn a real cross-owner collision into an opaque failure for no
+ * privacy gain.
  */
 const SWITCH_NOT_FOUND = { code: 'switch_not_found', message: 'Switch not found' } as const;
 
@@ -268,11 +296,34 @@ const armResponse = (c: Context, outcome: ArmReleaseOutcome, subject: string) =>
             );
         case 'invalid':
             return c.json({ code: 'invalid_request', message: outcome.message }, 400);
-        case 'live_limit':
+        case 'held_limit':
             return c.json(
                 {
-                    code: DEADMAN_RELEASE_ERRORS.liveLimit,
-                    message: 'This account has as many live release switches as are allowed',
+                    code: DEADMAN_RELEASE_ERRORS.heldLimit,
+                    message:
+                        'This account has as many release switches with their content still held ' +
+                        '(armed, in grace, or fired and not yet removed) as are allowed',
+                },
+                409
+            );
+        case 'rate_limited':
+            c.header('Retry-After', String(outcome.retryAfterSeconds));
+            return c.json(
+                {
+                    code: DEADMAN_RELEASE_ERRORS.armRateLimited,
+                    message: `At most ${DEADMAN_MAX_ARMS_PER_DAY} release switches armed in any 24 hours.`,
+                    retryAfterSeconds: outcome.retryAfterSeconds,
+                },
+                429
+            );
+        case 'recipient_limit':
+            return c.json(
+                {
+                    code: DEADMAN_RELEASE_ERRORS.recipientLimit,
+                    message:
+                        'A copy names an account that is already named on as many held releases ' +
+                        'as are allowed',
+                    recipientAccountId: outcome.recipientAccountId,
                 },
                 409
             );
@@ -298,7 +349,9 @@ const identityResponse = (
         | { kind: 'invalid_envelope' }
         | { kind: 'not_yours' }
         | { kind: 'invalid' }
-        | { kind: 'live_limit' }
+        | { kind: 'held_limit' }
+        | { kind: 'rate_limited' }
+        | { kind: 'recipient_limit' }
         | { kind: 'id_taken' }
     >
 ) => {
@@ -406,8 +459,16 @@ function createDeadmanRouter() {
         const denied = requireDomainCapability(c, 'deadman', 'write');
         if (denied) return denied;
 
-        // Refused before the body is read: see ARMING_UNAVAILABLE.
-        if (!releasesEnabled()) return c.json(ARMING_UNAVAILABLE, 409);
+        // Refused before the body is parsed: see ARMING_UNAVAILABLE.
+        const availability = armingAvailability();
+        if (!availability.available) {
+            return c.json(
+                availability.reason === 'sweep_off'
+                    ? ARMING_UNAVAILABLE_NO_SWEEP
+                    : ARMING_UNAVAILABLE,
+                409
+            );
+        }
 
         const subject = requireAuthenticatedUser(c);
         if (!subject) return unauthorized(c);

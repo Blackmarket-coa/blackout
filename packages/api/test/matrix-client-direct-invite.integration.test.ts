@@ -36,13 +36,18 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     });
 }) as typeof fetch;
 
-test('createRoom sends the invite list and is_direct only when asked, and no encryption event when encrypted is false', async () => {
+test('createRoom sends the invite list and is_direct only when asked, the preset and initial_state as given, and no encryption event when encrypted is false', async () => {
     calls.length = 0;
+    // The notifier's arguments: `public_chat` with an invite-only join rule is
+    // what keeps the homeserver's backstop from encrypting the room.
     const direct = await matrixClient.createRoom({
         name: 'Blackout notices',
         visibility: 'private',
-        preset: 'private_chat',
+        preset: 'public_chat',
         encrypted: false,
+        initialState: [
+            { type: 'm.room.join_rules', state_key: '', content: { join_rule: 'invite' } },
+        ],
         invite: ['@bob:test.local'],
         isDirect: true,
         powerLevelOverride: { events_default: 50, invite: 50 },
@@ -54,17 +59,25 @@ test('createRoom sends the invite list and is_direct only when asked, and no enc
     assert.deepEqual(calls[0].body.invite, ['@bob:test.local']);
     assert.equal(calls[0].body.is_direct, true);
     assert.equal(calls[0].body.visibility, 'private');
-    assert.equal(calls[0].body.preset, 'private_chat');
+    assert.equal(calls[0].body.preset, 'public_chat');
     assert.equal(calls[0].body.name, 'Blackout notices');
     assert.deepEqual(calls[0].body.power_level_content_override, {
         events_default: 50,
         invite: 50,
     });
-    assert.equal(
+    assert.deepEqual(
         calls[0].body.initial_state,
-        undefined,
-        'encrypted: false adds no encryption event'
+        [{ type: 'm.room.join_rules', state_key: '', content: { join_rule: 'invite' } }],
+        'encrypted: false adds no encryption event; the join rule is sent as given'
     );
+
+    calls.length = 0;
+    await matrixClient.createRoom({
+        encrypted: false,
+        visibility: 'private',
+        preset: 'private_chat',
+    });
+    assert.equal(calls[0].body.initial_state, undefined, 'no initial_state when none is asked for');
 
     calls.length = 0;
     await matrixClient.createRoom({

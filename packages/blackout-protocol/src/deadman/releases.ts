@@ -49,9 +49,18 @@ export type DeadmanReleasedCopy = {
     /** The release id, which is also the switch's id. */
     releaseId: string;
     ownerAccountId: string;
-    /** When the switch fired. */
+    /**
+     * When the server recorded the trigger. The server's word: it keeps the
+     * timer and can hold a release back, delay it or bring it forward
+     * (`release-envelope-2026-10-26.md` §10), so a screen attributes this time
+     * to Blackout's server, not to the owner.
+     */
     releasedAt: string;
-    /** When the API removes the content and the copies. */
+    /**
+     * When the content and the copies become due for removal: the API's sweep
+     * removes them at its first pass on or after this time, while a sweep runs
+     * (`BLACKOUT_DEADMAN_SWEEP`); with none running they are held.
+     */
     removesAt: string;
     header: ReleaseHeader;
     /** The owner's identity as it was at arming: verify it, then compare. */
@@ -82,16 +91,34 @@ export type DeadmanNoticeCounts = {
 
 /** `GET /v1/deadman/limits`: what the arming form needs to say true things. */
 export type DeadmanLimits = {
-    /** Whether this deployment arms release switches (`BLACKOUT_DEADMAN_RELEASES`). */
+    /**
+     * Whether this deployment arms release switches: `BLACKOUT_DEADMAN_RELEASES`
+     * is on and the API's own environment runs the sweep (`BLACKOUT_DEADMAN_SWEEP`
+     * is not `0`), since a switch armed where no sweep runs would never fire.
+     */
     armingAvailable: boolean;
+    /** Why arming is not available, when it is not: the flag, or the sweep. */
+    armingUnavailableReason?: 'releases_off' | 'sweep_off';
     checkInIntervalSeconds: { min: number; max: number };
     gracePeriodSeconds: { min: number; max: number };
     maxRecipients: number;
     maxMessageBytes: number;
     paddedSizes: number[];
     labelMaxLength: number;
-    /** Live (armed or in grace) release switches one account may have. */
-    maxLiveReleaseSwitches: number;
+    /**
+     * Release switches one owner may have whose content the server still
+     * holds: armed, in grace, and fired until the removal 365 days after the
+     * trigger. A cancelled switch holds no content and does not count; legacy
+     * switches never count. The bound on what one account can make the server
+     * keep.
+     */
+    maxHeldReleaseSwitches: number;
+    /** Release arms one owner may make in any 24 hours (429 `release_arm_rate_limited`). */
+    maxArmsPerDay: number;
+    /** Held releases one owner may have naming one recipient (409 `recipient_limit`). */
+    maxHeldReleasesPerRecipientFromOwner: number;
+    /** Held releases naming one recipient from every owner together (409 `recipient_limit`). */
+    maxHeldReleasesPerRecipient: number;
     /** How late a sweep may reach a switch before it is read as an outage. */
     backlogToleranceSeconds: number;
     /** The grace a switch reached that late gets from then. */
@@ -106,8 +133,19 @@ export type DeadmanLimits = {
 export const DEADMAN_RELEASE_RETENTION_DAYS = 365;
 /** Days the bot retries a notice before recording it as failed. */
 export const DEADMAN_NOTICE_RETRY_DAYS = 30;
-/** Live release switches per owner: a bound on storage. */
-export const DEADMAN_MAX_LIVE_RELEASE_SWITCHES = 20;
+/**
+ * Release switches per owner whose content is still held (armed, in grace, or
+ * fired until the 365-day removal): what bounds the content one account can
+ * make the server keep, about 7 MiB of headers and up to about 2.3 MiB of
+ * copies at the largest sizes (`release-envelope-2026-10-26.md` §15).
+ */
+export const DEADMAN_MAX_HELD_RELEASE_SWITCHES = 20;
+/** Release arms per owner in any 24 hours. */
+export const DEADMAN_MAX_ARMS_PER_DAY = 10;
+/** Held releases from one owner that may name one recipient. */
+export const DEADMAN_MAX_HELD_RELEASES_PER_RECIPIENT_FROM_OWNER = 5;
+/** Held releases from every owner together that may name one recipient. */
+export const DEADMAN_MAX_HELD_RELEASES_PER_RECIPIENT = 50;
 /** The owner-only label's length, as before. */
 export const DEADMAN_LABEL_MAX_LENGTH = 280;
 
@@ -171,8 +209,17 @@ export const DEADMAN_RELEASE_ERRORS = {
     invalidSignature: 'invalid_release_signature',
     /** 409: the release id is already a switch's. */
     releaseIdTaken: 'release_id_taken',
-    /** 409: the owner has as many live release switches as are allowed. */
-    liveLimit: 'release_switch_limit',
+    /** 409: the owner has as many release switches with content still held as are allowed. */
+    heldLimit: 'release_switch_limit',
+    /** 429, with `Retry-After`: the owner armed as many release switches in 24 hours as are allowed. */
+    armRateLimited: 'release_arm_rate_limited',
+    /**
+     * 409: a copy names an account that is already named on as many held
+     * releases as are allowed, from this owner or from everyone;
+     * `recipientAccountId` says whose. One code for both bounds, so the answer
+     * does not say how many others have named that person.
+     */
+    recipientLimit: 'recipient_limit',
     /** 409: re-sealing a switch that is not in the release format. */
     notARelease: 'not_a_release',
     /** 400: re-sealing for an account the switch does not name. */

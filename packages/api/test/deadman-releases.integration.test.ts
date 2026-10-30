@@ -40,15 +40,15 @@ const protocol = await import('@blackout/protocol');
 const { ALICE, BOB } = await import('../../blackout-protocol/src/release/testVectors');
 const {
     ARMING_UNAVAILABLE,
+    ARMING_UNAVAILABLE_NO_SWEEP,
     RELEASE_ARM_MAX_BODY_BYTES,
     RELEASE_RESEAL_MAX_BODY_BYTES,
     recordToOwnerView,
     sweepOverdueDeadmanSwitches,
 } = await import('../src/modules/deadman');
 const { computeDeadlines } = await import('../src/services/deadmanScheduler');
-const { DEADMAN_RELEASE_RETENTION_MS, blankReleaseWraps, removeExpiredReleases } = await import(
-    '../src/services/deadmanReleases'
-);
+const { DEADMAN_RELEASE_RETENTION_MS, blankReleaseWraps, noticeCounts, removeExpiredReleases } =
+    await import('../src/services/deadmanReleases');
 const lifecycle = await import('../src/services/accountLifecycle');
 
 // The API configures no KEM provider; only this test's own sealing needs one.
@@ -226,24 +226,101 @@ test('with the flag off, arming is refused with 409 before the body is read and 
 
         const limits = await app.request('/v1/deadman/limits', { headers: headers(alice) });
         assert.equal(limits.status, 200);
-        assert.equal(((await limits.json()) as DeadmanLimits).armingAvailable, false);
+        const closed = (await limits.json()) as DeadmanLimits;
+        assert.equal(closed.armingAvailable, false);
+        assert.equal(closed.armingUnavailableReason, 'releases_off');
         assert.deepEqual(await releasesFor(bob), []);
     } finally {
         process.env.BLACKOUT_DEADMAN_RELEASES = '1';
     }
-    // Any spelling of on but 1 or true is off.
-    process.env.BLACKOUT_DEADMAN_RELEASES = 'yes';
+    // On for 1 or true in any casing, surrounding whitespace ignored; off for
+    // anything else (`yes`, `on`). A broken body shows the flag was passed
+    // (400, not 409) without arming anything.
+    for (const [spelling, status] of [
+        ['yes', 409],
+        ['on', 409],
+        ['TRUE', 400],
+        [' true ', 400],
+        ['1 ', 400],
+    ] as const) {
+        process.env.BLACKOUT_DEADMAN_RELEASES = spelling;
+        try {
+            assert.equal(
+                (await arm(alice, armBody({ broken: true }))).status,
+                status,
+                `flag ${JSON.stringify(spelling)}`
+            );
+        } finally {
+            process.env.BLACKOUT_DEADMAN_RELEASES = '1';
+        }
+    }
+});
+
+test('with the sweep switched off in the API’s own environment, arming is refused with 409 and /limits says why', async () => {
+    const envelope = await build(vectorKeySet(ALICE), [BOB.identity]);
+    process.env.BLACKOUT_DEADMAN_SWEEP = '0';
     try {
-        assert.equal((await arm(alice, armBody(envelope))).status, 409);
+        const res = await arm(alice, armBody(envelope));
+        assert.equal(res.status, 409);
+        assert.deepEqual(await res.json(), ARMING_UNAVAILABLE_NO_SWEEP);
+        assert.equal(db.getDeadmanSwitch(envelope.releaseId), undefined);
+        const limits = (await (
+            await app.request('/v1/deadman/limits', { headers: headers(alice) })
+        ).json()) as DeadmanLimits;
+        assert.equal(limits.armingAvailable, false);
+        assert.equal(limits.armingUnavailableReason, 'sweep_off');
+        // The flag comes first: with both off, the reason is the flag.
+        delete process.env.BLACKOUT_DEADMAN_RELEASES;
+        try {
+            assert.deepEqual(
+                await (await arm(alice, armBody(envelope))).json(),
+                ARMING_UNAVAILABLE
+            );
+            const both = (await (
+                await app.request('/v1/deadman/limits', { headers: headers(alice) })
+            ).json()) as DeadmanLimits;
+            assert.equal(both.armingUnavailableReason, 'releases_off');
+        } finally {
+            process.env.BLACKOUT_DEADMAN_RELEASES = '1';
+        }
     } finally {
-        process.env.BLACKOUT_DEADMAN_RELEASES = '1';
+        delete process.env.BLACKOUT_DEADMAN_SWEEP;
+    }
+    // Any other value, the default included, leaves arming open.
+    process.env.BLACKOUT_DEADMAN_SWEEP = '1';
+    try {
+        const limits = (await (
+            await app.request('/v1/deadman/limits', { headers: headers(alice) })
+        ).json()) as DeadmanLimits;
+        assert.equal(limits.armingAvailable, true);
+        assert.equal(limits.armingUnavailableReason, undefined);
+    } finally {
+        delete process.env.BLACKOUT_DEADMAN_SWEEP;
     }
 });
 
 test('with the flag on, an owner arms a release switch: the row, one copy per account, and an owner view that holds only the owner’s copy', async () => {
     const envelope = await build(vectorKeySet(ALICE), [BOB.identity]);
-    const res = await arm(alice, armBody(envelope));
+    // The copies are written before the switch, so a crash between the two
+    // leaves copies no switch names rather than a switch without copies.
+    const realCreate = db.createDeadmanSwitch.bind(db);
+    let wrapsAtSwitchWrite = -1;
+    db.createDeadmanSwitch = ((input: Parameters<typeof db.createDeadmanSwitch>[0]) => {
+        wrapsAtSwitchWrite = db.listDeadmanReleaseWraps(input.id).length;
+        return realCreate(input);
+    }) as typeof db.createDeadmanSwitch;
+    let res: Response;
+    try {
+        res = await arm(alice, armBody(envelope));
+    } finally {
+        db.createDeadmanSwitch = realCreate;
+    }
     assert.equal(res.status, 201);
+    assert.equal(
+        wrapsAtSwitchWrite,
+        2,
+        'both copies were in the store when the switch was written'
+    );
     const body = (await res.json()) as Envelope;
     assert.equal(body.event, 'blackout.deadman.switch.armed');
     assert.equal(body.roomId, null);
@@ -486,29 +563,202 @@ test('the envelope’s form, the owner, the bounds, the identities and the signa
     }
 });
 
-test('at most 20 live release switches per owner; cancelled ones do not count', async () => {
+/** Move an owner's arms out of the 24-hour window, so the next test step is about another bound. */
+const backdateArms = (ownerId: string, byMs = 25 * 3600 * 1000) => {
+    for (const record of db.listDeadmanSwitchesForOwner(ownerId)) {
+        db.deadmanSwitches.set(record.id, {
+            ...record,
+            createdAt: new Date(Date.parse(record.createdAt) - byMs).toISOString(),
+        });
+    }
+};
+
+/** What the store holds for one owner's release switches: content and copies, in bytes. */
+const heldBytes = (ownerId: string) => {
+    let content = 0;
+    let copies = 0;
+    for (const record of db.listDeadmanSwitchesForOwner(ownerId)) {
+        content += record.encryptedPayload.length;
+        for (const wrap of db.listDeadmanReleaseWraps(record.id)) {
+            copies += wrap.sealedKey.length + wrap.signature.length;
+        }
+    }
+    return { content, copies };
+};
+
+test('at most 10 release arms in any 24 hours: the 11th is 429 with Retry-After, and fits again a day after the first', async () => {
     const owner = await freshPerson();
+    const people = [await freshPerson(), await freshPerson()];
+    for (let i = 0; i < 10; i += 1) {
+        const envelope = await build(owner.keySet, [people[i % 2].keySet.identity], `m ${i}`);
+        assert.equal((await arm(owner.user, armBody(envelope))).status, 201, `arm ${i}`);
+    }
+    const eleventh = await build(owner.keySet, [people[0].keySet.identity]);
+    const refused = await arm(owner.user, armBody(eleventh));
+    const body = await errorOf(refused, 429, 'release_arm_rate_limited');
+    const retryAfter = (body as unknown as { retryAfterSeconds: number }).retryAfterSeconds;
+    assert.ok(retryAfter > 23 * 3600 && retryAfter <= 24 * 3600, `about a day: ${retryAfter}`);
+    assert.equal(refused.headers.get('retry-after'), String(retryAfter));
+    assert.equal(db.getDeadmanSwitch(eleventh.releaseId), undefined);
+    assert.equal(db.listDeadmanReleaseWraps(eleventh.releaseId).length, 0);
+    // A cancelled arm still counts: the arm happened.
+    const [first] = db.listDeadmanSwitchesForOwner(owner.user.id);
+    await app.request(`/v1/deadman/switches/${first.id}/cancel`, {
+        method: 'POST',
+        headers: headers(owner.user),
+    });
+    await errorOf(await arm(owner.user, armBody(eleventh)), 429, 'release_arm_rate_limited');
+    // Once the first arm is more than a day old, one more fits, and only one.
+    db.deadmanSwitches.set(first.id, {
+        ...db.getDeadmanSwitch(first.id)!,
+        createdAt: new Date(Date.now() - 24 * 3600 * 1000 - 1000).toISOString(),
+    });
+    assert.equal((await arm(owner.user, armBody(eleventh))).status, 201);
+    const twelfth = await build(owner.keySet, [people[1].keySet.identity]);
+    await errorOf(await arm(owner.user, armBody(twelfth)), 429, 'release_arm_rate_limited');
+});
+
+test('at most 20 release switches per owner with content held: fired ones count until their removal, cancelled and legacy ones do not, and held bytes stop growing', async () => {
+    const owner = await freshPerson();
+    // Four people, five switches each: under the per-recipient bound.
+    const people = [
+        await freshPerson(),
+        await freshPerson(),
+        await freshPerson(),
+        await freshPerson(),
+    ];
     const ids: string[] = [];
     for (let i = 0; i < 20; i += 1) {
-        const envelope = await build(owner.keySet, [BOB.identity], `message ${i}`);
-        assert.equal((await arm(owner.user, armBody(envelope))).status, 201, `arm ${i}`);
+        const envelope = await build(owner.keySet, [people[i % 4].keySet.identity], `message ${i}`);
+        // One of them with a long timer, so it is still armed when the rest fire.
+        const overrides = i === 0 ? { checkInIntervalSeconds: 3600 } : {};
+        assert.equal((await arm(owner.user, armBody(envelope, overrides))).status, 201, `arm ${i}`);
         ids.push(envelope.releaseId);
+        if (i === 9) backdateArms(owner.user.id);
     }
-    const oneMore = await build(owner.keySet, [BOB.identity]);
+    backdateArms(owner.user.id);
+    const oneMore = await build(owner.keySet, [people[0].keySet.identity]);
     await errorOf(await arm(owner.user, armBody(oneMore)), 409, 'release_switch_limit');
     assert.equal(db.getDeadmanSwitch(oneMore.releaseId), undefined);
+    assert.equal(db.listDeadmanReleaseWraps(oneMore.releaseId).length, 0);
 
+    // The sweep fires 19 of them: their content is still held, so they still count.
+    const firesAt = FIRES_AT();
+    sweepAt(firesAt);
+    assert.equal(
+        ids.slice(1).filter((id) => db.getDeadmanSwitch(id)?.status === 'triggered').length,
+        19
+    );
+    assert.equal(db.getDeadmanSwitch(ids[0])?.status, 'armed');
+    const before = heldBytes(owner.user.id);
+    await errorOf(await arm(owner.user, armBody(oneMore)), 409, 'release_switch_limit');
+    for (let round = 0; round < 5; round += 1) {
+        const again = await build(
+            owner.keySet,
+            [people[round % 4].keySet.identity],
+            `again ${round}`
+        );
+        await errorOf(await arm(owner.user, armBody(again)), 409, 'release_switch_limit');
+    }
+    assert.deepEqual(heldBytes(owner.user.id), before, 'nothing more is held');
+    assert.ok(before.content > 19 * 1000, 'the fired switches’ content is what is held');
+
+    // Cancelling the armed one frees its slot: cancel blanks its content.
     const cancel = await app.request(`/v1/deadman/switches/${ids[0]}/cancel`, {
         method: 'POST',
         headers: headers(owner.user),
     });
     assert.equal(cancel.status, 200);
     assert.equal((await arm(owner.user, armBody(oneMore))).status, 201);
+    backdateArms(owner.user.id);
+    const yetAnother = await build(owner.keySet, [people[1].keySet.identity]);
+    await errorOf(await arm(owner.user, armBody(yetAnother)), 409, 'release_switch_limit');
+
+    // The 365-day removal frees the fired ones' slots.
+    sweepAt(new Date(firesAt.getTime() + DEADMAN_RELEASE_RETENTION_MS));
+    assert.equal(db.getDeadmanSwitch(ids[1])?.encryptedPayload, '');
+    assert.equal((await arm(owner.user, armBody(yetAnother))).status, 201);
+
     // Legacy switches do not count against it.
     const legacyOwner = await freshPerson();
     for (let i = 0; i < 25; i += 1) seedLegacy(legacyOwner.user);
     const legacyEnvelope = await build(legacyOwner.keySet, [BOB.identity]);
     assert.equal((await arm(legacyOwner.user, armBody(legacyEnvelope))).status, 201);
+});
+
+test('at most 5 held releases from one owner may name one person, and 50 from everyone; one code for both', async () => {
+    const owner = await freshPerson();
+    const victim = await freshPerson();
+    const ids: string[] = [];
+    for (let i = 0; i < 5; i += 1) {
+        const envelope = await build(owner.keySet, [victim.keySet.identity], `named ${i}`);
+        assert.equal((await arm(owner.user, armBody(envelope))).status, 201, `arm ${i}`);
+        ids.push(envelope.releaseId);
+    }
+    const sixth = await build(owner.keySet, [victim.keySet.identity, BOB.identity]);
+    const refused = await errorOf(await arm(owner.user, armBody(sixth)), 409, 'recipient_limit');
+    assert.equal(refused.recipientAccountId, victim.user.id);
+    assert.equal(db.getDeadmanSwitch(sixth.releaseId), undefined);
+    assert.equal(db.listDeadmanReleaseWraps(sixth.releaseId).length, 0);
+    // A cancelled one does not count: its copies are blank.
+    assert.equal(
+        (
+            await app.request(`/v1/deadman/switches/${ids[4]}/cancel`, {
+                method: 'POST',
+                headers: headers(owner.user),
+            })
+        ).status,
+        200
+    );
+    const replacement = await build(owner.keySet, [victim.keySet.identity], 'replacement');
+    assert.equal((await arm(owner.user, armBody(replacement))).status, 201);
+    await errorOf(await arm(owner.user, armBody(sixth)), 409, 'recipient_limit');
+    // Fired ones count until their removal.
+    sweepAt(FIRES_AT());
+    assert.equal(db.getDeadmanSwitch(ids[0])?.status, 'triggered');
+    await errorOf(await arm(owner.user, armBody(sixth)), 409, 'recipient_limit');
+    // Another owner may still name them: the bound is per owner here.
+    const another = await freshPerson();
+    assert.equal(
+        (await arm(another.user, armBody(await build(another.keySet, [victim.keySet.identity]))))
+            .status,
+        201
+    );
+    // A copy for the owner's own account is not "naming" anyone: the owner can
+    // arm for other people while at the bound for this one.
+    assert.equal(
+        (await arm(owner.user, armBody(await build(owner.keySet, [BOB.identity])))).status,
+        201
+    );
+
+    // From everyone: ten owners, five each, name one person; the 51st is refused
+    // with the same code and message, so the answer does not say which bound.
+    const popular = await freshPerson();
+    for (let o = 0; o < 10; o += 1) {
+        const namer = await freshPerson();
+        for (let i = 0; i < 5; i += 1) {
+            const envelope = await build(namer.keySet, [popular.keySet.identity], `p ${o} ${i}`);
+            assert.equal((await arm(namer.user, armBody(envelope))).status, 201, `${o}/${i}`);
+        }
+    }
+    const eleventhOwner = await freshPerson();
+    const fiftyFirst = await errorOf(
+        await arm(
+            eleventhOwner.user,
+            armBody(await build(eleventhOwner.keySet, [popular.keySet.identity]))
+        ),
+        409,
+        'recipient_limit'
+    );
+    assert.equal(fiftyFirst.recipientAccountId, popular.user.id);
+    assert.equal(fiftyFirst.message, refused.message);
+    assert.deepEqual(Object.keys(fiftyFirst).sort(), Object.keys(refused).sort());
+    // Someone else is still free to be named by that owner.
+    assert.equal(
+        (await arm(eleventhOwner.user, armBody(await build(eleventhOwner.keySet, [BOB.identity]))))
+            .status,
+        201
+    );
 });
 
 test('after the trigger each recipient reads their own copy and nothing of anyone else’s; the owner and strangers read none; the legacy views never list it', async () => {
@@ -903,7 +1153,10 @@ test('GET /limits says what the arming form may say, from the deployment’s own
         maxMessageBytes: 65536,
         paddedSizes: [1024, 16384, 262144],
         labelMaxLength: 280,
-        maxLiveReleaseSwitches: 20,
+        maxHeldReleaseSwitches: 20,
+        maxArmsPerDay: 10,
+        maxHeldReleasesPerRecipientFromOwner: 5,
+        maxHeldReleasesPerRecipient: 50,
         backlogToleranceSeconds: 15 * 60,
         backlogGraceSeconds: 72 * 60 * 60,
         releaseRetentionDays: 365,
@@ -952,11 +1205,47 @@ test('the export lists an owner’s release switches without any copy, and a rec
     const theirs = lifecycle.exportUserData(recipient.user.id)!;
     assert.equal(theirs.deadmanReleases.length, 1);
     assert.deepEqual(theirs.deadmanReleases, await releasesFor(recipient.user));
+    // The notice rows about the recipient are theirs too: the room, status,
+    // attempts, when it was sent or given up.
+    db.updateDeadmanReleaseNotice(envelope.releaseId, recipient.user.id, {
+        roomId: '!notices:test.local',
+    });
+    const notice = db.getDeadmanReleaseNotice(envelope.releaseId, recipient.user.id)!;
+    assert.deepEqual(lifecycle.exportUserData(recipient.user.id)!.deadmanNotices, [
+        {
+            switchId: envelope.releaseId,
+            roomId: '!notices:test.local',
+            status: 'pending',
+            attempts: 0,
+            nextAttemptAt: notice.nextAttemptAt,
+            createdAt: notice.createdAt,
+        },
+    ]);
+    assert.deepEqual(owners.deadmanNotices, [], 'the owner has no notice rows');
+    // A row for a switch that has not fired (a store from a crash) is not
+    // exported: before the trigger a recipient learns nothing of a switch.
+    const unfired = await build(owner.keySet, [recipient.keySet.identity], 'unfired');
+    assert.equal((await arm(owner.user, armBody(unfired))).status, 201);
+    db.createDeadmanReleaseNotice({
+        switchId: unfired.releaseId,
+        recipientAccountId: recipient.user.id,
+        nextAttemptAt: new Date().toISOString(),
+    });
+    const afterCrashRow = lifecycle.exportUserData(recipient.user.id)!;
+    assert.equal(afterCrashRow.deadmanNotices.length, 1);
+    assert.ok(!JSON.stringify(afterCrashRow).includes(unfired.releaseId));
     // Through the route too.
     const res = await app.request('/v1/auth/account/export', { headers: headers(recipient.user) });
     assert.equal(res.status, 200);
-    const exported = (await res.json()) as { deadmanReleases: DeadmanReleasedCopy[] };
+    const exported = (await res.json()) as {
+        deadmanReleases: DeadmanReleasedCopy[];
+        deadmanNotices: Array<{ switchId: string }>;
+    };
     assert.deepEqual(exported.deadmanReleases[0].copy, recipientCopy);
+    assert.deepEqual(
+        exported.deadmanNotices.map((n) => n.switchId),
+        [envelope.releaseId]
+    );
 });
 
 test('deleting an owner’s account removes an unfired release’s copies and keeps a fired one for the people it named; deleting a recipient’s removes their copies and ends their notices', async () => {
@@ -1216,6 +1505,81 @@ test('a legacy switch holds no release whatever its payload looks like, and a fi
     assert.deepEqual(orphaned.notices, { total: 1, sent: 0, pending: 1, failed: 0 });
     assert.equal(orphaned.encryptedPayload, undefined);
     assert.equal((await releasesFor(recipient.user)).length, 1, 'the recipient still reads it');
+});
+
+test('the 365-day removal lists each release’s copies by switch: a pass over releases already removed does not scan the copies', () => {
+    // Fired long ago, removed on the first pass; every later pass must cost
+    // one indexed lookup per release, not a scan of every copy row (the
+    // independent review's P3b-M4: 8 s a tick at 10,000 removed releases).
+    const owner = randomUUID();
+    const releasedAt = new Date(Date.now() - 400 * 24 * 3600 * 1000).toISOString();
+    const ids: string[] = [];
+    for (let i = 0; i < 1500; i += 1) {
+        const id = randomUUID();
+        ids.push(id);
+        for (const account of [owner, randomUUID(), randomUUID()]) {
+            db.putDeadmanReleaseWrap({
+                switchId: id,
+                recipientAccountId: account,
+                recipientFingerprint: 'ab'.repeat(32),
+                sealedKey: 'sealed',
+                signature: 'signed',
+            });
+        }
+        db.createDeadmanSwitch({
+            id,
+            ownerId: owner,
+            status: 'triggered',
+            checkInIntervalSeconds: 3600,
+            gracePeriodSeconds: 0,
+            lastCheckInAt: releasedAt,
+            triggerAt: releasedAt,
+            releaseAt: releasedAt,
+            recipients: [],
+            encryptedPayload: '{"header":{},"ownerIdentity":{}}',
+            releaseFormat: 'release-v1',
+            releasedAt,
+        });
+    }
+    assert.equal(db.listDeadmanReleaseWraps(ids[7]).length, 3, 'listed by switch');
+    assert.ok(removeExpiredReleases(new Date()) >= 1500);
+    assert.ok(db.listDeadmanReleaseWraps(ids[7]).every((w) => w.sealedKey === ''));
+
+    // The second pass: nothing to do, and no walk over the copies map; nor
+    // over the notices map when one release's notices are counted.
+    db.createDeadmanReleaseNotice({
+        switchId: ids[7],
+        recipientAccountId: randomUUID(),
+        nextAttemptAt: releasedAt,
+    });
+    const iterators = ['values', 'entries', 'keys', 'forEach', Symbol.iterator] as const;
+    const maps = [db.deadmanReleaseWraps, db.deadmanReleaseNotices].map(
+        (map) => map as unknown as Record<string | symbol, unknown>
+    );
+    const saved = maps.flatMap((map) => iterators.map((name) => [map, name, map[name]] as const));
+    let walks = 0;
+    for (const [map, name, original] of saved) {
+        map[name] = function walk(this: unknown, ...args: unknown[]) {
+            walks += 1;
+            return (original as (...a: unknown[]) => unknown).apply(this, args);
+        };
+    }
+    let removed: number;
+    let elapsedMs: number;
+    let counts: ReturnType<typeof noticeCounts>;
+    try {
+        const started = performance.now();
+        removed = removeExpiredReleases(new Date());
+        elapsedMs = performance.now() - started;
+        counts = noticeCounts(ids[7]);
+    } finally {
+        for (const [map, name] of saved) delete map[name];
+    }
+    assert.equal(removed, 0);
+    assert.deepEqual(counts, { total: 1, sent: 0, pending: 1, failed: 0 });
+    assert.equal(walks, 0, 'neither the copies map nor the notices map was iterated');
+    assert.ok(elapsedMs < 2000, `a no-op pass over 1,500 removed releases took ${elapsedMs} ms`);
+    assert.equal(db.listDeadmanReleaseWraps(ids[1499]).length, 3, 'the index is intact');
 });
 
 test('a recipient whose account was deleted before the trigger gets no notice row; the others do', async () => {
