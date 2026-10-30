@@ -923,8 +923,11 @@ of the release-identities record and the questions below.
 3.  The owner's public identity is kept with each release switch, so a fired
     release stays checkable after the owner deletes their account, until it
     is removed after 365 days (E13).
-4.  At most 20 live (armed or in grace) release switches per owner, a bound
-    on storage of about 10 MB per account.
+4.  At most 20 live (armed or in grace) release switches per owner. Part 2's
+    independent review found that this alone bounds no storage, since a
+    fired release is held for 365 days outside it; the bounds on what
+    persists, and on what one account may send another, are part 2's, and
+    its record section states them.
 5.  The header is signed inside each copy's signature rather than once
     (E7); recipients learn they read the same text only by comparing.
 6.  Transferable signatures, held by the server from arming (C15, E8).
