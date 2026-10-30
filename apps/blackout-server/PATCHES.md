@@ -565,3 +565,33 @@ of these converge with upstream rather than diverge from it.
   not touch it; it is recorded here because it sits outside
   `blackout_runtime/`. Record:
   `docs/security/synapse-dependencies-triage-2026-10-25.md` (last section).
+
+## 2026-10-30 authlib 1.9.1 (JWS and HMAC key advisories)
+
+Edits outside `blackout_runtime/` for the authlib advisories recorded in
+`docs/security/dependency-advisories-server-desktop-2026-10-30.md` (repository
+root). Ported from upstream `b20ae98` (#20415, "Bump authlib from 1.6.12 to
+1.9.1", element-hq/synapse develop, 2026-10-27), which changed only
+`poetry.lock` and `tests/handlers/test_oidc.py`. Re-check both files during any
+reconciliation with upstream; after this they match upstream's for authlib.
+
+- `pyproject.toml`: `authlib = ">=1.9.1,<1.10"` (was `>=1.6.12,<1.7`). 1.9.1
+  fixes GHSA-6v38-4h7w-rj9h (Critical), GHSA-7vr2-2fgp-9w7p and
+  GHSA-8m4g-j4wp-wgcg (High), and five Moderate/Low advisories. Upstream has no
+  upper bound (`authlib>=0.15.1`); this tree caps below the next minor, which
+  has not been released or checked.
+- `poetry.lock`: `poetry lock --no-update` under poetry 1.3.2. authlib 1.6.12 to
+  1.9.1, and `joserfc` 1.7.7 is added (authlib 1.7+ requires `joserfc>=1.6.8`
+  and `cryptography>=45.0.1`; the lock already has cryptography 50.0.2). The
+  file hashes are the ones upstream's lock carries. Nothing else moved apart
+  from `content-hash`.
+- `tests/handlers/test_oidc.py` (`test_map_userinfo_to_user`): the integer
+  `sub` case now arrives from the userinfo endpoint
+  (`_user_profile_method = "userinfo_endpoint"`, `scope=""`, so the fake
+  provider issues no id_token), as in upstream. Since 1.7.0 authlib validates
+  id_token claims with joserfc, which rejects a `sub` that is not a string
+  (RFC 7519 StringOrURI; OIDC Core requires a string). A provider that puts an
+  integer `sub` in a signed id_token is now refused with `invalid_token`; one
+  that returns an integer id from its userinfo endpoint (GitHub-style OAuth2)
+  still maps. `synapse/handlers/oidc.py` is unchanged, and so is every claim
+  check it asks for (`iss`, `aud`, `exp`, `nonce`, `at_hash`, signature).
