@@ -10,7 +10,10 @@ supporting the claim next to it, the claim is wrong and we want to know — see
 Last reviewed: **2026-08-10**; section 1 updated 2026-10-18 with the defaults
 for new canopies and dens; section 2 updated 2026-10-26 with release keys in the
 export; sections 1 and 2 updated 2026-10-29 with the dead-man release notice and
-the releases given to a person in the export. Changes to anything here are
+the releases given to a person in the export; section 1 updated 2026-10-30 with
+how the notices room is made unencrypted and kept to one per person, the
+safety-code condition on "never reaches the server readable", and the bounds on
+who can name you, exact on one API server and not across replicas. Changes to anything here are
 recorded in the [policy changelog](docs/legal/CHANGELOG.md).
 
 ---
@@ -105,8 +108,11 @@ Encryption claims are only worth something with the exceptions attached.
     private, it would break them. Giving the bot real crypto is on the roadmap;
     until it lands, this list stands and stays here.
 -   **Dead-man release notices.** When a dead-man switch armed in the release
-    format fires, the bot makes one "Blackout notices" room per person named,
-    invites them, and posts one fixed sentence with the release's id — nothing
+    format fires, the bot makes one "Blackout notices" room per person named
+    and reuses it (a homeserver slow to make it can still leave someone an
+    extra, empty one in the cases
+    [`KNOWN_LIMITATIONS.md`](KNOWN_LIMITATIONS.md) lists), invites them, and
+    posts one fixed sentence with the release's id — nothing
     of the message, nobody's name, not the owner's label. The room is not
     end-to-end encrypted, on purpose: the bot cannot encrypt, so its post is
     plaintext whatever a room's state says, and the room is created so that
@@ -122,10 +128,10 @@ Encryption claims are only worth something with the exceptions attached.
     [`release-envelope-2026-10-26.md`](docs/security/release-envelope-2026-10-26.md)
     §11). Any account with release keys can name you on a switch, within
     bounds the API enforces (5 held releases naming you from one account, 50
-    from everyone: exact on one API server against requests sent at once, and
-    exceeded across several replicas only by what they take in within the
-    moment their store takes to refresh); you cannot yet refuse an owner. No deployment can arm such
-    a switch yet: arming is refused until an operator turns
+    from everyone: exact on one API server against requests sent at once;
+    across several replicas a burst of requests can exceed them by up to its
+    own size until the replicas' queued writes reach each other); you cannot
+    yet refuse an owner. No deployment can arm such a switch yet: arming is refused until an operator turns
     `BLACKOUT_DEADMAN_RELEASES` on, and no deployment file does.
 -   **Scheduled messages.** When you schedule a message, you hand its text to the
     Blackout API. The API stores it as plaintext until it is sent, then clears it,

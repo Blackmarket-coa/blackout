@@ -641,7 +641,7 @@ longer current.
     fires (the other crash shape) is left alone, neither sent nor ended, and
     is sent once the switch fires (P3b-L1). Legacy switches change status
     only, as today.
--   **The room.** One standing room per account, named "Blackout notices",
+-   **The room.** One standing room per person, named "Blackout notices",
     created by the bot with the `public_chat` preset, an invite-only
     `m.room.join_rules` in `initial_state` and `visibility: private`, the
     person invited with `is_direct`, and power levels that let only the bot
@@ -657,12 +657,39 @@ invite`, set by every in-repo template, adds `m.room.encryption` to every
     backstop would encrypt this preset too. An earlier notice's room is
     reused; a person who left it, or declined it, is invited again, with
     `is_direct`, when a later notice is due, at most once per notice
-    (recorded on the row as `reinvited_at`). One room per account holds
-    within one process: a per-recipient slot serialises finding or making
-    the room and a notice that waited reads the room again (P3b-M5), and the
-    interval does not start a tick while one runs. A room the homeserver no
-    longer has is replaced once per person: every row of theirs that pointed
-    at it moves to the replacement (P3b-L3).
+    (recorded on the row as `reinvited_at`). One room per person: within one
+    process a per-recipient slot serialises finding or making the room and a
+    notice that waited reads the room again (P3b-M5), and the interval does
+    not start a tick while one runs; and the room carries an alias,
+    `#blackout-notices-<hmac>:<server>`, 128 bits of an HMAC over the
+    person's Matrix id under a key derived from `JWT_SECRET_PRIMARY`, which
+    the homeserver refuses to give a second room before it makes one
+    (`M_ROOM_IN_USE`). So a `createRoom` the homeserver finished after the
+    notifier stopped waiting, which a timeout does not cancel (the servlet
+    is not cancellable), or one another API process made, is found through
+    the alias on the next attempt and not made again (round 3 of the review:
+    as first fixed, each such attempt left the person an extra, empty room
+    with an invite). The alias is resolved fresh, not from the client's
+    process cache; the room it names is used only if the bot made it (its
+    `m.room.create` is the bot's), and one with no `m.room.create` yet is
+    still being made and is waited for. The person sees the alias as the
+    room's address; nobody without the secret can compute it from a Matrix
+    id, so the directory does not say who has a notices room. What remains:
+    where the homeserver refuses the alias itself (an alias policy that
+    forbids the bot answers 403, an appservice holding the namespace
+    `M_EXCLUSIVE`), or the alias names a room that is gone or that the bot
+    did not make (an admin who shuts a room down with a replacement moves its
+    aliases there), the room is made without an alias, so that the person
+    still gets notices, and a create of that room which times out after the
+    homeserver made it leaves an extra, empty room with an invite, once per
+    such attempt, as before the alias; so does a rotation of the secret
+    between a timed-out create and its retry, since the alias changes with
+    the key; and two processes making one person's room at the same moment
+    both pass the alias check, and the second's alias write then fails
+    after the homeserver gave it a room id but before any event, so that room
+    has nobody in it and nobody invited (`handlers/room.py`, `create_room`).
+    A room the homeserver no longer has is replaced once per person: every
+    row of theirs that pointed at it moves to the replacement (P3b-L3).
 -   **The notice:** an `m.text` (an `m.notice` would be silent under
     `.m.rule.suppress_notices`) with the fixed body "There is something new
     for you in Blackout. Open Blackout to see it. This room is not end-to-end
@@ -681,8 +708,17 @@ invite`, set by every in-repo template, adds `m.room.encryption` to every
     that does not is that notice's retry (`matrix_<call>_timeout`) and its
     request is aborted, since the ticks do not overlap and a hung call would
     otherwise hold every other due notice for undici's five-minute default.
-    It does not go through `botPostingGate.ts`: it is the bot's own post into
-    its own room.
+    A tick is still a sequence, and a notice makes up to seven calls in turn
+    (the state of a known room, a create, the alias lookup, the bot's own id
+    until the homeserver has answered it once, the state of the room found,
+    a re-invite or a create without the alias, the send): a homeserver that
+    answers nothing holds a tick of 50 for about 25 minutes, each notice
+    ending at its first call, and one that answers each call just inside the
+    30 s can hold one notice for about three and a half minutes and a tick of
+    50 for about three hours, with every notice due beyond the 50 waiting for
+    the next tick (round 3 of the review: as first written only the first
+    case was stated). It does not go through `botPostingGate.ts`: it is the
+    bot's own post into its own room.
 -   **What the owner sees:** when the switch fired, how many recipients were
     given access, and how many notices were sent, are pending and failed;
     never the notice rooms. A recipient who deleted their account drops out
@@ -705,12 +741,24 @@ invite`, set by every in-repo template, adds `m.room.encryption` to every
     again right before the rows are written, with nothing yielding between,
     so on one API process the bounds hold against arms sent at once (as first
     fixed they were read once, before the signature awaits, and a burst of N
-    arms passed every one: round 2 of the review); across API replicas the
-    store is eventually consistent, and each bound can be exceeded by what
-    lands within its refresh window, typically under a second. So, on one
-    process, one person receives at most 50 notices in any 365 days, each
-    with at most one re-invite. A recipient cannot yet refuse an owner
-    (decision 19).
+    arms passed every one: round 2 of the review). Across API replicas each
+    replica checks against its own mirror, which shows another replica's
+    arms only once that replica's write-behind queue has written them to
+    Postgres and told its peers; the queue writes one row at a time, in
+    order, and an arm queues one write per copy and one for the switch (up to
+    66), so a burst is itself what lengthens the delay, and across replicas a
+    burst can exceed each bound by up to its own size until the queues drain.
+    How long that takes was not measured (round 3 of the review: as written
+    in round 2 this said "typically under a second", which nothing measured
+    and the queue's design contradicts in exactly the burst case). So, on
+    one process, at most 50 notice rows name one person in any 365 days, each
+    with at most one re-invite, and each sent once the homeserver has
+    accepted it; a send the homeserver accepted but answered after the 30 s
+    is retried with the same transaction id, which the homeserver
+    deduplicates for about 30 minutes (§15, "Read, not run"), so a homeserver
+    that keeps doing that past the sixth retry (30 s doubling: about 31
+    minutes in) can show the person the same notice more than once. A
+    recipient cannot yet refuse an owner (decision 19).
 -   **Who learns what from a notice:** the homeserver, nothing new; Apple or
     Google, that a notification came (the app registers `event_id_only`
     pushers); an email provider, the fixed body, for someone with email
@@ -969,8 +1017,13 @@ message, and nothing here makes a release happen on time (§10, R12).
     `release_id_taken`, an existence answer for any switch's id, accepted and
     explained at `SWITCH_NOT_FOUND` in the module: P3b-L7, decision 22), and
     every bound still has room, each read again (round 2 of the review: read
-    once before the signature awaits, a burst of N arms passed every bound);
-    then the rows are written with no await between, in the mirror: the
+    once before the signature awaits, a burst of N arms passed every bound),
+    and the owner's current identity is still the row the verifier was built
+    from and every recipient's current identity is still the copy's, each
+    refused with its own code as before the awaits (round 3: read once, so a
+    recipient who rotated during the verification got a held copy sealed to
+    a replaced key, and one who deleted their account a held copy their
+    deletion's blanking pass had already run past); then the rows are written with no await between, in the mirror: the
     copies first, one row per account, and then the switch, id = release id,
     no room, `release-v1`, the recipients' account ids, the label. In
     Postgres mode each row is its own write-behind upsert, committed after
@@ -982,8 +1035,8 @@ message, and nothing here makes a release happen on time (§10, R12).
     crash; nothing detects the orphaned copies or the missing one (P3b-L5).
     On one replica two arms with one id cannot both write and the bounds
     hold against arms sent at once; across replicas the store is eventually
-    consistent and the window applies to both (P3b-L6). The answer is the
-    armed event with the owner's view.
+    consistent and the window, which a burst lengthens (§11), applies to
+    both (P3b-L6). The answer is the armed event with the owner's view.
 -   **The owner's view** carries `releaseFormat`, `releasedAt` once fired,
     `release` (the header, the owner's identity, the owner's own copy, and
     whom each held copy is sealed to with its fingerprint) while the content
@@ -1003,8 +1056,11 @@ message, and nothing here makes a release happen on time (§10, R12).
     a replaced owner identity is `owner_identity_changed`: the owner arms
     again, E14); the switch is read again after the awaits, so, on one
     replica, a cancel that landed meanwhile wins and no copy is written to a
-    cancelled switch. Across replicas the store is eventually consistent
-    (LISTEN/NOTIFY, typically sub-second), and a cancel on one replica with a
+    cancelled switch. Across replicas the store is eventually consistent (a
+    replica sees another's write once that replica's write-behind queue has
+    written it and told its peers through LISTEN/NOTIFY; how long that takes
+    grows with the queue and was not measured), and a cancel on one replica
+    with a
     re-seal on another in that window can leave a sealed copy on a cancelled
     switch: served to nobody, since `releasedCopiesFor` needs `releasedAt`,
     which a cancelled switch never gets, and blanked by a second cancel
@@ -1053,8 +1109,17 @@ message, and nothing here makes a release happen on time (§10, R12).
     with `name: "Blackout notices"`, `visibility: private`, `preset:
 public_chat`, `encrypted: false`, `initial_state` holding an invite-only
     `m.room.join_rules`, the person invited with `is_direct`, `events_default`
-    and `invite` at 50: §11 says why that preset) and recorded on the row
-    before anything is sent, so a crash makes no second room; finding or
+    and `invite` at 50: §11 says why that preset; and `room_alias_name`, the
+    person's alias) and recorded on the row before anything is sent, so a
+    crash after the answer makes no second room; a create the homeserver
+    refuses with `M_ROOM_IN_USE` has its alias resolved fresh and the room
+    it names used if its `m.room.create` is the bot's (the bot's id from
+    whoami, cached once answered), with the person invited again as for a
+    known room, and one with no `m.room.create` yet is retried
+    (`matrix_alias_room_not_ready`); a create refused for the alias itself
+    (403, `M_EXCLUSIVE`) or an alias naming a room that is gone or not the
+    bot's gets a room without the alias, any other refusal is a retry (§11
+    says what each leaves: round 3 of the review); finding or
     making the room happens under a per-recipient slot, with the row and the
     room read again once the slot is held, so two notices for one person in
     overlapping ticks make one room (P3b-M5); a person whose membership is
@@ -1093,17 +1158,24 @@ public_chat`, `encrypted: false`, `initial_state` holding an invite-only
     one that does not is that notice's retry (`matrix_<call>_timeout`) with
     its request aborted: the ticks do not overlap, so without that one
     connection the homeserver accepted and never answered held every due
-    notice for undici's default of five minutes; a tick is still a sequence,
-    so 50 notices whose every call times out take about 25 minutes, and the
-    worker's shutdown waits for a tick in flight only up to its own bound.
-    An in-flight set keeps an overlapping tick off a notice, and the interval
-    does not start a tick while the previous one runs; a stop ends a tick
-    after the notice in hand. Logs carry counts only.
+    notice for undici's default of five minutes; every one of the seven
+    calls a notice can make (state, create, alias lookup, whoami, state of
+    the room found, re-invite or a create without the alias, send) hands its
+    signal to `fetch` (round 3: as first fixed, only createRoom's abort was
+    pinned by a test). A tick is still a sequence: 50 notices whose every
+    call times out take about 25 minutes, a homeserver that answers each call
+    just inside the 30 s can hold one notice about three and a half minutes
+    and a tick of 50 about three hours (§11), and the worker's shutdown waits
+    for a tick in flight only up to its own bound. An in-flight set keeps an
+    overlapping tick off a notice, and the interval does not start a tick
+    while the previous one runs; a stop ends a tick after the notice in hand.
+    Logs carry counts, and for a throw that is not a homeserver call the
+    error's message; never who or where.
 -   **Account deletion** (`accountLifecycle.ts`): an unfired release switch
     of the account's loses its copies with its content; a fired one keeps its
     content, the owner's identity it was signed with (E13) and the recipients'
-    copies, and only the owner's own copy goes, since nothing is re-sealed
-    after the trigger and nobody is left to open it. As a recipient: the
+    copies, and only the owner's own copy and the label go, since nothing is
+    re-sealed after the trigger and nobody is left to open it. As a recipient: the
     account's copies on others' switches go, fired or not; its pending notices
     end with `recipient_gone`, and a notice whose homeserver call was in
     flight when the deletion landed stays `failed` with that reason, with no
@@ -1135,18 +1207,21 @@ public_chat`, `encrypted: false`, `initial_state` holding an invite-only
     nothing yielding before the writes, so on one replica exactly the bound
     passes a burst of arms (round 2 of the review: checked once, a burst of
     N passed every bound, and "two arms racing can exceed one by one" was
-    not true, since N racing exceeded it by N − 1); across replicas by what
-    lands within the refresh window. The held cap is what bounds the content
+    not true, since N racing exceeded it by N − 1); across replicas by up to
+    the size of a burst, until the replicas' write-behind queues drain (§11). The held cap is what bounds the content
     one account can make the server keep; the rows are not bounded: a
     cancelled release switch's row and its blanked copy rows stay, so an
     account that arms and cancels at the rate adds up to 10 switch rows and
     650 blanked copy rows a day for good, about 230 KB a day as JSON in the
     mirror at 64 recipients and a full label (about 11 KB at one recipient),
-    which decision 24 asks about. The per-recipient bounds are read once per
-    copy per arm through the store's by-recipient index (round 2: as first
-    fixed, a scan of every copy row per copy).
+    which decision 24 asks about. The per-recipient bounds are read twice
+    per copy per arm (before the signatures and again before the writes),
+    each time through the store's by-recipient index (round 2: as first
+    fixed, a scan of every copy row per copy), and the owner's two bounds
+    twice per arm through a by-owner index of the switches (round 3: as
+    first fixed, a filter over every switch row, four times per arm).
 -   **Tests** (`packages/api/test/`): `deadman-releases.integration.test.ts`,
-    23 (the flag off and on, and every spelling; the sweep switched off; the
+    24 (the flag off and on, and every spelling; the sweep switched off; the
     body's shape and cap; every refusal in order, including a copy re-signed
     by a third party; the arming rate; the held cap at its edge, fired
     switches counted and bytes held flat; the per-recipient bounds, 5 and
@@ -1158,8 +1233,9 @@ public_chat`, `encrypted: false`, `initial_state` holding an invite-only
     is held; legacy switches unchanged, a legacy payload that looks like
     release JSON included; the limits; the export, notice rows included;
     deletion of an owner and of a recipient, before and after the trigger;
-    a person's rows listed through the by-recipient index);
-    `deadman-release-notices.integration.test.ts`, 23 (the rows the sweep
+    a person's rows and an owner's switches listed through their indexes; a
+    key change or a deletion during an arm's verification);
+    `deadman-release-notices.integration.test.ts`, 26 (the rows the sweep
     writes; the room's creation body and the send's body and transaction id;
     what the notice never carries; room reuse; re-invite, once per notice;
     the replaced room, once per person; each retry and its backoff; a thrown
@@ -1167,18 +1243,24 @@ public_chat`, `encrypted: false`, `initial_state` holding an invite-only
     recipient; a release that is not there; a switch not yet fired; a
     deletion during a send, during a send the homeserver refuses, and a row
     ended during one; a deletion while the room is found or made, under each
-    call; a call that never answers, ended at the timeout; no homeserver
+    call; a call that never answers, ended at the timeout, each of the seven
+    with its request aborted; a create the homeserver finished after the
+    timeout, found through the alias; the room made without the alias when
+    the alias cannot be used; a deletion during the alias lookup, whoami and
+    a create without the alias; no homeserver
     configured; the overlapping tick, with a bounded wait; two notices for
     one person in overlapping ticks; the interval's running guard; the
     per-tick cap; the stop mid-tick; start and stop);
     `deadman-releases-postgres.integration.test.ts`, 3 (PGlite: a restart,
     `room_id` NULL, `reinvited_at`, a legacy row reading `legacy`, the
-    by-switch and by-recipient indexes after hydration and after a wholesale
-    refresh, a blanked
+    by-switch, by-recipient and by-owner indexes after hydration and after a
+    wholesale refresh, a blanked
     copy and a cleared room in Postgres, the down migration refused and then
     run);
     `deadman-releases-file.integration.test.ts`, 1;
-    `matrix-client-direct-invite.integration.test.ts`, 2; `postgres-store`
+    `matrix-client-direct-invite.integration.test.ts`, 4 (`is_direct`, the
+    alias and a refusal's error code, the alias lookup's cache and signal,
+    whoami's signal); `postgres-store`
     (158 descriptors) and `background-loops` (the notifier among the loops)
     updated. The envelopes in these tests are built with the protocol as the
     owner's device builds them, and the vectors' Alice and Bob stand in for
@@ -1217,8 +1299,24 @@ event) and on a member state PUT (`rest/client/room.py` hands the content to
 keeps a transaction id for about 30 minutes
 (`rest/client/transactions.py`, `CLEANUP_PERIOD_MS`), so the transaction id
 deduplicates a resend soon after a crash and not one after a long outage; the
-push and email behaviour (design §5). The homeserver in the tests is a stub
-that records what the API sends.
+push and email behaviour (design §5); and, for the notices room's alias
+(round 3 of the review), that `createRoom` refuses a taken
+`room_alias_name` with `M_ROOM_IN_USE` before it makes a room, makes a room
+id before an alias policy (403) or an appservice's namespace (`M_EXCLUSIVE`)
+refuses the alias and before any event, and sends `m.room.canonical_alias`
+with it (`handlers/room.py`, `create_room`; `handlers/directory.py`); that
+the default `alias_creation_rules` allow every alias and no in-repo template
+sets them, and the appservice's exclusive alias namespace is `#blackout_.*`,
+which `#blackout-notices-` does not match, so the bot token the deployment
+documents (an admin user's) may create the alias, and a bot token that was
+the appservice's own would be refused it (`M_EXCLUSIVE`) and get rooms
+without one (`config/room_directory.py`, `appservice/__init__.py`,
+`deploy/matrix-appservice/registration.yaml`); that a purge deletes the
+room's aliases and a shutdown with a replacement moves them to it
+(`storage/databases/main/purge_events.py`, `handlers/room.py`); and that the
+`createRoom` servlet is not cancellable, so an aborted request still makes
+the room (`rest/client/room.py`). The homeserver in the tests is a stub that
+records what the API sends.
 
 ## Decisions for the operator to confirm or veto
 
@@ -1247,8 +1345,8 @@ that records what the API sends.
     decision 18 adds up to 10 switch rows and 650 copy rows a day, about
     230 KB a day as JSON at 64 recipients and a full label, about 11 KB at
     one recipient (decision 24). The bounds hold on one API process against
-    arms sent at once; across replicas each can be exceeded by what lands
-    within the store's refresh window.
+    arms sent at once; across replicas a burst can exceed each by up to its
+    own size until the replicas' write-behind queues drain (§11).
 5.  The header is signed inside each copy's signature rather than once
     (E7); recipients learn they read the same text only by comparing.
 6.  Transferable signatures, held by the server from arming (C15, E8).
@@ -1262,15 +1360,17 @@ that records what the API sends.
 11. Decision 19 stays open: no order is added to identities in PR 3 (§9).
 12. (Part 2.) When an owner deletes their account, a fired release keeps its
     content, the owner's identity and the recipients' copies until the 365
-    days end, and only the owner's own copy goes; an unfired one loses
-    everything. A deleted recipient's copies go at once, fired or not (§15).
+    days end, and only the owner's own copy and the label go; an unfired one
+    loses everything. A deleted recipient's copies go at once, fired or not (§15).
 13. (Part 2.) Re-sealing is not gated on `BLACKOUT_DEADMAN_RELEASES`: a
     switch armed while the flag was on stays its owner's to keep sealed to
     current keys (§13, §15).
 14. (Part 2.) The notifier sends at most 50 notices per tick, retries with
     backoff from 30 s to a 6-hour cap, and the standing room is one per
-    account, reused for every release; a notice row keeps its room id until
-    the recipient's account is deleted.
+    person, reused for every release, and kept to one by the per-recipient
+    slot within a process and by the room's alias across a timed-out create
+    and across processes, except where §11 says (decision 25); a notice row
+    keeps its room id until the recipient's account is deleted.
 15. (Part 2.) `GET /v1/deadman/limits` and `GET /v1/deadman/releases` need
     `deadman.read`, which every session token carries, like the other reads.
 16. (Part 2.) A legacy switch's recipient views are unchanged, and a release
@@ -1316,6 +1416,20 @@ that records what the API sends.
     that is up to 10 switch rows and 650 copy rows a day per account, for
     good. Keep them, as the record of what was armed, or let a cancelled
     release switch's rows be deleted after some time.
+25. (Part 2, after its review's round 3.) The notices room carries an alias,
+    an HMAC of the person's Matrix id under a key derived from
+    `JWT_SECRET_PRIMARY`, so that a create the homeserver finished after the
+    notifier's 30 s, or one another process made, is found rather than made
+    again (§11). What it costs: the person sees the alias as the room's
+    address; a rotation of `JWT_SECRET_PRIMARY` changes every alias (a room
+    already made is still found through the rows, but a create that timed
+    out across the rotation is not found and another is made); and where the
+    homeserver refuses the alias (an alias policy, an appservice's
+    namespace) or the alias names a room that is gone or not the bot's, the
+    room is made without it, and a slow homeserver can then leave an extra,
+    empty room again. Keep this key, give the alias a secret of its own that
+    is never rotated with the JWT secret, or drop the alias and accept the
+    extra rooms a slow homeserver leaves.
 
 ## Not verified here
 
@@ -1706,7 +1820,8 @@ this section), and each time at least one test failed. The design document,
 and the deletion screen are edited here too; the trust page is regenerated.
 The fixes then had a second pass from the same verifiers, who replayed the
 attacks against them and read every sentence they changed; what that pass
-found, and what was done about each, is under "Round 2" below.
+found, and what was done about each, is under "Round 2" below, and what a
+third pass found in the second round's fixes under "Round 3".
 
 ### High
 
@@ -1957,8 +2072,8 @@ a tick that outlived it.
     send) runs under `guarded`, which turns a throw into that notice's retry
     with `matrix_<call>_network_error`; anything else that throws inside one
     notice is logged (counts and the error string only) and retried as
-    `notifier_threw`. `inviteToRoom` itself is unchanged: its eight callers
-    read its `{ ok, status }` shape. Test: "a homeserver call that throws is
+    `notifier_threw`. `inviteToRoom`'s answer is unchanged (round 2 added an
+    optional `signal`): its eight callers read its `{ ok, status }` shape. Test: "a homeserver call that throws is
     that notice's attempt: counted, backed off, and the tick goes on to the
     next notice" (the invite, the state read and the create each thrown in
     turn; attempts, `lastError`, the backoff; the other due notice sent).
@@ -2151,6 +2266,124 @@ the tests and the mutation table for them are at the end of this section.
     process against arms sent at once and can be exceeded across replicas by
     what lands within the store's refresh window.
 
+### Round 3: what the verifiers found in the fixes
+
+A third pass replayed the attacks against round 2's fixes (the bounds, the
+room's state on the fork, the overlap, the removal's cost and the indexes'
+survival, the deletion races), checked each round-2 fix against every store
+and caller and with its check removed, and read every corrected sentence.
+Fifteen findings, two of them Medium as claims and the rest Low; each fixed
+or explained here, with the tests and the mutation table at the end of this
+section.
+
+-   **A create that timed out on this side but succeeded on the homeserver
+    left an extra room (Low).** Synapse's `createRoom` servlet is not
+    cancellable, so the aborted request still made the room with its
+    invite; nothing recorded it, and the retry, and any other notice for the
+    person in that tick, made another: under a homeserver that kept
+    answering `createRoom` after 30 s, one empty "Blackout notices" invite
+    per attempt, about 130 over the retry window by the verifiers' count, while `TRUST.md`, §11,
+    decision 14 and `KNOWN_LIMITATIONS.md` said one room per person. Done:
+    the room is created with an alias, an HMAC of the person's Matrix id
+    under a key derived from `JWT_SECRET_PRIMARY`; Synapse refuses a taken
+    alias with `M_ROOM_IN_USE` before it makes a room, and on that answer the
+    notifier resolves the alias fresh and uses the room it names if the bot
+    made it, with the person invited again as for a known room, and waits
+    for one still being made. Where the alias cannot be used (refused by the
+    homeserver, or naming a room that is gone or not the bot's) the room is
+    made without it, rather than the person getting no notice for the retry
+    window; §11 says what that leaves, and decision 25 asks about the key.
+    Tests: "a createRoom the homeserver finished after the call timed out is
+    found by the room's alias on the retry: one room per person, fresh from
+    the directory" (the verifiers' scenario D: two due notices, the first
+    create answered after the timeout, one room in all, the second notice
+    sent in the same tick through the alias, the retry reusing it; one
+    notice alone, its retry found through the alias; the same after a purge
+    freed the alias); "when the alias cannot be used the room is made without
+    it" (a 403 and an `M_EXCLUSIVE` refusal, an alias naming a room the
+    homeserver answers 404 for and one an admin made, a room still being
+    made waited for; a 500 not taken for an alias refusal); "a deletion that
+    lands during the alias lookup, the bot's id or a create without the alias
+    is seen before anything more is asked or recorded"; and in
+    `matrix-client-direct-invite.integration.test.ts` the alias, a refusal's
+    error code, the lookup's cache and signal, and whoami's signal.
+-   **"Typically under a second" (Medium as a claim).** `KNOWN_LIMITATIONS.md`
+    and §11 put a number on the cross-replica window that nothing measured,
+    and §15 said "typically sub-second". A replica sees another's arms only
+    once that replica's write-behind queue, one FIFO chain writing one row at
+    a time and publishing each change after its upsert, has reached them, and
+    an arm queues up to 66 upserts, so the burst the sentence was about is
+    what lengthens the window. Done: the number is gone from both, and §11,
+    §15, decision 4, `KNOWN_LIMITATIONS.md`, `TRUST.md` and the changelog say
+    that across replicas a burst can exceed each bound by up to its own size
+    until the queues drain, which was not measured.
+-   **The abort was pinned for `createRoom` only (Low).** Removing the signal
+    from `getRoomStateAdmin`'s or `sendEvent`'s `fetch` survived the notices
+    suite (the verifiers' V02 and V03). Done: test 15 now parks the state read
+    of a known room, the re-invite, the send, the alias lookup and the bot's
+    id, and asserts each row's `matrix_<call>_timeout` and that each signal
+    was aborted; V02 and V03 are C01 and C02 in the table below and fail it.
+-   **A homeserver that answers slowly was not stated (Low).** The header and
+    `KNOWN_LIMITATIONS.md` gave what a homeserver that answers nothing holds;
+    one that answers each call just inside the timeout holds a notice for
+    every call it makes. Done: both, §11 and §15 say a notice makes up to
+    seven calls (with the alias), so about three and a half minutes for one
+    notice and about three hours for a tick of 50.
+-   **The owner's bounds scanned every switch row (Low).** The held cap and
+    the rate each filtered every switch, twice per arm. Done: the switches
+    map is a `GroupedMap` grouped by owner, rebuilt on the file store's
+    hydrate and kept by the Postgres store's refresh. Tests: test 22 spies
+    the switches map's iterators too and reads both bounds; the file and
+    Postgres tests list switches by owner after a restart and a refresh.
+-   **The identities were read before the awaits only (Low).** A recipient
+    who rotated during an arm's verification got a held copy sealed to a
+    replaced key, and one who deleted their account a held copy their
+    deletion's blanking pass had already run past, counted toward that
+    account's bound for 365 days. Done: the post-await block reads the
+    owner's identity (the same row the verifier was built from) and every
+    recipient's again, refusing with the existing codes. Test: "a key change
+    or a deletion during an arm's verification is seen before the rows are
+    written" (a recipient's rotation and erased keys, the owner's rotation
+    and erased keys, no switch or copy written; the same arm accepted when
+    nothing changes).
+-   **`THREAT_MODEL.md`'s Release identities row said deletion "removes the
+    public halves" (Medium as a claim).** For an owner with a fired release
+    switch the full public identity stays in that switch for up to 365 days
+    and is served to its recipients. Done: the row carries the exception
+    the deletion screen and `KNOWN_LIMITATIONS.md` carry, and the
+    changelog's 2026-10-26 entry points at the 2026-10-29 one.
+-   **§15, "read once per copy per arm" (Low).** Twice, before the
+    signatures and again before the writes. Done.
+-   **§15, "Logs carry counts only" (Low).** Two warnings carry a thrown
+    error's message. Done there and in the notifier's header: counts, and
+    for a throw that is not a homeserver call the error's message; never who
+    or where.
+-   **"Only the owner's own copy goes" (Low).** The label goes too. Done in
+    §15, decision 12 and the changelog's deletion bullet;
+    `KNOWN_LIMITATIONS.md`'s deletion paragraph says the label is removed.
+-   **The P3b-L2 entry said `inviteToRoom` was unchanged (Low).** Round 2
+    gave it an optional `signal`. Done: its answer is unchanged.
+-   **`THREAT_MODEL.md`'s and `TRUST.md`'s headers (Low).** Both dated their
+    dead-man text 2026-10-29 though round 1 and round 2 rewrote it on
+    2026-10-30. Done: each has a 2026-10-30 entry naming the room's creation,
+    the comparison condition, the bounds and the one-process qualifier.
+-   **Test 2's title stated what the homeserver does (Low).** The test pins
+    the body the API sends; the stub cannot model the backstop. Done: "the
+    notifier asks for a direct room with the body the homeserver's backstop
+    leaves unencrypted (public_chat, an invite-only join rule in
+    initial_state) ...". The fork-side test the review proposed under
+    `tests/blackout_runtime/` was not added (still open, below).
+-   **§11, "one person receives at most 50 notices in any 365 days" (Low).**
+    True of notice rows; a send the homeserver accepted but answered after
+    the 30 s is retried with the same transaction id, which it deduplicates
+    for about 30 minutes, so a homeserver that keeps doing that past the
+    sixth retry can show the same notice twice. Done: §11 says at most 50
+    notice rows, each sent once accepted, with that case.
+-   **Commit trailers (Low, for whoever merges).** No tracked file names a
+    model; every fix commit's message ends with the attribution lines the
+    session's harness requires. Rewriting them would take a rebase or an
+    amend, which this work does not do; left to whoever merges.
+
 ### Claims that were not true, and what they say now
 
 1.  Decision 4, §13, §15, `deadmanReleases.ts` and the protocol's constant:
@@ -2223,6 +2456,35 @@ the tests and the mutation table for them are at the end of this section.
     take.
 23. (Round 2.) The M1 note above named one other `private_chat` +
     `encrypted: false` site; there are three. It names them.
+24. (Round 3.) `TRUST.md` §1, §11, decision 14, `KNOWN_LIMITATIONS.md` and
+    the changelog: one room per person. A `createRoom` the homeserver
+    finished after the timeout left an extra room per attempt. Now the
+    room's alias finds it, and each says what can still leave one.
+25. (Round 3.) `KNOWN_LIMITATIONS.md` and §11, "typically under a second";
+    §15, "typically sub-second". Measured by nothing, and contradicted by the
+    write-behind queue in the burst case the sentences were about. Now: by
+    up to a burst's own size until the queues drain, not measured.
+26. (Round 3.) The notifier's header and `KNOWN_LIMITATIONS.md` stated a
+    homeserver that answers nothing and not one that answers slowly. Now
+    both, with the number of calls a notice makes.
+27. (Round 3.) `THREAT_MODEL.md` §5, the Release identities row: "account
+    deletion removes the public halves"; the changelog's 2026-10-26 entry,
+    the same. Except the identity kept with a fired release; the row says
+    so and the entry points at the later one.
+28. (Round 3.) §15, "read once per copy per arm". Twice.
+29. (Round 3.) §15, "Logs carry counts only". Counts, and a thrown error's
+    message.
+30. (Round 3.) §15, decision 12 and the changelog, "only the owner's own
+    copy goes". The label goes too.
+31. (Round 3.) The P3b-L2 entry, "`inviteToRoom` itself is unchanged".
+    Round 2 added a `signal`; its answer is unchanged.
+32. (Round 3.) The `THREAT_MODEL.md` and `TRUST.md` headers dated the
+    dead-man text 2026-10-29. Each now has its 2026-10-30 entry.
+33. (Round 3.) Test 2's title: the homeserver's backstop "leaves" the room
+    unencrypted, which the stub cannot show. Now the body the API asks for.
+34. (Round 3.) §11, "one person receives at most 50 notices in any 365
+    days". Notice rows; a send accepted and answered late can repeat once
+    the transaction id has aged out. Now said.
 
 ### Raised and refuted
 
@@ -2326,6 +2588,51 @@ it. The sources were restored after each run and the diff checked unchanged.
 | timeout: the signal is handed to createRoom so the request is aborted            | `deadman-release-notices.integration.test.ts`   | test 15                                                                          |
 | timeout: matrix-client passes the signal to the createRoom request               | `deadman-release-notices.integration.test.ts`   | test 15                                                                          |
 
+Round 3's checks, the same way (`fix/mut/spec-round3.py`, in scratch; the
+test numbers are the files' after round 3: releases 24, notices 26, file 1,
+client 4). Thirty checks; twenty-nine caught on the first run. The thirtieth,
+the row read again after the alias lookup, survived: the client answers the
+bot's id from its cache once known, so the next read of the row, right after
+it, ended the notice with no call between them that a test could see. It is
+observable (without it, the bot's id is asked for on a deleted person's
+notice), so test 18 counts the calls for the bot's id on a stand-in, and the
+mutant then failed it. The verifiers' own V02 and V03 (the state read's and
+the send's `fetch` without the signal) are C01 and C02 and now fail test 15.
+The sources were restored after each run and the diff checked unchanged.
+
+| Check removed                                                                                | Test file                                         | What failed                                                                        |
+| -------------------------------------------------------------------------------------------- | ------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| T01: identities: the owner's and the recipients' identities are read again before the writes | `deadman-releases.integration.test.ts`            | test 24: a key change or a deletion during an arm’s verification is seen before t… |
+| T02: identities: each recipient's identity is read again (the owner's still is)              | `deadman-releases.integration.test.ts`            | test 24                                                                            |
+| T03: identities: the owner's identity is read again (the recipients' still are)              | `deadman-releases.integration.test.ts`            | test 24                                                                            |
+| T04: index: an owner's switches listed through the index, not a scan                         | `deadman-releases.integration.test.ts`            | test 22: a person’s copies, notices and switches are listed through the index, no… |
+| T05: index: the file store rebuilds the by-owner index on hydrate                            | `deadman-releases-file.integration.test.ts`       | test 1: a release switch, its copies and its notices survive a restart of the fi…  |
+| N01: alias: the create names the person's alias                                              | `deadman-release-notices.integration.test.ts`     | test 2: the notifier asks for a direct room with the body the homeserver’s backs…  |
+| N02: alias: a taken alias is resolved, not retried                                           | `deadman-release-notices.integration.test.ts`     | test 15: a homeserver call that never answers ends at the call timeout as that no… |
+| N03: alias: resolved fresh, not from the client's process cache                              | `deadman-release-notices.integration.test.ts`     | test 16: a createRoom the homeserver finished after the call timed out is found b… |
+| N04: alias: the room it names is used only if the bot made it                                | `deadman-release-notices.integration.test.ts`     | test 17: when the alias cannot be used the room is made without it: an alias the … |
+| N05: alias: a room still being made is waited for, not replaced                              | `deadman-release-notices.integration.test.ts`     | test 17                                                                            |
+| N06: alias: a refused alias falls back to a room without it                                  | `deadman-release-notices.integration.test.ts`     | test 17                                                                            |
+| N07: alias: only an alias refusal falls back, not any refusal                                | `deadman-release-notices.integration.test.ts`     | test 17                                                                            |
+| N08: alias: M_EXCLUSIVE (an appservice namespace) is an alias refusal                        | `deadman-release-notices.integration.test.ts`     | test 17                                                                            |
+| N09: alias: a room that is gone or not the bot's falls back, not retried for the window      | `deadman-release-notices.integration.test.ts`     | test 17                                                                            |
+| N10: alias: the row is read again after the alias lookup (survived, then caught)             | `deadman-release-notices.integration.test.ts`     | test 18: a deletion that lands during the alias lookup, the bot’s id or a create … |
+| N11: alias: the row is read again after the bot's id                                         | `deadman-release-notices.integration.test.ts`     | test 18                                                                            |
+| N12: alias: the row is read again after a create without the alias                           | `deadman-release-notices.integration.test.ts`     | test 18                                                                            |
+| N13: abort: the signal is handed to the state read                                           | `deadman-release-notices.integration.test.ts`     | test 15                                                                            |
+| N14: abort: the signal is handed to the re-invite                                            | `deadman-release-notices.integration.test.ts`     | test 15                                                                            |
+| N15: abort: the signal is handed to the send                                                 | `deadman-release-notices.integration.test.ts`     | test 15                                                                            |
+| N16: abort: the signal is handed to the alias lookup                                         | `deadman-release-notices.integration.test.ts`     | test 15                                                                            |
+| N17: abort: the signal is handed to the bot's id                                             | `deadman-release-notices.integration.test.ts`     | test 15                                                                            |
+| C01: abort: matrix-client passes the signal to the state read (the verifiers' V02)           | `deadman-release-notices.integration.test.ts`     | test 15                                                                            |
+| C02: abort: matrix-client passes the signal to the send (the verifiers' V03)                 | `deadman-release-notices.integration.test.ts`     | test 15                                                                            |
+| C03: abort: matrix-client passes the signal to the direct re-invite                          | `deadman-release-notices.integration.test.ts`     | test 15                                                                            |
+| C04: abort: matrix-client passes the signal to the alias lookup                              | `deadman-release-notices.integration.test.ts`     | test 15                                                                            |
+| C05: abort: matrix-client passes the signal to whoami                                        | `matrix-client-direct-invite.integration.test.ts` | test 4: botUserId hands its signal to whoami, and an aborted request caches noth…  |
+| C06: whoami: an aborted request caches no fallback id                                        | `matrix-client-direct-invite.integration.test.ts` | test 4                                                                             |
+| C07: alias: matrix-client honours cache: false                                               | `deadman-release-notices.integration.test.ts`     | test 16                                                                            |
+| C08: alias: matrix-client surfaces a refusal's Matrix error code                             | `deadman-release-notices.integration.test.ts`     | test 15                                                                            |
+
 ### Still open
 
 -   **A recipient-side refusal of an owner** (decision 19), which the
@@ -2336,16 +2643,34 @@ it. The sources were restored after each run and the diff checked unchanged.
     (decision 20); extending the 365-day removal to them is the operator's.
 -   **The rows of cancelled release switches** stay for good (decision 24);
     deleting them after some time is the operator's.
--   **Across API replicas** the bounds hold only up to what lands within the
-    store's refresh window; a conditional write in Postgres would close that
+-   **Across API replicas** a burst can exceed each bound by up to its own
+    size until the replicas' write-behind queues drain, and how long that
+    takes was not measured; a conditional write in Postgres would close it
     and was not built (P3b-L6).
+-   **The notices room's alias** (decision 25): its key, and what it leaves
+    (§11): a room made without the alias where the homeserver refuses it or
+    the alias names a room that is gone or not the bot's, whose create can
+    then leave an extra room again if it times out after the homeserver made
+    it; a rotation of the secret between a timed-out create and its retry;
+    and two processes making one person's room at once, which leaves an
+    empty room id nobody is in. The fork-side test of the room's creation
+    under `tests/blackout_runtime/` that the review proposed, which would
+    back test 2 with a run, was not added.
+-   **A known room the bot was removed from** (an admin's shutdown without a
+    purge, which kicks the bot and the person and keeps the room) is not
+    replaced: its state still answers, so each notice to that person invites
+    them again, is refused, and retries until its window closes. Replacing a
+    known room the bot is not in was not built here, since a wrong idea of
+    the bot's own id would then replace every person's room; the alias path
+    makes that check only for a room no row knows yet.
 -   **The device-side record of a release's recipients** (part 1's review,
     PR 4) stands as before.
 -   What the review did not verify stands: Postgres end to end through the
     routes (PGlite exercises the store and the migration), the multi-replica
     refresh of the two tables under a real transport, the write-behind crash
     window (from the code), anything against a real Synapse beyond the
-    review's scratch run of the fork, and whether a deployment ever runs the
+    review's scratch run of the fork (the alias's behaviour included: read
+    in the fork, run only against the stub), and whether a deployment ever runs the
     sweep with `BLACKOUT_DEADMAN_SWEEP=0` after releases fired (the API now
     refuses to arm there; nothing can make an existing release's removal run).
 -   An aside from the review, outside this PR: `GET /v1/deadman/releases`

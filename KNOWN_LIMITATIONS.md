@@ -329,7 +329,8 @@ For the source-of-truth triage with tier/owner detail see
     public release key it was signed with, until 365 days after it fired; a
     switch armed before Blackout could release messages (every switch that
     exists today) keeps its payload for the people it named with no removal
-    date, because a release is not taken back. Copies of other people's
+    date, because a release is not taken back. Either way its label is
+    removed. Copies of other people's
     releases sealed to you are removed, a notice still owed to you is dropped,
     and the record of each notice (its status and attempts) stays, with its
     room forgotten. It
@@ -374,6 +375,15 @@ For the source-of-truth triage with tier/owner detail see
     a room's state says, and the room is created so that the homeserver's
     encryption backstop (above) does not mark it encrypted (the `public_chat`
     preset with an invite-only join rule; the backstop keys on the preset).
+    The bot makes one such room for you and reuses it. The room has an
+    address made from your Matrix id under a secret the server keeps (nobody
+    without it can work out whether you have one), so that a room the
+    homeserver finished making after the bot stopped waiting is found again
+    rather than made twice. Where the homeserver refuses that address, where
+    it names a room that is gone or that the bot did not make, or where the
+    server's secret changed in between, a homeserver that is slow to make the
+    room can still leave you an extra, empty "Blackout notices" room with an
+    invite, one per such attempt.
     A fixed sentence, "There is something new for you in Blackout. Open
     Blackout to see it. This room is not end-to-end encrypted, so please
     don't reply here.", and the release's id, and nothing else: not who armed
@@ -382,11 +392,14 @@ For the source-of-truth triage with tier/owner detail see
     the homeserver emails you about unread messages, can see that you got one.
     The bot retries a notice the homeserver refuses for 30 days, then records
     it as failed, and gives up on a call the homeserver does not answer within
-    30 seconds the same way (it sends one notice at a time, so a homeserver
-    that answers nothing holds every notice due behind it, each for up to 30
-    seconds); whether a notice reaches you depends on the homeserver and
-    your client, and the release does not: it is released when the API's own
-    store says so, and the view the next PR adds reads that store.
+    30 seconds the same way. It sends one notice at a time, and one notice can
+    take up to seven calls, so a homeserver that answers nothing holds every
+    notice due behind it, each for up to 30 seconds, and one that answers
+    slowly, just inside the 30 seconds each time, can hold each for about
+    three and a half minutes and a batch of 50 for about three hours. Whether
+    a notice reaches you depends on the homeserver and your client, and the
+    release does not: it is released when the API's own store says so, and
+    the view the next PR adds reads that store.
 -   **Who can name you, and what that does to your notices room.** Any
     account on this server with release keys can name you on a release switch
     without your agreement; the design asks the owner to compare a safety code
@@ -394,10 +407,13 @@ For the source-of-truth triage with tier/owner detail see
     bounds it: one account can name you on at most 5 held releases, and
     everyone together on at most 50 (`GET /v1/deadman/limits`; a release is
     held from arming until 365 days after it fires). The bounds hold on one
-    API server against requests sent all at once; a deployment running
-    several API replicas can exceed each by what the replicas take in within
-    the moment their store takes to refresh, typically under a second. Each
-    one that fires puts
+    API server against requests sent all at once. A deployment running
+    several API replicas can exceed each: a replica sees another's arms only
+    once that replica's queued database writes have gone through, one after
+    another, and a burst of requests is itself what fills that queue, so
+    across replicas a burst can exceed a bound by up to its own size until
+    the queues drain; how long that takes was not measured. Each one that
+    fires puts
     one notice in your notices room, and if you left that room the bot
     invites you back, once per notice. You cannot yet refuse an owner, and
     release keys cannot be unpublished, so the only way to stop being named is
@@ -431,9 +447,9 @@ For the source-of-truth triage with tier/owner detail see
     sealed copies at the largest sizes; can arm at most 10 in any 24 hours;
     and can name one person on at most 5 held releases, who can be named on at
     most 50 from everyone. `GET /v1/deadman/limits` reports each. The bounds
-    hold on one API server against requests sent all at once; several API
-    replicas can exceed each by what they take in within the moment their
-    store takes to refresh. An owner whose 20 switches all fired cannot arm
+    hold on one API server against requests sent all at once; across several
+    API replicas a burst can exceed each by up to its own size until the
+    replicas' queued writes have reached each other (above). An owner whose 20 switches all fired cannot arm
     again until the oldest is removed; cancelling an unfired one frees its
     place. These bound content, not rows: a cancelled release switch leaves
     its row (whom it named, the label and timing) and one blanked copy row

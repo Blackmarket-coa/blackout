@@ -500,7 +500,13 @@ screen. **Verdict:** not proposed; recorded so the trade is on paper.
     join rule in `initial_state`, which Synapse sends in place of the preset's
     public one; its visibility is `private` _(as first built the room used
     `private_chat` and the fork encrypted it: part 2's independent review,
-    P3b-M1)_. The person is invited as a direct message (`is_direct`), and
+    P3b-M1)_. It carries an alias, an HMAC of the person's Matrix id under
+    a key derived from the API's secret, so that a room the homeserver made
+    after the bot stopped waiting for it is found again rather than made
+    twice _(round 3 of that review; where the alias cannot be used the room
+    is made without it, and a slow create can then leave an extra, empty
+    room, as `release-envelope-2026-10-26.md` §11 says)_. The person is
+    invited as a direct message (`is_direct`), and
     their power level is below the room's `events_default` so nothing can be
     typed there. One `m.text` per recipient per release. An
     `m.notice` would be silent: the default rule `.m.rule.suppress_notices`

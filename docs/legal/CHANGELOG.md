@@ -52,8 +52,9 @@ no deployment, compose or env file does.
     is bounded: 20 release switches with content held, 10 arms in 24 hours, 5
     held releases naming one person from one owner and 50 from everyone
     (`GET /v1/deadman/limits` reports each; exact on one API server against
-    requests sent at once, and exceeded across several replicas only by what
-    they take in within the moment their store takes to refresh). The rows of
+    requests sent at once; across several replicas a burst of requests can
+    exceed them by up to its own size until the replicas' queued writes reach
+    each other). The rows of
     a cancelled switch stay, blank. Cancelling removes the message and
     the copies from its database (backups aside); 365 days after a switch fires
     they are removed, at the sweep's first pass after that, and the rows stay,
@@ -63,7 +64,12 @@ no deployment, compose or env file does.
 -   **The bot posts a notice in a room that is not encrypted.** When a release
     switch fires, the Blackout bot makes, once per person, a "Blackout notices"
     room, invites them as a direct message, and posts one fixed sentence with
-    the release's id: nothing of the message, nobody's name, not the owner's
+    the release's id (the room's alias is an HMAC of the person's Matrix id
+    under a key derived from the server's secret, so that a room the
+    homeserver finished making after the bot stopped waiting is found rather
+    than made again; in the cases
+    [`KNOWN_LIMITATIONS.md`](../../KNOWN_LIMITATIONS.md) lists a slow
+    homeserver can still leave an extra, empty one): nothing of the message, nobody's name, not the owner's
     label. The room is a plaintext service room like the others
     [`TRUST.md`](../../TRUST.md) §1 lists, created so that the homeserver does
     not mark it encrypted (the bot cannot encrypt, so its post is plaintext
@@ -80,7 +86,7 @@ no deployment, compose or env file does.
 -   **Deleting an account** removes the sealed copies of its unfired release
     switches with their content; a fired one keeps its content, the copies for
     the people it named and the public key it was signed with, until the 365
-    days end, so that what was released stays checkable (a switch armed before
+    days end, and only the owner's own copy and the label go, so that what was released stays checkable (a switch armed before
     releases, every switch that exists today, keeps its payload for the people
     it named with no removal date). As a person named on others' switches, the
     account's copies are removed, a notice still owed to it is dropped, and its
@@ -109,7 +115,9 @@ Arming a switch is still closed, so nothing is encrypted for them yet.
     Any account signed in on the homeserver can read them, and the server sees
     who looks up whom. Deleting the account removes them: for each one a row
     stays with no keys and no account, saying only when it was published and
-    replaced.
+    replaced. (A copy of the one a release switch was signed with stays with
+    that switch once it has fired, until 365 days after: the 2026-10-29 entry
+    above.)
 -   **The private half never reaches the server.** It stays on the devices
     that made it or loaded a recovery file, and in the recovery files the
     person saves; signing out does not remove it from a device. The app's
