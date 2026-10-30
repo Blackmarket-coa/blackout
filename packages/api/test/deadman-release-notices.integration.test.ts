@@ -2145,7 +2145,7 @@ test('a stop mid-tick ends the tick after the notice in hand; the rest stay pend
     assert.equal((await runDeadmanReleaseNotifier({ now: at })).sent, 1);
 });
 
-test('a room found through the alias that is still not the whole room the create makes at the notice’s next attempt (no events, the create alone, the create and the bot’s join, or power levels that let the person post) is taken for a create the homeserver abandoned: a room is made without the alias, nobody is invited into it, and later notices reuse the new room', async () => {
+test('a room found through the alias that is still not the whole room the create makes, with the bot in it, at the notice’s next attempt (no events, the create alone, the create and the bot’s join, a room the bot has left, or power levels that let the person post) is waited for once, as a create in progress, and then replaced: a room is made without the alias, nobody is invited into the old one, and later notices reuse the new room', async () => {
     // The homeserver writes the alias after it makes the room id and before
     // it sends any event (`handlers/room.py`, `create_room`), and then writes
     // the room in steps (`_send_events_for_new_room`: m.room.create alone,
@@ -2163,6 +2163,16 @@ test('a room found through the alias that is still not the whole room the create
         ['no events', () => []],
         ['the create alone', () => [create]],
         ['the create and the bot’s join', () => [create, memberEvent(bot)]],
+        [
+            'the whole room, which the bot has since left',
+            (personMxid) => [
+                ...createdRoomState(bot, {
+                    invite: [personMxid],
+                    power_level_content_override: { events_default: 50, invite: 50 },
+                }).filter((e) => !(e.type === 'm.room.member' && e.state_key === bot)),
+                memberEvent(bot, 'leave'),
+            ],
+        ],
         [
             'power levels that let the person post',
             (personMxid) => [

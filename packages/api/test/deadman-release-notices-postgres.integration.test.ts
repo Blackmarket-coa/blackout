@@ -167,66 +167,100 @@ const committed = async (switchId: string, accountId: string) =>
 const urlOf = (input: RequestInfo | URL): string =>
     typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
 
-test('an account deletion the API process committed while the worker was sending stands in Postgres, whenever its change notification reaches the worker', async () => {
-    const variants = [
+test('an account deletion the API process committed while the worker had a notice in hand stands in Postgres, whenever its change notification reaches the worker', async () => {
+    type Variant = {
+        name: string;
+        /** An earlier notice made the person's room; `purged`: the homeserver has since lost it. */
+        room: 'none' | 'known' | 'purged';
+        /** The homeserver call the deletion lands during. */
+        park: 'send' | 'create';
+        /** The notification reaches the worker while that call is in flight, not after. */
+        early: boolean;
+    };
+    const variants: Variant[] = [
         {
-            name: 'the notification after the send answered, room known',
-            roomKnown: true,
+            name: 'room known, during the send, told after',
+            room: 'known',
+            park: 'send',
             early: false,
         },
         {
-            name: 'the notification while the send was in flight, room known',
-            roomKnown: true,
+            name: 'room known, during the send, told during',
+            room: 'known',
+            park: 'send',
             early: true,
         },
         {
-            name: 'the notification after the send answered, room made in this attempt',
-            roomKnown: false,
+            name: 'room made now, during the send, told after',
+            room: 'none',
+            park: 'send',
+            early: false,
+        },
+        {
+            name: 'room made now, during the create, told after',
+            room: 'none',
+            park: 'create',
+            early: false,
+        },
+        {
+            name: 'room purged and replaced now, during the create, told after',
+            room: 'purged',
+            park: 'create',
             early: false,
         },
     ];
     for (const variant of variants) {
         const recipient = await person();
-        if (variant.roomKnown) {
+        const mxid = `@pn-${recipient.id.slice(0, 8)}:test.local`;
+        let earlier: { switchId: string } | undefined;
+        if (variant.room !== 'none') {
             // An earlier notice made the person's room; its writes landed in
             // Postgres, conditional on the row still pending there.
-            const earlier = await release(recipient);
-            assert.equal((await runDeadmanReleaseNotifier({ now: earlier.at })).sent, 1);
+            const first = await release(recipient);
+            earlier = first;
+            assert.equal((await runDeadmanReleaseNotifier({ now: first.at })).sent, 1);
             await worker.drain();
-            const sent = await committed(earlier.switchId, recipient.id);
+            const sent = await committed(first.switchId, recipient.id);
             assert.equal(
                 sent.status,
                 'sent',
-                `${variant.name}: a conditional write applies to a pending row`
+                `${variant.name}: a conditional write lands on a pending row`
             );
             assert.ok(sent.room_id, variant.name);
+            if (variant.room === 'purged') matrix.purgeRoom(sent.room_id);
         }
         const notice = await release(recipient);
         await worker.drain();
         const app = new store.PostgresBackedDb();
         await app.init(pool as never);
 
-        // The send is parked until the app has committed the deletion.
+        // The call is parked until the app has committed the deletion.
         let open!: () => void;
         const gate = new Promise<void>((resolve) => {
             open = resolve;
         });
         let parked = false;
         globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-            if (
-                urlOf(input).includes('/send/') &&
-                urlOf(input).includes(notice.switchId) &&
-                !parked
-            ) {
+            const url = urlOf(input);
+            const hit =
+                variant.park === 'send'
+                    ? url.includes('/send/') && url.includes(notice.switchId)
+                    : url.includes('/createRoom') && String(init?.body).includes(mxid);
+            if (hit && !parked) {
                 parked = true;
                 await gate;
             }
             return matrix.fetch(input, init);
         }) as typeof fetch;
+        const tellWorker = () => {
+            for (const row of app.listDeadmanReleaseNoticesForRecipient(recipient.id)) {
+                deliverToWorker(row.switchId, recipient.id);
+            }
+        };
         try {
             const tick = runDeadmanReleaseNotifier({ now: notice.at });
             for (let i = 0; i < 200 && !parked; i += 1) await new Promise((r) => setTimeout(r, 10));
-            assert.ok(parked, `${variant.name}: the send was reached`);
+            assert.ok(parked, `${variant.name}: the call was reached`);
             deleteOnApp(app, recipient.id);
             await app.drain();
             assert.deepEqual(
@@ -235,13 +269,13 @@ test('an account deletion the API process committed while the worker was sending
                 `${variant.name}: the app committed the deletion`
             );
             if (variant.early) {
-                deliverToWorker(notice.switchId, recipient.id);
+                tellWorker();
                 await settle();
             }
             open();
             await tick;
             if (!variant.early) {
-                deliverToWorker(notice.switchId, recipient.id);
+                tellWorker();
                 await settle();
             }
             await worker.drain();
@@ -255,6 +289,15 @@ test('an account deletion the API process committed while the worker was sending
             { status: 'failed', last_error: 'recipient_gone', room_id: null },
             `${variant.name}: Postgres keeps the deletion's row`
         );
+        if (earlier) {
+            const kept = await committed(earlier.switchId, recipient.id);
+            assert.equal(kept.status, 'sent', variant.name);
+            assert.equal(
+                kept.room_id,
+                null,
+                `${variant.name}: the earlier row keeps the deletion's forgotten room, not a replacement`
+            );
+        }
         const mirrored = worker.getDeadmanReleaseNotice(notice.switchId, recipient.id)!;
         assert.equal(mirrored.status, 'failed', `${variant.name}: the worker's mirror, once told`);
         assert.equal(mirrored.roomId, undefined, variant.name);
