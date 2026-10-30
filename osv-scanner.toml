@@ -53,9 +53,11 @@ reason = "No fixed version exists (all versions <=2.0.2 affected). Build-time on
 
 # deepmerge prototype poisoning (GHSA-gcqx-w48m-w2h4 / CVE-2026-93753): when a
 # source object has an own `__proto__` key (as JSON.parse produces) and the
-# value it lands on is a primitive, null or a null-prototype object,
-# mergeObject() sets the prototype of the object deepmerge returns.
-# Object.prototype itself is not touched.
+# value it is merged onto is a primitive, null or a null-prototype object,
+# mergeObject() sets the prototype of the merged object at that position: a
+# nested value of the result, or the result itself for a null-prototype
+# target. The top level of deepmerge.all(), which starts from {}, is not
+# poisoned. Object.prototype itself is not touched.
 #
 # There is nothing to bump to: OSV lists 4.2.0 through 4.3.1, the latest
 # release, as affected, and names no fixed version.
@@ -64,9 +66,10 @@ reason = "No fixed version exists (all versions <=2.0.2 affected). Build-time on
 # written in this repo:
 #   - @vanilla-extract/css 1.20.1 (apps/blackout-client, packages/ui, and the
 #     vanilla-extract vite plugin): `style([...])` merges the style objects of
-#     our own `.css.ts(x)` files while vite evaluates them in Node. No deepmerge
-#     code ships in the client bundle (checked against a production build's JS
-#     and its source maps).
+#     our own `.css.ts(x)` files while vite evaluates them in Node. A nested key
+#     of a merged rule could be poisoned, but only by those repo-authored
+#     objects. No deepmerge code ships in the client bundle (checked against a
+#     production build's JS and its source maps).
 #   - workbox-build 7.4.0 -> @rollup/plugin-node-resolve 15.3.1, which merges
 #     only its own constant defaults.
 # Not mirrored in .trivyignore or pnpm.auditConfig: GitHub rates it Low, so

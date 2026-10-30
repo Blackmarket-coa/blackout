@@ -36,9 +36,15 @@ are Low or Moderate, so neither Trivy's CRITICAL/HIGH gate nor
     both osv-scanner gates are red on every branch. A react-router 7.x release
     now fixes it without React 19. See
     [the react-router section](#react-router-ignore-ghsa-qwww-vcr4-c8h2-lapses-2026-10-31t0000z).
+-   **So this branch passes the OSV gates only until 2026-10-31T00:00 UTC.**
+    Its local scan exits 0 now. A scan that starts at or after that moment
+    fails on it with one row, react-router 7.18.0. The operator needs to choose
+    one of the react-router options before this branch is pushed. Its OSV
+    result must not be presented as green after that time.
 
 The lockfile moves exactly those two packages. Nothing was added to
-`.trivyignore` or `pnpm.auditConfig.ignoreGhsas`.
+`.trivyignore` or `pnpm.auditConfig.ignoreGhsas`. `.trivyignore`'s header now
+says which accepted advisories are mirrored where.
 
 ---
 
@@ -145,10 +151,21 @@ GHSA-qwww-vcr4-c8h2 for react-router 7.18.0.
         peer, and no dependencies. node-server has no body limit of its own. The
         API's 16 MiB cap is hono's `bodyLimit` (`middleware/body-limit.ts`),
         which does not change.
--   **No API test runs node-server.** Every API suite dispatches through
-    `app.fetch` / `app.request`. The only mention of `@hono/node-server` under
-    `test/` is a comment. A green API suite therefore says nothing about this
-    bump.
+-   **Only one API test runs node-server, and it sends one request.**
+    -   `test/production-app-sigterm.integration.test.ts` runs
+        `deploy/docker/backend/bin/start-app`, which ends in
+        `exec node --import tsx src/index.ts`. The test sets
+        `NODE_ENV=development`, so the real `serve()` at `src/index.ts:509`
+        listens.
+    -   It waits for `serve()`'s `blackout-server listening` log, sends one
+        `GET /health` over HTTP and expects 200, then checks the SIGTERM drain.
+    -   Both CI API gates run it (`test:integration` and the post-merge `test`).
+        On this branch, with 2.1.3, it passed in both runs below and once more
+        on its own.
+    -   Every other API suite dispatches through `app.fetch` / `app.request`.
+        No test drives request headers, bodies, streaming or aborts through
+        the adapter. So a green API suite shows that `serve()` starts, answers
+        one GET and shuts down with 2.1.3, and nothing more about this bump.
 -   **So the adapter was run on the wire.** A scratch harness (not committed) did
     the following, once per version (2.0.10 and 2.1.3, both from
     integrity-checked tarballs, sharing the installed hono 4.13.11):
@@ -190,9 +207,8 @@ GHSA-qwww-vcr4-c8h2 for react-router 7.18.0.
         signal when an HTTP/2 client resets the stream. The API serves HTTP/1
         only and has no `serveStatic`.
     -   2.1.3 is the smallest fix.
--   **Outcome:** `packages/api`'s pin `2.0.10` → **`2.1.3`**, exact like the
-    rest of that manifest (`.npmrc` has `save-exact=true`). There is one path, so
-    no override.
+-   **Outcome:** `packages/api`'s pin `2.0.10` → **`2.1.3`**, an exact pin, kept
+    as it was (`2.0.10` was exact). There is one path, so no override.
 -   **Source:** OSV and GitHub advisory files; node-server 2.0.10 / 2.1.3 /
     2.1.4 / 2.1.5 tarballs (diffed); `honojs/node-server` commits
     `v2.0.10..v2.1.5`; harness runs.
@@ -270,16 +286,22 @@ GHSA-qwww-vcr4-c8h2 for react-router 7.18.0.
 ## deepmerge 4.3.1: no fixed version, build time only — ignored
 
 -   **What:** GHSA-gcqx (CVE-2026-93753; GitHub Low, CVSS 3.1 5.3).
-    `mergeObject()` lets a source object poison the prototype of the object
-    deepmerge returns. Run against the installed 4.3.1, with a source parsed from
-    `{"__proto__":{"polluted":"yes"}}`:
-    -   `deepmerge({}, src)`, and `deepmerge.all([src])` (vanilla-extract's call
-        shape, which starts from `{}`): not poisoned. `'__proto__' in {}` is true,
+    `mergeObject()` lets a source object poison the prototype of an object in
+    the merged result. Run against the installed 4.3.1, with a source `src`
+    parsed from `{"__proto__":{"polluted":"yes"}}`:
+    -   **The top level of the result is safe.** `deepmerge({}, src)`,
+        `deepmerge.all([src])`, and the top level of any `deepmerge.all(...)`,
+        which starts from `{}`, are not poisoned. `'__proto__' in {}` is true,
         so the key is skipped as unsafe.
-    -   `deepmerge({ a: 'str' }, { a: src }).a` and
-        `deepmerge(Object.create(null), src)`: the result inherits `polluted`.
-        The `in` check throws, or is false, on a primitive or null-prototype
-        target, so the key is written.
+    -   **A nested key can be poisoned.** An earlier source holds a primitive
+        or `null` at a key, and a later one holds an object with an own
+        `__proto__` there. The merged value at that key then inherits
+        `polluted`. `deepmerge.all([{ a: 'str' }, { a: src }], { arrayMerge })`
+        is poisoned at `.a`, and so are the same call with `1` or `null` in
+        place of `'str'`. So is `deepmerge(Object.create(null), src)` itself.
+        The `in` check throws, or is false, on a primitive, null or
+        null-prototype target, so the key is written.
+    -   An earlier object at that key, or no earlier value, is safe.
     -   `Object.prototype` is never touched.
 -   **Versions:** both sources say `introduced 4.2.0`, `last_affected 4.3.1`.
     4.3.1 (2023-03-16) is the latest release. **There is no fix to bump to.**
@@ -294,10 +316,14 @@ GHSA-qwww-vcr4-c8h2 for react-router 7.18.0.
 -   **Our tree:** not reachable. Both paths run at build time, on input written
     in this repo.
     -   **vanilla-extract.** The one call is
-        `deepmerge.all(styleRules, { arrayMerge })` in `composedStyle()`, which
-        backs `style([...])`. It runs when `@vanilla-extract/vite-plugin`
-        evaluates our `.css.ts` / `.css.tsx` files in Node, during `vite build`
-        or `vite dev`. Its inputs are style objects in our source.
+        `deepmerge.all(styleRules, { arrayMerge })` in `composedStyle()`
+        (`dist/vanilla-extract-css.esm.js:386`), which backs `style([...])`. It
+        runs when `@vanilla-extract/vite-plugin` evaluates our `.css.ts` /
+        `.css.tsx` files in Node, during `vite build` or `vite dev`.
+    -   That call can hit the nested case above. The top-level rule it returns
+        is not poisoned. A nested key can be, but only by the style objects it
+        is given, and those are written in this repo. None of the 118 tracked
+        `.css.ts` / `.css.tsx` files contains `__proto__` or `JSON.parse`.
     -   **The shipped client bundle has no deepmerge code.** I checked the
         production build (`pnpm --filter @blackout/client build` on this branch):
         -   None of the 163 `.js` / `.mjs` files in `dist` contains deepmerge's
@@ -332,6 +358,8 @@ GHSA-qwww-vcr4-c8h2 for react-router 7.18.0.
     -   It is not mirrored in `.trivyignore` or `pnpm.auditConfig.ignoreGhsas`.
         Trivy's gate is CRITICAL/HIGH with `ignore-unfixed`, and
         `pnpm audit --prod --audit-level high` reports it as "1 low" and passes.
+        `.trivyignore`'s header now names it as an OSV-only entry, so the header
+        no longer claims all three lists hold the same set.
     -   An entry in either would silence nothing today. If GitHub ever re-rates
         the advisory, those gates should fail and prompt a fresh look.
 -   **Plan:**
@@ -341,8 +369,9 @@ GHSA-qwww-vcr4-c8h2 for react-router 7.18.0.
        without deepmerge, and deepmerge for a fix.
     3. Re-check by 2027-01-28. The entry should be deleted once neither path
        resolves deepmerge ≤ 4.3.1.
--   **Source:** OSV and GitHub advisory files; deepmerge 4.3.1 source; PoC run;
-    `@vanilla-extract/css` 1.20.1 `dist`; the npm registry for
+-   **Source:** OSV and GitHub advisory files; deepmerge 4.3.1 source; PoC
+    runs (top level and nested); `@vanilla-extract/css` 1.20.1 `dist`; the
+    npm registry for
     `@vanilla-extract/css`, `@rollup/plugin-node-resolve` and `workbox-build`;
     the client build's `dist`.
 
@@ -371,7 +400,8 @@ then, and one fact the entry does not reflect.
         (Trivy is red on develop for other reasons; see Verification.)
     -   So only the OSV gates enforce the deadline.
 -   **The entry's premise is out of date.** The entry's comment, its `reason`,
-    and `docs/migrations/react-19-and-react-router-8.md` all say the fix is
+    the matching `.trivyignore` comment and
+    `docs/migrations/react-19-and-react-router-8.md` all say the fix is
     react-router 8, whose whole line requires React ≥ 19.2.7. But:
     -   OSV and GitHub now list two fixed ranges: **7.12.0 → 7.18.2** and 8.0.0 →
         8.3.0.
@@ -401,12 +431,15 @@ then, and one fact the entry does not reflect.
 2. **`ignoreUntil` lapses at the start of its date.** The image-size entries
    (`2026-11-30`) stop applying at 2026-11-30T00:00Z. Anyone setting a date
    should count to the day before.
-3. **No API test runs `@hono/node-server`.** Every suite goes through
-   `app.fetch` / `app.request`. A change to the adapter, or to how
-   `src/index.ts` calls `serve()`, passes every API gate without the adapter
-   running. This is the same gap the 2026-10-23 record found for nodemailer. A
-   test that starts `serve()` on port 0, like the harness above, would close it.
-   Not added here.
+3. **Only one API test runs `@hono/node-server`, with one request.**
+   `production-app-sigterm` starts the real `serve()` through `start-app`,
+   sends one `GET /health` and checks the SIGTERM drain. Every other suite goes
+   through `app.fetch` / `app.request`. A change to how the adapter handles
+   request headers, bodies, streaming or aborts passes every API gate without
+   those paths running. This is a narrower form of the gap the 2026-10-23
+   record found for nodemailer (its item 9). A test that sends header, body
+   and abort cases to `serve()` on a free port, like the harness above, would
+   close it. Not added here.
 4. **No client test loads translations through i18next-http-backend.**
    `src/app/i18n.ts` is imported only by `main.tsx`, and no unit test imports
    it. The client build includes the module (its source map lists
@@ -418,6 +451,57 @@ then, and one fact the entry does not reflect.
    change stays the override bump, as `1554e05` did.
 6. **`folds` peers `@vanilla-extract/css` 1.9.2 exactly**, and pnpm warns
    about it. The vanilla-extract bump in the deepmerge plan widens that gap.
+7. **The brace-expansion mirrors are dead.** `osv-scanner.toml` removed its
+   GHSA-mh99-v99m-4gvg entry when the overrides cleared it. `.trivyignore`
+   (GHSA-mh99 and CVE-2026-14257) and `pnpm.auditConfig.ignoreGhsas` still
+   list it, and the `.trivyignore` comment names versions (1.1.16 / 2.1.2 /
+   5.0.8) the lockfile no longer has (1.1.21 / 2.1.7 / 5.0.12). Neither
+   scanner reports it without the entry. Trivy 0.69.3 on this branch's
+   `pnpm-lock.yaml` with no ignore file, with and without
+   `--include-dev-deps`, reports only deepmerge, image-size ×2 and
+   react-router. `pnpm audit --json` over the whole tree (1,520 packages),
+   with GHSA-mh99 taken out of `ignoreGhsas`, reports only deepmerge (low) and
+   the three ignored highs. Both entries are left in place, and
+   `.trivyignore`'s header now says so. Removing them is a separate change.
+8. **The image-size entries' premise is out of date too.** Their comments and
+   `reason` say no fixed version exists. OSV now lists both advisories as
+   fixed in **2.0.3** (records modified 2026-09-24). image-size 2.0.3 and
+   2.0.4 were published on 2026-09-14, and Trivy's row shows `2.0.3` as fixed.
+   The lockfile has image-size 1.2.1, from metro 0.83.5 (`image-size ^1.0.2`).
+   On the registry, metro **0.83.8** (2026-08-19, the `0.83-stable` tag)
+   declares no image-size dependency, nor do the metro-core, metro-config,
+   metro-file-map and metro-transform-worker 0.83.8 manifests I read. It is
+   inside `@react-native/community-cli-plugin` 0.82.1's `^0.83.1`. So a metro
+   update may remove image-size, and both ignores, before they lapse at
+   2026-11-30T00:00Z. Not tried here, and the other metro-\* packages were not
+   checked.
+
+## Corrected after review
+
+The first version of this record (`79b2791`) said four things that were not
+true. They are corrected above. The commit messages of `a147f5c` and `79b2791`
+repeat the first and third, and this section is their correction.
+
+1. **"No API test runs node-server."** `production-app-sigterm` does: it
+   starts the real `serve()` through `start-app` and sends one `GET /health`.
+   The gap is the adapter's header, body, streaming and abort handling, not
+   `serve()` as a whole (the node-server section, and item 3 of "Found
+   outside the gates").
+2. **"Exact like the rest of that manifest (`.npmrc` has
+   `save-exact=true`)."** `packages/api/package.json` has 11 caret ranges among
+   its 25 entries, among them `hono`, `ws`, `zod`, `pg` and `nodemailer`. The
+   repo's only `.npmrc` is `apps/blackout-client/.npmrc`, which does not apply
+   to `packages/api`. The pin is exact because `2.0.10` was.
+3. **"`deepmerge.all([src])` (vanilla-extract's call shape): not
+   poisoned."** Only the top level of that call is safe. A nested key can be
+   poisoned (deepmerge section). The conclusion, not reachable, stands: the
+   inputs are this repo's own style objects. The `osv-scanner.toml` comment,
+   which said deepmerge sets the prototype of "the object deepmerge returns",
+   now says the merged object at that position.
+4. **`.trivyignore`'s header** said it mirrors the accepted-risk set in
+   `osv-scanner.toml` and `pnpm.auditConfig`. The lists already differed (the
+   Twisted entries, the brace-expansion entries), and the deepmerge entry
+   widened the gap. The header now says what is mirrored where, and why.
 
 ## Verification
 
@@ -434,6 +518,9 @@ All runs are local, on this branch unless the row says otherwise, with Node
 | this branch                                                  | exit 0: "No issues found", 4 filtered, no unused-ignore line                                           |
 | this branch, react-router `ignoreUntil` set to today (probe) | exit 1: unused ignore GHSA-qwww-vcr4-c8h2; 1 row, react-router 7.18.0 (what CI sees from 10-31 00:00Z) |
 
+The exit 0 holds only until **2026-10-31T00:00Z**. From then on, a scan of
+this branch gives the probe's result.
+
 `pnpm audit --prod --audit-level high` (security.yml): exit 0, "4
 vulnerabilities found, 1 low | 3 high (3 ignored)". The low one is deepmerge
 (`--json`); the three ignored are image-size ×2 and react-router. The root
@@ -442,8 +529,10 @@ vulnerabilities found, 1 low | 3 high (3 ignored)". The low one is deepmerge
 **Gates:**
 
 The gates below ran on the tree committed as `a147f5c`, the dependency commit.
-The next commit adds only this document and the `osv-scanner.toml` entry, which
-nothing but the scans reads.
+The two commits after it change only this document, comments and one entry in
+`osv-scanner.toml`, and the header comment of `.trivyignore`. Only the scans
+read those two files. The re-runs after the corrections are in the second
+table.
 
 | Gate                     | Command                                                                                                                             | Result                                                                                                                                                                                                                                                           |
 | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -464,6 +553,23 @@ nothing but the scans reads.
 | pnpm audit               | `pnpm audit --prod --audit-level high` (`security.yml`)                                                                             | exit 0 (above)                                                                                                                                                                                                                                                   |
 | Trivy                    | v0.69.3, `security.yml`'s flags, on `git archive` exports of develop and of this branch                                             | exit 1 on **both**, with the same 6 findings and none in `pnpm-lock.yaml`: authlib ×3 and twisted in `apps/blackout-server/poetry.lock`, zip ×2 in `blackout-desktop/src-tauri/Cargo.lock`. They predate this change and are outside it. DB of 2026-10-30T19:07Z |
 | gitleaks                 | 8.21.2, `gitleaks git --log-opts="origin/develop..HEAD" --no-banner --redact .`; `gitleaks dir` on this file and `osv-scanner.toml` | no leaks                                                                                                                                                                                                                                                         |
+
+**Re-runs after the corrections** (2026-10-30, 20:53 to 21:01 UTC, on the
+corrected tree):
+
+| Gate                        | Command                                                                                                                                       | Result                                                                                        |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| OSV scan                    | osv-scanner v2.3.3, `--lockfile=pnpm-lock.yaml`                                                                                               | exit 0: "No issues found", 4 filtered. Holds until 2026-10-31T00:00Z                          |
+| OSV probe                   | the same, with the react-router `ignoreUntil` set to `2026-10-30`                                                                             | exit 1: unused ignore GHSA-qwww-vcr4-c8h2; 1 row, react-router 7.18.0, CVSS 7.1, fixed 7.18.2 |
+| Trivy                       | v0.69.3, `security.yml`'s flags, on an export of the corrected tree, same DB                                                                  | exit 1 with the same 6 findings as before, none in `pnpm-lock.yaml`; the new header parses    |
+| real `serve()` test         | `tsx --import ./test/_setup/blocking-stdio.mjs --test --test-force-exit --test-concurrency=1 test/production-app-sigterm.integration.test.ts` | 1 / 1 pass, with node-server 2.1.3                                                            |
+| deepmerge PoC               | scratch script, installed deepmerge 4.3.1                                                                                                     | as in the deepmerge section                                                                   |
+| brace-expansion, image-size | Trivy with no ignore file; `pnpm audit --json` without GHSA-mh99; OSV; the npm registry                                                       | as in items 7 and 8 of "Found outside the gates"                                              |
+| gitleaks                    | `gitleaks dir` on this file, `osv-scanner.toml` and `.trivyignore`                                                                            | no leaks                                                                                      |
+
+`pnpm audit` was not re-run: `package.json` and the lockfile did not change.
+The API and client suites were not re-run either, apart from the one test
+above. No code, manifest or lockfile changed.
 
 **Not verified:**
 

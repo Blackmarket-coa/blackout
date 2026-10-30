@@ -1,6 +1,18 @@
 # Trivy ignore list — reviewed, non-applicable advisories only.
-# Mirrors the accepted-risk set in osv-scanner.toml and pnpm.auditConfig
-# (package.json). Keep the rationale in sync across all three.
+# An advisory accepted in osv-scanner.toml is mirrored here, and in
+# pnpm.auditConfig.ignoreGhsas (package.json), only where Trivy or pnpm audit
+# would otherwise report it. Keep the rationale in sync wherever an entry
+# appears. The lists differ on purpose, as of 2026-10-30:
+#   - deepmerge GHSA-gcqx-w48m-w2h4 is in osv-scanner.toml only. GitHub rates
+#     it Low, below this scan's CRITICAL/HIGH and below both levels the repo
+#     runs pnpm audit at (high in security.yml, moderate in guard:audit-clean).
+#   - The Twisted entries below are here only: the OSV gates and pnpm audit
+#     read pnpm-lock.yaml, not poetry.lock.
+#   - brace-expansion GHSA-mh99-v99m-4gvg is here and in pnpm.auditConfig, but
+#     osv-scanner.toml dropped it once the overrides cleared it. Neither Trivy
+#     nor pnpm audit reports it without these entries (checked 2026-10-30), so
+#     both are dead and left for their own removal.
+# Record: docs/security/dependency-advisories-2026-10-30.md.
 
 # react-router RSC-mode CSRF bypass. The client is a Vite SPA using
 # react-router in library mode only (no RSC), so it does not apply. The fix
