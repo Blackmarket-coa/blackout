@@ -49,19 +49,23 @@ are Low or Moderate, so neither Trivy's CRITICAL/HIGH gate nor
     audit passed on `71548f0` at 21:55 (Verification). The next `ignoreUntil`
     to lapse is image-size's, at 2026-11-30T00:00Z on CI (item 8 of "Found
     outside the gates").
--   **Two newer advisories turn the OSV gates red again.** GHSA-3g3m-2fjr-6pw4
-    (glob, fixed in 14.0.2) and GHSA-g3hv-75wg-m249 (minimatch, fixed in
-    11.0.1), both Moderate, were published at 23:09Z on 2026-10-30, after the
-    runs above. At 00:04Z on 10-31 the scan of this branch exits 1 with five
-    rows: glob 11.1.0 and 13.0.6, minimatch 3.1.5, 5.1.9 and 10.2.5. develop's
-    scan has the same five, besides the four rows CI reported and
-    react-router's, whose ignore lapsed at 00:00Z as predicted. They are not
-    triaged or changed here.
+-   **Two newer advisories turned the OSV gates red again.**
+    GHSA-3g3m-2fjr-6pw4 (glob, fixed in 14.0.2) and GHSA-g3hv-75wg-m249
+    (minimatch, fixed in 11.0.1), both Moderate, were published at 23:09Z on
+    2026-10-30, after the runs above. At 00:04Z on 10-31 the scan of this
+    branch exited 1 with five rows: glob 11.1.0 and 13.0.6, minimatch 3.1.5,
+    5.1.9 and 10.2.5. develop's scan has the same five, besides the four rows
+    CI reported and react-router's, whose ignore lapsed at 00:00Z as
+    predicted. `pnpm audit` picked up minimatch later: `guard:audit-clean`
+    exited 0 in the fourth-review run and 1 at 00:58Z, on minimatch 3.1.5.
+    Neither advisory is triaged or changed in this record.
+    [The 2026-10-31 record](dependency-advisories-2026-10-31.md) does both.
 
-The lockfile moves exactly those three packages. Nothing was added to
-`.trivyignore` or `pnpm.auditConfig.ignoreGhsas`, and react-router's entry
-left both. `.trivyignore`'s header now
-says which accepted advisories are mirrored where.
+This record's changes move exactly those three packages in the lockfile.
+They add nothing to `.trivyignore` or `pnpm.auditConfig.ignoreGhsas`, and
+react-router's entry left both. `.trivyignore`'s header now says which
+accepted advisories are mirrored where. The glob and minimatch change moves
+more of the lockfile and adds minimatch's GHSA to `ignoreGhsas` (its record).
 
 ---
 
@@ -445,9 +449,12 @@ section) rather than renewing a false reason or letting every PR go red.
     action path, a failed origin check now turns the request into a `GET`
     inside the `catch`, so the action does not run.
 -   **What the client loads is unchanged.** The browser build takes
-    `dist/development/index.mjs`, which only re-exports, and one shared chunk.
-    The build's 161 source maps list one react-router source,
-    `chunk-62JRHF6Z.mjs`, which is 7.18.0's `chunk-4ZMWKKQ3.mjs`. Vitest loads
+    `dist/development/index.mjs`, which only re-exports. It imports two
+    chunks, `chunk-62JRHF6Z.mjs` and `chunk-ZA36QIGN.mjs`, and the second
+    imports the first (read from the installed 7.18.2). The package sets
+    `sideEffects: false`. Only the first chunk contributes code: the build's
+    161 source maps list one react-router source, `chunk-62JRHF6Z.mjs`,
+    which is 7.18.0's `chunk-4ZMWKKQ3.mjs`. Vitest loads
     `dist/development/index.js` and its three CommonJS chunks (traced with
     `strace` on one router test). All of these are among the 66.
 -   **Why 7.18.2 and not 7.18.5.** The same rule as the other two bumps: the
@@ -679,17 +686,54 @@ second shows was incomplete. This list is their correction:
 
 After midnight UTC two more things were measured. develop's react-router
 ignore lapsed at 00:00Z, as the react-router section predicted. Two
-advisories published at 23:09Z make the OSV gates red again (Result).
+advisories published at 23:09Z made the OSV gates red again (Result).
+
+A fifth review, of `741f903`, found the glob and minimatch rows untriaged and
+five statements wrong or stale. They are corrected above. The commit message
+of `741f903` repeats item 3 ("index.mjs and one chunk in the build"). This
+list is their correction:
+
+1. **The glob and minimatch rows were disclosed, not triaged.** On the next
+   push they would have turned `ci.yml`'s Dependency audit and
+   `security.yml`'s OSV step red. The 2026-10-31 record triages them, and its
+   change moves glob and two of the three minimatch versions and ignores
+   3.1.5. Result and "Not verified" now point there.
+2. **`guard:audit-clean` went red after the fourth-review run.** That table's
+   "exit 0 both, unchanged" held in its window, 23:50Z to 00:11Z. At 00:58Z
+   the same script exited 1 on minimatch 3.1.5. The row now says so.
+3. **The browser build's react-router entry imports two chunks, not one.**
+   Only the first contributes code. Both are among the 66.
+4. **The Gates preamble's count was off by one again.** "Four commits follow
+   it" was five at `741f903`, which is itself one of them, and item 2 of the
+   fourth list called the count fixed. The preamble now gives no count.
+5. **"CI ran them"** said CI ran the API suites. On `71548f0` it ran the PR
+   gate (`test:integration`) and launch smoke. The post-merge suite runs only
+   in `turborepo-ci.yml`, which this PR does not trigger. The Verification
+   preamble now lists that row and the `--offline` install as exceptions,
+   with the two client unit rows.
+6. **Security checks had a second red step.** The CI paragraph said they stay
+   red until the six Trivy findings are fixed (`-v48`). From 23:09Z the OSV
+   step would also fail on `71548f0` and `741f903`, and `-v48` does not fix
+   that. The paragraph now says so.
 
 ## Verification
 
 Runs are local and on this branch unless the row or section says otherwise,
-with Node 22.22.0 and pnpm 9.15.4 (the pinned `packageManager`). Commands are as in
-`ci.yml` and `security.yml`, except two client unit rows. Those ran
-`vitest run tests/unit src`, which is `test:unit` (`mobile_contract_tests.yml`
-runs it), not `ci.yml`'s `test:coverage`, which also enforces the coverage
-floors. `test:coverage` is in the last table. The suites ran one at a time.
-CI's own runs on `71548f0` are in "CI on `71548f0`" below.
+with Node 22.22.0 and pnpm 9.15.4 (the pinned `packageManager`). Commands are
+as in `ci.yml` and `security.yml`, or in the workflow a row names, with three
+exceptions:
+
+-   The two client unit rows ran `vitest run tests/unit src`, which is
+    `test:unit` (`mobile_contract_tests.yml` runs it), not `ci.yml`'s
+    `test:coverage`, which also enforces the coverage floors.
+    `test:coverage` is in the fourth-review table.
+-   The API post-merge row ran `@blackout/api`'s `test` script. In CI only
+    `turborepo-ci.yml` runs it (`pnpm turbo run test`), on pushes to `main`
+    and `develop` and on PRs to `main`, so not on this PR.
+-   The install row's first command adds `--offline`, which CI does not pass.
+
+The suites ran one at a time. CI's own runs on `71548f0` are in "CI on
+`71548f0`" below.
 
 **Scans before the react-router bump** (osv-scanner v2.3.3,
 `--lockfile=pnpm-lock.yaml`, 2026-10-30; the scans after it are in the
@@ -715,12 +759,13 @@ image-size ×2 and react-router. The root `guard:audit-clean` script
 **Gates:**
 
 The gates below ran on the tree committed as `a147f5c`, the dependency commit.
-Four commits follow it. The first three, up to `1ba075a`, change only this
-document, comments and one entry in `osv-scanner.toml`, and the header comment
-of `.trivyignore`. Only the scans read those two files. The fourth, `71548f0`,
-moves react-router in the client manifest and the lockfile and removes its
-three ignores. Its gates are in "Re-runs after the react-router bump". The
-re-runs after each review are in the tables after this one.
+The commits after it up to `1ba075a` change only this document, comments and
+one entry in `osv-scanner.toml`, and the header comment of `.trivyignore`.
+Only the scans read those two files. `71548f0` moves react-router in the
+client manifest and the lockfile and removes its three ignores. Its gates are
+in "Re-runs after the react-router bump". `741f903` changes only documents.
+The glob and minimatch change that follows has its gates in the 2026-10-31
+record. Each review's re-runs are in a table after this one.
 
 | Gate                     | Command                                                                                                                             | Result                                                                                                                                                                                                                                                           |
 | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -796,7 +841,10 @@ the tree with react-router 7.18.2 and the three ignores removed):
 | prettier            | `prettier --check` on the changed files                                                                    | pass                                                                                                                                                                    |
 
 The API suites were not re-run locally: react-router is a client dependency
-only, and nothing under `packages/` resolves it. CI ran them (below).
+only, and nothing under `packages/` resolves it. CI ran the PR gate
+(`test:integration`) and launch smoke on `71548f0` (below). The post-merge
+suite runs only in `turborepo-ci.yml`, which this PR does not trigger, so for
+this record it ran only in the Gates table, on `a147f5c`'s tree.
 
 **CI on `71548f0`** (pushed 2026-10-30 at 21:53Z; read from the Actions API):
 
@@ -812,8 +860,12 @@ So PR #994's Security checks stay red until the six Trivy findings are fixed
 checks run (40419066923, on `ff7d08b`, 2026-10-26) was green. A local Trivy run
 on develop's tree gives the same 6 (Gates table), so develop's next run should
 fail the same way; that was not run on a runner. Both OSV jobs passed before
-the glob and minimatch advisories were published (23:09Z). With the local scan
-now exiting 1 (Result), a re-run of either should fail; none was re-run.
+the glob and minimatch advisories were published (23:09Z). From then the local
+scan of `71548f0`'s lockfile, which `741f903` does not change, exited 1
+(Result), so a re-run of either job on those commits should have failed. None
+was re-run. That is a second red step in Security checks, and `-v48` does not
+fix it: at `05dfc10` it changes no `pnpm-lock.yaml`, `package.json` or
+`osv-scanner.toml`. The 2026-10-31 change does; its scans exit 0.
 
 **Re-runs after the fourth review** (2026-10-30 23:50 to 2026-10-31 00:11
 UTC). The change is to this document, `docs/migrations/react-19-and-react-router-8.md`
@@ -829,9 +881,23 @@ manifest or lockfile changed:
 | client unit (`ci.yml`) | `pnpm --filter @blackout/client run test:coverage`                                                                                                    | 516 files; 3504 passed, 3 skipped; statements 45.31, branches 36.38, functions 36.24, lines 46.37 against floors 41.3, 32.2, 32.5, 42.3             |
 | OSV scan               | osv-scanner v2.3.3 (sha256 matches `osv-scanner_SHA256SUMS`), 00:04Z on 10-31, `TZ` = `UTC`, `Etc/GMT-3`, `Pacific/Kiritimati`, `America/Los_Angeles` | exit 1 in all four: 3 filtered, no unused-ignore line, 5 rows from GHSA-3g3m-2fjr-6pw4 (glob) and GHSA-g3hv-75wg-m249 (minimatch) (Result)          |
 | OSV, develop           | the same, `TZ=UTC`, on develop's `pnpm-lock.yaml` and `osv-scanner.toml`                                                                              | exit 1: unused ignore GHSA-qwww-vcr4-c8h2; 10 rows: the four CI reported, the same five, and react-router 7.18.0                                    |
-| pnpm audit             | `pnpm audit --prod --audit-level high`; `pnpm run guard:audit-clean`                                                                                  | exit 0 both, unchanged: "3 vulnerabilities found, 1 low \| 2 high (2 ignored)"                                                                      |
+| pnpm audit             | `pnpm audit --prod --audit-level high`; `pnpm run guard:audit-clean`                                                                                  | exit 0 both, unchanged: "3 vulnerabilities found, 1 low \| 2 high (2 ignored)". At 00:58Z `guard:audit-clean` exited 1 on minimatch 3.1.5 (Result)  |
 | prettier               | `prettier --check` on the three changed files                                                                                                         | pass                                                                                                                                                |
 | gitleaks               | `gitleaks dir` on the three changed files                                                                                                             | no leaks                                                                                                                                            |
+
+**Re-runs after the fifth review** (2026-10-31, 02:45 to 03:00 UTC, on the
+tree with the 2026-10-31 change). The change is to this document only:
+
+| Gate              | Command                                                                                                               | Result                                                                                                                          |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| react-router load | `grep` for `from "./chunk-` in the installed 7.18.2's `dist/development/index.mjs` and chunks; its `package.json`     | `index.mjs` imports `chunk-ZA36QIGN.mjs` and `chunk-62JRHF6Z.mjs`; the first imports the second; `sideEffects: false`           |
+| workflows         | `grep` of `.github/workflows/` for the API `test` script, `turbo run test` and `--offline`                            | only `turborepo-ci.yml` runs `pnpm turbo run test` (PRs to `main`; pushes to `main`, `develop`); no workflow passes `--offline` |
+| CI runs           | the Actions API: the branch's runs; the jobs of 41134501169                                                           | 8 runs, all on `71548f0`, none of them Turborepo CI; API smoke + integration and Launch-smoke gate passed                       |
+| `-v48`            | `git diff --name-only ff7d08b 05dfc10`                                                                                | 19 files; not `pnpm-lock.yaml`, `package.json` or `osv-scanner.toml`                                                            |
+| OSV scan          | osv-scanner v2.3.3 (sha256 matches `osv-scanner_SHA256SUMS`), 02:50Z, `TZ` = `UTC`, `Etc/GMT-3`, `Pacific/Kiritimati` | exit 0 in all three: "No issues found", 4 filtered, no unused-ignore or multiple-ignore line                                    |
+| pnpm audit        | `pnpm audit --prod --audit-level high`; `pnpm run guard:audit-clean`, 02:50Z                                          | exit 0 both: "4 vulnerabilities found, 1 low \| 1 moderate (1 ignored) \| 2 high (2 ignored)"                                   |
+| prettier          | `prettier --check` on this file                                                                                       | pass                                                                                                                            |
+| gitleaks          | `gitleaks dir` on this file; `gitleaks git --log-opts="741f903442..HEAD"`                                             | no leaks                                                                                                                        |
 
 **Not verified:**
 
@@ -853,8 +919,9 @@ manifest or lockfile changed:
     page errors.
 -   Trivy's red result is not addressed here. CI confirmed it on `71548f0`
     (above).
--   The glob and minimatch advisories were not triaged: not which packages
-    pull those versions in, nor whether the code is reachable.
+-   The glob and minimatch advisories were not triaged here: not which
+    packages pull those versions in, nor whether the code is reachable. The
+    2026-10-31 record does that.
 -   The node-server harness covers HTTP/1.1 only, without TLS, a proxy in
     front, slow clients, SSE streams, or the WebSocket upgrade shims
     (`/twitch-irc`, `/obs-ws/`, `/se-overlay/`) that attach to the same server.
