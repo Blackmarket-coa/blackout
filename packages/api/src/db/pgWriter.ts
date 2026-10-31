@@ -299,6 +299,12 @@ export interface BoundStatement {
     sql: string;
     params: unknown[];
     required: boolean;
+    /**
+     * The row Postgres keeps may differ from the record bound (an upsertEach
+     * whose onConflictSet merges the two), so the keys this statement returns
+     * are re-read into the writer's own mirror.
+     */
+    merges?: boolean;
 }
 
 export interface CompiledStep {
@@ -505,7 +511,8 @@ export function bindStep(compiled: CompiledStep, ctx: StepContext): BoundStateme
             const params = step.params(ctx);
             return params ? bound([...params]) : [];
         }
-        case 'upsertEach':
+        case 'upsertEach': {
+            const merges = Object.keys(step.onConflictSet ?? {}).length > 0;
             return step.records(ctx).map((record) => {
                 const row = recordToRow(plan, record);
                 const columns = Object.keys(row);
@@ -521,8 +528,10 @@ export function bindStep(compiled: CompiledStep, ctx: StepContext): BoundStateme
                     sql: buildTargetedUpsertSql(plan, columns, step.onConflictSet),
                     params: columns.map((c) => row[c]),
                     required,
+                    ...(merges ? { merges } : {}),
                 };
             });
+        }
     }
 }
 

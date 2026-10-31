@@ -719,11 +719,13 @@ const removedKeys = (ctx: StepContext, map: string) =>
 
 /**
  * A mesh envelope's `seen_by` merges with whatever Postgres already holds, so
- * a concurrent write from another process keeps the nodes it recorded.
+ * a concurrent write from another process keeps the nodes it recorded. Each
+ * node is kept once, in the order it first appears (Postgres's, then this
+ * write's). The writer re-reads the merged row (BoundStatement.merges).
  */
 const MESH_SEEN_BY_UNION = {
     seen_by:
-        'ARRAY(SELECT DISTINCT s FROM unnest(mesh_envelopes.seen_by || EXCLUDED.seen_by) AS s)',
+        'ARRAY(SELECT u.s FROM unnest(mesh_envelopes.seen_by || EXCLUDED.seen_by) WITH ORDINALITY AS u(s, n) GROUP BY u.s ORDER BY min(u.n))',
 };
 
 /**

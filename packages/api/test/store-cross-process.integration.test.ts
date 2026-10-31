@@ -1962,14 +1962,19 @@ test('X9: a mesh gossip merge writes what it changed and keeps an envelope this 
         A.db.replaceMeshEnvelopes([{ ...shared, seenBy: ['n0', 'nA'] }, arrived]);
         await quiesce(w);
         const rows = await w.sql('SELECT id, seen_by FROM mesh_envelopes');
-        const byId = new Map(rows.map((r) => [r.id, [...r.seen_by].sort()]));
+        const byId = new Map(rows.map((r) => [r.id, [...r.seen_by]]));
         assert.ok(byId.has(unseen.id), 'the unseen envelope is kept');
         assert.ok(byId.has(arrived.id), 'the arrival is written');
         assert.equal(byId.has(dying.id), false, 'the dropped envelope is deleted');
         assert.deepEqual(
             byId.get(shared.id),
-            ['n0', 'nA', 'nB'],
-            'seen_by is merged, not replaced'
+            ['n0', 'nB', 'nA'],
+            "seen_by is merged, not replaced, each node once in first-seen order (Postgres's, then A's)"
+        );
+        assert.deepEqual(
+            A.db.listMeshEnvelopes().find((e: any) => e.id === shared.id).seenBy,
+            ['n0', 'nB', 'nA'],
+            'the writer re-read the merged row, so it does not re-offer the envelope to nB'
         );
         // An enqueue on the same process keeps it too.
         const queued = A.db.enqueueMeshEnvelope(mkEnvelope());
@@ -1977,8 +1982,8 @@ test('X9: a mesh gossip merge writes what it changed and keeps an envelope this 
         assert.equal(await count(w, 'mesh_envelopes', 'id = ANY($1)', [[unseen.id, queued.id]]), 2);
         assert.ok(B.db.listMeshEnvelopes().some((e: any) => e.id === arrived.id));
         assert.deepEqual(
-            [...B.db.listMeshEnvelopes().find((e: any) => e.id === shared.id).seenBy].sort(),
-            ['n0', 'nA', 'nB'],
+            B.db.listMeshEnvelopes().find((e: any) => e.id === shared.id).seenBy,
+            ['n0', 'nB', 'nA'],
             "the peer re-read Postgres's row"
         );
     });

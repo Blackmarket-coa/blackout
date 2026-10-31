@@ -51,7 +51,8 @@ export interface TargetedWrite {
 }
 
 type TargetedOutcome =
-    | { outcome: 'committed'; returned: KeySet }
+    /** `merged`: returned keys whose row Postgres merged with the record bound (BoundStatement.merges). */
+    | { outcome: 'committed'; returned: KeySet; merged: KeySet }
     | { outcome: 'conflict'; at: BoundStatement };
 
 function addKey(set: KeySet, mapName: string, key: string, kv: unknown[]): void {
@@ -316,7 +317,7 @@ export class WriteBehindQueue {
             return union(write.touched, uncertain);
         }
         if (result?.outcome === 'committed') {
-            return union(symmetricDifference(write.touched, committed), uncertain);
+            return union(symmetricDifference(write.touched, committed), result.merged, uncertain);
         }
         return minus(uncertain, write.touched);
     }
@@ -326,6 +327,7 @@ export class WriteBehindQueue {
         uncertain: KeySet
     ): Promise<TargetedOutcome> {
         const returned: KeySet = new Map();
+        const merged: KeySet = new Map();
         const client = await this.pool.connect();
         let open = false;
         try {
@@ -337,7 +339,9 @@ export class WriteBehindQueue {
                 if (plan) {
                     for (const row of res.rows) {
                         const kv = plan.descriptor.conflictColumns.map((c) => row[c] ?? null);
-                        addKey(returned, s.map, keyOfTuple(plan, kv), kv);
+                        const key = keyOfTuple(plan, kv);
+                        addKey(returned, s.map, key, kv);
+                        if (s.merges) addKey(merged, s.map, key, kv);
                     }
                 }
                 if (s.required && res.rows.length === 0) {
@@ -360,7 +364,7 @@ export class WriteBehindQueue {
                     for (const [k, kv] of keys) addKey(uncertain, m, k, kv);
                 throw err;
             }
-            return { outcome: 'committed', returned };
+            return { outcome: 'committed', returned, merged };
         } catch (err) {
             if (open) await client.query('ROLLBACK').catch(() => undefined);
             throw err;
