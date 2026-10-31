@@ -1755,17 +1755,33 @@ test('a standby whose mirror has not heard of a trigger, a check-in or a cancel 
     // and its sweep wrote notice rows for it in its mirror. A check-in or a
     // cancel another process committed was written over the same way. A
     // second store stands in for the old leader or the API process.
-    type Variant = {
-        name: string;
-        elsewhere: 'fired' | 'firedAndSent' | 'checkedIn' | 'cancelled';
-    };
-    const variants: Variant[] = [
+    type Elsewhere =
+        | 'fired'
+        | 'firedAndSent'
+        | 'firedErasedHere'
+        | 'checkedIn'
+        | 'cancelled'
+        | 'labelled';
+    const variants: Array<{ name: string; elsewhere: Elsewhere }> = [
         { name: 'fired and sent by the old leader', elsewhere: 'firedAndSent' },
         { name: 'fired by the old leader, which stopped before sending', elsewhere: 'fired' },
+        {
+            name: 'fired by the old leader while this process erased the label (the owner’s deletion) during the statement',
+            elsewhere: 'firedErasedHere',
+        },
         { name: 'checked in on the API process', elsewhere: 'checkedIn' },
         { name: 'cancelled on the API process', elsewhere: 'cancelled' },
+        {
+            name: 'its label changed on the API process: fired, the label kept',
+            elsewhere: 'labelled',
+        },
     ];
+    const realConnect = pool.connect;
     for (const variant of variants) {
+        const firedElsewhere =
+            variant.elsewhere === 'fired' ||
+            variant.elsewhere === 'firedAndSent' ||
+            variant.elsewhere === 'firedErasedHere';
         const recipient = await person();
         const owner = await person();
         const envelope = await protocol.buildReleaseEnvelope({
@@ -1775,7 +1791,12 @@ test('a standby whose mirror has not heard of a trigger, a check-in or a cancel 
         });
         const armed = await armReleaseSwitch({
             ownerId: owner.id,
-            input: { checkInIntervalSeconds: 60, gracePeriodSeconds: 0, envelope },
+            input: {
+                checkInIntervalSeconds: 60,
+                gracePeriodSeconds: 0,
+                label: 'owner label',
+                envelope,
+            },
         });
         assert.equal(armed.kind, 'armed', variant.name);
         const switchId = envelope.releaseId;
@@ -1785,7 +1806,7 @@ test('a standby whose mirror has not heard of a trigger, a check-in or a cancel 
         await other.init(pool as never);
         const firstAt = new Date((clock += 300_000));
         const first = firstAt.toISOString();
-        if (variant.elsewhere === 'fired' || variant.elsewhere === 'firedAndSent') {
+        if (firedElsewhere) {
             const fired = await other.advanceDeadmanSwitch(switchId, read, {
                 status: 'triggered',
                 releasedAt: first,
@@ -1814,24 +1835,54 @@ test('a standby whose mirror has not heard of a trigger, a check-in or a cancel 
                     gracePeriodSeconds: 0,
                 }),
             });
-        } else {
+        } else if (variant.elsewhere === 'cancelled') {
             other.updateDeadmanSwitch(switchId, { status: 'cancelled', encryptedPayload: '' });
+        } else {
+            other.updateDeadmanSwitch(switchId, { headline: 'changed elsewhere' });
         }
         await other.drain();
         assert.equal(worker.getDeadmanSwitch(switchId)?.status, 'armed', 'not heard of');
 
         // The standby's sweep, a few seconds later: the switch is overdue in
-        // its mirror.
+        // its mirror. In one variant this process erases the switch's label
+        // while the sweep's statement runs.
+        let erased = false;
+        if (variant.elsewhere === 'firedErasedHere') {
+            pool.connect = async () => {
+                const client = await realConnect();
+                return {
+                    ...client,
+                    async query<T = Record<string, unknown>>(sql: string, params?: unknown[]) {
+                        if (!erased && sql.startsWith('UPDATE deadman_switches')) {
+                            erased = true;
+                            worker.eraseDeadmanSwitch(switchId);
+                        }
+                        return client.query<T>(sql, params);
+                    },
+                };
+            };
+        }
         const later = new Date(firstAt.getTime() + 5_000);
-        await sweepOverdueDeadmanSwitches(later, Number.MAX_SAFE_INTEGER);
+        try {
+            await sweepOverdueDeadmanSwitches(later, Number.MAX_SAFE_INTEGER);
+            await worker.drain();
+        } finally {
+            pool.connect = realConnect;
+        }
+        if (variant.elsewhere === 'firedErasedHere') assert.ok(erased, variant.name);
         const stored = (
             await pg.query(
-                'SELECT status, released_at, last_check_in_at FROM deadman_switches WHERE id = $1',
+                'SELECT status, released_at, last_check_in_at, headline FROM deadman_switches WHERE id = $1',
                 [switchId]
             )
-        ).rows[0] as { status: string; released_at: Date | null; last_check_in_at: Date };
+        ).rows[0] as {
+            status: string;
+            released_at: Date | null;
+            last_check_in_at: Date;
+            headline: string | null;
+        };
         const mirrored = worker.getDeadmanSwitch(switchId)!;
-        if (variant.elsewhere === 'fired' || variant.elsewhere === 'firedAndSent') {
+        if (firedElsewhere) {
             assert.equal(stored.status, 'triggered', variant.name);
             assert.equal(
                 stored.released_at?.toISOString(),
@@ -1840,6 +1891,12 @@ test('a standby whose mirror has not heard of a trigger, a check-in or a cancel 
             );
             assert.equal(mirrored.status, 'triggered', variant.name);
             assert.equal(mirrored.releasedAt, first, `${variant.name}: the mirror took it`);
+            if (variant.elsewhere === 'firedErasedHere') {
+                assert.equal(stored.headline, null, `${variant.name}: the erase kept`);
+                assert.equal(mirrored.headline, undefined, variant.name);
+            } else {
+                assert.equal(stored.headline, 'owner label', variant.name);
+            }
         } else if (variant.elsewhere === 'checkedIn') {
             assert.equal(stored.status, 'armed', `${variant.name}: not fired`);
             assert.equal(stored.released_at, null, variant.name);
@@ -1850,16 +1907,26 @@ test('a standby whose mirror has not heard of a trigger, a check-in or a cancel 
                 first,
                 `${variant.name}: the mirror took the check-in`
             );
-        } else {
+        } else if (variant.elsewhere === 'cancelled') {
             assert.equal(stored.status, 'cancelled', `${variant.name}: not fired`);
             assert.equal(stored.released_at, null, variant.name);
             assert.equal(mirrored.status, 'cancelled', variant.name);
+        } else {
+            assert.equal(stored.status, 'triggered', `${variant.name}: fired`);
+            assert.equal(stored.released_at?.toISOString(), later.toISOString(), variant.name);
+            assert.equal(
+                stored.headline,
+                'changed elsewhere',
+                `${variant.name}: only the moved columns written`
+            );
         }
-        assert.equal(
-            worker.getDeadmanReleaseNotice(switchId, recipient.id),
-            undefined,
-            `${variant.name}: the standby's sweep wrote no notice row`
-        );
+        if (variant.elsewhere !== 'labelled') {
+            assert.equal(
+                worker.getDeadmanReleaseNotice(switchId, recipient.id),
+                undefined,
+                `${variant.name}: the standby's sweep wrote no notice row`
+            );
+        }
 
         const sendsBefore = matrix.sends.filter((x) => x.txnId.includes(switchId)).length;
         await runDeadmanReleaseNotifier({ now: later });
@@ -1870,12 +1937,12 @@ test('a standby whose mirror has not heard of a trigger, a check-in or a cancel 
                 switchId,
             ])
         ).rows as Array<{ status: string }>;
-        if (variant.elsewhere === 'fired') {
-            // The old leader stopped before sending: the notice is sent once.
-            assert.equal(sends, 1, variant.name);
-            assert.deepEqual(rows, [{ status: 'sent' }], variant.name);
-        } else if (variant.elsewhere === 'firedAndSent') {
+        if (variant.elsewhere === 'firedAndSent') {
             assert.equal(sends, 0, `${variant.name}: not sent again`);
+            assert.deepEqual(rows, [{ status: 'sent' }], variant.name);
+        } else if (firedElsewhere || variant.elsewhere === 'labelled') {
+            // Fired, and not yet sent: the notice is sent once.
+            assert.equal(sends, 1, variant.name);
             assert.deepEqual(rows, [{ status: 'sent' }], variant.name);
         } else {
             assert.equal(sends, 0, variant.name);

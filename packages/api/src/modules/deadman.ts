@@ -207,7 +207,7 @@ const ownedSwitch = (id: string, subject: string): DeadmanSwitchRecord | undefin
  *
  * Every move is conditional (`advanceDeadmanSwitch`): it lands only on a
  * switch still as this pass read it, with the same status and last check-in
- * and not fired, in Postgres too, so a standby whose mirror has not yet heard
+ * (a fired switch is `triggered`), in Postgres too, so a standby whose mirror has not yet heard
  * of a trigger, a check-in or a cancel another process committed does not
  * write over it, and a switch it does not move gets nothing else written and
  * no event (round 9 of part 2's review). Each switch is read from the mirror

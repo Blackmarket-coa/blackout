@@ -190,14 +190,15 @@ import { randomUUID } from 'node:crypto';
 
 const nowIso = () => new Date().toISOString();
 
-/** Whether a switch is still as the sweep read it: same status, same last check-in, not fired (`advanceDeadmanSwitch`). */
+/**
+ * Whether a switch is still as the sweep read it: the same status and the
+ * same last check-in (`advanceDeadmanSwitch`). A fired switch's status is
+ * `triggered`, which the sweep never moves from.
+ */
 const switchStillAsRead = (
     current: DeadmanSwitchRecord,
     read: Pick<DeadmanSwitchRecord, 'status' | 'lastCheckInAt'>
-): boolean =>
-    current.status === read.status &&
-    current.lastCheckInAt === read.lastCheckInAt &&
-    !current.releasedAt;
+): boolean => current.status === read.status && current.lastCheckInAt === read.lastCheckInAt;
 
 /** Coalition demo seed rows, or none when demo seeding is off (default in production). */
 const demoSeedRows = <T>(rows: T[]): T[] => (shouldSeedCoalitionDemoData() ? rows : []);
@@ -2673,8 +2674,9 @@ class InMemoryDb {
     /**
      * The sweep's move of one switch (into grace, into a backlog window, or
      * the trigger), applied only while the switch is still as the sweep read
-     * it (`read`): the same status and the same last check-in, and not fired.
-     * The updated record, or `undefined` when it is not. Here, and in the
+     * it (`read`): the same status and the same last check-in (one another
+     * process fired is `triggered`, which the sweep never moves from). The
+     * updated record, or `undefined` when it is not. Here, and in the
      * file store, the mirror is the database and the sweep has just read it,
      * so it holds; the Postgres store carries the condition into the database
      * (round 9 of part 2's review: a standby whose mirror had not heard of a
@@ -9186,18 +9188,21 @@ export class PostgresBackedDb extends InMemoryDb {
     /**
      * The sweep's move of a switch, conditional in Postgres: one `UPDATE ...
      * WHERE` the stored switch still has the status and the last check-in the
-     * sweep read and has not fired (`released_at IS NULL`), `RETURNING` the
-     * row, run once this process's queued writes have been attempted (its
-     * arming of the switch among them). The mirror takes the move at once, as
+     * sweep read (a fired one's status is `triggered`), `RETURNING` the row,
+     * run in the write-behind queue's order (`enqueueCall`): after every
+     * write this process queued before it (its arming of the switch among
+     * them), and before any it queues meanwhile. The mirror takes the move at once, as
      * the sweep's write always did, so a check-in or a cancel on this process
      * sees it. When the statement changes no row, another process got there
      * first: a leader that fired the switch before this standby's mirror
      * heard of it (round 9 of part 2's review: the standby fired it again and
      * Postgres took its later `releasedAt`), a check-in or a cancel on the API
-     * process; the switch is read from Postgres into the mirror, if this
-     * process wrote nothing to it meanwhile, and `undefined` is returned, so
-     * the sweep writes nothing else for it (no notice rows, no event). Only
-     * the moved columns are written, so a label another process wrote stays.
+     * process; the switch is read from Postgres into the mirror and
+     * `undefined` is returned, so the sweep writes nothing else for it (no
+     * notice rows, no event). Where this process wrote the switch while the
+     * statement ran, what that write changed is kept over Postgres's row and
+     * the result written after it. Only the moved columns are written, so a
+     * label another process wrote stays.
      * A database error is logged and the move kept in the mirror, as a
      * write-behind write that failed twice is (`db_write_behind_failed`).
      */
@@ -9212,46 +9217,44 @@ export class PostgresBackedDb extends InMemoryDb {
         >
     ): Promise<DeadmanSwitchRecord | undefined> {
         const plan = this.plans.get('deadmanSwitches');
-        if (!this.pool || !plan) return super.advanceDeadmanSwitch(id, read, patch);
+        const queue = this.queue;
+        if (!this.pool || !plan || !queue) return super.advanceDeadmanSwitch(id, read, patch);
         const before = this.getDeadmanSwitch(id);
         if (!before || !switchStillAsRead(before, read)) return undefined;
         const next: DeadmanSwitchRecord = { ...before, ...patch, updatedAt: nowIso() };
         const map = this.mapByName('deadmanSwitches');
         map.set(id, next as unknown as Record<string, unknown>);
-        await this.drain();
         const moved = recordToRow(plan, { ...patch, updatedAt: next.updatedAt });
         const columns = Object.keys(moved);
+        const table = plan.descriptor.tableName;
+        const n = columns.length;
         let applied: Record<string, unknown> | undefined;
         let stored: Record<string, unknown> | undefined;
         try {
-            const client = await this.pool.connect();
-            try {
-                const table = plan.descriptor.tableName;
-                const n = columns.length;
-                applied = (
+            // In the write-behind queue's order: after every write this process
+            // queued before it (the arming of the switch among them), and
+            // before any it queues meanwhile.
+            ({ applied, stored } = await queue.enqueueCall(async (client) => {
+                const row = (
                     await client.query<Record<string, unknown>>(
                         `UPDATE ${table} SET ${columns
                             .map((c, i) => `${c} = $${i + 1}`)
                             .join(', ')} ` +
                             `WHERE id = $${n + 1} AND status = $${n + 2} ` +
-                            `AND last_check_in_at = $${
-                                n + 3
-                            }::timestamptz AND released_at IS NULL ` +
+                            `AND last_check_in_at = $${n + 3}::timestamptz ` +
                             'RETURNING *',
                         [...columns.map((c) => moved[c]), id, read.status, read.lastCheckInAt]
                     )
                 ).rows[0];
-                if (!applied) {
-                    stored = (
-                        await client.query<Record<string, unknown>>(
-                            `SELECT * FROM ${table} WHERE id = $1`,
-                            [id]
-                        )
-                    ).rows[0];
-                }
-            } finally {
-                client.release?.();
-            }
+                if (row) return { applied: row, stored: undefined };
+                const found = (
+                    await client.query<Record<string, unknown>>(
+                        `SELECT * FROM ${table} WHERE id = $1`,
+                        [id]
+                    )
+                ).rows[0];
+                return { applied: undefined, stored: found };
+            }));
         } catch (err) {
             log.error('deadman_switch_advance_failed', {
                 error: err instanceof Error ? err.message : String(err),
@@ -9267,9 +9270,28 @@ export class PostgresBackedDb extends InMemoryDb {
             });
             return next;
         }
-        if (map.get(id) === (next as unknown as Record<string, unknown>)) {
+        const current = map.get(id);
+        if (current === (next as unknown as Record<string, unknown>)) {
             if (stored) map.set(id, rowToRecord(plan, stored));
             else map.set(id, before as unknown as Record<string, unknown>);
+        } else if (current && stored) {
+            // This process wrote the switch while the statement ran (its
+            // owner's deletion erasing the label, say; a check-in and a cancel
+            // refuse the moved switch): what that write changed is kept, the
+            // rest is Postgres's, and the result is written after it, so the
+            // mirror and Postgres agree and the other process's move stands.
+            const theirs = rowToRecord(plan, stored);
+            const mine = next as unknown as Record<string, unknown>;
+            const merged: Record<string, unknown> = {};
+            for (const key of new Set([
+                ...Object.keys(mine),
+                ...Object.keys(current),
+                ...Object.keys(theirs),
+            ])) {
+                if (key === 'id' || key === 'createdAt') continue;
+                merged[key] = current[key] !== mine[key] ? current[key] : theirs[key];
+            }
+            this.updateDeadmanSwitch(id, merged as Partial<DeadmanSwitchRecord>);
         }
         return undefined;
     }

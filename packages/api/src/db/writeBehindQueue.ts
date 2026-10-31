@@ -9,7 +9,7 @@
 
 import { log } from '../telemetry/logger';
 import { dbWriteBehindDepth, dbWriteBehindFailuresTotal } from '../telemetry/metrics';
-import type { PgPool } from './migrate';
+import type { PgClient, PgPool } from './migrate';
 import type { StoreChangeTransport } from './pgNotify';
 import { resyncMap, snakeToCamel, upsertRecord, type TablePlan } from './pgWriter';
 
@@ -62,6 +62,36 @@ export class WriteBehindQueue {
 
     enqueueResync(mapName: string): void {
         this.schedule({ kind: 'resync', mapName });
+    }
+
+    /**
+     * Run `fn` on a connection in the queue's order: after every write queued
+     * before it has been attempted, and before any queued after it. Its
+     * result is the returned promise's. Unlike a queued write, it is not
+     * retried, logged or announced here, and a failure is the caller's (the
+     * sweep's conditional move of a switch, `advanceDeadmanSwitch`).
+     */
+    enqueueCall<T>(fn: (client: PgClient) => Promise<T>): Promise<T> {
+        this.pending += 1;
+        dbWriteBehindDepth.set(this.pending);
+        const result = this.tail.then(async () => {
+            try {
+                const client = await this.pool.connect();
+                try {
+                    return await fn(client);
+                } finally {
+                    client.release?.();
+                }
+            } finally {
+                this.pending -= 1;
+                dbWriteBehindDepth.set(this.pending);
+            }
+        });
+        this.tail = result.then(
+            () => undefined,
+            () => undefined
+        );
+        return result;
     }
 
     private schedule(op: WriteOp): void {
