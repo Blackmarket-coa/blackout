@@ -1196,12 +1196,23 @@ test('U4b: init boots on a schema behind the code, leaving out the steps whose t
     // (BLACKOUT_DB_MIGRATE_ON_START=0 with ./bin/migrate not yet run) boots;
     // what it cannot write is logged. PGlite here, whichever backend the rest uses.
     const { PGlite } = await import('@electric-sql/pglite');
-    const latest = Math.max(
-        ...readdirSync(MIGRATIONS_DIR)
-            .filter((f) => f.endsWith('.up.sql'))
-            .map((f) => Number.parseInt(f, 10))
-    );
-    for (const ordinal of [latest - 1, 99]) {
+    const ups = readdirSync(MIGRATIONS_DIR).filter((f) => f.endsWith('.up.sql'));
+    const latest = Math.max(...ups.map((f) => Number.parseInt(f, 10)));
+    // The migration that creates invitation_admissions, the only table of
+    // deleteInvitationAdmissionsForUser, found by its SQL: "the latest minus
+    // one" stops lacking that table as soon as a later migration is added.
+    const creates = ups
+        .filter((f) =>
+            /CREATE TABLE (IF NOT EXISTS )?invitation_admissions\b/i.test(
+                readFileSync(join(MIGRATIONS_DIR, f), 'utf8')
+            )
+        )
+        .map((f) => Number.parseInt(f, 10));
+    assert.equal(creates.length, 1, 'one migration creates invitation_admissions');
+    const admissions = creates[0]!;
+    // One migration behind the code, the schema just before that table, and
+    // one before migration 100 (refresh_tokens.session_ends_at).
+    for (const ordinal of new Set([latest - 1, admissions - 1, 99])) {
         const pg = new PGlite();
         const client = {
             async query(sql: string, params?: unknown[]) {
@@ -1219,13 +1230,25 @@ test('U4b: init boots on a schema behind the code, leaving out the steps whose t
                 migrationsDir: MIGRATIONS_DIR,
                 targetOrdinal: ordinal,
             });
+            const hasTable = (
+                await client.query(
+                    "SELECT to_regclass('public.invitation_admissions') IS NOT NULL AS t"
+                )
+            ).rows[0].t as boolean;
+            assert.equal(
+                hasTable,
+                ordinal >= admissions,
+                `${ordinal}: invitation_admissions exists from migration ${admissions} on`
+            );
             const db: any = new PostgresBackedDb();
             db.users.delete('demo-user');
             await db.init(pool);
             assert.equal(
                 db.compiled.has('deleteInvitationAdmissionsForUser'),
-                false,
-                `${ordinal}: its only table (migration 105) is not there, so it writes the mirror only`
+                hasTable,
+                hasTable
+                    ? `${ordinal}: its table is there, so it is compiled`
+                    : `${ordinal}: its only table (migration ${admissions}) is not there, so it writes the mirror only`
             );
             assert.ok(db.compiled.has('deleteVaultItem'), `${ordinal}: the others are compiled`);
             assert.equal(db.persistsRefreshTokenSessionEnds(), ordinal >= 100);
