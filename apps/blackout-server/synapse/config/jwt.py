@@ -80,11 +80,11 @@ class JWTConfig(Config):
         """Refuse an HS* secret that JWT login could not use, or that anyone could.
 
         ``JwtHandler`` verifies each token with
-        ``JsonWebToken([algorithm]).decode(token, key=secret)``. From authlib
-        1.9.0 that raises ValueError, which the handler does not catch, when
-        the key is empty or contains PEM or SSH key text anywhere, so every
-        JWT login would answer 500. Before 1.9.1 an empty key verified a token
-        anyone could sign (GHSA-8m4g-j4wp-wgcg).
+        ``JsonWebToken([algorithm]).decode(token, key=secret)``. That raises
+        ValueError, which the handler does not catch, from authlib 1.9.0 when
+        the key contains PEM or SSH key text anywhere, and from 1.9.1 when it
+        is empty, so every JWT login would answer 500. Before 1.9.1 an empty
+        key verified a token anyone could sign (GHSA-8m4g-j4wp-wgcg).
 
         So this makes the handler's own call once, with a token signed with
         the empty key. authlib prepares the secret as it would for a login (a

@@ -1,12 +1,13 @@
 """JWT login refuses, at startup, an HS* secret it could not use or anyone could.
 
 ``JwtHandler`` verifies each token with
-``JsonWebToken([algorithm]).decode(token, key=secret)``. From authlib 1.9.0
-that raises ValueError, which the handler does not catch, for a key that is
-empty or contains PEM or SSH key text anywhere (``-----BEGIN ``, ``ssh-rsa ``
-and four more markers), so every JWT login answered 500. Under authlib 1.6.12
-an empty key accepted tokens anyone could sign. The secret may also be a JWK,
-as a mapping or as JSON text, which authlib unpacks on every verify.
+``JsonWebToken([algorithm]).decode(token, key=secret)``. That raises
+ValueError, which the handler does not catch, from authlib 1.9.0 for a key that
+contains PEM or SSH key text anywhere (``-----BEGIN ``, ``ssh-rsa `` and four
+more markers), and from 1.9.1 for an empty key, so every JWT login answered
+500. Under authlib 1.6.12 an empty key accepted tokens anyone could sign. The
+secret may also be a JWK, as a mapping or as JSON text, which authlib unpacks
+on every verify.
 
 ``JWTConfig`` (``synapse/config/jwt.py``) now makes the handler's call once at
 startup, with a token signed with the empty key, and refuses an empty or

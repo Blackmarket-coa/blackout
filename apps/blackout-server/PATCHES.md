@@ -738,10 +738,11 @@ imported a string secret only and so missed a secret given as a JWK.
     for each login: a mapping or `{...}` text is read as a JWK, and a key set
     is searched by `kid`, so the check tries each `kid` the set names. The
     secret passes only when authlib reports a bad signature. Any other
-    exception (authlib 1.9.x's `ValueError` for an empty key or one holding
-    PEM or SSH key text anywhere, an empty key set, JSON text that does not
-    parse) becomes a `ConfigError` at `jwt_config.secret`, and so does a
-    token that verifies, because then the secret works as the empty key.
+    exception (the `ValueError` authlib raises from 1.9.0 for a key holding
+    PEM or SSH key text anywhere and from 1.9.1 for an empty key, an empty
+    key set, JSON text that does not parse) becomes a `ConfigError` at
+    `jwt_config.secret`, and so does a token that verifies, because then the
+    secret works as the empty key.
 - Before this, under authlib 1.9.1, such a homeserver started and answered
   every JWT login with 500; under 1.6.12 an empty secret, or a JWK with an
   empty `k`, accepted tokens anyone could sign (GHSA-8m4g-j4wp-wgcg). Under
@@ -790,9 +791,11 @@ root).
   (`not self.client_secret`, was `is None`) for `client_secret_post`,
   `client_secret_basic` and `client_secret_jwt`. `MSC3861DelegatedAuth`
   already asserted it truthy, so such a homeserver stopped during setup with
-  `AssertionError: No client_secret provided`, on both authlib versions; it
-  now stops with the config path. Under `python -O`, which no Blackout image
-  uses, the assertion would be gone and authlib 1.9.1 would refuse to sign
+  `AssertionError: No client_secret provided`, on both authlib versions (run
+  for `client_secret_jwt` and `client_secret_post`; `client_secret_basic`
+  takes the same branch); it now stops with the config path. Under
+  `python -O`, which no Dockerfile or deploy script in the tree sets, the
+  assertion would be gone and authlib 1.9.1 would refuse to sign
   `client_secret_jwt` on every request.
 - `tests/blackout_runtime/test_msc3861_client_assertion.py`: a JWK naming
   RS384, RS512, PS256 or ES256 is refused at `experimental_features.msc3861.jwk`;
