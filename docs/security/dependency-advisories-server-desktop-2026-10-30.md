@@ -25,8 +25,10 @@ entries this record extends.
     Moderate/Low authlib advisories published with the three above.
 -   **id_token claims are type-checked now, as upstream's are.** authlib 1.7+
     refuses an id_token whose `sub` or `jti` is not a string, or whose `aud`
-    holds a non-string. An integer id from the userinfo endpoint (GitHub-style
-    OAuth2) still logs in. No claim check was loosened. Two that were already
+    holds a non-string, even with `user_profile_method: userinfo_endpoint`.
+    An integer id from the userinfo endpoint (GitHub-style OAuth2) still logs
+    in when the provider sends no id_token. No claim check was loosened. Two
+    that were already
     weak, and still are, are now written down in
     [their own section](#claim-checks-the-bump-did-not-change): `aud` is
     enforced only through `azp`, and the signature check accepts `none` when
@@ -44,13 +46,23 @@ entries this record extends.
     this record said they did not. Under 1.9.1 both refuse a boolean `exp`,
     `nbf` or `iat`, and an HMAC secret that is empty or holds PEM or SSH key
     text made every JWT login answer 500. A fork patch now refuses such a
-    secret at startup. Provider metadata validation now accepts more
+    secret at startup by making the login's own verify call once. Since the
+    third review that covers a secret given as a JWK too, and an empty or
+    missing secret is refused on any authlib version. Provider metadata
+    validation now accepts more
     `http://` loopback URLs (no port, or `[::1]`). See
     [JWT login, the logout token and provider metadata](#jwt-login-the-logout-token-and-provider-metadata).
 -   **A logout token whose key authlib cannot use gets 400, not 500 (fork
     patch).** An unknown `kid`, or HS256 naming the provider's EC key, raised
     `ValueError` past the handler. Each such token still makes Synapse refetch
     the provider's JWKS once; that is [recorded, not patched](#malformed-logout-tokens).
+-   **MSC3861 refuses at startup a client credential that cannot sign (fork
+    patch, third review).** Under 1.9.1 a `private_key_jwt` JWK whose `alg`
+    is not RS256 let the homeserver start and then answer every
+    authenticated request with 503. Such a JWK, a JWK that cannot sign at
+    all, and an empty `client_secret` are now refused when the config loads.
+    No shipped configuration enables MSC3861 on the fork image. See
+    [Two side effects](#two-side-effects).
 -   **Twisted's HTTP/2 advisory is ignored, with an expiry.** No Blackout
     listener can speak HTTP/2: the `h2` package is not installed and Synapse's
     TLS listeners negotiate no ALPN. Twisted **26.10.0 final was published on
@@ -65,20 +77,25 @@ entries this record extends.
     calls the updater today.
 -   **The gate passes.** Trivy 0.69.3, run as `security.yml` runs it, reports no
     un-ignored High/Critical finding.
--   **The desktop lock has not been built.** Only a `cargo check` against stub
-    system libraries ran here, and no CI job builds the desktop app before a
-    release tag. An unsigned build on ubuntu-22.04 should run before this
-    merges or before the next release tag; see
-    [Before merge or release](#before-merge-or-release).
+-   **The desktop app builds and links on Linux (third review).**
+    `cargo build --release --locked` ran on Ubuntu 24.04 with the workflow's
+    apt packages: tauri 2.12.5, wry 0.57.1, tao 0.37.2 and
+    tauri-plugin-updater 2.14.1 compiled with no warning and the binary
+    links WebKitGTK 4.1, GTK 3, libsoup 3 and libdbus. It was not run, and
+    nothing was built for Windows, where zip is compiled, or macOS. No CI
+    job builds the desktop app before a release tag, so the release job's
+    own build is still the first on ubuntu-22.04 and the other platforms;
+    see [Before merge or release](#before-merge-or-release).
 -   **The two id_token gaps are now in `KNOWN_LIMITATIONS.md`** ("OIDC sign-in
     checks") and in `THREAT_MODEL.md`'s OIDC tokens row, which said only "OIDC
     sigs".
 -   **Found outside scope, not fixed here:** the desktop updater's public key
     in `tauri.conf.json` is a literal `${TAURI_UPDATER_PUBKEY}` placeholder; no
     PR job compiles the desktop crate; and two older ignores rested on reasons
-    the advisory data no longer supports. The `-v47` branch fixes the
-    react-router one (react-router 7.18.2, `71548f0`) and corrects
-    `.trivyignore`'s header (`26e6ce5`). See
+    the advisory data no longer supports. The `-v47` branch (PR #994) fixes
+    the react-router one (react-router 7.18.2, `71548f0350`) and corrects
+    `.trivyignore`'s header (`26e6ce5`). The plan is to merge this branch
+    into PR #994, so that the two land together. See
     [Found outside scope](#found-outside-scope-not-fixed-here).
 
 Commits, on top of `ff7d08b`: `21c9591` (authlib, with the `PATCHES.md`
@@ -89,8 +106,12 @@ corrected `PATCHES.md` entry), `d9eed10` (the logout-token fix), `e6b6b5a` (the
 Twisted ignore records) and `b1cad1e` (the record). After the second review:
 `85df7cc` (400 for an unusable logout-token key), `5bad47c` (the JWT secret
 check, and the corrected `PATCHES.md` authlib entry), `b37a2cd` (the Twisted
-comments in `pyproject.toml` and `.trivyignore`), then this version of the
-record, with `KNOWN_LIMITATIONS.md` and `THREAT_MODEL.md`.
+comments in `pyproject.toml` and `.trivyignore`), then `cfd9ab0` (the
+record, with `KNOWN_LIMITATIONS.md` and `THREAT_MODEL.md`). After the third
+review: `93d3024` (the JWT secret check rewritten), `7babe24` (MSC3861 client
+credentials), `3ca628a` (the authlib comment in `pyproject.toml`), `4403f4c`
+(the release each authlib refusal arrived in, in the docstrings and
+`PATCHES.md`), then this version of the record.
 
 ## What the review changed
 
@@ -117,6 +138,19 @@ A second review found seven more. Each is answered here:
 | `PATCHES.md` and this record said JWT login and the logout token were unchanged.                                                                             | Corrected: boolean time claims are refused, and an unusable HMAC secret gave 500. That secret is now refused at startup (`5bad47c`).                                                      |
 | Metadata validation's new acceptance of `http://` loopback URLs was not recorded.                                                                            | [Recorded](#jwt-login-the-logout-token-and-provider-metadata), in `PATCHES.md` too. No code change.                                                                                       |
 | The desktop lock was only checked, never built, and no CI job builds it before a release.                                                                    | Still true. The build to run, and how not to run it, are under [Before merge or release](#before-merge-or-release).                                                                       |
+
+A third review found six more, and asked for a real desktop build. Each is
+answered here:
+
+| Finding                                                                                                                                                                                                                       | Now                                                                                                                                                                                                                                                 |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The JWT secret check missed a secret given as a JWK. `{kty: oct, k: ""}`, its JSON text, or a PEM `k` passed startup and gave 500 per login under 1.9.1; under 1.6.12 the empty `k` logged in with a token anyone could sign. | The check makes the login's own verify call now, and refuses an empty or missing secret first (`93d3024`). [Below](#jwt-login-the-logout-token-and-provider-metadata).                                                                              |
+| The second round's report said the secret is refused at startup "on any authlib version".                                                                                                                                     | Not repeated in this record or `PATCHES.md`. Only an empty or missing secret, and every empty-key form, are refused on any version. PEM or SSH text after the first byte is refused only under the locked `>=1.9.1`.                                |
+| The gate passes partly through the react-router ignore, whose reason is stale, and `.trivyignore`'s header contradicts the Twisted block.                                                                                     | Not changed here. `-v47` (PR #994) fixes both (`71548f0350`, `26e6ce5`), and this branch is to be merged into PR #994. [Found outside scope](#found-outside-scope-not-fixed-here).                                                                  |
+| MSC3861 `private_key_jwt` with a JWK whose `alg` is not RS256: every authenticated request 503 under 1.9.1. This record said the assertion is "the same on both" and the change "log noise only".                             | Refused at startup (`7babe24`); both sentences corrected in [Two side effects](#two-side-effects). Upstream never ran MSC3861 on authlib 1.7+, so there was nothing to port.                                                                        |
+| MSC3861 `client_secret_jwt` with an empty secret fails every request.                                                                                                                                                         | Measured through a homeserver: it never got that far. `MSC3861DelegatedAuth` asserts the secret, so the homeserver stopped at setup on both versions (run for `client_secret_jwt` and `client_secret_post`). It is a `ConfigError` now (`7babe24`). |
+| `pyproject.toml` said an integer `sub` from the userinfo endpoint is "still accepted", without the condition.                                                                                                                 | Reworded there and in `PATCHES.md` (`3ca628a`): only when the provider sends no id_token.                                                                                                                                                           |
+| (Asked for, not a finding) a real desktop build, which round three could not do for want of disk and system libraries.                                                                                                        | Done on Linux: it compiles and links with no warning. [Verification](#verification).                                                                                                                                                                |
 
 ---
 
@@ -230,7 +264,10 @@ Per advisory:
     rather than a session. The first version said that was read from the code,
     not run. It has been run since: HTTP 500 `M_UNKNOWN`, for a valid token as
     for any other. After the second review the fork refuses such a secret at
-    startup instead ([below](#jwt-login-the-logout-token-and-provider-metadata)).
+    startup instead, and after the third it does so through the login's own
+    verify call, so a secret given as a JWK is covered as well
+    ([below](#jwt-login-the-logout-token-and-provider-metadata)). An empty or
+    missing secret is refused on any authlib version.
 
 ### What was done
 
@@ -255,6 +292,10 @@ Per advisory:
     `synapse/config/jwt.py` refuses an HMAC secret authlib cannot use, and
     `handle_backchannel_logout` answers a key it cannot use with 400. Each has
     its own `PATCHES.md` entry and test.
+-   After the third review: the JWT secret check is rewritten to make the
+    login's own verify call, and `config/experimental.py` refuses an MSC3861
+    client credential that cannot sign. Again each has its `PATCHES.md`
+    entry and tests.
 
 ### The claim-type checks
 
@@ -289,7 +330,16 @@ the integer `sub` alone, which was incomplete.
 -   A non-string `iss` was refused before and still is. `oidc.py` always
     checks `iss` against the issuer, and 1.6.12's value check fails on it.
 -   A provider whose userinfo endpoint returns an integer `sub` still maps to
-    a Matrix user. The subject template renders it as a string.
+    a Matrix user when it sends no id_token (scopes without `openid`, or a
+    plain OAuth2 provider). The subject template renders it as a string.
+    With the `openid` scope an OIDC provider's id_token carries the same
+    `sub`, and the login is refused even under
+    `user_profile_method: userinfo_endpoint`. The third review ran both
+    through the callback, and this round again: with `scope=""` the integer
+    maps to external id `1234` on both versions; with `openid` it maps under
+    1.6.12 and renders `invalid_token` under 1.9.1. The comment over authlib
+    in `pyproject.toml` said only "still accepted", and gives the condition
+    now (`3ca628a`).
 -   JWT login (`jwt.py`) and the logout token are not affected by these
     string checks. They validate with authlib.jose's `JWTClaims`, which
     accepts an integer `jti` on both versions. They do change in other ways,
@@ -375,14 +425,45 @@ them). The release each change arrived in was read from the 1.7.2, 1.8.0 and
     every JWT login answered 500 `M_UNKNOWN`. That was run here through
     `/login` with the new check bypassed: `""` and `abc-----BEGIN xyz` give
     500, `plain-secret` gives 200.
-    -   **Fork patch (`5bad47c`):** `JWTConfig` imports an `HS*` secret with
-        `OctKey.import_key`, the call authlib's HMAC algorithms make, and turns
-        a `ValueError` into a `ConfigError` at `jwt_config.secret`. The
-        homeserver then stops at startup with the reason. Asymmetric
-        algorithms, whose secret is a public key and so contains `-----BEGIN `,
-        and disabled JWT login are not checked.
-        `tests/blackout_runtime/test_jwt_secret_config.py` fails on the code
-        before the patch. No Blackout template enables `jwt_config`.
+    -   **Fork patch (`5bad47c`, rewritten in `93d3024`):** for HS256,
+        HS384 and HS512, `JWTConfig` refuses an empty or missing secret
+        outright. Then it makes `JwtHandler`'s own call once,
+        `JsonWebToken([algorithm]).decode(token, key=secret)`, with a token
+        signed with the empty HMAC key. authlib prepares the secret as it
+        does for each login: a mapping or `{...}` text is read as a JWK, and
+        a key set is tried under each `kid` it names. The secret passes only
+        when authlib reports a bad signature. Any other exception becomes a
+        `ConfigError` at `jwt_config.secret`, and so does a token that
+        verifies, since the secret then works as the empty key (`"\x00"`
+        does: HMAC pads a key with zero bytes). The homeserver stops at
+        startup with the reason. Asymmetric algorithms, whose secret is a
+        public key and so contains `-----BEGIN `, and disabled JWT login are
+        not checked. No Blackout template enables `jwt_config`.
+    -   **What `5bad47c` missed (third review).** It imported the secret with
+        `OctKey.import_key`, and for a JWK that call puts off the empty-key
+        and PEM checks until each verify. The review parsed
+        `{kty: oct, k: ""}`, its JSON text, and a `k` that decodes to
+        `-----BEGIN PUBLIC KEY-----` with `HomeServerConfig`: each passed
+        startup. It ran the two empty-`k` forms through `/login`: under
+        1.9.1 each login answered 500, and under 1.6.12 a token signed with
+        the empty key logged in. The PEM `k` raises the same `ValueError` on
+        the handler's call under 1.9.1 (measured here with that call, not
+        through `/login`). `5bad47c` also refused a two-key set that
+        the handler can use (`Missing required field: "k"`). The rewrite
+        refuses the first three and accepts the set, and `/login` with each
+        of its keys returns 200.
+    -   **On which authlib version.** Measured through `HomeServerConfig`
+        under both venvs. Refused under 1.6.12 and 1.9.1: an empty or
+        missing secret, an empty-`k` JWK as a mapping or as JSON text, a key
+        set with an empty `k`, an empty key set, `"\x00"`, JSON text that
+        does not parse, `use: enc`, and PEM text at the start of a string.
+        Refused only under 1.9.x: PEM or SSH key text after the first byte,
+        as a string or as a JWK's `k`. 1.6.12 uses those as HMAC keys, so
+        refusing them there would refuse a working configuration. The lock
+        requires `>=1.9.1`. `tests/blackout_runtime/test_jwt_secret_config.py`
+        has fourteen refused and four accepted forms. On `5bad47c` its JWK
+        refusals fail and its key-set cases error; under 1.6.12 with the
+        rewrite only the PEM and SSH cases fail, as above.
     -   Catching the `ValueError` in `jwt.py` (a 403 per login) was the
         alternative. A startup error tells the operator; a 403 on every login
         only tells the user.
@@ -426,17 +507,62 @@ them). The release each change arrived in was read from the 1.7.2, 1.8.0 and
     -   A probe of `MSC3861DelegatedAuth`'s own `ClientAuth`, with authlib's
         filters as installed, counted 3 warnings in 3 calls under 1.9.1 and
         none under 1.6.12. `client_secret_jwt`, `client_secret_post` and
-        `client_secret_basic` warn on neither version. The assertion is the
-        same on both: header `alg`, `kid` and `typ`; claims `iss`, `sub`,
-        `aud`, `exp`, `iat` and `jti`; a 3600-second lifetime.
+        `client_secret_basic` warn on neither version. For a JWK with no
+        `alg` member, or with `"alg": "RS256"`, the assertion is the same on
+        both: header `alg`, `kid` and `typ`; claims `iss`, `sub`, `aud`,
+        `exp`, `iat` and `jti`; a 3600-second lifetime.
         `tests/blackout_runtime/test_msc3861_client_assertion.py` (`ad9bf75`)
-        now checks it for both JWT methods, verifying the signature without
-        authlib.
-    -   It is log noise only, and no shipped configuration reaches it.
+        checks it for both JWT methods, verifying the signature without
+        authlib, and since `7babe24` for an `alg: RS256` JWK too. (Corrected
+        after the third review. This sentence said "the same on both"
+        without the condition.)
+    -   **Not only log noise (corrected after the third review).** The
+        warning is log noise. But joserfc also checks the key against the
+        assertion. Its `Key.check_alg` refuses a JWK whose `alg` is not the
+        RS256 that `PrivateKeyJWTWithKid` signs with; 1.6.12 ignored `alg`.
+        Measured through a homeserver with `"alg": "RS512"`: under 1.9.1,
+        `get_user_by_access_token` raised a 503,
+        `Unable to introspect the access token`, and no introspection
+        request was sent; under 1.6.12 the request was sent and the
+        provider's answer came back (401 for an inactive token). The config
+        accepted that JWK, so the homeserver started and then failed every
+        authenticated request. A JWK that is public only or has `use: enc`
+        gave the same 503 under both versions.
+    -   **Fork patch (`7babe24`).** `config/experimental.py` refuses a JWK
+        whose `alg` is set and is not RS256, at
+        `experimental_features.msc3861.jwk`, on any authlib version. Then it
+        signs one assertion with `private_key_jwt_sign` and the arguments
+        `PrivateKeyJWTWithKid.sign` passes, and turns any exception into the
+        same `ConfigError`. That also refuses, on both versions, a JWK that
+        is public only, is not RSA, or has `use: enc` or `key_ops` without
+        `sign`. Upstream removed experimental MSC3861 in v1.157.0
+        (2026-07-21); every upstream release locks authlib 1.6.12 or older,
+        so upstream never ran it on joserfc and there was nothing to port.
+    -   **An empty `client_secret`.** The third review found that 1.9.1
+        refuses to sign `client_secret_jwt` with an empty secret
+        (`oct key material must not be empty`), where 1.6.12 signed with the
+        empty key, and expected every request to fail. Measured through a
+        homeserver, neither version got that far: `MSC3861DelegatedAuth`
+        asserts the secret is truthy, so the homeserver stopped during setup
+        with `AssertionError: No client_secret provided`. That was run for
+        `client_secret_jwt` and `client_secret_post` on both versions;
+        `client_secret_basic` takes the same branch. The config refused only
+        `None`; since `7babe24` it refuses `""` the same way, for all three.
+        The per-request failure would appear only under `python -O`, which
+        strips the assertion. No Dockerfile or deploy script in the tree sets
+        `-O` or `PYTHONOPTIMIZE`.
+    -   **A `client_secret` that starts with `-----BEGIN `.** 1.6.12 refused
+        to sign `client_secret_jwt` with `-----BEGIN PUBLIC KEY-----`; 1.9.1
+        signs with it and emits joserfc's `SecurityWarning`. This is the
+        homeserver's own secret for signing its requests to the provider,
+        not a key it verifies tokens with, so GHSA-7vr2's key confusion does
+        not arise. Left as it is.
+    -   No shipped configuration reaches any of this.
         `infra/single-server-baseline` uses classic `oidc_providers`, and the
         MAS stack runs the upstream image. If the fork ever enables
         `private_key_jwt`, convert the JWK to a joserfc key once at config
-        time. That is a fork change and needs a `PATCHES.md` entry.
+        time to stop the per-request warning. That is a fork change and
+        needs a `PATCHES.md` entry.
 
 ## Claim checks the bump did not change
 
@@ -747,6 +873,34 @@ The effective minimum Rust becomes 1.90, from 1.88 before. `Cargo.toml` says
     against tauri 2.12.5's API. It is not a build: nothing was linked or
     run. zip is not compiled on Linux.
 
+-   **A release build on Linux, after the third review.** With 9 GB free
+    and the load under 3, the workflow's apt packages were installed:
+    `libwebkit2gtk-4.1-dev`, `libxdo-dev`, `libssl-dev`,
+    `libayatana-appindicator3-dev` and `librsvg2-dev`, here with
+    `--no-install-recommends`, from Ubuntu 24.04's archive (131 packages,
+    `libdbus-1-dev` among them). The build ran on a `git archive` of
+    `blackout-desktop` at `3ca628a`:
+
+    -   icons generated as the workflow does, with
+        `tauri icon src-tauri/icons/blackout.svg`, from `@tauri-apps/cli`
+        2.10.1, the locked version (its npm integrity matches
+        `pnpm-lock.yaml`);
+    -   a one-line placeholder `index.html` as `frontendDist`, because the
+        client was not built (a monorepo install was not part of this);
+    -   `cargo build --release --locked -j 3`, rustc 1.97.0, with its own
+        target directory, deleted afterwards.
+
+    It finished in 6 minutes 40 seconds with no warning and no error, and
+    left `Cargo.lock` unchanged. It compiled tauri 2.12.5, wry 0.57.1, tao
+    0.37.2, tauri-runtime-wry 2.12.3, muda 0.20.0, tray-icon 0.25.1 and
+    tauri-plugin-updater 2.14.1, and linked a 22.5 MB `blackout-desktop`
+    executable. `ldd` resolves its WebKitGTK 4.1, GTK 3, libsoup 3 and
+    libdbus libraries. Since this build has no warning, none is new against
+    `develop`, so `develop` was not built for comparison. Not done: running
+    the binary (there is no display here), a bundle, a build on
+    ubuntu-22.04 (the release job's runner) or on Windows or macOS, and a
+    build with the real client.
+
 -   **What was run instead:**
     -   `cargo update --dry-run`, then the update;
     -   `cargo tree -i zip --target all`: zip 9.1.3, only through
@@ -771,7 +925,9 @@ its toolchain-free notification harness; its `build` job has
 `release-*` and `v*` tags, and on `workflow_dispatch`. PRs here target
 `develop`. So tauri 2.10.3 → 2.12.5, wry 0.54 → 0.57, tao, tray-icon, muda and
 the 28 added package versions (15 of them crates new to the lock, dbus and
-libdbus-sys among them) would first be linked and bundled by the release job. That job bundles with `@tauri-apps/cli`
+libdbus-sys among them) would first be linked and bundled in CI by the release
+job. They have been linked once outside CI, after the third review, on Ubuntu
+24.04 (see [Verification](#verification)). That job bundles with `@tauri-apps/cli`
 2.10.1 (`pnpm-lock.yaml`), two minors behind the crate.
 
 -   **The CLI and crate versions.** tauri-cli 2.10.1's
@@ -795,9 +951,11 @@ libayatana-appindicator3-dev librsvg2-dev`):
     `tagName: ${{ github.ref_name }}`, `releaseDraft: false` and
     `prerelease: false`, so it would publish a release named after the
     branch.
--   **Not done here.** This host has none of those development packages, and
-    it is shared with other work; installing them was not part of this task.
-    `@tauri-apps/cli` was not moved to 2.12.x either: the mismatch check does
+-   **Done here, after the third review: the Linux half of the Rust build**
+    (see [Verification](#verification)), on Ubuntu 24.04 rather than 22.04,
+    with a placeholder frontend and without `tauri build`'s bundling. The
+    release job's own build is still the first on 22.04, Windows and macOS.
+    `@tauri-apps/cli` was not moved to 2.12.x: the mismatch check does
     not require it, and `pnpm-lock.yaml` belongs to the `-v47` branch's
     change. Moving it with the build above is reasonable.
 
@@ -811,6 +969,7 @@ libayatana-appindicator3-dev librsvg2-dev`):
 | first version, the new entry's `exp:` set to 2026-10-01 | GHSA-vpp8-g58w-m8mp only                                                         | 1    |
 | after review, every Twisted `exp:` set to 2026-10-01    | the four Twisted advisories only                                                 | 1    |
 | after the second review (`b37a2cd`)                     | none                                                                             | 0    |
+| after the third review (`3ca628a`)                      | none                                                                             | 0    |
 
 The last two rows show that Trivy 0.69.3 honours the `exp:` date, now on all
 four Twisted entries. Nothing from authlib or zip remains with the ignore file
@@ -828,21 +987,30 @@ four ids (Trivy matches the HTTP/2 one by GHSA, the other three by CVE),
 react-router 7.18.0 (fixed in 7.18.2 and 8.3.0) and image-size 1.2.1 twice
 (fixed in 2.0.3).
 
+After the third review the same binary (its tarball re-checked against
+`trivy_0.69.3_checksums.txt`) and the same DB, still the newest, were run
+over the worktree at `3ca628a`, plain and with `--show-suppressed`. Same
+result: no finding, exit 0, and the same seven suppressed. The react-router
+one stays suppressed on this branch until it is merged into PR #994, whose
+`71548f0350` removes the ignore with the bump.
+
 ## Validation
 
 -   **Lock:** `poetry lock --check`, `.ci/scripts/check_lockfile.py` and
     `scripts-dev/check_locked_deps_have_sdists.py` (151 packages) pass.
 -   **Lock, after the second review:** `poetry lock --check` (poetry 1.3.2)
     passes with the reworded `pyproject.toml` comment. `poetry.lock` did not
-    change in that round.
+    change in that round. After the third review it passes again, with the
+    authlib comment reworded; `poetry.lock` did not change.
 -   **The auth tests, before and after:** 231 tests in 13 modules. All pass
     on both sides, and none is skipped, so authlib was loaded. After review,
     with the three new modules (`test_oidc_claim_types`,
     `test_backchannel_logout_alg`, `test_msc3861_client_assertion`): 239,
     all passing, none skipped. After the second review, the same 16 modules
     plus `test_jwt_secret_config` and the whole of `tests.config` (for the
-    `config/jwt.py` change): 347 tests, all passing, none skipped. The
-    original 13 modules:
+    `config/jwt.py` change): 347 tests, all passing, none skipped. After the
+    third review, the same 18 modules: 354 tests (the two changed modules
+    have seven more), all passing, none skipped. The original 13 modules:
     -   `tests.handlers.test_oidc`, `test_sso`, `test_auth` and
         `test_oauth_delegation`;
     -   `tests.rest.client.test_login` (JWT login lives here; there is no
@@ -859,13 +1027,17 @@ react-router 7.18.0 (fixed in 7.18.2 and 8.3.0) and image-size 1.2.1 twice
     | after         | 3,350 | 3,034 | 173     | 110     | 34    |
     | after review  | 3,358 | 3,042 | 173     | 110     | 34    |
     | second review | 3,363 | 3,047 | 173     | 110     | 34    |
+    | third review  | 3,370 | 3,054 | 173     | 110     | 34    |
 
     Compared test by test, every outcome is the same. After review, the
     failing, erroring and skipped tests are the same ones, by test id, as
     before, and the 8 added tests pass. After the second review they are the
     same ones again, and the 5 added tests (one logout test, four JWT config
-    tests) pass. The 144 failures and errors are the fork's existing ones (see
-    the 2026-10-25 record). None is in an auth module.
+    tests) pass. After the third review, compared by test id with the second
+    review's run, the 316 failing, erroring and skipped ids are the same,
+    each with the same outcome, and the 7 added tests pass. The 144 failures
+    and errors are the fork's existing ones (see the 2026-10-25 record). None
+    is in an auth module.
 
 -   **The new tests against the code they pin:**
 
@@ -877,9 +1049,25 @@ react-router 7.18.0 (fixed in 7.18.2 and 8.3.0) and image-size 1.2.1 twice
     -   After the second review, on the code before `85df7cc` and `5bad47c`:
         `test_logout_token_with_unusable_key_is_refused_with_400` fails (HTTP 500) and `test_unusable_hmac_secrets_are_refused` fails (no
         `ConfigError`). With the patches both pass.
+    -   After the third review, the two changed modules on the code before
+        `93d3024` and `7babe24` (`cfd9ab0`), under 1.9.1:
+        `test_unusable_hmac_secrets_are_refused`,
+        `test_empty_client_secret_is_refused`,
+        `test_jwk_for_another_algorithm_is_refused` and
+        `test_jwk_that_cannot_sign_is_refused` fail, and
+        `test_usable_hmac_secrets_are_accepted` and the two `/login` tests
+        error, because `cfd9ab0` refuses the key set. With the patches all 13
+        pass. Under 1.6.12 with the patches, only
+        `test_unusable_hmac_secrets_are_refused` fails, on the PEM and SSH
+        forms that 1.6.12 can use.
+    -   Also after the third review, through a homeserver on `cfd9ab0`, under
+        each version: a JWK with `"alg": "RS512"`, a public JWK and
+        `use: enc`, and an empty `client_secret` for `client_secret_jwt` and
+        `client_secret_post`. The results are in
+        [Two side effects](#two-side-effects).
 
 -   **`blackout_runtime_tests`:** 85 passed before and after, and again after
-    each review, run with `pytest -q` as the fork's
+    each of the three reviews, run with `pytest -q` as the fork's
     `docs/ops/upstream_sync_runbook.md` says. pytest is not in
     the lock: 8.3.5 was added to each venv with `--no-deps`, because 9.x would
     have moved the locked `packaging`. `tests/blackout_runtime` is part of the
@@ -897,18 +1085,23 @@ react-router 7.18.0 (fixed in 7.18.2 and 8.3.0) and image-size 1.2.1 twice
     touch (`synapse/http/proxyagent.py`, `tests/server.py` and others), and
     none in the four. The same command on a `git archive` of the previous
     head reports the same 56. Why the round before counted one is not known;
-    the comparison, not the count, is what this shows.
+    the comparison, not the count, is what this shows. After the third
+    review, ruff, black and isort pass on the four changed Python files
+    (`config/jwt.py`, `config/experimental.py` and the two test modules),
+    and mypy reports the same 56 errors, line for line, on the branch and on
+    `cfd9ab0`, none of them in the four.
 -   **Desktop:** as in [Verification](#verification).
 -   **gitleaks 8.21.2** over `origin/develop..HEAD`: no leaks, after each
-    review too. The MSC3861 test generates its RSA keys at run time, so no private
-    key is committed.
+    review too. The MSC3861 test generates its RSA and EC keys at run time,
+    so no private key is committed.
 -   **prettier 2.8.1**, the root's version, on the changed Markdown and YAML:
     clean.
 -   **No pre-commit hook ran.** `core.hooksPath` is `.husky/_`, which this
     worktree does not have (pnpm's `prepare` script creates it), so git ran no
-    hook. The hook's two steps were run by hand before each commit, and both
-    passed: lint-staged's `prettier --write --ignore-unknown` on the staged
-    files, and `tools/ci/check-auth-secrets.mjs`.
+    hook. The hook's two steps were run by hand before each commit, the
+    third review's included, and both passed: lint-staged's
+    `prettier --write --ignore-unknown` on the staged files (as `--check`),
+    and `tools/ci/check-auth-secrets.mjs`.
 
 ## Found outside scope (not fixed here)
 
@@ -947,11 +1140,11 @@ react-router 7.18.0 (fixed in 7.18.2 and 8.3.0) and image-size 1.2.1 twice
         fix for both. The lock has 1.2.1, which metro pins to the 1.x line, so
         the premise to state is "fixed only in 2.x; metro requires 1.x".
 
-    Neither is changed here. The `-v47` advisory branch, which covers
+    Neither is changed here. The `-v47` advisory branch (PR #994), which covers
     `pnpm-lock.yaml`, handles both in its own record
     (`dependency-advisories-2026-10-30.md` on that branch):
 
-    -   **react-router: fixed there.** `71548f0` ("fix(deps): react-router
+    -   **react-router: fixed there.** `71548f0350` ("fix(deps): react-router
         7.18.2 fixes GHSA-qwww-vcr4-c8h2; drop its ignores") moves the client
         to 7.18.2 and removes the ignore from all three lists. The first two
         versions of this record said `-v47` asked the operator to choose an
@@ -959,7 +1152,9 @@ react-router 7.18.0 (fixed in 7.18.2 and 8.3.0) and image-size 1.2.1 twice
         gate still applies the old ignore (Trivy `--show-suppressed` lists it
         against 7.18.0), and from 2026-10-31 the OSV step fails on this
         branch's PR as on any other, because a pull request's checks run on
-        its merge with `develop`.
+        its merge with `develop`. The plan is to merge this branch into
+        PR #994 once both are clean, so that the two land together and this
+        branch's changes are never checked without `71548f0350`.
     -   **image-size: recorded there.** Item 8 of its "Found outside the
         gates" says the premise is out of date and that a metro update should
         remove image-size. The ignores stay until 2026-11-30.
@@ -972,8 +1167,10 @@ react-router 7.18.0 (fixed in 7.18.2 and 8.3.0) and image-size 1.2.1 twice
 
 ## Not verified
 
--   A desktop build or run on any platform, and the updater against a real
-    release. See [Before merge or release](#before-merge-or-release).
+-   A desktop build on Windows, macOS or ubuntu-22.04, a bundle, a build with
+    the real client, a run on any platform, and the updater against a real
+    release. Only the Linux release build above ran. See
+    [Before merge or release](#before-merge-or-release).
 -   That libdbus-1-dev is installed on the runner was read from jammy's
     package dependencies, not from a run of the job.
 -   A Docker build of the fork image, and Synapse against a real OIDC provider.
@@ -981,7 +1178,9 @@ react-router 7.18.0 (fixed in 7.18.2 and 8.3.0) and image-size 1.2.1 twice
     against the test suite's fake provider and in direct probes of authlib.
     What Keycloak and Authentik advertise was read from their source.
 -   MSC3861 against a real authorization server. The tests check the form
-    Synapse posts, not a server's acceptance of it.
+    Synapse posts, not a server's acceptance of it. Nor was the startup
+    check tried with a JWK exported from Keycloak or Authentik, only with
+    keys made in the tests.
 -   Twisted 26.10.0 against the trial suite.
 -   The malformed logout tokens under authlib 1.6.12 after `85df7cc`. This
     round measured 1.9.1; the second review measured both versions before it.

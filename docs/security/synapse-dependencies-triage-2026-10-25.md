@@ -483,8 +483,11 @@ Two entries above have changed. The detail is in
     two High) are fixed only in 1.9.0 and 1.9.1, so the fork now locks 1.9.1,
     as upstream does since `b20ae98` (#20415). The integer-`sub` question
     above was settled upstream's way. An integer `sub` from the userinfo
-    endpoint still logs in; one inside a signed id_token is refused, as
-    joserfc requires. `test_map_userinfo_to_user` carries upstream's change.
+    endpoint still logs in when the provider sends no id_token; one inside
+    an id_token is refused, as joserfc requires, even with
+    `user_profile_method: userinfo_endpoint` (qualified after the third
+    review of the 2026-10-30 record). `test_map_userinfo_to_user` carries
+    upstream's change.
     joserfc also refuses an id_token whose `jti` is not a string, or whose
     `aud` holds a non-string. The 2026-10-30 record lists the whole change.
 -   **Twisted 26.4.0 has a fourth High:** GHSA-vpp8-g58w-m8mp, HTTP/2 rapid
