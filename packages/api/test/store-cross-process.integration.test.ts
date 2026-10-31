@@ -9,8 +9,11 @@
 // holds the lease from its first statement until release(), as a real pooled
 // connection holds its session, and a BEGIN..COMMIT on one process can never
 // interleave with another's statements. Each process's pool also logs its
-// statements and can delay or fail chosen ones. A process's transport can be
-// made deaf ("has not heard yet"); the world records every notification.
+// statements and can delay, gate or fail chosen ones, or hold a statement's
+// reply after the server has answered it (on PGlite the session is free
+// meanwhile, so hold only a statement outside a transaction). A process's
+// transport can be made deaf ("has not heard yet"); the world records every
+// notification.
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
@@ -38,6 +41,8 @@ interface RawClient {
     query(sql: string, params?: unknown[]): Promise<{ rows: Row[] }>;
     release(): void;
     on?(event: string, cb: (arg: unknown) => void): void;
+    /** PGlite only: give up the session lease until this client's next statement. */
+    pause?(): void;
 }
 interface RawPool {
     connect(): Promise<RawClient>;
@@ -121,6 +126,11 @@ async function pgliteDatabase(): Promise<Database> {
                     return run(sql, params);
                 },
                 release() {
+                    const free = held;
+                    held = null;
+                    free?.();
+                },
+                pause() {
                     const free = held;
                     held = null;
                     free?.();
@@ -230,6 +240,10 @@ interface Ctl {
     delay: (sql: string) => number;
     /** Fail a statement before it is sent, or after it has run (its effect stands). */
     fault: (sql: string) => 'before' | 'after' | undefined;
+    /** Wait for this promise before sending a statement (no lease is held meanwhile). */
+    gate: (sql: string) => Promise<void> | undefined;
+    /** Deliver this statement's reply only once the promise settles; the server has already run it. */
+    hold: (sql: string) => Promise<void> | undefined;
 }
 
 function instrument(base: RawPool, ctl: Ctl): RawPool {
@@ -241,6 +255,8 @@ function instrument(base: RawPool, ctl: Ctl): RawPool {
                     const text = sql.replace(/\s+/g, ' ').trim();
                     const d = ctl.delay(text);
                     if (d > 0) await sleep(d);
+                    const g = ctl.gate(text);
+                    if (g) await g;
                     const f = ctl.fault(text);
                     if (f === 'before') {
                         ctl.log.push(`!${text}`);
@@ -256,6 +272,11 @@ function instrument(base: RawPool, ctl: Ctl): RawPool {
                     ctl.log.push(text);
                     if (f === 'after') {
                         throw new Error(`injected fault after: ${text.slice(0, 60)}`);
+                    }
+                    const h = ctl.hold(text);
+                    if (h) {
+                        c.pause?.();
+                        await h;
                     }
                     return res;
                 },
@@ -325,7 +346,13 @@ interface World {
     close(): Promise<void>;
 }
 
-const newCtl = (): Ctl => ({ log: [], delay: () => 0, fault: () => undefined });
+const newCtl = (): Ctl => ({
+    log: [],
+    delay: () => 0,
+    fault: () => undefined,
+    gate: () => undefined,
+    hold: () => undefined,
+});
 
 async function world(n: number, mode: Mode): Promise<World> {
     const database = PG_URL ? await postgresDatabase() : await pgliteDatabase();
@@ -631,6 +658,153 @@ test("X16b (fence): a table reload ('r') and a full rehydrate keep a queued key,
             assert.equal((await vaultRow(w, v)).label, `B-${reload}`);
             assert.equal(B.db.getVaultItem(v)?.label, `B-${reload}`);
         }
+    });
+});
+
+const deferred = () => {
+    let resolve!: () => void;
+    const promise = new Promise<void>((r) => (resolve = r));
+    return { promise, resolve };
+};
+
+/**
+ * Order one refresh around one write on process `p`: the first statement
+ * matching `write` is sent only after the server has answered the first
+ * statement matching `select`, and that answer reaches the store only on
+ * release(). So the SELECT's snapshot predates the write, the write lands
+ * (its fence comes down) while the reply is in flight, and the reply is
+ * applied after it.
+ */
+function replyAfterWrite(p: Proc, write: RegExp, select: RegExp) {
+    const answered = deferred();
+    const reply = deferred();
+    let gated = false;
+    let held = false;
+    p.ctl.gate = (sql) =>
+        !gated && write.test(sql) ? ((gated = true), answered.promise) : undefined;
+    p.ctl.hold = (sql) =>
+        !held && select.test(sql) ? ((held = true), answered.resolve(), reply.promise) : undefined;
+    return {
+        held: () => held,
+        release() {
+            p.ctl.gate = () => undefined;
+            p.ctl.hold = () => undefined;
+            reply.resolve();
+        },
+    };
+}
+
+test("X16d (fence): a refresh whose SELECT ran before this process's queued write committed does not take the write back", async () => {
+    await withWorld(1, 'hub', async (w) => {
+        const [A] = w.procs;
+        const u = mkUser(A.db);
+        const cutoffJti = `user-token-cutoff:${u}`;
+        // An older logout-everywhere cutoff, an hour back, in Postgres and A's mirror.
+        A.db.revokeUserTokensBefore(u, 'reuse_detected');
+        await quiesce(w);
+        await w.sql(
+            `UPDATE revoked_sessions SET revoked_at = revoked_at - interval '1 hour' WHERE jti = $1`,
+            [cutoffJti]
+        );
+        await w.emit({ src: 'elsewhere', m: 'revokedSessions', op: 'k', kvs: [[cutoffJti]] });
+        await quiesce(w);
+        const t0 = A.db.getUserTokenRevocationCutoff(u);
+        assert.ok(t0 > 0 && t0 < Date.now() / 1000 - 3000, 'A holds the older cutoff');
+        // Every case runs; the ones that took a write back are listed at the end.
+        const taken: string[] = [];
+        const expect = (ok: boolean, what: string) => {
+            if (!ok) taken.push(what);
+        };
+
+        const run = async (
+            what: string,
+            write: RegExp,
+            select: RegExp,
+            act: () => void,
+            refresh: () => Promise<void> | void
+        ) => {
+            const order = replyAfterWrite(A, write, select);
+            act();
+            assert.equal(A.db.queue.depth, 1, `${what}: the write is queued`);
+            await refresh();
+            await A.db.queue.drain();
+            assert.ok(order.held(), `${what}: the refresh's SELECT ran before the write`);
+            assert.equal(A.db.queue.depth, 0, `${what}: the write has landed`);
+            order.release();
+            await quiesce(w);
+        };
+
+        // A peer's 'u' naming the cutoff row while A's logout-everywhere is queued.
+        let t2 = 0;
+        await run(
+            "'u'",
+            /^INSERT INTO revoked_sessions/,
+            /^SELECT x\.\* FROM revoked_sessions/,
+            () => {
+                A.db.revokeUserTokensBefore(u, 'logout_everywhere');
+                t2 = A.db.getUserTokenRevocationCutoff(u);
+            },
+            () => w.emit({ src: 'elsewhere', m: 'revokedSessions', op: 'u', kv: [cutoffJti] })
+        );
+        const pgCutoff = (
+            await w.sql('SELECT reason FROM revoked_sessions WHERE jti = $1', [cutoffJti])
+        )[0];
+        assert.equal(pgCutoff.reason, 'logout_everywhere');
+        assert.ok(t2 > t0);
+        expect(
+            A.db.getUserTokenRevocationCutoff(u) === t2 &&
+                A.db.revokedSessions.get(cutoffJti)?.reason === 'logout_everywhere',
+            "'u': A's own logout-everywhere cutoff moved back"
+        );
+
+        // A peer's 'k' naming a refresh token while A's logout (a family revoke) is queued.
+        const famK = randomUUID();
+        const tk = mkRefresh(A.db, u, famK);
+        await quiesce(w);
+        await run(
+            "'k'",
+            /^BEGIN$/,
+            /^SELECT x\.\* FROM refresh_tokens/,
+            () => A.db.revokeRefreshTokenFamily(famK, 'logout'),
+            () => w.emit({ src: 'elsewhere', m: 'refreshTokens', op: 'k', kvs: [[tk.id]] })
+        );
+        expect(
+            Boolean(A.db.findRefreshTokenByHash(tk.tokenHash)?.revokedAt),
+            "'k': a refresh token A logged out is live again in A"
+        );
+
+        // A table reload ('r', from a process on the previous release) while a logout is queued.
+        const jti = `j-${randomUUID()}`;
+        await run(
+            "'r'",
+            /^INSERT INTO revoked_sessions/,
+            /^SELECT \* FROM revoked_sessions/,
+            () => A.db.revokeSession({ jti, userId: u, reason: 'logout', expiresAt: inHours(1) }),
+            () => w.emit({ src: 'elsewhere', m: 'revokedSessions', op: 'r' })
+        );
+        assert.equal(await count(w, 'revoked_sessions', 'jti = $1', [jti]), 1);
+        expect(A.db.isSessionRevoked(jti), "'r': A accepts a session it logged out");
+
+        // The full rehydrate after a LISTEN reconnect, while a family revoke is queued.
+        const famR = randomUUID();
+        const tr = mkRefresh(A.db, u, famR);
+        await quiesce(w);
+        await run(
+            'rehydrate',
+            /^BEGIN$/,
+            /^SELECT \* FROM refresh_tokens/,
+            () => A.db.revokeRefreshTokenFamily(famR, 'logout'),
+            () => A.tap.reconnect!()
+        );
+        assert.equal(
+            await count(w, 'refresh_tokens', 'family_id = $1 AND revoked_at IS NULL', [famR]),
+            0
+        );
+        expect(
+            Boolean(A.db.findRefreshTokenByHash(tr.tokenHash)?.revokedAt),
+            'rehydrate: a refresh token A logged out is live again in A'
+        );
+        assert.deepEqual(taken, [], 'no refresh took back a write A had made');
     });
 });
 

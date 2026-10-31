@@ -8737,10 +8737,13 @@ export class PostgresBackedDb extends InMemoryDb {
 
     /**
      * Put Postgres's current row for each key into the mirror, or remove the
-     * key when Postgres has no row. Two kinds of key are left alone:
+     * key when Postgres has no row. Three kinds of key are left alone:
      * - a key this process still has a queued write for: Postgres does not hold
      *   that write yet, so its row is older than the mirror. The key is marked
      *   and re-read when the write lands (rereadLandedKeys).
+     * - a key that had a queued write when the SELECT was sent, and has none
+     *   now: the write may have committed after the SELECT's snapshot, so the
+     *   row read may predate it. The key is read again.
      * - a key the mirror changed while the SELECT was in flight: the row read
      *   may predate that change, so the key is read again.
      */
@@ -8750,7 +8753,11 @@ export class PostgresBackedDb extends InMemoryDb {
         for (const kv of kvs) wanted.set(keyOfTuple(plan, kv), kv);
         const instance = this.mapByName(mapName);
         const seen = new Map<string, unknown>();
-        for (const k of wanted.keys()) seen.set(k, instance.get(k));
+        const fencedAtStart = new Set<string>();
+        for (const k of wanted.keys()) {
+            seen.set(k, instance.get(k));
+            if (this.queue?.isFenced(mapName, k)) fencedAtStart.add(k);
+        }
         const rows = await this.withClient((c) => selectByKeys(c, plan, [...wanted.values()]));
         const found = new Map<string, Record<string, unknown>>();
         for (const row of rows) {
@@ -8764,7 +8771,7 @@ export class PostgresBackedDb extends InMemoryDb {
                 this.markDirty(mapName, k, kv);
                 continue;
             }
-            if (map !== instance || map.get(k) !== seen.get(k)) {
+            if (fencedAtStart.has(k) || map !== instance || map.get(k) !== seen.get(k)) {
                 again.push(kv);
                 continue;
             }
@@ -8780,14 +8787,16 @@ export class PostgresBackedDb extends InMemoryDb {
     /**
      * Replace a map with Postgres's rows, except for the keys whose local value
      * Postgres may not hold yet: a key with a queued write keeps the mirror's
-     * value (or absence) and is re-read when the write lands; a key the mirror
-     * changed while the SELECT was in flight keeps the mirror's value and is
-     * read again.
+     * value (or absence) and is re-read when the write lands; a key that had a
+     * queued write when the SELECT was sent (the write may have committed after
+     * its snapshot), or that the mirror changed while the SELECT was in flight,
+     * keeps the mirror's value and is read again.
      */
     private async reloadTable(plan: TablePlan, client?: PgClient): Promise<void> {
         const mapName = plan.descriptor.mapName;
         const instance = this.mapByName(mapName);
         const before = new Map(instance);
+        const fencedAtStart = new Set(this.queue?.fencedKeys(mapName) ?? []);
         const select = (c: PgClient) =>
             c.query<Record<string, unknown>>(`SELECT * FROM ${plan.descriptor.tableName}`);
         const res = client ? await select(client) : await this.withClient(select);
@@ -8805,12 +8814,13 @@ export class PostgresBackedDb extends InMemoryDb {
         const keys = new Set([
             ...before.keys(),
             ...instance.keys(),
+            ...fencedAtStart,
             ...(this.queue?.fencedKeys(mapName) ?? []),
         ]);
         for (const k of keys) {
             const fenced = this.queue?.isFenced(mapName, k) ?? false;
             const mine = instance.get(k);
-            if (!fenced && mine === before.get(k)) continue;
+            if (!fenced && !fencedAtStart.has(k) && mine === before.get(k)) continue;
             const known = mine ?? before.get(k) ?? fresh.get(k);
             const kv = known ? kvOf(plan, known) : undefined;
             if (mine) fresh.set(k, mine);
