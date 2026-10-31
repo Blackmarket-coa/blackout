@@ -8905,15 +8905,16 @@ export class PostgresBackedDb extends InMemoryDb {
     }
 
     /**
-     * The copy as Postgres has it committed. An account deletion blanks every
-     * copy sealed to the account before anything else, so a deletion another
-     * process (the API process, with the loops in a worker) committed is seen
-     * here even when its change notification has not reached this one: a
-     * notice row that process never saw, which its deletion could not end, is
-     * then not sent (round 6 of part 2's review). This process's own queued
-     * writes are not waited for: the one reader, the notifier, reads a copy
-     * written at arming, long before the switch could fire, and a deletion in
-     * this process is seen in the mirror first.
+     * The copy as Postgres has it, once this process's own queued writes have
+     * gone through. An account deletion blanks every copy sealed to the
+     * account before anything else, so a deletion another process (the API
+     * process, with the loops in a worker) committed is seen here even when
+     * its change notification has not reached this one: a notice row that
+     * process never saw, which its deletion could not end, is then not sent
+     * (round 6 of part 2's review). Waiting for this process's own writes
+     * first means a copy it wrote and has not yet flushed (one armed and
+     * fired in this process within the queue's lag) is not read as gone,
+     * which would end that person's notice.
      */
     override async readDeadmanReleaseWrapCommitted(
         switchId: string,
@@ -8923,6 +8924,7 @@ export class PostgresBackedDb extends InMemoryDb {
         if (!this.pool || !plan) {
             return super.readDeadmanReleaseWrapCommitted(switchId, recipientAccountId);
         }
+        await this.drain();
         const client = await this.pool.connect();
         try {
             const res = await client.query<Record<string, unknown>>(

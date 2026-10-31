@@ -143,11 +143,19 @@ const release = async (recipient: { keySet: ReleaseKeySet }, beforeSweep?: () =>
 };
 
 type Store = InstanceType<typeof store.PostgresBackedDb>;
-/** The account deletion's release writes on the app, as the deletion and the route run them. */
+/**
+ * The account deletion's release writes on the app, as the deletion and the
+ * route run them. The route answers once `finishAccountDeletion` returns, so
+ * by then every write the deletion queued is in Postgres.
+ */
 const deleteOnApp = async (app: Store, accountId: string) => {
     eraseReleaseCopiesAndNoticesOf(app, accountId);
     await finishAccountDeletion(accountId, app);
-    await app.drain();
+    assert.equal(
+        (app as unknown as { queue: { depth: number } }).queue.depth,
+        0,
+        'the deletion is in the database before the route answers'
+    );
 };
 
 const committed = async (switchId: string, accountId: string) =>
