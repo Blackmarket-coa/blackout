@@ -48,18 +48,23 @@ no deployment, compose or env file does.
     safety code with each person named and nobody's app code was altered (in a
     web browser the server supplies that code). It can see who armed what for
     whom, which of three padded sizes the message is, every check-in, when the
-    switch fires and who fetched their copy. What one account can make it keep
-    is bounded: 20 release switches with content held, 10 arms in 24 hours, 5
+    switch fires and who fetched their copy. The content one account can make
+    it keep is bounded (its rows are not: a cancelled switch's stay, below):
+    20 release switches with content held, 10 arms in 24 hours, 5
     held releases naming one person from one owner and 50 from everyone
     (`GET /v1/deadman/limits` reports each; exact on one API server against
     requests sent at once; across several replicas a burst of requests can
     exceed them by up to its own size until the replicas' queued writes reach
-    each other). The bound of 50 can be filled on purpose: ten accounts with
-    release keys, five arms each in a day, keep every other owner from naming
-    that person (the owner is refused, 409 `recipient_limit`, and sees it) while
-    those switches stay armed and for at least 365 days after they fire, and
-    neither the person nor anyone else can clear it through the app or the API;
-    which bound replaces it is an open decision
+    each other). The bound of 50 can be filled on purpose, for many people at
+    once: one release names up to 64 people and the bound of 5 is per person,
+    so ten accounts with release keys, five arms each naming the same 64, keep
+    every other owner from naming any of them (the owner is refused, 409
+    `recipient_limit`, and sees it), 128 people a day and 256 within the cap of
+    held switches, about 26 for each account used, while those switches stay
+    armed (one check-in per switch per interval, which can be up to 365 days)
+    and for at least 365 days after they fire, and neither a person named nor
+    anyone else can clear it through the app or the API; which bound replaces
+    it is an open decision
     ([`release-envelope-2026-10-26.md`](../security/release-envelope-2026-10-26.md),
     decision 18). The rows of a cancelled switch stay, blank. Cancelling removes
     the message and the copies from its database (backups aside; across several
@@ -105,7 +110,9 @@ no deployment, compose or env file does.
     in the moment the deletion reaches another replica can stay until that
     release is cancelled or removed), a notice still owed to it is dropped
     (one the bot was already sending can still arrive), and its notice rows
-    forget their room. The export of an account includes
+    forget their room (across the API and worker processes through the
+    deletion's last step; if that step fails, which is logged, a notice that
+    was being sent keeps its room). The export of an account includes
     the notice rows about it (`deadmanNotices`), for fired switches.
 
 ### Not changed

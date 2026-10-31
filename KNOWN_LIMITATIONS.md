@@ -337,7 +337,10 @@ For the source-of-truth triage with tier/owner detail see
     that release is cancelled or removed), a notice still owed to you is
     dropped (one the bot was already sending at that moment can still
     arrive), and the record of each notice (its status and attempts) stays,
-    with its room forgotten. It
+    with its room forgotten (where the server runs its background work in a
+    separate process, the last step of the deletion does that for a notice
+    the deleting process had not heard of yet; if that step fails, which the
+    server logs, such a notice the bot was already sending keeps its room). It
     removes the release keys you published (their public halves), except the
     copy kept with a release switch of yours that has already fired, which goes
     with that release; the fingerprint of the key each
@@ -432,17 +435,23 @@ For the source-of-truth triage with tier/owner detail see
     invites you back, once per notice. You cannot yet refuse an owner, and
     release keys cannot be unpublished, so the only way to stop being named is
     to delete your account.
--   **The bound of 50 can be used to stop others naming you.** Ten accounts on
-    this server, each with release keys, can fill your 50 in one day, by naming
-    you on five release switches each. From then on anyone else who names you on
+-   **The bound of 50 can be used to stop others naming you, and many people at
+    once.** One release switch can name up to 64 people, and the bound of 5 per
+    account is counted for each person named, so ten accounts on this server,
+    each with release keys, naming the same 64 people on five release switches
+    each, fill the 50 for all 64 of them. At the limit of 10 arms a day that is
+    128 people a day, and 256 people (in two days) before those accounts reach
+    their limit of 20 held switches each: about 26 people for every account
+    someone controls. From then on anyone else who names one of those people on
     a release switch is refused (they see the refusal, 409 `recipient_limit`,
-    and can tell it is not their own bound if they named you fewer than five
-    times), for as long as those accounts keep their switches armed by checking
-    in, and for at least 365 days after the switches fire; deleting those
-    accounts does not free the places of switches that have fired, since a fired
-    release stays for the people it named. Neither you nor anyone else can clear
-    it through the app or the API: new release keys change nothing, you cannot
-    cancel someone else's switch, and no administrator route removes a release
+    and can tell it is not their own bound if they named the person fewer than
+    five times), for as long as those accounts keep their switches armed, which
+    takes one check-in per switch per interval, and an interval can be as long
+    as 365 days, and for at least 365 days after the switches fire; deleting
+    those accounts does not free the places of switches that have fired, since
+    a fired release stays for the people it named. Neither you nor anyone else
+    can clear it through the app or the API: new release keys change nothing,
+    you cannot cancel someone else's switch, and no administrator route removes a release
     (short of an operator editing the database). Which bound replaces this is an
     open decision for the operator
     ([`docs/security/release-envelope-2026-10-26.md`](docs/security/release-envelope-2026-10-26.md),

@@ -15,7 +15,7 @@ how the notices room is made unencrypted and kept to one per person except in
 the cases [KNOWN_LIMITATIONS.md](KNOWN_LIMITATIONS.md) lists, the safety-code
 condition on "never reaches the server readable", the bounds on who can name
 you, exact on one API server and not across replicas, and what a few accounts
-can do with the bound of 50. Changes
+can do with the bound of 50, to up to 64 people per five switches. Changes
 to anything here are
 recorded in the [policy changelog](docs/legal/CHANGELOG.md).
 
@@ -133,13 +133,17 @@ Encryption claims are only worth something with the exceptions attached.
     everyone: exact on one API server against requests sent at once; across
     several replicas a burst of requests can exceed them by up to its own size
     until the replicas' queued writes reach each other); you cannot yet refuse
-    an owner. The bound of 50 can be turned against you: ten accounts with
-    release keys can fill it in a day, and then nobody else can name you on a
-    release switch (an owner refused that way is told so, 409 `recipient_limit`)
-    for as long as those accounts keep their switches armed, and for at least
-    365 days after the switches fire, whether or not the accounts are deleted;
-    neither you nor anyone else can clear it through the app or the API, and
-    which bound replaces it is an open decision
+    an owner. The bound of 50 can be turned against you, and against many
+    people at once: one release switch can name up to 64 people and the bound
+    of 5 is counted per person, so ten accounts with release keys can fill it
+    for 64 people with five switches each, 128 people a day and 256 within
+    their limit of held switches, and then nobody else can name any of them on
+    a release switch (an owner refused that way is told so, 409
+    `recipient_limit`) for as long as those accounts keep their switches armed
+    (one check-in per switch per interval, which can be up to a year), and for
+    at least 365 days after the switches fire, whether or not the accounts are
+    deleted; neither you nor anyone else can clear it through the app or the
+    API, and which bound replaces it is an open decision
     ([`KNOWN_LIMITATIONS.md`](KNOWN_LIMITATIONS.md)). No deployment can arm such
     a switch yet: arming is refused until an operator turns
     `BLACKOUT_DEADMAN_RELEASES` on, and no deployment file does.

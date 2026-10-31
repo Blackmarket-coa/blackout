@@ -778,11 +778,15 @@ invite`, set by every in-repo template, adds `m.room.encryption` to every
     rows stay: the switch with whom it named, the label and timing; each copy
     row with the fingerprint of the key it was sealed to; the notice rows as a
     record that one was sent, with their room until that person deletes their
-    account (P3b-L10, P3b-L12). A recipient who wants the message after that
-    has to have saved it.
--   **What one account can make the server keep or send** is bounded (P3b-H1):
-    at most 20 release switches per owner whose content is held, armed, in grace
-    or fired until the removal; at most 10 arms per owner in any 24 hours; at
+    account (P3b-L10, P3b-L12; across the API and worker processes too since
+    round 6, §15, unless the deletion's last statement fails, which is
+    logged). A recipient who wants the message after that has to have saved
+    it.
+-   **The content one account can make the server keep, and what it can make it
+    send,** is bounded (P3b-H1; content, not rows: a cancelled switch's rows
+    stay, decision 24): at most 20 release switches per owner whose content is
+    held, armed, in grace or fired until the removal; at most 10 arms per owner
+    in any 24 hours; at
     most 5 held releases naming one person from one owner and 50 from everyone.
     Each bound is read before the signatures are verified and again right before
     the rows are written, with nothing yielding between, so on one API process
@@ -809,16 +813,27 @@ invite`, set by every in-repo template, adds `m.room.encryption` to every
     the latest without a device, and from the thirteenth (about 26 hours in)
     with one (30 s doubling to 6 hours). A recipient cannot yet refuse an owner
     (decision 19). The bound of 50 from everyone is itself a lever (round 5 of
-    the review): ten accounts, each with published release keys, at five arms
-    each in a day, fill one person's 50, and from then on every other owner who
-    names that person is refused 409 `recipient_limit` (the owner sees it, and
-    one below its own 5 can tell it is the 50) for as long as those switches are
-    kept armed by check-ins and for at least 365 days after they fire; a fired
-    one stays after its owner's account is deleted (decision 12), and neither
-    the person nor anyone else can clear it through the API (new release keys
-    change nothing, the person gets 404 for someone else's cancel, and no admin
-    route touches a release). Decision 18 lists the alternatives; test 26 of the
-    releases file pins what it does now.
+    the review), and a broad one (round 6: as round 5 wrote it here it reached
+    one person). One release names up to 64 people and the bound of 5 from one
+    owner is per person, so five arms naming the same 64 people put each of them
+    at 5 from that owner, and ten accounts with published release keys, five
+    arms each, fill the 50 for all 64: 128 people a day at the arming rate of
+    10, and 256 within the held cap of 20 switches each, in two days, about 26
+    people for each account (20 held switches naming 64 each is 1,280 names,
+    and each person blocked takes 50). In the verifiers' replay ten accounts
+    armed 100 releases of 64 on each of two days, 256 people ended at 50, and
+    the third day's arms were refused by the held cap. From then on every other
+    owner who names one of those people is refused 409 `recipient_limit` (the
+    owner sees it, and one below its own 5 can tell it is the 50) for as long
+    as those switches are kept armed, which takes one check-in per switch per
+    interval (an interval can be up to 365 days), and for at least 365 days
+    after they fire; a fired one stays after its owner's account is deleted
+    (decision 12), and neither a person named nor anyone else can clear it
+    through the API (new release keys change nothing, the person gets 404 for
+    someone else's cancel, and no admin route touches a release). Decision 18
+    lists the alternatives with their cost per person blocked; test 26 of the
+    releases file pins what it does now, with two people named by the same
+    arms.
 -   **Who learns what from a notice:** the homeserver, nothing new; Apple or
     Google, that a notification came (the app registers `event_id_only`
     pushers); an email provider, the fixed body, for someone with email
@@ -907,13 +922,15 @@ of the release-identities record and the questions below.
 -   **Does a deleted account leave anything?** A deleted owner's unfired
     switches lose their content, identity copy and copies; a deleted
     recipient's copies are blanked and their pending notices fail; fired
-    releases stay for the people named, until the 365 days end.
+    releases stay for the people named, until the removal at the first sweep
+    pass at least 365 days after they fired.
 -   **What changed against the design:** the release id is the switch id
     (one id, chosen by the device because it is in the associated data and
     the transcript); the owner's identity is kept with the release (E13); a
-    cap on release switches per owner whose content is held bounds what the
-    server keeps (decision 4 below, as part 2's review corrected it); the header is signed inside every copy's signature, not
-    separately (E7).
+    cap on release switches per owner whose content is held bounds the content
+    the server keeps, not its rows (decision 4 below, as part 2's review
+    corrected it, and decision 24); the header is signed inside every copy's
+    signature, not separately (E7).
 
 ## 14. PR 3 as built, part 1: protocol and SDK (`-v44`)
 
@@ -1239,19 +1256,47 @@ message, and nothing here makes a release happen on time (§10, R12).
     written over with the refusal). That read is the notifier's own process's
     mirror. Where the deletion runs in another process, as
     `deploy/docker/production` always has it (the loops in `worker`,
-    `BLACKOUT_BACKGROUND_WORKERS_DISABLED=1` on `app`), every notifier write is
-    also conditional in Postgres (`updateDeadmanReleaseNoticeIf`:
+    `BLACKOUT_BACKGROUND_WORKERS_DISABLED=1` on `app`), three things carry it
+    into the database. Every change the notifier writes is conditional in
+    Postgres (`updateDeadmanReleaseNoticeIf`:
     `ON CONFLICT ... DO UPDATE ... WHERE status = 'pending'`, or
-    `WHERE room_id =` the room a row is moved off), so a deletion the API
-    process committed first stands in the database whenever its change
-    notification reaches the worker; until it does, the worker's mirror and its
-    tick's count say sent, and a deletion that commits after the worker's write
-    lands over it, as its own full-row write (no room; `failed` with
+    `WHERE room_id =` the room a row is moved off), and the creation of a row,
+    by the sweep or the notifier's catch-up, is insert-only there
+    (`ON CONFLICT ... DO NOTHING`), as it is in the mirror. Before it makes a
+    room and again before it sends, the notifier reads the person's copy from
+    Postgres itself, after its own queued writes
+    (`readDeadmanReleaseWrapCommitted`): an account deletion blanks every
+    copy sealed to the account first, so once one has committed nothing is
+    made or sent for that person, whether or not the API process had heard of
+    the notice row. And the deletion finishes with
+    one statement in Postgres (`finishAccountDeletion`, which the route awaits
+    after `confirmAccountDeletion`, once the deletion's own writes are in the
+    database) that ends every notice row still pending to the account and
+    forgets the room of every one of theirs, rows the API process never saw
+    included. So a deletion the API process committed stands in the database
+    whenever its change notification reaches the worker; until it does, the
+    worker's mirror and its tick's count can say sent. What it leaves: a notice
+    whose send had begun when the deletion committed can still arrive, and its
+    row then has no room (for a row the API process had not seen, `failed`
+    with `recipient_gone` if the deletion's last statement came first, and
+    `sent` if the worker's write did); a deletion that commits after the
+    worker's write to a row the API process had seen lands over it, as its own
+    full-row write (no room; `failed` with
     `recipient_gone`, for a notice the homeserver accepted, unless the API
-    process had already seen it sent). Round 5 of the review: the worker's
-    full-row upsert landed over the API's committed deletion whenever the
-    notification came after the send answered, and Postgres ended `sent` with
-    the room. Each call has `NOTICE_CALL_TIMEOUT_MS`, 30 s, to answer, and one
+    process had already seen it sent); and if the deletion's last statement
+    fails (logged, and the deletion still answered) or the API process stops
+    before it, a row it had not seen keeps what the worker wrote, a room and
+    `sent` included where the send had begun first. Round 5 of the review: the
+    worker's full-row upsert landed over the API's committed deletion whenever
+    the notification came after the send answered, and Postgres ended `sent`
+    with the room. Round 6: the conditional writes guarded only rows the
+    deletion had ended, so a row the worker's sweep wrote moments before the
+    deletion, which the API process had not yet heard of, was sent after the
+    deletion committed and kept its room for good; and the catch-up's creation
+    was a plain upsert, so a leader that had the fired switch but not yet the
+    row the old leader sent wrote it back to pending with no attempts, and it
+    was sent again. Each call has `NOTICE_CALL_TIMEOUT_MS`, 30 s, to answer,
+    and one
     that does not is that notice's retry (`matrix_<call>_timeout`) with its
     request aborted: the ticks do not overlap, so without that one connection
     the homeserver accepted and never answered held every due notice for
@@ -1288,9 +1333,13 @@ message, and nothing here makes a release happen on time (§10, R12).
     room, re-invite or attempt recorded on it (P3b-L14; with the deletion on
     the API process and the notifier in the worker, in Postgres through the
     conditional writes above, and in the worker's mirror once the change
-    notification reaches it: round 5), though the homeserver may still have
-    accepted that call's notice; every notice row of its forgets
-    the room that tied the account to a Matrix id; the switch keeps the
+    notification reaches it: round 5; and for a notice row the API process had
+    not yet heard of, through the worker's read of the copy from Postgres and
+    the deletion's last statement: round 6), though the homeserver may still
+    have accepted that call's notice; every notice row of its forgets the room
+    that tied the account to a Matrix id (across processes through that last
+    statement; if it fails, which is logged, a row the API process had not seen
+    keeps what the worker wrote); the switch keeps the
     account id among its recipients, as legacy switches do. What stays after
     a blank, named here because the user-facing texts name it too: each
     blanked copy row keeps the account id and the fingerprint of the key it
@@ -1341,7 +1390,7 @@ message, and nothing here makes a release happen on time (§10, R12).
     ms at each size), rebuilt by the file store's hydrate and kept by the
     Postgres store's hydration and refreshes as the others are.
 -   **Tests** (`packages/api/test/`): `deadman-releases.integration.test.ts`,
-    25 (the flag off and on, and every spelling; the sweep switched off; the
+    27 (the flag off and on, and every spelling; the sweep switched off; the
     body's shape and cap; every refusal in order, including a copy re-signed
     by a third party; the arming rate; the held cap at its edge, fired
     switches counted and bytes held flat; the per-recipient bounds, 5 and
@@ -1355,8 +1404,10 @@ message, and nothing here makes a release happen on time (§10, R12).
     deletion of an owner and of a recipient, before and after the trigger;
     a person's rows, an owner's switches and an account's release identities
     listed through their indexes; a key change or a deletion during an arm's
-    verification, and during a re-seal's; ten accounts filling one person's
-    50, pinned as the known trade-off of decision 18);
+    verification, and during a re-seal's; ten accounts filling the 50 of two
+    people named by the same arms, pinned as the known trade-off of decision
+    18; the deletion route finishing the deletion in the database, and
+    answering when that step fails);
     `deadman-release-notices.integration.test.ts`, 29 (the rows the sweep
     writes; the room's creation body, its alias computed independently under
     the server's secret, and the send's body and transaction id;
@@ -1372,7 +1423,8 @@ message, and nothing here makes a release happen on time (§10, R12).
     the alias cannot be used, and when the room it names is still not the
     whole room with the bot in it at the next attempt (no events, the create
     alone, the create and the bot's join, a room the bot left, power levels
-    that let the person post); a retry timed from when it is recorded, after
+    that let the person post, or invite, or give the person their own level);
+    a retry timed from when it is recorded, after
     a long tick; a deletion during the alias lookup,
     whoami and a create without the alias; a row another process sent
     meanwhile, counted as its; no homeserver
@@ -1385,12 +1437,22 @@ message, and nothing here makes a release happen on time (§10, R12).
     and after a wholesale refresh, a blanked
     copy and a cleared room in Postgres, the down migration refused and then
     run);
-    `deadman-release-notices-postgres.integration.test.ts`, 2 (the worker's
-    notifier on PGlite beside a second store as the API process: a deletion
-    committed there during the send, the create or the re-invite, or before
-    a tick past the window, told before or after the call answers, stands in
-    Postgres; the conditional write by status and by room);
-    `deadman-releases-file.integration.test.ts`, 1;
+    `deadman-release-notices-postgres.integration.test.ts`, 5 (the worker's
+    notifier on PGlite beside a second store as the API process, which runs
+    the deletion's own release writes and its last statement and announces
+    its changes as the transport would: a deletion committed there during the
+    send, the create or the re-invite, or before a tick past the window, told
+    before or after the call answers, stands in Postgres, and so does one of a
+    notice row the API process had not seen, before the tick, during the
+    create or the send, or after the worker recorded it sent, with the sends
+    and rooms made counted and every change to the rows recorded by a trigger,
+    so that nothing after the deletion sets one back to pending or gives one a
+    room even for a moment; the conditional write by status and by room; the
+    creation of a row insert-only; the end after a send for an account found
+    gone, against a sent another notifier committed; the writer's refusal of
+    a guard it cannot carry);
+    `deadman-releases-file.integration.test.ts`, 1 (with the notifier's
+    conditional write applied, refused and by room across restarts);
     `matrix-client-direct-invite.integration.test.ts`, 4 (`is_direct`, the
     alias and a refusal's error code, the alias lookup's cache and signal,
     whoami's signal); `postgres-store`
@@ -1479,17 +1541,19 @@ records what the API sends.
     release stays checkable after the owner deletes their account, until it
     is removed after 365 days (E13).
 4.  At most 20 release switches per owner whose content the server still
-    holds: armed, in grace, or fired until the removal 365 days after the
-    trigger. _(Corrected after part 2's review, P3b-H1: as first built the cap
-    counted armed and grace switches only, a fired switch's content was held
-    365 days outside it, and the "bound on storage of about 10 MB per
-    account" written here was false: one account held 20.1 MiB after three
-    rounds of arm-and-fire with the live count at 0.)_ What it bounds: a held
+    holds: armed, in grace, or fired until the removal at the first sweep pass
+    at least 365 days after the trigger. _(Corrected after part 2's review,
+    P3b-H1: as first built the cap counted armed and grace switches only, a
+    fired switch's content was held 365 days outside it, and the "bound on
+    storage of about 10 MB per account" written here was false: one account
+    held 20.1 MiB after three rounds of arm-and-fire with the live count at
+    0.)_ What it bounds: a held
     switch is at most about 350 KB of header JSON (a 256 KiB ciphertext in
     base64; 20 of them measured at 6.7 MiB) plus up to 65 sealed copies of
     about 1.8 KB each, so about 6.7 MiB of headers and up to about 2.3 MiB of
-    copies per account, held for up to 365 days after firing, in Postgres and
-    in every replica's mirror. It bounds content, not rows: a cancelled
+    copies per account, held until the first sweep pass at least 365 days
+    after firing (with no sweep running, for good), in Postgres and in every
+    replica's mirror. It bounds content, not rows: a cancelled
     release switch's row and its blanked copy rows (recipient id, fingerprint,
     timestamps) stay for good, so arming and cancelling at the rate of
     decision 18 adds up to 10 switch rows and 650 copy rows a day, about
@@ -1509,9 +1573,10 @@ records what the API sends.
 10. The flag `BLACKOUT_DEADMAN_RELEASES` gates arming only (§13).
 11. Decision 19 stays open: no order is added to identities in PR 3 (§9).
 12. (Part 2.) When an owner deletes their account, a fired release keeps its
-    content, the owner's identity and the recipients' copies until the 365
-    days end, and only the owner's own copy and the label go; an unfired one
-    loses everything. A deleted recipient's copies go at once, fired or not
+    content, the owner's identity and the recipients' copies until the
+    removal at the first sweep pass at least 365 days after it fired, and
+    only the owner's own copy and the label go; an unfired one loses
+    everything. A deleted recipient's copies go at once, fired or not
     (§15).
 13. (Part 2.) Re-sealing is not gated on `BLACKOUT_DEADMAN_RELEASES`: a
     switch armed while the flag was on stays its owner's to keep sealed to
@@ -1521,7 +1586,9 @@ records what the API sends.
     person, reused for every release, and kept to one by the per-recipient
     slot within a process and by the room's alias across a timed-out create
     and across processes, except where §11 says (decision 25); a notice row
-    keeps its room id until the recipient's account is deleted.
+    keeps its room id until the recipient's account is deleted (across the API
+    and worker processes too since round 6 of the review, §15, unless the
+    deletion's last statement fails, which is logged).
 15. (Part 2.) `GET /v1/deadman/limits` and `GET /v1/deadman/releases` need
     `deadman.read`, which every session token carries, like the other reads.
 16. (Part 2.) A legacy switch's recipient views are unchanged, and a release
@@ -1529,40 +1596,63 @@ records what the API sends.
     `GET /v1/deadman/releases` only.
 17. (Part 2, after its review.) Because the cap of decision 4 counts fired
     switches until their removal, an owner whose 20 release switches all
-    fired cannot arm another until the oldest is removed, 365 days after it
-    fired; cancelling an unfired one frees its place. Confirm the number, or
-    choose a larger cap or a separate cap for fired switches.
+    fired cannot arm another until the oldest is removed, at the first sweep
+    pass at least 365 days after it fired; cancelling an unfired one frees
+    its place. Confirm the number, or choose a larger cap or a separate cap
+    for fired switches.
 18. (Part 2, after its review.) At most 10 arms per owner in any 24 hours (429,
     `Retry-After`); at most 5 held releases naming one person from one owner and
     50 from everyone (409 `recipient_limit`, one code for both bounds). The
     second bound discloses, to an owner below 5 who is refused, that the person
     is at 50 from everyone; a bound on what everyone together may do to one
     person cannot avoid that. _(Round 5 of the review: the second bound is also
-    a lever, which this decision did not say.)_ Ten accounts, each with
-    published release keys (the cost: creating the accounts and one identity
-    publish each, then five arms each, inside one day at the arming rate), fill
-    one person's 50; from then on every other owner who names that person is
-    refused 409 `recipient_limit` (the owner sees the refusal; it is not silent)
-    for as long as those switches are kept armed by check-ins, and for at least
-    365 days after they fire, until the removal; an attacker's account deletion
+    a lever, which this decision did not say. Round 6: as round 5 wrote it here
+    the lever reached one person, and the options were compared at that cost;
+    it reaches many, and the costs below are per person blocked.)_ One release
+    names up to 64 people, and the bound of 5 from one owner is per person, so
+    five arms naming the same 64 people put each of them at 5 from that owner.
+    Ten accounts, each with published release keys (the cost: creating the
+    accounts and one identity publish each, then the arms), therefore fill the
+    50 for 64 people with five arms each: 128 people a day at the arming rate,
+    and 256 people within the held cap of 20 switches each, in two days. That
+    is about 26 people for each attacking account (20 held switches naming 64
+    each is 1,280 names, and each person blocked takes 50), from ten accounts
+    up; the verifiers' replay put 256 people at 50 with ten accounts in two
+    days, and the third day's arms were refused by the held cap. From then on
+    every other owner who names one of those people is refused 409
+    `recipient_limit` (the owner sees the refusal; it is not silent) for as
+    long as those switches are kept armed, which takes one check-in per switch
+    per interval, and an interval can be up to 365 days, and for at least 365
+    days after they fire, until the removal; an attacker's account deletion
     frees only its unfired switches (decision 12 keeps a fired one for the
-    people it named). Neither the person nor anyone else can clear it through
-    the API: new release keys change nothing, the person gets 404 for someone
-    else's cancel, and no admin route touches a release (an operator could only
-    edit the database). In a dead-man tool that blocks a safety function for a
-    chosen person (a journalist could not name their editor). Test 26 of the
-    releases file pins it as it is. The options, each with what it keeps: (a)
-    keep it as it is; (b) count only unfired releases toward the 50 (fired ones
-    are bounded per owner and their notices are sent): an attacker still holds
-    the slots by keeping armed switches checked in, and fired releases naming
-    one person are then bounded only by how many accounts name them; (c) count
-    distinct owners rather than releases (at most 50 owners naming one person,
-    say): the same lever, at 50 accounts rather than ten; (d) drop the
-    from-everyone bound: no lever, and what one person can be sent is then
-    bounded only by how many accounts an attacker can make (5 releases each),
-    which depends on how sign-up is gated; (e) a recipient-side refusal
-    (decision 19, PR 4's or later), under which a refused owner's releases stop
-    counting and stop notifying: the fix for both sides, not built. Confirm one.
+    people it named). Neither the people named nor anyone else can clear it
+    through the API: new release keys change nothing, a person gets 404 for
+    someone else's cancel, and no admin route touches a release (an operator
+    could only edit the database). In a dead-man tool that blocks a safety
+    function for chosen people, and for a whole group at once (a journalist
+    could not name their editor, nor anyone else name any of 64 people in one
+    newsroom). Test 26 of the releases
+    file pins it as it is, with two people named by the same arms. The
+    options, each with its cost per person blocked: (a) keep it as it is: ten
+    accounts block 256 people, about 26 per account, for as long as they check
+    in and at least 365 days after firing; (b) count only unfired releases
+    toward the 50 (fired ones are bounded per owner and their notices are
+    sent): the same breadth, 256 people per ten accounts, held for as long as
+    the attacker keeps the switches armed (one check-in per switch per
+    interval, as rarely as once in 365 days) and no longer, and fired releases
+    naming one person are then bounded only by how many accounts name them;
+    (c) count distinct owners rather than releases (at most 50 owners naming
+    one person, say): blocking anyone then takes 50 accounts rather than ten,
+    but each account counts toward every person its 20 switches name, up to
+    1,280, so 50 accounts block about 1,280 people, the same 26 per account:
+    it raises the smallest attack, not the cost per person blocked; (d) drop
+    the from-everyone bound: nobody can be blocked, and what one person can be
+    sent is then bounded only by how many accounts an attacker can make (5
+    held releases each), which depends on how sign-up is gated; (e) a
+    recipient-side refusal (decision 19, PR 4's or later), under which a
+    refused owner's releases stop counting and stop notifying: each person
+    named can clear it by refusing the owners who filled it (ten, or however
+    many it took), and nobody can do it for them; not built. Confirm one.
 19. (Part 2, after its review.) A person who left or declined their notices
     room is invited again at most once per notice (decision 8, bounded).
     A recipient cannot yet refuse an owner: any account with release keys can
@@ -2018,8 +2108,8 @@ this section), and each time at least one test failed. The design document,
 and the deletion screen are edited here too; the trust page is regenerated.
 The fixes then had a second pass from the same verifiers, who replayed the
 attacks against them and read every sentence they changed; what that pass
-found, and what was done about each, is under "Round 2" below, and what a
-third pass found in the second round's fixes under "Round 3".
+found, and what was done about each, is under "Round 2" below, and what each
+later pass found in the previous round's fixes under "Round 3" to "Round 6".
 
 ### High
 
@@ -2560,8 +2650,9 @@ section.
     nothing changes).
 -   **`THREAT_MODEL.md`'s Release identities row said deletion "removes the
     public halves" (Medium as a claim).** For an owner with a fired release
-    switch the full public identity stays in that switch for up to 365 days
-    and is served to its recipients. Done: the row carries the exception
+    switch the full public identity stays in that switch until the removal,
+    at least 365 days (round 6: "for up to 365 days" understated it), and is
+    served to its recipients. Done: the row carries the exception
     the deletion screen and `KNOWN_LIMITATIONS.md` carry, and the
     changelog's 2026-10-26 entry points at the 2026-10-29 one.
 -   **§15, "read once per copy per arm" (Low).** Twice, before the
@@ -2813,8 +2904,9 @@ table at the end of this section.
     `TRUST.md` §1 (and `trust.html`, regenerated), the `THREAT_MODEL.md`
     Dead-man row's Availability column and the changelog say who can fill
     it (ten accounts with published release keys, five arms each, in a
-    day), for how long (while those switches are kept armed by check-ins,
-    and at least 365 days after they fire, deleted owners' fired ones
+    day; round 6: for up to 64 people with the same five arms, which this
+    said as one person), for how long (while those switches are kept armed
+    by check-ins, and at least 365 days after they fire, deleted owners' fired ones
     included), that neither the person nor anyone else can clear it, and
     that the refused owner sees the 409. Test: test 26 of the releases file
     ("a known trade-off, pinned (decision 18): ...") fills a person's 50
@@ -2841,8 +2933,11 @@ table at the end of this section.
     value throws rather than drop the condition; every other mutator is
     unchanged). Every write the notifier makes uses it: `status = 'pending'` for
     the room, the re-invite stamp, sent, retry and every end, and `room_id =`
-    the old room for the rows moved off a purged one. What it leaves, stated in
-    §15, the notifier's header and the deletion texts: until the app's
+    the old room for the rows moved off a purged one. (Round 6: not every
+    write; the creation of a row by the sweep and the catch-up was a plain
+    upsert, now insert-only, and the conditions guarded only rows the deletion
+    had reached, not one the API process had not yet heard of. Both below.)
+    What it leaves, stated in §15, the notifier's header and the deletion texts: until the app's
     notification arrives the worker's mirror and its tick's count say sent; a
     deletion that commits after the worker's write lands over it as its own
     full-row write, which leaves no room and, unless the app had already seen
@@ -2950,6 +3045,192 @@ table at the end of this section.
     qualifier (Low).** Done: "except in the cases KNOWN_LIMITATIONS.md
     lists", with the bound of 50 named too, and `trust.html` regenerated
     (`node tools/ci/build-trust-page.mjs`).
+
+### Round 6: what the verifiers found in the fixes
+
+A sixth pass replayed the attacks against round 5's head (`abff30b035`):
+the bound of 50 with releases that name 64 people, the deletion across the
+app/worker split with a notice row the API process had not yet seen, the
+notifier's writes during a leader handover, and the checks round 5 added,
+each removed once on a snapshot of the branch. Fourteen findings: one
+Medium (an attack's breadth the records understated), the rest Low. Each is
+fixed or explained here, with the tests and the mutation table at the end of
+this section. One more defect, of this round's own making, is recorded with
+them.
+
+-   **The lever of the bound of 50 reaches far more people than the records
+    said (Medium as raised).** Every statement of round 5's lever described
+    one person. One release names up to 64 (`RELEASE_MAX_RECIPIENTS`), and
+    the bound of 5 from one owner is per person, so five arms naming the same
+    64 people put each at 5 from that owner: in the verifiers' replay ten
+    accounts, 100 arms of 64 on each of two days, put 256 people at 50, the
+    third day's arms were refused by the held cap, and a genuine owner naming
+    any of them was refused 409 `recipient_limit`. Decision 18 compared its
+    options by their cost to an attacker at one person each, which overstated
+    that cost by 64 to 256 times; option (c), counting distinct owners, was
+    "the same lever, at 50 accounts rather than ten", where 50 accounts block
+    about 1,280 people. Not changed in code, as round 5 said: which bound
+    replaces it is the operator's. Done: decision 18 states the breadth (64
+    people per five arms; 128 a day at the arming rate; 256 within the held
+    cap of 20; about 26 people per attacking account), that one check-in per
+    switch per interval keeps an armed one counted and that an interval can
+    be 365 days, and each option's cost per person blocked, (c) included: it
+    raises the smallest attack from ten accounts to 50, not the cost per
+    person; §11's bounds bullet, Still open, `KNOWN_LIMITATIONS.md` (the
+    bullet now "... and many people at once"), `TRUST.md` §1 and its header
+    (and `trust.html`, regenerated), the `THREAT_MODEL.md` Dead-man row's
+    Availability column and its last-updated note, and the changelog say the
+    same; the round-5 entry points here. Test: test 26 of the releases file
+    now names two people in every one of the fifty arms and checks both end
+    at 50, the genuine owner is refused for each, and both can be named again
+    after the removal sweep.
+-   **A comment gave a protection as the reason for one code (Low).**
+    `recipientHasRoom` said the two bounds share a code because a second one
+    "would say how many others have named the person"; an owner below its own
+    5 who is refused learns that anyway (decision 18). Done: the comment says
+    the shared code hides nothing, and why.
+-   **Not every notifier write was conditional in Postgres (Low as raised).**
+    `createDeadmanReleaseNotice`, which the sweep's trigger and the
+    notifier's catch-up call, was a plain upsert: in the mirror it writes only
+    a missing row, in Postgres it wrote the whole row over whatever was there.
+    A process with the fired switch in its mirror but not yet the row (a
+    leader taking over within the change notification's lag) set a row the
+    old leader had sent back to pending with no attempts, and the next tick
+    to read it sent the notice again (the verifiers' probe on PGlite:
+    `fix/r5v/catchup-create.mts`). Done: the mutator spec is insert-only
+    (`insertIfAbsent`: `ON CONFLICT ... DO NOTHING`), carried through the
+    write-behind queue to `upsertRecord`, which refuses a guard on such a
+    write. Test: test 3 of `deadman-release-notices-postgres` (a standby
+    booted before the trigger, told of the switch and not the row, writes the
+    row; Postgres keeps the sent row, attempts and room; a replica booting
+    reads it sent; the standby, told of the row, reads it sent). Run: the
+    verifiers' probe, re-run: Postgres stays `sent` with one attempt, and the
+    old leader's next tick finds nothing due and sends nothing.
+-   **A deletion on the API process did not reach a notice row it had not yet
+    seen (Low as raised, a claim).** The conditional writes guarded only the
+    rows the deletion had ended. A row the worker's sweep wrote moments before
+    the deletion, whose change notification had not reached the API process,
+    was left pending; the deletion blanked the copy and deleted the user, the
+    worker then sent the notice after the deletion had committed and recorded
+    it `sent` with its room, and nothing cleared it (the verifiers' probe:
+    `fix/claims-r5-verify/unseen-row.mts`). So "a deletion the API process
+    committed first stands in the database", "every notice row of its forgets
+    the room", decision 14's "until the recipient's account is deleted", §11's
+    Retention, `KNOWN_LIMITATIONS.md`'s and the deletion screen's "a notice
+    still owed to you is dropped" and the changelog's sentence were not true
+    across the split. Done in code rather than in the sentences: before it
+    makes a room and again before it sends, the notifier reads the person's
+    copy from Postgres itself, after its own queued writes
+    (`readDeadmanReleaseWrapCommitted`, through `copyHeldInDatabase`); a
+    deletion blanks every copy sealed to the account first, so once one has
+    committed nothing is made or sent for that person. And the deletion
+    finishes with one statement in Postgres (`finishAccountDeletion`, awaited
+    by the route after `confirmAccountDeletion`;
+    `endDeadmanReleaseNoticesOfDeletedAccount` on the Postgres store, once its
+    queue has drained, so the route also answers only when the deletion is in
+    the database) that ends every notice row still pending to the account and
+    forgets the room of every one, rows the API process never saw included;
+    the rows it changed go into its mirror and are announced to the other
+    processes. What it leaves, now said in §15, the notifier's header, decision
+    14, §11, `KNOWN_LIMITATIONS.md` and the changelog: a notice whose send had
+    begun when the deletion committed can still arrive (its row then has no
+    room); and if the last statement fails (logged; the deletion is still
+    answered) or the API process stops before it, a row it had not seen keeps
+    what the worker wrote, a room included where the send had begun first. The
+    deletion screen's sentence was true once the code was, and is unchanged.
+    The release part of the deletion is now `eraseReleaseCopiesAndNoticesOf`
+    (next entry). Tests: test 1 of `deadman-release-notices-postgres` adds five
+    variants in which the API process booted before the sweep wrote the row
+    (deleted before the tick, with no room and with a known one: no room made,
+    no send; during the create: one room made, no send; during the send: one
+    send, the row `failed` with no room; after the worker recorded it sent:
+    `sent` with no room), and every variant now checks the API process's own
+    mirror, delivers to the worker what that process announced, as the
+    transport would, and requires, through a trigger on PGlite that records
+    every change to a notice row, that nothing after the deletion set a row of
+    the person's back to pending or gave one a room (added after round 5's
+    W09 and W11 survived against this round's code, below); test 27 of the releases file checks that the route runs
+    the last step after the deletion's writes and still answers when it
+    throws. Run: the verifiers' probe, re-run: no send, and Postgres, the
+    worker's mirror and a replica booting all read `failed`,
+    `recipient_gone`, no room.
+-   **This round's own slip: a database read that did not wait for the
+    process's own writes.** `3155c4856a` dropped the drain from
+    `readDeadmanReleaseWrapCommitted` just before it was committed, on the
+    reasoning that a copy is always written long before its switch can fire,
+    and the Postgres notices file was not run again after that edit; at that
+    commit it fails. A release armed and fired in one process within the
+    write-behind queue's lag has its copy still queued, the read finds no
+    committed copy, and the notice is ended as `recipient_gone`, so the person
+    is never told. `a868a8c7c5` puts the drain back; removing it is Y09 below,
+    which test 1 catches. The commits are not rewritten, so `3155c4856a` stays
+    in the history with a failing test.
+-   **The cross-process test copied the deletion by hand (Low).** Done: the
+    copy-and-notice writes of the deletion are `eraseReleaseCopiesAndNoticesOf`
+    (store given), which `confirmAccountDeletion` calls with the process's
+    store and the test with the API process's; the test also runs
+    `finishAccountDeletion` on that store, as the route does. Removing the call
+    from `confirmAccountDeletion` (Y17) fails the in-memory deletion tests.
+-   **The end the notifier writes after a send for an account found gone was
+    called equivalent, and is not (Low, claim).** Round 5's mutation note said
+    its condition (W16) changes nothing observable. During a leader handover
+    another notifier may already have committed `sent`; with the account gone
+    another way the unconditional write turned that into `failed` (the
+    verifiers' probe, `fix/claims-r5-verify/w16.mts`). Done: test 4 of
+    `deadman-release-notices-postgres` has that case (the worker's send held,
+    a second store commits `sent` with its room, the account leaves the
+    worker's view, the send released: Postgres and a booting replica keep
+    `sent` and the other room), W16 now fails it, and round 5's note says so.
+-   **Halves of round 5's checks no test reached (Low).** The verifiers'
+    mutants V1 (`aliasRoomComplete` without "the person cannot invite"), V2
+    (the person's own level in `users` not read) and V3 (`upsertRecord`'s
+    refusal of a guard it cannot carry disabled) passed every test. Done:
+    test 27 of the notices file has two more shapes, power levels that keep
+    the person from posting but let them invite (`events_default` 50,
+    `invite` 0) and power levels that give the person their own level of 100,
+    each waited for once and then replaced; test 5 of
+    `deadman-release-notices-postgres` checks that a guard field with no
+    column, one with no value, and a guard on an insert-only write each
+    throw, write nothing, and that a guard the writer can carry lands. Y20,
+    Y21 and Y22 below are V1, V2 and V3, and fail.
+-   **No test ran the file store's conditional write (Low).** Every notifier
+    write goes through `updateDeadmanReleaseNoticeIf`; the file-store restart
+    test covered only the unconditional one, and the verifiers' V4 (its
+    `persist()` removed) passed. Done: the test runs it applied (a retry with a
+    room), refused by its condition and by room, each read back after
+    reopening the store, the room lookup and the by-switch listing included;
+    Y24 below is V4, and fails.
+-   **Verification in a shared worktree (Low).** The verifiers found another
+    agent's mutant in this worktree while their own in-worktree mutants ran,
+    so either could have undone the other partway through a run; they re-ran
+    theirs on a `git archive` snapshot with the same outcomes. Done: every
+    mutant of this round ran on a snapshot of `a868a8c7c5` outside the
+    worktree (`fix/r6/snap`), and round 5's seventeen were run again there
+    against this round's code; two of them, W09 and W11, then survived, and
+    the cross-process test gained the check that kills them again (below).
+    Round 5's own table was run on a snapshot too (`fix/r5/mut`), so it is not
+    affected by another agent's edits.
+-   **§15 said the releases file had 25 tests (Low).** It had 26, the
+    twenty-sixth being the pin the sentence names; it now has 27. Done, with
+    the other files' counts.
+-   **Retention was still "up to 365 days" in two places and a flat "365 days
+    after" in five (Low).** The removal runs at the first sweep pass at least
+    365 days after the trigger, and with no sweep running never. Done: decision
+    4 (twice), the round-3 entry, decisions 12 and 17, §13, and the protocol's
+    `maxHeldReleaseSwitches` docstring.
+-   **"What one account can make the server keep is bounded" without "content,
+    not rows" in four places (Low).** Done: §11's bounds bullet, §13,
+    `THREAT_MODEL.md`'s Dead-man row and the docstring, and the changelog's
+    sentence as well.
+-   **Model names in the commit trailers and in older documents (Low, twice
+    raised).** Not acted on, as in round 5: the two attribution lines are the
+    ones the session's harness requires and rewriting them needs a rebase or a
+    squash at merge, the operator's to decide; the older documents that name a
+    model are on `develop` and belong to a change there. The round-4 sentence
+    (claim 44) stays as it was.
+
+No new operator decision this round: decision 18 is restated with the
+lever's breadth and each option's cost per person blocked.
 
 ### Claims that were not true, and what they say now
 
@@ -3128,6 +3409,34 @@ table at the end of this section.
 57. (Round 5.) The deletion screen, `KNOWN_LIMITATIONS.md` and the changelog,
     the deletion: "a notice still owed to you is dropped". One the bot was
     already sending can still arrive. Now said.
+58. (Round 6.) Decision 18, §11, the round-5 entry, Still open,
+    `KNOWN_LIMITATIONS.md`, `TRUST.md`, `THREAT_MODEL.md` and the changelog:
+    ten accounts "fill one person's 50". The same arms fill it for up to 64
+    people: 128 a day, 256 within the held cap, about 26 per attacking
+    account, and decision 18's options were costed at one person each. Now
+    said, with each option's cost per person blocked.
+59. (Round 6.) `recipientHasRoom`'s comment: one code for both bounds
+    because a second "would say how many others have named the person". It
+    hides nothing from an owner below 5. Now said.
+60. (Round 6.) §15, the round-5 entry and the notifier's header: "every
+    notifier write is also conditional in Postgres". The creation of a row
+    was a plain upsert; now insert-only, and said.
+61. (Round 6.) §15, the notifier's header, decision 14, §11's Retention,
+    `KNOWN_LIMITATIONS.md` and the changelog: a deletion the API process
+    committed "stands in the database", and every notice row of the account
+    "forgets the room". Not for a row the API process had not yet seen. Now
+    true through the worker's read of the copy from Postgres and the
+    deletion's last statement, with what that leaves stated.
+62. (Round 6.) Round 5's mutation note: W16 "is equivalent ... nothing
+    observable changes". It can land over another notifier's `sent`; now a
+    test kills it, and the note says so.
+63. (Round 6.) §15: the releases file has 25 tests. 26 then, 27 now.
+64. (Round 6.) Decision 4 and the round-3 entry, "for up to 365 days";
+    decisions 4, 12 and 17, §13 and the protocol's docstring, a flat "365
+    days after". At least 365 days, at the first sweep pass after. Now said.
+65. (Round 6.) §11, §13, `THREAT_MODEL.md` and the protocol's docstring,
+    what one account can make the server keep "is bounded". The content is;
+    the rows are not. Now said.
 
 ### Raised and refuted
 
@@ -3303,11 +3612,14 @@ test numbers are the files' after round 5: notices 29, notices on Postgres
 2, releases 26). Seventeen mutants, sixteen caught on the first run, and
 the sources were compared with the commit after the run. The seventeenth,
 W16, the condition on the end the notifier writes after a send when the
-account is found gone, survived, and is equivalent: the write it guards
-sets the same status, reason and empty room as the deletion it could land
-over (only the timestamps differ), so nothing observable changes; it is
-kept so that every notifier write goes through the same conditional
-method. P01 is not a check this round added but the behaviour test 26
+account is found gone, survived, and was called equivalent here: the write
+it guards sets the same status, reason and empty room as the deletion it
+could land over (only the timestamps differ), so nothing observable
+changes. (Round 6: not equivalent. During a leader handover the write can
+also land over a `sent` another notifier committed, for an account gone
+another way, and without the condition it turned that `sent` into
+`failed`; test 4 of the notices-on-Postgres file now has that case, and W16
+fails it, below.) P01 is not a check this round added but the behaviour test 26
 pins: counting only unfired releases toward the 50 fails it.
 
 | Check removed                                                                       | Test file                                              | What failed                                                                      |
@@ -3330,6 +3642,55 @@ pins: counting only unfired releases toward the 50 fails it.
 | W16: cross-process: the recipient-gone end after a send is conditional (equivalent) | `deadman-release-notices-postgres.integration.test.ts` | survived (equivalent, above)                                                     |
 | P01: pin: the 50 counts fired releases until their removal (decision 18 changed)    | `deadman-releases.integration.test.ts`                 | tests 8, 22 and 26                                                               |
 
+Round 6's checks, the same way (`fix/r6/mut/spec-round6.py`, in scratch, run
+on a `git archive` snapshot of `a868a8c7c5` outside the worktree, waiting for
+the machine's load before each; the test numbers are the files' after round
+6: releases 27, notices 29, notices on Postgres 5, file 1). Twenty-five
+mutants, twenty-five caught on the first run, the sources compared with the
+snapshot after each. Y20 to Y22 and Y24 are the verifiers' V1 to V4; W16 is
+round 5's survivor, now caught. Round 5's other sixteen mutants were run again
+on the same snapshot against this round's code (`spec-round5-rerun.json`, W12
+re-spelled for the queue's new argument): fourteen were caught, and W09 (the
+condition on the room recorded after a create) and W11 (on the re-invite
+stamp) survived. Their unconditional writes still land after the deletion and
+set the person's row back to pending with a room, and the worker's read of the
+copy from Postgres then ends it again, so the final row, all the test looked
+at, was right; for that moment Postgres held a deleted person's notice pending
+in a room, which a crash or a booting replica would have read. Test 1 now
+records every change to a notice row with a trigger on PGlite and requires
+that, once the deletion has committed, no write sets a row of the person's
+back to pending or gives one a room (`01f189b394`); on a snapshot of that
+commit both fail it ("room made now, during the create" and "person left,
+during the re-invite": nothing after the deletion put a row back).
+
+| Check removed                                                                               | Test file                                              | What failed                                                                                 |
+| ------------------------------------------------------------------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------- |
+| Y01: insert-only: the notice creation's spec (a plain upsert put back)                      | `deadman-release-notices-postgres.integration.test.ts` | test 3: a notice row is created only where Postgres has none (Postgres set back to pending) |
+| Y02: insert-only: the writer's `ON CONFLICT ... DO NOTHING`                                 | `deadman-release-notices-postgres.integration.test.ts` | test 3                                                                                      |
+| Y03: insert-only: the write-behind queue passes it on                                       | `deadman-release-notices-postgres.integration.test.ts` | test 3                                                                                      |
+| Y04: insert-only: the Postgres wrapper takes it from the spec                               | `deadman-release-notices-postgres.integration.test.ts` | test 3                                                                                      |
+| Y05: unseen row: the copy read from the database before a room is made                      | `deadman-release-notices-postgres.integration.test.ts` | test 1, a row the app had not seen, deleted before the tick: a room was made                |
+| Y06: unseen row: the copy read from the database again before the send                      | `deadman-release-notices-postgres.integration.test.ts` | test 1, the same, deleted during the create: the notice was sent                            |
+| Y07: unseen row: the check reads the database, not the mirror                               | `deadman-release-notices-postgres.integration.test.ts` | test 1, the same, deleted before the tick: the tick did not end it                          |
+| Y08: unseen row: the Postgres store reads the committed row                                 | `deadman-release-notices-postgres.integration.test.ts` | test 1, as Y07                                                                              |
+| Y09: unseen row: the read waits for the process's own queued writes (3155c4856a's slip)     | `deadman-release-notices-postgres.integration.test.ts` | test 1, the first variant: a release armed and fired at once was ended, not sent            |
+| Y10: end pass: the deletion finishes in the database at all                                 | `deadman-release-notices-postgres.integration.test.ts` | test 1: the deletion's writes were not in the database when it returned                     |
+| Y11: end pass: a pending row ends                                                           | `deadman-release-notices-postgres.integration.test.ts` | test 1, a row the app had not seen, deleted before the tick: the row still pending          |
+| Y12: end pass: every row forgets its room                                                   | `deadman-release-notices-postgres.integration.test.ts` | test 1, the same, deleted during the send: the room kept                                    |
+| Y13: end pass: a row already sent, with a room, is reached too                              | `deadman-release-notices-postgres.integration.test.ts` | test 1, the same, deleted after it was recorded sent: the room kept                         |
+| Y14: end pass: the rows it changed go into the API process's mirror                         | `deadman-release-notices-postgres.integration.test.ts` | test 1, the first unseen variant: the API process's mirror had no row                       |
+| Y15: end pass: the rows it changed are announced to the other processes                     | `deadman-release-notices-postgres.integration.test.ts` | test 1, deleted during the send: the worker's mirror, once told, still said sent            |
+| Y16: end pass: the deletion's own writes are in Postgres first, so before the route answers | `deadman-release-notices-postgres.integration.test.ts` | test 1: the deletion's writes were not in the database when it returned                     |
+| Y17: `confirmAccountDeletion` runs the extracted copy-and-notice writes                     | `deadman-release-notices.integration.test.ts`          | test 13: an account deletion that lands during a send stands: the row stays fai…            |
+| Y18: the deletion route awaits `finishAccountDeletion`                                      | `deadman-releases.integration.test.ts`                 | test 27: the account deletion route finishes the deletion in the database once …            |
+| Y19: a failure of the last step is logged, and the deletion is answered                     | `deadman-releases.integration.test.ts`                 | test 27                                                                                     |
+| Y20: alias room: the person cannot invite (V1)                                              | `deadman-release-notices.integration.test.ts`          | test 27: a room found through the alias that is still not the whole room the cr…            |
+| Y21: alias room: the person's own level in `users` counts (V2)                              | `deadman-release-notices.integration.test.ts`          | test 27                                                                                     |
+| Y22: writer: a guard field with no column or value throws (V3)                              | `deadman-release-notices-postgres.integration.test.ts` | test 5: the writer refuses a conditional write it cannot carry into Postgres, …             |
+| Y23: writer: an insert-only write refuses a guard                                           | `deadman-release-notices-postgres.integration.test.ts` | test 5                                                                                      |
+| Y24: file store: the conditional write persists (V4)                                        | `deadman-releases-file.integration.test.ts`            | test 1: a release switch, its copies and its notices survive a restart of the …             |
+| W16: round 5's survivor: the recipient-gone end after a send is conditional                 | `deadman-release-notices-postgres.integration.test.ts` | test 4: after a send, the end for an account found gone is conditional too: du…             |
+
 ### Still open
 
 -   **A recipient-side refusal of an owner** (decision 19), which the
@@ -3337,11 +3698,15 @@ pins: counting only unfired releases toward the 50 fails it.
     operator's. Until then `KNOWN_LIMITATIONS.md` says what any account with
     release keys can do to another's notices room, within the bounds.
 -   **The bound of 50 held releases naming one person from everyone** is a
-    lever (decision 18, round 5): ten accounts can fill it and keep every
-    other owner from naming that person while their switches stay armed and
-    for at least 365 days after they fire, and nobody can clear it. Which
-    bound replaces it is the operator's; test 26 of the releases file pins
-    it as it is.
+    lever (decision 18, rounds 5 and 6): ten accounts can fill it for 64
+    people with five arms each, 128 people a day and 256 within their held
+    cap, about 26 people per account, and keep every other owner from naming
+    any of them while their switches stay armed (one check-in per switch per
+    interval, which can be 365 days) and for at least 365 days after they
+    fire, and nobody can clear it. Which bound replaces it is the operator's;
+    every alternative short of the recipient-side refusal keeps the same
+    cost per person blocked or drops the bound (decision 18); test 26 of the
+    releases file pins it as it is.
 -   **Fired legacy switches' payloads** are held with no removal date
     (decision 20); extending the 365-day removal to them is the operator's.
 -   **The rows of cancelled release switches** stay for good (decision 24);
@@ -3354,7 +3719,9 @@ pins: counting only unfired releases toward the 50 fails it.
     copy on a switch another replica cancelled. A conditional write in
     Postgres would close it and was not built for the bounds or the copies
     (P3b-L6); the notice rows have one since round 5
-    (`updateDeadmanReleaseNoticeIf`), for the notifier's writes only.
+    (`updateDeadmanReleaseNoticeIf`), for the notifier's writes only, and
+    since round 6 their creation is insert-only in Postgres and the
+    deletion ends them there with one statement.
 -   **The notices room's alias** (decisions 25 and 26): its key, and what it
     leaves (§11): a room made without the alias where the homeserver refuses it
     or the alias names a room that is gone, not the bot's, one the bot has left,
@@ -3391,6 +3758,23 @@ pins: counting only unfired releases toward the 50 fails it.
     answered 200 (empty) to a still-valid token of a deleted account rather
     than 401; whether the auth middleware checks the user row still exists is
     worth a look.
+-   An aside found while probing round 6, outside this PR and present on
+    `develop`: a Postgres-backed mutator whose spec is a `resync` reconciles a
+    whole table to the calling process's mirror (`resyncMap`: it deletes every
+    row the mirror lacks, then writes every row the mirror has), so across
+    processes it undoes what another process wrote within the change
+    notification's lag. Run in scratch on PGlite (`fix/r6/aside/`): an account
+    deletion on one process (`deleteUser`, `resync('users')`) deleted from
+    Postgres an account another process had created moments before; and the
+    worker's prune of expired revocations (`pruneExpiredRevokedSessions`,
+    `resync('revokedSessions')`) deleted a session revocation the API process
+    had just written, so a process booting afterwards, or the API process once
+    told of the worker's reload, no longer treats that token as revoked. In
+    `deploy/docker/production` the API process and the worker are two such
+    processes. Read in the code, not run: the other `resync` mutators
+    (`purgeUserAuthArtifacts`, the token consumers, `revokeRefreshTokenFamily`
+    and the rest) have the same shape. It needs its own change; nothing here
+    depends on it, and the release tables use targeted writes only.
 
 ## Sources
 

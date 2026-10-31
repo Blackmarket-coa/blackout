@@ -107,10 +107,11 @@ export type DeadmanLimits = {
     labelMaxLength: number;
     /**
      * Release switches one owner may have whose content the server still
-     * holds: armed, in grace, and fired until the removal 365 days after the
-     * trigger. A cancelled switch holds no content and does not count; legacy
-     * switches never count. The bound on what one account can make the server
-     * keep.
+     * holds: armed, in grace, and fired until the removal (at the first sweep
+     * pass at least 365 days after the trigger). A cancelled switch holds no
+     * content and does not count; legacy switches never count. The bound on
+     * the content one account can make the server keep, not on its rows: a
+     * cancelled switch's rows stay.
      */
     maxHeldReleaseSwitches: number;
     /** Release arms one owner may make in any 24 hours (429 `release_arm_rate_limited`). */

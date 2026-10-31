@@ -295,9 +295,11 @@ export const heldReleasesNaming = (
 /**
  * Whether one more held release from `ownerId` may name `recipientAccountId`:
  * at most `DEADMAN_MAX_HELD_RELEASES_PER_RECIPIENT_FROM_OWNER` from this
- * owner, and `DEADMAN_MAX_HELD_RELEASES_PER_RECIPIENT` from everyone. Which
- * bound refused is not told apart in the answer: the second would say how many
- * others have named the person.
+ * owner, and `DEADMAN_MAX_HELD_RELEASES_PER_RECIPIENT` from everyone. Both are
+ * refused with one code (`recipient_limit`), which hides nothing: an owner
+ * who has named the person fewer than five times and is refused can tell it
+ * is the bound from everyone, and so that the person is at 50 (decision 18;
+ * a bound on what everyone together may do to one person cannot avoid it).
  */
 export const recipientHasRoom = (ownerId: string, recipientAccountId: string): boolean => {
     const naming = heldReleasesNaming(recipientAccountId);
