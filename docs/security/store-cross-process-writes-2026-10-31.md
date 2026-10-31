@@ -11,14 +11,17 @@ run to show both, what it leaves open, and what the operator has to decide.
 
 **Rating:** High. It is fixed on this branch, not on `develop`.
 **State read:** `develop` at `ff7d08bfa0`. The fix is the commits after it on the
-branch (listed under "Commits").
+branch (listed under "Commits"). The branch has since merged `develop` at
+`f6da7b7d16` (`a0f6012736`), which changed no file under `packages/api/src` or
+`packages/api/test`.
 **Read** means a claim rests on the code; **Run** that it was observed in Node
 22.22.0 in this worktree, on PGlite or on PostgreSQL 16.15 as stated; **Test**
 names the regression test that keeps it true. No production deployment was
 examined. A review of the branch found one high, one medium and seventeen low findings;
 what changed because of them is under "Changed after review round 1". A second
 review found two medium findings, both fixed (under "Changed after review round
-2"). The sections below describe the code after those changes.
+2"). A third found eight low findings, all fixed (under "Changed after review
+round 3"). The sections below describe the code after those changes.
 
 | ID  | Finding                                                                                                                                                                         | Verified                     | Disposition                                                               |
 | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- | ------------------------------------------------------------------------- |
@@ -298,7 +301,7 @@ milliseconds, so the tests that need microseconds write them explicitly.
 | X2            | The original `resync-users` probe: deleting one account keeps an account the deleting process had not heard of, in Postgres and in the peer's mirror                                                                                                                                                                                                                                                                                                                                                     |
 | X3            | A family revoke reaches the successor a peer minted; the parent keeps `replaced_by` and `rotated`; both mirrors hold Postgres's rows                                                                                                                                                                                                                                                                                                                                                                     |
 | X4            | Revoke-all reaches a token a peer minted, and a token the revoking process held carries in Postgres the time its mirror stamped                                                                                                                                                                                                                                                                                                                                                                          |
-| X5            | For all five consumes, Postgres keeps the first `consumed_at` and the stale process re-reads it                                                                                                                                                                                                                                                                                                                                                                                                          |
+| X5            | For all five consumes, Postgres keeps the first `consumed_at` and the stale process re-reads it. A consume of an OAuth or OIDC state row Postgres holds as expired, on a process whose copy is not, records nothing in Postgres, and that process re-reads the row (round 3; #12 and #14's expiry test)                                                                                                                                                                                                  |
 | X6            | Removing a circle edge is one `DELETE` by key; an unseen edge is kept (first half)                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | X7            | Purge removes the account's rows written elsewhere in all six tables, linked accounts included, and leaves revocations and another account's rows                                                                                                                                                                                                                                                                                                                                                        |
 | X7b           | Deleting an account's invitation admissions reaches ones written elsewhere and keeps another account's                                                                                                                                                                                                                                                                                                                                                                                                   |
@@ -307,9 +310,9 @@ milliseconds, so the tests that need microseconds write them explicitly.
 | X8c           | A stale accept of a bounty another process claimed directly accepts and declines nothing                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | X9            | A gossip merge and an enqueue keep an envelope they had not heard of; the merge writes the arrival, deletes what it dropped and merges `seen_by`, which Postgres, the writer's mirror and the peer's all hold in the same order                                                                                                                                                                                                                                                                          |
 | X10           | A score recompute keeps an argument it had not heard of                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| X11, X11b     | The retention sweep deletes a reply it judged unchanged, keeps one another process changed since, and deletes one whose `updated_at` has microseconds                                                                                                                                                                                                                                                                                                                                                    |
+| X11, X11b     | The retention sweep deletes a reply it judged unchanged, keeps one another process changed since, and deletes one whose `updated_at` has microseconds. A reply whose mirror copy has no `updatedAt` is deleted whatever Postgres holds (round 3; #32's `nullMatchesAny`, D5)                                                                                                                                                                                                                             |
 | X12           | The pin sweeper deletes an unchanged pin, one with microseconds and one stamped by `DEFAULT NOW()`, and keeps a pin another process rewrote                                                                                                                                                                                                                                                                                                                                                              |
-| X13, X13b     | A superseded verification token (also one a peer issued) and its sent time survive a restart; the expired-token deletes judge Postgres's rows                                                                                                                                                                                                                                                                                                                                                            |
+| X13, X13b     | A superseded verification token (also one a peer issued) and its sent time survive a restart; the expired-token sweeps judge Postgres's rows. On a process that has not heard of a peer's consume and sent mark, a revoke leaves the consumed token unrevoked and a second sent mark keeps the first `sent_at` (round 3; #41's `consumed_at IS NULL`, #40's `sent_at IS NULL`)                                                                                                                           |
 | X14–X16c, X18 | First half: receivers drop gone keys, the fence, in-transaction notification and rollback, a required miss, retry after a lost `COMMIT`                                                                                                                                                                                                                                                                                                                                                                  |
 | X16d          | A refresh whose `SELECT` was answered before a queued write committed, and whose reply arrived after the write landed, does not take the write back. Four cases on one process, each recorded and asserted together: a peer's `'u'` naming the logout-everywhere cutoff while a newer cutoff is queued, a `'k'` naming a refresh token while its family's logout is queued, a `'r'` while a sign-out is queued, and the rehydrate after a reconnect while a logout is queued                             |
 | X8d           | An accept whose first `COMMIT` reply was lost is retried; the retry's gate misses on the first attempt's own commit and rolls back; the conflict counter does not move, and Postgres and both mirrors hold the accept                                                                                                                                                                                                                                                                                    |
@@ -343,42 +346,45 @@ and keeps a running writer's.
 
 ## Mutation checks
 
-Each was run in a scratch `git worktree add --detach` copy of this branch
-(with the final commit's changes), one at a time, and the copy was removed
-afterwards. "Fails" lists the tests that failed; every other test in the files
-run passed. Files: X = `store-cross-process`, C = `store-spec-coverage`,
-W = `pg-writer-targeted`. PGlite unless marked.
+Each was run in a scratch `git worktree add --detach` copy of this branch at
+`a8edded8ab` (the code after every round's change, with round 3's tests), one
+at a time, the copy restored after each run and removed afterwards. Until
+round 3 this table held counts from runs made before review round 1, though it
+said they were made with the final commit's changes; each "Since" note says
+what moved. "Fails" lists the tests that failed; every other test in the files
+run passed. Files: X = `store-cross-process` (41 tests), C =
+`store-spec-coverage` (2), W = `pg-writer-targeted` (6). PGlite unless marked.
 
-| Mutation                                                                                                  | Files | Result                                                                                                                                                           |
-| --------------------------------------------------------------------------------------------------------- | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| None (baseline)                                                                                           | X C W | 44 of 44 pass; on PostgreSQL 16.15, X 36 of 36                                                                                                                   |
-| `develop`'s `src/db` entire                                                                               | X C   | all 38 fail. Many at setup (`develop` ignores `'k'` and lacks the new seams), so the next row is the comparison that matters. U1 lists exactly S2 and S3         |
-| `develop`'s `pgDescriptors.ts` on this branch's writer and receivers (before the resync code was removed) | X     | 25 of 36 fail: every new X test except X11b (a guard-precision test with no guard to test), plus X6, X15, both X18, X16c and U7. The same 25 on PostgreSQL 16.15 |
-| No self-refresh                                                                                           | X     | X3, X4, X5, X8, X8b, X8c, X11, X12, X17, X15b, self-refresh                                                                                                      |
-| No `'k'` publish                                                                                          | X     | 22 fail: X1, X1b, X2, X3, X4, X6, X7, X7b, X8, X9, X10, X11, X12, X13, X13b, X15, X16c, X17, X18 (both), X19, self-refresh                                       |
-| No guard on #30 and #32                                                                                   | X     | X11, X12                                                                                                                                                         |
-| Plain equality instead of `date_trunc('milliseconds', …)`                                                 | X     | X11b, X12; the same on PostgreSQL 16.15, where `DEFAULT NOW()` has microseconds                                                                                  |
-| No `required` on #10                                                                                      | X     | X8b (its conflict count), X8c (its rows); the same on PostgreSQL 16.15                                                                                           |
-| Mirror keys built by a `:` join                                                                           | X W   | U2, the composite-key test, X14 (both), X6                                                                                                                       |
-| `'u'`/`'k'` keep a key whose row is gone                                                                  | X     | 16 fail, among them X14 (both), X1, X2, X7, X17, X19                                                                                                             |
-| No fence                                                                                                  | X     | X16, X16b, X16c                                                                                                                                                  |
-| Notification after commit, with the in-transaction `NOTIFY` failing                                       | X     | X15                                                                                                                                                              |
-| Purge's map list as on `develop` (`revokedSessions` for `linkedAccounts`)                                 | X C   | X7, U1, U6                                                                                                                                                       |
-| Specs #39 to #42 dropped                                                                                  | X C   | X13, X13b, U1, U6                                                                                                                                                |
-| The revocation prune ignores expiry                                                                       | X     | X1, X19                                                                                                                                                          |
-| Account deletion without the explicit child deletes                                                       | X     | X17, U7                                                                                                                                                          |
-| Revocations among the explicit child deletes (D1 reversed)                                                | X     | X17                                                                                                                                                              |
-| A consume without `consumed_at IS NULL`                                                                   | X     | X5                                                                                                                                                               |
-| A revoke binding a time other than the mirror's                                                           | X     | X4                                                                                                                                                               |
-| The capture does not record `delete`                                                                      | C     | U6                                                                                                                                                               |
-| A method assigns into a mirror record in place                                                            | C     | U1                                                                                                                                                               |
-| A new method that writes `users` with no spec                                                             | C     | U1                                                                                                                                                               |
+| Mutation                                                                                                  | Files | Result at `a8edded8ab`                                                                                                                                                                                                                                                                                                                               |
+| --------------------------------------------------------------------------------------------------------- | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| None (baseline)                                                                                           | X C W | 49 of 49 pass; on PostgreSQL 16.15, X 41 of 41                                                                                                                                                                                                                                                                                                       |
+| `develop`'s `src/db` entire                                                                               | X C   | Not comparable with today's tests: X14 (both), X16, X16b, X16d, `drainWrites` and map kind fail, then a test never settles and the other 36 are cancelled. Kept from before round 1, with that code's tests: all 38 fail, many at setup (`develop` ignores `'k'` and lacks the new seams); U1 lists exactly S2 and S3                                |
+| `develop`'s `pgDescriptors.ts` on this branch's writer and receivers (before the resync code was removed) | X     | Not comparable with today's tests: 4 pass and the 37 from X16d on are cancelled when a test never settles; on PostgreSQL 16.15 the run had not ended after 900 s and was killed. Kept from before round 1, with that code's tests: 25 of 36 fail, every new X test except X11b, plus X6, X15, both X18, X16c and U7; the same 25 on PostgreSQL 16.15 |
+| No self-refresh                                                                                           | X     | 13 fail: X3, X4, X5, X8, X8b, X8c, X9, X11, X12, X13, X17, X15b, self-refresh. Since: X9 (round 1's re-read of a merged row) and X13 (round 3's re-reads)                                                                                                                                                                                            |
+| No `'k'` publish                                                                                          | X     | 23 fail: X1, X1b, X2, X3, X4, X6, X7, X7b, X8, X8d, X9, X10, X11, X12, X13, X13b, X15, X16c, X17, X18 (both), X19, self-refresh. Since: X8d (round 1)                                                                                                                                                                                                |
+| No guard on #30 and #32                                                                                   | X     | X11, X12                                                                                                                                                                                                                                                                                                                                             |
+| Plain equality instead of `date_trunc('milliseconds', …)`                                                 | X     | X11b, X12; the same on PostgreSQL 16.15, where `DEFAULT NOW()` has microseconds                                                                                                                                                                                                                                                                      |
+| No `required` on #10                                                                                      | X     | X8b (its conflict count), X8c (its rows), X8d; the same on PostgreSQL 16.15. Since: X8d (round 1)                                                                                                                                                                                                                                                    |
+| Mirror keys built by a `:` join                                                                           | X W   | U2, the composite-key test, X14 (both), X6                                                                                                                                                                                                                                                                                                           |
+| `'u'`/`'k'` keep a key whose row is gone                                                                  | X     | 16 fail: X1, X1b, X2, X6, X7, X7b, X11, X12, X13b, X14 (both), X16c, X17, X18 (both), X19                                                                                                                                                                                                                                                            |
+| No fence                                                                                                  | X     | X16, X16b, X16c, X16d. Since: X16d (round 1)                                                                                                                                                                                                                                                                                                         |
+| Notification after commit, with the in-transaction `NOTIFY` failing                                       | X     | X15                                                                                                                                                                                                                                                                                                                                                  |
+| Purge's map list as on `develop` (`revokedSessions` for `linkedAccounts`)                                 | X C   | X7, U1, U6                                                                                                                                                                                                                                                                                                                                           |
+| Specs #39 to #42 dropped                                                                                  | X C   | X13, X13b, U1, U6                                                                                                                                                                                                                                                                                                                                    |
+| The revocation prune ignores expiry                                                                       | X     | X1, X19                                                                                                                                                                                                                                                                                                                                              |
+| Account deletion without the explicit child deletes                                                       | X     | X17, U7                                                                                                                                                                                                                                                                                                                                              |
+| Revocations among the explicit child deletes (D1 reversed)                                                | X     | X17                                                                                                                                                                                                                                                                                                                                                  |
+| A consume without `consumed_at IS NULL`                                                                   | X     | X5                                                                                                                                                                                                                                                                                                                                                   |
+| A revoke binding a time other than the mirror's                                                           | X     | X4                                                                                                                                                                                                                                                                                                                                                   |
+| The capture does not record `delete`                                                                      | C     | U6                                                                                                                                                                                                                                                                                                                                                   |
+| A method assigns into a mirror record in place                                                            | C     | U1                                                                                                                                                                                                                                                                                                                                                   |
+| A new method that writes `users` with no spec                                                             | C     | U1                                                                                                                                                                                                                                                                                                                                                   |
 
 The first half's mutations (no transaction, no retry, unkept uncertain keys,
 no boot `PREPARE`, an unknown method skipped, no chunking, an unchanged call
 queued, a wrapper that throws, and the receiver mutations) are in its commit
-messages; four of them were re-run here on the final code (`:` join, absent
-rows kept, no fence, notification after commit) with the results above.
+messages; four of them are in the table above (`:` join, absent rows kept, no
+fence, notification after commit), re-run at `a8edded8ab`.
 
 After review round 1, each round-1 change was mutated in place in this
 worktree, one at a time, and the file restored from a copy afterwards
@@ -410,6 +416,20 @@ from `215eff7c6d`.
 | U4b after round 2, with either 106 added                                     | X     | passes; it boots 105, 104 and 99                                                                               |
 | A missing table refuses the boot again (round 1's mutation, on the new U4b)  | X     | U4b fails: "MUTATOR_SPECS.deleteInvitationAdmissionsForUser step 1 (deleteWhere on invitationAdmissions): ..." |
 
+After review round 3, the predicates of finding 4 were each removed alone in
+a scratch `git worktree add --detach` copy, restored after each run and
+removed afterwards. "Before" is `a0f6012736` (X and C); "after" is the same
+code with `b2ba8803c7`'s tests (X), on PGlite and on PostgreSQL 16.15.
+
+| Predicate removed                                                        | Before        | After (PGlite and PostgreSQL 16.15, the same)                                                     |
+| ------------------------------------------------------------------------ | ------------- | ------------------------------------------------------------------------------------------------- |
+| None (baseline)                                                          | X C 43 of 43  | X 41 of 41                                                                                        |
+| #41 `revokeEmailVerificationTokensForUser`: `consumed_at IS NULL`        | 43 of 43 pass | X13 alone fails: "a consumed token is not superseded" (`'superseded'` where `null` was expected)  |
+| #40 `markEmailVerificationTokenSent`: `sent_at IS NULL`                  | 43 of 43 pass | X13 alone fails: "Postgres keeps the first sent_at" (the second process's later time was written) |
+| #12 `consumePendingOAuthLink`: `AND expires_at > $2`                     | 43 of 43 pass | X5 alone fails: "consumePendingOAuthLink: Postgres records no consume"                            |
+| #14 `consumePendingOidcLogin`: `AND expires_at > $2` (not in the review) | 43 of 43 pass | X5 alone fails: "consumePendingOidcLogin: Postgres records no consume"                            |
+| #32 the retention sweep's guard: `nullMatchesAny`                        | 43 of 43 pass | X11 alone fails: the reply is still in Postgres (1 where 0 was expected)                          |
+
 ## Gates
 
 Run in `packages/api` (Node 22.22.0, pnpm 9.15.4). "C6" is the commit that
@@ -419,18 +439,20 @@ commit after it, which fixed the file store's temp-file race (O13); "R1" is
 changes only documents); "R2" is `beeaa6556c`, after review round 2, whose
 `src` is R1's (`git diff b828f7f244 beeaa6556c -- packages/api/src` is empty;
 round 2 changed U4b and documents; `265f430fdb` after it changes one comment in
-the single-server compose file):
+the single-server compose file); "R3m" is `a0f6012736`, the merge of `develop`
+at `f6da7b7d16`; "R3" is `a8edded8ab`, after review round 3 (its tests and
+comments; this record's commit changes only the record):
 
-| Gate                                                    | Result                                                                                                                                                                                                                                                                                                                                                        |
-| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pnpm lint`, `pnpm typecheck`                           | clean (C6, C7, R1, R2)                                                                                                                                                                                                                                                                                                                                        |
-| `pnpm test:integration` (CI's PR gate)                  | C6: 2014 of 2015, three runs; each time the one failure was a `streaming-module` test hit by the file store's temp-file race (O13). C7: 2015 of 2015. R1: 2022 of 2022 (5 min 20 s). R2: 2022 of 2022 (5 min 25 s); U4b among them                                                                                                                            |
-| `pnpm test` (post-merge, `--test-force-exit`)           | TAP, C6 and C7 alike: tests 2135, pass 2135, fail 0, cancelled 0; all 23 tests that `cbce376602`, `111eabe39e` and `c30077a925` add appear in it (2112 before them). R1: tests 2142, pass 2142, fail 0, cancelled 0; the 7 tests round 1 adds appear in it and in `test:integration`. R2: tests 2142, pass 2142, fail 0, cancelled 0 (13 min); U4b among them |
-| `pnpm test:launch-smoke`                                | C6, C7, R1 and R2: 14 of 14                                                                                                                                                                                                                                                                                                                                   |
-| `store-cross-process` on PostgreSQL 16.15 (loopback)    | C6: 36 of 36, three runs; C7, with `store-spec-coverage`: 38 of 38 (the coverage file's U6 boots on PGlite either way). R1, the same two files: 43 of 43. Every per-test and template database dropped afterwards (0 left). R2, the same two files: 43 of 43, 0 databases left (U4b boots on PGlite in either mode)                                           |
-| the store's test files on PGlite (mutation baseline)    | `store-cross-process`, `store-spec-coverage` and `pg-writer-targeted`: 44 of 44 (C7). R1, seven files run together: 59 of 59 (`store-cross-process` 41, `store-spec-coverage` 2, `pg-writer-targeted` 6, `postgres-store` 4, `pg-notify-replication` 3, `write-behind-durability` 2, `file-store-temp-snapshots` 1)                                           |
-| the reviewer's harnesses at R1 (`verify-concurrency-1`) | `attack.mts`: hub on PGlite 10 pass, 0 fail (A7 needs real Postgres); PostgreSQL 16.15 9 pass, 2 fail, A7 (O15) and A9 (the boot gap, O4). `natural.mts` N1: 0 of 1,000 logouts lost in four runs; N2: three runs, one listen error and one reconnect each, no LISTEN session left, 0 lost                                                                    |
-| root `pnpm exec prettier --check` on the changed files  | clean                                                                                                                                                                                                                                                                                                                                                         |
+| Gate                                                    | Result                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm lint`, `pnpm typecheck`                           | clean (C6, C7, R1, R2, R3m, R3)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `pnpm test:integration` (CI's PR gate)                  | C6: 2014 of 2015, three runs; each time the one failure was a `streaming-module` test hit by the file store's temp-file race (O13). C7: 2015 of 2015. R1: 2022 of 2022 (5 min 20 s). R2: 2022 of 2022 (5 min 25 s); U4b among them. R3m: 2022 of 2022 (5 min 57 s). R3: 2022 of 2022 (5 min 29 s). The merge changes no API count: `develop`'s new tests are in the client (Vitest) and the Synapse fork (Python), which no API gate runs, and it changed only `packages/api/package.json` (`@hono/node-server` 2.1.3) in the API; round 3 adds assertions to X5, X11 and X13, not tests |
+| `pnpm test` (post-merge, `--test-force-exit`)           | TAP, C6 and C7 alike: tests 2135, pass 2135, fail 0, cancelled 0; all 23 tests that `cbce376602`, `111eabe39e` and `c30077a925` add appear in it (2112 before them). R1: tests 2142, pass 2142, fail 0, cancelled 0; the 7 tests round 1 adds appear in it and in `test:integration`. R2: tests 2142, pass 2142, fail 0, cancelled 0 (13 min); U4b among them. R3m: tests 2142, pass 2142, fail 0, cancelled 0 (12 min 13 s). R3: tests 2142, pass 2142, fail 0, cancelled 0 (12 min 27 s)                                                                                               |
+| `pnpm test:launch-smoke`                                | C6, C7, R1, R2, R3m and R3: 14 of 14                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `store-cross-process` on PostgreSQL 16.15 (loopback)    | C6: 36 of 36, three runs; C7, with `store-spec-coverage`: 38 of 38 (the coverage file's U6 boots on PGlite either way). R1, the same two files: 43 of 43. Every per-test and template database dropped afterwards (0 left). R2, the same two files: 43 of 43, 0 databases left (U4b boots on PGlite in either mode). R3m and R3, the same two files: 43 of 43 each, 0 databases left                                                                                                                                                                                                     |
+| the store's test files on PGlite (mutation baseline)    | `store-cross-process`, `store-spec-coverage` and `pg-writer-targeted`: 44 of 44 (C7). R1, seven files run together: 59 of 59 (`store-cross-process` 41, `store-spec-coverage` 2, `pg-writer-targeted` 6, `postgres-store` 4, `pg-notify-replication` 3, `write-behind-durability` 2, `file-store-temp-snapshots` 1). R3, `store-cross-process`, `store-spec-coverage` and `pg-writer-targeted`: 49 of 49 (41, 2 and 6)                                                                                                                                                                   |
+| the reviewer's harnesses at R1 (`verify-concurrency-1`) | `attack.mts`: hub on PGlite 10 pass, 0 fail (A7 needs real Postgres); PostgreSQL 16.15 9 pass, 2 fail, A7 (O15) and A9 (the boot gap, O4). `natural.mts` N1: 0 of 1,000 logouts lost in four runs; N2: three runs, one listen error and one reconnect each, no LISTEN session left, 0 lost                                                                                                                                                                                                                                                                                               |
+| root `pnpm exec prettier --check` on the changed files  | clean                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 
 The earlier commits' gates are in their messages: `test:integration` 2003 of
 2003 after the auth tables, and 2010 of 2010 after the bounty, sweeper, mesh
@@ -467,7 +489,7 @@ transaction. Both leave 1,000 rows. The design lens measured 728 ms against
     Under READ COMMITTED the revoke waits on the rotation's row lock and then
     changes nothing, so the new successor stays live (run on PostgreSQL 16.15 by
     the design). A family advisory lock in both writers fixes it (PR 3).
--   **O3 — the upsert siblings.** About 160 specs are still whole-row upserts, and
+-   **O3 — the upsert siblings.** 220 specs are still whole-row upserts, and
     the last writer wins. On the security tables that means a stale
     `markUserEmailVerified` can revert a password change, a stale
     `updateUserPassword` can re-insert a deleted account, a stale moderation
@@ -477,6 +499,20 @@ transaction. Both leave 1,000 rows. The design lens measured 728 ms against
     approval and is not built. Others to review after it: voice-room sanctions,
     moderation actions, marketplace entitlements, creator stream auth, canary
     tokens, dead-man switches, scheduled messages and release identities.
+    An upsert writes the record its method returned whenever that is an
+    object (`installWriteThrough`), so a call that changes nothing still
+    rewrites its row, whole, from the calling process's copy. A scan of
+    `InMemoryDb` for upsert methods that can return a record read from a
+    mirror map without writing it (round 3, Read; the scan looks for that
+    one shape, so it may miss others) finds 11, all PR 2 candidates:
+    `markUserEmailVerified` (an already-verified account: the row is
+    rewritten, `password_hash` included), `consumeRefreshTokenForRotation`
+    (a token already rotated or revoked), `revokeInvitationToken`,
+    `markBurnerIdentityBurned`, `markCoalitionNotificationRead` (each when
+    already done), `markGreeted`, `markBillingWebhookEventProcessed`,
+    `addCircleEdge` (each when the row exists), `openDeadDrop` (a drop
+    already opened), `joinVoiceRoom` (an active participant) and
+    `applyVoiceRoomSanction` (a standing sanction).
 -   **O4 — the rest of M11's stale-read gaps.** An upsert's notification is
     still sent after commit, fire-and-forget, on another connection; the gap
     between hydrating and `LISTEN` at boot is still open; a half-open listener
@@ -494,7 +530,10 @@ transaction. Both leave 1,000 rows. The design lens measured 728 ms against
     the gap from hydrating `revoked_sessions` to `LISTEN` at 278 to 365 ms at
     `a1696d1609` and 272 to 359 ms on `develop`, so it was there before. After
     review round 2, `KNOWN_LIMITATIONS.md`, both deploy comments and the M11
-    note say this; before, they described only the window.
+    note say this; before, they described only the window. After review
+    round 3, so do the store's header in `store.ts`, `pgNotify.ts`'s header
+    and the production refusal in `src/index.ts`, which had still called the
+    store eventually consistent.
 -   **O5 — account deletion fails for an account with messages, votes or tips.**
     Those foreign keys do not cascade, so the `DELETE` fails, the whole op rolls
     back (now including the explicit child deletes) and the failure is counted.
@@ -608,24 +647,47 @@ set in any committed file.
    descriptor with no `keyOf` throws; `0ca48db41b` fixes it), so it is not
    bisect-safe. Likewise `c30077a925` alone carries the file store's temp-name
    race (O13), which failed one `test:integration` test in each of three runs
-   until `a1696d1609`. The round-1 receiver fixes (`b0b5bfbd32`, the fence
-   taken when a refresh starts; `0cd7b9ab75`, a map's kind kept;
-   `b28fc592ad`, one LISTEN reconnect) change nothing a process sends, so they
-   are safe in either release; they sit after B's commits on this branch, so
-   putting them in A means cherry-picking them.
+   until `a1696d1609`. The round-1 receiver fixes change nothing a process
+   sends, and they sit after B's commits on this branch, so putting one in A
+   means cherry-picking it. Checked against `0ca48db41b` (round 3), they do
+   not all apply to A as it stands:
+
+    - `b0b5bfbd32` (the fence taken when a refresh starts): its `store.ts`
+      change applies cleanly; its test (X16d) does not, against A's test
+      file.
+    - `b28fc592ad` (one LISTEN reconnect): applies cleanly, with its test.
+    - `0cd7b9ab75` (a map's kind kept) does not apply. Its capture half
+      changes `captureWrites`, which `60203eb3a4` adds in B, so it conflicts
+      there. Its reload half applies cleanly but changes nothing in A, where
+      every mirror map is a plain `Map`; it matters only once v46's
+      `GroupedMap`s are merged (decision 4 (a)). It belongs with B.
+
+    With `b0b5bfbd32`'s `store.ts` change and `b28fc592ad` applied to
+    `0ca48db41b` in a scratch worktree, `pnpm typecheck` and `eslint` on the
+    changed files were clean, and A's five store test files
+    (`store-cross-process`, `pg-notify-replication`, `postgres-store`,
+    `write-behind-durability`, `pg-writer-targeted`) passed, 18 of 18 on
+    PGlite.
+
 3. **Past losses.** Nothing records which rows were lost. Either accept that a
    revoked access token a resync brought back expires on its own within 24
    hours of the fix shipping, or rotate the JWT signing key at deploy, which
    ends every access token at once. Separately: whether to tell users.
-4. **Order with v46.** The unmerged v46 branch (`215eff7c6d`, 48 commits on
-   `ff7d08bfa0`, local only) also changes `pgWriter.ts`,
-   `writeBehindQueue.ts`, `pgDescriptors.ts` and `store.ts`, and adds
-   migration 106. `git merge-tree --write-tree` of this branch's tip with it
-   reports conflicts in exactly those four files (the reviewer's run on
-   `a1696d1609` found 2 hunks in `pgDescriptors.ts`, 1 in `pgWriter.ts`, 3 in
-   `store.ts` and 3 in `writeBehindQueue.ts`); `KNOWN_LIMITATIONS.md` and the
-   postgres-store test merge cleanly. Whichever lands second must also handle
-   five overlaps outside the conflict hunks, which git will not flag:
+4. **Order with v46.** The unmerged v46 branch (`215eff7c6d` or later; the
+   branch moves, so re-run `git merge-tree` before merging; local only) also
+   changes `pgWriter.ts`, `writeBehindQueue.ts`, `pgDescriptors.ts` and
+   `store.ts`, and adds migration 106. `git merge-tree --write-tree` of this
+   branch's tip with it reports conflicts in exactly those four files (the
+   reviewer's run on `a1696d1609` found 2 hunks in `pgDescriptors.ts`, 1 in
+   `pgWriter.ts`, 3 in `store.ts` and 3 in `writeBehindQueue.ts`);
+   `KNOWN_LIMITATIONS.md` and the postgres-store test merge cleanly. During
+   round 3 v46 moved twice. At `dbc50a2ae5` (111 commits on `ff7d08bfa0`),
+   `git merge-tree` with this branch after its merge of `develop` reported the
+   same four files and the same hunk counts; at `9fffb126a5` (117 commits), the
+   same four files, with 4 hunks in `store.ts` where there had been 3. The
+   other two files merged cleanly both times.
+   Whichever lands second must also handle five overlaps outside the
+   conflict hunks, which git will not flag:
 
     - **(a)** v46 makes four maps `GroupedMap`s (an indexed `Map` subclass)
       and reloads them with `freshMapLike`. This branch's `reloadTable` now
@@ -748,37 +810,62 @@ checked here first; both were real.
 
 No finding was rejected.
 
+## Changed after review round 3
+
+The third review ran at `232b8c6409` and found eight low findings; the
+eighth repeats the third's two `erase*` comments. Before they were worked,
+`develop` at `f6da7b7d16` was merged in (`a0f6012736`, no conflict; it
+changed no file under `packages/api/src` or `packages/api/test`). Each
+finding was checked here first; all were real.
+
+| #    | Finding                                                                                                                                                                                                                                                       | Now                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1    | `src/index.ts`'s production refusal, `pgNotify.ts`'s header and `store.ts`'s header called the store eventually consistent without the case `KNOWN_LIMITATIONS.md` now states: a process that misses a notification stays stale until it restarts or re-reads | Corrected (`a8edded8ab`) in `KNOWN_LIMITATIONS.md`'s words, and none of the three says "eventually" now. The "Documents corrected" line that said `pgNotify.ts`'s header described what exists was wrong (that header had not been changed) and is corrected. Checked first: the three texts as quoted; no test matches the refusal's text                                                                                                                                                                                                                                                                                        |
+| 2    | `store.ts`'s header ("a row a call did not change is never rewritten"), `KNOWN_LIMITATIONS.md` and both deploy comments ("a write names only the rows it changed") are false for an upsert whose method returns a record unchanged                            | Corrected (`a8edded8ab`): no write reconciles a table; a targeted op writes only the rows its call changed; an upsert writes the one row the call returned, whole, even when unchanged. Checked first in `installWriteThrough` (it queues an upsert whenever the result is an object) and `markUserEmailVerified` (a verified account's record returned as it is, so the users row is rewritten, `password_hash` included). The 11 methods of that shape a scan found are named in O3 as PR 2 candidates. Found while fixing it: O3 said "about 160" upsert specs; `MUTATOR_SPECS` has 220 (and 42 targeted), counted at run time |
+| 3, 8 | `eraseDeadmanSwitch` called its write "a targeted upsert"; `eraseScheduledMessage` and `eraseReleaseIdentity` said a single-row upsert "cannot touch a row another replica wrote"                                                                             | Corrected (`a8edded8ab`): "an upsert", and "cannot touch any other row; it can still overwrite a newer version of this one (last writer wins)". Checked first: the three specs are `upsert(...)` in `pgDescriptors.ts`                                                                                                                                                                                                                                                                                                                                                                                                            |
+| 4    | Four spec predicates had no test that failed without them: #41's `consumed_at IS NULL`, #40's `sent_at IS NULL`, #12's `AND expires_at > $2`, #32's `nullMatchesAny`                                                                                          | Tests (`b2ba8803c7`) in X13, X5 and X11, and #14's expiry test, which had none either. Reproduced first: with each of the five removed, `store-cross-process` and `store-spec-coverage` passed 43 of 43. Now each fails exactly one test (round-3 mutation table)                                                                                                                                                                                                                                                                                                                                                                 |
+| 5    | The first mutation table said "with the final commit's changes", but its counts were from before round 1 (the review dates them to `a1696d1609`; the saved runs, finished between 05:51 and 06:21 UTC, predate even `c30077a925`, committed at 06:46)         | Re-run at `a8edded8ab`, this branch's code after round 3, with the round-3 tests, and the rows replaced (Mutation checks). The two rows that put `develop`'s code under today's tests do not finish (a test never settles and the rest are cancelled), so each keeps its earlier result, labelled as run before round 1                                                                                                                                                                                                                                                                                                           |
+| 6    | Decision 4 named v46 as `215eff7c6d`; that branch moves                                                                                                                                                                                                       | Now "`215eff7c6d` or later; re-run `git merge-tree` before merging". During round 3 it moved to `dbc50a2ae5` and then `9fffb126a5`, where `store.ts` has 4 conflict hunks, not 3 (decision 4)                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| 7    | Decision 2 said the three round-1 receiver fixes are safe in either release and that putting them in A means cherry-picking; one does not apply to A as it stands                                                                                             | Corrected after applying each to `0ca48db41b` in a scratch worktree: `0cd7b9ab75`'s capture half changes code B adds, and its reload half is a no-op in A; the other two apply, and A's store tests pass with them (decision 2)                                                                                                                                                                                                                                                                                                                                                                                                   |
+
+No finding was rejected.
+
 ## Commits
 
 On `claude/bmc-transmutation-strategy-6jenal-v49`, after `ff7d08bfa0`:
 
-| Commit       | What                                                                                                   |
-| ------------ | ------------------------------------------------------------------------------------------------------ |
-| `75b6060037` | Targeted statement primitives in `pgWriter` (U2, U3)                                                   |
-| `2f5b92a5a1` | Receivers re-read changed keys by key, behind a per-key fence (X14, X16, X16b)                         |
-| `0ca48db41b` | Computing an upsert's fence key never throws into the mutator                                          |
-| `60203eb3a4` | The targeted kind, one transaction per call, the keyed deletes (#11, #16–29, #31, #33, #36, #38)       |
-| `cbce376602` | The auth tables: #1–9, #12–15, #39–42 (X1–X5, X7, X13, X17, X19, U7)                                   |
-| `111eabe39e` | Bounty, sweepers, mesh and coliseum: #10, #30, #32, #34, #35, #37 (X8, X8b, X9–X12, X11b)              |
-| `c30077a925` | Remove the resync; U1, U6, X1b, X7b, X8c; the prose, `KNOWN_LIMITATIONS.md`, the M11 note, this record |
-| `a1696d1609` | The file store's temp file is per process (O13); this record's gates                                   |
-| `b0b5bfbd32` | Round 1: a refresh re-reads a key whose queued write landed while its `SELECT` was out (X16d)          |
-| `7b94aa8344` | Round 1: `flushRuntimeStoreWrites` waits for the write queue only (`drainWrites`)                      |
-| `2efb0ffeab` | Round 1: the store boots on a schema behind the code (U4b)                                             |
-| `0e712a9b7e` | Round 1: a gate miss after a lost `COMMIT` reply is not counted (X8d)                                  |
-| `551a39043b` | Round 1: the mesh writer re-reads merged `seen_by`, kept in first-seen order (X9)                      |
-| `b28fc592ad` | Round 1: one dropped LISTEN connection is replaced once, and released (S9)                             |
-| `0cd7b9ab75` | Round 1: the capture and the reload keep a mirror map's own kind                                       |
-| `f80b923e4d` | Round 1: a file store's boot removes temp snapshots dead processes left (O16)                          |
-| `b828f7f244` | Round 1: Helm chart, headers, production error and alert text say write-behind                         |
-| `baa7a1d593` | Round 1: this record, `KNOWN_LIMITATIONS.md`                                                           |
-| `7bc2db101b` | Round 2: U4b finds the schema without `invitation_admissions` by its migration (overlap (e))           |
-| `beeaa6556c` | Round 2: a missed notification lasts until restart: `KNOWN_LIMITATIONS.md`, deploy comments, M11 note  |
-| `265f430fdb` | Round 2: the single-server compose file says write-behind, and that a missed notification lasts        |
-| this commit  | Round 2: this record                                                                                   |
+| Commit       | What                                                                                                         |
+| ------------ | ------------------------------------------------------------------------------------------------------------ |
+| `75b6060037` | Targeted statement primitives in `pgWriter` (U2, U3)                                                         |
+| `2f5b92a5a1` | Receivers re-read changed keys by key, behind a per-key fence (X14, X16, X16b)                               |
+| `0ca48db41b` | Computing an upsert's fence key never throws into the mutator                                                |
+| `60203eb3a4` | The targeted kind, one transaction per call, the keyed deletes (#11, #16–29, #31, #33, #36, #38)             |
+| `cbce376602` | The auth tables: #1–9, #12–15, #39–42 (X1–X5, X7, X13, X17, X19, U7)                                         |
+| `111eabe39e` | Bounty, sweepers, mesh and coliseum: #10, #30, #32, #34, #35, #37 (X8, X8b, X9–X12, X11b)                    |
+| `c30077a925` | Remove the resync; U1, U6, X1b, X7b, X8c; the prose, `KNOWN_LIMITATIONS.md`, the M11 note, this record       |
+| `a1696d1609` | The file store's temp file is per process (O13); this record's gates                                         |
+| `b0b5bfbd32` | Round 1: a refresh re-reads a key whose queued write landed while its `SELECT` was out (X16d)                |
+| `7b94aa8344` | Round 1: `flushRuntimeStoreWrites` waits for the write queue only (`drainWrites`)                            |
+| `2efb0ffeab` | Round 1: the store boots on a schema behind the code (U4b)                                                   |
+| `0e712a9b7e` | Round 1: a gate miss after a lost `COMMIT` reply is not counted (X8d)                                        |
+| `551a39043b` | Round 1: the mesh writer re-reads merged `seen_by`, kept in first-seen order (X9)                            |
+| `b28fc592ad` | Round 1: one dropped LISTEN connection is replaced once, and released (S9)                                   |
+| `0cd7b9ab75` | Round 1: the capture and the reload keep a mirror map's own kind                                             |
+| `f80b923e4d` | Round 1: a file store's boot removes temp snapshots dead processes left (O16)                                |
+| `b828f7f244` | Round 1: Helm chart, headers, production error and alert text say write-behind                               |
+| `baa7a1d593` | Round 1: this record, `KNOWN_LIMITATIONS.md`                                                                 |
+| `7bc2db101b` | Round 2: U4b finds the schema without `invitation_admissions` by its migration (overlap (e))                 |
+| `beeaa6556c` | Round 2: a missed notification lasts until restart: `KNOWN_LIMITATIONS.md`, deploy comments, M11 note        |
+| `265f430fdb` | Round 2: the single-server compose file says write-behind, and that a missed notification lasts              |
+| `232b8c6409` | Round 2: this record                                                                                         |
+| `a0f6012736` | Merge `develop` at `f6da7b7d16` (#993, #994, #995); no file under `packages/api/src` or `test` changed there |
+| `b2ba8803c7` | Round 3: X5, X11 and X13 fail without #12, #14, #32, #40 and #41's predicates                                |
+| `a8edded8ab` | Round 3: the store's comments say a missed notification lasts, and that an upsert rewrites its row           |
+| this commit  | Round 3: this record                                                                                         |
 
 Release A of the rollout (decision 2) is the receivers: the first three
-commits. Release B is the rest.
+commits. Release B is the rest. Which round-1 receiver fixes can also go
+into A, and which cannot, is in decision 2.
 
 ## Documents corrected
 
@@ -788,8 +875,10 @@ commits. Release B is the rest.
     that fails twice loses it. The header now says so, and says what is written.
     Two account-deletion comments explained keeping a row by the resync's danger;
     they now say the write is a single-row upsert.
--   `packages/api/src/db/pgDescriptors.ts` and `pgNotify.ts`: the header, the
-    spec kinds and the `'r'` op describe what exists now.
+-   `packages/api/src/db/pgDescriptors.ts`: the header and the spec kinds;
+    `pgNotify.ts`: the `'r'` op. Each describes what exists now.
+    `pgNotify.ts`'s own header was not changed, and called reads "eventually
+    consistent" until review round 3 (below).
 -   `packages/api/src/db/writeBehindQueue.ts`: a lost write is lost "before a
     later resync"; there is none.
 -   `packages/api/src/services/authRowsPruneScheduler.ts` and
@@ -843,6 +932,34 @@ After review round 2:
     left with "only a bounded stale-read window equal to NOTIFY latency".
     Neither was true. The baseline runs one API container and no worker.
 -   This record: O4 and the U4b row.
+
+After review round 3:
+
+-   `packages/api/src/db/store.ts` (the store's header), `pgNotify.ts` (its
+    header) and `src/index.ts` (the production refusal of a non-Postgres
+    store) called the store eventually consistent without the case
+    `KNOWN_LIMITATIONS.md` states: a process that misses a notification (the
+    boot gap, a failed after-commit send, a half-open listener) keeps its old
+    copy until it restarts or re-reads the row. Each now says so in
+    `KNOWN_LIMITATIONS.md`'s words, and none says "eventually".
+-   `store.ts`'s header said "a row a call did not change is never
+    rewritten"; `KNOWN_LIMITATIONS.md` and both deploy comments said "a write
+    names only the rows it changed". An upsert writes the row its call
+    returned even when the call changed nothing (O3). Each now says that no
+    write reconciles a table, that a targeted op writes only the rows its call
+    changed, and that an upsert writes the one row the call returned, whole,
+    even when unchanged. The two YAML files parse to the same documents as
+    before.
+-   `store.ts`: `eraseDeadmanSwitch` called its write "a targeted upsert"; it
+    is an upsert (`upsert('deadmanSwitches')`). `eraseScheduledMessage` and
+    `eraseReleaseIdentity` said the single-row upsert "cannot touch a row
+    another replica wrote"; it cannot touch any other row, and can still
+    overwrite a newer version of this one (last writer wins).
+-   This record: the "Documents corrected" line above on `pgNotify.ts`, O3's
+    count (220 upsert specs, counted from `MUTATOR_SPECS` at run time; it
+    said about 160) and its PR 2 candidates, O4, decisions 2 and 4, the X5,
+    X11 and X13 rows, the first mutation table, and the header, gates and
+    commits for the merge and round 3.
 
 Records written before this one (`api-findings-triage-2026-10-25.md`, D2: the
 prune "as a resync of `revokedSessions`") are left as written; this record
