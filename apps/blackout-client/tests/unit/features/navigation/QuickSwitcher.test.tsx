@@ -516,7 +516,16 @@ describe('collectRecentMessages', () => {
 });
 
 describe('QuickSwitcher recent-messages wiring (component)', () => {
+    // Clearing the DOM does not unmount a React root, so a mounted switcher
+    // keeps its 150 ms search-debounce timer alive. If the file's jsdom
+    // environment is torn down before it fires, its setState throws
+    // "window is not defined" as an unhandled error and fails the run.
+    const mountedRoots: ReactDOM.Root[] = [];
+
     afterEach(() => {
+        act(() => {
+            mountedRoots.splice(0).forEach((root) => root.unmount());
+        });
         document.body.innerHTML = '';
     });
 
@@ -524,6 +533,7 @@ describe('QuickSwitcher recent-messages wiring (component)', () => {
         const container = document.createElement('div');
         document.body.appendChild(container);
         const root = ReactDOM.createRoot(container);
+        mountedRoots.push(root);
         act(() => {
             root.render(
                 <Provider store={store}>
