@@ -6461,8 +6461,11 @@ export class FileBackedDb extends InMemoryDb {
         // leaves a half-written JSON document that `hydrate()` cannot parse,
         // and the store is unrecoverable on next boot. rename(2) within a
         // directory is atomic, so a reader sees either the previous snapshot
-        // or the new one and never a partial one.
-        const tmpPath = `${DB_FILE_PATH}.tmp`;
+        // or the new one and never a partial one. The temp name carries the
+        // process id: with one fixed name, a second process writing the same
+        // store (two test files run in parallel do) renames the first one's
+        // temp file away, and the first rename fails with ENOENT.
+        const tmpPath = `${DB_FILE_PATH}.tmp-${process.pid}`;
         try {
             writeFileSync(tmpPath, `${JSON.stringify(this.snapshot(), null, 2)}\n`, 'utf8');
             renameSync(tmpPath, DB_FILE_PATH);

@@ -10,8 +10,8 @@ mirror. This record covers that defect and its fix (PR 1 of the plan), what was
 run to show both, what it leaves open, and what the operator has to decide.
 
 **Rating:** High. It is fixed on this branch, not on `develop`.
-**State read:** `develop` at `ff7d08bfa0`. The fix is the seven commits after it
-on the branch (listed under "Commits").
+**State read:** `develop` at `ff7d08bfa0`. The fix is the commits after it on the
+branch (listed under "Commits").
 **Read** means a claim rests on the code; **Run** that it was observed in Node
 22.22.0 in this worktree, on PGlite or on PostgreSQL 16.15 as stated; **Test**
 names the regression test that keeps it true. No production deployment was
@@ -336,18 +336,19 @@ rows kept, no fence, notification after commit) with the results above.
 
 ## Gates
 
-Run in `packages/api` on this commit's code, before this record was added
-to it (Node 22.22.0, pnpm 9.15.4):
+Run in `packages/api` (Node 22.22.0, pnpm 9.15.4). "C6" is the commit that
+removed the resync, run before this record was added to it; "C7" is the
+commit after it, which fixed the file store's temp-file race (O13):
 
-| Gate                                                   | Result                                                                                                                         |
-| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
-| `pnpm lint`, `pnpm typecheck`                          | clean                                                                                                                          |
-| `pnpm test:integration` (CI's PR gate)                 | 2014 of 2015, three runs; each time the one failure was a `streaming-module` test hit by the file store's temp-file race (O13) |
-| `pnpm test` (post-merge, `--test-force-exit`)          | TAP: tests 2135, pass 2135, fail 0, cancelled 0; all 23 tests the last three commits add appear in it (2112 before them)       |
-| `pnpm test:launch-smoke`                               | 14 of 14                                                                                                                       |
-| `store-cross-process` on PostgreSQL 16.15 (loopback)   | 36 of 36, three runs; every per-test and template database dropped afterwards                                                  |
-| the store's test files on PGlite (mutation baseline)   | `store-cross-process`, `store-spec-coverage` and `pg-writer-targeted`: 44 of 44                                                |
-| root `pnpm exec prettier --check` on the changed files | clean                                                                                                                          |
+| Gate                                                   | Result                                                                                                                                                                          |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm lint`, `pnpm typecheck`                          | clean                                                                                                                                                                           |
+| `pnpm test:integration` (CI's PR gate)                 | C6: 2014 of 2015, three runs; each time the one failure was a `streaming-module` test hit by the file store's temp-file race (O13). C7: 2015 of 2015                            |
+| `pnpm test` (post-merge, `--test-force-exit`)          | TAP, C6 and C7 alike: tests 2135, pass 2135, fail 0, cancelled 0; all 23 tests that `cbce376602`, `111eabe39e` and `c30077a925` add appear in it (2112 before them)             |
+| `pnpm test:launch-smoke`                               | C6 and C7: 14 of 14                                                                                                                                                             |
+| `store-cross-process` on PostgreSQL 16.15 (loopback)   | C6: 36 of 36, three runs; C7, with `store-spec-coverage`: 38 of 38 (the coverage file's U6 boots on PGlite either way); every per-test and template database dropped afterwards |
+| the store's test files on PGlite (mutation baseline)   | `store-cross-process`, `store-spec-coverage` and `pg-writer-targeted`: 44 of 44                                                                                                 |
+| root `pnpm exec prettier --check` on the changed files | clean                                                                                                                                                                           |
 
 The earlier commits' gates are in their messages: `test:integration` 2003 of
 2003 after the auth tables, and 2010 of 2010 after the bounty, sweeper, mesh
@@ -436,12 +437,17 @@ transaction. Both leave 1,000 rows. The design lens measured 728 ms against
     PostgreSQL 16.15 on loopback. No production deployment was examined, nothing
     ran under a transaction-mode pooler, and CI has no real-Postgres job for these
     tests.
--   **O13 — a test flake outside this change.** The file store writes every
-    snapshot through one fixed temporary name (`store.json.tmp`), so two test
-    files that use the default file store and run in parallel can race on it:
-    one gets `ENOENT` on the rename and answers 500. It failed one
-    `streaming-module` test in two of the `test:integration` runs (Gates). It is
-    in the file store, not the Postgres store, and is left for its own fix.
+-   **O13 — a test flake outside the Postgres store, fixed.** The file store
+    wrote every snapshot through one fixed temporary name (`store.json.tmp`),
+    so two test files using the default file store, run in parallel, raced on
+    it: one got `ENOENT` on the rename and answered 500. Adding
+    `store-spec-coverage` put the four `streaming-*` files side by side under
+    `test:integration`, and one of their tests failed in each of three runs.
+    The same four files run in parallel failed 3 tests in every run on
+    `develop` too, so the race was there before. The temp name now carries the
+    process id (as `cleanCoalitionDemoSeed` already did); run in parallel three
+    times, the four files failed 2 to 4 tests each time before the change and
+    none after it.
 
 ## For the operator
 
@@ -517,7 +523,8 @@ On `claude/bmc-transmutation-strategy-6jenal-v49`, after `ff7d08bfa0`:
 | `60203eb3a4` | The targeted kind, one transaction per call, the keyed deletes (#11, #16–29, #31, #33, #36, #38)       |
 | `cbce376602` | The auth tables: #1–9, #12–15, #39–42 (X1–X5, X7, X13, X17, X19, U7)                                   |
 | `111eabe39e` | Bounty, sweepers, mesh and coliseum: #10, #30, #32, #34, #35, #37 (X8, X8b, X9–X12, X11b)              |
-| this commit  | Remove the resync; U1, U6, X1b, X7b, X8c; the prose, `KNOWN_LIMITATIONS.md`, the M11 note, this record |
+| `c30077a925` | Remove the resync; U1, U6, X1b, X7b, X8c; the prose, `KNOWN_LIMITATIONS.md`, the M11 note, this record |
+| this commit  | The file store's temp file is per process (O13); this record's gates                                   |
 
 Release A of the rollout (decision 2) is the receivers: the first three
 commits. Release B is the rest.
