@@ -12,6 +12,13 @@ on:
             - 'deploy/**'
             # So a change to the panel proxy framing guard alone runs it.
             - 'tools/ci/check-embed-proxy-framing*'
+            # The Trivy step scans the desktop app's Cargo.lock and
+            # services/perturbation's requirements.txt, and reads
+            # .trivyignore: without these, a PR that moved only one of them
+            # got no Trivy result until the push to develop.
+            - 'blackout-desktop/**'
+            - 'services/**'
+            - '.trivyignore'
             - 'pnpm-lock.yaml'
             - 'package.json'
             - '.github/workflows/security.yml'
