@@ -52,11 +52,13 @@ encryption_enabled_by_default_for_room_type: invite
 # on. It read `${JWT_ENABLED:-false}` and `${JWT_SECRET:-}`, which envsubst left
 # as text: a non-empty string, which Synapse read as on, and a secret anyone
 # can read here. To use JWT login, write `enabled: true` below and set
-# JWT_SECRET to a long random value; an empty secret stops startup. See
-# docs/upgrade.md, "Upgrading to authlib 1.9.1".
+# SYNAPSE_JWT_LOGIN_SECRET to a long random value; an empty secret stops
+# startup. Never reuse the API's JWT_SECRET or JWT_SECRET_PRIMARY: whoever
+# holds this secret can sign in as any user. See docs/upgrade.md, "Upgrading
+# to authlib 1.9.1".
 jwt_config:
   enabled: false
-  secret: "${JWT_SECRET}"
+  secret: "${SYNAPSE_JWT_LOGIN_SECRET}"
   algorithm: "HS256"
 
 turn_uris:

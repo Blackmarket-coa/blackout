@@ -953,14 +953,16 @@ service files, which upstream does not have. Found by the sixth review of
   JWT login opened to anyone who signs with the literal only once both were
   fixed, which making this service work needs. The template is the same on
   `develop`. It now writes `enabled: false` and
-  `secret: "${JWT_SECRET}"`, under a comment, so no environment variable turns
-  JWT login on; an operator who writes `enabled: true` gets `JWT_SECRET`'s
+  `secret: "${SYNAPSE_JWT_LOGIN_SECRET}"`, under a comment, so no environment
+  variable turns JWT login on; an operator who writes `enabled: true` gets
+  `SYNAPSE_JWT_LOGIN_SECRET`'s
   value, or, when it is unset, an empty secret that the startup check
   refuses. Neither of the two faults is fixed here; the record lists every
   `${VAR:-default}` in the template, what it renders to, and what Synapse
   does with it. Only `jwt_config` was a security defect.
 - `services/blackout-server/.env.example`: `JWT_ENABLED=false` is gone (no
-  longer read), and `JWT_SECRET` is empty, where it was `change-me`, with a
+  longer read), and `JWT_SECRET` is renamed `SYNAPSE_JWT_LOGIN_SECRET` and left
+  empty, where it was `change-me`, with a
   comment saying when it is used.
 - `synapse/config/jwt.py` (`JWTConfig._check_enabled`): `jwt_config.enabled`
   must be a YAML boolean, or absent (off). Anything else (a string such as

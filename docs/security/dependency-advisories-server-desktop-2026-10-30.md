@@ -301,6 +301,24 @@ two faults would have opened JWT login. Each alone stops startup, so it would
 take both; the `PATCHES.md` entry it added said the same and is corrected in
 this version.
 
+A seventh review found no medium or high problem and three low ones:
+
+-   **The serde_with item gave a false reason.** It said serde_with is built
+    only into the build-time copy of tauri-utils. `cargo tree -e normal`
+    shows it in the runtime copy too, on every desktop target. It is still
+    not reached, for another reason: tauri-utils uses only
+    `skip_serializing_none`. The item is corrected.
+-   **The Railway template's secret shared the API's variable name.** After
+    `48ab32d` the template read `secret: "${JWT_SECRET}"`. `JWT_SECRET` is
+    also the name of the API's session-signing secret (`deploy/secrets/`),
+    so an operator who wrote `enabled: true` in a shared environment would
+    have made that secret the JWT login secret. The template now reads
+    `SYNAPSE_JWT_LOGIN_SECRET`, as do `.env.example`, `docs/upgrade.md` and
+    `PATCHES.md`. A test renders the template with only `JWT_SECRET` set and
+    requires an empty secret; with the previous template it gets the API's
+    value.
+-   **`48ab32d`'s commit message**, already corrected in the paragraph above.
+
 ---
 
 ## Method
@@ -1845,9 +1863,13 @@ The record's own commit changes no file Trivy reads.
         `VariantStrIter` was not checked.
     -   **serde_with 3.18.0**, GHSA-7gcf-g7xr-8hxj (Moderate, fixed in
         3.21.0): `KeyValueMap` serialization panics on an empty entry. It is
-        built only into the build-time copy of tauri-utils (under
-        tauri-build, tauri-codegen, tauri-macros and tauri-plugin's build
-        script); `cargo tree` shows no path from the runtime copy.
+        compiled into the runtime copy of tauri-utils on every desktop
+        target (`cargo tree -i serde_with --target all -e normal`: through
+        tauri, tauri-runtime and tauri-plugin-deep-link), not only the
+        build-time copy, as an earlier version of this item said. It is not
+        reached: tauri-utils 2.10.2 uses only `serde_with::skip_serializing_none`
+        (`config.rs:38`, `config_v1/mod.rs:19`), and no other crate source
+        in the cargo registry names `KeyValueMap`.
     -   **rand 0.9.2**, GHSA-cq8v-f236-94qc (Low, fixed in 0.9.3): unsound
         only when a custom `log` logger calls `rand::rng()`. It comes in
         through tauri-plugin-notification 2.3.3, and the app's code installs

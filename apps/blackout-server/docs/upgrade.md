@@ -218,7 +218,9 @@ checked when `enabled` is `true`, and the secret when the algorithm is also
 read. It used `${JWT_ENABLED:-false}` and `${JWT_SECRET:-}`, which
 `envsubst` does not expand: JWT login rendered as on, with a secret anyone
 could read in the template. To use JWT login there, write `enabled: true` in
-the template and set `JWT_SECRET` to a long random value. The template's other
+the template and set `SYNAPSE_JWT_LOGIN_SECRET` to a long random value, never
+the API's `JWT_SECRET` or `JWT_SECRET_PRIMARY` (the variable was `JWT_SECRET`,
+the same name the API's session-signing secret uses). The template's other
 `${VAR:-default}` values (the listener port, the database name, user and port,
 the Redis port, TURN) render as text too, so that service does not start as
 rendered; the record lists them.

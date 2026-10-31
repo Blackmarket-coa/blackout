@@ -353,14 +353,19 @@ class JwtSecretConfigTestCase(TestCase):
         template = RAILWAY_TEMPLATE.read_text(encoding="utf-8")
         envs: Tuple[Dict[str, str], ...] = (
             {},
-            {"JWT_ENABLED": "true", "JWT_SECRET": "a-long-random-secret"},
+            {"JWT_ENABLED": "true", "SYNAPSE_JWT_LOGIN_SECRET": "a-long-random-secret"},
+            # The API's session-signing secret must never become the JWT login
+            # secret: the template read JWT_SECRET until 2026-10-31.
+            {"JWT_SECRET": "the-api-session-signing-secret"},
         )
         for env in envs:
             with self.subTest(env=env):
                 rendered = yaml.safe_load(_envsubst(template, env))
                 jwt_config = rendered["jwt_config"]
                 self.assertIs(jwt_config["enabled"], False)
-                self.assertEqual(jwt_config["secret"], env.get("JWT_SECRET", ""))
+                self.assertEqual(
+                    jwt_config["secret"], env.get("SYNAPSE_JWT_LOGIN_SECRET", "")
+                )
                 self.assertFalse(_parse(jwt_config).jwt.jwt_enabled)
 
     def test_disabled_jwt_login_is_not_checked(self) -> None:
