@@ -1474,7 +1474,7 @@ test('a leader taking over uses the room the old leader recorded on another of t
     }
 });
 
-test('a room or a re-invite recorded on a pending row whose write was dropped is kept when the row is read from Postgres: the person is not invited twice for one notice, no second room is made with the alias refused, and the next write carries them into Postgres', async () => {
+test('a room or a re-invite recorded on a pending row whose write was dropped is kept when the row is read from Postgres: the person is not invited twice for one notice, no second room is made with the alias refused, and the next write carries them into Postgres; a row ended elsewhere does not get them back', async () => {
     // Round 8 of part 2's review: the refresh put the stored row into the
     // mirror whenever this process wrote nothing to it during the read,
     // reasoning that the stored row was at least as new; a write that failed
@@ -1554,6 +1554,31 @@ test('a room or a re-invite recorded on a pending row whose write was dropped is
             matrix.sendStatus = 200;
         }
     }
+
+    // Only on a row still pending there: one another process ended (an
+    // account deletion on a second store, which forgets the room) does not
+    // get the mirror's room back.
+    const gone = await person();
+    const ended = await release(gone);
+    matrix.sendStatus = 500;
+    try {
+        await runDeadmanReleaseNotifier({ now: ended.at });
+    } finally {
+        matrix.sendStatus = 200;
+    }
+    await worker.drain();
+    const before = worker.getDeadmanReleaseNotice(ended.switchId, gone.id)!;
+    assert.equal(before.status, 'pending');
+    assert.ok(before.roomId, 'the worker recorded a room');
+    const other = new store.PostgresBackedDb();
+    await other.init(pool as never);
+    eraseReleaseCopiesAndNoticesOf(other, gone.id);
+    await finishAccountDeletion(gone.id, other);
+    await runDeadmanReleaseNotifier({ now: new Date(before.nextAttemptAt) });
+    await worker.drain();
+    const mirrored = worker.getDeadmanReleaseNotice(ended.switchId, gone.id)!;
+    assert.equal(mirrored.status, 'failed', 'ended elsewhere: the mirror takes the stored row');
+    assert.equal(mirrored.roomId, undefined, 'ended elsewhere: the mirror does not keep its room');
 });
 
 test('the deletion route answers only once the deletion’s own writes have been attempted in Postgres, however long that takes, and waits for its last statement at most the bound: after the answer the worker makes no room, invites nobody and sends nothing for the person', async () => {
