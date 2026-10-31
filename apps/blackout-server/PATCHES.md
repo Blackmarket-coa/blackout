@@ -577,9 +577,17 @@ reconciliation with upstream; after this they match upstream's for authlib.
 
 - `pyproject.toml`: `authlib = ">=1.9.1,<1.10"` (was `>=1.6.12,<1.7`). 1.9.1
   fixes GHSA-6v38-4h7w-rj9h (Critical), GHSA-7vr2-2fgp-9w7p and
-  GHSA-8m4g-j4wp-wgcg (High), and five Moderate/Low advisories. Upstream has no
+  GHSA-8m4g-j4wp-wgcg (High), and five Moderate/Low advisories. It also fixes
+  GHSA-c73q-w75p-j82v (High, published 2026-10-30 23:09 UTC, after the rest;
+  added after the fourth review): the documented RFC 7592
+  `ClientConfigurationEndpoint` examples do not bind the registration access
+  token to the client. That is authorization-server code. Synapse is an OAuth
+  client here, and nothing in `synapse/` or `blackout_runtime/` uses an
+  RFC 7591 or 7592 endpoint, so it was not reachable. Upstream has no
   upper bound (`authlib>=0.15.1`); this tree caps below the next minor, which
-  has not been released or checked.
+  has not been released or checked. The cap also covers
+  `synapse/config/jwt.py`'s use of `authlib.jose.rfc7519.jwt.prepare_raw_key`,
+  a module-level helper outside authlib's documented API.
 - `poetry.lock`: `poetry lock --no-update` under poetry 1.3.2. authlib 1.6.12 to
   1.9.1, and `joserfc` 1.7.7 is added (authlib 1.7+ requires `joserfc>=1.6.8`
   and `cryptography>=45.0.1`; the lock already has cryptography 50.0.2). The
