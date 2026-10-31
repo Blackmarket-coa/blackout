@@ -2449,3 +2449,47 @@ test('a retry is timed from when it was recorded, not from the tick’s start: a
         matrix.aliases.delete(noticeRoomAlias(lateMxid));
     }
 });
+
+test('a database read that never answers ends at the call timeout as that notice’s retry, database_read_timeout, before anything is asked of the homeserver, and the next notice is not held behind it', async () => {
+    // Round 7 of part 2's review: the reads of the copy and the row from the
+    // database (`readDeadmanReleaseCommitted`: a drain of the write-behind
+    // queue, a connection and two queries in Postgres) had no bound, so a
+    // stalled connection held the tick, and the running guard every later
+    // one. Each read now has the call timeout, here shortened.
+    const slow = await freshPerson();
+    const quick = await freshPerson();
+    const first = await released(await freshPerson(), [slow.keySet.identity]);
+    const second = await released(await freshPerson(), [quick.keySet.identity]);
+    matrix.clearCalls();
+    const slowMxid = matrixUserIdFor(slow.user.id)!;
+    const store = db as unknown as Record<string, unknown>;
+    const original = db.readDeadmanReleaseCommitted.bind(db);
+    let release!: () => void;
+    const never = new Promise<void>((resolve) => {
+        release = resolve;
+    });
+    store.readDeadmanReleaseCommitted = async (switchId: string, recipientAccountId: string) => {
+        if (recipientAccountId === slow.user.id) await never;
+        return original(switchId, recipientAccountId);
+    };
+    const now = new Date(Math.max(first.at.getTime(), second.at.getTime()));
+    try {
+        const result = await within(5000, runDeadmanReleaseNotifier({ now, callTimeoutMs: 100 }));
+        assert.notEqual(result, 'pending', 'the tick ended');
+        assert.ok(result !== 'pending' && result.retried >= 1);
+    } finally {
+        release();
+        delete store.readDeadmanReleaseCommitted;
+    }
+    const held = db.getDeadmanReleaseNotice(first.record.id, slow.user.id)!;
+    assert.equal(held.status, 'pending');
+    assert.equal(held.attempts, 1);
+    assert.equal(held.lastError, 'database_read_timeout');
+    assert.equal(
+        matrix.creates.filter((x) => JSON.stringify(x.body.invite).includes(slowMxid)).length,
+        0,
+        'nothing asked of the homeserver for it'
+    );
+    const sent = db.getDeadmanReleaseNotice(second.record.id, quick.user.id)!;
+    assert.equal(sent.status, 'sent', 'the next notice was not held behind the stalled read');
+});

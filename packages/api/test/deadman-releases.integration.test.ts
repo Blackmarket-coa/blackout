@@ -2141,11 +2141,14 @@ test('a known trade-off, pinned (decision 18): ten accounts that each fire five 
     assert.equal((await armGenuine(alsoNamed.keySet.identity)).status, 201);
 });
 
-test('the account deletion route finishes the deletion in the database once its writes are made, and a failure of that last step leaves the deletion standing and answered', async () => {
+test('the account deletion route revokes the session, then finishes the deletion in the database once its writes are made; a failure of that last step, or one that never answers, leaves the deletion standing and answered', async () => {
     // `finishAccountDeletion` ends, in the database itself, the notice rows
     // another process wrote that this one had not heard of (round 6 of part
     // 2's review); in one process there is nothing for it to do, so here it
-    // is watched rather than seen at work.
+    // is watched rather than seen at work. Round 7: the session was revoked
+    // only after that await, so other requests on the process could run as
+    // the deleted account meanwhile, and a stalled database held the route's
+    // answer and the revocation for good.
     const store = db as unknown as Record<string, unknown>;
     const original = db.endDeadmanReleaseNoticesOfDeletedAccount.bind(db);
     const calls: string[] = [];
@@ -2158,6 +2161,12 @@ test('the account deletion route finishes the deletion in the database once its 
     try {
         store.endDeadmanReleaseNoticesOfDeletedAccount = async (accountId: string, at: string) => {
             assert.equal(db.getUserById(accountId), undefined, 'after the deletion’s writes');
+            assert.ok(
+                [...db.revokedSessions.values()].some(
+                    (row) => row.userId === accountId && row.reason === 'account_deleted'
+                ),
+                'after the session is revoked'
+            );
             calls.push(accountId);
             return original(accountId, at);
         };
@@ -2177,4 +2186,18 @@ test('the account deletion route finishes the deletion in the database once its 
     } finally {
         delete store.endDeadmanReleaseNoticesOfDeletedAccount;
     }
+
+    // An end that never answers (a stalled connection) is waited for only up
+    // to the bound, here shortened; the route passes the default.
+    const stalled = {
+        endDeadmanReleaseNoticesOfDeletedAccount: () => new Promise<number>(() => {}),
+    };
+    const started = performance.now();
+    const finished = await Promise.race([
+        lifecycle.finishAccountDeletion('any-account', stalled as never, 50).then(() => 'returned'),
+        new Promise<string>((resolve) => setTimeout(() => resolve('still waiting'), 5000)),
+    ]);
+    assert.equal(finished, 'returned', 'the wait is bounded');
+    assert.ok(performance.now() - started < 3000);
+    assert.equal(lifecycle.ACCOUNT_DELETION_FINISH_TIMEOUT_MS, 10_000);
 });
