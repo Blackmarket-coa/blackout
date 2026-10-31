@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { EventEmitter } from 'node:events';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -8,7 +9,9 @@ process.env.BLACKOUT_DB_MODE = 'memory';
 
 const { PostgresBackedDb } = await import('../src/db/store');
 const { MIGRATIONS_DIR } = await import('../src/db/migrate');
-const { InMemoryStoreChangeHub, InMemoryStoreChangeTransport } = await import('../src/db/pgNotify');
+const { InMemoryStoreChangeHub, InMemoryStoreChangeTransport, PgNotifyTransport } = await import(
+    '../src/db/pgNotify'
+);
 const { PGlite } = await import('@electric-sql/pglite');
 
 type AnyPg = {
@@ -143,4 +146,62 @@ test('a replica ignores its own change notifications', async () => {
     // Self-notification must not corrupt or drop the record.
     await new Promise((r) => setTimeout(r, 50));
     assert.deepEqual(replica.getUserById(userId)?.id, created.id);
+});
+
+/** A LISTEN connection: records its statements and how it was released; the test raises its events. */
+class FakeListenClient extends EventEmitter {
+    readonly sql: string[] = [];
+    readonly released: unknown[] = [];
+    async query(sql: string) {
+        this.sql.push(sql);
+        return { rows: [] };
+    }
+    release(destroy?: unknown) {
+        this.released.push(destroy ?? 'returned');
+    }
+}
+
+test('a dropped LISTEN connection that raises error twice is replaced once, and the old one is released', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const clients: FakeListenClient[] = [];
+    const pool = {
+        async connect() {
+            const c = new FakeListenClient();
+            clients.push(c);
+            return c;
+        },
+    };
+    const transport = new PgNotifyTransport(pool);
+    const got: string[] = [];
+    await transport.subscribe((p) => got.push(p.m));
+    let rehydrates = 0;
+    transport.onReconnect(() => rehydrates++);
+    const settle = async () => {
+        for (let i = 0; i < 5; i++) await new Promise((r) => setImmediate(r));
+    };
+
+    // pg_terminate_backend: the server's error, then the socket's.
+    clients[0].emit('error', new Error('terminating connection due to administrator command'));
+    clients[0].emit('error', new Error('Connection terminated unexpectedly'));
+    t.mock.timers.tick(2000);
+    await settle();
+    t.mock.timers.tick(2000);
+    await settle();
+    assert.equal(clients.length, 2, 'one new LISTEN connection, not two');
+    assert.deepEqual(clients[1].sql, ['LISTEN blackout_store_change']);
+    assert.equal(rehydrates, 1, 'one rehydrate');
+    assert.equal(clients[0].released.length, 1, 'the dead connection is released once');
+    assert.ok(clients[0].released[0] instanceof Error, 'and destroyed, not returned to the pool');
+
+    const note = (m: string) => ({ payload: JSON.stringify({ src: 'x', m, op: 'k', kvs: [] }) });
+    clients[0].emit('notification', note('old'));
+    clients[1].emit('notification', note('new'));
+    assert.deepEqual(got, ['new'], 'only the current connection delivers');
+
+    await transport.close();
+    assert.deepEqual(clients[1].released, ['returned'], 'close() releases the current one');
+    clients[1].emit('error', new Error('late'));
+    t.mock.timers.tick(2000);
+    await settle();
+    assert.equal(clients.length, 2, 'nothing reconnects after close()');
 });

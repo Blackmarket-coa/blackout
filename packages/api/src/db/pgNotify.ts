@@ -96,7 +96,8 @@ export function keyChangePayloads(
 interface NotifyClient {
     query(sql: string, params?: unknown[]): Promise<unknown>;
     on(event: string, cb: (arg: unknown) => void): void;
-    release?(): void;
+    /** pg's PoolClient: an argument destroys the connection instead of returning it to the pool. */
+    release?(destroy?: Error | boolean): void;
 }
 interface NotifyPool {
     connect(): Promise<NotifyClient>;
@@ -105,6 +106,7 @@ interface NotifyPool {
 /** Postgres LISTEN/NOTIFY transport. Holds one dedicated connection for LISTEN. */
 export class PgNotifyTransport implements StoreChangeTransport {
     private listenClient: NotifyClient | null = null;
+    private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     private reconnectHandler: (() => void) | null = null;
     private changeHandler: ((payload: StoreChangePayload) => void) | null = null;
     private closed = false;
@@ -148,11 +150,31 @@ export class PgNotifyTransport implements StoreChangeTransport {
         this.reconnectHandler = handler;
     }
 
+    /**
+     * Open the listening connection. Only the current one counts: a
+     * connection already given up on delivers nothing, and its later errors
+     * are ignored. A dropped connection can raise 'error' more than once (the
+     * server's termination, then the socket closing), and each used to
+     * schedule its own reconnect, which left two listening connections, every
+     * notification delivered twice, two rehydrates, and a connection close()
+     * never released.
+     */
     private async openListenConnection(): Promise<void> {
         if (this.closed) return;
         const client = await this.pool.connect();
+        if (this.closed) {
+            client.release?.();
+            return;
+        }
         this.listenClient = client;
+        const giveUp = (err: unknown): boolean => {
+            if (this.listenClient !== client) return false;
+            this.listenClient = null;
+            client.release?.(err instanceof Error ? err : true);
+            return true;
+        };
         client.on('notification', (arg: unknown) => {
+            if (this.listenClient !== client) return;
             const msg = arg as { payload?: string };
             if (!msg.payload || !this.changeHandler) return;
             try {
@@ -164,21 +186,31 @@ export class PgNotifyTransport implements StoreChangeTransport {
             }
         });
         client.on('error', (err: unknown) => {
+            if (!giveUp(err)) return;
             log.warn('pg_notify_listen_error', {
                 error: err instanceof Error ? err.message : String(err),
             });
             this.scheduleReconnect();
         });
-        await client.query(`LISTEN ${CHANNEL}`);
+        try {
+            await client.query(`LISTEN ${CHANNEL}`);
+        } catch (err) {
+            giveUp(err);
+            throw err;
+        }
     }
 
+    /** At most one reconnect is pending at a time. */
     private scheduleReconnect(): void {
-        if (this.closed) return;
-        this.listenClient = null;
-        setTimeout(() => {
+        if (this.closed || this.reconnectTimer) return;
+        this.reconnectTimer = setTimeout(() => {
+            this.reconnectTimer = null;
             void (async () => {
                 try {
                     await this.openListenConnection();
+                    // Closed meanwhile, or this connection already dropped again
+                    // (that drop scheduled the next attempt, which refreshes).
+                    if (!this.listenClient) return;
                     // We may have missed notifications while disconnected — force a full refresh.
                     this.reconnectHandler?.();
                     log.info('pg_notify_listen_reconnected');
@@ -194,6 +226,8 @@ export class PgNotifyTransport implements StoreChangeTransport {
 
     async close(): Promise<void> {
         this.closed = true;
+        if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+        this.reconnectTimer = null;
         try {
             await this.listenClient?.query(`UNLISTEN ${CHANNEL}`);
         } catch {
