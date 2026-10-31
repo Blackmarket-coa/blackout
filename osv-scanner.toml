@@ -13,7 +13,12 @@
 # @babel/plugin-transform-modules-systemjs, vitest, postcss, tar) has been
 # resolved by bumping the underlying dependency via pnpm.overrides. The
 # react-router RSC CSRF advisory (GHSA-qwww-vcr4-c8h2) was resolved on
-# 2026-10-30 by moving the client to react-router 7.18.2.
+# 2026-10-30 by moving the client to react-router 7.18.2. The glob
+# AbortSignal advisory (GHSA-3g3m-2fjr-6pw4) was resolved on 2026-10-31 by
+# the pnpm.overrides pin "glob@>=9 <14.0.2": "^14.0.3", which also took
+# minimatch 10.2.5 out of the tree. With "minimatch@5": "^11.0.3", one
+# minimatch version is left in that advisory's range (GHSA-g3hv-75wg-m249),
+# triaged in its entry below.
 
 # image-size infinite-loop DoS, two advisories of the same class: crafted
 # JXL/HEIF box-types (GHSA-5p2g-fcmc-qvqq) and a zero-length ICNS entry
@@ -80,6 +85,59 @@ reason = "No fixed version exists (all versions <=2.0.2 affected). Build-time on
 id = "GHSA-gcqx-w48m-w2h4"
 ignoreUntil = 2027-01-28
 reason = "No fixed version exists (4.2.0-4.3.1 affected). Build-time only: vanilla-extract merges our .css.ts style objects (repo code and dependency constants), rollup's node-resolve its own defaults; none of it ships in the client bundle."
+
+# minimatch globParts amplification (GHSA-g3hv-75wg-m249 / CVE-2026-118764,
+# Moderate): at optimizationLevel >= 2, firstPhasePreProcess() clones a
+# pattern row for each `**/..` inside a fixpoint loop, so the rows double per
+# occurrence, and secondPhasePreProcess() then compares every pair. OSV and
+# GitHub list every version below 11.0.1 (introduced 0).
+#
+# Bumped where it could be. minimatch 10.2.5 left the lockfile with the glob
+# override above: glob 14.0.3 depends on minimatch ^11.0.2 and runs its own
+# bundled copy of 11.0.1's preprocessing. 5.1.9 moved to 11.0.3 through the
+# "minimatch@5" override: its one consumer, filelist 1.0.6, calls only
+# minimatch.match(), and returns the same file lists with 11.0.3.
+#
+# This entry covers what is left, minimatch 3.1.5, which does not contain the
+# code: its minimatch.js has no firstPhasePreProcess, no optimizationLevel and
+# no `**/..` row clone. The code first appears in 7.0.0; it is also absent
+# from 4.2.6, 5.0.0, 5.1.9, 6.0.0, 6.2.0 and 6.2.3. The 3.x line has no fixed
+# release, and its consumers cannot take 11:
+#   - glob 7.2.3 (under react-native 0.82.1, @react-native/codegen, rimraf
+#     3.0.2 and test-exclude 6.0.0) reads each pattern portion as a RegExp
+#     (`pn._glob`, `e.match(pn)`); minimatch 11 keeps Matcher objects there.
+#   - test-exclude 6.0.0 and eslint-plugin-react call the module itself as a
+#     function, which minimatch 11's CommonJS build does not export.
+#   - eslint 8.29.0, @eslint/eslintrc, @humanwhocodes/config-array and
+#     eslint-plugin-import / jsx-a11y depend on it as well.
+#
+# Mirrored in pnpm.auditConfig.ignoreGhsas: `pnpm audit --prod
+# --audit-level moderate` (guard:audit-clean) reports 3.1.5 on 42 production
+# paths, packages/ui -> react-native 0.82.1 -> glob 7.2.3 / test-exclude
+# 6.0.0, and exits 1. Not in .trivyignore: Moderate is below Trivy's
+# CRITICAL/HIGH gate, and security.yml's pnpm audit (high) passes without it.
+#
+# The ignore is per ID, not per version. A minimatch that does contain the
+# code (7.0.0 to 11.0.0) entering the lockfile, for example 10.2.6 through
+# eslint 10 (minimatch ^10.2.6), test-exclude 8 (^10.2.2) or filelist 2
+# (^10.2.1), would pass every gate: the OSV gates and guard:audit-clean
+# because of this entry and its mirror, Trivy and security.yml's pnpm audit
+# because it is Moderate. The OSV scan would print only its "filtered out"
+# line, as it does now. A glob from 9.0.0 to 14.0.1 or a minimatch 5.x cannot
+# come back that way: the two overrides move them to 14.0.3 and 11.0.3.
+#
+# Plan: the advisory's range starts at 0, but the code starts at 7.0.0. The
+# operator can ask github/advisory-database to correct `introduced`; once OSV
+# follows, the scanner reports this entry as unused, and it and its mirror
+# are deleted. Moving eslint does not clear it: eslint 9.39.5 still takes
+# minimatch ^3.1.5, and eslint 10.14.0 takes ^10.2.6, which has the code.
+# ignoreUntil = 2026-12-01 stops applying at 2026-12-01T00:00Z on CI (local
+# midnight on the scanning host). Record:
+# docs/security/dependency-advisories-2026-10-31.md.
+[[IgnoredVulns]]
+id = "GHSA-g3hv-75wg-m249"
+ignoreUntil = 2026-12-01
+reason = "Only minimatch 3.1.5 remains (10.2.5 and 5.1.9 bumped to 11.0.3). Its minimatch.js has no firstPhasePreProcess or optimizationLevel, which first appear in 7.0.0; 3.x has no fix, and glob 7, test-exclude 6 and eslint-plugin-react cannot take 11."
 
 # The braces stack-exhaustion ignore (GHSA-vfj7-8cjw-p6xm / CVE-2026-93687)
 # used to sit here. GitHub withdrew that advisory on 2026-10-23 ("not a
