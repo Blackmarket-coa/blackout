@@ -2145,7 +2145,7 @@ test('a stop mid-tick ends the tick after the notice in hand; the rest stay pend
     assert.equal((await runDeadmanReleaseNotifier({ now: at })).sent, 1);
 });
 
-test('a room found through the alias that is still not the whole room the create makes, with the bot in it, at the notice’s next attempt (no events, the create alone, the create and the bot’s join, a room the bot has left, or power levels that let the person post) is waited for once, as a create in progress, and then replaced: a room is made without the alias, nobody is invited into the old one, and later notices reuse the new room', async () => {
+test('a room found through the alias that is still not the whole room the create makes, with the bot in it, at the notice’s next attempt (no events, the create alone, the create and the bot’s join, a room the bot has left, or power levels that let the person post or invite, by the defaults or by their own level) is waited for once, as a create in progress, and then replaced: a room is made without the alias, nobody is invited into the old one, and later notices reuse the new room', async () => {
     // The homeserver writes the alias after it makes the room id and before
     // it sends any event (`handlers/room.py`, `create_room`), and then writes
     // the room in steps (`_send_events_for_new_room`: m.room.create alone,
@@ -2155,7 +2155,10 @@ test('a room found through the alias that is still not the whole room the create
     // stopped every notice to the person for the whole window (round 4 of
     // part 2's review); the create alone was taken as the bot's and its
     // re-invite refused for the window (M_NOT_JOINED), and the create with
-    // the bot's join was used with no power levels (round 5).
+    // the bot's join was used with no power levels (round 5). The last two
+    // shapes pin the check's other halves: the person must not be able to
+    // invite either, and their own level in `users` counts over the default
+    // (round 6).
     pushEarlierRowsOut();
     const bot = matrix.botUserId;
     const create = { type: 'm.room.create', state_key: '', sender: bot, content: {} };
@@ -2182,6 +2185,42 @@ test('a room found through the alias that is still not the whole room the create
                     type: 'm.room.power_levels',
                     state_key: '',
                     content: { users: { [bot]: 100 }, users_default: 0, invite: 50 },
+                },
+                memberEvent(personMxid, 'invite'),
+            ],
+        ],
+        [
+            'power levels that keep the person from posting but let them invite',
+            (personMxid) => [
+                create,
+                memberEvent(bot),
+                {
+                    type: 'm.room.power_levels',
+                    state_key: '',
+                    content: {
+                        users: { [bot]: 100 },
+                        users_default: 0,
+                        events_default: 50,
+                        invite: 0,
+                    },
+                },
+                memberEvent(personMxid, 'invite'),
+            ],
+        ],
+        [
+            'power levels that give the person their own level of 100',
+            (personMxid) => [
+                create,
+                memberEvent(bot),
+                {
+                    type: 'm.room.power_levels',
+                    state_key: '',
+                    content: {
+                        users: { [bot]: 100, [personMxid]: 100 },
+                        users_default: 0,
+                        events_default: 50,
+                        invite: 50,
+                    },
                 },
                 memberEvent(personMxid, 'invite'),
             ],

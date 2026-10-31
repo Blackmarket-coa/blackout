@@ -2071,19 +2071,27 @@ test('a key change or a deletion during a re-seal’s verification is seen befor
     assert.equal(copyOf(steady).sealedKey, steady.copy.sealedKey);
 });
 
-test('a known trade-off, pinned (decision 18): ten accounts that each fire five releases naming one person keep every other owner from naming them, 409 recipient_limit, until the removal at least 365 days after they fired; the person cannot clear it', async () => {
+test('a known trade-off, pinned (decision 18): ten accounts that each fire five releases naming the same people keep every other owner from naming any of them, 409 recipient_limit, until the removal at least 365 days after they fired; nobody named can clear it', async () => {
     // The bound of 50 held releases naming one person from everyone counts a
     // fired release until its removal, so a few accounts can fill one
     // person's 50 in a day (ten at the arming rate of decision 18, each with
-    // published release keys) and hold them for 365 days. Which bound replaces
-    // it is the operator's decision; this pins what it does now (round 5 of
-    // part 2's review).
+    // published release keys) and hold them for 365 days. The bound of 5 from
+    // one owner is per person, and one release names up to 64, so the same
+    // five arms fill it for everyone they name: two people here, up to 64 per
+    // five arms in the record's numbers (round 6). Which bound replaces it is
+    // the operator's decision; this pins what it does now (round 5 of part
+    // 2's review).
     const target = await freshPerson();
+    const alsoNamed = await freshPerson();
     const filled: string[] = [];
     for (let o = 0; o < 10; o += 1) {
         const namer = await freshPerson();
         for (let i = 0; i < 5; i += 1) {
-            const envelope = await build(namer.keySet, [target.keySet.identity], `fill ${o} ${i}`);
+            const envelope = await build(
+                namer.keySet,
+                [target.keySet.identity, alsoNamed.keySet.identity],
+                `fill ${o} ${i}`
+            );
             assert.equal((await arm(namer.user, armBody(envelope))).status, 201, `${o}/${i}`);
             filled.push(envelope.releaseId);
         }
@@ -2093,13 +2101,21 @@ test('a known trade-off, pinned (decision 18): ten accounts that each fire five 
     assert.ok(filled.every((id) => db.getDeadmanSwitch(id)?.status === 'triggered'));
     assert.equal((await releasesFor(target.user)).length, 50);
     assert.equal(heldReleasesNaming(target.user.id).total, 50);
+    assert.equal((await releasesFor(alsoNamed.user)).length, 50);
+    assert.equal(heldReleasesNaming(alsoNamed.user.id).total, 50, 'the same arms filled both');
 
-    // A genuine owner naming the person is refused; the owner sees the 409.
+    // A genuine owner naming either person is refused; the owner sees the 409.
     const genuine = await freshPerson();
     const armGenuine = async (identity: ReleaseIdentity) =>
         arm(genuine.user, armBody(await build(genuine.keySet, [identity])));
     const refused = await errorOf(await armGenuine(target.keySet.identity), 409, 'recipient_limit');
     assert.equal(refused.recipientAccountId, target.user.id);
+    const refusedToo = await errorOf(
+        await armGenuine(alsoNamed.keySet.identity),
+        409,
+        'recipient_limit'
+    );
+    assert.equal(refusedToo.recipientAccountId, alsoNamed.user.id);
 
     // The person cannot clear it: new release keys change nothing, and a
     // release that names them is not theirs to cancel.
@@ -2120,7 +2136,9 @@ test('a known trade-off, pinned (decision 18): ten accounts that each fire five 
     await errorOf(await armGenuine(rotated.identity), 409, 'recipient_limit');
     sweepAt(new Date(firesAt.getTime() + DEADMAN_RELEASE_RETENTION_MS));
     assert.equal(heldReleasesNaming(target.user.id).total, 0);
+    assert.equal(heldReleasesNaming(alsoNamed.user.id).total, 0);
     assert.equal((await armGenuine(rotated.identity)).status, 201);
+    assert.equal((await armGenuine(alsoNamed.keySet.identity)).status, 201);
 });
 
 test('the account deletion route finishes the deletion in the database once its writes are made, and a failure of that last step leaves the deletion standing and answered', async () => {
