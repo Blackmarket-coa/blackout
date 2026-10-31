@@ -13,7 +13,7 @@
 // made deaf ("has not heard yet"); the world records every notification.
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -21,7 +21,8 @@ process.env.BLACKOUT_DB_MODE = 'memory';
 
 const { PostgresBackedDb } = await import('../src/db/store');
 const { MIGRATIONS_DIR, migrateUp } = await import('../src/db/migrate');
-const { MUTATOR_SPECS } = await import('../src/db/pgDescriptors');
+const { MUTATOR_SPECS, TABLE_DESCRIPTORS, USER_CASCADE_CHILDREN, USER_CASCADE_LEFT_IN_MIRRORS } =
+    await import('../src/db/pgDescriptors');
 const { registry } = await import('../src/telemetry/metrics');
 const {
     InMemoryStoreChangeHub,
@@ -445,6 +446,84 @@ const vaultCount = async (w: World, id: string): Promise<number> =>
 
 const vaultRow = async (w: World, id: string) =>
     (await w.sql('SELECT label, ciphertext FROM vault_items WHERE id = $1', [id]))[0];
+
+const hex = () => randomBytes(32).toString('hex');
+const inHours = (h: number) => new Date(Date.now() + h * 3600_000).toISOString();
+const iso = (v: unknown) => (v == null ? v : new Date(v as string).toISOString());
+
+const mkRefresh = (db: any, userId: string, familyId: string) =>
+    db.createRefreshToken({
+        id: randomUUID(),
+        userId,
+        familyId,
+        tokenHash: hex(),
+        expiresAt: inHours(24),
+    });
+
+const mkLinked = (db: any, userId: string, provider = 'twitch') =>
+    db.upsertLinkedAccount({
+        id: randomUUID(),
+        blackoutUserId: userId,
+        provider,
+        providerUserId: `p-${randomUUID().slice(0, 8)}`,
+        accessTokenCiphertext: 'ct',
+        scopes: [],
+        encryptionKeyId: 'k1',
+    });
+
+const mkReset = (db: any, userId: string, expiresAt = inHours(1)) =>
+    db.createPasswordResetToken({ id: randomUUID(), userId, tokenHash: hex(), expiresAt });
+
+const mkVerify = (db: any, userId: string, expiresAt = inHours(1)) =>
+    db.createEmailVerificationToken({
+        id: randomUUID(),
+        userId,
+        email: 'v@e.x',
+        tokenHash: hex(),
+        expiresAt,
+    });
+
+const mkDeletion = (db: any, userId: string) =>
+    db.createAccountDeletionToken({
+        id: randomUUID(),
+        userId,
+        tokenHash: hex(),
+        expiresAt: inHours(1),
+    });
+
+const mkOAuthLink = (db: any, userId: string) =>
+    db.createPendingOAuthLink({
+        stateHash: hex(),
+        blackoutUserId: userId,
+        provider: 'twitch',
+        codeVerifierCiphertext: 'cv',
+        redirectUri: 'https://x.example/cb',
+        scopes: [],
+        encryptionKeyId: 'k1',
+        expiresAt: inHours(1),
+    });
+
+const mkOidcLogin = (db: any) =>
+    db.createPendingOidcLogin({
+        stateHash: hex(),
+        codeVerifierCiphertext: 'cv',
+        nonceHash: hex(),
+        redirectUri: 'https://x.example/cb',
+        encryptionKeyId: 'k1',
+        expiresAt: inHours(1),
+    });
+
+const revoke = (db: any, userId: string, expiresAt = inHours(1)) =>
+    db.revokeSession({ jti: `j-${randomUUID()}`, userId, reason: 'logout', expiresAt }).jti;
+
+const count = async (w: World, table: string, where: string, params: unknown[]) =>
+    (await w.sql(`SELECT count(*)::int AS n FROM ${table} WHERE ${where}`, params))[0].n;
+
+/** Make this process hear nothing more from its peers (it still publishes). */
+async function deafen(w: World, p: Proc): Promise<void> {
+    await quiesce(w);
+    p.tap.deaf = true;
+}
 
 // ------------------------------------------------------------------ receiver
 
@@ -911,4 +990,430 @@ test('a targeted step that throws while binding never throws into the mutator, a
                 assert.equal(await vaultCount(w, v), 1);
             })
     );
+});
+
+// ------------------------------------------------------------------ auth tables
+
+test("X1: the worker's prune keeps a revocation and a cutoff it has not heard of, and still prunes the expired row", async () => {
+    await withWorld(2, 'pg', async (w) => {
+        const [app, worker] = w.procs;
+        const u = mkUser(app.db);
+        const cutoffJti = `user-token-cutoff:${u}`;
+        app.db.revokeUserTokensBefore(u, 'admin_revoke');
+        const expired = revoke(app.db, u, new Date(Date.now() - 60_000).toISOString());
+        await quiesce(w);
+        // The earlier cutoff, an hour back, as both mirrors hold it.
+        await w.sql(
+            `UPDATE revoked_sessions SET revoked_at = now() - interval '1 hour' WHERE jti = $1`,
+            [cutoffJti]
+        );
+        await w.emit({ src: 'elsewhere', m: 'revokedSessions', op: 'k', kvs: [[cutoffJti]] });
+        await deafen(w, worker);
+        const t1 = worker.db.getUserTokenRevocationCutoff(u);
+        assert.ok(t1 > 0 && t1 < Date.now() / 1000 - 3000, 'the worker holds the older cutoff');
+
+        // The app revokes a session and moves the cutoff on; the worker hears neither.
+        const live = revoke(app.db, u);
+        app.db.revokeUserTokensBefore(u, 'password_change');
+        const t2 = app.db.getUserTokenRevocationCutoff(u);
+        await quiesce(w);
+        assert.equal(worker.db.isSessionRevoked(live), false, 'the worker has not heard');
+
+        assert.equal(worker.db.pruneExpiredRevokedSessions(new Date()), 1);
+        await quiesce(w);
+
+        assert.equal(await count(w, 'revoked_sessions', 'jti = $1', [live]), 1, 'kept in Postgres');
+        assert.equal(await count(w, 'revoked_sessions', 'jti = $1', [expired]), 0, 'pruned');
+        const [cut] = await w.sql('SELECT revoked_at FROM revoked_sessions WHERE jti = $1', [
+            cutoffJti,
+        ]);
+        assert.equal(
+            Math.floor(new Date(cut.revoked_at).getTime() / 1000),
+            t2,
+            'cutoff not moved back'
+        );
+        const booted = await w.boot();
+        try {
+            for (const [name, db] of [
+                ['the app', app.db],
+                ['a process booted now', booted],
+            ] as const) {
+                assert.equal(db.isSessionRevoked(live), true, `${name} still refuses the token`);
+                assert.equal(
+                    db.getUserTokenRevocationCutoff(u),
+                    t2,
+                    `${name} keeps the later cutoff`
+                );
+                assert.equal(db.revokedSessions.has(expired), false);
+            }
+        } finally {
+            await booted.shutdown();
+        }
+    });
+});
+
+test('X2: deleting one account keeps an account the deleting process has not heard of', async () => {
+    await withWorld(2, 'pg', async (w) => {
+        const [A, B] = w.procs;
+        const leaving = mkUser(A.db);
+        await deafen(w, B);
+        const fresh = mkUser(A.db);
+        await quiesce(w);
+        assert.equal(B.db.getUserById(fresh), undefined, 'B has not heard of the new account');
+        assert.equal(B.db.deleteUser(leaving), true);
+        await quiesce(w);
+        assert.equal(await count(w, 'users', 'id = $1', [leaving]), 0);
+        assert.equal(await count(w, 'users', 'id = $1', [fresh]), 1, 'the unseen account is kept');
+        assert.equal(A.db.getUserById(leaving), undefined, 'the peer dropped the deleted account');
+        assert.ok(A.db.getUserById(fresh), 'and still holds the other');
+    });
+});
+
+test('X3: a family revoke reaches the successor a peer minted, and keeps the rotated parent as Postgres has it', async () => {
+    await withWorld(2, 'pg', async (w) => {
+        const [A, B] = w.procs;
+        const u = mkUser(A.db);
+        const family = randomUUID();
+        const t1 = mkRefresh(A.db, u, family);
+        await deafen(w, B);
+        // A rotates t1 into t2; B has heard of neither.
+        const t2 = mkRefresh(A.db, u, family);
+        A.db.consumeRefreshTokenForRotation(t1.id, t2.id);
+        await quiesce(w);
+        assert.equal(B.db.refreshTokens.get(t1.id)?.revokedAt, undefined, 'B: t1 still live');
+
+        assert.equal(B.db.revokeRefreshTokenFamily(family, 'reuse_detected'), 1);
+        await quiesce(w);
+        const rows = await w.sql(
+            'SELECT id, replaced_by, revoked_at, revoked_reason FROM refresh_tokens WHERE family_id = $1',
+            [family]
+        );
+        const row = (id: string) => rows.find((r) => r.id === id)!;
+        assert.equal(
+            row(t2.id).revoked_reason,
+            'reuse_detected',
+            'the unseen successor is revoked'
+        );
+        assert.equal(row(t1.id).replaced_by, t2.id, 'the parent keeps its successor link');
+        assert.equal(row(t1.id).revoked_reason, 'rotated', 'and its first revocation');
+        for (const p of [A, B]) {
+            assert.equal(p.db.refreshTokens.get(t2.id)?.revokedReason, 'reuse_detected');
+            assert.equal(p.db.refreshTokens.get(t1.id)?.replacedBy, t2.id);
+        }
+        assert.equal(
+            iso(B.db.refreshTokens.get(t2.id)?.revokedAt),
+            iso(row(t2.id).revoked_at),
+            "B read in Postgres's row"
+        );
+    });
+});
+
+test('X4: revoke-all reaches a refresh token a peer minted', async () => {
+    await withWorld(2, 'pg', async (w) => {
+        const [A, B] = w.procs;
+        const u = mkUser(A.db);
+        await deafen(w, B);
+        const t = mkRefresh(A.db, u, randomUUID());
+        await quiesce(w);
+        assert.equal(B.db.refreshTokens.get(t.id), undefined);
+        assert.equal(B.db.revokeRefreshTokensForUser(u, 'password_change'), 0);
+        await quiesce(w);
+        const [row] = await w.sql('SELECT revoked_reason FROM refresh_tokens WHERE id = $1', [
+            t.id,
+        ]);
+        assert.equal(row?.revoked_reason, 'password_change');
+        for (const p of [A, B]) {
+            assert.equal(p.db.refreshTokens.get(t.id)?.revokedReason, 'password_change');
+        }
+    });
+});
+
+test('X5: a single-use row consumed on two processes keeps the first consumption, and the stale mirror re-reads it', async () => {
+    await withWorld(2, 'pg', async (w) => {
+        const [A, B] = w.procs;
+        const u = mkUser(A.db);
+        const kinds = [
+            [
+                'password_reset_tokens',
+                'id',
+                mkReset(A.db, u).id,
+                'consumePasswordResetToken',
+                'passwordResetTokens',
+            ],
+            [
+                'email_verification_tokens',
+                'id',
+                mkVerify(A.db, u).id,
+                'consumeEmailVerificationToken',
+                'emailVerificationTokens',
+            ],
+            [
+                'account_deletion_tokens',
+                'id',
+                mkDeletion(A.db, u).id,
+                'consumeAccountDeletionToken',
+                'accountDeletionTokens',
+            ],
+            [
+                'pending_oauth_links',
+                'state_hash',
+                mkOAuthLink(A.db, u).stateHash,
+                'consumePendingOAuthLink',
+                'pendingOAuthLinks',
+            ],
+            [
+                'pending_oidc_logins',
+                'state_hash',
+                mkOidcLogin(A.db).stateHash,
+                'consumePendingOidcLogin',
+                'pendingOidcLogins',
+            ],
+        ] as const;
+        await deafen(w, B);
+        const first = new Map<string, string>();
+        for (const [, , key, method] of kinds) first.set(key, A.db[method](key).consumedAt);
+        await quiesce(w);
+        await sleep(5);
+        for (const [, , key, method] of kinds) {
+            const stale = B.db[method](key);
+            assert.ok(
+                stale.consumedAt > first.get(key)!,
+                `${method}: B's mirror accepted it again`
+            );
+        }
+        await quiesce(w);
+        for (const [table, col, key, method, map] of kinds) {
+            const [row] = await w.sql(`SELECT consumed_at FROM ${table} WHERE ${col} = $1`, [key]);
+            assert.equal(iso(row.consumed_at), first.get(key), `${method}: Postgres keeps A's`);
+            assert.equal(B.db[map].get(key).consumedAt, first.get(key), `${method}: B re-read it`);
+        }
+    });
+});
+
+test("X7: purge removes the account's auth rows written anywhere, linked accounts included, and nothing else", async () => {
+    await withWorld(2, 'pg', async (w) => {
+        const [A, B] = w.procs;
+        const [u, v] = [mkUser(A.db), mkUser(A.db)];
+        await deafen(w, A);
+        // Written on B, unheard by A: the account's rows, another account's, and a revocation.
+        const mine = {
+            reset: mkReset(B.db, u).id,
+            verify: mkVerify(B.db, u).id,
+            deletion: mkDeletion(B.db, u).id,
+            refresh: mkRefresh(B.db, u, randomUUID()).id,
+            oauth: mkOAuthLink(B.db, u).stateHash,
+        };
+        mkLinked(B.db, u);
+        const theirs = { reset: mkReset(B.db, v).id, refresh: mkRefresh(B.db, v, randomUUID()).id };
+        mkLinked(B.db, v);
+        const jti = revoke(B.db, u);
+        await quiesce(w);
+
+        A.db.purgeUserAuthArtifacts(u);
+        await quiesce(w);
+        for (const [table, col] of [
+            ['password_reset_tokens', 'user_id'],
+            ['email_verification_tokens', 'user_id'],
+            ['account_deletion_tokens', 'user_id'],
+            ['refresh_tokens', 'user_id'],
+            ['linked_accounts', 'blackout_user_id'],
+            ['pending_oauth_links', 'blackout_user_id'],
+        ]) {
+            assert.equal(
+                await count(w, table, `${col} = $1`, [u]),
+                0,
+                `${table}: the account's rows go`
+            );
+        }
+        assert.equal(await count(w, 'revoked_sessions', 'jti = $1', [jti]), 1, 'revocations stay');
+        assert.equal(await count(w, 'password_reset_tokens', 'id = $1', [theirs.reset]), 1);
+        assert.equal(await count(w, 'refresh_tokens', 'id = $1', [theirs.refresh]), 1);
+        assert.equal(await count(w, 'linked_accounts', 'blackout_user_id = $1', [v]), 1);
+        // The peer's mirror follows.
+        assert.equal(B.db.passwordResetTokens.has(mine.reset), false);
+        assert.equal(B.db.emailVerificationTokens.has(mine.verify), false);
+        assert.equal(B.db.accountDeletionTokens.has(mine.deletion), false);
+        assert.equal(B.db.refreshTokens.has(mine.refresh), false);
+        assert.equal(B.db.pendingOAuthLinks.has(mine.oauth), false);
+        assert.equal(B.db.getLinkedAccount(u, 'twitch'), undefined);
+        assert.ok(B.db.getLinkedAccount(v, 'twitch'));
+        assert.equal(B.db.isSessionRevoked(jti), true);
+    });
+});
+
+test('X13: a superseded verification token and its sent time reach Postgres, including a token a peer issued', async () => {
+    await withWorld(2, 'pg', async (w) => {
+        const [A, B] = w.procs;
+        const u = mkUser(A.db);
+        await deafen(w, A);
+        const unseen = mkVerify(B.db, u).id;
+        await quiesce(w);
+        const t1 = mkVerify(A.db, u).id;
+        const sent = A.db.markEmailVerificationTokenSent(t1).sentAt;
+        assert.equal(A.db.revokeEmailVerificationTokensForUser(u, 'superseded'), 1);
+        const t2 = mkVerify(A.db, u).id;
+        await quiesce(w);
+        const booted = await w.boot();
+        try {
+            const get = (id: string) => booted.emailVerificationTokens.get(id);
+            assert.equal(get(t1)?.sentAt, sent, 'the sent time survives a restart');
+            assert.equal(get(t1)?.revokedReason, 'superseded');
+            assert.equal(
+                get(unseen)?.revokedReason,
+                'superseded',
+                "the peer's token is superseded too"
+            );
+            assert.equal(get(t2)?.revokedReason, undefined, 'the new token is live');
+        } finally {
+            await booted.shutdown();
+        }
+        assert.equal(B.db.emailVerificationTokens.get(unseen)?.revokedReason, 'superseded');
+        assert.equal(B.db.emailVerificationTokens.get(t1)?.sentAt, sent);
+    });
+});
+
+test("X13b: the expired-token sweeps judge Postgres's rows: unexpired and consumed ones stay, unseen expired ones go", async () => {
+    await withWorld(2, 'pg', async (w) => {
+        const [A, B] = w.procs;
+        const u = mkUser(A.db);
+        const past = new Date(Date.now() - 60_000).toISOString();
+        const consumed = mkVerify(A.db, u, past).id;
+        A.db.consumeEmailVerificationToken(consumed);
+        await deafen(w, A);
+        const resets = { live: mkReset(B.db, u).id, gone: mkReset(B.db, u, past).id };
+        const verifies = { live: mkVerify(B.db, u).id, gone: mkVerify(B.db, u, past).id };
+        await quiesce(w);
+        assert.equal(A.db.deleteExpiredPasswordResetTokens(new Date()), 0);
+        assert.equal(A.db.deleteExpiredEmailVerificationTokens(new Date()), 0);
+        await quiesce(w);
+        assert.equal(await count(w, 'password_reset_tokens', 'id = $1', [resets.live]), 1);
+        assert.equal(await count(w, 'password_reset_tokens', 'id = $1', [resets.gone]), 0);
+        assert.equal(await count(w, 'email_verification_tokens', 'id = $1', [verifies.live]), 1);
+        assert.equal(await count(w, 'email_verification_tokens', 'id = $1', [verifies.gone]), 0);
+        assert.equal(await count(w, 'email_verification_tokens', 'id = $1', [consumed]), 1);
+        assert.equal(B.db.passwordResetTokens.has(resets.gone), false);
+        assert.equal(B.db.emailVerificationTokens.has(verifies.gone), false);
+        assert.ok(
+            B.db.passwordResetTokens.has(resets.live) && B.db.emailVerificationTokens.has(consumed)
+        );
+    });
+});
+
+test("X17: after an account is deleted, the peer's mirror holds none of its vault items, links or webhooks", async () => {
+    await withWorld(2, 'pg', async (w) => {
+        const [A, B] = w.procs;
+        const u = mkUser(A.db);
+        const vault = mkVault(A.db, u);
+        mkLinked(A.db, u);
+        const hook = A.db.createOutboundEventWebhook({
+            id: randomUUID(),
+            blackoutUserId: u,
+            name: 'n',
+            targetUrl: 'https://x.example/h',
+            signingSecretCiphertext: 'sc',
+            encryptionKeyId: 'k1',
+            eventTypes: [],
+            isActive: true,
+            consecutiveFailures: 0,
+            deliveryCount: 0,
+        }).id;
+        const compat = A.db.createDiscordCompatWebhook({
+            id: randomUUID(),
+            blackoutUserId: u,
+            matrixRoomId: '!r:x',
+            name: 'n',
+            tokenHash: hex(),
+            isActive: true,
+            deliveryCount: 0,
+        }).id;
+        const jti = revoke(A.db, u);
+        await deafen(w, A);
+        const unseen = mkVault(B.db, u);
+        await quiesce(w);
+        assert.ok(B.db.getVaultItem(vault) && B.db.getLinkedAccount(u, 'twitch'));
+        assert.equal(A.db.getVaultItem(unseen), undefined);
+
+        A.db.deleteUser(u);
+        await quiesce(w);
+        assert.equal(await count(w, 'users', 'id = $1', [u]), 0);
+        for (const p of [A, B]) {
+            assert.equal(p.db.getUserById(u), undefined);
+            assert.equal(p.db.getVaultItem(vault), undefined);
+            assert.equal(p.db.getVaultItem(unseen), undefined);
+            assert.equal(p.db.getLinkedAccount(u, 'twitch'), undefined);
+            assert.equal(p.db.outboundEventWebhooks.has(hook), false);
+            assert.equal(p.db.discordCompatWebhooks.has(compat), false);
+        }
+        // Postgres's cascade removed the revocation; the mirrors keep refusing the token.
+        assert.equal(await count(w, 'revoked_sessions', 'jti = $1', [jti]), 0);
+        assert.equal(B.db.isSessionRevoked(jti), true);
+    });
+});
+
+test('X19: a 2,000-row prune announces every key in payloads under the NOTIFY limit, and the peer converges', async () => {
+    await withWorld(2, 'pg', async (w) => {
+        const [A, B] = w.procs;
+        const u = mkUser(A.db);
+        await quiesce(w);
+        await w.sql(
+            `INSERT INTO revoked_sessions (jti, user_id, revoked_at, expires_at, reason)
+             SELECT 'x19-' || g || '-' || md5(g::text), $1, now() - interval '2 days', now() - interval '1 day', 'logout'
+             FROM generate_series(1, 2000) g`,
+            [u]
+        );
+        const jtis = (await w.sql(`SELECT jti FROM revoked_sessions WHERE jti LIKE 'x19-%'`)).map(
+            (r) => r.jti as string
+        );
+        for (const p of keyChangePayloads(
+            'elsewhere',
+            'revokedSessions',
+            jtis.map((j) => [j])
+        )) {
+            await w.emit(p);
+        }
+        const live = revoke(A.db, u);
+        await quiesce(w);
+        assert.equal(B.db.revokedSessions.size, 2001, 'B holds every row');
+        const heard = w.heard.length;
+
+        assert.equal(A.db.pruneExpiredRevokedSessions(new Date()), 2000);
+        await quiesce(w);
+        const sent = w.heard.slice(heard).filter((p) => p.m === 'revokedSessions');
+        assert.ok(sent.length > 1, 'split across several notifications');
+        for (const p of sent) assert.ok(Buffer.byteLength(JSON.stringify(p)) < 8000);
+        assert.deepEqual(
+            sent.flatMap((p) => p.kvs!.map((kv) => kv[0])).sort(),
+            [...jtis].sort(),
+            'every pruned key announced once'
+        );
+        assert.equal(await count(w, 'revoked_sessions', 'true', []), 1);
+        assert.deepEqual([...B.db.revokedSessions.keys()], [live], 'the peer converged');
+    });
+});
+
+test('U7: USER_CASCADE_CHILDREN, with the rows left in mirrors, is every cascading foreign key to users', async () => {
+    await withWorld(0, 'hub', async (w) => {
+        const rows = await w.sql(
+            `SELECT c.conrelid::regclass::text AS child, a.attname AS col
+             FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = ANY (c.conkey)
+             WHERE c.contype = 'f' AND c.confrelid = 'users'::regclass AND c.confdeltype = 'c'`
+        );
+        const tableOf = new Map(TABLE_DESCRIPTORS.map((d) => [d.mapName, d.tableName]));
+        const mapped = new Set(TABLE_DESCRIPTORS.map((d) => d.tableName));
+        const catalogue = rows
+            .filter((r) => mapped.has(r.child))
+            .map((r) => `${r.child}.${r.col}`)
+            .sort();
+        const listed = [...USER_CASCADE_CHILDREN, ...USER_CASCADE_LEFT_IN_MIRRORS]
+            .map((c) => `${tableOf.get(c.map)}.${c.column}`)
+            .sort();
+        assert.ok(catalogue.length >= 21);
+        assert.deepEqual(listed, catalogue);
+        // deleteUser deletes each listed child explicitly, before the account.
+        const steps = (MUTATOR_SPECS.deleteUser as { steps: any[] }).steps;
+        assert.deepEqual(
+            steps.map((s) => (s.op === 'deleteWhere' ? `${s.map}:${s.where}` : `${s.map}:${s.op}`)),
+            [...USER_CASCADE_CHILDREN.map((c) => `${c.map}:${c.column} = $1`), 'users:deleteKey']
+        );
+    });
 });

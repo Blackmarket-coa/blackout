@@ -7,7 +7,13 @@
 // InMemoryDb mutators, whether a write-through is a targeted upsert of the
 // returned record or a (rarer) resync of the affected map(s).
 
-import { camelToSnake, type Row, type TableDescriptor, type TargetedStep } from './pgWriter';
+import {
+    camelToSnake,
+    type Row,
+    type StepContext,
+    type TableDescriptor,
+    type TargetedStep,
+} from './pgWriter';
 
 const KEY_ID = (r: Record<string, unknown>) => String(r.id);
 
@@ -582,6 +588,131 @@ const deleteKey = (map: string, key: (args: readonly unknown[]) => unknown[]): M
     targeted({ op: 'deleteKey', map, key: (ctx) => key(ctx.args) });
 const deleteById = (map: string): MutatorSpec => deleteKey(map, ([id]) => [id]);
 
+type Params = (ctx: StepContext) => readonly unknown[] | undefined;
+const deleteWhere = (map: string, where: string, params: Params): TargetedStep => ({
+    op: 'deleteWhere',
+    map,
+    where,
+    params,
+});
+const updateWhere = (map: string, set: string, where: string, params: Params): TargetedStep => ({
+    op: 'updateWhere',
+    map,
+    set,
+    where,
+    params,
+});
+
+/** The record the call left for a key it changed in `map`, or undefined when it changed none there. */
+const changedTo = (ctx: StepContext, map: string): Record<string, unknown> | undefined =>
+    ctx.changed(map).find((c) => c.after)?.after;
+
+/** A prune's `now` argument as ISO; the time the call returned when it was left to default. */
+const nowArg = (ctx: StepContext): string => {
+    const v = ctx.args[0];
+    return v instanceof Date ? v.toISOString() : typeof v === 'string' ? v : ctx.at;
+};
+
+/**
+ * A single-use row consumed by key, only while Postgres still has it
+ * unconsumed: of two processes that consume it, the first one's
+ * `consumed_at` stays, and the other's mirror re-reads it. The call's own
+ * record supplies the values; a call that changed nothing (the mirror's row
+ * was already consumed, or absent) writes nothing.
+ */
+const consume = (map: string, keyColumn: string, keyField: string, also = ''): MutatorSpec =>
+    targeted(
+        updateWhere(
+            map,
+            'consumed_at = $2',
+            `${keyColumn} = $1 AND consumed_at IS NULL${also}`,
+            (c) => {
+                const r = changedTo(c, map);
+                return r ? [r[keyField], r.consumedAt] : undefined;
+            }
+        )
+    );
+
+/**
+ * Delete the rows Postgres itself finds expired at the call's `now`. A row
+ * this process has not heard of is judged on its own `expires_at`, so an
+ * unexpired one stays and an expired one goes, wherever it was written.
+ */
+const pruneWhere = (map: string, where: string): MutatorSpec =>
+    targeted(deleteWhere(map, where, (c) => [nowArg(c)]));
+
+/**
+ * Revoke every still-live refresh token matching `column = $1`, including any
+ * a peer minted that this process has not heard of. The timestamp is the one
+ * the mutator stamped on the mirror's records, so both hold the same value.
+ */
+const revokeRefreshTokensWhere = (column: string): MutatorSpec =>
+    targeted(
+        updateWhere(
+            'refreshTokens',
+            'revoked_at = $2, revoked_reason = $3',
+            `${column} = $1 AND revoked_at IS NULL`,
+            (c) => [c.args[0], changedTo(c, 'refreshTokens')?.revokedAt ?? c.at, c.args[1]]
+        )
+    );
+
+/**
+ * Every descriptor table with an `ON DELETE CASCADE` foreign key to `users`,
+ * and its column. Postgres deletes these rows with the account; deleteUser
+ * also deletes them explicitly, first and in the same transaction, so their
+ * keys come back from RETURNING and every mirror is told they are gone (the
+ * cascade itself tells no one). A test checks this list, with
+ * USER_CASCADE_LEFT_IN_MIRRORS, against the live foreign-key catalogue.
+ */
+export const USER_CASCADE_CHILDREN: ReadonlyArray<{ map: string; column: string }> = [
+    { map: 'passwordResetTokens', column: 'user_id' },
+    { map: 'refreshTokens', column: 'user_id' },
+    { map: 'linkedAccounts', column: 'blackout_user_id' },
+    { map: 'pendingOAuthLinks', column: 'blackout_user_id' },
+    { map: 'twitchChatBridges', column: 'blackout_user_id' },
+    { map: 'twitchEventSubscriptions', column: 'blackout_user_id' },
+    { map: 'widgetAlertTokens', column: 'blackout_user_id' },
+    { map: 'youtubeChatBridges', column: 'blackout_user_id' },
+    { map: 'kickChatBridges', column: 'blackout_user_id' },
+    { map: 'simulcastDestinations', column: 'blackout_user_id' },
+    { map: 'discordCompatWebhooks', column: 'blackout_user_id' },
+    { map: 'outboundEventWebhooks', column: 'blackout_user_id' },
+    { map: 'twitchIrcBotTokens', column: 'blackout_user_id' },
+    { map: 'obsWsPasswords', column: 'blackout_user_id' },
+    { map: 'twitchExtensionPanels', column: 'creator_id' },
+    { map: 'channelPointsRewards', column: 'creator_id' },
+    { map: 'channelPointsLedger', column: 'channel_id' },
+    { map: 'channelPointsLedger', column: 'user_id' },
+    { map: 'creatorListings', column: 'seller_user_id' },
+    { map: 'vaultItems', column: 'owner_user_id' },
+];
+
+/**
+ * Cascaded by Postgres with the account but deliberately not deleted
+ * explicitly, so no mirror is told. The revocations of a deleted account
+ * (its logged-out tokens and its logout-everywhere cutoff) stay in every
+ * running process's mirror, which keeps refusing those tokens until it
+ * restarts; telling the mirrors would make every process accept them at once
+ * for the rest of their lifetime. Nothing reads a revocation as proof that
+ * the account exists.
+ */
+export const USER_CASCADE_LEFT_IN_MIRRORS: ReadonlyArray<{ map: string; column: string }> = [
+    { map: 'revokedSessions', column: 'user_id' },
+];
+
+/** The account's per-user auth rows, deleted by purgeUserAuthArtifacts. */
+const USER_AUTH_ARTIFACTS: ReadonlyArray<{ map: string; column: string }> = [
+    { map: 'passwordResetTokens', column: 'user_id' },
+    { map: 'emailVerificationTokens', column: 'user_id' },
+    { map: 'accountDeletionTokens', column: 'user_id' },
+    { map: 'refreshTokens', column: 'user_id' },
+    { map: 'linkedAccounts', column: 'blackout_user_id' },
+    { map: 'pendingOAuthLinks', column: 'blackout_user_id' },
+];
+
+const deleteByUser = (rows: ReadonlyArray<{ map: string; column: string }>): TargetedStep[] =>
+    rows.map(({ map, column }) => deleteWhere(map, `${column} = $1`, (c) => [c.args[0]]));
+
 /**
  * Maps each of the 127 InMemoryDb mutators to its write-through. `upsert`
  * persists the method's returned record; `resync` reconciles a map after a
@@ -593,7 +724,13 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
     createUser: upsert('users'),
     updateUserPassword: upsert('users'),
     markUserEmailVerified: upsert('users'),
-    deleteUser: resync('users'),
+    // The account's cascaded child rows first (see USER_CASCADE_CHILDREN),
+    // then the account: only that id, never a row this process has not heard of.
+    deleteUser: targeted(...deleteByUser(USER_CASCADE_CHILDREN), {
+        op: 'deleteKey',
+        map: 'users',
+        key: (c) => [c.args[0]],
+    }),
     createScheduledMessage: upsert('scheduledMessages'),
     markScheduledMessageDelivered: upsert('scheduledMessages'),
     markScheduledMessageFailed: upsert('scheduledMessages'),
@@ -601,36 +738,63 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
     // Account deletion. A targeted upsert, not a resync: see the store method.
     eraseScheduledMessage: upsert('scheduledMessages'),
     createPasswordResetToken: upsert('passwordResetTokens'),
-    consumePasswordResetToken: resync('passwordResetTokens'),
+    consumePasswordResetToken: consume('passwordResetTokens', 'id', 'id'),
+    deleteExpiredPasswordResetTokens: pruneWhere('passwordResetTokens', 'expires_at < $1'),
     createEmailVerificationToken: upsert('emailVerificationTokens'),
-    consumeEmailVerificationToken: resync('emailVerificationTokens'),
+    consumeEmailVerificationToken: consume('emailVerificationTokens', 'id', 'id'),
+    markEmailVerificationTokenSent: targeted(
+        updateWhere(
+            'emailVerificationTokens',
+            'sent_at = $2',
+            'id = $1 AND sent_at IS NULL',
+            (c) => {
+                const r = changedTo(c, 'emailVerificationTokens');
+                return r ? [r.id, r.sentAt] : undefined;
+            }
+        )
+    ),
+    // Supersedes every outstanding token of the account, including one a peer
+    // issued that this process has not heard of.
+    revokeEmailVerificationTokensForUser: targeted(
+        updateWhere(
+            'emailVerificationTokens',
+            'revoked_reason = $2',
+            'user_id = $1 AND consumed_at IS NULL AND revoked_reason IS NULL',
+            (c) => [c.args[0], c.args[1]]
+        )
+    ),
+    deleteExpiredEmailVerificationTokens: pruneWhere(
+        'emailVerificationTokens',
+        'expires_at < $1 AND consumed_at IS NULL'
+    ),
     createAccountDeletionToken: upsert('accountDeletionTokens'),
-    consumeAccountDeletionToken: resync('accountDeletionTokens'),
+    consumeAccountDeletionToken: consume('accountDeletionTokens', 'id', 'id'),
     createInvitationToken: upsert('invitationTokens'),
     incrementInvitationTokenUseCount: upsert('invitationTokens'),
     revokeInvitationToken: upsert('invitationTokens'),
     createInvitationRedemption: upsert('invitationRedemptions'),
     createInvitationAdmission: upsert('invitationAdmissions'),
     claimInvitationAdmission: upsert('invitationAdmissions'),
-    // Account deletion removes rows, so the map is reconciled, not upserted.
-    deleteInvitationAdmissionsForUser: resync('invitationAdmissions'),
+    // Account deletion: the admission the account claimed and any for its
+    // Matrix id, wherever they were written.
+    deleteInvitationAdmissionsForUser: targeted(
+        deleteWhere(
+            'invitationAdmissions',
+            'claimed_by_user_id = $1 OR ($2::text IS NOT NULL AND matrix_user_id = $2::text)',
+            (c) => [c.args[0], c.args[1] ?? null]
+        )
+    ),
     createBurnerIdentity: upsert('burnerIdentities'),
     markBurnerIdentityBurned: upsert('burnerIdentities'),
     rotateBurnerIdentity: upsert('burnerIdentities'),
-    purgeUserAuthArtifacts: resync(
-        'passwordResetTokens',
-        'emailVerificationTokens',
-        'accountDeletionTokens',
-        'refreshTokens',
-        'revokedSessions',
-        'pendingOAuthLinks'
-    ),
+    // The six maps the method writes. Revocations are not among them.
+    purgeUserAuthArtifacts: targeted(...deleteByUser(USER_AUTH_ARTIFACTS)),
     createRefreshToken: upsert('refreshTokens'),
     consumeRefreshTokenForRotation: upsert('refreshTokens'),
-    revokeRefreshTokenFamily: resync('refreshTokens'),
-    revokeRefreshTokensForUser: resync('refreshTokens'),
+    revokeRefreshTokenFamily: revokeRefreshTokensWhere('family_id'),
+    revokeRefreshTokensForUser: revokeRefreshTokensWhere('user_id'),
     revokeSession: upsert('revokedSessions'),
-    pruneExpiredRevokedSessions: resync('revokedSessions'),
+    pruneExpiredRevokedSessions: pruneWhere('revokedSessions', 'expires_at <= $1'),
     createMessage: upsert('messages'),
     createVote: upsert('votes'),
     castVote: upsert('voteEntries'),
@@ -708,11 +872,22 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
     deleteLinkedAccount: deleteKey('linkedAccounts', ([userId, provider]) => [userId, provider]),
     setLinkedAccountSyncCursor: upsert('linkedAccounts'),
     createPendingOAuthLink: upsert('pendingOAuthLinks'),
-    consumePendingOAuthLink: resync('pendingOAuthLinks'),
-    prunePendingOAuthLinks: resync('pendingOAuthLinks'),
+    // The same expiry test as the store method's.
+    consumePendingOAuthLink: consume(
+        'pendingOAuthLinks',
+        'state_hash',
+        'stateHash',
+        ' AND expires_at > $2'
+    ),
+    prunePendingOAuthLinks: pruneWhere('pendingOAuthLinks', 'expires_at <= $1'),
     createPendingOidcLogin: upsert('pendingOidcLogins'),
-    consumePendingOidcLogin: resync('pendingOidcLogins'),
-    prunePendingOidcLogins: resync('pendingOidcLogins'),
+    consumePendingOidcLogin: consume(
+        'pendingOidcLogins',
+        'state_hash',
+        'stateHash',
+        ' AND expires_at > $2'
+    ),
+    prunePendingOidcLogins: pruneWhere('pendingOidcLogins', 'expires_at <= $1'),
     createTwitchChatBridge: upsert('twitchChatBridges'),
     updateTwitchChatBridge: upsert('twitchChatBridges'),
     deleteTwitchChatBridge: deleteById('twitchChatBridges'),

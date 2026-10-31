@@ -17,7 +17,9 @@
  * than the interval still prunes). It runs under the same leader discipline as
  * every loop `startBackgroundLoops` starts: one process holds the
  * background-leader lock (services/backgroundLeader.ts), and in postgres mode
- * each prune is written through as a resync of its table. The tick is
+ * each prune is written through as one DELETE of the rows Postgres itself
+ * finds expired, so a row another process wrote is judged on its own expiry
+ * rather than deleted because this process has not heard of it. The tick is
  * synchronous, so the worker's drain (services/backgroundTicks.ts) has nothing
  * to wait for.
  */
