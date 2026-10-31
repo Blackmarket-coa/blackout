@@ -18,22 +18,15 @@ import { pad, unpad, type PaddingStrategy } from './padding';
 import { open, seal } from './sealedBox';
 import { deriveClue } from './clue';
 import { randomId } from './random';
-import {
-    deriveSharedSecret,
-    generateEphemeralKeyPair,
-    importRecipientPrivateKey,
-    importRecipientPublicKey,
-} from './keys';
-import { importAesGcmKey } from './hkdf';
-import { deriveHybridAeadKey, getKemProvider } from './pqHybrid';
-import { randomBytes } from './random';
+import { importRecipientPrivateKey } from './keys';
+import { hybridOpen, hybridSeal } from './hybridSeal';
 
 export const ENVELOPE_VERSION = 1;
 export const SUPPORTED_SUITES = [
     'sealedbox-x25519-aes256gcm-v1',
     'sealedbox-x25519-mlkem768-aes256gcm-v2',
 ] as const;
-export type EnvelopeSuite = (typeof SUPPORTED_SUITES)[number];
+export type EnvelopeSuite = typeof SUPPORTED_SUITES[number];
 
 export type DeadDropEnvelopeV1 = {
     v: 1;
@@ -103,8 +96,6 @@ export type EncryptInput = {
     recipientPqPublicKey?: Uint8Array;
 };
 
-const subtle = (): SubtleCrypto => globalThis.crypto.subtle;
-
 export type EncryptInputV1 = Omit<EncryptInput, 'suite' | 'recipientPqPublicKey'> & {
     suite?: 'sealedbox-x25519-aes256gcm-v1';
 };
@@ -117,9 +108,7 @@ export type EncryptInputV2 = EncryptInput & {
 export function encryptDeadDrop(input: EncryptInputV1): Promise<DeadDropEnvelopeV1>;
 export function encryptDeadDrop(input: EncryptInputV2): Promise<DeadDropEnvelopeV2>;
 export function encryptDeadDrop(input: EncryptInput): Promise<AnyDeadDropEnvelope>;
-export async function encryptDeadDrop(
-    input: EncryptInput
-): Promise<AnyDeadDropEnvelope> {
+export async function encryptDeadDrop(input: EncryptInput): Promise<AnyDeadDropEnvelope> {
     if (input.plaintext.length === 0) {
         throw new Error('plaintext must not be empty');
     }
@@ -147,43 +136,23 @@ export async function encryptDeadDrop(
         if (!input.recipientPqPublicKey) {
             throw new Error('recipientPqPublicKey is required for v2 suite');
         }
-        const kem = getKemProvider();
-        if (input.recipientPqPublicKey.length !== kem.publicKeyLength) {
-            throw new Error(
-                `recipientPqPublicKey must be ${kem.publicKeyLength} bytes, got ${input.recipientPqPublicKey.length}`,
-            );
-        }
-        const recipientEcPub = await importRecipientPublicKey(input.recipientPublicKeyBase64);
-        const ephemeral = await generateEphemeralKeyPair();
-        const ecSecret = await deriveSharedSecret(ephemeral.privateKey, recipientEcPub);
-        const { ciphertext: pqCiphertext, sharedSecret: pqSecret } = await kem.encapsulate(
-            input.recipientPqPublicKey,
-        );
-        const aeadKeyBytes = await deriveHybridAeadKey({
-            ecSecret,
-            pqSecret,
-            ephemeralX25519Pub: ephemeral.publicKeyBytes,
-            pqCiphertext,
+        // The shared hybrid seal with no transcript: the keys dead drops have
+        // always derived, plus the all-zero X25519 refusal (hybridSeal.ts).
+        const sealed = await hybridSeal({
+            plaintext: padded,
+            recipientX25519PublicKeyBase64: input.recipientPublicKeyBase64,
+            recipientPqPublicKey: input.recipientPqPublicKey,
         });
-        const aeadKey = await importAesGcmKey(aeadKeyBytes);
-        const nonce = randomBytes(12);
-        const ct = new Uint8Array(
-            await subtle().encrypt(
-                { name: 'AES-GCM', iv: nonce as unknown as BufferSource },
-                aeadKey,
-                padded as unknown as BufferSource,
-            ),
-        );
         return {
             v: 2,
             suite: 'sealedbox-x25519-mlkem768-aes256gcm-v2',
             pad: input.paddingStrategy,
             dropId,
             clue: toBase64(clue),
-            ek: toBase64(ephemeral.publicKeyBytes),
-            pqCt: toBase64(pqCiphertext),
-            nonce: toBase64(nonce),
-            ct: toBase64(ct),
+            ek: toBase64(sealed.ephemeralPublicKey),
+            pqCt: toBase64(sealed.kemCiphertext),
+            nonce: toBase64(sealed.nonce),
+            ct: toBase64(sealed.ciphertext),
             expiresAt: input.expiresAt,
         };
     }
@@ -201,9 +170,7 @@ export type DecryptInput = {
     recipientPqSecretKey?: Uint8Array;
 };
 
-export const decryptDeadDrop = async (
-    input: DecryptInput
-): Promise<Uint8Array> => {
+export const decryptDeadDrop = async (input: DecryptInput): Promise<Uint8Array> => {
     const env = input.envelope;
     if (env.v === 1) {
         if (!SUPPORTED_SUITES.includes(env.suite)) {
@@ -225,29 +192,17 @@ export const decryptDeadDrop = async (
         if (!input.recipientPqSecretKey) {
             throw new Error('recipientPqSecretKey is required to decrypt a v2 envelope');
         }
-        const kem = getKemProvider();
-        const ephemeralPubBytes = fromBase64(env.ek);
-        const pqCiphertext = fromBase64(env.pqCt);
-        const ephemeralPub = await importRecipientPublicKey(env.ek);
         const privateKey = await importRecipientPrivateKey(input.recipientPrivateKeyJwk);
-        const ecSecret = await deriveSharedSecret(privateKey, ephemeralPub);
-        const pqSecret = await kem.decapsulate(pqCiphertext, input.recipientPqSecretKey);
-        const aeadKeyBytes = await deriveHybridAeadKey({
-            ecSecret,
-            pqSecret,
-            ephemeralX25519Pub: ephemeralPubBytes,
-            pqCiphertext,
+        const padded = await hybridOpen({
+            sealed: {
+                ephemeralPublicKey: fromBase64(env.ek),
+                kemCiphertext: fromBase64(env.pqCt),
+                nonce: fromBase64(env.nonce),
+                ciphertext: fromBase64(env.ct),
+            },
+            recipientPrivateKey: privateKey,
+            recipientPqSecretKey: input.recipientPqSecretKey,
         });
-        const aeadKey = await importAesGcmKey(aeadKeyBytes);
-        const nonce = fromBase64(env.nonce);
-        const ct = fromBase64(env.ct);
-        const padded = new Uint8Array(
-            await subtle().decrypt(
-                { name: 'AES-GCM', iv: nonce as unknown as BufferSource },
-                aeadKey,
-                ct as unknown as BufferSource,
-            ),
-        );
         return unpad(padded);
     }
 

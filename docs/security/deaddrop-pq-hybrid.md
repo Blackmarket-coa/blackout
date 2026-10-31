@@ -49,6 +49,21 @@ key, so the hybrid is strictly stronger than either primitive alone.
     the comparison is in
     [`release-identities-2026-10-26.md`](release-identities-2026-10-26.md) §5.
 
+    **The framing of `info`** (the envelope's independent review, P3-L1):
+    the label `blackout-deaddrop-v2-hybrid` is 27 bytes with no terminator
+    and no length prefix, and a transcript, when there is one, follows it
+    directly and raw (not hashed). A dead drop passes no transcript, and a
+    release copy's transcript starts with its own NUL-terminated label
+    (`blackout-release-seal-v1`, 0x00), so today the two `info` values can
+    never coincide. **A dead-drop transcript, when one is added, must start
+    with its own NUL-terminated label that is none of the release labels**
+    ([`release-envelope-2026-10-26.md`](release-envelope-2026-10-26.md) §3
+    lists the eight), and the labels test must include it; or
+    `deriveHybridAeadKey` moves to a v3 label with a terminator and a length
+    prefix on the transcript. Otherwise a dead-drop `info` beginning
+    `blackout-release-seal-v1` 0x00 … could derive the same key as a release
+    wrap.
+
 -   Pluggable `KemProvider` interface with `setKemProvider()` /
     `getKemProvider()`. The default is `NULL_KEM_PROVIDER`, which throws
     on every operation so we cannot accidentally encrypt with a zero-
@@ -60,13 +75,22 @@ key, so the hybrid is strictly stronger than either primitive alone.
 recipientPqPublicKey })` produces a `DeadDropEnvelopeV2` with a real
     ML-KEM-768 KEM ciphertext. `decryptDeadDrop` dispatches on
     `envelope.v` and accepts `recipientPqSecretKey` for v2.
--   30 regression tests (`apps/blackout-client/tests/unit/sdk/deaddropPqHybrid.test.ts`)
+-   **One sealing function** (2026-10-26, for the dead-man release): the v2
+    branches of `encryptDeadDrop` and `decryptDeadDrop` call `hybridSeal` and
+    `hybridOpen` (`hybridSeal.ts`), the function release copies also seal
+    with ([`release-envelope-2026-10-26.md`](release-envelope-2026-10-26.md)
+    §2). A dead drop passes no transcript, so its keys are derived exactly as
+    before, which a test rebuilds independently. The move added one check: an
+    all-zero X25519 output is refused on both sides.
+-   36 regression tests (`apps/blackout-client/tests/unit/sdk/deaddropPqHybrid.test.ts`)
     covering KDF determinism, salt binding, transcript binding, empty-
     secret rejection, v1↔v2 envelope validators, ML-KEM-768 size constants
     (FIPS 203 Table 3), real keypair generation, encapsulate / decapsulate
     round-trip, IND-CCA2 implicit rejection on tampered ciphertext, length
-    guards, end-to-end v2 envelope round-trip, and rejection of mismatched
-    PQ keys.
+    guards, end-to-end v2 envelope round-trip, rejection of mismatched
+    PQ keys, and (since 2026-10-26) the shared sealing function: the v2
+    derivation rebuilt with `node:crypto`, with and without a transcript, and
+    the all-zero X25519 refusal when sealing and opening.
 
 ## What is deferred
 
@@ -77,9 +101,11 @@ The KEM module follows FIPS 203 ML-KEM-768 exactly through
 -   The recipient's X25519 public key is not bound into the derivation
     when the transcript is empty, as it is for every dead drop today (C5).
     Release seals bind it through the recipient's fingerprint.
--   No check that the X25519 output is not all zeros, which RFC 9180
-    §7.1.4 requires (C8). Node's WebCrypto refuses small-order keys itself;
-    browsers were not checked.
+-   ~~No check that the X25519 output is not all zeros, which RFC 9180
+    §7.1.4 requires (C8).~~ Done on 2026-10-26: the shared sealing function
+    refuses it when sealing and when opening. Node's WebCrypto refuses
+    small-order keys itself, by throwing; the check covers an engine that
+    returns zeros, and browsers were not checked.
 -   AES-GCM gets no associated data, so the envelope's `dropId`, `pad` and
     `expiresAt` are not authenticated by it.
 
@@ -93,7 +119,12 @@ Upgrades:
 ## Tracking
 
 -   Source: `packages/blackout-protocol/src/deaddrop/crypto/pqHybrid.ts`,
+    `packages/blackout-protocol/src/deaddrop/crypto/hybridSeal.ts`,
     `packages/blackout-protocol/src/deaddrop/crypto/mlkem768Provider.ts`,
     `packages/blackout-protocol/src/deaddrop/crypto/envelope.ts`.
--   Tests: `apps/blackout-client/tests/unit/sdk/deaddropPqHybrid.test.ts`.
+-   Tests: `apps/blackout-client/tests/unit/sdk/deaddropPqHybrid.test.ts`
+    (including the shared function: the dead-drop derivation rebuilt with
+    `node:crypto`, the all-zero refusal on both sides) and
+    `deaddropCrypto.test.ts` (a drop padded to the 256 KiB bucket, which
+    threw until `randomBytes` split its `getRandomValues` calls).
 -   Threat model entry: `THREAT_MODEL.md` §7 R3.

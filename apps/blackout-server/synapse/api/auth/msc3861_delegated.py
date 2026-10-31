@@ -74,7 +74,10 @@ class PrivateKeyJWTWithKid(PrivateKeyJWT):  # type: ignore[misc]
     out which key to use to verify the signature.
     """
 
-    def sign(self, auth: Any, token_endpoint: str) -> bytes:
+    # str: from 1.7.0 authlib signs through joserfc's jwt.encode, which returns
+    # str (1.6.12 returned bytes); pyproject.toml requires authlib >=1.9.1.
+    # Blackout fork patch, see PATCHES.md, 2026-10-30.
+    def sign(self, auth: Any, token_endpoint: str) -> str:
         return private_key_jwt_sign(
             auth.client_secret,
             client_id=auth.client_id,

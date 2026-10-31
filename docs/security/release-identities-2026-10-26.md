@@ -464,7 +464,15 @@ whose transcript is empty, lack it, which belongs to the dead-drop work.
     signed header, so PR 3 should sign one release header (release id,
     owner, ciphertext hash, key commitment) that every recipient receives
     alike. Without that, the app must not say that everyone given access read
-    the same text.
+    the same text. **PR 3 took the other form** (the envelope record's E7,
+    [`release-envelope-2026-10-26.md`](release-envelope-2026-10-26.md) §4
+    and decision 5): the header's fields are inside every copy's signature
+    and no header is signed on its own, since a separate signature would
+    authenticate nothing more and would not stop the key's holder signing
+    two headers for two recipients. Two recipients know they read the same
+    text only by comparing their headers out of band, and the app must say
+    no more than that (noted 2026-10-29, after the envelope's independent
+    review).
 5.  The owner's signature: Ed25519 under its own label,
     `blackout-release-seal-signature-v1` and 0x00, over the transcript's
     fields, SHA-256 of the content nonce and ciphertext, the key commitment,

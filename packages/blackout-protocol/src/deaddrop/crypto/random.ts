@@ -9,12 +9,24 @@ const cryptoRef = (): Crypto => {
     return globalThis.crypto;
 };
 
+/**
+ * The most `getRandomValues` fills in one call: WebCrypto throws
+ * `QuotaExceededError` past 65,536 bytes.
+ */
+export const RANDOM_VALUES_MAX_BYTES = 65536;
+
+/** `length` random bytes, filled in as many calls as the per-call limit needs. */
 export const randomBytes = (length: number): Uint8Array => {
     if (!Number.isInteger(length) || length < 0) {
         throw new Error('length must be a non-negative integer');
     }
     const out = new Uint8Array(length);
-    cryptoRef().getRandomValues(out);
+    const crypto = cryptoRef();
+    for (let offset = 0; offset < length; offset += RANDOM_VALUES_MAX_BYTES) {
+        crypto.getRandomValues(
+            out.subarray(offset, Math.min(offset + RANDOM_VALUES_MAX_BYTES, length))
+        );
+    }
     return out;
 };
 
