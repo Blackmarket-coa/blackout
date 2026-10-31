@@ -8,6 +8,7 @@ import {
     previewInvitation,
     redeemInvitation,
 } from '../../features/invitations/invitationsClient';
+import { PENDING_INVITE_STORAGE_KEY } from '../../features/invitations/pendingInvite';
 import { ensureBlackoutApiToken } from '../../../client/blackoutApiSession';
 import { resolvePostAcceptancePath } from './postAcceptanceRoute';
 import { joinDenWithCanopy } from '../../features/room/joinDenWithCanopy';
@@ -21,7 +22,11 @@ import { joinDenWithCanopy } from '../../features/room/joinDenWithCanopy';
 const STEP_TIMEOUT_MS = 15_000;
 
 /** Reject after `ms`, aborting the paired controller so the fetch is cancelled. */
-const withTimeout = <T,>(promise: Promise<T>, ms: number, controller: AbortController): Promise<T> =>
+const withTimeout = <T,>(
+    promise: Promise<T>,
+    ms: number,
+    controller: AbortController
+): Promise<T> =>
     Promise.race([
         promise,
         new Promise<T>((_, reject) => {
@@ -33,10 +38,12 @@ const withTimeout = <T,>(promise: Promise<T>, ms: number, controller: AbortContr
     ]);
 
 /**
- * Storage key the post-login redeemer hook looks for. Kept here so the
- * landing page and the redeemer hook share one source of truth.
+ * Storage key the post-login redeemer hook looks for. Defined with the
+ * account-number sign-up's reader in `features/invitations/pendingInvite`, so
+ * the landing page, that sign-up and the redeemer hook share one source of
+ * truth.
  */
-export const PENDING_INVITE_STORAGE_KEY = 'blackout:pendingInviteToken';
+export { PENDING_INVITE_STORAGE_KEY };
 
 /**
  * Storage key RegisterForm reads on mount to pre-fill the
@@ -210,8 +217,8 @@ export const InviteLandingPage: React.FC = () => {
                     message: timedOut
                         ? 'This is taking longer than expected. Check your connection and try again.'
                         : err instanceof Error
-                          ? err.message
-                          : 'Could not load this invitation.',
+                        ? err.message
+                        : 'Could not load this invitation.',
                 });
             });
         return () => {
@@ -240,7 +247,7 @@ export const InviteLandingPage: React.FC = () => {
             const data = await withTimeout(
                 redeemInvitation(token, apiToken, controller.signal),
                 STEP_TIMEOUT_MS,
-                controller,
+                controller
             );
             if (cancelled) return;
             setPhase({ kind: 'redeemed', data });
@@ -257,7 +264,7 @@ export const InviteLandingPage: React.FC = () => {
                         // Join the canopy first so the restricted den is joinable.
                         joinDenWithCanopy(client, data.matrixRoomId, data.canopyId),
                         STEP_TIMEOUT_MS,
-                        controller,
+                        controller
                     );
                 } catch {
                     // Join can fail (already-joined, server hiccup); the
@@ -281,8 +288,8 @@ export const InviteLandingPage: React.FC = () => {
                 message: timedOut
                     ? 'Accepting your invitation timed out. Check your connection and try again.'
                     : err instanceof Error
-                      ? err.message
-                      : 'Could not redeem this invitation.',
+                    ? err.message
+                    : 'Could not redeem this invitation.',
             });
         });
 
@@ -304,7 +311,7 @@ export const InviteLandingPage: React.FC = () => {
             }
             window.location.assign(path);
         },
-        [token],
+        [token]
     );
 
     return (
@@ -320,7 +327,7 @@ const renderBody = (
     phase: Phase,
     authState: string,
     stashAndNavigate: (path: AuthDestination) => void,
-    retry: () => void,
+    retry: () => void
 ): React.ReactNode => {
     if (phase.kind === 'loading') {
         return (

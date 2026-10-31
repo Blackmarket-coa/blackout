@@ -259,6 +259,40 @@ For the source-of-truth triage with tier/owner detail see
     1.27.5 and 1.22.1 in containers) and Chromium only, not on a deployed host
     or through Cloudflare.
 
+### Panic wipe (2026-10-26)
+
+-   **Where:** Settings → Help & advanced → Panic wipe
+    (`apps/blackout-client/src/app/features/panic/`).
+-   **It removes only some localStorage entries:** unsent drafts, the list of
+    burner identities and the account to go back to from one, saved
+    steganography passphrases and settings, the data-broker deletion details,
+    ephemeral-drop view counts and reading positions. Until 2026-10-26 its
+    screen said it cleared the "sensitive data this app stores on this
+    device", which it never did; the screen now lists what it removes and
+    what stays.
+-   **What stays:** the Matrix client's IndexedDB stores, which hold this
+    device's copy of your rooms and recent messages and the encryption keys
+    that decrypt your messages (the app does not encrypt these stores:
+    `initRustCrypto` is called without a storage key or password); the
+    original videos in the device's video vault; the release-key store
+    (private release keys and the list of people compared with, see Release
+    keys below) unless its option is ticked; and everything else the app
+    keeps in localStorage, such as settings, per-room notification choices,
+    recent reactions and GIFs, saved homeservers and the Matrix client's own
+    entries.
+-   **"Also delete release keys from this device"** is off by default. Ticked,
+    it deletes every account's release keys and comparisons on the device, and
+    the screen says first that without a recovery file they are gone for good.
+    If that deletion fails, the screen says so and does not reload.
+-   **"Also forget this device's sign-ins"** (labelled "Also sign out" until
+    2026-10-26) removes the stored session of every account on the device,
+    burner identities included, and the Blackout API token, so the app opens
+    on the sign-in screen. It sends nothing to the homeserver: those sessions
+    are not ended there, and they stay on the account's list of sessions.
+-   **Not a forensic wipe:** the browser deletes the entries, but their data
+    may stay on the disk. Forensic imaging of a seized device (adversary A10)
+    is out of scope in [`THREAT_MODEL.md`](THREAT_MODEL.md).
+
 ### Scheduled messages
 
 -   **Where:** the composer's "Scheduled send preset"
@@ -289,8 +323,13 @@ For the source-of-truth triage with tier/owner detail see
     `POST /v1/auth/account/delete/request` and `/confirm`.
 -   **State:** Deleting your Blackout account removes the account, its sessions
     and linked services, and cancels and erases your unsent scheduled messages.
-    It does not yet deactivate your Matrix account, and your messages stay in
-    rooms.
+    It removes the release keys you published (their public halves); the
+    private keys on your devices and in your recovery files stay until you
+    remove them. It does not yet deactivate your Matrix account, and your
+    messages stay in rooms. If an anonymous sign-up used an invitation, the
+    record tying that invitation to your Matrix account is removed too. Where
+    the inviter's list of who joined through their link includes you, that
+    entry stays, showing an internal id where your name was.
 
 ### Dead-man's switch (experimental)
 
@@ -335,6 +374,89 @@ For the source-of-truth triage with tier/owner detail see
     the design above. Until it ships, nothing is released and arming stays
     closed.
 
+### Release keys (2026-10-26)
+
+-   **Where:** Settings → Account & identity → Release keys
+    (`apps/blackout-client/src/app/features/release-keys/`), and the API's
+    `/v1/release-identities` routes (`packages/api/src/routes/releaseIdentities.ts`).
+    Format and review:
+    [`docs/security/release-identities-2026-10-26.md`](docs/security/release-identities-2026-10-26.md).
+-   **What they are for:** the dead-man switch release
+    ([`docs/security/deadman-release-design-2026-10-24.md`](docs/security/deadman-release-design-2026-10-24.md)),
+    which is not built yet. You can create release keys, publish their public
+    half, save a recovery file and compare a safety code with someone, but
+    arming a switch stays closed, so nothing is encrypted for these keys yet.
+-   **Lose the device, lose the keys.** The private keys live only on the
+    devices that made them or loaded a recovery file, and in the recovery
+    files you save. A device that is lost, reset, or whose browser deletes
+    the site's data (clearing browsing data does; browsers may also evict a
+    site's storage, Safari among them after a period without a visit) loses
+    them, and Blackout cannot bring them back: it never had them. Creating
+    new keys does not recover old ones, and everyone who compared a code
+    with you has to compare again. Save a recovery file, and save a new one
+    after each comparison: a file holds only the comparisons made before it
+    was saved.
+-   **Signing out leaves them, and so does the panic wipe unless told
+    otherwise.** Signing out never removes release keys from the device, where
+    any code running in the app's origin can read them; the panic wipe removes
+    them only when its "Also delete release keys from this device" is ticked,
+    and it is off by default. "Remove release keys from this device" removes
+    them; on a device other people use, save a recovery file, then remove them
+    before you sign out. Another open tab that showed them keeps them in
+    memory until it is closed or reloaded (the panic wipe reloads only its
+    own tab), though it can no longer save or publish them.
+-   **Recovery file:** encrypted with your passphrase (at least 12
+    characters; argon2id, then AES-256-GCM). Anyone with the file who guesses
+    or learns the passphrase can use your release keys, and Blackout cannot
+    reset a forgotten passphrase. The app asks the browser to download the
+    file; whether that works in the desktop and mobile apps was not tested,
+    so check that the file was saved. The passphrase fields ask the browser
+    not to offer saving the passphrase (`autocomplete="off"`), but browsers
+    may offer it anyway; don't let one save it, as the screen also says.
+    Loading a file whose current key is older than this device's, was
+    replaced, or is neither the server's current key nor one this device
+    holds, asks before it changes which key this device uses.
+-   **What the server sees:** the public half of your keys, and the keys you
+    replaced, which any account signed in on this homeserver can read, and
+    who looked up whom (the Matrix id you look up travels in the request
+    body, not in the URL that proxies log). The server could hand out a key
+    that isn't the person's. A safety-code comparison shows whether the key
+    you were given is theirs, at the time you compare, and only if you read
+    all twelve groups: checking a few is far weaker. Compare in person if you
+    can; on a call, know that a voice can be imitated. A comparison says
+    nothing about keys published later. In a web browser the server also
+    supplies the app's code, which a comparison cannot check.
+-   **Publishing:** creating keys publishes them, and the listing stays until
+    your account is deleted; there is no way to unpublish. An account can
+    publish at most 3 new release keys in any 24 hours, and 1000 in all, and
+    anyone using your account shares that limit with you. The server refuses
+    a key it has seen for your account before, so a published key you
+    replaced can't be made current again. It can't refuse an older key it
+    never saw: release keys carry no sequence number, so a key you replaced
+    before it was ever published (after the daily limit, say) can still be
+    published later, from another device of yours or by someone with access
+    to your account who has it, and it then replaces your newer key for good.
+    Publishing from this app always uses the keys this device stores at that
+    moment, so a tab left open on older keys can't do it. If Blackout's
+    server shows a key for you that you didn't make, someone with access to
+    your account, or the server, published it; the screen says so.
+-   **A lost device:** replacing your release keys doesn't sign it out. End
+    its Matrix session from a Matrix client that lists your account's
+    sessions, or by resetting your password with “Sign out of other
+    devices”; then “Sign out every Blackout session”, on the Release keys
+    screen, ends every Blackout session of your account, this device's
+    included (it gets a new one from its Matrix session). Until both are
+    done, whoever has the device can publish keys of their own in place of
+    yours, which retires yours for good, and can use up the account's 3 a
+    day. An account made with an email and password through Blackout's API
+    keeps that password apart from Matrix: a Matrix reset doesn't change it,
+    and this app has no screen to change it. An API token issued in the same
+    second as the sign-out isn't refused; it expires within 24 hours.
+-   **Only this homeserver:** a Matrix id on another server finds nobody.
+-   **Devices:** a browser or webview needs WebCrypto Ed25519 and X25519 and
+    IndexedDB; the screen says so when one is missing. Support was read from
+    MDN's data, not tested on devices.
+
 ### Admin-only API writes (2026-10-23)
 
 -   **Where:** the API's write routes under `/v1/governance`,
@@ -362,7 +484,7 @@ For the source-of-truth triage with tier/owner detail see
 -   **Next:** a role model built from Matrix power levels
     ([`docs/security/capability-header-triage-2026-10-23.md`](docs/security/capability-header-triage-2026-10-23.md)).
 
-### Voice rooms in the API (2026-10-25)
+### Voice rooms in the API (2026-10-26)
 
 -   **Where:** the API's voice rooms under `/v1/voice`
     (`packages/api/src/routes/voice.ts`). Calls in the apps do not use them:
@@ -390,16 +512,35 @@ For the source-of-truth triage with tier/owner detail see
     removed account gets no new token for that room and cannot join it through
     the API until a moderator readmits it, and a muted account's new tokens
     cannot publish until it is unmuted. **A token already issued is not
-    revoked.** One the API issued lives two minutes, and LiveKit can give a
-    connected client a refreshed token of its own, whose lifetime LiveKit's
-    server sets. Until such a token expires, a removed person's client that
-    kept it can rejoin the call, and a muted person who reconnects with a token
-    issued before the mute can speak; a connection made that way stays until a
-    moderator acts again. A lock refuses new joins and tokens but does not end
-    connections already made. Without LiveKit configured, mute and remove do
-    nothing and say so (503); when LiveKit fails, the record stands, the answer
-    is 502, and it says the person may still be heard or connected until the
-    moderator retries.
+    revoked.** One the API issued lives two minutes, and LiveKit's server gives
+    a connected client tokens of its own, each valid for ten minutes and renewed
+    every five. With one, a removed person's client can connect to the call
+    again, and a muted person can reconnect with a token from before the mute
+    and speak.
+-   **Applied again on arrival, where LiveKit sends its webhooks to the API.**
+    The LiveKit server can be configured to tell the API who joins and who
+    publishes (`POST /v1/voice/livekit/webhook`; the single-server stack's
+    LiveKit configuration does, and `packages/api/README.md` gives the snippet
+    for others). Where it is, the API disconnects a removed person, or mutes a
+    muted one and takes away their publishing, as soon as LiveKit reports them
+    joining or publishing, whatever token they used; and a mute or removal
+    LiveKit could not carry out when it was made is applied at the person's
+    next reported join or publish. They are still in the call for the moment
+    that takes. A report LiveKit drops or gives up on leaves them there until
+    their next join or publish, so a removed person who reconnects and only
+    listens can stay. Someone who never reconnects is left to the moderator's
+    own action. **Without the webhook**, a connection made with an earlier
+    token stays until a moderator acts again. A lock refuses new joins and
+    tokens but does not end connections already made, and a token issued
+    before the lock still connects, webhook or not. Without LiveKit
+    configured, mute and remove do nothing and say so (503); when LiveKit
+    fails, the record stands, the answer is 502, and it says the person may
+    still be heard or connected until the moderator retries.
+-   **What the webhook gives the API.** LiveKit sends the events of every room
+    on that server, MatrixRTC calls included: for those, with the
+    lk-jwt-service 0.2.3 the single-server stack runs, the Matrix room id and
+    each participant's Matrix user id and device id. The API acts only on
+    rooms it created, and keeps and logs nothing about the others.
 -   **When the homeserver cannot be read** (no bot token, an error), nobody has
     an elevated role: creating and moderating are refused, a locked room is
     refused with the reason, and an unlocked room still admits the account as
@@ -414,8 +555,9 @@ For the source-of-truth triage with tier/owner detail see
     the same answer.
 -   **Next:** in
     [`docs/security/capability-header-triage-2026-10-23.md`](docs/security/capability-header-triage-2026-10-23.md),
-    V4's residual (tokens already issued; closing it needs LiveKit's webhooks)
-    and V5 (the operator's billing decision on the token route).
+    V5 (the operator's billing decision on the token route), V10 (a lock is
+    not applied on arrival), and the operator's decisions on the webhook
+    (2026-10-26 section).
 
 ---
 
@@ -465,6 +607,42 @@ For the source-of-truth triage with tier/owner detail see
     nothing. No app sends the ping yet, so through the apps no challenge shows
     as seen.
 
+### OIDC sign-in checks (2026-10-30)
+
+-   **Where:** the homeserver's OIDC login (`oidc_providers`,
+    `apps/blackout-server/synapse/handlers/oidc.py`);
+    [`docs/security/dependency-advisories-server-desktop-2026-10-30.md`](docs/security/dependency-advisories-server-desktop-2026-10-30.md),
+    sections "Claim checks the bump did not change" and "The claim-type
+    checks". The first two gaps below are in upstream Synapse too, and
+    neither changed with the authlib 1.9.1 bump. The third came with the
+    bump, as it did upstream.
+-   **Unsigned id_tokens:** the id_token's signature is checked against the
+    algorithms the identity provider lists in
+    `id_token_signing_alg_values_supported`. If that list has `none`, an
+    unsigned id_token is accepted. What then stops a forged one is the TLS
+    connection to the provider's token endpoint, the one place the id_token
+    is taken from. Metadata validation requires that endpoint to be `https`,
+    or `http` to a loopback address, unless the provider's
+    `skip_verification` is set. OIDC allows this for the code flow. Keycloak and Authentik, the
+    providers the shipped template names, do not list `none` for id_tokens
+    (read from their source, not from running instances). Back-channel logout
+    tokens refuse `none` whatever the provider lists.
+-   **Audience:** `aud` is not compared with this homeserver's client id when
+    the token's `azp` names it. An id_token with `aud: "other"` and `azp` set
+    to our client id is accepted, as is one listing extra audiences. OIDC Core
+    3.1.3.7 says such a token must be rejected. The token must still be
+    signed by the provider and come from its token endpoint.
+-   **Claim types (since the authlib 1.9.1 bump):** an identity provider
+    whose id_token carries a `sub` or `jti` that is not a string, or an
+    `aud` list with a member that is not a string, can no longer sign in;
+    the callback shows `invalid_token`. This holds with
+    `user_profile_method: userinfo_endpoint` too, whenever the `openid`
+    scope makes the provider send an id_token. An integer user id still
+    works only from the userinfo endpoint of a provider that sends no
+    id_token (GitHub-style OAuth2, or scopes without `openid`).
+-   **Not there yet:** refusing `none` for id_tokens (it could break a
+    compliant provider), and comparing `aud` with the client id.
+
 ## Deferred multi-week workstreams
 
 These are tracked in
@@ -507,8 +685,18 @@ than writing to the existing account of that name. Before 2026-10-25 the
 account-number route minted a Matrix account with no invite check
 (D3 in [`docs/black-mask-account-link-design.md`](docs/black-mask-account-link-design.md) §7;
 fixed in [`docs/security/api-findings-triage-2026-10-25.md`](docs/security/api-findings-triage-2026-10-25.md)).
-The web client's anonymous sign-up does not send a token yet, so with the gate
-on it is refused until it does.
+Since 2026-10-26 the web client's anonymous sign-up sends the invitation token
+the invite link left in the tab, and the redeem it makes after sign-in claims
+the use that sign-up spent instead of spending a second one, so the setting can
+be turned on without breaking that sign-up; no tracked deploy file turns it on.
+With it on, an anonymous account can be created only in a tab that opened an
+invitation link: anywhere else, the Black Mask chat panel included, the sign-up
+is refused and says an invitation is needed. A new account whose first sign-in
+happens in another tab leaves its invitation's use spent with no redemption
+recorded, so the inviter sees the use but gets no follower. With the setting on
+or off, an invitation the server no longer accepts (not recognized, used up,
+expired or revoked) stops the anonymous sign-up in the tab that holds it, and
+the form says why.
 
 ### Release signoff
 

@@ -137,6 +137,26 @@ describe('SettingsPage surfaces', () => {
         root.unmount();
     });
 
+    it('lists Release keys under Account & identity for everyone, behind no flag', async () => {
+        setViewportWidth(1280);
+        const container = document.createElement('div');
+        document.body.appendChild(container);
+        const root = ReactDOM.createRoot(container);
+
+        await act(async () => {
+            root.render(
+                <Provider store={createStore()}>
+                    <SettingsPage />
+                </Provider>
+            );
+            await Promise.resolve();
+        });
+
+        const labels = navLabels(container);
+        expect(labels.indexOf('Release keys')).toBe(labels.indexOf('Burner identities') + 1);
+        root.unmount();
+    });
+
     it('lists Subscriptions right after Account when accountSubscriptions is on', async () => {
         setViewportWidth(1280);
         const store = createStore();

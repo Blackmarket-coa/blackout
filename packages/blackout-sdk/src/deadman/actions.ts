@@ -10,10 +10,11 @@ import type {
 import type { ApiClient } from '../client/types';
 
 /**
- * The body `POST /v1/deadman/switches` took while arming was open. The route
- * now answers 409 `arming_unavailable` to every call, whatever the body, and
- * the format changes when arming reopens with the release
- * (`docs/security/deadman-release-design-2026-10-24.md` §8, PR 3).
+ * The body `POST /v1/deadman/switches` took while arming was open, before
+ * the release format. The route refuses it: with arming closed it answers
+ * 409 `arming_unavailable` whatever the body, and with it open it takes the
+ * release format only, which `createDeadmanReleaseActions().armReleaseSwitch`
+ * builds (`docs/security/release-envelope-2026-10-26.md`).
  */
 export type ArmDeadmanSwitchInput = {
     roomId: string;
@@ -41,9 +42,10 @@ export type DeadmanReleasedListResponse = {
 
 export const createDeadmanActions = (client: ApiClient) => ({
     /**
-     * Arm a new switch. Refused with 409 `arming_unavailable` until the API
-     * can release a message to the people the owner names; the body is not
-     * read. Kept so the refusal can be shown, not because it arms anything.
+     * Send the old arming body. Refused: 409 `arming_unavailable` while
+     * arming is closed (the body is not read), 400 once it is open, since the
+     * route then takes the release format only (`armReleaseSwitch`). Kept so
+     * the refusal can be shown, not because it arms anything.
      */
     armSwitch: (input: ArmDeadmanSwitchInput) =>
         client<DeadmanSwitchArmedEvent>({

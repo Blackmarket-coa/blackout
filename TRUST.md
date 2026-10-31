@@ -8,7 +8,8 @@ supporting the claim next to it, the claim is wrong and we want to know — see
 [SECURITY.md](SECURITY.md).
 
 Last reviewed: **2026-08-10**; section 1 updated 2026-10-18 with the defaults
-for new canopies and dens. Changes to anything here are recorded in the
+for new canopies and dens; section 2 updated 2026-10-26 with release keys in the
+export. Changes to anything here are recorded in the
 [policy changelog](docs/legal/CHANGELOG.md).
 
 ---
@@ -146,8 +147,8 @@ is advertising.
 ## 2. Your data, portable, free
 
 **Every user can download their account data — profile, linked accounts, social
-graph, ledger records, scheduled messages and dead-man switches — on any tier,
-in one click.** It does not yet include every record the server keeps.
+graph, ledger records, scheduled messages, dead-man switches and the public half
+of their release keys — on any tier, in one click.** It does not yet include every record the server keeps.
 
 In the app: **Settings → Privacy & data → Download your data**. Or over HTTP:
 

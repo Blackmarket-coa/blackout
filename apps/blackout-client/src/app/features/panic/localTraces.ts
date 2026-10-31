@@ -7,9 +7,14 @@
  *  - SENSITIVE_TRACE_PREFIXES: privacy-relevant local state (drafts, burner
  *    metadata, saved steganography passphrases, reading position, etc.) — wiped
  *    by default.
- *  - SESSION_PREFIXES: the Matrix session + API token — only wiped when the
- *    user explicitly opts to sign out as part of the panic, since clearing them
- *    logs the device out (irreversible without the account's credentials).
+ *  - SESSION_PREFIXES: the stored Matrix sessions + API token — only wiped when
+ *    the user explicitly opts in, since the app then forgets every sign-in on
+ *    this device (getting back in takes the account's credentials). Nothing is
+ *    sent to the homeserver, so those sessions are not ended there.
+ *
+ * Only localStorage is touched. The Matrix client's IndexedDB stores (room
+ * data and the encryption keys) and every other IndexedDB database stay;
+ * `PanicSettings.tsx` says so on screen.
  */
 
 export const SENSITIVE_TRACE_PREFIXES = [

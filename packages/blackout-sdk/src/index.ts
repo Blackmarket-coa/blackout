@@ -17,6 +17,8 @@ export * from './forum/actions';
 export * from './deaddrop/actions';
 export * from './deaddrop/matrixActions';
 export * from './deadman/actions';
+export * from './deadman/releaseActions';
+export * from './release/actions';
 export * from './deaddrop/entitlementGate';
 export * from './persona/entitlementGate';
 export * from './hardening/entitlementGate';

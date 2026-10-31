@@ -44,3 +44,40 @@ eff3f80589879b156a2378743f3c42e2ce7314f1:packages/api/test/github-issues.integra
 #    to it do not reintroduce the flag. See the F3 entry in
 #    docs/security/api-findings-triage-2026-10-25.md.
 9aafe6c971ba584305186633e73c1a73ab78c008:packages/api/src/routes/messages.ts:generic-api-key:116
+
+# 6) Release-identity test vectors in
+#    packages/blackout-protocol/src/release/testVectors.ts (see
+#    docs/security/release-identities-2026-10-26.md, section 6). Fixed and
+#    synthetic: the vector identities' private keys are byte ranges (0x00,
+#    0x01, ...) so the known-answer tests can be reproduced, and they protect
+#    nothing real. Two of the flagged lines hold the X25519 public key of the
+#    "Alice" vector identity (once in the identity, once in the recovery
+#    file's contents); the third holds the argon2id output for the vector's
+#    test passphrase, written in the same file, which opens only the vector
+#    recovery file. Dropping or weakening them would weaken the tests. The
+#    fingerprints name the commit that adds the file, so a rebase of the
+#    branch changes them (they were updated each time it was replayed onto
+#    develop, last onto 8a20ad6a0b).
+8264a28c8174346811584712f5f5db9614bda7dc:packages/blackout-protocol/src/release/testVectors.ts:generic-api-key:63
+8264a28c8174346811584712f5f5db9614bda7dc:packages/blackout-protocol/src/release/testVectors.ts:generic-api-key:159
+8264a28c8174346811584712f5f5db9614bda7dc:packages/blackout-protocol/src/release/testVectors.ts:generic-api-key:170
+
+# 7) Release-envelope test vectors in
+#    packages/blackout-protocol/src/release/envelopeVectors.ts (see
+#    docs/security/release-envelope-2026-10-26.md, section 12). Fixed and
+#    synthetic: every input is a byte range (the content key 0xe0, 0xe1, ...;
+#    each ephemeral X25519 scalar and ML-KEM encapsulation seed likewise) and
+#    the identities are entry 6's vector identities, so the known-answer tests
+#    can be reproduced, and they protect nothing real. The six flagged lines
+#    hold, for each of the vector's two sealed copies (Alice's own and Bob's),
+#    the X25519 shared secret, the ML-KEM-768 shared secret and the HKDF wrap
+#    key derived from them, all recomputed from those inputs by the test.
+#    Dropping or weakening them would weaken the tests. The fingerprints name
+#    the commit that adds the file; the branch is brought up to date by
+#    merging, not rebasing, so they stay valid.
+ea07ee8b939964a690efb0d1140e8c3abb52e6c0:packages/blackout-protocol/src/release/envelopeVectors.ts:generic-api-key:61
+ea07ee8b939964a690efb0d1140e8c3abb52e6c0:packages/blackout-protocol/src/release/envelopeVectors.ts:generic-api-key:66
+ea07ee8b939964a690efb0d1140e8c3abb52e6c0:packages/blackout-protocol/src/release/envelopeVectors.ts:generic-api-key:68
+ea07ee8b939964a690efb0d1140e8c3abb52e6c0:packages/blackout-protocol/src/release/envelopeVectors.ts:generic-api-key:100
+ea07ee8b939964a690efb0d1140e8c3abb52e6c0:packages/blackout-protocol/src/release/envelopeVectors.ts:generic-api-key:105
+ea07ee8b939964a690efb0d1140e8c3abb52e6c0:packages/blackout-protocol/src/release/envelopeVectors.ts:generic-api-key:107

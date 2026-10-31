@@ -41,3 +41,13 @@ export {
     type DeriveHybridKeyInput,
 } from './pqHybrid';
 export { mlKem768Provider } from './mlkem768Provider';
+export {
+    hybridSeal,
+    hybridSealWith,
+    hybridOpen,
+    HybridSealError,
+    HYBRID_SEAL_NONCE_BYTES,
+    type HybridSealed,
+    type HybridSealRandomness,
+    type HybridSealErrorCode,
+} from './hybridSeal';

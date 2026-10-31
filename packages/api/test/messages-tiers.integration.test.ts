@@ -59,6 +59,13 @@ const list = async (channelId: string, headers: Record<string, string>) =>
 const storedIn = (channelId: string) =>
     [...db.messages.values()].filter((m) => m.channelId === channelId);
 
+// A message's ids are random hex, and about one message in a hundred has
+// "e2e" in one of them by chance. Searching its JSON for a label masks them
+// first, so only a field the server wrote can match.
+const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g;
+const withoutIds = (message: Record<string, unknown>, channelId: string) =>
+    JSON.stringify(message).replaceAll(channelId, '<channel>').replace(UUID, '<uuid>');
+
 test('tier 2 stores the text as written and claims no encryption', async () => {
     const a = seedUser();
     const channelId = `tier2-${randomUUID().slice(0, 8)}`;
@@ -70,7 +77,7 @@ test('tier 2 stores the text as written and claims no encryption', async () => {
     assert.equal(message.isEncrypted, false);
     assert.equal('encryptionAlgorithm' in message, false);
     assert.equal('signature' in message, false);
-    assert.ok(!JSON.stringify(message).includes('e2e'), 'no end-to-end claim anywhere');
+    assert.ok(!withoutIds(message, channelId).includes('e2e'), 'no end-to-end claim anywhere');
 
     const [row] = storedIn(channelId);
     assert.equal(row.content, 'as written');

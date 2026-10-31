@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { db } from '../db/store';
+import { db, flushRuntimeStoreWrites } from '../db/store';
 import {
     MIN_PASSWORD_LENGTH,
     hashPassword,
@@ -423,7 +423,9 @@ auth.post('/account-number', async (c) => {
 
     // A presented token is checked before anything is provisioned, so a bad
     // one never costs a Matrix account. It is consumed after provisioning, as
-    // /register does, so a room-bound invitation can admit the new account.
+    // /register does, so a room-bound invitation can admit the new account,
+    // and the use is recorded as an admission that the account's first
+    // /v1/invitations/redeem claims instead of spending a second one.
     if (inviteToken) {
         const preview = previewInvitation(inviteToken);
         if (preview.kind !== 'ok') {
@@ -482,6 +484,10 @@ auth.post('/account-number', async (c) => {
                     );
                 }
                 invite = { ok: true, matrixInvite: outcome.matrixInvite };
+                // The spent use, and the admission the account's first redeem
+                // will claim, go to Postgres before the only credential is
+                // handed out (a no-op outside Postgres mode).
+                await flushRuntimeStoreWrites();
             }
             return c.json({ accountNumber: formatAccountNumber(accountNumber), invite }, 201);
         }

@@ -138,6 +138,11 @@ services:
             - LIVEKIT_URL=${LIVEKIT_PUBLIC_WS_URL:-}
             - LIVEKIT_API_KEY=${LIVEKIT_API_KEY:-}
             - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET:-}
+            # Where the API calls LiveKit's room service (voice moderation and
+            # the LiveKit webhook's enforcement): the livekit container over the
+            # internal `app` network. This container has no route to the public
+            # LIVEKIT_URL, and the SDK would drop its /livekit/sfu path anyway.
+            - LIVEKIT_INTERNAL_URL=http://livekit:7880
             # Runtime store mode. `postgres` makes the API persist all state to the
             # Postgres service above via the write-through store: it runs migrations
             # on boot, hydrates an in-memory read mirror, and write-throughs every

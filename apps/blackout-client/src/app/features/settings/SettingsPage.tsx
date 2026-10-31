@@ -29,6 +29,7 @@ const DataTransparencySettings = lazy(
 );
 const DataDeletionPanel = lazy(() => import('../data-deletion/DataDeletionPanel'));
 const BurnerIdentitiesPanel = lazy(() => import('../burner-identity/BurnerIdentitiesPanel'));
+const ReleaseKeysSettings = lazy(() => import('../release-keys/ReleaseKeysSettings'));
 const VoiceVideoSettings = lazy(() => import('./VoiceVideoSettings'));
 const AccessibilitySettings = lazy(() => import('./AccessibilitySettings'));
 const KeybindsSettings = lazy(() => import('./KeybindsSettings'));
@@ -59,7 +60,14 @@ const groups: SettingsGroup[] = [
     {
         id: 'identity',
         label: 'Account & identity',
-        sectionIds: ['account', 'subscriptions', 'identities', 'character-sheet', 'about'],
+        sectionIds: [
+            'account',
+            'subscriptions',
+            'identities',
+            'release-keys',
+            'character-sheet',
+            'about',
+        ],
     },
     {
         id: 'look-feel',
@@ -142,6 +150,12 @@ const sections: SettingsSection[] = [
         component: BurnerIdentitiesPanel,
     },
     {
+        id: 'release-keys',
+        label: 'Release keys',
+        summary: 'Keys for dead-man switch releases, their recovery file, and safety codes',
+        component: ReleaseKeysSettings,
+    },
+    {
         id: 'voice-video',
         label: 'Voice & Video',
         summary: 'Devices and noise suppression',
@@ -168,7 +182,7 @@ const sections: SettingsSection[] = [
     {
         id: 'panic',
         label: 'Panic wipe',
-        summary: 'Clear sensitive local traces from this device',
+        summary: 'Remove drafts, saved passphrases and other listed data from this device',
         component: PanicSettings,
     },
     {

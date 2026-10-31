@@ -30,9 +30,7 @@ describe('@blackout/protocol auth-threads guards (BKL-011)', () => {
         expect(AUTH_THREADS_EVENT_NAMES.threadActivityUpdated).toBe(
             'co.bmc.thread.activity.updated'
         );
-        expect(AUTH_THREADS_EVENT_NAMES.authSessionContinued).toBe(
-            'co.bmc.auth.session.continued'
-        );
+        expect(AUTH_THREADS_EVENT_NAMES.authSessionContinued).toBe('co.bmc.auth.session.continued');
     });
 
     it('isThreadActivityUpdated enforces the kind union', () => {
@@ -110,6 +108,16 @@ describe('createAuthActions', () => {
         expect(calls.at(-1)).toEqual({
             method: 'POST',
             path: '/v1/auth/sign-out',
+            body: {},
+        });
+    });
+
+    it('revokeAllSessions posts to the revoke-all route', async () => {
+        const { apiClient, calls } = buildClient<unknown>({ ok: true, refreshTokensRevoked: 2 });
+        await createAuthActions(apiClient).revokeAllSessions();
+        expect(calls.at(-1)).toEqual({
+            method: 'POST',
+            path: '/v1/auth/sessions/revoke',
             body: {},
         });
     });
@@ -222,19 +230,13 @@ describe('isSessionExpired', () => {
 
     it('returns true when the session has expired', () => {
         expect(
-            isSessionExpired(
-                { expiresAt: '2026-04-30T00:00:00.000Z' },
-                '2026-04-30T01:00:00.000Z'
-            )
+            isSessionExpired({ expiresAt: '2026-04-30T00:00:00.000Z' }, '2026-04-30T01:00:00.000Z')
         ).toBe(true);
     });
 
     it('returns false when the session is still active', () => {
         expect(
-            isSessionExpired(
-                { expiresAt: '2026-04-30T01:00:00.000Z' },
-                '2026-04-30T00:30:00.000Z'
-            )
+            isSessionExpired({ expiresAt: '2026-04-30T01:00:00.000Z' }, '2026-04-30T00:30:00.000Z')
         ).toBe(false);
     });
 

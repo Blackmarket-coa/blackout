@@ -29,6 +29,7 @@ import type {
     DeadDropRecord,
     DeadmanSwitchRecord,
     DeadmanSwitchStatus,
+    ReleaseIdentityRecord,
     ForumPostRecord,
     UserRecord,
     VoiceRoomEventRecord,
@@ -60,6 +61,7 @@ import type {
     AccountDeletionTokenRecord,
     InvitationTokenRecord,
     InvitationRedemptionRecord,
+    InvitationAdmissionRecord,
     BurnerIdentityRecord,
     RefreshTokenRecord,
     RevokedSessionRecord,
@@ -212,6 +214,7 @@ type PersistedState = {
     channels: ChannelRecord[];
     deadDrops: DeadDropRecord[];
     deadmanSwitches: DeadmanSwitchRecord[];
+    releaseIdentities: ReleaseIdentityRecord[];
     moderationActions: ModerationActionRecord[];
     creatorStreamAuth: CreatorStreamAuthRecord[];
     streams: StreamRecord[];
@@ -243,6 +246,7 @@ type PersistedState = {
     accountDeletionTokens: AccountDeletionTokenRecord[];
     invitationTokens: InvitationTokenRecord[];
     invitationRedemptions: InvitationRedemptionRecord[];
+    invitationAdmissions: InvitationAdmissionRecord[];
     burnerIdentities: BurnerIdentityRecord[];
     refreshTokens: RefreshTokenRecord[];
     revokedSessions: RevokedSessionRecord[];
@@ -380,6 +384,8 @@ class InMemoryDb {
     channels = new Map<string, ChannelRecord>();
     deadDrops = new Map<string, DeadDropRecord>();
     deadmanSwitches = new Map<string, DeadmanSwitchRecord>();
+    /** Published release identities, current and superseded, keyed by row id. */
+    releaseIdentities = new Map<string, ReleaseIdentityRecord>();
     moderationActions = new Map<string, ModerationActionRecord>();
     creatorStreamAuth = new Map<string, CreatorStreamAuthRecord>();
     streams = new Map<string, StreamRecord>();
@@ -420,6 +426,8 @@ class InMemoryDb {
     invitationTokens = new Map<string, InvitationTokenRecord>();
     /** Keyed by redemption id. */
     invitationRedemptions = new Map<string, InvitationRedemptionRecord>();
+    /** Keyed by admission id: account-number sign-up's spent uses (D3). */
+    invitationAdmissions = new Map<string, InvitationAdmissionRecord>();
     /** Burner identities, keyed by row id. */
     burnerIdentities = new Map<string, BurnerIdentityRecord>();
     refreshTokens = new Map<string, RefreshTokenRecord>();
@@ -959,6 +967,62 @@ class InMemoryDb {
         return [...this.invitationRedemptions.values()]
             .filter((r) => r.invitationTokenId === invitationTokenId)
             .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    }
+
+    createInvitationAdmission(
+        input: Omit<InvitationAdmissionRecord, 'createdAt' | 'claimedAt' | 'claimedByUserId'>
+    ): InvitationAdmissionRecord {
+        const record: InvitationAdmissionRecord = { ...input, createdAt: nowIso() };
+        this.invitationAdmissions.set(record.id, record);
+        return record;
+    }
+
+    /** The admission of `matrixUserId` on an invitation, claimed or not. */
+    findInvitationAdmission(
+        invitationTokenId: string,
+        matrixUserId: string
+    ): InvitationAdmissionRecord | undefined {
+        return [...this.invitationAdmissions.values()].find(
+            (a) => a.invitationTokenId === invitationTokenId && a.matrixUserId === matrixUserId
+        );
+    }
+
+    /**
+     * Claim an unclaimed admission for `userId`. A compare-and-set, checked and
+     * written in one synchronous call, so of two claims of one admission
+     * exactly one gets the claimed record back. Undefined when the admission
+     * is gone or already claimed, by anyone.
+     */
+    claimInvitationAdmission(id: string, userId: string): InvitationAdmissionRecord | undefined {
+        const existing = this.invitationAdmissions.get(id);
+        if (!existing || existing.claimedByUserId) return undefined;
+        const updated: InvitationAdmissionRecord = {
+            ...existing,
+            claimedAt: nowIso(),
+            claimedByUserId: userId,
+        };
+        this.invitationAdmissions.set(id, updated);
+        return updated;
+    }
+
+    /**
+     * Account deletion: remove an account's admissions, the one it claimed and
+     * any for its Matrix id that it never claimed, since each holds that
+     * Matrix id. The redemption row a claim wrote stays, as every redemption
+     * row does. Returns how many were removed.
+     */
+    deleteInvitationAdmissionsForUser(userId: string, matrixUserId?: string): number {
+        let removed = 0;
+        for (const [id, admission] of this.invitationAdmissions) {
+            if (
+                admission.claimedByUserId === userId ||
+                (matrixUserId !== undefined && admission.matrixUserId === matrixUserId)
+            ) {
+                this.invitationAdmissions.delete(id);
+                removed += 1;
+            }
+        }
+        return removed;
     }
 
     /** Best-effort cascade: drop all per-user auth artifacts so a deleted user
@@ -2470,6 +2534,76 @@ class InMemoryDb {
             updatedAt: nowIso(),
         };
         this.deadmanSwitches.set(id, updated);
+        return updated;
+    }
+
+    /** Every release identity the account published, newest first. */
+    listReleaseIdentitiesForAccount(accountId: string): ReleaseIdentityRecord[] {
+        // Erased rows have no account; nothing finds them by one.
+        if (!accountId) return [];
+        return [...this.releaseIdentities.values()]
+            .filter((record) => record.accountId === accountId)
+            .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt) || b.id.localeCompare(a.id));
+    }
+
+    /** The account's current release identity: the newest one not superseded. */
+    getCurrentReleaseIdentity(accountId: string): ReleaseIdentityRecord | undefined {
+        return this.listReleaseIdentitiesForAccount(accountId).find(
+            (record) => !record.supersededAt
+        );
+    }
+
+    /** Mark one identity superseded at `at`; `undefined` if it is unknown or already was. */
+    supersedeReleaseIdentity(id: string, at: string): ReleaseIdentityRecord | undefined {
+        const record = this.releaseIdentities.get(id);
+        if (!record || record.supersededAt) return undefined;
+        const updated: ReleaseIdentityRecord = { ...record, supersededAt: at };
+        this.releaseIdentities.set(id, updated);
+        return updated;
+    }
+
+    /**
+     * Publish an account's release identity. Every identity of the account
+     * not yet superseded is marked superseded first, each as its own write,
+     * so Postgres sees the old row replaced before the new one appears.
+     * Callers check the identity, the account's history and the publish
+     * limits first (`services/releaseIdentities.ts`).
+     */
+    publishReleaseIdentity(
+        input: Omit<ReleaseIdentityRecord, 'publishedAt' | 'supersededAt'>
+    ): ReleaseIdentityRecord {
+        const at = nowIso();
+        for (const existing of this.listReleaseIdentitiesForAccount(input.accountId)) {
+            if (!existing.supersededAt) this.supersedeReleaseIdentity(existing.id, at);
+        }
+        const record: ReleaseIdentityRecord = { ...input, publishedAt: at };
+        this.releaseIdentities.set(record.id, record);
+        return record;
+    }
+
+    /**
+     * Account deletion: blank one release identity, current or superseded:
+     * its keys, signature, fingerprint and account go, and the row keeps only
+     * its id, format version and times. The row stays because this is a
+     * targeted upsert, as `eraseScheduledMessage` and `eraseDeadmanSwitch`
+     * are: the Postgres writer has no targeted delete, and a resync of the
+     * table can delete rows another replica has just written, or write back
+     * stale copies of them.
+     */
+    eraseReleaseIdentity(id: string): ReleaseIdentityRecord | undefined {
+        const record = this.releaseIdentities.get(id);
+        if (!record) return undefined;
+        const updated: ReleaseIdentityRecord = {
+            ...record,
+            accountId: '',
+            signingKey: '',
+            x25519Key: '',
+            mlkem768Key: '',
+            signature: '',
+            fingerprint: '',
+            supersededAt: record.supersededAt ?? nowIso(),
+        };
+        this.releaseIdentities.set(id, updated);
         return updated;
     }
 
@@ -5628,6 +5762,9 @@ export class FileBackedDb extends InMemoryDb {
         this.channels = new Map((parsed.channels ?? []).map((row) => [row.id, row]));
         this.deadDrops = new Map((parsed.deadDrops ?? []).map((row) => [row.id, row]));
         this.deadmanSwitches = new Map((parsed.deadmanSwitches ?? []).map((row) => [row.id, row]));
+        this.releaseIdentities = new Map(
+            (parsed.releaseIdentities ?? []).map((row) => [row.id, row])
+        );
         this.moderationActions = new Map(
             (parsed.moderationActions ?? []).map((row) => [row.id, row])
         );
@@ -5719,6 +5856,9 @@ export class FileBackedDb extends InMemoryDb {
         );
         this.invitationRedemptions = new Map(
             (parsed.invitationRedemptions ?? []).map((row) => [row.id, row])
+        );
+        this.invitationAdmissions = new Map(
+            (parsed.invitationAdmissions ?? []).map((row) => [row.id, row])
         );
         this.burnerIdentities = new Map(
             (parsed.burnerIdentities ?? []).map((row) => [row.id, row])
@@ -6154,6 +6294,7 @@ export class FileBackedDb extends InMemoryDb {
             channels: [...this.channels.values()],
             deadDrops: [...this.deadDrops.values()],
             deadmanSwitches: [...this.deadmanSwitches.values()],
+            releaseIdentities: [...this.releaseIdentities.values()],
             moderationActions: [...this.moderationActions.values()],
             creatorStreamAuth: [...this.creatorStreamAuth.values()],
             streams: [...this.streams.values()],
@@ -6191,6 +6332,7 @@ export class FileBackedDb extends InMemoryDb {
             accountDeletionTokens: [...this.accountDeletionTokens.values()],
             invitationTokens: [...this.invitationTokens.values()],
             invitationRedemptions: [...this.invitationRedemptions.values()],
+            invitationAdmissions: [...this.invitationAdmissions.values()],
             burnerIdentities: [...this.burnerIdentities.values()],
             refreshTokens: [...this.refreshTokens.values()],
             revokedSessions: [...this.revokedSessions.values()],
@@ -6459,6 +6601,29 @@ export class FileBackedDb extends InMemoryDb {
         return record;
     }
 
+    override createInvitationAdmission(
+        input: Omit<InvitationAdmissionRecord, 'createdAt' | 'claimedAt' | 'claimedByUserId'>
+    ): InvitationAdmissionRecord {
+        const record = super.createInvitationAdmission(input);
+        this.persist();
+        return record;
+    }
+
+    override claimInvitationAdmission(
+        id: string,
+        userId: string
+    ): InvitationAdmissionRecord | undefined {
+        const updated = super.claimInvitationAdmission(id, userId);
+        if (updated) this.persist();
+        return updated;
+    }
+
+    override deleteInvitationAdmissionsForUser(userId: string, matrixUserId?: string): number {
+        const removed = super.deleteInvitationAdmissionsForUser(userId, matrixUserId);
+        if (removed > 0) this.persist();
+        return removed;
+    }
+
     override purgeUserAuthArtifacts(userId: string): void {
         super.purgeUserAuthArtifacts(userId);
         this.persist();
@@ -6631,6 +6796,26 @@ export class FileBackedDb extends InMemoryDb {
 
     override eraseDeadmanSwitch(id: string): DeadmanSwitchRecord | undefined {
         const updated = super.eraseDeadmanSwitch(id);
+        if (updated) this.persist();
+        return updated;
+    }
+
+    override supersedeReleaseIdentity(id: string, at: string): ReleaseIdentityRecord | undefined {
+        const updated = super.supersedeReleaseIdentity(id, at);
+        if (updated) this.persist();
+        return updated;
+    }
+
+    override publishReleaseIdentity(
+        input: Omit<ReleaseIdentityRecord, 'publishedAt' | 'supersededAt'>
+    ): ReleaseIdentityRecord {
+        const record = super.publishReleaseIdentity(input);
+        this.persist();
+        return record;
+    }
+
+    override eraseReleaseIdentity(id: string): ReleaseIdentityRecord | undefined {
+        const updated = super.eraseReleaseIdentity(id);
         if (updated) this.persist();
         return updated;
     }

@@ -17,6 +17,11 @@
  *   - a removal disconnects the participant (`removeParticipant`). It does not
  *     revoke a token the participant already holds (`services/livekit.ts`).
  *
+ * When LiveKit's server sends its webhooks to the API, the same calls apply a
+ * removal or a mute that stands to anyone LiveKit reports joining or
+ * publishing, a connection made with such a token included
+ * (`livekitWebhook.ts`).
+ *
  * The LiveKit identity is the Blackout user id, as the tokens are minted. A
  * participant who is not connected is not an error: the route writes its
  * record before calling here, and that record decides the account's next
@@ -46,9 +51,15 @@ export type LiveKitRemoveOutcome =
     | { ok: true; disconnected: boolean }
     | { ok: false; reason: LiveKitModerationFailure; detail?: string };
 
-/** LiveKit's answer for a room, participant or track that is not there (Twirp `not_found`, HTTP 404). */
+/**
+ * LiveKit's answer for a room, participant or track that is not there: a Twirp
+ * error whose code is `not_found` (with HTTP 404). A 404 without that code is
+ * not LiveKit saying so; it is whatever answered instead (a proxy's page for a
+ * path it does not route, say), so LiveKit was not reached and nothing is known
+ * about who is connected.
+ */
 const isNotFound = (error: unknown): boolean =>
-    error instanceof TwirpError && (error.status === 404 || error.code === 'not_found');
+    error instanceof TwirpError && error.code === 'not_found';
 
 const unavailable = (
     action: string,

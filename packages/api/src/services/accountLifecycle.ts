@@ -1,6 +1,9 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import type { ReleaseIdentity } from '@blackout/protocol';
 import { db } from '../db/store';
 import type { UserRecord } from '../db/types';
+import { recordToReleaseIdentity } from './releaseIdentities';
+import { matrixUserIdFor } from './userIdentity';
 
 const DELETE_TOKEN_BYTES = 32;
 const DEFAULT_DELETE_TTL_SECONDS = 60 * 30; // 30 minutes
@@ -79,6 +82,16 @@ export interface AccountExport {
         releaseAt: string;
         recipientCount: number;
         createdAt: string;
+    }>;
+    /**
+     * Release identities this user published, current and replaced: public
+     * keys only. The private halves were never sent to the server.
+     */
+    releaseIdentities: Array<{
+        fingerprint: string;
+        publishedAt: string;
+        supersededAt?: string;
+        identity: ReleaseIdentity;
     }>;
     refreshTokensCount: number;
     passwordResetTokensCount: number;
@@ -201,6 +214,15 @@ export const exportUserData = (userId: string): AccountExport | null => {
             createdAt: sw.createdAt,
         }));
 
+    const releaseIdentities: AccountExport['releaseIdentities'] = db
+        .listReleaseIdentitiesForAccount(userId)
+        .map((record) => ({
+            fingerprint: record.fingerprint,
+            publishedAt: record.publishedAt,
+            ...(record.supersededAt ? { supersededAt: record.supersededAt } : {}),
+            identity: recordToReleaseIdentity(record),
+        }));
+
     const refreshTokensCount = [...db.refreshTokens.values()].filter(
         (t) => t.userId === userId
     ).length;
@@ -224,6 +246,7 @@ export const exportUserData = (userId: string): AccountExport | null => {
         moderationActions,
         scheduledMessages,
         deadmanSwitches,
+        releaseIdentities,
         refreshTokensCount,
         passwordResetTokensCount,
         emailVerificationTokensCount,
@@ -290,6 +313,21 @@ export const confirmAccountDeletion = (
     // that has fired stays readable to the people it named; its label goes.
     for (const sw of db.listDeadmanSwitchesForOwner(record.userId)) {
         db.eraseDeadmanSwitch(sw.id);
+    }
+    // Invitation admissions (the use an account-number sign-up spent) hold the
+    // account's Matrix id, so they go with it, claimed or not. The redemption
+    // row a claim wrote stays, as every redemption row does. Read the Matrix id
+    // while the user row still exists.
+    db.deleteInvitationAdmissionsForUser(
+        record.userId,
+        matrixUserIdFor(record.userId) ?? undefined
+    );
+    // Release identities: the public keys go with the account, one row at a
+    // time, so nothing but this account's rows is written. The private halves
+    // are on the person's devices and in their recovery files, which the
+    // server never had.
+    for (const identity of db.listReleaseIdentitiesForAccount(record.userId)) {
+        db.eraseReleaseIdentity(identity.id);
     }
     db.purgeUserAuthArtifacts(record.userId);
     db.deleteUser(record.userId);

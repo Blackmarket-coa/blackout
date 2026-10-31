@@ -20,6 +20,18 @@ rtc:
 keys:
   # Shared with the lk-jwt-service token bridge (same values in .env).
   ${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}
+# Room events to the API, so that a voice-room mute or removal that stands is
+# applied to anyone who connects again with a token issued before it
+# (POST /v1/voice/livekit/webhook; packages/api/README.md, "Voice rooms").
+# Straight to the api container over the internal `app` network, not through
+# nginx. Each delivery is signed with the secret of `api_key`, which must be
+# the pair the API holds as LIVEKIT_API_KEY / LIVEKIT_API_SECRET. LiveKit
+# 1.8.4 sends every room's events, MatrixRTC calls' included; the API acts
+# only on rooms it created.
+webhook:
+  api_key: ${LIVEKIT_API_KEY}
+  urls:
+    - http://api:9000/v1/voice/livekit/webhook
 turn:
   # coturn ships as its own service in this stack.
   enabled: false

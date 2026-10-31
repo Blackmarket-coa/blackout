@@ -7,7 +7,7 @@ import { redeemInvitation } from '../../features/invitations/invitationsClient';
 import { joinDenWithCanopy } from '../../features/room/joinDenWithCanopy';
 import { ensureBlackoutApiToken } from '../../../client/blackoutApiSession';
 import { resolvePostAcceptancePath } from './postAcceptanceRoute';
-import { PENDING_INVITE_STORAGE_KEY } from './InviteLandingPage';
+import { PENDING_INVITE_STORAGE_KEY } from '../../features/invitations/pendingInvite';
 
 /**
  * After a user signs up via the standard Matrix UIA flow or signs in to
@@ -15,6 +15,11 @@ import { PENDING_INVITE_STORAGE_KEY } from './InviteLandingPage';
  * token into sessionStorage. This effect picks it up exactly once,
  * redeems it against `POST /v1/invitations/redeem`, and clears the slot
  * so a refresh doesn't re-fire the call.
+ *
+ * An account-number sign-up already sent the token, and the server spent
+ * one of its uses then. The redeem here claims that use for the new account
+ * instead of spending another: the redemption is recorded, the inviter is
+ * followed, and the answer carries the room and canopy to route into.
  *
  * Failures are intentionally silent at the UI level — the recipient
  * already saw the inviter on the landing page, and surfacing a global

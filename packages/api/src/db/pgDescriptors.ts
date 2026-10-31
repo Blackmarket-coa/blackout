@@ -395,6 +395,7 @@ const ALL_MAP_NAMES = [
     'forumPosts',
     'deadDrops',
     'deadmanSwitches',
+    'releaseIdentities',
     'moderationActions',
     'creatorStreamAuth',
     'streams',
@@ -433,6 +434,7 @@ const ALL_MAP_NAMES = [
     'accountDeletionTokens',
     'invitationTokens',
     'invitationRedemptions',
+    'invitationAdmissions',
     'burnerIdentities',
     'refreshTokens',
     'revokedSessions',
@@ -586,6 +588,10 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
     incrementInvitationTokenUseCount: upsert('invitationTokens'),
     revokeInvitationToken: upsert('invitationTokens'),
     createInvitationRedemption: upsert('invitationRedemptions'),
+    createInvitationAdmission: upsert('invitationAdmissions'),
+    claimInvitationAdmission: upsert('invitationAdmissions'),
+    // Account deletion removes rows, so the map is reconciled, not upserted.
+    deleteInvitationAdmissionsForUser: resync('invitationAdmissions'),
     createBurnerIdentity: upsert('burnerIdentities'),
     markBurnerIdentityBurned: upsert('burnerIdentities'),
     rotateBurnerIdentity: upsert('burnerIdentities'),
@@ -614,6 +620,12 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
     updateDeadmanSwitch: upsert('deadmanSwitches'),
     // Account deletion. A targeted upsert, not a resync: see the store method.
     eraseDeadmanSwitch: upsert('deadmanSwitches'),
+    // Publishing supersedes the current identity (its own upsert, issued
+    // first by publishReleaseIdentity) and then adds the new one.
+    supersedeReleaseIdentity: upsert('releaseIdentities'),
+    publishReleaseIdentity: upsert('releaseIdentities'),
+    // Account deletion. A targeted upsert, not a resync: see the store method.
+    eraseReleaseIdentity: upsert('releaseIdentities'),
     createModerationAction: upsert('moderationActions'),
     upsertCreatorStreamAuth: upsert('creatorStreamAuth'),
     upsertStream: upsert('streams'),

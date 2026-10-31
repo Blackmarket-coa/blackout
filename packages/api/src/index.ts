@@ -34,6 +34,7 @@ import pluginDiscoveryRoutes from './routes/pluginDiscovery';
 import creatorRoutes from './routes/creator';
 import vaultRoutes from './routes/vault';
 import voiceRoutes from './routes/voice';
+import livekitWebhookRoutes, { LIVEKIT_WEBHOOK_PATH } from './routes/livekitWebhook';
 import subscriptionRoutes from './routes/subscriptions';
 import tipRoutes from './routes/tips';
 import creatorSubRoutes from './routes/creatorSubs';
@@ -83,6 +84,7 @@ import reputationRoutes from './routes/reputation';
 import spatialRoutes from './routes/spatial';
 import webauthnRoutes from './routes/webauthn';
 import keyTransparencyRoutes from './routes/keyTransparency';
+import releaseIdentityRoutes from './routes/releaseIdentities';
 import diagnosticsRoutes from './routes/diagnostics';
 import telemetryRoutes from './routes/telemetry';
 import adminRoutes from './routes/admin';
@@ -164,7 +166,12 @@ app.use('*', httpMetricsMiddleware);
 // 413 carries them and is counted; on the Content-Length fast path bodyLimit
 // rejects without reading the body at all.
 app.use('*', jsonBodyLimit(GLOBAL_MAX_BODY_BYTES));
-app.use('*', rateLimit);
+const apiRoots = legacyAliasEnabled ? [API_ROOTS.v1, API_ROOTS.legacyApiAlias] : [API_ROOTS.v1];
+// LiveKit's webhook deliveries are counted in a bucket of their own, on their
+// route (`livekitWebhookRateLimit` in middleware/rate-limit.ts says why), and
+// not here; this path only, exactly as mounted below.
+const ownBucketPaths = new Set(apiRoots.map((root) => `${root}${LIVEKIT_WEBHOOK_PATH}`));
+app.use('*', (c, next) => (ownBucketPaths.has(c.req.path) ? next() : rateLimit(c, next)));
 
 // Public canary tripwire (OSS-manifest G5) — mounted before the /v1 auth gate
 // so an unauthorized party who opens a honeypot artifact fires the canary.
@@ -187,7 +194,7 @@ if (legacyAliasEnabled) {
     startLegacyApiAliasWeeklyReporter();
 }
 
-for (const root of legacyAliasEnabled ? [API_ROOTS.v1, API_ROOTS.legacyApiAlias] : [API_ROOTS.v1]) {
+for (const root of apiRoots) {
     app.route(`${root}/auth`, authRoutes);
     app.route(`${root}/admin`, adminRoutes);
     app.route(`${root}/invitations`, invitationRoutes);
@@ -224,6 +231,8 @@ for (const root of legacyAliasEnabled ? [API_ROOTS.v1, API_ROOTS.legacyApiAlias]
     app.route(`${root}/creator`, creatorRoutes);
     app.route(`${root}/vault`, vaultRoutes);
     app.route(`${root}/voice`, voiceRoutes);
+    // LiveKit's server posts here, not a signed-in client (routes/livekitWebhook.ts).
+    app.route(`${root}${LIVEKIT_WEBHOOK_PATH}`, livekitWebhookRoutes);
     app.route(`${root}/subscriptions`, subscriptionRoutes);
     app.route(`${root}/tips`, tipRoutes);
     app.route(`${root}/creator-subs`, creatorSubRoutes);
@@ -269,6 +278,8 @@ for (const root of legacyAliasEnabled ? [API_ROOTS.v1, API_ROOTS.legacyApiAlias]
     app.route(`${root}/spatial`, spatialRoutes);
     app.route(`${root}/auth/webauthn`, webauthnRoutes);
     app.route(`${root}/key-transparency`, keyTransparencyRoutes);
+    // Release identities for dead-man switch releases (and, later, dead drops).
+    app.route(`${root}/release-identities`, releaseIdentityRoutes);
     app.route(`${root}/diagnostics`, diagnosticsRoutes);
     app.route(`${root}/telemetry`, telemetryRoutes);
     // Also reachable under /v1 (and the legacy alias) so the web client works on

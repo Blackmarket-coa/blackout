@@ -41,7 +41,9 @@ export const setRoomServiceClientFactory = (f: Factory | undefined): void => {
 
 const defaultFactory: Factory = () => {
     const config = getLiveKitConfig();
-    return new RoomServiceClient(config.url, config.apiKey, config.apiSecret);
+    // `LIVEKIT_INTERNAL_URL` where the API cannot reach the public address
+    // (`getLiveKitConfig`).
+    return new RoomServiceClient(config.roomServiceUrl, config.apiKey, config.apiSecret);
 };
 
 /** The room-service client: the injected one in tests, else one from the environment, built once. */

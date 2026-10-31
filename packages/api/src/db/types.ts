@@ -226,6 +226,30 @@ export interface InvitationRedemptionRecord {
     createdAt: string;
 }
 
+/**
+ * A use of an invitation that account-number sign-up (`POST
+ * /v1/auth/account-number`) spent for a new Matrix account, before any
+ * Blackout account exists to record a redemption for. The first
+ * `POST /v1/invitations/redeem` from the Blackout account with that Matrix id
+ * claims it: the redemption row and the follow are written then, and no
+ * second use is spent. Claimed at most once; one never claimed keeps its use
+ * spent. Kept apart from the redemption rows so each of those still names a
+ * Blackout account. D3 in docs/security/api-findings-triage-2026-10-25.md.
+ */
+export interface InvitationAdmissionRecord {
+    id: UUID;
+    invitationTokenId: UUID;
+    /** The Matrix account the sign-up minted, `@<localpart>:<this server name>`. */
+    matrixUserId: string;
+    /** Whether admitting it to the invitation's room worked; unset when the invitation has no room. */
+    matrixInviteOk?: boolean;
+    createdAt: string;
+    /** When the admission was claimed; unset until then. */
+    claimedAt?: string;
+    /** The Blackout account that claimed it; unset until then. */
+    claimedByUserId?: UUID;
+}
+
 export interface RefreshTokenRecord {
     id: UUID;
     userId: UUID;
@@ -879,6 +903,29 @@ export interface DeadmanSwitchRecord {
     backlogGraceStartedAt?: string;
     createdAt: string;
     updatedAt: string;
+}
+
+/**
+ * One release identity an account published (`PUT /v1/release-identities/me`):
+ * the public keys and signature exactly as sent, already verified, and the
+ * fingerprint the API computed. Publishing a different identity marks the
+ * current row `supersededAt` and adds a new one, so the history of an
+ * account's keys shows. Account deletion blanks the account's rows
+ * (`eraseReleaseIdentity`). Migration 104;
+ * `docs/security/release-identities-2026-10-26.md`.
+ */
+export interface ReleaseIdentityRecord {
+    id: UUID;
+    accountId: UUID;
+    /** The identity format version (`v`). */
+    formatVersion: number;
+    signingKey: string;
+    x25519Key: string;
+    mlkem768Key: string;
+    signature: string;
+    fingerprint: string;
+    publishedAt: string;
+    supersededAt?: string;
 }
 
 export interface ModerationActionRecord {
