@@ -651,15 +651,20 @@ shipped (only incremental adoption remains).
     has already succeeded.
 -   Revoking a refresh-token family while another process is rotating a token
     of that family can leave the new token live.
--   Writes to other tables replace the whole row, and the last one wins. A
-    stale copy can still undo a change made elsewhere in the same window, for
-    example a password change, a moderation decision, or a vault item's
-    contents.
+-   Other writes, including some on these same tables (a password change,
+    marking an email address verified, a refresh-token rotation), replace the
+    whole row, and the last one wins. A stale copy can still undo a change
+    made elsewhere in the same window, for example a password change, a
+    moderation decision, or a vault item's contents.
 -   After you delete your account, an access token you already hold keeps
     working on the other processes until it expires (up to 24 hours), and
     deleting an account that has messages, votes or tips fails in the
     database while the process you used no longer shows it; it comes back
-    after a restart. Both were so before this release.
+    after a restart. Both were so before this release. A refresh token or vault
+    item another process creates for the account while the deletion is
+    running is removed from the database, but can stay in that process's copy
+    (and the deleting one's) until it restarts; such a refresh token is
+    refused, since its account is gone.
 -   Until every process runs this release, the ones that do not still write
     whole tables.
 -   Four writes never reach the database in this mode, so each is lost on
