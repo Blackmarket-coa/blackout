@@ -706,30 +706,38 @@ list is their correction:
 4. **The Gates preamble's count was off by one again.** "Four commits follow
    it" was five at `741f903`, which is itself one of them, and item 2 of the
    fourth list called the count fixed. The preamble now gives no count.
-5. **"CI ran them"** said CI ran the API suites. On `71548f0` it ran the PR
-   gate (`test:integration`) and launch smoke. The post-merge suite runs only
-   in `turborepo-ci.yml`, which this PR does not trigger. The Verification
-   preamble now lists that row and the `--offline` install as exceptions,
-   with the two client unit rows.
+5. **"CI ran them"** said CI ran the API suites without saying where. On
+   `71548f0` Blackout CI ran the PR gate (`test:integration`) and launch
+   smoke, and Centralized CI Parity ran the post-merge suite (item 7 below
+   corrects this item). The Verification preamble now lists the `--offline`
+   install as an exception, with the two client unit rows.
 6. **Security checks had a second red step.** The CI paragraph said they stay
    red until the six Trivy findings are fixed (`-v48`). From 23:09Z the OSV
    step would also fail on `71548f0` and `741f903`, and `-v48` does not fix
    that. The paragraph now says so.
+7. **Item 5 was itself wrong, found on 2026-10-31 from CI's own log.** It
+   said the post-merge suite runs only in `turborepo-ci.yml`. The grep behind
+   it looked for `turbo run test` in `.github/workflows/`, but
+   `centralized-ci-parity.yml` runs `pnpm ci:parity`, and
+   `tools/ci/run-centralized-parity.mjs` runs `pnpm test`, the root's
+   `turbo run test`, which includes `@blackout/api`'s `test` script. That
+   workflow runs on pull requests that change `package.json`,
+   `pnpm-lock.yaml`, `tools/ci/**` or `docs/**`. On `71548f0` its job
+   124333484714 (run 41134501148) printed `# tests 2091`, `# pass 2091`,
+   `# fail 0`. Item 5, the Verification preamble, the paragraph above "CI on
+   `71548f0`" and the "workflows" row of the fifth-review table now say so.
 
 ## Verification
 
 Runs are local and on this branch unless the row or section says otherwise,
 with Node 22.22.0 and pnpm 9.15.4 (the pinned `packageManager`). Commands are
-as in `ci.yml` and `security.yml`, or in the workflow a row names, with three
+as in `ci.yml` and `security.yml`, or in the workflow a row names, with two
 exceptions:
 
 -   The two client unit rows ran `vitest run tests/unit src`, which is
     `test:unit` (`mobile_contract_tests.yml` runs it), not `ci.yml`'s
     `test:coverage`, which also enforces the coverage floors.
     `test:coverage` is in the fourth-review table.
--   The API post-merge row ran `@blackout/api`'s `test` script. In CI only
-    `turborepo-ci.yml` runs it (`pnpm turbo run test`), on pushes to `main`
-    and `develop` and on PRs to `main`, so not on this PR.
 -   The install row's first command adds `--offline`, which CI does not pass.
 
 The suites ran one at a time. CI's own runs on `71548f0` are in "CI on
@@ -841,10 +849,10 @@ the tree with react-router 7.18.2 and the three ignores removed):
 | prettier            | `prettier --check` on the changed files                                                                    | pass                                                                                                                                                                    |
 
 The API suites were not re-run locally: react-router is a client dependency
-only, and nothing under `packages/` resolves it. CI ran the PR gate
-(`test:integration`) and launch smoke on `71548f0` (below). The post-merge
-suite runs only in `turborepo-ci.yml`, which this PR does not trigger, so for
-this record it ran only in the Gates table, on `a147f5c`'s tree.
+only, and nothing under `packages/` resolves it. On `71548f0` (below) Blackout
+CI ran the PR gate (`test:integration`) and launch smoke, and Centralized CI
+Parity ran the post-merge suite, 2091 of 2091 (job 124333484714). Locally it
+ran in the Gates table, on `a147f5c`'s tree.
 
 **CI on `71548f0`** (pushed 2026-10-30 at 21:53Z; read from the Actions API):
 
@@ -888,16 +896,16 @@ manifest or lockfile changed:
 **Re-runs after the fifth review** (2026-10-31, 02:45 to 02:55 UTC, on the
 tree with the 2026-10-31 change). The change is to this document only:
 
-| Gate              | Command                                                                                                               | Result                                                                                                                          |
-| ----------------- | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| react-router load | `grep` for `from "./chunk-` in the installed 7.18.2's `dist/development/index.mjs` and chunks; its `package.json`     | `index.mjs` imports `chunk-ZA36QIGN.mjs` and `chunk-62JRHF6Z.mjs`; the first imports the second; `sideEffects: false`           |
-| workflows         | `grep` of `.github/workflows/` for the API `test` script, `turbo run test` and `--offline`                            | only `turborepo-ci.yml` runs `pnpm turbo run test` (PRs to `main`; pushes to `main`, `develop`); no workflow passes `--offline` |
-| CI runs           | the Actions API: the branch's runs; the jobs of 41134501169                                                           | 8 runs, all on `71548f0`, none of them Turborepo CI; API smoke + integration and Launch-smoke gate passed                       |
-| `-v48`            | `git diff --name-only ff7d08b 05dfc10`                                                                                | 19 files; not `pnpm-lock.yaml`, `package.json` or `osv-scanner.toml`                                                            |
-| OSV scan          | osv-scanner v2.3.3 (sha256 matches `osv-scanner_SHA256SUMS`), 02:50Z, `TZ` = `UTC`, `Etc/GMT-3`, `Pacific/Kiritimati` | exit 0 in all three: "No issues found", 4 filtered, no unused-ignore or multiple-ignore line                                    |
-| pnpm audit        | `pnpm audit --prod --audit-level high`; `pnpm run guard:audit-clean`, 02:50Z                                          | exit 0 both: "4 vulnerabilities found, 1 low \| 1 moderate (1 ignored) \| 2 high (2 ignored)"                                   |
-| prettier          | `prettier --check` on this file                                                                                       | pass                                                                                                                            |
-| gitleaks          | `gitleaks dir` on this file; `gitleaks git --log-opts="741f903442..HEAD"`                                             | no leaks                                                                                                                        |
+| Gate              | Command                                                                                                               | Result                                                                                                                                                                                                                                     |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| react-router load | `grep` for `from "./chunk-` in the installed 7.18.2's `dist/development/index.mjs` and chunks; its `package.json`     | `index.mjs` imports `chunk-ZA36QIGN.mjs` and `chunk-62JRHF6Z.mjs`; the first imports the second; `sideEffects: false`                                                                                                                      |
+| workflows         | `grep` of `.github/workflows/` for the API `test` script, `turbo run test` and `--offline`                            | `turborepo-ci.yml` runs `pnpm turbo run test` (PRs to `main`; pushes to `main`, `develop`); the grep missed `centralized-ci-parity.yml`, which runs it through `pnpm ci:parity` (item 7 of the fifth list); no workflow passes `--offline` |
+| CI runs           | the Actions API: the branch's runs; the jobs of 41134501169                                                           | 8 runs, all on `71548f0`, none of them Turborepo CI; API smoke + integration and Launch-smoke gate passed; Centralized CI Parity's post-merge suite 2091 / 2091                                                                            |
+| `-v48`            | `git diff --name-only ff7d08b 05dfc10`                                                                                | 19 files; not `pnpm-lock.yaml`, `package.json` or `osv-scanner.toml`                                                                                                                                                                       |
+| OSV scan          | osv-scanner v2.3.3 (sha256 matches `osv-scanner_SHA256SUMS`), 02:50Z, `TZ` = `UTC`, `Etc/GMT-3`, `Pacific/Kiritimati` | exit 0 in all three: "No issues found", 4 filtered, no unused-ignore or multiple-ignore line                                                                                                                                               |
+| pnpm audit        | `pnpm audit --prod --audit-level high`; `pnpm run guard:audit-clean`, 02:50Z                                          | exit 0 both: "4 vulnerabilities found, 1 low \| 1 moderate (1 ignored) \| 2 high (2 ignored)"                                                                                                                                              |
+| prettier          | `prettier --check` on this file                                                                                       | pass                                                                                                                                                                                                                                       |
+| gitleaks          | `gitleaks dir` on this file; `gitleaks git --log-opts="741f903442..HEAD"`                                             | no leaks                                                                                                                                                                                                                                   |
 
 **Not verified:**
 
