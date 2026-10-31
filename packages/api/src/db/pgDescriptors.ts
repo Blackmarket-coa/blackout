@@ -7,7 +7,7 @@
 // InMemoryDb mutators, whether a write-through is a targeted upsert of the
 // returned record or a (rarer) resync of the affected map(s).
 
-import { camelToSnake, type Row, type TableDescriptor } from './pgWriter';
+import { camelToSnake, type Row, type TableDescriptor, type TargetedStep } from './pgWriter';
 
 const KEY_ID = (r: Record<string, unknown>) => String(r.id);
 
@@ -556,16 +556,38 @@ export const TABLE_DESCRIPTORS: TableDescriptor[] = ALL_MAP_NAMES.map((mapName) 
     };
 });
 
-export type MutatorSpec = { kind: 'upsert'; map: string } | { kind: 'resync'; maps: string[] };
+/**
+ * - `upsert`: persist the record the method returned.
+ * - `resync`: reconcile whole maps against this process's mirror (being
+ *   replaced by `targeted`).
+ * - `targeted`: run fixed statements (pgWriter's TargetedStep) that name the
+ *   rows the call changed, by key or by a predicate Postgres evaluates, in one
+ *   transaction; the statements are checked against the schema at boot.
+ */
+export type MutatorSpec =
+    | { kind: 'upsert'; map: string }
+    | { kind: 'resync'; maps: string[] }
+    | { kind: 'targeted'; steps: TargetedStep[] };
 
 const upsert = (map: string): MutatorSpec => ({ kind: 'upsert', map });
 const resync = (...maps: string[]): MutatorSpec => ({ kind: 'resync', maps });
+const targeted = (...steps: TargetedStep[]): MutatorSpec => ({ kind: 'targeted', steps });
+
+/**
+ * Delete the one row whose key the call's arguments name, in conflict-column
+ * order. Only that row: a row this process has not heard of is never touched,
+ * as it was by the whole-table resync this replaces.
+ */
+const deleteKey = (map: string, key: (args: readonly unknown[]) => unknown[]): MutatorSpec =>
+    targeted({ op: 'deleteKey', map, key: (ctx) => key(ctx.args) });
+const deleteById = (map: string): MutatorSpec => deleteKey(map, ([id]) => [id]);
 
 /**
  * Maps each of the 127 InMemoryDb mutators to its write-through. `upsert`
  * persists the method's returned record; `resync` reconciles a map after a
- * delete / bulk-revoke / consume. The `reset*ForTest` seams are intentionally
- * absent — postgres mode never calls them.
+ * delete / bulk-revoke / consume; `targeted` writes only the rows the call
+ * changed. The `reset*ForTest` seams are intentionally absent — postgres mode
+ * never calls them.
  */
 export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
     createUser: upsert('users'),
@@ -683,7 +705,7 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
     insertAdRevenueShare: upsert('adRevenueShares'),
     updateAdRevenueShare: upsert('adRevenueShares'),
     upsertLinkedAccount: upsert('linkedAccounts'),
-    deleteLinkedAccount: resync('linkedAccounts'),
+    deleteLinkedAccount: deleteKey('linkedAccounts', ([userId, provider]) => [userId, provider]),
     setLinkedAccountSyncCursor: upsert('linkedAccounts'),
     createPendingOAuthLink: upsert('pendingOAuthLinks'),
     consumePendingOAuthLink: resync('pendingOAuthLinks'),
@@ -693,51 +715,52 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
     prunePendingOidcLogins: resync('pendingOidcLogins'),
     createTwitchChatBridge: upsert('twitchChatBridges'),
     updateTwitchChatBridge: upsert('twitchChatBridges'),
-    deleteTwitchChatBridge: resync('twitchChatBridges'),
+    deleteTwitchChatBridge: deleteById('twitchChatBridges'),
     createTwitchEventSubscription: upsert('twitchEventSubscriptions'),
     updateTwitchEventSubscriptionStatus: upsert('twitchEventSubscriptions'),
-    deleteTwitchEventSubscription: resync('twitchEventSubscriptions'),
+    // Keyed by the Helix subscription id, not a row id.
+    deleteTwitchEventSubscription: deleteKey('twitchEventSubscriptions', ([helixId]) => [helixId]),
     createWidgetAlertToken: upsert('widgetAlertTokens'),
     revokeWidgetAlertToken: upsert('widgetAlertTokens'),
     createYoutubeChatBridge: upsert('youtubeChatBridges'),
     updateYoutubeChatBridge: upsert('youtubeChatBridges'),
-    deleteYoutubeChatBridge: resync('youtubeChatBridges'),
+    deleteYoutubeChatBridge: deleteById('youtubeChatBridges'),
     createKickChatBridge: upsert('kickChatBridges'),
     updateKickChatBridge: upsert('kickChatBridges'),
-    deleteKickChatBridge: resync('kickChatBridges'),
+    deleteKickChatBridge: deleteById('kickChatBridges'),
     createSimulcastDestination: upsert('simulcastDestinations'),
     updateSimulcastDestination: upsert('simulcastDestinations'),
-    deleteSimulcastDestination: resync('simulcastDestinations'),
+    deleteSimulcastDestination: deleteById('simulcastDestinations'),
     createDiscordCompatWebhook: upsert('discordCompatWebhooks'),
     updateDiscordCompatWebhook: upsert('discordCompatWebhooks'),
-    deleteDiscordCompatWebhook: resync('discordCompatWebhooks'),
+    deleteDiscordCompatWebhook: deleteById('discordCompatWebhooks'),
     createDiscordServerImport: upsert('discordServerImports'),
     updateDiscordServerImport: upsert('discordServerImports'),
     createDiscordImportMapping: upsert('discordImportMappings'),
     createDiscordBridgeActivation: upsert('discordBridgeActivations'),
     updateDiscordBridgeActivation: upsert('discordBridgeActivations'),
-    deleteDiscordBridgeActivation: resync('discordBridgeActivations'),
+    deleteDiscordBridgeActivation: deleteById('discordBridgeActivations'),
     createOutboundEventWebhook: upsert('outboundEventWebhooks'),
     updateOutboundEventWebhook: upsert('outboundEventWebhooks'),
-    deleteOutboundEventWebhook: resync('outboundEventWebhooks'),
+    deleteOutboundEventWebhook: deleteById('outboundEventWebhooks'),
     createTwitchIrcBotToken: upsert('twitchIrcBotTokens'),
     revokeTwitchIrcBotToken: upsert('twitchIrcBotTokens'),
-    deleteTwitchIrcBotToken: resync('twitchIrcBotTokens'),
+    deleteTwitchIrcBotToken: deleteById('twitchIrcBotTokens'),
     createObsWsPassword: upsert('obsWsPasswords'),
     revokeObsWsPassword: upsert('obsWsPasswords'),
-    deleteObsWsPassword: resync('obsWsPasswords'),
+    deleteObsWsPassword: deleteById('obsWsPasswords'),
     createTwitchExtensionPanel: upsert('twitchExtensionPanels'),
     updateTwitchExtensionPanel: upsert('twitchExtensionPanels'),
-    deleteTwitchExtensionPanel: resync('twitchExtensionPanels'),
+    deleteTwitchExtensionPanel: deleteById('twitchExtensionPanels'),
     createCreatorListing: upsert('creatorListings'),
     updateCreatorListing: upsert('creatorListings'),
-    deleteCreatorListing: resync('creatorListings'),
+    deleteCreatorListing: deleteById('creatorListings'),
     createVaultItem: upsert('vaultItems'),
     updateVaultItem: upsert('vaultItems'),
-    deleteVaultItem: resync('vaultItems'),
+    deleteVaultItem: deleteById('vaultItems'),
     createChannelPointsReward: upsert('channelPointsRewards'),
     updateChannelPointsReward: upsert('channelPointsRewards'),
-    deleteChannelPointsReward: resync('channelPointsRewards'),
+    deleteChannelPointsReward: deleteById('channelPointsRewards'),
     appendChannelPointsLedger: upsert('channelPointsLedger'),
     upsertCoalitionSpatialItem: upsert('coalitionSpatialItems'),
     deleteCoalitionSpatialItem: resync('coalitionSpatialItems'),
@@ -759,7 +782,7 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
     upsertCoalitionCampaign: upsert('coalitionCampaigns'),
     upsertCoalitionCampaignPost: upsert('coalitionCampaignPosts'),
     upsertCoalitionExternalActivity: upsert('coalitionExternalActivity'),
-    deleteCoalitionExternalActivity: resync('coalitionExternalActivity'),
+    deleteCoalitionExternalActivity: deleteById('coalitionExternalActivity'),
     deleteCoalitionExternalActivities: resync('coalitionExternalActivity'),
     upsertCoalitionCampaignSyncOptIn: upsert('coalitionCampaignSyncOptIns'),
     upsertCoalitionBoost: upsert('coalitionBoosts'),
@@ -792,8 +815,11 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
     createCoalitionFeedComment: upsert('coalitionFeedComments'),
     addCircleEdge: upsert('circleEdges'),
     // A withdrawn follow is deleted outright (unlike a relay, which keeps its
-    // row and flips `active`), so the map has to be reconciled, not upserted.
-    removeCircleEdge: resync('circleEdges'),
+    // row and flips `active`): that one (follower, followee) row.
+    removeCircleEdge: deleteKey('circleEdges', ([followerId, followeeId]) => [
+        followerId,
+        followeeId,
+    ]),
     upsertRelayEdge: upsert('relayEdges'),
     upsertCommunityAsset: upsert('communityAssets'),
     upsertCommunityAssetReport: upsert('communityAssetReports'),
@@ -811,7 +837,7 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
     replaceMeshEnvelopes: resync('meshEnvelopes'),
     upsertClip: upsert('clips'),
     updateClip: upsert('clips'),
-    deleteClip: resync('clips'),
+    deleteClip: deleteById('clips'),
     upsertColiseumTopic: upsert('coliseumTopics'),
     upsertSellerProfile: upsert('marketplaceSellerProfiles'),
     createColiseumChallenge: upsert('coliseumChallenges'),
@@ -837,7 +863,7 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
     upsertColiseumExplainerVote: upsert('coliseumExplainerVotes'),
     createPluginInstallation: upsert('pluginInstallations'),
     updatePluginInstallation: upsert('pluginInstallations'),
-    deletePluginInstallation: resync('pluginInstallations'),
+    deletePluginInstallation: deleteById('pluginInstallations'),
     addReputationEvent: upsert('reputationEvents'),
     createPluginDen: upsert('pluginDens'),
     createCoalitionKitManifestApplication: upsert('coalitionKitManifestApplications'),

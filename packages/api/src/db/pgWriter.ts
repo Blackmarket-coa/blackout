@@ -226,6 +226,16 @@ export interface StepContext {
     result: unknown;
     /** The mirror's record for `key` in `map` as it was before the call. */
     before(map: string, key: string): Record<string, unknown> | undefined;
+    /**
+     * Every key of `map` the call changed in the mirror, with its record before
+     * and after (undefined where the key was absent). A statement that must
+     * write what the mutator chose (a timestamp it took itself) reads it here.
+     */
+    changed(map: string): ReadonlyArray<{
+        key: string;
+        before?: Record<string, unknown>;
+        after?: Record<string, unknown>;
+    }>;
     /** ISO time at which the call returned. */
     at: string;
 }

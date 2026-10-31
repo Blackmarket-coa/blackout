@@ -11,7 +11,7 @@
 // interleave with another's statements. Each process's pool also logs its
 // statements and can delay or fail chosen ones. A process's transport can be
 // made deaf ("has not heard yet"); the world records every notification.
-import test from 'node:test';
+import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
@@ -21,9 +21,15 @@ process.env.BLACKOUT_DB_MODE = 'memory';
 
 const { PostgresBackedDb } = await import('../src/db/store');
 const { MIGRATIONS_DIR, migrateUp } = await import('../src/db/migrate');
-const { InMemoryStoreChangeHub, InMemoryStoreChangeTransport, PgNotifyTransport } = await import(
-    '../src/db/pgNotify'
-);
+const { MUTATOR_SPECS } = await import('../src/db/pgDescriptors');
+const { registry } = await import('../src/telemetry/metrics');
+const {
+    InMemoryStoreChangeHub,
+    InMemoryStoreChangeTransport,
+    PgNotifyTransport,
+    MAX_KEY_PAYLOAD_BYTES,
+    keyChangePayloads,
+} = await import('../src/db/pgNotify');
 
 type Payload = import('../src/db/pgNotify').StoreChangePayload;
 type Row = Record<string, any>;
@@ -144,6 +150,18 @@ async function pgliteDatabase(): Promise<Database> {
 let postgresTemplate: Promise<string> | null = null;
 let postgresCount = 0;
 
+after(async () => {
+    if (!postgresTemplate) return;
+    const tpl = await postgresTemplate;
+    const { default: pg } = (await import('pg')) as unknown as {
+        default: { Client: new (cfg: { connectionString: string }) => any };
+    };
+    const admin = new pg.Client({ connectionString: PG_URL! });
+    await admin.connect();
+    await admin.query(`DROP DATABASE IF EXISTS ${tpl}`);
+    await admin.end();
+});
+
 async function postgresDatabase(): Promise<Database> {
     const { default: pg } = (await import('pg')) as unknown as {
         default: {
@@ -185,7 +203,18 @@ async function postgresDatabase(): Promise<Database> {
         async close() {
             for (const p of pools) await p.end();
             await direct.end();
-            await admin.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
+            // Pool.end() resolves while its sockets are still closing; a drop
+            // that terminated them would raise an error event nobody listens
+            // for. Wait for the sessions to go, then drop.
+            for (let i = 0; i < 200; i++) {
+                const live = await admin.query(
+                    'SELECT count(*)::int AS n FROM pg_stat_activity WHERE datname = $1',
+                    [name]
+                );
+                if (live.rows[0].n === 0) break;
+                await sleep(10);
+            }
+            await admin.query(`DROP DATABASE IF EXISTS ${name}`);
             await admin.end();
         },
     };
@@ -378,6 +407,42 @@ const mkVault = (db: any, owner: string, fields: Record<string, string> = {}): s
         ...fields,
     }).id;
 
+/** A counter's value for the labels given (0 before it was first incremented). */
+function metric(name: string, labels: Record<string, string>): number {
+    for (const line of registry.expose().split('\n')) {
+        if (!line.startsWith(`${name}{`)) continue;
+        const got = Object.fromEntries(
+            [...line.matchAll(/(\w+)="([^"]*)"/g)].map((m) => [m[1], m[2]])
+        );
+        if (Object.entries(labels).every(([k, v]) => got[k] === v)) {
+            return Number(line.slice(line.lastIndexOf(' ') + 1));
+        }
+    }
+    return 0;
+}
+
+/** Run `fn` with MUTATOR_SPECS[method] replaced; processes built inside see the replacement. */
+async function withSpec(
+    method: string,
+    spec: typeof MUTATOR_SPECS[string] | undefined,
+    fn: () => Promise<void>
+): Promise<void> {
+    const specs = MUTATOR_SPECS as Record<string, typeof MUTATOR_SPECS[string]>;
+    const had = Object.prototype.hasOwnProperty.call(specs, method);
+    const saved = specs[method];
+    if (spec) specs[method] = spec;
+    else delete specs[method];
+    try {
+        await fn();
+    } finally {
+        if (had) specs[method] = saved;
+        else delete specs[method];
+    }
+}
+
+const vaultCount = async (w: World, id: string): Promise<number> =>
+    (await w.sql('SELECT count(*)::int AS n FROM vault_items WHERE id = $1', [id]))[0].n;
+
 const vaultRow = async (w: World, id: string) =>
     (await w.sql('SELECT label, ciphertext FROM vault_items WHERE id = $1', [id]))[0];
 
@@ -488,4 +553,362 @@ test("X16b (fence): a table reload ('r') and a full rehydrate keep a queued key,
             assert.equal(B.db.getVaultItem(v)?.label, `B-${reload}`);
         }
     });
+});
+
+// ------------------------------------------------------------------ writer
+
+test('X6: removing a circle edge deletes that one row by key, and keeps an edge the remover has not heard of', async () => {
+    await withWorld(2, 'pg', async (w) => {
+        const [A, B] = w.procs;
+        const [x, y, z] = [randomUUID(), randomUUID(), randomUUID()];
+        const edge = (db: any, f: string, t: string) =>
+            db.addCircleEdge({ id: randomUUID(), followerId: f, followeeId: t });
+        edge(A.db, x, y);
+        edge(A.db, y, z);
+        await quiesce(w);
+        A.tap.deaf = true;
+        edge(B.db, z, x);
+        await quiesce(w);
+        assert.equal(A.db.getCircleEdge(z, x), undefined, 'A has not heard of z -> x');
+
+        A.ctl.log.length = 0;
+        A.db.removeCircleEdge(y, z);
+        await A.db.drain();
+        const onTable = A.ctl.log.filter((q) => /circle_edges/.test(q));
+        assert.deepEqual(
+            onTable,
+            [
+                'DELETE FROM circle_edges WHERE follower_id = $1 AND followee_id = $2 RETURNING follower_id, followee_id',
+            ],
+            'one DELETE of that row, and no re-read: the key Postgres returned is the key the mirror removed'
+        );
+        const left = await w.sql(
+            'SELECT follower_id, followee_id FROM circle_edges WHERE follower_id = ANY($1)',
+            [[x, y, z]]
+        );
+        assert.deepEqual(
+            left.map((r) => `${r.follower_id}>${r.followee_id}`).sort(),
+            [`${x}>${y}`, `${z}>${x}`].sort()
+        );
+        await quiesce(w);
+        assert.equal(B.db.getCircleEdge(y, z), undefined, 'the peer dropped the removed edge');
+        assert.ok(B.db.getCircleEdge(z, x));
+
+        // A removal the mirror does not hold changes nothing, so nothing is queued.
+        A.ctl.log.length = 0;
+        assert.equal(A.db.removeCircleEdge(z, x), false);
+        await A.db.drain();
+        assert.deepEqual(A.ctl.log, []);
+        assert.equal(
+            (
+                await w.sql('SELECT count(*)::int AS n FROM circle_edges WHERE follower_id = $1', [
+                    z,
+                ])
+            )[0].n,
+            1
+        );
+    });
+});
+
+test('X15: an op whose transaction fails publishes nothing and leaves Postgres as it was', async () => {
+    await withWorld(2, 'pg', async (w) => {
+        const [A, B] = w.procs;
+        const u = mkUser(A.db);
+        const v = mkVault(A.db, u);
+        await quiesce(w);
+        assert.ok(B.db.getVaultItem(v));
+        const failures = metric('db_write_behind_failures_total', {
+            map: 'vaultItems',
+            kind: 'targeted',
+        });
+        const heard = w.heard.length;
+
+        // The in-transaction NOTIFY fails on both attempts.
+        A.ctl.log.length = 0;
+        A.ctl.fault = (sql) => (/^SELECT pg_notify/.test(sql) ? 'before' : undefined);
+        A.db.deleteVaultItem(v);
+        await quiesce(w);
+        assert.equal(await vaultCount(w, v), 1, 'the DELETE was rolled back with its notification');
+        assert.deepEqual(w.heard.slice(heard), [], 'nothing was announced');
+        assert.ok(B.db.getVaultItem(v), 'the peer holds what Postgres holds');
+        assert.equal(A.ctl.log.filter((q) => q === 'BEGIN').length, 2, 'it was retried once');
+        assert.equal(A.ctl.log.filter((q) => q === 'ROLLBACK').length, 2);
+        assert.equal(
+            metric('db_write_behind_failures_total', { map: 'vaultItems', kind: 'targeted' }),
+            failures + 1,
+            'the lost write is counted'
+        );
+    });
+});
+
+test('X15b: a required step that matches nothing rolls the whole op back (no partial delete), announces nothing, and re-reads', async () => {
+    await withSpec(
+        'deleteVaultItem',
+        {
+            kind: 'targeted',
+            steps: [
+                { op: 'deleteKey', map: 'vaultItems', key: (c) => [c.args[0]] },
+                {
+                    op: 'updateWhere',
+                    map: 'vaultItems',
+                    set: 'label = label',
+                    where: 'id = $1',
+                    params: () => [randomUUID()],
+                    required: true,
+                },
+            ],
+        },
+        () =>
+            withWorld(2, 'pg', async (w) => {
+                const [A, B] = w.procs;
+                const u = mkUser(A.db);
+                const v = mkVault(A.db, u);
+                await quiesce(w);
+                const conflicts = metric('db_targeted_write_conflicts_total', {
+                    map: 'vaultItems',
+                    method: 'deleteVaultItem',
+                });
+                const heard = w.heard.length;
+                assert.equal(A.db.deleteVaultItem(v), true);
+                assert.equal(A.db.getVaultItem(v), undefined, 'the mirror changed at once');
+                await quiesce(w);
+                assert.equal(await vaultCount(w, v), 1, 'the first statement was rolled back');
+                assert.deepEqual(w.heard.slice(heard), []);
+                assert.ok(A.db.getVaultItem(v), 'A re-read the key and holds the row again');
+                assert.ok(B.db.getVaultItem(v));
+                assert.equal(
+                    metric('db_targeted_write_conflicts_total', {
+                        map: 'vaultItems',
+                        method: 'deleteVaultItem',
+                    }),
+                    conflicts + 1
+                );
+            })
+    );
+});
+
+test('self-refresh: rows a set-based step reached that the mirror did not hold are read into it', async () => {
+    await withSpec(
+        'deleteVaultItem',
+        {
+            kind: 'targeted',
+            steps: [
+                { op: 'deleteKey', map: 'vaultItems', key: (c) => [c.args[0]] },
+                {
+                    op: 'updateWhere',
+                    map: 'vaultItems',
+                    set: `label = 'swept'`,
+                    where: 'owner_user_id = $1',
+                    // The owner of the item the call removed, read from the call's changes.
+                    params: (c) => {
+                        const [gone] = c.changed('vaultItems');
+                        assert.equal(gone?.after, undefined);
+                        assert.equal(c.before('vaultItems', gone!.key), gone!.before);
+                        return [gone!.before!.ownerUserId];
+                    },
+                },
+            ],
+        },
+        () =>
+            withWorld(2, 'pg', async (w) => {
+                const [A, B] = w.procs;
+                const u = mkUser(A.db);
+                const v = mkVault(A.db, u);
+                await quiesce(w);
+                A.tap.deaf = true;
+                const unseen = mkVault(B.db, u);
+                await quiesce(w);
+                assert.equal(A.db.getVaultItem(unseen), undefined);
+                A.db.deleteVaultItem(v);
+                await quiesce(w);
+                assert.equal((await vaultRow(w, unseen)).label, 'swept');
+                assert.equal(
+                    A.db.getVaultItem(unseen)?.label,
+                    'swept',
+                    'A read the unseen row its UPDATE reached'
+                );
+                assert.equal(B.db.getVaultItem(unseen)?.label, 'swept', 'and the peer was told');
+            })
+    );
+});
+
+for (const mode of ['pg', 'hub'] as const) {
+    test(`X18 (${mode}): the first attempt fails after its COMMIT, and the retry ends in the same state`, async () => {
+        await withWorld(2, mode, async (w) => {
+            const [A, B] = w.procs;
+            const u = mkUser(A.db);
+            const v = mkVault(A.db, u);
+            await quiesce(w);
+            assert.ok(B.db.getVaultItem(v));
+            const failures = metric('db_write_behind_failures_total', {
+                map: 'vaultItems',
+                kind: 'targeted',
+            });
+            let commits = 0;
+            A.ctl.log.length = 0;
+            A.ctl.fault = (sql) => (sql === 'COMMIT' && ++commits === 1 ? 'after' : undefined);
+            A.db.deleteVaultItem(v);
+            await quiesce(w);
+            assert.equal(A.ctl.log.filter((q) => q === 'BEGIN').length, 2, 'the op was retried');
+            assert.equal(await vaultCount(w, v), 0);
+            assert.equal(A.db.getVaultItem(v), undefined);
+            assert.equal(
+                B.db.getVaultItem(v),
+                undefined,
+                'the peer was told, whichever attempt told it'
+            );
+            assert.equal(
+                metric('db_write_behind_failures_total', { map: 'vaultItems', kind: 'targeted' }),
+                failures,
+                'the op succeeded on its retry'
+            );
+        });
+    });
+}
+
+test('X16c (fence): a peer refresh does not bring back a row this process has a queued delete for', async () => {
+    await withWorld(2, 'pg', async (w) => {
+        const [A, B] = w.procs;
+        const u = mkUser(A.db);
+        const v = mkVault(A.db, u);
+        await quiesce(w);
+        // B's op has not begun when A's update lands (a delay inside B's
+        // transaction would hold PGlite's one session and order A after B).
+        B.ctl.delay = (sql) => (sql === 'BEGIN' ? 300 : 0);
+        B.db.deleteVaultItem(v);
+        A.db.updateVaultItem(v, { label: 'A' });
+        await A.db.drain();
+        await sleep(PG_URL ? 80 : 30);
+        await B.db.applyTail;
+        assert.equal(B.db.queue.depth, 1, "B's delete is still queued");
+        assert.equal(
+            B.db.getVaultItem(v),
+            undefined,
+            "A's update does not bring the row back into B"
+        );
+        await quiesce(w);
+        assert.equal(await vaultCount(w, v), 0);
+        for (const p of [A, B]) assert.equal(p.db.getVaultItem(v), undefined);
+    });
+});
+
+test('U4: a targeted spec naming a column the schema lacks makes init reject', async () => {
+    await withWorld(0, 'hub', async (w) => {
+        await withSpec(
+            'deleteVaultItem',
+            {
+                kind: 'targeted',
+                steps: [
+                    {
+                        op: 'deleteWhere',
+                        map: 'vaultItems',
+                        where: 'ownr_user_id = $1',
+                        params: (c) => [c.args[0]],
+                    },
+                ],
+            },
+            async () => {
+                await assert.rejects(
+                    w.boot(),
+                    /MUTATOR_SPECS\.deleteVaultItem step 1 .*ownr_user_id/
+                );
+            }
+        );
+        await withSpec(
+            'deleteVaultItem',
+            {
+                kind: 'targeted',
+                steps: [
+                    {
+                        op: 'deleteKey',
+                        map: 'vaultItems',
+                        key: (c) => [c.args[0]],
+                        guard: { column: 'edited_at', value: () => null },
+                    },
+                ],
+            },
+            async () => {
+                await assert.rejects(
+                    w.boot(),
+                    /MUTATOR_SPECS\.deleteVaultItem step 1 .*edited_at does not exist/
+                );
+            }
+        );
+        // The real specs fit the schema.
+        const db = await w.boot();
+        await db.shutdown();
+    });
+});
+
+test('U5: a spec naming a method InMemoryDb does not define throws when the store is built', async () => {
+    await withSpec(
+        'deleteNoSuchRecord',
+        {
+            kind: 'targeted',
+            steps: [{ op: 'deleteKey', map: 'vaultItems', key: (c) => [c.args[0]] }],
+        },
+        async () => {
+            assert.throws(() => new PostgresBackedDb(), /MUTATOR_SPECS names deleteNoSuchRecord/);
+        }
+    );
+    assert.doesNotThrow(() => new PostgresBackedDb());
+});
+
+test('chunking: key notifications stay within the NOTIFY limit and carry every key once, in order', () => {
+    const src = randomUUID();
+    for (const kvs of [
+        Array.from({ length: 2000 }, () => [randomUUID()]),
+        Array.from({ length: 600 }, (_, i) => [`ключ-${i}-${'ü'.repeat(i % 40)}`, 'twitch']),
+    ]) {
+        const payloads = keyChangePayloads(src, 'revokedSessions', kvs);
+        assert.ok(payloads.length > 1);
+        for (const p of payloads) {
+            assert.equal(p.op, 'k');
+            assert.ok(Buffer.byteLength(JSON.stringify(p)) <= MAX_KEY_PAYLOAD_BYTES);
+        }
+        assert.deepEqual(
+            payloads.flatMap((p) => p.kvs),
+            kvs
+        );
+    }
+    assert.ok(MAX_KEY_PAYLOAD_BYTES < 8000, 'below the 8000-byte payload Postgres refuses');
+    assert.deepEqual(keyChangePayloads(src, 'm', []), []);
+});
+
+test('a targeted step that throws while binding never throws into the mutator, and the lost write is counted', async () => {
+    await withSpec(
+        'deleteVaultItem',
+        {
+            kind: 'targeted',
+            steps: [
+                {
+                    op: 'deleteKey',
+                    map: 'vaultItems',
+                    key: () => {
+                        throw new Error('bad key');
+                    },
+                },
+            ],
+        },
+        () =>
+            withWorld(1, 'hub', async (w) => {
+                const [A] = w.procs;
+                const v = mkVault(A.db, mkUser(A.db));
+                await quiesce(w);
+                const failures = metric('db_write_behind_failures_total', {
+                    map: 'vaultItems',
+                    kind: 'targeted',
+                });
+                assert.equal(A.db.deleteVaultItem(v), true, 'the call returns its own result');
+                await quiesce(w);
+                assert.equal(
+                    metric('db_write_behind_failures_total', {
+                        map: 'vaultItems',
+                        kind: 'targeted',
+                    }),
+                    failures + 1
+                );
+                assert.equal(await vaultCount(w, v), 1);
+            })
+    );
 });

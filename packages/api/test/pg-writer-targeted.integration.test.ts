@@ -12,7 +12,7 @@ import { join } from 'node:path';
 process.env.BLACKOUT_DB_MODE = 'memory';
 
 const { MIGRATIONS_DIR } = await import('../src/db/migrate');
-const { TABLE_DESCRIPTORS } = await import('../src/db/pgDescriptors');
+const { TABLE_DESCRIPTORS, MUTATOR_SPECS } = await import('../src/db/pgDescriptors');
 const W = await import('../src/db/pgWriter');
 const { PGlite } = await import('@electric-sql/pglite');
 
@@ -45,6 +45,7 @@ const ctx = (over: Partial<StepContext> = {}): StepContext => ({
     args: [],
     result: undefined,
     before: () => undefined,
+    changed: () => [],
     at: new Date().toISOString(),
     ...over,
 });
@@ -239,6 +240,30 @@ test('U3: every compiled UPDATE and DELETE has a WHERE that uses a parameter, an
         params: () => [],
     });
     await assert.rejects(W.prepareCheck(client, typo.checkSql), /emial/);
+});
+
+test('U3 (specs): every targeted spec compiles to statements that restrict by a parameter and PREPARE on the schema', async () => {
+    const { client, plans } = await shared;
+    const byMap = new Map(plans.map((p) => [p.descriptor.mapName, p]));
+    let steps = 0;
+    for (const [method, spec] of Object.entries(MUTATOR_SPECS)) {
+        if (spec.kind !== 'targeted') continue;
+        assert.ok(spec.steps.length > 0, method);
+        for (const step of spec.steps) {
+            const plan = byMap.get(step.map);
+            assert.ok(plan, `${method}: no table for ${step.map}`);
+            const compiled = W.compileStep(plan, step);
+            if (step.op !== 'upsertEach') {
+                assert.ok(
+                    restrictsByParameter(compiled.checkSql),
+                    `${method}: ${compiled.checkSql}`
+                );
+            }
+            await W.prepareCheck(client, compiled.checkSql);
+            steps += 1;
+        }
+    }
+    assert.ok(steps >= 19, `${steps} targeted steps`);
 });
 
 test('U3 (binding): parameters line up with placeholders, and a step that does not apply binds nothing', async () => {

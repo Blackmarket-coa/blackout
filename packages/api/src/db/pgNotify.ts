@@ -29,9 +29,21 @@ export interface StoreChangePayload {
     kvs?: unknown[][];
 }
 
+/** The part of a connection publishWithin needs: the open transaction's own client. */
+export interface TransactionClient {
+    query(sql: string, params?: unknown[]): Promise<unknown>;
+}
+
 export interface StoreChangeTransport {
     /** Fire-and-forget publish of a change to peers. */
     publish(payload: StoreChangePayload): void;
+    /**
+     * Publish as part of the caller's open transaction on `client`: Postgres
+     * delivers it when the transaction commits, never before, and drops it if
+     * the transaction rolls back. A transport without it (the in-process test
+     * hub) is published to after the commit instead.
+     */
+    publishWithin?(client: TransactionClient, payload: StoreChangePayload): Promise<void>;
     /** Begin delivering peer changes to `handler`. */
     subscribe(handler: (payload: StoreChangePayload) => void): Promise<void>;
     /** Invoked when the subscription reconnects after a drop (peers may have been
@@ -41,6 +53,43 @@ export interface StoreChangeTransport {
 }
 
 const CHANNEL = 'blackout_store_change';
+
+/**
+ * Upper bound for one 'k' payload, in UTF-8 bytes. Postgres refuses a NOTIFY
+ * payload of 8000 bytes or more ("payload string too long"), which inside the
+ * write's transaction would roll the write back.
+ */
+export const MAX_KEY_PAYLOAD_BYTES = 7000;
+
+/**
+ * The 'k' notifications for one map's changed keys, split so that each
+ * serialized payload stays within `maxBytes`. Keys keep their order. A single
+ * key too large for any payload still gets one of its own.
+ */
+export function keyChangePayloads(
+    src: string,
+    m: string,
+    kvs: readonly unknown[][],
+    maxBytes = MAX_KEY_PAYLOAD_BYTES
+): StoreChangePayload[] {
+    const base = Buffer.byteLength(JSON.stringify({ src, m, op: 'k', kvs: [] }));
+    const out: StoreChangePayload[] = [];
+    let chunk: unknown[][] = [];
+    let size = base;
+    for (const kv of kvs) {
+        const len = Buffer.byteLength(JSON.stringify(kv));
+        if (chunk.length > 0 && size + 1 + len > maxBytes) {
+            out.push({ src, m, op: 'k', kvs: chunk });
+            chunk = [];
+            size = base;
+        }
+        // A comma separates every element after the first.
+        size += len + (chunk.length > 0 ? 1 : 0);
+        chunk.push(kv);
+    }
+    if (chunk.length > 0) out.push({ src, m, op: 'k', kvs: chunk });
+    return out;
+}
 
 interface NotifyClient {
     query(sql: string, params?: unknown[]): Promise<unknown>;
@@ -80,6 +129,12 @@ export class PgNotifyTransport implements StoreChangeTransport {
                 });
             }
         })();
+    }
+
+    async publishWithin(client: TransactionClient, payload: StoreChangePayload): Promise<void> {
+        // On the write's own connection, inside its transaction: delivered on
+        // COMMIT, discarded on ROLLBACK, and a failure here fails the write.
+        await client.query('SELECT pg_notify($1, $2)', [CHANNEL, JSON.stringify(payload)]);
     }
 
     async subscribe(handler: (payload: StoreChangePayload) => void): Promise<void> {

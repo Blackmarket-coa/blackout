@@ -173,19 +173,26 @@ import {
     shouldSeedCoalitionDemoData,
 } from './coalitionSeed';
 import {
+    bindStep,
+    compileStep,
     hydrateMap,
     introspectColumns,
     keyOfTuple,
     kvOf,
+    prepareCheck,
     rowToRecord,
     selectByKeys,
+    type BoundStatement,
+    type CompiledStep,
+    type StepContext,
     type TablePlan,
 } from './pgWriter';
-import { MUTATOR_SPECS, TABLE_DESCRIPTORS } from './pgDescriptors';
-import { WriteBehindQueue } from './writeBehindQueue';
+import { MUTATOR_SPECS, TABLE_DESCRIPTORS, type MutatorSpec } from './pgDescriptors';
+import { WriteBehindQueue, type KeySet } from './writeBehindQueue';
 import { PgNotifyTransport, type StoreChangePayload, type StoreChangeTransport } from './pgNotify';
 import type { PgClient, PgPool } from './migrate';
 import { log } from '../telemetry/logger';
+import { dbWriteBehindFailuresTotal } from '../telemetry/metrics';
 import { randomUUID } from 'node:crypto';
 
 const nowIso = () => new Date().toISOString();
@@ -8321,6 +8328,63 @@ export class FileBackedDb extends InMemoryDb {
  */
 type MutableMap = Map<string, Record<string, unknown>>;
 
+const ABSENT: unique symbol = Symbol('absent');
+type Prior = Record<string, unknown> | typeof ABSENT;
+const activeCaptures = new WeakMap<MutableMap, Set<Map<string, Prior>>>();
+
+/**
+ * Record, for one synchronous mutator call, what each key of `map` held before
+ * the call first wrote it (ABSENT for a key it added). set/delete/clear are
+ * shadowed on the instance for the duration of the call only. A mutator that
+ * calls another shares one shadow between the two captures.
+ */
+function captureWrites(map: MutableMap): { prior: Map<string, Prior>; stop(): void } {
+    const target = map as unknown as Record<string, unknown>;
+    let recorders = activeCaptures.get(map);
+    if (!recorders) {
+        const active = new Set<Map<string, Prior>>();
+        recorders = active;
+        activeCaptures.set(map, active);
+        const note = (k: string) => {
+            for (const r of active) {
+                if (!r.has(k)) {
+                    r.set(
+                        k,
+                        Map.prototype.has.call(map, k) ? Map.prototype.get.call(map, k) : ABSENT
+                    );
+                }
+            }
+        };
+        target.set = function (this: MutableMap, k: string, v: Record<string, unknown>) {
+            note(k);
+            return Map.prototype.set.call(this, k, v);
+        };
+        target.delete = function (this: MutableMap, k: string) {
+            note(k);
+            return Map.prototype.delete.call(this, k);
+        };
+        target.clear = function (this: MutableMap) {
+            for (const k of Map.prototype.keys.call(this) as IterableIterator<string>) note(k);
+            return Map.prototype.clear.call(this);
+        };
+    }
+    const prior = new Map<string, Prior>();
+    const active = recorders;
+    active.add(prior);
+    return {
+        prior,
+        stop() {
+            active.delete(prior);
+            if (active.size === 0 && activeCaptures.get(map) === active) {
+                activeCaptures.delete(map);
+                delete target.set;
+                delete target.delete;
+                delete target.clear;
+            }
+        },
+    };
+}
+
 export class PostgresBackedDb extends InMemoryDb {
     private readonly plans = new Map<string, TablePlan>();
     private queue: WriteBehindQueue | null = null;
@@ -8336,6 +8400,8 @@ export class PostgresBackedDb extends InMemoryDb {
     private applyTail: Promise<void> = Promise.resolve();
     /** map -> key -> key column values: refreshes skipped while a local write was queued. */
     private readonly dirtyKeys = new Map<string, Map<string, unknown[]>>();
+    /** Each targeted mutator's steps, compiled against the live schema at init. */
+    private compiled = new Map<string, CompiledStep[]>();
 
     constructor() {
         super();
@@ -8355,7 +8421,14 @@ export class PostgresBackedDb extends InMemoryDb {
         const self = this as unknown as Record<string, unknown>;
         for (const [method, spec] of Object.entries(MUTATOR_SPECS)) {
             const original = proto[method];
-            if (typeof original !== 'function') continue;
+            if (typeof original !== 'function') {
+                // A spec for a method that does not exist would persist nothing.
+                throw new Error(`MUTATOR_SPECS names ${method}, which InMemoryDb does not define`);
+            }
+            if (spec.kind === 'targeted') {
+                self[method] = this.targetedWriteThrough(method, spec, original);
+                continue;
+            }
             self[method] = (...args: unknown[]): unknown => {
                 const result = original.apply(this, args);
                 const queue = this.queue;
@@ -8371,6 +8444,182 @@ export class PostgresBackedDb extends InMemoryDb {
                 return result;
             };
         }
+    }
+
+    /**
+     * The wrapper for a `targeted` spec. It records which mirror keys the call
+     * changed (and what they held before), binds the spec's statements to the
+     * call's arguments, result and prior values, and queues them as one op.
+     * Nothing is queued when the call changed nothing and no step is
+     * set-based (a set-based step can reach rows the mirror does not hold).
+     */
+    private targetedWriteThrough(
+        method: string,
+        spec: Extract<MutatorSpec, { kind: 'targeted' }>,
+        original: (...a: unknown[]) => unknown
+    ): (...args: unknown[]) => unknown {
+        const maps = [...new Set(spec.steps.map((s) => s.map))];
+        const setBased = spec.steps.some((s) => s.op === 'deleteWhere' || s.op === 'updateWhere');
+        return (...args: unknown[]): unknown => {
+            const queue = this.queue;
+            const compiled = this.compiled.get(method);
+            if (!queue || !compiled) return original.apply(this, args);
+            const captures = maps.map((m) => {
+                const instance = this.mapByName(m);
+                return { map: m, instance, capture: captureWrites(instance) };
+            });
+            let result: unknown;
+            try {
+                result = original.apply(this, args);
+            } finally {
+                for (const c of captures) c.capture.stop();
+            }
+            try {
+                this.queueTargeted(method, setBased, compiled, captures, args, result);
+            } catch (err) {
+                // The mirror has changed and Postgres will not: the same loss
+                // condition as a write that failed after its retry. Never
+                // thrown into the caller, whose mirror change already stands.
+                dbWriteBehindFailuresTotal.inc({ map: maps.join(','), kind: 'targeted' });
+                log.error('db_write_behind_failed', {
+                    map: maps.join(','),
+                    kind: 'targeted',
+                    method,
+                    error: err instanceof Error ? err.message : String(err),
+                });
+            }
+            return result;
+        };
+    }
+
+    /** Diff a targeted call's captures, bind its steps, and queue them (targetedWriteThrough). */
+    private queueTargeted(
+        method: string,
+        setBased: boolean,
+        compiled: CompiledStep[],
+        captures: Array<{
+            map: string;
+            instance: MutableMap;
+            capture: { prior: Map<string, Prior> };
+        }>,
+        args: unknown[],
+        result: unknown
+    ): void {
+        const queue = this.queue!;
+        const touched: KeySet = new Map();
+        const priorOf = new Map<string, (key: string) => Prior>();
+        const changes = new Map<
+            string,
+            Array<{
+                key: string;
+                before?: Record<string, unknown>;
+                after?: Record<string, unknown>;
+            }>
+        >();
+        for (const { map: m, instance, capture } of captures) {
+            const plan = this.plans.get(m);
+            const now = this.mapByName(m);
+            const before = (k: string): Prior =>
+                capture.prior.has(k)
+                    ? capture.prior.get(k)!
+                    : instance.has(k)
+                    ? instance.get(k)!
+                    : ABSENT;
+            priorOf.set(m, before);
+            if (!plan) continue;
+            // A method that replaced the whole map (replaceMeshEnvelopes) is
+            // diffed old instance against new; otherwise only written keys.
+            const keys =
+                now === instance
+                    ? [...capture.prior.keys()]
+                    : new Set([...capture.prior.keys(), ...instance.keys(), ...now.keys()]);
+            const changed = new Map<string, unknown[]>();
+            const list: Array<{
+                key: string;
+                before?: Record<string, unknown>;
+                after?: Record<string, unknown>;
+            }> = [];
+            changes.set(m, list);
+            for (const k of keys) {
+                const was = before(k);
+                const is = now.has(k) ? now.get(k)! : ABSENT;
+                if (was === is) continue;
+                list.push({
+                    key: k,
+                    ...(was !== ABSENT ? { before: was } : {}),
+                    ...(is !== ABSENT ? { after: is } : {}),
+                });
+                changed.set(k, kvOf(plan, (is !== ABSENT ? is : was) as Record<string, unknown>));
+            }
+            if (changed.size > 0) touched.set(m, changed);
+        }
+        if (touched.size === 0 && !setBased) return;
+        const ctx: StepContext = {
+            args,
+            result,
+            at: nowIso(),
+            before: (m, k) => {
+                const prior = priorOf.has(m) ? priorOf.get(m)!(k) : this.mapByName(m).get(k);
+                return prior === ABSENT ? undefined : prior;
+            },
+            changed: (m) => changes.get(m) ?? [],
+        };
+        const statements: BoundStatement[] = compiled.flatMap((c) => bindStep(c, ctx));
+        if (statements.length > 0) queue.enqueueTargeted({ method, statements, touched });
+    }
+
+    /**
+     * Compile every targeted spec against this database's tables and PREPARE
+     * each statement, so a spec naming a column, table or type the schema
+     * lacks fails the boot instead of every later write.
+     */
+    private async compileTargetedSpecs(client: PgClient): Promise<void> {
+        const compiled = new Map<string, CompiledStep[]>();
+        for (const [method, spec] of Object.entries(MUTATOR_SPECS)) {
+            if (spec.kind !== 'targeted') continue;
+            compiled.set(
+                method,
+                spec.steps.map((step, i) => {
+                    const where = `MUTATOR_SPECS.${method} step ${i + 1} (${step.op} on ${
+                        step.map
+                    })`;
+                    const plan = this.plans.get(step.map);
+                    if (!plan) throw new Error(`${where}: this database has no table for the map`);
+                    try {
+                        return compileStep(plan, step);
+                    } catch (err) {
+                        throw new Error(
+                            `${where}: ${err instanceof Error ? err.message : String(err)}`
+                        );
+                    }
+                })
+            );
+        }
+        // One transaction, so a pooler that hands each statement its own
+        // server connection cannot split a PREPARE from its DEALLOCATE.
+        await client.query('BEGIN');
+        try {
+            for (const [method, steps] of compiled) {
+                for (const [i, c] of steps.entries()) {
+                    try {
+                        await prepareCheck(client, c.checkSql);
+                    } catch (err) {
+                        throw new Error(
+                            `MUTATOR_SPECS.${method} step ${i + 1} (${c.step.op} on ${
+                                c.plan.descriptor.tableName
+                            }) does not fit the schema: ${
+                                err instanceof Error ? err.message : String(err)
+                            }: ${c.checkSql}`
+                        );
+                    }
+                }
+            }
+            await client.query('COMMIT');
+        } catch (err) {
+            await client.query('ROLLBACK').catch(() => undefined);
+            throw err;
+        }
+        this.compiled = compiled;
     }
 
     /**
@@ -8396,6 +8645,7 @@ export class PostgresBackedDb extends InMemoryDb {
                 this.plans.set(descriptor.mapName, plan);
                 await hydrateMap(client, plan, this.mapByName(descriptor.mapName));
             }
+            await this.compileTargetedSpecs(client);
         } finally {
             client.release?.();
         }
@@ -8408,6 +8658,18 @@ export class PostgresBackedDb extends InMemoryDb {
             this.instanceId
         );
         this.queue.onKeysLanded((mapName, keys) => this.rereadLandedKeys(mapName, keys));
+        // After a targeted op: re-read the keys where Postgres's effect and the
+        // mirror's differ (rows the statements reached that the mirror does not
+        // hold, and mirror changes Postgres refused or never saw).
+        this.queue.onRereadKeys((keys) => {
+            for (const [mapName, kvs] of keys) {
+                const plan = this.plans.get(mapName);
+                if (plan && kvs.size > 0) {
+                    const list = [...kvs.values()];
+                    this.onApplyChain('self', () => this.refreshKeys(plan, list), mapName);
+                }
+            }
+        });
         if (transport) {
             await transport.subscribe((payload) => this.applyPeerChange(payload));
             // After a dropped LISTEN connection we may have missed notifications;

@@ -64,6 +64,10 @@ test('every mutator spec targets a real method and a real map', () => {
         assert.equal(typeof store[method], 'function', `mutator ${method} must exist on the store`);
         if (spec.kind === 'upsert') {
             assert.ok(mapNames.has(spec.map), `spec ${method} → unknown map ${spec.map}`);
+        } else if (spec.kind === 'targeted') {
+            assert.ok(spec.steps.length > 0, `spec ${method} has no steps`);
+            for (const step of spec.steps)
+                assert.ok(mapNames.has(step.map), `spec ${method} → unknown map ${step.map}`);
         } else {
             for (const m of spec.maps)
                 assert.ok(mapNames.has(m), `spec ${method} → unknown map ${m}`);

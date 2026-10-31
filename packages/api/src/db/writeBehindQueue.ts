@@ -13,16 +13,91 @@
 // fenced, a refresh from a peer must not overwrite this process's newer value
 // with Postgres's older one; the store skips the key and re-reads it once the
 // fence comes down (onKeysLanded).
+//
+// A targeted op (one mutator call's bound statements) runs on one connection as
+// BEGIN; statements; NOTIFY of the changed keys; COMMIT. Peers are therefore
+// told about exactly the rows that changed, and only once they have: Postgres
+// delivers a NOTIFY on COMMIT and drops it on ROLLBACK. A statement marked
+// required that matches no row rolls the whole op back. Afterwards the keys
+// where Postgres's effect and the mirror's differ are handed back to the store
+// to re-read (onRereadKeys).
 
 import { log } from '../telemetry/logger';
-import { dbWriteBehindDepth, dbWriteBehindFailuresTotal } from '../telemetry/metrics';
+import {
+    dbTargetedWriteConflictsTotal,
+    dbWriteBehindDepth,
+    dbWriteBehindFailuresTotal,
+} from '../telemetry/metrics';
 import type { PgPool } from './migrate';
-import type { StoreChangeTransport } from './pgNotify';
-import { resyncMap, snakeToCamel, upsertRecord, type TablePlan } from './pgWriter';
+import { keyChangePayloads, type StoreChangePayload, type StoreChangeTransport } from './pgNotify';
+import {
+    keyOfTuple,
+    resyncMap,
+    snakeToCamel,
+    upsertRecord,
+    type BoundStatement,
+    type Row,
+    type TablePlan,
+} from './pgWriter';
+
+/** map -> mirror key -> key column values. */
+export type KeySet = Map<string, Map<string, unknown[]>>;
+
+/** One targeted mutator call: its bound statements and the mirror keys it changed. */
+export interface TargetedWrite {
+    method: string;
+    statements: BoundStatement[];
+    /** Every key the call changed in the mirror (each is fenced until the op has run). */
+    touched: KeySet;
+}
+
+type TargetedOutcome =
+    | { outcome: 'committed'; returned: KeySet }
+    | { outcome: 'conflict'; at: BoundStatement };
+
+function addKey(set: KeySet, mapName: string, key: string, kv: unknown[]): void {
+    let keys = set.get(mapName);
+    if (!keys) {
+        keys = new Map();
+        set.set(mapName, keys);
+    }
+    keys.set(key, kv);
+}
+
+function union(...sets: KeySet[]): KeySet {
+    const out: KeySet = new Map();
+    for (const s of sets)
+        for (const [m, keys] of s) for (const [k, kv] of keys) addKey(out, m, k, kv);
+    return out;
+}
+
+/** Keys in exactly one of the two sets. */
+function symmetricDifference(a: KeySet, b: KeySet): KeySet {
+    const out: KeySet = new Map();
+    for (const [x, y] of [
+        [a, b],
+        [b, a],
+    ]) {
+        for (const [m, keys] of x) {
+            for (const [k, kv] of keys) if (!y.get(m)?.has(k)) addKey(out, m, k, kv);
+        }
+    }
+    return out;
+}
+
+function minus(a: KeySet, b: KeySet): KeySet {
+    const out: KeySet = new Map();
+    for (const [m, keys] of a)
+        for (const [k, kv] of keys) if (!b.get(m)?.has(k)) addKey(out, m, k, kv);
+    return out;
+}
+
+const sizeOf = (set: KeySet) => [...set.values()].reduce((n, keys) => n + keys.size, 0);
 
 type WriteOp = (
     | { kind: 'upsert'; mapName: string; record: Record<string, unknown> }
     | { kind: 'resync'; mapName: string }
+    | { kind: 'targeted'; mapName: string; write: TargetedWrite }
 ) & {
     /** map -> mirror keys this op writes, counted in the fence while it is queued. */
     fence: Map<string, string[]>;
@@ -36,6 +111,7 @@ export class WriteBehindQueue {
     /** map -> mirror key -> number of queued ops that write it. */
     private readonly fence = new Map<string, Map<string, number>>();
     private landed: ((mapName: string, keys: string[]) => void) | null = null;
+    private reread: ((keys: KeySet) => void) | null = null;
 
     constructor(
         private readonly pool: PgPool,
@@ -64,6 +140,19 @@ export class WriteBehindQueue {
     /** Called with the keys whose last queued write has just run (the fence came down). */
     onKeysLanded(handler: (mapName: string, keys: string[]) => void): void {
         this.landed = handler;
+    }
+
+    /** Called after a targeted op with the keys whose mirror value Postgres may not match. */
+    onRereadKeys(handler: (keys: KeySet) => void): void {
+        this.reread = handler;
+    }
+
+    /** Queue one targeted mutator call. Its touched keys are fenced until it has run. */
+    enqueueTargeted(write: TargetedWrite): void {
+        const fence = new Map<string, string[]>();
+        for (const [m, keys] of write.touched) fence.set(m, [...keys.keys()]);
+        const mapName = [...new Set(write.statements.map((s) => s.map))].join(',');
+        this.schedule({ kind: 'targeted', mapName, write, fence });
     }
 
     enqueueUpsert(mapName: string, record: Record<string, unknown>): void {
@@ -132,6 +221,19 @@ export class WriteBehindQueue {
     }
 
     private async run(op: WriteOp): Promise<void> {
+        if (op.kind === 'targeted') {
+            let reread: KeySet = new Map();
+            try {
+                reread = await this.runTargeted(op.mapName, op.write);
+            } finally {
+                this.pending -= 1;
+                dbWriteBehindDepth.set(this.pending);
+                // Fence first, so the re-reads below are not skipped for this op's own keys.
+                this.lower(op.fence);
+                if (sizeOf(reread) > 0) this.reread?.(reread);
+            }
+            return;
+        }
         const plan = this.plans.get(op.mapName);
         if (!plan) {
             this.pending -= 1;
@@ -181,15 +283,112 @@ export class WriteBehindQueue {
         }
     }
 
-    private async withRetry(fn: () => Promise<void>): Promise<void> {
+    /**
+     * Run one targeted op, retrying once (every statement is idempotent: a
+     * keyed delete of a gone row, or a predicate the first attempt already
+     * made false, changes nothing the second time). Returns the keys to re-read.
+     */
+    private async runTargeted(label: string, write: TargetedWrite): Promise<KeySet> {
+        // Keys returned by an attempt whose COMMIT was sent but did not report
+        // back: that attempt may have committed, so its keys are announced and
+        // re-read with whatever the final attempt returns.
+        const uncertain: KeySet = new Map();
+        let result: TargetedOutcome | null = null;
         try {
-            await fn();
+            result = await this.withRetry(() => this.attemptTargeted(write, uncertain));
+        } catch (err) {
+            // As for an upsert: the mirror has the change and Postgres may not.
+            dbWriteBehindFailuresTotal.inc({ map: label, kind: 'targeted' });
+            log.error('db_write_behind_failed', {
+                map: label,
+                kind: 'targeted',
+                method: write.method,
+                error: err instanceof Error ? err.message : String(err),
+            });
+        }
+        const committed = result?.outcome === 'committed' ? result.returned : new Map();
+        if (this.transport && !this.transport.publishWithin) {
+            // A transport that cannot publish inside the transaction (the
+            // in-process test hub) is told after the commit.
+            for (const p of this.keyPayloads(union(committed, uncertain)))
+                this.transport.publish(p);
+        }
+        if (result?.outcome === 'conflict') {
+            dbTargetedWriteConflictsTotal.inc({ map: result.at.map, method: write.method });
+            log.warn('db_targeted_write_conflict', { map: result.at.map, method: write.method });
+            return union(write.touched, uncertain);
+        }
+        if (result?.outcome === 'committed') {
+            return union(symmetricDifference(write.touched, committed), uncertain);
+        }
+        return minus(uncertain, write.touched);
+    }
+
+    private async attemptTargeted(
+        write: TargetedWrite,
+        uncertain: KeySet
+    ): Promise<TargetedOutcome> {
+        const returned: KeySet = new Map();
+        const client = await this.pool.connect();
+        let open = false;
+        try {
+            await client.query('BEGIN');
+            open = true;
+            for (const s of write.statements) {
+                const res = await client.query<Row>(s.sql, s.params);
+                const plan = this.plans.get(s.map);
+                if (plan) {
+                    for (const row of res.rows) {
+                        const kv = plan.descriptor.conflictColumns.map((c) => row[c] ?? null);
+                        addKey(returned, s.map, keyOfTuple(plan, kv), kv);
+                    }
+                }
+                if (s.required && res.rows.length === 0) {
+                    open = false;
+                    await client.query('ROLLBACK');
+                    return { outcome: 'conflict', at: s };
+                }
+            }
+            const transport = this.transport;
+            if (transport?.publishWithin) {
+                for (const p of this.keyPayloads(union(returned, uncertain))) {
+                    await transport.publishWithin(client, p);
+                }
+            }
+            open = false;
+            try {
+                await client.query('COMMIT');
+            } catch (err) {
+                for (const [m, keys] of returned)
+                    for (const [k, kv] of keys) addKey(uncertain, m, k, kv);
+                throw err;
+            }
+            return { outcome: 'committed', returned };
+        } catch (err) {
+            if (open) await client.query('ROLLBACK').catch(() => undefined);
+            throw err;
+        } finally {
+            client.release?.();
+        }
+    }
+
+    private keyPayloads(keys: KeySet): StoreChangePayload[] {
+        const out: StoreChangePayload[] = [];
+        for (const [m, kvs] of keys) {
+            if (kvs.size > 0) out.push(...keyChangePayloads(this.instanceId, m, [...kvs.values()]));
+        }
+        return out;
+    }
+
+    private async withRetry<T>(fn: () => Promise<T>): Promise<T> {
+        try {
+            return await fn();
         } catch (err) {
             // One retry for transient connection blips; a second failure surfaces to the caller's logger.
             log.warn('db_write_behind_retry', {
                 error: err instanceof Error ? err.message : String(err),
             });
-            await fn();
+            return await fn();
         }
     }
 
