@@ -1,5 +1,13 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import {
+    existsSync,
+    mkdirSync,
+    readFileSync,
+    readdirSync,
+    renameSync,
+    rmSync,
+    writeFileSync,
+} from 'node:fs';
+import { basename, dirname, join, resolve } from 'node:path';
 import { hashPassword } from '../services/auth';
 import type {
     CanaryTokenRecord,
@@ -5731,6 +5739,48 @@ class InMemoryDb {
     }
 }
 
+const processIsAlive = (pid: number): boolean => {
+    try {
+        process.kill(pid, 0);
+        return true;
+    } catch (err) {
+        // EPERM: it exists, under another user.
+        return (err as NodeJS.ErrnoException).code === 'EPERM';
+    }
+};
+
+/**
+ * Remove the temp snapshots a process that died mid-write left beside the
+ * store file (FileBackedDb.persist names them `<file>.tmp-<pid>`; before that,
+ * `<file>.tmp`). Nothing else ever reads or overwrites one, so each would
+ * otherwise keep a full copy of the store, out of reach of account erasure.
+ * The temp file of a process still running is left alone: it may be writing.
+ */
+function removeStaleTempSnapshots(): void {
+    const dir = dirname(DB_FILE_PATH);
+    const prefix = `${basename(DB_FILE_PATH)}.tmp`;
+    let names: string[];
+    try {
+        names = readdirSync(dir);
+    } catch {
+        return;
+    }
+    for (const name of names) {
+        if (!name.startsWith(prefix)) continue;
+        const rest = name.slice(prefix.length);
+        const pid = /^-([1-9]\d*)$/.exec(rest)?.[1];
+        if (rest !== '' && pid === undefined) continue;
+        if (pid !== undefined && Number(pid) !== process.pid && processIsAlive(Number(pid))) {
+            continue;
+        }
+        try {
+            rmSync(join(dir, name), { force: true });
+        } catch {
+            // Best effort; hydrate() never reads a temp file.
+        }
+    }
+}
+
 export class FileBackedDb extends InMemoryDb {
     // Persistence is suppressed until construction finishes. During `super()` the
     // InMemoryDb constructor seeds a demo user, whose persisting override would
@@ -5742,6 +5792,7 @@ export class FileBackedDb extends InMemoryDb {
 
     constructor() {
         super();
+        removeStaleTempSnapshots();
         const fileExisted = existsSync(DB_FILE_PATH);
         this.hydrate();
         this.ready = true;
@@ -6464,7 +6515,10 @@ export class FileBackedDb extends InMemoryDb {
         // or the new one and never a partial one. The temp name carries the
         // process id: with one fixed name, a second process writing the same
         // store (two test files run in parallel do) renames the first one's
-        // temp file away, and the first rename fails with ENOENT.
+        // temp file away, and the first rename fails with ENOENT. That is all
+        // the pid buys: the file store is still single-writer, and two
+        // processes on one file overwrite each other's snapshots. A temp file
+        // left by a crash is removed at the next boot (removeStaleTempSnapshots).
         const tmpPath = `${DB_FILE_PATH}.tmp-${process.pid}`;
         try {
             writeFileSync(tmpPath, `${JSON.stringify(this.snapshot(), null, 2)}\n`, 'utf8');
