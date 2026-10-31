@@ -10,13 +10,21 @@ entries this record extends.
 
 After a fourth review it also covers five more High advisories against the
 same `poetry.lock`. GitHub reviewed them after the Trivy database the gate used
-(2026-10-30 19:07 UTC), so the gate did not report them, and would have from
-the next one: four against pyasn1 0.6.4, and a fourth against authlib 1.6.12.
+(2026-10-30 19:07 UTC), so the gate did not report them: four against pyasn1
+0.6.4, and a fourth against authlib 1.6.12. Trivy's database of 2026-10-31
+01:14 UTC has all five, and on `develop` it reports them next to the six
+(measured after the sixth review).
 
 A fifth review (2026-10-31) found that the fourth review's JWT startup check
 missed a key-set `kid` that is not a string, which left open the login bypass
-that `develop` has, and three smaller gaps in the code and this record. They
-are answered in [What the review changed](#what-the-review-changed).
+that `develop` has, and three smaller gaps in the code and this record.
+
+A sixth review (2026-10-31) found that one of Blackout's own templates, the
+Railway service's, turned JWT login on with a secret anyone can read in the
+repository, held back only by two unrelated faults in the same service. So
+this record's statement that no Blackout template enables `jwt_config` was
+false. It also found five smaller gaps. The answers to both reviews are in
+[What the review changed](#what-the-review-changed).
 
 | Package (lock)        | Advisory                              | Severity | Fixed in   | Outcome                                         |
 | --------------------- | ------------------------------------- | -------- | ---------- | ----------------------------------------------- |
@@ -59,6 +67,20 @@ are answered in [What the review changed](#what-the-review-changed).
     configurations.** One of them (the empty HMAC key) is reachable by an
     operator who enables JWT login with an empty secret. It is fixed anyway: the
     default for an authentication bypass is to bump.
+-   **The Railway template's JWT login is off, and `enabled` must be a
+    boolean (sixth review, `48ab32d`).** That template wrote
+    `enabled: ${JWT_ENABLED:-false}` and `secret: "${JWT_SECRET:-}"`, and its
+    entrypoint renders it with `envsubst`, which leaves both as text. Synapse
+    read the string as on, with that literal as the HS256 secret; the startup
+    check accepted it, and a token signed with it verified as any user. The
+    service cannot start today, for two unrelated reasons (its listener port
+    renders as text too, and its image has no authlib), and each alone stops
+    it; fixing both, which making the service work needs, would have opened
+    that login. It is not one of the advisories, but it is the kind of hole
+    they are. `JWTConfig` now refuses an `enabled` that is not a YAML
+    boolean, and the template writes `enabled: false`. Every other
+    `${VAR:-default}` in the template, all deploy defects, is
+    [found outside scope](#found-outside-scope-not-fixed-here).
 -   **JWT login and the logout token change too.** The first two versions of
     this record said they did not. Under 1.9.1 both refuse a boolean `exp`,
     `nbf` or `iat`, and an HMAC secret that is empty or holds PEM or SSH key
@@ -96,8 +118,9 @@ are answered in [What the review changed](#what-the-review-changed).
 -   **pyasn1 moves to 0.6.5 (fourth review).** GitHub reviewed four High
     advisories against 0.6.4, all quadratic CPU in pyasn1's decoder, between
     23:03 and 23:07 UTC on 2026-10-30, four hours after the Trivy database
-    the gate used. The next database, due 2026-10-31 19:07 UTC, would have
-    turned the gate red on this branch and on `develop`. `service_identity`
+    the gate used. Trivy's database of 2026-10-31 01:14 UTC has them, and
+    reports all four on `develop`; this branch passes on it (sixth review).
+    `service_identity`
     decodes the SRV-ID of each peer certificate the hostname check reads,
     with no schema. A probe of that call took 4.4 s of CPU for a 100 KB
     crafted certificate under 0.6.4, and 0.14 s under 0.6.5. A peer reaches
@@ -115,21 +138,29 @@ are answered in [What the review changed](#what-the-review-changed).
     the webview stack with it. The vulnerable zip code runs only on Windows, only
     after the updater has checked the minisign signature, and nothing in the app
     calls the updater today.
--   **The gate passes, with the database it has.** Trivy 0.69.3, run as
-    `security.yml` runs it, reports no un-ignored High/Critical finding
-    against the database of 2026-10-30 19:07 UTC, still the newest at
-    2026-10-31 00:58 UTC. That database predates the five advisories added
-    in the fourth review. For the next one, OSV was queried on 2026-10-31
-    between 00:35 and 00:58 UTC over every package of the five lockfiles
-    other than `pnpm-lock.yaml`. On this branch it lists no advisory whose
-    GHSA severity is High or Critical beyond the four ignored Twisted
-    entries and black, a dev dependency, which Trivy skips. That sentence
-    counted GHSA severity labels only (corrected after the fifth review).
-    RustSec advisories carry none, and four in the desktop lock score High
-    or have no rating: RUSTSEC-2026-0194 and -0195 (quick-xml),
+-   **The gate passes on the newest database (sixth review).** Trivy
+    0.69.3, run as `security.yml` runs it over a `git archive` of
+    `ae70358`, reports no un-ignored High/Critical finding against the
+    database of 2026-10-31 01:14 UTC, the newest when it was downloaded at
+    03:07 UTC. That database has the five advisories added in the fourth
+    review, and over `develop` the same run reports eleven findings: the six
+    above and those five. The earlier rounds ran against the database of
+    2026-10-30 19:07 UTC. This record called it "still the newest" at the
+    fifth review's run (02:09 UTC), which reused a cache from 00:58 UTC and
+    never looked for another; that was not checked, and the 01:14 UTC
+    database was downloadable by 02:19 UTC ([The gate](#the-gate)). OSV,
+    queried on 2026-10-31 between 00:35 and 00:58 UTC over every package of
+    the five lockfiles other than `pnpm-lock.yaml`, lists on this branch no
+    advisory whose GHSA severity is High or Critical beyond the four ignored
+    Twisted entries and black, a dev dependency, which Trivy skips. That
+    sentence counts GHSA severity labels only (corrected after the fifth
+    review). RustSec advisories carry none, and four in the desktop lock
+    score High or have no rating: RUSTSEC-2026-0194 and -0195 (quick-xml),
     RUSTSEC-2026-0382 (rustls-webpki) and RUSTSEC-2026-0383
-    (webpki-root-certs). They are on `develop` at the same versions, Trivy
-    does not load them, and they are
+    (webpki-root-certs). Trivy does not load RustSec-only advisories. The
+    same lock also has eight GHSA-rated Moderate and Low advisories, below
+    the gate's severity (sixth review). All are on `develop` at the same
+    versions, and they are
     [found outside scope](#found-outside-scope-not-fixed-here) with their
     exposure. `pnpm-lock.yaml` is `-v47`'s and was not queried here.
 -   **The Trivy check now runs on more pull requests (fourth review,
@@ -160,7 +191,11 @@ are answered in [What the review changed](#what-the-review-changed).
     list also has the four RustSec advisories above: the quick-xml code
     paths do not run, webpki-root-certs is not built for any desktop target,
     and rustls-webpki is reached only by the updater on Linux, which nothing
-    calls. See
+    calls. After the sixth review it also has the desktop lock's eight
+    GHSA-rated Moderate and Low advisories, and every other
+    `${VAR:-default}` in the Railway template: the listener port, the
+    database name, user and port, the Redis port and TURN render as text,
+    so that service cannot start as rendered. See
     [Found outside scope](#found-outside-scope-not-fixed-here).
 
 Commits, on top of `ff7d08b`: `21c9591` (authlib, with the `PATCHES.md`
@@ -183,7 +218,11 @@ the authlib `PATCHES.md` entry), `b3cd1b3` (the Security checks paths filter),
 then `b0b738f` (the record, with `KNOWN_LIMITATIONS.md` and the 2026-10-25
 record's addendum). After the fifth review: `6484756` (the JWT key-set `kid`
 type, with its `PATCHES.md` entry), `823530e` (the MSC3861 signer's return
-type, with the authlib `PATCHES.md` entry), then this version of the record.
+type, with the authlib `PATCHES.md` entry), then `05dfc10` (the record).
+After the sixth review: `48ab32d` (`jwt_config.enabled` must be a boolean,
+and the Railway template's JWT login is off, with `PATCHES.md`), `ae70358`
+(the operator notes in `docs/upgrade.md`), then this version of the record,
+with one sentence of `PATCHES.md` corrected (below).
 
 ## What the review changed
 
@@ -246,13 +285,31 @@ A fifth review found four more. Each is answered here:
 | "OSV lists no High/Critical beyond" counted GHSA severity labels only; four RustSec advisories in the desktop lock score High or are unrated.                                                                                                                                                                   | The sentence says what it counts, and the four are [found outside scope](#found-outside-scope-not-fixed-here), each with its path and exposure.                |
 | The record called the HTTP-test failures the fork's. The federation-agent ones come from this sandbox's proxy variables, so no passing test reaches the certificate check after a handshake.                                                                                                                    | [Validation](#validation) gives the cause, with the evidence, and says that those TLS tests could not run here.                                                |
 
+A sixth review found six more. Each is answered here:
+
+| Finding                                                                                                                                                                                                                                                                                                                                                           | Now                                                                                                                                                                                                                                                                                                                                |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| This record and `PATCHES.md` said no Blackout template enables `jwt_config`. The Railway template does: `envsubst` leaves `${JWT_ENABLED:-false}` and `${JWT_SECRET:-}` as text, so JWT login rendered as on with a secret anyone can read, and the startup check accepted it. Only a broken listener port and a missing authlib keep that service from starting. | `jwt_config.enabled` must be a YAML boolean, and the template writes `enabled: false` (`48ab32d`). Both statements are corrected ([Our exposure](#our-exposure), [JWT login](#jwt-login-the-logout-token-and-provider-metadata)), and the template's other renders are [found outside scope](#found-outside-scope-not-fixed-here). |
+| The Trivy database timeline was wrong. `NextUpdate` is when the client looks again, not when a database comes out, and a newer one (2026-10-31 01:14 UTC) was out before the fifth review's run.                                                                                                                                                                  | Run on it: no finding on this branch, eleven on `develop` ([The gate](#the-gate)). The item is gone from [Not verified](#not-verified).                                                                                                                                                                                            |
+| Found outside scope gave seven RustSec notices as the rest of OSV's report for the desktop lock. OSV also has eight GHSA-rated Moderate and Low advisories there, four of them against rustls on the updater's TLS path.                                                                                                                                          | [Listed](#found-outside-scope-not-fixed-here), each with its path and exposure.                                                                                                                                                                                                                                                    |
+| "How the updater uses zip" cited the tauri-plugin-updater 2.10.0 source; 2.14.1 is locked.                                                                                                                                                                                                                                                                        | [It cites 2.14.1](#how-the-updater-uses-zip), with line references. The conclusion is the same.                                                                                                                                                                                                                                    |
+| The non-string `kid` refusal stops at startup key sets that `develop` starts and serves, whatever their keys.                                                                                                                                                                                                                                                     | Kept, to fail closed. `PATCHES.md`, [this record](#jwt-login-the-logout-token-and-provider-metadata) and the operator notes say so now.                                                                                                                                                                                            |
+| Configurations refused at startup or at sign-in since the bump were written down only in `PATCHES.md` and this record, not in the fork's operator upgrade guide.                                                                                                                                                                                                  | `apps/blackout-server/docs/upgrade.md` has an "Upgrading to authlib 1.9.1 (2026-10-30)" section, with each error text and its fix (`ae70358`).                                                                                                                                                                                     |
+
+`48ab32d`'s commit message says that fixing either of the Railway service's
+two faults would have opened JWT login. Each alone stops startup, so it would
+take both; the `PATCHES.md` entry it added said the same and is corrected in
+this version.
+
 ---
 
 ## Method
 
 -   **Scanner:** Trivy 0.69.3, the version the failing CI run used, from the
     GitHub release, checked against `trivy_0.69.3_checksums.txt`. Its vulnerability DB was
-    published 2026-10-30 19:07 UTC. Run with `security.yml`'s flags: `fs`,
+    published 2026-10-30 19:07 UTC; after the sixth review, the one of
+    2026-10-31 01:14 UTC, over `git archive` exports of this branch and of
+    `develop`, with no flag beyond `security.yml`'s. Run with `security.yml`'s flags: `fs`,
     `--scanners vuln`, `--severity CRITICAL,HIGH`, `--ignore-unfixed`,
     `--ignorefile .trivyignore`, `--exit-code 1`, over the repository root.
     The only addition was `--skip-dirs node_modules,.git`; this worktree's
@@ -284,6 +341,12 @@ A fifth review found four more. Each is answered here:
     priority and, after the fourth review, pyasn1 and pyasn1-modules. The
     lock was regenerated with poetry 1.3.2, the version `docker/Dockerfile`
     installs.
+-   **envsubst (sixth review):** gettext-base 0.21-14ubuntu2 from Ubuntu's
+    archive, fetched with `apt-get download` into a scratch directory and
+    not installed; its sha256 matches apt's index. The Railway image installs
+    Debian bookworm's gettext-base 0.21-12, the same upstream release. Each
+    render was parsed with `HomeServerConfig`, on this branch's code and with
+    `05dfc10`'s `config/jwt.py`.
 -   **Tests:** trial under Python 3.11.17 (the image builds on 3.11), in two
     venvs built from the lock before and after. Each venv installs the
     Dockerfile's `poetry export --extras all` plus the dev group, minus
@@ -349,7 +412,9 @@ review this list had four, and left out the fork's own startup check:
 `infra/single-server-baseline/deploy.sh` builds it as `blackout-synapse:stable`,
 and that stack's `homeserver.yaml.template` configures `oidc_providers`.
 `services/blackout-server/Dockerfile` exports without extras, so it has no
-authlib. `deploy/docker/blackout-backend` runs the upstream image, not the fork.
+authlib, and Synapse stops at startup on that service's own `jwt_config`
+(`DependencyException ['authlib']`, with `enabled: false` too; sixth review).
+`deploy/docker/blackout-backend` runs the upstream image, not the fork.
 
 **That upstream image still ships authlib 1.6.12** (added after the fourth
 review). `deploy/docker/blackout-backend/docker-compose.yml` pins
@@ -393,8 +458,19 @@ Per advisory:
     `config/jwt.py` reads `jwt_config.secret` verbatim and does not reject an
     empty string. A homeserver with JWT login on, an HS\* algorithm and an
     empty secret (for example, a template variable that rendered empty) would
-    accept a token anyone can sign, for any user. No Blackout template enables
-    `jwt_config`. OIDC id_tokens are checked only against the provider's
+    accept a token anyone can sign, for any user. Until the sixth review
+    this said that no Blackout template enables `jwt_config`. One does:
+    `apps/blackout-server/services/blackout-server/homeserver.yaml.template`,
+    in the image `railway.toml` deploys, rendered `enabled` as the string
+    `${JWT_ENABLED:-false}`, which is on, and the secret as the literal
+    `${JWT_SECRET:-}`. That secret is not empty, so GHSA-8m4g itself does
+    not apply, but anyone who reads the template can sign a login token
+    with it. Two unrelated faults block it today, each on its own: the same
+    render breaks the listener's port, which Synapse refuses first, and that
+    image has no authlib, so `check_requirements("jwt")` stops startup.
+    Since `48ab32d` the template writes `enabled: false`, and `JWTConfig`
+    refuses an `enabled` that is not a boolean, so fixing both faults no
+    longer opens JWT login. OIDC id_tokens are checked only against the provider's
     JWKS, never against `client_secret`. With 1.9.1 such a configuration fails
     closed. authlib raises `ValueError` for the empty key, which `jwt.py` does
     not catch (it catches `JoseError`), so each JWT login ends in an error
@@ -588,7 +664,9 @@ them). The release each change arrived in was read from the 1.7.2, 1.8.0 and
         does: HMAC pads a key with zero bytes). The homeserver stops at
         startup with the reason. Asymmetric algorithms, whose secret is a
         public key and so contains `-----BEGIN `, and disabled JWT login are
-        not checked. No Blackout template enables `jwt_config`.
+        not checked. (Until the sixth review this item ended "No Blackout
+        template enables `jwt_config`"; the Railway one did. See the
+        `enabled` item below.)
     -   **What `5bad47c` missed (third review).** It imported the secret with
         `OctKey.import_key`, and for a JWK that call puts off the empty-key
         and PEM checks until each verify. The review parsed
@@ -687,6 +765,19 @@ them). The release each change arrived in was read from the 1.7.2, 1.8.0 and
             with no `kid`, when the member is the set's only key, and that
             is what the rest of the check tries. A member without a `kid`,
             in a set that names others, is never chosen, and is not tried.
+        -   **This refuses key sets that `develop` starts and serves** (said
+            plainly after the sixth review). The refusal goes by the `kid`'s
+            type, whatever the key. A strong `oct` key under `kid: 5`, a
+            one-key set under `kid: null`, and strong keys under `kid: "a"`
+            and `kid: 7` each load on `develop`, under authlib 1.6.12 and
+            1.9.1, and `JwtHandler`'s call logs in with each `kid`. On this
+            branch, under either version, each stops at startup
+            (`keys[0] has a kid that is not a string (5)`). That is on
+            purpose. It fails closed; RFC 7517 makes `kid` a string; and
+            trying each member under its own typed `kid` instead would mean
+            copying authlib's `==` across JSON types (`true == 1`). The
+            operator's fix is to quote the `kid` and have the issuer send the
+            same string, as the notes in `docs/upgrade.md` say.
         -   The test module has the eight sets (`AA` beside a usable key,
             under `kid: 5` or `kid: true` as a mapping, under `kid: 5` as
             JSON text, and under `kid: true` as a list; a usable key under
@@ -695,6 +786,20 @@ them). The release each change arrived in was read from the 1.7.2, 1.8.0 and
             homeserver's config does not load, and the same `/login`, given
             that set, answers the empty-key token with 200 as
             `@mallory:test`.
+    -   **`enabled` that is not a boolean (sixth review, `48ab32d`).**
+        `jwt_config` never checked `enabled`, and JWT login is on whenever it
+        is truthy, so `"false"` turned it on. The Railway template rendered
+        `${JWT_ENABLED:-false}` as that text ([Our exposure](#our-exposure)).
+        `JWTConfig` now refuses, before any other check, an `enabled` that is
+        not a YAML boolean (a string, `null`, an empty value, a number), with
+        a `ConfigError` at `jwt_config.enabled`; a missing `enabled` still
+        means off. The tests refuse seven such values and load `true`,
+        `false` and none, and render the template as `envsubst` does: it has
+        `enabled: false` whatever the environment. On `05dfc10`'s
+        `config/jwt.py` the refusal test fails, and with `05dfc10`'s
+        template the template test does. This refuses configurations that
+        `develop` starts: there a quoted `"true"`, `"false"` or `1` ran JWT
+        login, and `null`, `""` or `0` left it off.
 -   **Loopback `http` metadata (1.8.0).** `is_secure_transport`, which
     `validate_issuer`, `validate_authorization_endpoint`,
     `validate_token_endpoint` and `validate_jwks_uri` use, now parses the URL.
@@ -1018,7 +1123,8 @@ from `.trivyignore`.
 
 Added after the fourth review. GitHub reviewed these four on 2026-10-30,
 between 23:03 and 23:07 UTC. Trivy's database of 19:07 UTC, which every gate
-run in this record used, does not have them. Each is High (CVSS 7.5,
+run in this record used until the sixth review, does not have them; the one of
+2026-10-31 01:14 UTC does, and reports them on `develop`. Each is High (CVSS 7.5,
 availability only), affects every release through 0.6.4, and is fixed in
 0.6.5, on PyPI since 2026-10-27.
 
@@ -1108,18 +1214,29 @@ them, and OSV lists nothing against it.
 
 ### How the updater uses zip
 
-From the 2.10.0 source:
+From the source of tauri-plugin-updater 2.14.1, the locked version (its
+crate's sha256, `d957abbc…`, is the checksum in `Cargo.lock`). Until the sixth
+review this section cited the 2.10.0 source; the conclusion holds for both.
 
--   `zip` is an optional dependency under
-    `cfg(target_os = "windows")`, enabled by the default `zip` feature. It is
-    not compiled for macOS or Linux.
--   It is used once, in `extract_zip`: `ZipArchive::new(..)` and then
-    `extract(temp_dir)`. `install` reaches it only when the bytes are a zip.
-    `ZipStreamReader` is never used.
--   `install` is fed only bytes that `download` returned, and `download` runs
-    `verify_signature` (minisign, against `plugins.updater.pubkey`) before it
-    returns them. The JavaScript `install` command takes the resource id of
-    those verified bytes, not raw bytes.
+-   `zip` is an optional dependency under `cfg(target_os = "windows")`
+    (`Cargo.toml` line 198), enabled by the default `zip` feature. It is not
+    compiled for macOS or Linux: `cargo tree -i zip` finds it for
+    `x86_64-pc-windows-msvc` only, through the updater, and for neither
+    `x86_64-unknown-linux-gnu` nor `aarch64-apple-darwin`.
+-   It is used once, in `extract_zip` (`src/updater.rs` 1140-1160):
+    `zip::ZipArchive::new(..)`, then `extract(&temp_dir)`. `extract` (1121)
+    calls it only when the bytes are a zip, and only the Windows
+    `install_inner` (1009, in the `#[cfg(windows)]` block from 999) calls
+    `extract`. `ZipStreamReader` is never used.
+-   `install` (921-924) runs `self.verify(bytes)?`, the minisign check
+    against `plugins.updater.pubkey`, before `install_inner`. `download`
+    runs `self.verify(&buffer)?` (891) before it returns the bytes, and
+    `download_and_install` (933-941) installs only what `download` returned.
+    The JavaScript `install` command (`src/commands.rs` 137-157) takes the
+    resource ids of an update and of the bytes the JavaScript `download`
+    stored, and calls the same `install`. The JavaScript `check` (43) takes
+    headers, a timeout, a proxy and a target, not the endpoints or the
+    public key.
 
 So both advisories need an archive signed with the project's updater key.
 Whoever holds that key can already ship an installer that runs as the user.
@@ -1279,24 +1396,29 @@ libayatana-appindicator3-dev librsvg2-dev`):
 
 ## The gate
 
-| Run                                                     | High/Critical reported                                                           | Exit |
-| ------------------------------------------------------- | -------------------------------------------------------------------------------- | ---- |
-| `develop` (`ff7d08b`)                                   | the six above                                                                    | 1    |
-| this branch                                             | none                                                                             | 0    |
-| this branch, `.trivyignore` emptied                     | 7: the four Twisted entries, image-size (2) and react-router, all ignored before | 1    |
-| first version, the new entry's `exp:` set to 2026-10-01 | GHSA-vpp8-g58w-m8mp only                                                         | 1    |
-| after review, every Twisted `exp:` set to 2026-10-01    | the four Twisted advisories only                                                 | 1    |
-| after the second review (`b37a2cd`)                     | none                                                                             | 0    |
-| after the third review (`3ca628a`)                      | none                                                                             | 0    |
-| after the fourth review (`b3cd1b3`)                     | none                                                                             | 0    |
-| after the fifth review (`823530e`)                      | none                                                                             | 0    |
+| Run                                                            | High/Critical reported                                                           | Exit |
+| -------------------------------------------------------------- | -------------------------------------------------------------------------------- | ---- |
+| `develop` (`ff7d08b`)                                          | the six above                                                                    | 1    |
+| this branch                                                    | none                                                                             | 0    |
+| this branch, `.trivyignore` emptied                            | 7: the four Twisted entries, image-size (2) and react-router, all ignored before | 1    |
+| first version, the new entry's `exp:` set to 2026-10-01        | GHSA-vpp8-g58w-m8mp only                                                         | 1    |
+| after review, every Twisted `exp:` set to 2026-10-01           | the four Twisted advisories only                                                 | 1    |
+| after the second review (`b37a2cd`)                            | none                                                                             | 0    |
+| after the third review (`3ca628a`)                             | none                                                                             | 0    |
+| after the fourth review (`b3cd1b3`)                            | none                                                                             | 0    |
+| after the fifth review (`823530e`)                             | none                                                                             | 0    |
+| after the sixth review (`ae70358`), DB of 2026-10-31 01:14 UTC | none                                                                             | 0    |
+| `develop` (`ff7d08b`), DB of 2026-10-31 01:14 UTC              | eleven: the six above, authlib GHSA-c73q and the four pyasn1 advisories          | 1    |
 
-The last two rows show that Trivy 0.69.3 honours the `exp:` date, now on all
-four Twisted entries. Nothing from authlib or zip remains with the ignore file
-emptied. The runs after review used the same Trivy binary (its checksum
-re-checked) and the same vulnerability DB, of 2026-10-30 19:07 UTC, which was
-still the newest (its next update is due 2026-10-31 19:07 UTC). The scan read
-six lockfiles: the fork's `poetry.lock` and `Cargo.lock`, the legacy API's
+The two rows with `exp:` set to 2026-10-01 show that Trivy 0.69.3 honours the
+`exp:` date, now on all four Twisted entries. Nothing from authlib or zip
+remains with the ignore file emptied. The runs through the fifth review used
+the same Trivy binary (its checksum re-checked) and the vulnerability DB of
+2026-10-30 19:07 UTC. This record called it still the newest, reading its
+`NextUpdate` (2026-10-31 19:07 UTC) as the next database's date. That field
+only tells the client when to look again; a newer database, built at 01:14
+UTC, was downloadable by 02:19 UTC (corrected after the sixth review). The
+scan read six lockfiles: the fork's `poetry.lock` and `Cargo.lock`, the legacy API's
 `requirements.txt`, the desktop `Cargo.lock`, `pnpm-lock.yaml` and
 `services/perturbation/requirements.txt`.
 
@@ -1327,11 +1449,32 @@ gate fails on `develop`, and on this branch it does not for these lockfiles.
 After the fifth review the same binary (the tarball's `sha256` checked
 against `trivy_0.69.3_checksums.txt`, and the extracted binary's against the
 one in the tarball) was run over the worktree at `823530e`, plain and with
-`--show-suppressed`, against the same database, still the newest
-(`NextUpdate` 2026-10-31 19:07 UTC). No finding, exit 0, and the same seven
+`--show-suppressed`, against the same database, from a cache downloaded at
+00:58 UTC; Trivy did not look for a newer one, because that cache's
+`NextUpdate` was in the future. This record called it still the newest. That
+was not checked, and the 01:14 UTC database was downloadable by 02:19 UTC, ten
+minutes after the run (sixth review). No finding, exit 0, and the same seven
 suppressed. That round changed no lockfile. Trivy loads no RustSec-only
 advisory, so it cannot show the four in
 [Found outside scope](#found-outside-scope-not-fixed-here).
+
+After the sixth review the same binary (the tarball's `sha256` checked
+against `trivy_0.69.3_checksums.txt`, and the extracted binary's against the
+one in the tarball) downloaded a new database at 03:07 UTC: the one of
+2026-10-31 01:14 UTC, which has the pyasn1 advisories and GHSA-c73q. It ran
+with `security.yml`'s flags, and no others, over `git archive` exports of
+`ae70358` and of `develop`, plain and with `--show-suppressed`:
+
+-   `ae70358`: no finding, exit 0, and the same seven suppressed.
+-   `develop`: eleven findings, exit 1. authlib 1.6.12 under its four
+    advisories, pyasn1 0.6.4 under four, Twisted 26.4.0 under
+    GHSA-vpp8-g58w-m8mp, and zip 4.6.1 under two. With `--show-suppressed`,
+    the other three Twisted ids, react-router and image-size twice, which
+    `develop`'s `.trivyignore` ignores too.
+
+So with the newest database the gate is green on this branch, and red on
+`develop` for the five advisories the fourth review added as well as the six.
+The record's own commit changes no file Trivy reads.
 
 ## Validation
 
@@ -1346,6 +1489,7 @@ advisory, so it cannot show the four in
     packages) pass with pyasn1 0.6.5.
 -   **Lock, after the fifth review:** `poetry lock --check` (poetry 1.3.2)
     passes. Neither `pyproject.toml` nor `poetry.lock` changed in that round.
+    After the sixth review it passes again; neither file changed.
 -   **The auth tests, before and after:** 231 tests in 13 modules. All pass
     on both sides, and none is skipped, so authlib was loaded. After review,
     with the three new modules (`test_oidc_claim_types`,
@@ -1370,7 +1514,9 @@ advisory, so it cannot show the four in
     339 tests, all passing, none skipped. The fourth review's 358 named
     that module alone and inside `tests.config`, and trial ran its 21 tests
     twice; without the repeat that run was 337, and `test_jwt_secret_config`
-    has two more. The original 13 modules:
+    has two more. After the sixth review, the same modules and
+    `tests.config`: 342 tests (`test_jwt_secret_config` has three more),
+    all passing, none skipped. The original 13 modules:
     -   `tests.handlers.test_oidc`, `test_sso`, `test_auth` and
         `test_oauth_delegation`;
     -   `tests.rest.client.test_login` (JWT login lives here; there is no
@@ -1441,7 +1587,10 @@ advisory, so it cannot show the four in
     other 104 are the fork's existing ones (see the 2026-10-25 record).
     None is in an auth module. After the fifth review the full suite was
     not run again: that round changed `config/jwt.py`, its test module and
-    one annotation, and the targeted run covers each.
+    one annotation, and the targeted run covers each. Nor after the sixth:
+    that round changed how `config/jwt.py` reads `enabled`, its test module,
+    a template and an example file that no test but the new one reads, and
+    documents.
 
 -   **The new tests against the code they pin:**
 
@@ -1492,9 +1641,20 @@ advisory, so it cannot show the four in
         homeserver left a thread-pool worker running and trial never
         exited, so the test parses the config instead, as that helper does
         first.
+    -   After the sixth review, `test_jwt_secret_config` with `05dfc10`'s
+        `config/jwt.py`, under 1.9.1: `test_non_boolean_enabled_is_refused`
+        fails (no `ConfigError`). With `05dfc10`'s template,
+        `test_railway_template_leaves_jwt_login_off` fails
+        (`'${JWT_ENABLED:-false}' is not False`). The other 14 pass in each.
+        With both changes all 15 pass under 1.9.1, and under 1.6.12 only
+        `test_unusable_hmac_secrets_are_refused` fails, on the PEM and SSH
+        forms, as before. The test's `_envsubst` gave output byte-identical
+        to gettext-base 0.21's `envsubst` for the old and the new template,
+        each with no variable set and with `.env.example`'s values plus
+        `JWT_ENABLED=true`.
 
 -   **`blackout_runtime_tests`:** 85 passed before and after, and again after
-    each of the five reviews, run with `pytest -q` as the fork's
+    each of the six reviews, run with `pytest -q` as the fork's
     `docs/ops/upstream_sync_runbook.md` says. pytest is not in
     the lock: 8.3.5 was added to each venv with `--no-deps`, because 9.x would
     have moved the locked `packaging`. `tests/blackout_runtime` is part of the
@@ -1525,17 +1685,23 @@ advisory, so it cannot show the four in
     pass on `config/jwt.py`, `api/auth/msc3861_delegated.py` and the JWT
     test module, and mypy on the three reports the same 56 errors, line for
     line, as on `b0b738f` and as the fourth review's run, none in the
-    three.
+    three. After the sixth review, ruff, black and isort pass on
+    `config/jwt.py` and its test module. mypy first reported three errors
+    in the new test code (tuples of dicts inferred as `object`); with
+    annotations it reports the same 56, line for line, as the fifth
+    review's run, none in the two.
 -   **Desktop:** as in [Verification](#verification).
 -   **gitleaks 8.21.2** over `origin/develop..HEAD`: no leaks, after each
     review too. The MSC3861 test generates its RSA and EC keys at run time,
     and so does the JWT test its EC key, so no key is committed.
 -   **prettier 2.8.1**, the root's version, on the changed Markdown and YAML:
-    clean.
+    clean. After the sixth review, on this record and `PATCHES.md`; the
+    other files that round changed are under `apps/blackout-server/`, which
+    `.prettierignore` leaves to upstream's formatting.
 -   **No pre-commit hook ran.** `core.hooksPath` is `.husky/_`, which this
     worktree does not have (pnpm's `prepare` script creates it), so git ran no
     hook. The hook's two steps were run by hand before each commit, the
-    fourth and fifth reviews' included, and both passed: lint-staged's
+    fourth to sixth reviews' included, and both passed: lint-staged's
     `prettier --write --ignore-unknown` on the staged files (as `--check`),
     and `tools/ci/check-auth-secrets.mjs`.
 
@@ -1651,10 +1817,87 @@ advisory, so it cannot show the four in
         wasm32. `cargo tree -i webpki-root-certs` finds it for no Linux,
         Windows or macOS target, so no desktop build contains it.
 
-    OSV also lists seven RustSec notices with no rating in the same lock:
-    unsoundness in anyhow 1.0.102, event-listener 5.4.1 and tokio 1.50.0,
-    and four unmaintained crates (proc-macro-error, zbus_names, zvariant,
-    zvariant_derive). They are not triaged here.
+    OSV also lists, in the same lock, eight advisories with a GHSA severity
+    below High. The fifth review's list left them out; the sixth review's
+    sweep (2026-10-31 03:00 UTC) has them. Each is on `develop` at the same
+    version, the gate's severity filter does not reach them, and none is
+    changed here:
+
+    -   **rustls 0.23.37** (fixed in 0.23.45 or 0.23.46):
+        GHSA-2mjx-qc3c-rqvc (Moderate, TLS 1.3 handshake messages accepted
+        across encryption levels), GHSA-c8m5-c952-6cm4 (Moderate, `Debug` of
+        a client session value shows its secrets), GHSA-h2v8-394m-p7vv
+        (Low, Brotli certificate decompression, off by default) and
+        GHSA-w44r-93j7-qv28 (Low, an unauthenticated ServerHello downgrades
+        later key exchanges for that name). The same path and reasoning as
+        RUSTSEC-2026-0382: rustls comes in only through reqwest 0.13.2 and
+        the updater, on every desktop target; nothing in the app calls the
+        updater; and a package must still pass the minisign check.
+    -   **tar 0.4.45**, GHSA-3pv8-6f4r-ffg2 (Moderate, fixed in 0.4.46): a
+        PAX header applied to the wrong entry. Only tauri-plugin-updater
+        uses it, on Linux and macOS (`Cargo.toml` lines 173 and 187), to
+        unpack an update in `install_inner` (`src/updater.rs` 1283 and
+        1517), after the same signature check as zip.
+    -   **glib 0.18.5**, GHSA-wrw7-89jp-8q8g (Moderate, fixed in 0.20.0):
+        unsound `Iterator` impls of `VariantStrIter`. Linux only, through
+        the GTK 3 stack tauri uses there (atk, gtk, muda, tray-icon). The
+        app's own code does not call glib; whether a dependency iterates a
+        `VariantStrIter` was not checked.
+    -   **serde_with 3.18.0**, GHSA-7gcf-g7xr-8hxj (Moderate, fixed in
+        3.21.0): `KeyValueMap` serialization panics on an empty entry. It is
+        built only into the build-time copy of tauri-utils (under
+        tauri-build, tauri-codegen, tauri-macros and tauri-plugin's build
+        script); `cargo tree` shows no path from the runtime copy.
+    -   **rand 0.9.2**, GHSA-cq8v-f236-94qc (Low, fixed in 0.9.3): unsound
+        only when a custom `log` logger calls `rand::rng()`. It comes in
+        through tauri-plugin-notification 2.3.3, and the app's code installs
+        no logger.
+
+    And seven RustSec notices with no rating: unsoundness in anyhow
+    1.0.102, event-listener 5.4.1 and tokio 1.50.0, and four unmaintained
+    crates (proc-macro-error, zbus_names, zvariant, zvariant_derive). They
+    are not triaged here.
+
+5.  **The Railway template renders every `${VAR:-default}` as text (sixth
+    review).** `apps/blackout-server/services/blackout-server/entrypoint.sh`
+    renders `homeserver.yaml.template` with plain `envsubst` at every start
+    of the `managed` profile; it is the only `envsubst` user under
+    `apps/blackout-server` (`git grep`). gettext's `envsubst` expands only
+    `$NAME` and `${NAME}`, so each `${VAR:-default}` stays as written,
+    whatever the environment holds. Rendered here (see [Method](#method))
+    with no variable set and with `.env.example`'s values, then parsed with
+    `HomeServerConfig` one fault at a time:
+
+    | Setting                               | Renders as                                                 | What Synapse does with it                                                                                                                                                             | Kind                             |
+    | ------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
+    | `listeners[0].port`                   | `${PORT:-8008}`                                            | refuses the config, before any other check: `Listener configuration is lacking a valid 'port' option`                                                                                 | deploy: the service cannot start |
+    | `database.args.database`, `.user`     | `${DATABASE_NAME:-blackout}`, `${DATABASE_USER:-blackout}` | passes them to psycopg2 unchanged; they are not the database and role `.env.example` names                                                                                            | deploy                           |
+    | `database.args.port`                  | `${DATABASE_PORT:-5432}`                                   | passed to psycopg2 unchanged; what libpq does with it was not run (no psycopg2 here)                                                                                                  | deploy                           |
+    | `redis.port`                          | `${REDIS_PORT:-6379}`                                      | loads; `connectTCP`, which `synapse/replication/tcp/redis.py` calls with it, raises `ServiceNameUnknownError`                                                                         | deploy                           |
+    | `jwt_config.enabled`, `.secret`       | `${JWT_ENABLED:-false}`, `${JWT_SECRET:-}`                 | JWT login on, with a secret anyone can read                                                                                                                                           | security: fixed in `48ab32d`     |
+    | `turn_uris[0]`                        | `${TURN_URIS:-turn:turn.example.org:3478?transport=udp}`   | hands it to clients as is (`/voip/turnServer`); no client can use it                                                                                                                  | deploy: no TURN                  |
+    | `turn_shared_secret`                  | `${TURN_SHARED_SECRET:-changeme}`                          | signs the TURN credentials it hands out; a TURN server accepts them only if given that literal, and `docker/compose.turn.yaml` gives coturn `TURN_SHARED_SECRET` from the environment | deploy; fails closed             |
+    | `blackout.fbm_api_url`, `.ollama_url` | `${FBM_API_URL:-}`, `${OLLAMA_URL:-}`                      | nothing: no Python code reads either key                                                                                                                                              | none                             |
+
+    The switches that matter most render as meant: `enable_registration`
+    and `enable_registration_without_verification` use plain `${VAR}`, and
+    an unset one renders empty and stops startup
+    (`invalid truth value 'none'`); `federation_domain_whitelist: []` is a
+    literal. So `jwt_config` was the only security defect, and it is fixed.
+    The rest are left to whoever makes this service start: plain `${VAR}`
+    with the defaults in `.env.example`, as the template's own comment above
+    `enable_registration` already asks, or a renderer that expands defaults.
+    That change also has to give the image authlib (`--extras jwt` or
+    `all` in its `poetry export`, as `docker/Dockerfile` has) or drop the
+    `jwt_config` block: `check_requirements("jwt")` runs for any non-empty
+    `jwt_config`, so without authlib the block stops startup even with
+    `enabled: false` (measured with authlib hidden from that check).
+
+    `deploy/docker/blackout-backend`'s Synapse template has no such
+    expression outside a comment. Its two appservice templates under
+    `integrations/templates/` have sixteen; they are outside
+    `apps/blackout-server`, rendered by hand as their README says, and were
+    not analysed here.
 
 ## Not verified
 
@@ -1677,10 +1920,17 @@ advisory, so it cannot show the four in
     round measured 1.9.1; the second review measured both versions before it.
 -   A bound on the JWKS refetch, or a rate limit on `/_synapse/client`. Both
     are follow-ups ([Malformed logout tokens](#malformed-logout-tokens)).
--   The JWT secret check against an operator's real configuration. No
-    Blackout template enables `jwt_config`, so none was available. Nor was
-    the key-set warning tried with a real identity provider's JWKS; the
-    test's EC key is made at run time.
+-   The JWT checks against an operator's real configuration. The one
+    Blackout template with a `jwt_config`, the Railway one, has JWT login
+    off now; it was rendered and parsed, not run in its image, which cannot
+    start ([Found outside scope](#found-outside-scope-not-fixed-here)). Until
+    the sixth review this item said no Blackout template enables
+    `jwt_config`. Nor was the key-set warning tried with a real identity
+    provider's JWKS; the test's EC key is made at run time.
+-   The Railway image itself, neither built nor started. Its template was
+    rendered with Ubuntu's gettext-base 0.21, which matches the image's
+    Debian package in upstream release only, and what psycopg2 does with the
+    database values was not run.
 -   pyasn1's decode through a real TLS handshake, or the reactor stalling on
     one. The cost was measured on `extract_patterns` directly. That the
     hostname check runs only after the chain has validated, on the reactor
@@ -1692,7 +1942,6 @@ advisory, so it cannot show the four in
     and `HTTPS_PROXY` was not unset to run them.
 -   The four RustSec advisories in the desktop lock against a running app.
     Their exposure was read from `cargo tree` and the crates' source.
--   The Trivy gate with the database due 2026-10-31 19:07 UTC, the first that
-    will hold the pyasn1 and GHSA-c73q advisories. OSV stood in for it.
-    Whether that database adds advisories against `pnpm-lock.yaml` is for
-    `-v47` to see.
+-   Whether Trivy's database of 2026-10-31 01:14 UTC adds advisories against
+    `pnpm-lock.yaml` is for `-v47` to see; on this branch it adds none
+    above the ignored seven.

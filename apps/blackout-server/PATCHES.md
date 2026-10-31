@@ -949,9 +949,10 @@ service files, which upstream does not have. Found by the sixth review of
   service's `Dockerfile` exports the lock without extras, so authlib is
   not installed, and `check_requirements("jwt")` stops startup for any
   non-empty `jwt_config`, `enabled: false` included
-  (`DependencyException ['authlib']`). Fixing either fault alone would have
-  opened JWT login to anyone who signs with the literal. The template is the
-  same on `develop`. It now writes `enabled: false` and
+  (`DependencyException ['authlib']`). Each fault alone stops startup, so
+  JWT login opened to anyone who signs with the literal only once both were
+  fixed, which making this service work needs. The template is the same on
+  `develop`. It now writes `enabled: false` and
   `secret: "${JWT_SECRET}"`, under a comment, so no environment variable turns
   JWT login on; an operator who writes `enabled: true` gets `JWT_SECRET`'s
   value, or, when it is unset, an empty secret that the startup check
