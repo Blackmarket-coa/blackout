@@ -190,8 +190,13 @@ treq = ">=15.1"
 pyOpenSSL = ">=26.0.0"
 PyYAML = ">=3.13"
 # 0.6.4 fixes GHSA-jr27-m4p2-rc6r, GHSA-8ppf-4f7h-5ppj, GHSA-hm4w-wwcw-mr6r and
-# GHSA-m4p7-r5rc-7g4j (all High).
-pyasn1 = ">=0.6.4"
+# GHSA-m4p7-r5rc-7g4j (all High). 0.6.5 fixes GHSA-fm9c-5rcf-2q5p,
+# GHSA-9m75-vc3g-4x39, GHSA-2qm8-x737-gmw5 and GHSA-mm57-4v3p-rchx (all High,
+# quadratic decoding). service_identity decodes the SRV-ID of every peer
+# certificate Twisted verifies with it. See
+# docs/security/dependency-advisories-server-desktop-2026-10-30.md (repository
+# root).
+pyasn1 = ">=0.6.5"
 pyasn1-modules = ">=0.0.7"
 bcrypt = ">=3.1.7"
 # The thumbnailer decodes attacker-supplied images, and 13.0.0 is the first

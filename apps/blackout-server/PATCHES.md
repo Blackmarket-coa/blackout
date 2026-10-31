@@ -804,3 +804,25 @@ root).
   accepted; an empty secret is refused for each of the three methods; and
   an `alg: RS256`, `use: sig` JWK still sends a verified RS256 assertion.
   The alg and empty-secret refusals fail on the code before this patch.
+
+## 2026-10-31 pyasn1 0.6.5 (four decoder advisories)
+
+Edits outside `blackout_runtime/` for four High pyasn1 advisories that GitHub
+reviewed on 2026-10-30 between 23:03 and 23:07 UTC, after Trivy's database of
+19:07 UTC, so the gate did not report them yet. Recorded in
+`docs/security/dependency-advisories-server-desktop-2026-10-30.md` (repository
+root). Upstream element-hq/synapse `develop` at `cc172f7` still locks 0.6.4,
+so there was nothing to port; re-check both lines during any reconciliation.
+
+- `pyproject.toml`: `pyasn1 = ">=0.6.5"` (was `>=0.6.4`). 0.6.5 (PyPI,
+  2026-10-27) fixes GHSA-fm9c-5rcf-2q5p, GHSA-9m75-vc3g-4x39,
+  GHSA-2qm8-x737-gmw5 and GHSA-mm57-4v3p-rchx: quadratic CPU in decoding
+  schemaless containers, constructed strings, constructed BIT STRINGs and
+  binary REALs. `service_identity` decodes each peer certificate's SRV-ID
+  otherName with pyasn1's DER decoder and no schema, during the hostname
+  check that Twisted and `synapse/crypto/context_factory.py` run after the
+  certificate chain has validated.
+- `poetry.lock`: `poetry lock --no-update` under poetry 1.3.2. pyasn1 0.6.4 to
+  0.6.5, with the hashes PyPI lists, and `content-hash`. Nothing else moves;
+  the image's `--extras all` export changes by that one package.
+  `pyasn1-modules` 0.4.2 requires `pyasn1>=0.6.1,<0.7.0`.
