@@ -48,9 +48,15 @@ report_stats: false
 # Unset means upstream default `off`. See docs/audits/2026-08-10-encryption-audit.md.
 encryption_enabled_by_default_for_room_type: invite
 
+# JWT login (org.matrix.login.jwt) is off, and no environment variable turns it
+# on. It read `${JWT_ENABLED:-false}` and `${JWT_SECRET:-}`, which envsubst left
+# as text: a non-empty string, which Synapse read as on, and a secret anyone
+# can read here. To use JWT login, write `enabled: true` below and set
+# JWT_SECRET to a long random value; an empty secret stops startup. See
+# docs/upgrade.md, "Upgrading to authlib 1.9.1".
 jwt_config:
-  enabled: ${JWT_ENABLED:-false}
-  secret: "${JWT_SECRET:-}"
+  enabled: false
+  secret: "${JWT_SECRET}"
   algorithm: "HS256"
 
 turn_uris:

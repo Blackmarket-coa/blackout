@@ -747,7 +747,10 @@ imported a string secret only and so missed a secret given as a JWK. Revised
 again after the fourth (2026-10-31): `algorithm: none` is refused, and a key
 set is no longer refused for one key HS\* cannot use. Revised after the fifth
 (2026-10-31): a key-set member whose `kid` is not a string is refused, because
-the fourth review's version tried only the string ones.
+the fourth review's version tried only the string ones. Corrected after the
+sixth (2026-10-31): this entry said no Blackout template enables
+`jwt_config`, and one did; and the `kid` refusal is now said to refuse key
+sets that `develop` serves.
 
 - `synapse/config/jwt.py` (`JWTConfig._check_algorithm`, fourth review): when
   JWT login is enabled, `jwt_config.algorithm` must be one of the 14 JWS
@@ -774,7 +777,14 @@ the fourth review's version tried only the string ones.
     beside a usable key started, and a token with header
     `{"alg": "HS256", "kid": 5}` signed with the empty key logged in as any
     user. `develop`, on authlib 1.6.12, has no check and accepts the same
-    config and token;
+    config and token. Because the refusal goes by the `kid`'s type, it also
+    refuses key sets that `develop` starts and serves (said after the sixth
+    review): a strong `oct` key under `kid: 5`, a one-key set under
+    `kid: null`, and strong keys under `kid: "a"` and `kid: 7` each load on
+    `develop` under authlib 1.6.12 and 1.9.1, and `JwtHandler`'s call logs in
+    with each `kid`; on this tree each stops at startup. That is kept on
+    purpose, to fail closed: RFC 7517 makes `kid` a string, and the operator's
+    fix is to quote it (`docs/upgrade.md`, "Upgrading to authlib 1.9.1");
   - an empty or missing secret (`""`, `null`, an empty mapping) is refused
     outright, on any authlib version, and so is a JWK with an empty `k`,
     alone or in a key set (fourth review; 1.9.1 refused it anyway, but
@@ -809,7 +819,13 @@ the fourth review's version tried only the string ones.
   refused wherever it appears only under the locked `>=1.9.1`; 1.6.12 refuses
   only a string secret that starts with it, and uses any other as an HMAC
   key. The secret of an asymmetric algorithm, and a disabled `jwt_config`,
-  are not checked. No Blackout template enables `jwt_config`.
+  are not checked. Until the sixth review this bullet ended "No Blackout
+  template enables `jwt_config`". One did, without meaning to:
+  `services/blackout-server/homeserver.yaml.template` rendered
+  `enabled: ${JWT_ENABLED:-false}` as a non-empty string, with the literal
+  secret `${JWT_SECRET:-}`, which this check accepts. See "2026-10-31 JWT
+  login refuses a non-boolean `enabled`; the Railway template's JWT login is
+  off" below.
 - `tests/blackout_runtime/test_jwt_secret_config.py`: eighteen refused
   secrets for each of HS256, HS384 and HS512, among them a JWK mapping and
   JWK JSON text with an empty `k` or a PEM `k`, and key sets with an empty
@@ -862,7 +878,8 @@ root).
   with `private_key_jwt_sign` and the same arguments `sign` passes, and turns
   any exception into the same `ConfigError`. That also refuses, on both
   versions, a JWK that is public only, is not RSA, or has `use: enc` or
-  `key_ops` without `sign`; none of them could ever sign. Before this, each
+  `key_ops` without `sign`, and one without a `kid` (`KeyError: 'kid'`:
+  `sign` sends the `kid` header); none of them could ever sign. Before this, each
   of these let the homeserver start and then answer every authenticated
   request with 503 `Unable to introspect the access token`, the alg case
   under 1.9.1 only. Keep `_check_private_key_jwk` in step with
@@ -906,3 +923,61 @@ so there was nothing to port; re-check both lines during any reconciliation.
   0.6.5, with the hashes PyPI lists, and `content-hash`. Nothing else moves;
   the image's `--extras all` export changes by that one package.
   `pyasn1-modules` 0.4.2 requires `pyasn1>=0.6.1,<0.7.0`.
+
+## 2026-10-31 JWT login refuses a non-boolean `enabled`; the Railway template's JWT login is off
+
+A fork patch with no upstream counterpart (upstream's `synapse/config/jwt.py`
+at `cc172f7` reads `enabled` as given), and edits to Blackout's own Railway
+service files, which upstream does not have. Found by the sixth review of
+`docs/security/dependency-advisories-server-desktop-2026-10-30.md`
+(repository root), which records the render.
+
+- `services/blackout-server/homeserver.yaml.template`: `jwt_config` read
+  `enabled: ${JWT_ENABLED:-false}` and `secret: "${JWT_SECRET:-}"`. The
+  image `railway.toml` deploys renders this file at every start of the
+  `managed` profile with `entrypoint.sh`'s plain `envsubst`, and gettext's
+  `envsubst` expands only `$NAME` and `${NAME}`. Both stayed as text,
+  whatever the environment held. YAML then gave `enabled` the string
+  `${JWT_ENABLED:-false}`, which Synapse treats as on, and `secret` the
+  string `${JWT_SECRET:-}`, which anyone can read in this file. The secret
+  check this tree added on 2026-10-30 accepts it (it is not empty), and a
+  token signed with it verifies, as any user.
+  Two unrelated faults kept that from running. The same render leaves the
+  listener's `port: ${PORT:-8008}` as text, and Synapse refuses the listener
+  before it reads `jwt_config`:
+  `Listener configuration is lacking a valid 'port' option`. And the
+  service's `Dockerfile` exports the lock without extras, so authlib is
+  not installed, and `check_requirements("jwt")` stops startup for any
+  non-empty `jwt_config`, `enabled: false` included
+  (`DependencyException ['authlib']`). Fixing either fault alone would have
+  opened JWT login to anyone who signs with the literal. The template is the
+  same on `develop`. It now writes `enabled: false` and
+  `secret: "${JWT_SECRET}"`, under a comment, so no environment variable turns
+  JWT login on; an operator who writes `enabled: true` gets `JWT_SECRET`'s
+  value, or, when it is unset, an empty secret that the startup check
+  refuses. Neither of the two faults is fixed here; the record lists every
+  `${VAR:-default}` in the template, what it renders to, and what Synapse
+  does with it. Only `jwt_config` was a security defect.
+- `services/blackout-server/.env.example`: `JWT_ENABLED=false` is gone (no
+  longer read), and `JWT_SECRET` is empty, where it was `change-me`, with a
+  comment saying when it is used.
+- `synapse/config/jwt.py` (`JWTConfig._check_enabled`): `jwt_config.enabled`
+  must be a YAML boolean, or absent (off). Anything else (a string such as
+  `"false"` or `${JWT_ENABLED:-false}`, `null`, an empty value, a number) is
+  a `ConfigError` at `jwt_config.enabled`, before the algorithm and secret
+  checks, with the text
+  `jwt_config.enabled must be true or false (a YAML boolean), not '${JWT_ENABLED:-false}'`.
+  So a template that renders badly stops at startup instead of turning JWT
+  login on. This refuses configs that `develop` starts: any non-empty
+  string, `"false"` included, and `1` turned JWT login on there, and `null`,
+  `""` and `0` left it off.
+- `tests/blackout_runtime/test_jwt_secret_config.py`: seven `enabled`
+  values are refused at that path (the `envsubst` text, `"false"`,
+  `"true"`, `""`, `null`, `0`, `1`); `true`, `false` and a missing `enabled`
+  load; and the template, rendered as `envsubst` renders it, has
+  `enabled: false` with or without `JWT_ENABLED=true` in the environment.
+  The test's `_envsubst` gave output byte-identical to gettext-base 0.21's
+  `envsubst` for the old and the new template, each under two environments.
+  On `05dfc10`'s `config/jwt.py` the refusal test fails (no `ConfigError`),
+  and with `05dfc10`'s template the template test fails
+  (`'${JWT_ENABLED:-false}' is not False`).

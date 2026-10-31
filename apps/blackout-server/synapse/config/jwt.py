@@ -60,6 +60,7 @@ class JWTConfig(Config):
         jwt_config = config.get("jwt_config", None)
         if jwt_config:
             self.jwt_enabled = jwt_config.get("enabled", False)
+            self._check_enabled()
             self.jwt_secret = jwt_config["secret"]
             self.jwt_algorithm = jwt_config["algorithm"]
 
@@ -79,6 +80,23 @@ class JWTConfig(Config):
             self.jwt_subject_claim = None
             self.jwt_issuer = None
             self.jwt_audiences = None
+
+    def _check_enabled(self) -> None:
+        """Refuse an ``enabled`` that is not a YAML boolean.
+
+        JWT login is on whenever ``enabled`` is truthy, so a string turned it
+        on: ``"false"``, or ``${JWT_ENABLED:-false}`` left as text by
+        ``envsubst``, which expands no default. ``null``, an empty value, and
+        numbers are refused too, so that the configuration says ``true`` or
+        ``false``. A missing ``enabled`` still means off. (Blackout fork
+        patch, see PATCHES.md, 2026-10-31.)
+        """
+        if not isinstance(self.jwt_enabled, bool):
+            raise ConfigError(
+                "jwt_config.enabled must be true or false (a YAML boolean), "
+                "not %r" % (self.jwt_enabled,),
+                ("jwt_config", "enabled"),
+            )
 
     def _check_algorithm(self) -> None:
         """Refuse an algorithm that would let anyone log in, or no one.
@@ -133,7 +151,9 @@ class JWTConfig(Config):
         ``kid`` is present and is not a string (``5``, ``true``, ``null``) is
         refused first, naming its index: ``kid: 5`` would be chosen by a
         token whose ``kid`` is ``5``, and ``kid: true`` by one whose ``kid``
-        is ``true`` or ``1``, and no string ``kid`` stands for those. Then
+        is ``true`` or ``1``, and no string ``kid`` stands for those. That
+        also refuses a set that loaded before this check, a usable key under
+        ``kid: 5`` among them: failing closed is the point. Then
         the set is checked under each distinct string ``kid`` it names, or,
         when it names none, with a token without one, which authlib serves
         from a one-key set only. A member without a ``kid`` in a set that

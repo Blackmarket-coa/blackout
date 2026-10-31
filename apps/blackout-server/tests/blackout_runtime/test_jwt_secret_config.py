@@ -18,7 +18,12 @@ under ``kid: 5`` answers a token whose ``kid`` is ``5``, which no string kid
 stands for). The set is then checked under each string ``kid``: a key that
 cannot be used for HS* only logs a warning while another key can be used. It
 also refuses ``algorithm: none``, with which authlib accepts an unsigned token,
-and any name that is not one of authlib's JWS algorithms.
+and any name that is not one of authlib's JWS algorithms. And it refuses an
+``enabled`` that is not a YAML boolean: JWT login is on whenever ``enabled`` is
+truthy, and the Railway template (``services/blackout-server``) rendered
+``enabled: ${JWT_ENABLED:-false}`` through ``envsubst``, which expands no
+default, as that text, a non-empty string. The template now writes
+``enabled: false``; a test below renders it as its entrypoint does.
 
 Records: docs/security/dependency-advisories-server-desktop-2026-10-30.md
 (repository root) and PATCHES.md, 2026-10-30.
@@ -30,8 +35,11 @@ import base64
 import hashlib
 import hmac
 import json
-from typing import Any, Dict, Tuple
+import re
+from pathlib import Path
+from typing import Any, Dict, Mapping, Tuple
 
+import yaml
 from cryptography.hazmat.primitives.asymmetric import ec
 
 from synapse.config import ConfigError
@@ -202,6 +210,42 @@ REFUSED_ALGORITHMS: Dict[str, Any] = {
 }
 
 
+# Refused at jwt_config.enabled. Each string turned JWT login on before the
+# check, the first as the Railway template rendered it.
+REFUSED_ENABLED: Dict[str, Any] = {
+    "an envsubst default left as text": "${JWT_ENABLED:-false}",
+    "the string false": "false",
+    "the string true": "true",
+    "an empty string": "",
+    "null": None,
+    "zero": 0,
+    "one": 1,
+}
+
+# The template services/blackout-server/entrypoint.sh renders for the image
+# railway.toml deploys.
+RAILWAY_TEMPLATE = (
+    Path(__file__).resolve().parents[2]
+    / "services"
+    / "blackout-server"
+    / "homeserver.yaml.template"
+)
+
+_ENVSUBST_REFERENCE = re.compile(
+    r"\$(?:\{([A-Za-z_][A-Za-z0-9_]*)\}|([A-Za-z_][A-Za-z0-9_]*))"
+)
+
+
+def _envsubst(text: str, env: Mapping[str, str]) -> str:
+    """Render ``text`` as GNU gettext's ``envsubst`` does with no SHELL-FORMAT:
+    ``$NAME`` and ``${NAME}`` become the variable's value, or nothing when it
+    is unset, and anything else, ``${NAME:-default}`` included, is copied as
+    it is."""
+    return _ENVSUBST_REFERENCE.sub(
+        lambda m: env.get(m.group(1) or m.group(2), ""), text
+    )
+
+
 def _parse(jwt_config: Dict[str, Any]) -> HomeServerConfig:
     config_dict = {**default_config("test"), "jwt_config": jwt_config}
     config = HomeServerConfig()
@@ -278,6 +322,46 @@ class JwtSecretConfigTestCase(TestCase):
                     {"enabled": True, "secret": PUBLIC_KEY_TEXT, "algorithm": algorithm}
                 )
                 self.assertEqual(config.jwt.jwt_secret, PUBLIC_KEY_TEXT)
+
+    def test_non_boolean_enabled_is_refused(self) -> None:
+        for label, enabled in REFUSED_ENABLED.items():
+            with self.subTest(enabled=label):
+                with self.assertRaises(ConfigError) as cm:
+                    _parse(
+                        {
+                            "enabled": enabled,
+                            "secret": "plain-secret",
+                            "algorithm": "HS256",
+                        }
+                    )
+                self.assertEqual(cm.exception.path, ("jwt_config", "enabled"))
+
+    def test_boolean_or_missing_enabled_is_accepted(self) -> None:
+        cases: Tuple[Tuple[Dict[str, Any], bool], ...] = (
+            ({"enabled": True}, True),
+            ({"enabled": False}, False),
+            ({}, False),
+        )
+        for jwt_config, enabled in cases:
+            with self.subTest(jwt_config=jwt_config):
+                config = _parse(
+                    {**jwt_config, "secret": "plain-secret", "algorithm": "HS256"}
+                )
+                self.assertIs(config.jwt.jwt_enabled, enabled)
+
+    def test_railway_template_leaves_jwt_login_off(self) -> None:
+        template = RAILWAY_TEMPLATE.read_text(encoding="utf-8")
+        envs: Tuple[Dict[str, str], ...] = (
+            {},
+            {"JWT_ENABLED": "true", "JWT_SECRET": "a-long-random-secret"},
+        )
+        for env in envs:
+            with self.subTest(env=env):
+                rendered = yaml.safe_load(_envsubst(template, env))
+                jwt_config = rendered["jwt_config"]
+                self.assertIs(jwt_config["enabled"], False)
+                self.assertEqual(jwt_config["secret"], env.get("JWT_SECRET", ""))
+                self.assertFalse(_parse(jwt_config).jwt.jwt_enabled)
 
     def test_disabled_jwt_login_is_not_checked(self) -> None:
         for algorithm in ("HS256", "none"):
