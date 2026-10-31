@@ -8,21 +8,33 @@ the PR which showed them does not touch: the Synapse fork's
 way. This follows `synapse-dependencies-triage-2026-10-25.md`, whose Twisted
 entries this record extends.
 
-| Package (lock)        | Advisory                              | Severity | Fixed in   | Outcome                                    |
-| --------------------- | ------------------------------------- | -------- | ---------- | ------------------------------------------ |
-| authlib 1.6.12 (fork) | GHSA-6v38-4h7w-rj9h (CVE-2026-96760)  | Critical | 1.9.0      | bumped to 1.9.1                            |
-| authlib 1.6.12 (fork) | GHSA-7vr2-2fgp-9w7p (CVE-2026-114615) | High     | 1.9.0      | bumped to 1.9.1                            |
-| authlib 1.6.12 (fork) | GHSA-8m4g-j4wp-wgcg (CVE-2026-114616) | High     | 1.9.1      | bumped to 1.9.1                            |
-| Twisted 26.4.0 (fork) | GHSA-vpp8-g58w-m8mp (no CVE)          | High     | 26.10.0rc1 | not reachable; ignored until 2026-11-30    |
-| zip 4.6.1 (desktop)   | GHSA-m665-v7pm-7grj (CVE-2026-115905) | Critical | 9.0.5      | zip 9.1.3, via tauri-plugin-updater 2.14.1 |
-| zip 4.6.1 (desktop)   | GHSA-q7v9-x93c-xqv3 (CVE-2026-115909) | High     | 9.0.0      | same                                       |
+After a fourth review it also covers five more High advisories against the
+same `poetry.lock`. GitHub reviewed them after the Trivy database the gate used
+(2026-10-30 19:07 UTC), so the gate did not report them, and would have from
+the next one: four against pyasn1 0.6.4, and a fourth against authlib 1.6.12.
+
+| Package (lock)        | Advisory                              | Severity | Fixed in   | Outcome                                         |
+| --------------------- | ------------------------------------- | -------- | ---------- | ----------------------------------------------- |
+| authlib 1.6.12 (fork) | GHSA-6v38-4h7w-rj9h (CVE-2026-96760)  | Critical | 1.9.0      | bumped to 1.9.1                                 |
+| authlib 1.6.12 (fork) | GHSA-7vr2-2fgp-9w7p (CVE-2026-114615) | High     | 1.9.0      | bumped to 1.9.1                                 |
+| authlib 1.6.12 (fork) | GHSA-8m4g-j4wp-wgcg (CVE-2026-114616) | High     | 1.9.1      | bumped to 1.9.1                                 |
+| authlib 1.6.12 (fork) | GHSA-c73q-w75p-j82v (CVE-2026-116672) | High     | 1.9.1      | not reachable; cleared by 1.9.1 (fourth review) |
+| Twisted 26.4.0 (fork) | GHSA-vpp8-g58w-m8mp (no CVE)          | High     | 26.10.0rc1 | not reachable; ignored until 2026-11-30         |
+| pyasn1 0.6.4 (fork)   | GHSA-fm9c-5rcf-2q5p (CVE-2026-119194) | High     | 0.6.5      | bumped to 0.6.5 (fourth review)                 |
+| pyasn1 0.6.4 (fork)   | GHSA-9m75-vc3g-4x39 (CVE-2026-119195) | High     | 0.6.5      | same                                            |
+| pyasn1 0.6.4 (fork)   | GHSA-2qm8-x737-gmw5 (CVE-2026-119196) | High     | 0.6.5      | same                                            |
+| pyasn1 0.6.4 (fork)   | GHSA-mm57-4v3p-rchx (CVE-2026-119197) | High     | 0.6.5      | same                                            |
+| zip 4.6.1 (desktop)   | GHSA-m665-v7pm-7grj (CVE-2026-115905) | Critical | 9.0.5      | zip 9.1.3, via tauri-plugin-updater 2.14.1      |
+| zip 4.6.1 (desktop)   | GHSA-q7v9-x93c-xqv3 (CVE-2026-115909) | High     | 9.0.0      | same                                            |
 
 **Result:**
 
 -   **authlib moves to 1.9.1, the release upstream Synapse took on 2026-10-27.**
     The 2026-10-25 cap below 1.7 is lifted. Upstream's `b20ae98` (#20415) is
     ported: the lock entries and the one test change. The bump also clears five
-    Moderate/Low authlib advisories published with the three above.
+    Moderate/Low authlib advisories published with the three above, and a
+    fourth High that GitHub reviewed later, GHSA-c73q-w75p-j82v, in RFC 7592
+    server code that Synapse does not use (fourth review).
 -   **id_token claims are type-checked now, as upstream's are.** authlib 1.7+
     refuses an id_token whose `sub` or `jti` is not a string, or whose `aud`
     holds a non-string, even with `user_profile_method: userinfo_endpoint`.
@@ -52,6 +64,11 @@ entries this record extends.
     validation now accepts more
     `http://` loopback URLs (no port, or `[::1]`). See
     [JWT login, the logout token and provider metadata](#jwt-login-the-logout-token-and-provider-metadata).
+    After the fourth review, `algorithm: none` is refused at startup too:
+    with it an unsigned token logged in as any user. And a key set is
+    refused only when none of its keys can be used. The third review's
+    version refused a set that `develop` serves, for one key HS\* cannot
+    use; that key is now a warning.
 -   **A logout token whose key authlib cannot use gets 400, not 500 (fork
     patch).** An unknown `kid`, or HS256 naming the provider's EC key, raised
     `ValueError` past the handler. Each such token still makes Synapse refetch
@@ -63,6 +80,16 @@ entries this record extends.
     all, and an empty `client_secret` are now refused when the config loads.
     No shipped configuration enables MSC3861 on the fork image. See
     [Two side effects](#two-side-effects).
+-   **pyasn1 moves to 0.6.5 (fourth review).** GitHub reviewed four High
+    advisories against 0.6.4, all quadratic CPU in pyasn1's decoder, between
+    23:03 and 23:07 UTC on 2026-10-30, four hours after the Trivy database
+    the gate used. The next database, due 2026-10-31 19:07 UTC, would have
+    turned the gate red on this branch and on `develop`. `service_identity`
+    decodes the SRV-ID of each peer certificate the hostname check reads,
+    with no schema. A probe of that call took 4.4 s of CPU for a 100 KB
+    crafted certificate under 0.6.4, and 0.14 s under 0.6.5. A peer reaches
+    it only with a certificate that chains to a root Synapse trusts. See
+    [pyasn1](#pyasn1-quadratic-decoding).
 -   **Twisted's HTTP/2 advisory is ignored, with an expiry.** No Blackout
     listener can speak HTTP/2: the `h2` package is not installed and Synapse's
     TLS listeners negotiate no ALPN. Twisted **26.10.0 final was published on
@@ -75,8 +102,20 @@ entries this record extends.
     the webview stack with it. The vulnerable zip code runs only on Windows, only
     after the updater has checked the minisign signature, and nothing in the app
     calls the updater today.
--   **The gate passes.** Trivy 0.69.3, run as `security.yml` runs it, reports no
-    un-ignored High/Critical finding.
+-   **The gate passes, with the database it has.** Trivy 0.69.3, run as
+    `security.yml` runs it, reports no un-ignored High/Critical finding
+    against the database of 2026-10-30 19:07 UTC, still the newest at
+    2026-10-31 00:58 UTC. That database predates the five advisories added
+    in the fourth review. For the next one, OSV was queried on 2026-10-31
+    between 00:35 and 00:58 UTC over every package of the five lockfiles
+    other than `pnpm-lock.yaml`. On this branch it lists no High/Critical
+    beyond the four ignored Twisted entries and black, a dev dependency,
+    which Trivy skips. `pnpm-lock.yaml` is `-v47`'s and was not queried
+    here.
+-   **The Trivy check now runs on more pull requests (fourth review,
+    `b3cd1b3`).** A PR that changed only `blackout-desktop/**`,
+    `services/**` or `.trivyignore` got no Trivy result before the push to
+    `develop`: `security.yml`'s paths filter listed none of them.
 -   **The desktop app builds and links on Linux (third review).**
     `cargo build --release --locked` ran on Ubuntu 24.04 with the workflow's
     apt packages: tauri 2.12.5, wry 0.57.1, tao 0.37.2 and
@@ -88,7 +127,9 @@ entries this record extends.
     see [Before merge or release](#before-merge-or-release).
 -   **The two id_token gaps are now in `KNOWN_LIMITATIONS.md`** ("OIDC sign-in
     checks") and in `THREAT_MODEL.md`'s OIDC tokens row, which said only "OIDC
-    sigs".
+    sigs". Since the fourth review the same `KNOWN_LIMITATIONS.md` section
+    also says what the bump refuses: an id_token whose `sub` or `jti` is not
+    a string, or whose `aud` has a non-string member.
 -   **Found outside scope, not fixed here:** the desktop updater's public key
     in `tauri.conf.json` is a literal `${TAURI_UPDATER_PUBKEY}` placeholder; no
     PR job compiles the desktop crate; and two older ignores rested on reasons
@@ -111,7 +152,12 @@ record, with `KNOWN_LIMITATIONS.md` and `THREAT_MODEL.md`). After the third
 review: `93d3024` (the JWT secret check rewritten), `7babe24` (MSC3861 client
 credentials), `3ca628a` (the authlib comment in `pyproject.toml`), `4403f4c`
 (the release each authlib refusal arrived in, in the docstrings and
-`PATCHES.md`), then this version of the record.
+`PATCHES.md`), then `4c69c78` (the record). After the fourth review:
+`a8ba5a3` (pyasn1 0.6.5, with its `PATCHES.md` entry), `d084e96` (the JWT
+algorithm and key-set checks), `bd9ceae` (GHSA-c73q and `prepare_raw_key` in
+the authlib `PATCHES.md` entry), `b3cd1b3` (the Security checks paths filter),
+then this version of the record, with `KNOWN_LIMITATIONS.md` and the
+2026-10-25 record's addendum.
 
 ## What the review changed
 
@@ -152,6 +198,19 @@ answered here:
 | `pyproject.toml` said an integer `sub` from the userinfo endpoint is "still accepted", without the condition.                                                                                                                 | Reworded there and in `PATCHES.md` (`3ca628a`): only when the provider sends no id_token.                                                                                                                                                           |
 | (Asked for, not a finding) a real desktop build, which round three could not do for want of disk and system libraries.                                                                                                        | Done on Linux: it compiles and links with no warning. [Verification](#verification).                                                                                                                                                                |
 
+A fourth review found eight more. Each is answered here:
+
+| Finding                                                                                                                                              | Now                                                                                                                                                    |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Four High pyasn1 advisories, reviewed after the gate's Trivy database, would turn the gate red at the next one, and the record did not mention them. | pyasn1 0.6.5 (`a8ba5a3`), and [their own section](#pyasn1-quadratic-decoding), with the SRV-ID decode measured.                                        |
+| authlib GHSA-c73q (High), also fixed by 1.9.1, was in neither this record nor `PATCHES.md`.                                                          | In both, with why it is not reachable (`bd9ceae`).                                                                                                     |
+| `algorithm: none` passed the JWT startup check, and an unsigned token then logged in as any user.                                                    | Refused at `jwt_config.algorithm`, with every name authlib does not implement (`d084e96`). [Below](#jwt-login-the-logout-token-and-provider-metadata). |
+| "Our exposure" named four modules that import authlib; `config/jwt.py` is a fifth, and it uses `prepare_raw_key`.                                    | [Five now](#our-exposure); the cap's reasons name `prepare_raw_key`.                                                                                   |
+| The Trivy check did not run on a PR that changes only the desktop lock, `services/` or `.trivyignore`.                                               | The paths filter lists them (`b3cd1b3`).                                                                                                               |
+| The record did not say that the upstream image which `deploy/docker/blackout-backend` runs still ships authlib 1.6.12.                               | [Said](#our-exposure), with why it is not exposed and when it moves.                                                                                   |
+| The JWT secret check refused a key set that `develop` serves, because one member could not be used for HS\*.                                         | That member is a warning naming its `kid` now; a set with no usable key is still refused (`d084e96`).                                                  |
+| `KNOWN_LIMITATIONS.md` did not say that an id_token with a non-string `sub`, `jti` or `aud` member can no longer sign in.                            | It does.                                                                                                                                               |
+
 ---
 
 ## Method
@@ -168,18 +227,25 @@ answered here:
     records in `github/advisory-database` (from `raw.githubusercontent.com`),
     and NVD's API for the five that have CVEs. GitHub's and OSV's affected
     ranges are identical for all six. GitHub's advisory pages and REST API were
-    not reachable from this session.
+    not reachable from this session. After the fourth review, OSV's
+    `/v1/querybatch` over every package of the fork's `poetry.lock` and
+    `Cargo.lock`, the desktop `Cargo.lock` and both `requirements.txt`
+    files, and `/v1/vulns/<id>` for each hit; the five new advisories were
+    read in full there.
 -   **Upstream Synapse:** `element-hq/synapse` `develop` at `1a5fec6`, read
     through git (a blobless clone) and `raw.githubusercontent.com`. Re-checked
     after review at `cc172f7` (2026-10-30 20:47 UTC): `oidc.py` and the lock's
-    authlib and Twisted are unchanged since `1a5fec6`.
+    authlib and Twisted are unchanged since `1a5fec6`. Fetched again on
+    2026-10-31 at 00:40 UTC: `develop` is still `cc172f7`, and locks pyasn1
+    0.6.4.
 -   **Crates:** the crates.io API for `tauri-plugin-updater`, `zip` and
     `tauri` versions and dependency lists. The updater sources that were read
     (2.10.0 and 2.14.1) came from `static.crates.io`, and each one's sha256
     matches the checksum in `Cargo.lock` before and after.
--   **Python:** PyPI's JSON API for authlib, joserfc, Twisted, h2 and
-    priority. The lock was regenerated with poetry 1.3.2, the version
-    `docker/Dockerfile` installs.
+-   **Python:** PyPI's JSON API for authlib, joserfc, Twisted, h2,
+    priority and, after the fourth review, pyasn1 and pyasn1-modules. The
+    lock was regenerated with poetry 1.3.2, the version `docker/Dockerfile`
+    installs.
 -   **Tests:** trial under Python 3.11.17 (the image builds on 3.11), in two
     venvs built from the lock before and after. Each venv installs the
     Dockerfile's `poetry export --extras all` plus the dev group, minus
@@ -187,23 +253,27 @@ answered here:
     `pip install --no-deps -e .` and trial ran from a copy of it. Each heavy
     run started only when the machine's 1-minute load was under 3. The one
     exception was a 16-second first attempt, before the tree was installed;
-    it errored on the missing package metadata and was discarded.
+    it errored on the missing package metadata and was discarded. After the
+    fourth review, a copy of the after venv with pyasn1 0.6.5 installed
+    from the lock's hashes, and nothing else changed (`pip check` clean).
 
 ## authlib
 
 ### The advisories
 
-| Advisory            | Vulnerable code                                                                                                                                                  |
-| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| GHSA-6v38-4h7w-rj9h | `JsonWebSignature.deserialize_json()` returns the payload as verified when the JWS JSON serialization has an empty `signatures` array. No key is consulted.      |
-| GHSA-7vr2-2fgp-9w7p | `OctKey.import_key()` refuses PEM or SSH key text as an HMAC secret only when it starts at byte 0. With one leading byte, a public key becomes the HS256 secret. |
-| GHSA-8m4g-j4wp-wgcg | `OctKey.import_key()` and the HMAC algorithms accept a zero-length key, so anyone can compute a valid HS256/384/512 signature when the verifier's key is empty.  |
+| Advisory            | Vulnerable code                                                                                                                                                                                                                                                                 |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GHSA-6v38-4h7w-rj9h | `JsonWebSignature.deserialize_json()` returns the payload as verified when the JWS JSON serialization has an empty `signatures` array. No key is consulted.                                                                                                                     |
+| GHSA-7vr2-2fgp-9w7p | `OctKey.import_key()` refuses PEM or SSH key text as an HMAC secret only when it starts at byte 0. With one leading byte, a public key becomes the HS256 secret.                                                                                                                |
+| GHSA-8m4g-j4wp-wgcg | `OctKey.import_key()` and the HMAC algorithms accept a zero-length key, so anyone can compute a valid HS256/384/512 signature when the verifier's key is empty.                                                                                                                 |
+| GHSA-c73q-w75p-j82v | The documented examples for RFC 7592's `ClientConfigurationEndpoint` look the target client up by `client_id` and never check that the registration access token was issued to it. 1.9.1 makes that check itself (`token.check_client(client)`). Added after the fourth review. |
 
 GHSA-7vr2 also needs a verifier that accepts both HS\* and asymmetric
 algorithms, such as authlib's module-level `jwt` object, and a verification key
 passed as PEM or certificate text.
 
-Each was reproduced against the two locked versions:
+Each of the first three was reproduced against the two locked versions.
+GHSA-c73q was not: nothing here has such an endpoint.
 
 | Probe                                                                 | 1.6.12   | 1.9.1                                                        |
 | --------------------------------------------------------------------- | -------- | ------------------------------------------------------------ |
@@ -213,7 +283,8 @@ Each was reproduced against the two locked versions:
 
 ### Our exposure
 
-authlib is imported by four production modules of the fork:
+authlib is imported by five production modules of the fork. Until the fourth
+review this list had four, and left out the fork's own startup check:
 
 -   `synapse/handlers/oidc.py`, OIDC login: `JsonWebToken(alg_values).decode()`
     on the provider's id_token. `alg_values` is the provider's
@@ -226,7 +297,13 @@ authlib is imported by four production modules of the fork:
     client credentials. The access token is checked by introspection, a JSON
     POST to the provider. No JWT is verified here.
 -   `synapse/config/experimental.py`: `JsonWebKey.import_key()` on the
-    configured JWK, and an import check.
+    configured JWK, an import check, and since `7babe24` one
+    `private_key_jwt_sign` call at startup.
+-   `synapse/config/jwt.py`, at startup only (fork patch, `5bad47c` and
+    later): `JsonWebSignature.ALGORITHMS_REGISTRY` for the algorithm check,
+    and for HS\*, `prepare_raw_key` and one
+    `JsonWebToken([algorithm]).decode()` per `kid`, of a token it signs itself
+    with the empty key.
 
 **The production image installs authlib.** `docker/Dockerfile` runs
 `poetry export --extras all`, and `all` includes the `oidc` and `jwt` extras.
@@ -234,6 +311,21 @@ authlib is imported by four production modules of the fork:
 and that stack's `homeserver.yaml.template` configures `oidc_providers`.
 `services/blackout-server/Dockerfile` exports without extras, so it has no
 authlib. `deploy/docker/blackout-backend` runs the upstream image, not the fork.
+
+**That upstream image still ships authlib 1.6.12** (added after the fourth
+review). `deploy/docker/blackout-backend/docker-compose.yml` pins
+`ghcr.io/element-hq/synapse:v1.163.2`. Upstream's lock at `v1.163.2`, and at
+`v1.164.1`, its newest release, has authlib 1.6.12, pyasn1 0.6.4 and Twisted
+26.4.0, and no `h2`. So that image carries the three authlib advisories above
+and GHSA-c73q, and the filesystem gate never sees it. They are not reachable
+there: its `homeserver.yaml.template` sets no `jwt_config` and no
+`oidc_providers`, and it delegates authentication to
+`matrix_authentication_service` with a shared secret, so none of the authlib
+calls above runs. Its pyasn1 exposure is the one
+[below](#pyasn1-quadratic-decoding), on its outbound TLS connections. It moves
+when upstream releases a version on authlib 1.9.1 (upstream `develop` has been
+on it since `b20ae98`) and pyasn1 0.6.5; the compose file pins the tag, so
+that is a change to make then. Its Twisted exposure is not assessed here.
 
 Per advisory:
 
@@ -252,6 +344,12 @@ Per advisory:
         list, the JWKS dict as key, HS256 signed with the JWK's text or with
         its PEM behind a newline) is refused by 1.6.12 and 1.9.1 alike:
         `Missing required field: "k"`.
+-   **GHSA-c73q (High, fourth review): not reachable.** It is in authlib's
+    authorization-server code. Synapse is an OAuth client and OIDC relying
+    party: `synapse/` and `blackout_runtime/` import only client-side
+    authlib modules (`ClientAuth`, `prepare_grant_uri`, PKCE, the RFC 7523
+    client assertions, `IntrospectionToken`), and nothing names `rfc7591`,
+    `rfc7592` or `ClientConfigurationEndpoint`. 1.9.1 clears it anyway.
 -   **GHSA-8m4g (High): reachable only through operator configuration.**
     `config/jwt.py` reads `jwt_config.secret` verbatim and does not reject an
     empty string. A homeserver with JWT login on, an HS\* algorithm and an
@@ -272,8 +370,12 @@ Per advisory:
 ### What was done
 
 -   `pyproject.toml`: `authlib = ">=1.9.1,<1.10"`. 1.9.1 is the newest
-    release; 1.10 does not exist yet, so the cap is below a minor nobody here
-    has checked. Upstream has no cap.
+    release (still on 2026-10-31); 1.10 does not exist yet, so the cap is
+    below a minor nobody here has checked. Upstream has no cap. The cap also
+    covers `config/jwt.py`'s startup check, which uses
+    `authlib.jose.rfc7519.jwt.prepare_raw_key` and
+    `JsonWebSignature.ALGORITHMS_REGISTRY`. Neither is in authlib's
+    documented API, so a minor release could move either (fourth review).
 -   `poetry.lock`, with `poetry lock --no-update`:
 
     -   authlib 1.6.12 → 1.9.1;
@@ -463,10 +565,53 @@ them). The release each change arrived in was read from the 1.7.2, 1.8.0 and
         requires `>=1.9.1`. `tests/blackout_runtime/test_jwt_secret_config.py`
         has fourteen refused and four accepted forms. On `5bad47c` its JWK
         refusals fail and its key-set cases error; under 1.6.12 with the
-        rewrite only the PEM and SSH cases fail, as above.
+        rewrite only the PEM and SSH cases fail, as above. After the fourth
+        review it has eighteen refused, five accepted and two mixed forms,
+        and eight refused algorithms. Measured again through
+        `HomeServerConfig` under both versions, each behaves the same on
+        1.6.12 and 1.9.1 except those PEM and SSH forms: the new key-set
+        cases (an empty `k` or a zero byte beside a usable key, no usable
+        key, two keys without a `kid`), the two mixed sets with one warning
+        each, and every refused algorithm.
     -   Catching the `ValueError` in `jwt.py` (a 403 per login) was the
         alternative. A startup error tells the operator; a 403 on every login
         only tells the user.
+    -   **Key sets (fourth review, `d084e96`).** `93d3024` turned any
+        exception, for any `kid`, into the `ConfigError`. So a set with a
+        usable `oct` key and an RSA or EC public JWK stopped the homeserver
+        at startup (`Missing required field: "k"`), where `develop`, on
+        either version, starts, logs in with the `oct` key and answers a
+        token naming the other one with 500. That was a new availability
+        regression, found by the review. Now:
+        -   a key that verifies the empty-key token still refuses the whole
+            secret;
+        -   a JWK with an empty `k`, alone or in a set, is refused before any
+            verify call, because 1.9.1 fails on it where 1.6.12 verifies with
+            it;
+        -   a set none of whose keys can be used is refused, naming each
+            `kid` and its error;
+        -   a key that cannot be used beside one that can is logged as a
+            warning naming its `kid`, and the homeserver starts. A token
+            naming it still gets 500, as on `develop`; through `/login`
+            under 1.9.1 the `oct` key gave 200 and the EC `kid` raised
+            `ValueError: Missing required field: "k"` in the handler.
+    -   **`algorithm: none` (fourth review, `d084e96`).** `jwt_config` never
+        checked the algorithm, and the secret check returned early for
+        anything outside HS\*. `JwtHandler` passes the one algorithm to
+        `JsonWebToken([algorithm])`, which with `none` accepts an unsigned
+        token whatever the key. The review logged in as `@anyone:test` with
+        `{alg: none}.{sub: anyone}.` under both versions; a probe here
+        accepted that token with the key `""`, `"anything"` and `None`. It
+        predates the bump, upstream has it too (`cc172f7` reads the
+        algorithm verbatim), and only operator configuration reaches it. It
+        is the same class of bypass as the empty HMAC key. `JWTConfig` now
+        refuses `none`, and any name outside the 14 other JWS algorithms
+        authlib registers (the same in 1.6.12 and 1.9.1), with a
+        `ConfigError` at `jwt_config.algorithm`. Those other names (`NONE`,
+        `hs256`, `HS1024`, a JWE algorithm such as `dir`) refused every
+        token: a JWE token needs its `enc` in the same one-entry list, and a
+        `dir`/`A256GCM` token was refused with `["dir"]` and accepted only
+        with `["dir", "A256GCM"]`. A disabled `jwt_config` is not checked.
 -   **Loopback `http` metadata (1.8.0).** `is_secure_transport`, which
     `validate_issuer`, `validate_authorization_endpoint`,
     `validate_token_endpoint` and `validate_jwks_uri` use, now parses the URL.
@@ -775,6 +920,85 @@ It was not taken here, for three reasons:
 before and after, before 2026-11-30. Then remove all four Twisted entries
 from `.trivyignore`.
 
+## pyasn1: quadratic decoding
+
+Added after the fourth review. GitHub reviewed these four on 2026-10-30,
+between 23:03 and 23:07 UTC. Trivy's database of 19:07 UTC, which every gate
+run in this record used, does not have them. Each is High (CVSS 7.5,
+availability only), affects every release through 0.6.4, and is fixed in
+0.6.5, on PyPI since 2026-10-27.
+
+| Advisory                              | Vulnerable code                                                                                                                                                     | DER without a schema              |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
+| GHSA-fm9c-5rcf-2q5p (CVE-2026-119194) | `_decodeComponentsSchemaless` adds each component's TagSet to a growing set; tag ids chosen so their hashes collide make each insert compare with the earlier ones. | yes                               |
+| GHSA-9m75-vc3g-4x39 (CVE-2026-119195) | A constructed OCTET STRING or character string is reassembled with `bytes +=` per fragment, and an indefinite-length ANY the same way.                              | for constructed character strings |
+| GHSA-2qm8-x737-gmw5 (CVE-2026-119196) | A constructed BIT STRING shifts the whole accumulated integer for each fragment.                                                                                    | no: refused without a schema      |
+| GHSA-mm57-4v3p-rchx (CVE-2026-119197) | A binary REAL's mantissa is built one octet at a time, with a shift and a slice.                                                                                    | yes                               |
+
+### Our exposure to pyasn1
+
+Nothing in `synapse/` or `blackout_runtime/` imports pyasn1. Two installed
+packages do:
+
+-   **`service_identity` 24.2.0, on every hostname-verified TLS connection.**
+    `extract_patterns` (`service_identity/cryptography.py`) calls
+    `pyasn1.codec.der.decoder.decode(other.value)`, with no schema, for each
+    SubjectAltName `otherName` of type id-on-dnsSRV in the peer's
+    certificate. Synapse's HTTP client (`RegularPolicyForHTTPS`, for OIDC
+    providers, push gateways and the like) and its federation client
+    (`FederationPolicyForHTTPS`) both go through `ConnectionVerifier` in
+    `synapse/crypto/context_factory.py`, which calls `verify_hostname` when
+    the handshake completes, in the TLS info callback, on the reactor
+    thread. Email over TLS uses Twisted's `optionsForClientTLS`, which does
+    the same. Each verifies the chain first. OpenSSL aborts a handshake
+    whose certificate does not chain to a trusted root, and the federation
+    client skips the hostname check, and so the decode, when
+    `federation_verify_certificates` is off or the host is in
+    `federation_certificate_verification_whitelist`. So the input is a
+    certificate from a CA Synapse trusts: the system roots, or
+    `federation_custom_ca_list`. Read from the code; no handshake with a
+    crafted certificate was run.
+-   **ldap3, only with LDAP login.** `--extras all` installs
+    `matrix-synapse-ldap3` and ldap3, which decode some LDAP response
+    controls with pyasn1 (BER, with a schema) once an operator enables the
+    LDAP auth provider. The input then comes from the configured LDAP
+    server, or from anyone who can tamper with a cleartext `ldap://`
+    connection. No Blackout template configures LDAP. Not measured.
+
+The cost, measured with a probe of `extract_patterns` on self-signed
+certificates whose SRV-ID holds each advisory's input. The probe calls the
+function directly; it does not make a TLS handshake.
+
+| SRV-ID value                           | Certificate | 0.6.4  | 0.6.5  |
+| -------------------------------------- | ----------- | ------ | ------ |
+| SEQUENCE of colliding tags (GHSA-fm9c) | 50 KB       | 0.87 s | 0.08 s |
+| same                                   | 100 KB      | 4.44 s | 0.14 s |
+| binary REAL (GHSA-mm57)                | 50 KB       | 0.28 s | 0.00 s |
+| same                                   | 100 KB      | 1.12 s | 0.00 s |
+| constructed UTF8String (GHSA-9m75)     | 100 KB      | 0.09 s | 0.13 s |
+| an ordinary IA5String SRV-ID (control) | 0.3 KB      | 0.00 s | 0.00 s |
+
+OpenSSL accepts a peer certificate chain of up to 100 KiB by default
+(`SSL_MAX_CERT_LIST_DEFAULT`), so under 0.6.4 one handshake with such a
+certificate could hold the reactor for about four seconds. The
+constructed-string case is not yet quadratic at this size. Each crafted value
+makes `extract_patterns` raise `CertificateError`, so the connection fails
+either way; the control yields its two patterns on both versions.
+
+### What was done for pyasn1
+
+-   `pyproject.toml`: `pyasn1 = ">=0.6.5"` (was `>=0.6.4`), with the four
+    advisories in its comment.
+-   `poetry.lock`, with poetry 1.3.2's `lock --no-update`: pyasn1 0.6.4 →
+    0.6.5, with the file hashes PyPI lists, and the `content-hash`. Nothing
+    else moves. The image's `--extras all` export differs by that one
+    package. `pyasn1-modules` 0.4.2 requires `pyasn1>=0.6.1,<0.7.0`. OSV
+    lists no advisory against 0.6.5.
+-   `PATCHES.md` has the entry (`a8ba5a3`). Upstream `develop` (`cc172f7`)
+    still locks 0.6.4, so nothing was ported.
+-   The review's fallback, dated `.trivyignore` entries until 0.6.5 could
+    land, was not needed.
+
 ## zip in the desktop updater
 
 | Advisory            | Vulnerable code                                                                                                                                                                            |
@@ -970,6 +1194,7 @@ libayatana-appindicator3-dev librsvg2-dev`):
 | after review, every Twisted `exp:` set to 2026-10-01    | the four Twisted advisories only                                                 | 1    |
 | after the second review (`b37a2cd`)                     | none                                                                             | 0    |
 | after the third review (`3ca628a`)                      | none                                                                             | 0    |
+| after the fourth review (`b3cd1b3`)                     | none                                                                             | 0    |
 
 The last two rows show that Trivy 0.69.3 honours the `exp:` date, now on all
 four Twisted entries. Nothing from authlib or zip remains with the ignore file
@@ -994,6 +1219,16 @@ result: no finding, exit 0, and the same seven suppressed. The react-router
 one stays suppressed on this branch until it is merged into PR #994, whose
 `71548f0350` removes the ignore with the bump.
 
+After the fourth review the same binary (`sha256` of the tarball and of the
+extracted binary re-checked) was run over the worktree at `b3cd1b3` with a
+newly downloaded database. It was still the one of 2026-10-30 19:07 UTC, with
+`NextUpdate` 2026-10-31 19:07 UTC. Plain and with `--show-suppressed`: no
+finding, exit 0, and the same seven suppressed. Those runs cannot show the
+pyasn1 or GHSA-c73q findings, which that database does not have. OSV fills
+the gap: it lists all five against `develop`'s lock, and none against pyasn1
+0.6.5 or authlib 1.9.1 on this branch's. So at the next database update the
+gate fails on `develop`, and on this branch it does not for these lockfiles.
+
 ## Validation
 
 -   **Lock:** `poetry lock --check`, `.ci/scripts/check_lockfile.py` and
@@ -1002,6 +1237,9 @@ one stays suppressed on this branch until it is merged into PR #994, whose
     passes with the reworded `pyproject.toml` comment. `poetry.lock` did not
     change in that round. After the third review it passes again, with the
     authlib comment reworded; `poetry.lock` did not change.
+-   **Lock, after the fourth review:** `poetry lock --check`,
+    `check_lockfile.py` and `check_locked_deps_have_sdists.py` (151
+    packages) pass with pyasn1 0.6.5.
 -   **The auth tests, before and after:** 231 tests in 13 modules. All pass
     on both sides, and none is skipped, so authlib was loaded. After review,
     with the three new modules (`test_oidc_claim_types`,
@@ -1010,7 +1248,17 @@ one stays suppressed on this branch until it is merged into PR #994, whose
     plus `test_jwt_secret_config` and the whole of `tests.config` (for the
     `config/jwt.py` change): 347 tests, all passing, none skipped. After the
     third review, the same 18 modules: 354 tests (the two changed modules
-    have seven more), all passing, none skipped. The original 13 modules:
+    have seven more), all passing, none skipped. After the fourth review,
+    with pyasn1 0.6.5: the same 18 modules and `tests.config`, 358 tests
+    (`test_jwt_secret_config` has four more), all passing, none skipped.
+    For pyasn1 that run also took the TLS and HTTP modules: `tests.http`,
+    `tests.crypto` and `tests.replication.test_multi_media_repo`, 166 tests.
+    Of those, 33 fail, 7 error and 8 skip: the same ids, with the same
+    outcomes, as in the third review's full run under 0.6.4. They are the
+    fork's existing federation-agent, federation-client and proxy-agent
+    failures. The certificates in those tests carry no SRV-ID, so they do
+    not reach the pyasn1 decode; the probe above does. The original 13
+    modules:
     -   `tests.handlers.test_oidc`, `test_sso`, `test_auth` and
         `test_oauth_delegation`;
     -   `tests.rest.client.test_login` (JWT login lives here; there is no
@@ -1028,6 +1276,7 @@ one stays suppressed on this branch until it is merged into PR #994, whose
     | after review  | 3,358 | 3,042 | 173     | 110     | 34    |
     | second review | 3,363 | 3,047 | 173     | 110     | 34    |
     | third review  | 3,370 | 3,054 | 173     | 110     | 34    |
+    | fourth review | 3,374 | 3,058 | 173     | 110     | 34    |
 
     Compared test by test, every outcome is the same. After review, the
     failing, erroring and skipped tests are the same ones, by test id, as
@@ -1035,9 +1284,11 @@ one stays suppressed on this branch until it is merged into PR #994, whose
     same ones again, and the 5 added tests (one logout test, four JWT config
     tests) pass. After the third review, compared by test id with the second
     review's run, the 316 failing, erroring and skipped ids are the same,
-    each with the same outcome, and the 7 added tests pass. The 144 failures
-    and errors are the fork's existing ones (see the 2026-10-25 record). None
-    is in an auth module.
+    each with the same outcome, and the 7 added tests pass. After the
+    fourth review, with pyasn1 0.6.5, compared by test id with the third
+    review's run: the same 316 ids, each with the same outcome, and the 4
+    added tests pass. The 144 failures and errors are the fork's existing
+    ones (see the 2026-10-25 record). None is in an auth module.
 
 -   **The new tests against the code they pin:**
 
@@ -1065,9 +1316,17 @@ one stays suppressed on this branch until it is merged into PR #994, whose
         `use: enc`, and an empty `client_secret` for `client_secret_jwt` and
         `client_secret_post`. The results are in
         [Two side effects](#two-side-effects).
+    -   After the fourth review, `test_jwt_secret_config` on `93d3024`'s
+        `config/jwt.py`, under 1.9.1: `test_unusable_algorithms_are_refused`
+        fails (`algorithm: none` parses), and
+        `test_mixed_key_sets_are_accepted_with_a_warning` and both
+        `JwtLoginWithMixedKeySetTestCase` tests error
+        (`Missing required field: "k"`). With `d084e96` all 10 pass. Under
+        1.6.12 with `d084e96` only `test_unusable_hmac_secrets_are_refused`
+        fails, on the PEM and SSH forms, as before.
 
 -   **`blackout_runtime_tests`:** 85 passed before and after, and again after
-    each of the three reviews, run with `pytest -q` as the fork's
+    each of the four reviews, run with `pytest -q` as the fork's
     `docs/ops/upstream_sync_runbook.md` says. pytest is not in
     the lock: 8.3.5 was added to each venv with `--no-deps`, because 9.x would
     have moved the locked `packaging`. `tests/blackout_runtime` is part of the
@@ -1089,17 +1348,22 @@ one stays suppressed on this branch until it is merged into PR #994, whose
     review, ruff, black and isort pass on the four changed Python files
     (`config/jwt.py`, `config/experimental.py` and the two test modules),
     and mypy reports the same 56 errors, line for line, on the branch and on
-    `cfd9ab0`, none of them in the four.
+    `cfd9ab0`, none of them in the four. After the fourth review, ruff and
+    isort pass on `config/jwt.py` and its test module, and black does once
+    it had rewrapped four lines of the test. mypy first reported a 57th
+    error, in `config/jwt.py` (a `[None]` list where `List[str]` was
+    inferred); with that fixed it reports the same 56, line for line, as
+    the third review's run.
 -   **Desktop:** as in [Verification](#verification).
 -   **gitleaks 8.21.2** over `origin/develop..HEAD`: no leaks, after each
     review too. The MSC3861 test generates its RSA and EC keys at run time,
-    so no private key is committed.
+    and so does the JWT test its EC key, so no key is committed.
 -   **prettier 2.8.1**, the root's version, on the changed Markdown and YAML:
     clean.
 -   **No pre-commit hook ran.** `core.hooksPath` is `.husky/_`, which this
     worktree does not have (pnpm's `prepare` script creates it), so git ran no
     hook. The hook's two steps were run by hand before each commit, the
-    third review's included, and both passed: lint-staged's
+    fourth review's included, and both passed: lint-staged's
     `prettier --write --ignore-unknown` on the staged files (as `--check`),
     and `tools/ci/check-auth-secrets.mjs`.
 
@@ -1120,7 +1384,10 @@ one stays suppressed on this branch until it is merged into PR #994, whose
     from this update, but in CI one would first show on a release build.
     For this change, see [Before merge or release](#before-merge-or-release).
     Making the workflow build on pull requests to `develop` is the lasting
-    fix, and is left to whoever owns that workflow.
+    fix, and is left to whoever owns that workflow. Until the fourth review
+    no PR job scanned the desktop lock either: `security.yml`'s paths filter
+    did not list `blackout-desktop/**`. It does now (`b3cd1b3`), with
+    `services/**` and `.trivyignore`.
 3.  **Two older ignores rest on reasons the advisory data no longer
     supports.** Both still apply to this branch's gate (see the emptied-file
     row in [The gate](#the-gate)), and both belong to `pnpm-lock.yaml`, not to
@@ -1187,4 +1454,15 @@ one stays suppressed on this branch until it is merged into PR #994, whose
 -   A bound on the JWKS refetch, or a rate limit on `/_synapse/client`. Both
     are follow-ups ([Malformed logout tokens](#malformed-logout-tokens)).
 -   The JWT secret check against an operator's real configuration. No
-    Blackout template enables `jwt_config`, so none was available.
+    Blackout template enables `jwt_config`, so none was available. Nor was
+    the key-set warning tried with a real identity provider's JWKS; the
+    test's EC key is made at run time.
+-   pyasn1's decode through a real TLS handshake, or the reactor stalling on
+    one. The cost was measured on `extract_patterns` directly. That the
+    hostname check runs only after the chain has validated, on the reactor
+    thread, was read from Twisted's and Synapse's code. ldap3's use of
+    pyasn1 was not measured.
+-   The Trivy gate with the database due 2026-10-31 19:07 UTC, the first that
+    will hold the pyasn1 and GHSA-c73q advisories. OSV stood in for it.
+    Whether that database adds advisories against `pnpm-lock.yaml` is for
+    `-v47` to see.

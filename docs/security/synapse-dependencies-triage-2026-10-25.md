@@ -476,7 +476,8 @@ service against a running Synapse or Postgres.
 
 ## 2026-10-30: authlib past 1.7, and a fourth Twisted High
 
-Two entries above have changed. The detail is in
+Three entries above have changed (the third, pyasn1, after that record's
+fourth review on 2026-10-31). The detail is in
 `dependency-advisories-server-desktop-2026-10-30.md`.
 
 -   **The authlib `<1.7` bound is gone.** Three new advisories (one Critical,
@@ -503,3 +504,10 @@ Two entries above have changed. The detail is in
     GHSA and CVE lines both, so all four Twisted entries come back together.
     Their `.trivyignore` comment no longer calls the pre-release their only
     fix.
+-   **pyasn1 0.6.4, the floor above, has four more Highs**, all quadratic
+    CPU in its decoder: GHSA-fm9c-5rcf-2q5p, GHSA-9m75-vc3g-4x39,
+    GHSA-2qm8-x737-gmw5 and GHSA-mm57-4v3p-rchx. GitHub reviewed them on
+    2026-10-30 after 23:00 UTC, so the Trivy database of that day does not
+    have them yet. They are fixed in 0.6.5, which the fork now locks; its
+    `pyproject.toml` floor is 0.6.5. `service_identity` decodes the SRV-ID
+    of each peer certificate it checks with pyasn1.
