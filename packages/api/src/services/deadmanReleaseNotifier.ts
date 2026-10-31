@@ -45,7 +45,19 @@
  * One room per person: a per-recipient slot serialises finding or making the
  * room, and a notice that waited for the slot reads the room again before
  * deciding, so two notices for one person in overlapping ticks make one room;
- * the interval's tick does not start while the previous one runs. The room
+ * the interval's tick does not start while the previous one runs. Across
+ * processes a claim on the person does the same (round 9 of part 2's review:
+ * two notifiers at once, the alias refused, each made the person a room and
+ * sent there): before an attempt's first read, the notifier takes the
+ * person's row in `deadman_notice_claims` with one conditional upsert
+ * (`claimDeadmanNoticeRecipient`; no transaction is held open), and gives it
+ * up once the attempt's writes have been attempted, or it expires
+ * `NOTICE_CLAIM_LEASE_CALLS` call timeouts after it was taken (seven and a
+ * half minutes by default), in the database's clock. A process that cannot
+ * take it leaves the person's notices to the holder, asks the homeserver
+ * nothing for them and writes nothing (`elsewhere`); since the claim is
+ * taken before the first read, that read sees everything the previous holder
+ * wrote. On one process it is always granted. The room
  * also carries an alias, `#blackout-notices-<hmac>:<server>`: 128 bits of an
  * HMAC over the person's Matrix id under a key derived from the API's
  * `JWT_SECRET_PRIMARY` (`noticeRoomAliasLocalpart`). Nobody without the secret
@@ -85,9 +97,10 @@
  * homeserver made it leaves one more room, as before the alias; a create still
  * in progress after a whole backoff is taken for an abandoned one, and leaves
  * one more room the same way; and two processes making one person's room at
- * the same moment both pass the homeserver's alias check, and the second's
- * alias write then fails after the homeserver gave it a room id but before any
- * event, so that room has nobody in it and nobody invited. When the homeserver
+ * the same moment (since the claim, only where one holds it past its lease)
+ * both pass the homeserver's alias check, and the second's alias write then
+ * fails after the homeserver gave it a room id but before any event, so that
+ * room has nobody in it and nobody invited. When the homeserver
  * no longer has a person's room, the replacement is recorded on every one of
  * their rows that pointed at the old one. The row is read again after every
  * homeserver call and before anything is written to it: a deletion that landed
@@ -157,15 +170,18 @@
  * as on one process when the deletion lands during the send; for a row it had
  * not seen whose send was in flight, the row ends `failed` with
  * `recipient_gone` if the deletion's last statement comes first, and `sent`
- * with no room if this process's write does; two notifiers working on the
- * person's notices at the same moment (one notice both read pending before
- * either recorded it, or two of the person's notices before either recorded
- * a room) can, where the homeserver refuses the alias, each make the person a
- * room and send there, and the transaction id is deduplicated only within one
- * room (below), so the person can get an invitation and the notice in each of
- * two rooms (with the alias, the second create finds the first's room, and
- * two sends of one notice into it are deduplicated while the homeserver keeps
- * the id); and until the deletion's last statement has run, which can be
+ * with no room if this process's write does; a process that stops after a
+ * create has answered and before its record of the room has reached
+ * Postgres (the write is queued, and the read before the send waits for it)
+ * leaves the next holder of the claim no room to find, and where the
+ * homeserver refuses the alias that holder makes the person another, so they
+ * have an invitation in each (with the alias, the next create finds the
+ * first's room); two notifiers work on one person's notices at once only when
+ * one holds the claim past its lease (an attempt slower than
+ * `NOTICE_CLAIM_LEASE_CALLS` call timeouts, a paused process), and can then,
+ * where the homeserver refuses the alias, each make the person a room and
+ * send there, the transaction id being deduplicated only within one room
+ * (below); and until the deletion's last statement has run, which can be
  * after the route answered (it waits for it at most 10 s), and for good if it
  * fails (logged) or the API process stops before it, a row it had not seen
  * keeps what the notifier wrote, a room and `sent` included where the send
@@ -179,12 +195,14 @@
  * aborted. Without that, one connection the homeserver accepted and never
  * answered would hold the tick, and with it every other due notice, for
  * undici's default of five minutes, since the ticks do not overlap. Each
- * database read above has the same bound. A tick is still a sequence, and a
- * notice makes up to seven homeserver calls in turn (the state of a known
- * room, a create, the alias lookup, the bot's own id, the state of the room
- * found, a re-invite or a create without the alias, the send) and up to four
- * database reads among them (before the first call, and right before the
- * first create, the second create or the re-invite, and the send). The bot's
+ * database read above has the same bound, and so do the claim and its
+ * release. A tick is still a sequence, and a notice makes up to seven
+ * homeserver calls in turn (the state of a known room, a create, the alias
+ * lookup, the bot's own id, the state of the room found, a re-invite or a
+ * create without the alias, the send) and up to four database reads among
+ * them (before the first call, and right before the first create, the second
+ * create or the re-invite, and the send), after the claim and before its
+ * release. The bot's
  * id is cached for the process after the first whoami that is not cut short,
  * by this loop or any other caller in the API, a failed one included (a
  * refusal or a network error): that one caches the client's derived
@@ -193,13 +211,14 @@
  * replaced by one without it. So a homeserver that answers nothing holds a
  * tick of 50 notices for about 25 minutes, each notice ending at its first
  * call's timeout, and a database that answers nothing does the same at each
- * notice's first read; a homeserver and a database that answer slowly rather
- * than not at all, in just under the timeout each time, can hold one notice
- * for up to eleven timeouts (five and a half minutes) and a tick of 50 for
- * about four and a half hours, with every notice due beyond the 50 waiting
- * for the next tick. A read that timed out goes on in the background (it
- * cannot be aborted), so a stalled database can leave one waiting connection
- * per such notice. The worker's
+ * notice's claim (a claim that timed out is not given up: if it landed, it
+ * expires); a homeserver and a database that answer slowly rather than not at
+ * all, in just under the timeout each time, can hold one notice for up to
+ * thirteen timeouts (six and a half minutes, inside the claim's lease of
+ * fifteen) and a tick of 50 for about five and a half hours, with every
+ * notice due beyond the 50 waiting for the next tick. A database call that
+ * timed out goes on in the background (it cannot be aborted), so a stalled
+ * database can leave one waiting connection per such notice. The worker's
  * shutdown waits for a tick in flight only up to its own bound
  * (`backgroundTicks.ts`).
  *
@@ -215,7 +234,7 @@
  * Not through `botPostingGate.ts`: this is the bot's own post into its own
  * room, not a post in a user's name.
  */
-import { createHmac } from 'node:crypto';
+import { createHmac, randomUUID } from 'node:crypto';
 import {
     DEADMAN_NOTICE_BODY,
     DEADMAN_NOTICE_POINTER_FIELD,
@@ -242,6 +261,14 @@ export const NOTICE_RETRY_WINDOW_MS = DEADMAN_NOTICE_RETRY_DAYS * 24 * 60 * 60 *
 export const NOTICES_PER_TICK = 50;
 /** How long one homeserver call may take before it is this notice's retry (`matrix_<call>_timeout`). */
 export const NOTICE_CALL_TIMEOUT_MS = 30 * 1000;
+/**
+ * A claim on one person's notices (`claimDeadmanNoticeRecipient`) lasts this
+ * many call timeouts: an attempt makes at most twelve calls and reads, each
+ * bounded by one (the claim's own, four database reads and seven homeserver
+ * calls: the header), so this leaves three to spare for the row's write and
+ * the release. A process that stops holding a claim holds it this long.
+ */
+export const NOTICE_CLAIM_LEASE_CALLS = 15;
 
 /**
  * The notices room's join rule, sent in `initial_state` so that Synapse does
@@ -326,10 +353,11 @@ export interface NotifierResult {
     /**
      * Due, but another tick had it: one an overlapping tick in this process
      * holds (skipped), one found sent by another process (two notifiers
-     * during a leader handover, say) when this tick finished with it, or one
+     * during a leader handover, say) when this tick finished with it, one
      * the database has pending with a retry another process set for later
-     * (`checkDatabase`). Nothing is written to them here, and they are not
-     * counted as sent, retried or failed.
+     * (`checkDatabase`), or one whose person another process holds the claim
+     * on (`claimDeadmanNoticeRecipient`). Nothing is written to them here,
+     * and they are not counted as sent, retried or failed.
      */
     elsewhere: number;
 }
@@ -395,7 +423,14 @@ type Step =
      * notification's lag). Nothing is written here; the row, which the store
      * put in the mirror, waits for its time, and is counted as elsewhere.
      */
-    | { kind: 'notDue' };
+    | { kind: 'notDue' }
+    /**
+     * Another process holds the person's claim (`claimDeadmanNoticeRecipient`):
+     * it is finding or making their room or sending them a notice. Nothing is
+     * asked of the homeserver or written here; the row stays due, and is
+     * counted as elsewhere.
+     */
+    | { kind: 'claimed' };
 
 /** A homeserver call that threw, carried to `processOne` as this notice's retry. */
 class NoticeCallThrew extends Error {
@@ -463,14 +498,25 @@ const readDatabase = async (
     key: { switchId: string; recipientAccountId: string },
     timeoutMs: number,
     options: { personsRoom?: boolean } = {}
-) => {
+) =>
+    boundedDatabase(
+        db.readDeadmanReleaseCommitted(key.switchId, key.recipientAccountId, options),
+        timeoutMs,
+        'database_read_timeout'
+    );
+
+/**
+ * A database call of a notice's, bounded as a homeserver call is: one that has
+ * not answered after `timeoutMs` is that notice's retry (`reason`), and goes
+ * on in the background (it cannot be aborted).
+ */
+const boundedDatabase = async <T>(work: Promise<T>, timeoutMs: number, reason: string) => {
     let timer: ReturnType<typeof setTimeout> | undefined;
     return Promise.race([
-        db.readDeadmanReleaseCommitted(key.switchId, key.recipientAccountId, options),
+        work,
         new Promise<never>((_, reject) => {
             timer = setTimeout(
-                () =>
-                    reject(new NoticeCallThrew({ kind: 'retry', reason: 'database_read_timeout' })),
+                () => reject(new NoticeCallThrew({ kind: 'retry', reason })),
                 timeoutMs
             );
         }),
@@ -540,6 +586,16 @@ const COPY_UNAVAILABLE: Step = { kind: 'failed', reason: 'copy_unavailable' };
 
 /** The database has the row set to retry later than now (`checkDatabase`). */
 const NOT_DUE: Step = { kind: 'notDue' };
+
+/** Another process holds the person's claim (`attempt`). */
+const CLAIMED_ELSEWHERE: Step = { kind: 'claimed' };
+
+/**
+ * One attempt's claim on the person's notices: the token it is taken as, and
+ * whether it was granted, so it is given up after the row's write
+ * (`runDeadmanReleaseNotifier`).
+ */
+type NoticeClaim = { holder: string; toRelease: boolean };
 
 /** A room found through the alias that is not yet the room the create makes: retried once (`checkRoom`). */
 export const ALIAS_ROOM_NOT_READY = 'matrix_alias_room_not_ready';
@@ -826,9 +882,14 @@ const resolveRoom = async (
         const made = await makeRoom(current, mxid, matrix, callTimeoutMs, clock);
         if (!('roomId' in made)) return made;
         roomId = made.roomId;
-        // Recorded before the send, so a crash here does not make a second
-        // room. Every write here is conditional (`updateDeadmanReleaseNoticeIf`):
-        // in Postgres it lands only on a row still as this process read it.
+        // Recorded before the send: in this process's mirror at once, and in
+        // Postgres once the queued write lands, which the read before the
+        // send waits for. A process that stops between the create's answer
+        // and that write leaves Postgres without the room, and where the
+        // homeserver refuses the alias the next attempt makes the person
+        // another (an invitation in each; with the alias, it is found).
+        // Every write here is conditional (`updateDeadmanReleaseNoticeIf`):
+        // in Postgres it lands only on a row still pending there.
         db.updateDeadmanReleaseNoticeIf(
             key.switchId,
             key.recipientAccountId,
@@ -872,11 +933,31 @@ const attempt = async (
     record: DeadmanSwitchRecord,
     matrix: MatrixForNotices,
     callTimeoutMs: number,
-    clock: () => number
+    clock: () => number,
+    claim: NoticeClaim
 ): Promise<Step> => {
     const wrap = db.getDeadmanReleaseWrap(notice.switchId, notice.recipientAccountId);
     const mxid = matrixUserIdFor(notice.recipientAccountId);
     if (!wrap || !wrapIsHeld(wrap) || !mxid) return RECIPIENT_GONE;
+    // The person's claim, before anything is read from the database or asked
+    // of the homeserver: only one process at a time finds or makes their
+    // room or sends them a notice (round 9 of part 2's review: two notifiers
+    // at once, the alias refused, each made the person a room and sent
+    // there). Taken first, so the read below sees everything the previous
+    // holder wrote: it gave the claim up only once those writes had been
+    // attempted. One that times out is a retry; if it landed after all, it
+    // ends at its expiry.
+    const claimed = await boundedDatabase(
+        db.claimDeadmanNoticeRecipient(
+            notice.recipientAccountId,
+            claim.holder,
+            NOTICE_CLAIM_LEASE_CALLS * callTimeoutMs
+        ),
+        callTimeoutMs,
+        'database_claim_timeout'
+    );
+    if (!claimed) return CLAIMED_ELSEWHERE;
+    claim.toRelease = true;
     // From the database itself, before anything is asked of the homeserver:
     // nothing is asked for an account already deleted, or for a notice
     // another process already sent or set to retry later; and the person's
@@ -925,7 +1006,8 @@ const processOne = async (
     now: Date,
     matrix: MatrixForNotices,
     callTimeoutMs: number,
-    clock: () => number
+    clock: () => number,
+    claim: NoticeClaim
 ): Promise<Step> => {
     const record = db.getDeadmanSwitch(notice.switchId);
     // Only a release switch that fired has `releasedAt`; an empty payload is
@@ -939,12 +1021,35 @@ const processOne = async (
         return { kind: 'failed', reason: 'retry_window_over' };
     }
     try {
-        return await attempt(notice, record, matrix, callTimeoutMs, clock);
+        return await attempt(notice, record, matrix, callTimeoutMs, clock, claim);
     } catch (err) {
         if (err instanceof NoticeCallThrew) return err.step;
         // Not a homeserver call: still this notice's failure, not the tick's.
         log.warn('deadman_release_notice_threw', { error: String(err) });
         return { kind: 'retry', reason: 'notifier_threw' };
+    }
+};
+
+/**
+ * Give up an attempt's claim on the person's notices once its writes have been
+ * attempted (the store waits for them), bounded as a database read is: one
+ * that does not finish in time, or fails, is logged, and the claim then ends
+ * at its expiry.
+ */
+const releaseClaim = async (
+    recipientAccountId: string,
+    holder: string,
+    timeoutMs: number
+): Promise<void> => {
+    try {
+        await boundedDatabase(
+            db.releaseDeadmanNoticeRecipient(recipientAccountId, holder),
+            timeoutMs,
+            'database_release_timeout'
+        );
+    } catch (err) {
+        const reason = err instanceof NoticeCallThrew ? err.step.reason : String(err);
+        log.warn('deadman_release_notice_claim_not_released', { error: reason });
     }
 };
 
@@ -1007,8 +1112,9 @@ export const runDeadmanReleaseNotifier = async (
             continue;
         }
         inFlight.add(key);
+        const claim: NoticeClaim = { holder: randomUUID(), toRelease: false };
         try {
-            const step = await processOne(notice, now, matrix, callTimeoutMs, clock);
+            const step = await processOne(notice, now, matrix, callTimeoutMs, clock, claim);
             const at = new Date().toISOString();
             // The row, read again before anything is written to it: a deletion
             // that landed while this notice was in flight has ended the row
@@ -1031,8 +1137,9 @@ export const runDeadmanReleaseNotifier = async (
                 // row (this process wrote it during the read). Nothing written.
                 if (step.status === 'sent') result.elsewhere += 1;
                 else result.failed += 1;
-            } else if (step.kind === 'notDue') {
-                // Another process's retry, set for later: nothing written.
+            } else if (step.kind === 'notDue' || step.kind === 'claimed') {
+                // Another process's retry, set for later, or another process
+                // working on the person's notices now: nothing written.
                 result.elsewhere += 1;
             } else if (step.kind === 'sent') {
                 // The account, read again: one gone another way ends it here.
@@ -1095,6 +1202,9 @@ export const runDeadmanReleaseNotifier = async (
                 result.failed += 1;
             }
         } finally {
+            if (claim.toRelease) {
+                await releaseClaim(notice.recipientAccountId, claim.holder, callTimeoutMs);
+            }
             inFlight.delete(key);
         }
     }

@@ -65,3 +65,17 @@ CREATE INDEX IF NOT EXISTS idx_deadman_release_notices_due
   ON deadman_release_notices (status, next_attempt_at);
 CREATE INDEX IF NOT EXISTS idx_deadman_release_notices_recipient
   ON deadman_release_notices (recipient_account_id);
+
+-- The notifier's claim on one person's notices: while a process holds it
+-- (holder is a token per attempt), no other process finds or makes the
+-- person's notices room or sends them a notice, so two processes at once do
+-- not each make the person a room. A claim is taken with one conditional
+-- upsert, expires at expires_at (the database's clock), and is deleted when
+-- the attempt ends; it is not mirrored in memory. One left by a process that
+-- stopped holds the account id and an expiry, as the person's notice rows
+-- already do, until the next claim for that person replaces it.
+CREATE TABLE IF NOT EXISTS deadman_notice_claims (
+  recipient_account_id TEXT PRIMARY KEY,
+  holder TEXT NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL
+);

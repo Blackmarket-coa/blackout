@@ -8,6 +8,7 @@ BEGIN
     RAISE EXCEPTION 'deadman_switches holds release-format switches; 106 cannot be reverted without losing them';
   END IF;
 END $$;
+DROP TABLE IF EXISTS deadman_notice_claims;
 DROP INDEX IF EXISTS idx_deadman_release_notices_recipient;
 DROP INDEX IF EXISTS idx_deadman_release_notices_due;
 DROP TABLE IF EXISTS deadman_release_notices;

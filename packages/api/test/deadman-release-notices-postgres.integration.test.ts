@@ -1844,3 +1844,364 @@ test('a standby whose mirror has not heard of a trigger, a check-in or a cancel 
         await other.drain();
     }
 });
+
+/**
+ * A second API process (`_fixtures/notifierProcess.ts`): a worker thread with
+ * its own store, mirror and notifier on this database and the stand-in
+ * homeserver. Its database statements and homeserver calls come here and are
+ * answered from the same PGlite and stub; `hold` parks the first of its
+ * statements that `match` accepts until `open` is called.
+ */
+const startSecondProcess = async () => {
+    const { Worker } = await import('node:worker_threads');
+    const thread = new Worker(new URL('./_fixtures/notifierProcess.ts', import.meta.url));
+    type Hold = {
+        match: (sql: string, params: unknown[]) => boolean;
+        reached: () => void;
+        gate: Promise<void>;
+    };
+    const holds: Hold[] = [];
+    const statements: Array<{ sql: string; params: unknown[] }> = [];
+    const done = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void }>();
+    let seq = 0;
+    const answer = (id: number, value: unknown) =>
+        thread.postMessage({ type: 'answer', id, value });
+    const fail = (id: number, err: unknown) =>
+        thread.postMessage({ type: 'answer', id, error: String(err) });
+    await new Promise<void>((resolve, reject) => {
+        thread.once('error', reject);
+        thread.on('message', (message: Record<string, unknown>) => {
+            const id = message.id as number;
+            if (message.type === 'ready') resolve();
+            else if (message.type === 'failed') reject(new Error(String(message.error)));
+            else if (message.type === 'done') {
+                const waiter = done.get(id);
+                done.delete(id);
+                if (typeof message.error === 'string') waiter?.reject(new Error(message.error));
+                else waiter?.resolve(message.value);
+            } else if (message.type === 'query') {
+                const sql = message.sql as string;
+                const params = message.params as unknown[];
+                void (async () => {
+                    statements.push({ sql, params });
+                    const hold = holds.find((h) => h.match(sql, params));
+                    if (hold) {
+                        holds.splice(holds.indexOf(hold), 1);
+                        hold.reached();
+                        await hold.gate;
+                    }
+                    try {
+                        const client = await pool.connect();
+                        answer(id, { rows: (await client.query(sql, params)).rows });
+                    } catch (err) {
+                        fail(id, err);
+                    }
+                })();
+            } else if (message.type === 'fetch') {
+                void (async () => {
+                    try {
+                        const res = await matrix.fetch(message.url as string, {
+                            method: message.method as string,
+                            headers: message.headers as Record<string, string>,
+                            body: (message.body as string | null) ?? undefined,
+                        });
+                        answer(id, {
+                            status: res.status,
+                            headers: Object.fromEntries(res.headers.entries()),
+                            body: await res.text(),
+                        });
+                    } catch (err) {
+                        fail(id, err);
+                    }
+                })();
+            }
+        });
+    });
+    const command = (type: string, extra: Record<string, unknown> = {}) =>
+        new Promise<unknown>((resolve, reject) => {
+            seq += 1;
+            done.set(seq, { resolve, reject });
+            thread.postMessage({ type, id: seq, ...extra });
+        });
+    return {
+        tick: (now: Date) =>
+            command('tick', { now: now.toISOString() }) as Promise<{
+                sent: number;
+                elsewhere: number;
+                retried: number;
+                failed: number;
+            }>,
+        rehydrate: () => command('rehydrate'),
+        statements,
+        hold(match: Hold['match']) {
+            let reached!: () => void;
+            let open!: () => void;
+            const at = new Promise<void>((resolve) => {
+                reached = resolve;
+            });
+            const gate = new Promise<void>((resolve) => {
+                open = resolve;
+            });
+            holds.push({ match, reached, gate });
+            return { reached: at, open };
+        },
+        stop: () => thread.terminate(),
+    };
+};
+
+test('two notifiers working on one person’s notices at the same moment make the person one room and send each notice once, with the alias refused: the person’s claim in Postgres keeps the second out until the first has written what it did', async () => {
+    // Round 9 of part 2's review (the operator's decision of 2026-10-31).
+    // Before the claim, two notifiers (two leaders during a handover) could
+    // each read one of the person's notices pending before either had
+    // recorded a room and, where the homeserver refuses the alias, each made
+    // the person a room and sent there. The worker is one notifier; a worker
+    // thread with its own store and notifier is the other.
+    const second = await startSecondProcess();
+    const realFetch = globalThis.fetch;
+    const roomOf = (mxid: string): string =>
+        matrix.creates.filter((x) => JSON.stringify(x.body.invite).includes(mxid)).at(-1)!.roomId;
+    const claimsOf = async (accountId: string) =>
+        (
+            await pg.query(
+                'SELECT holder FROM deadman_notice_claims WHERE recipient_account_id = $1',
+                [accountId]
+            )
+        ).rows.length;
+    /** Park the worker's own next createRoom for `mxid` (the thread's calls do not pass here). */
+    const parkWorkerCreate = (mxid: string) => {
+        let reached!: () => void;
+        let open!: () => void;
+        const at = new Promise<void>((resolve) => {
+            reached = resolve;
+        });
+        const gate = new Promise<void>((resolve) => {
+            open = resolve;
+        });
+        let parked = false;
+        globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+            if (
+                !parked &&
+                /\/createRoom/.test(urlOf(input)) &&
+                String(init?.body ?? '').includes(mxid)
+            ) {
+                parked = true;
+                reached();
+                await gate;
+            }
+            return matrix.fetch(input, init);
+        }) as typeof fetch;
+        return { reached: at, open };
+    };
+    try {
+        matrix.aliasRefusal = { status: 403, errcode: 'M_FORBIDDEN' };
+        for (const notices of [1, 2]) {
+            const name = `${notices} notice${notices > 1 ? 's' : ''}`;
+            const recipient = await person();
+            const mxid = `@pn-${recipient.id.slice(0, 8)}:test.local`;
+            const fired: Array<{ switchId: string; at: Date }> = [];
+            for (let i = 0; i < notices; i += 1) fired.push(await release(recipient));
+            await worker.drain();
+            await second.rehydrate();
+            const at = fired[fired.length - 1].at;
+            const roomsBefore = roomsMadeFor(mxid);
+
+            // The worker takes the person's claim and parks on its create;
+            // the other process's tick meanwhile asks nothing of the
+            // homeserver for that person and writes nothing.
+            const ours = () => ({
+                creates: matrix.creates.filter((x) => JSON.stringify(x.body).includes(mxid)).length,
+                refusals: matrix.createRefusals.filter((x) => JSON.stringify(x.body).includes(mxid))
+                    .length,
+                sends: matrix.sends.filter((x) => fired.some((f) => x.txnId.includes(f.switchId)))
+                    .length,
+                invites: matrix.invites.filter((x) => x.userId === mxid).length,
+            });
+            const park = parkWorkerCreate(mxid);
+            const workerTick = runDeadmanReleaseNotifier({ now: at });
+            await park.reached;
+            assert.equal(await claimsOf(recipient.id), 1, `${name}: the worker holds the claim`);
+            const callsBefore = ours();
+            const elsewhere = await second.tick(at);
+            assert.ok(elsewhere.elsewhere >= notices, `${name}: left to the holder`);
+            assert.deepEqual(
+                ours(),
+                callsBefore,
+                `${name}: the other process asked the homeserver nothing for the person`
+            );
+            park.open();
+            const done = await workerTick;
+            globalThis.fetch = realFetch;
+            await worker.drain();
+            assert.ok(done.sent >= notices, `${name}: the worker sent each`);
+            assert.equal(await claimsOf(recipient.id), 0, `${name}: the claim given up`);
+
+            // Its next tick finds every notice sent in Postgres.
+            await second.tick(new Date(at.getTime() + 1_000));
+            assert.equal(roomsMadeFor(mxid) - roomsBefore, 1, `${name}: one room for the person`);
+            const room = roomOf(mxid);
+            for (const notice of fired) {
+                const sends = matrix.sends.filter((x) => x.txnId.includes(notice.switchId));
+                assert.deepEqual(
+                    sends.map((x) => x.roomId),
+                    [room],
+                    `${name}: each notice sent once, into that room`
+                );
+                assert.deepEqual(
+                    await committed(notice.switchId, recipient.id),
+                    { status: 'sent', last_error: null, room_id: room },
+                    name
+                );
+            }
+        }
+
+        // The claim is taken before the attempt's first read of Postgres, so
+        // that read sees everything the previous holder wrote. The other
+        // process has a newer release for the person that the worker has not
+        // heard of; its claim is parked before it runs while the worker makes
+        // the person's room for an older one. Taken after the read, it would
+        // have read no room for the person and made a second.
+        {
+            const recipient = await person();
+            const mxid = `@pn-${recipient.id.slice(0, 8)}:test.local`;
+            const owner = await person();
+            const envelope = await protocol.buildReleaseEnvelope({
+                ownerKeySet: owner.keySet,
+                recipients: [recipient.keySet.identity],
+                message: 'Synthetic test text.',
+            });
+            const armedNewer = await armReleaseSwitch({
+                ownerId: owner.id,
+                input: { checkInIntervalSeconds: 7 * 86_400, gracePeriodSeconds: 0, envelope },
+            });
+            assert.equal(armedNewer.kind, 'armed');
+            const newer = envelope.releaseId;
+            await worker.drain();
+            const old = new store.PostgresBackedDb();
+            await old.init(pool as never);
+            const newerAt = new Date(clock + 1_000).toISOString();
+            assert.ok(
+                await old.advanceDeadmanSwitch(newer, worker.getDeadmanSwitch(newer)!, {
+                    status: 'triggered',
+                    releasedAt: newerAt,
+                })
+            );
+            old.createDeadmanReleaseNotice({
+                switchId: newer,
+                recipientAccountId: recipient.id,
+                nextAttemptAt: newerAt,
+            });
+            await old.drain();
+            await second.rehydrate();
+            const older = await release(recipient);
+            await worker.drain();
+            assert.equal(worker.getDeadmanReleaseNotice(newer, recipient.id), undefined);
+            const roomsBefore = roomsMadeFor(mxid);
+            const claim = second.hold(
+                (sql, params) =>
+                    sql.startsWith('INSERT INTO deadman_notice_claims') &&
+                    params[0] === recipient.id
+            );
+            const statementsBefore = second.statements.length;
+            const secondTick = second.tick(new Date(older.at.getTime() + 2_000));
+            await claim.reached;
+            assert.ok(
+                !second.statements
+                    .slice(statementsBefore, -1)
+                    .some(
+                        ({ sql, params }) =>
+                            sql.startsWith('SELECT * FROM deadman_release_notices') &&
+                            params.includes(recipient.id)
+                    ),
+                'nothing of the person’s notices read before the claim'
+            );
+            await runDeadmanReleaseNotifier({ now: older.at });
+            await worker.drain();
+            claim.open();
+            await secondTick;
+            assert.equal(roomsMadeFor(mxid) - roomsBefore, 1, 'one room for the person');
+            const room = roomOf(mxid);
+            for (const switchId of [older.switchId, newer]) {
+                assert.deepEqual(
+                    matrix.sends.filter((x) => x.txnId.includes(switchId)).map((x) => x.roomId),
+                    [room],
+                    'each notice once, into the one room'
+                );
+            }
+            await old.drain();
+        }
+
+        // The claim is given up only once the holder's writes have been
+        // attempted: the other process holds it until its `sent` is in
+        // Postgres, so the worker, whose mirror reads the row pending, sends
+        // nothing again into the room it finds there.
+        {
+            const recipient = await person();
+            const notice = await release(recipient);
+            await worker.drain();
+            await second.rehydrate();
+            const sentWrite = second.hold(
+                (sql, params) =>
+                    sql.startsWith('INSERT INTO deadman_release_notices') &&
+                    params.includes(notice.switchId) &&
+                    params.includes('sent')
+            );
+            const secondTick = second.tick(notice.at);
+            await sentWrite.reached;
+            assert.equal(await claimsOf(recipient.id), 1, 'still held while its write waits');
+            const sendsBefore = matrix.sends.filter((x) =>
+                x.txnId.includes(notice.switchId)
+            ).length;
+            assert.equal(sendsBefore, 1);
+            const workerTick = await runDeadmanReleaseNotifier({ now: notice.at });
+            assert.equal(
+                matrix.sends.filter((x) => x.txnId.includes(notice.switchId)).length,
+                1,
+                'the worker sent nothing again'
+            );
+            assert.ok(workerTick.elsewhere >= 1, 'left to the holder');
+            sentWrite.open();
+            await secondTick;
+            assert.equal(await claimsOf(recipient.id), 0, 'given up after the write');
+            assert.equal((await committed(notice.switchId, recipient.id)).status, 'sent');
+        }
+
+        // A claim left by a process that stopped holds the person's notices
+        // until it expires, and no longer.
+        {
+            const recipient = await person();
+            const mxid = `@pn-${recipient.id.slice(0, 8)}:test.local`;
+            const notice = await release(recipient);
+            await worker.drain();
+            const stopped = new store.PostgresBackedDb();
+            await stopped.init(pool as never);
+            assert.equal(
+                await stopped.claimDeadmanNoticeRecipient(recipient.id, 'stopped-process', 400),
+                true
+            );
+            assert.equal(
+                await stopped.claimDeadmanNoticeRecipient(recipient.id, 'another', 400),
+                false,
+                'one holder at a time'
+            );
+            const held = await runDeadmanReleaseNotifier({ now: notice.at });
+            assert.ok(held.elsewhere >= 1);
+            assert.equal(roomsMadeFor(mxid), 0, 'no room while it is held');
+            assert.equal(
+                matrix.createRefusals.filter((x) => JSON.stringify(x.body).includes(mxid)).length,
+                0,
+                'no create asked for'
+            );
+            assert.equal(matrix.sends.filter((x) => x.txnId.includes(notice.switchId)).length, 0);
+            await new Promise((resolve) => setTimeout(resolve, 500));
+            const expired = await runDeadmanReleaseNotifier({ now: notice.at });
+            await worker.drain();
+            assert.ok(expired.sent >= 1, 'sent once it expired');
+            assert.equal(matrix.sends.filter((x) => x.txnId.includes(notice.switchId)).length, 1);
+            assert.equal(await claimsOf(recipient.id), 0);
+        }
+    } finally {
+        globalThis.fetch = realFetch;
+        matrix.aliasRefusal = null;
+        await second.stop();
+    }
+});

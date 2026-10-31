@@ -2955,6 +2955,31 @@ class InMemoryDb {
         return undefined;
     }
 
+    /**
+     * Take the notifier's claim on one person's notices for `leaseMs`, as
+     * `holder` (one token per attempt): `true` when it is this holder's. Only
+     * one holder at a time has a person's claim, so two processes do not find
+     * or make the person's room, or send them a notice, at the same moment.
+     * Here, and in the file store, there is one process, whose per-recipient
+     * slot already does that, so it is always granted; the Postgres store
+     * takes it in the database (`deadman_notice_claims`).
+     */
+    async claimDeadmanNoticeRecipient(
+        _recipientAccountId: string,
+        _holder: string,
+        _leaseMs: number
+    ): Promise<boolean> {
+        return true;
+    }
+
+    /** Give up a claim `claimDeadmanNoticeRecipient` granted (nothing to do here). */
+    async releaseDeadmanNoticeRecipient(
+        _recipientAccountId: string,
+        _holder: string
+    ): Promise<void> {
+        return undefined;
+    }
+
     /** Every release identity the account published, newest first. */
     listReleaseIdentitiesForAccount(accountId: string): ReleaseIdentityRecord[] {
         // Erased rows have no account; nothing finds them by one. Through the
@@ -9247,6 +9272,63 @@ export class PostgresBackedDb extends InMemoryDb {
             else map.set(id, before as unknown as Record<string, unknown>);
         }
         return undefined;
+    }
+
+    /**
+     * The notifier's claim on one person's notices, in the database: one
+     * statement that inserts the person's row in `deadman_notice_claims`, or
+     * takes it over where the claim there has expired, `RETURNING` it, with
+     * the expiry in the database's own clock, so the processes' clocks do not
+     * matter. No transaction is held open: the claim is the row, and it
+     * expires `leaseMs` after it was taken, so a process that stops with it
+     * holds it no longer than that. `false` when another holder's claim has
+     * not expired.
+     */
+    override async claimDeadmanNoticeRecipient(
+        recipientAccountId: string,
+        holder: string,
+        leaseMs: number
+    ): Promise<boolean> {
+        if (!this.pool || !this.plans.has('deadmanReleaseNotices')) {
+            return super.claimDeadmanNoticeRecipient(recipientAccountId, holder, leaseMs);
+        }
+        const client = await this.pool.connect();
+        try {
+            const res = await client.query<Record<string, unknown>>(
+                'INSERT INTO deadman_notice_claims (recipient_account_id, holder, expires_at) ' +
+                    "VALUES ($1, $2, now() + $3::integer * interval '1 millisecond') " +
+                    'ON CONFLICT (recipient_account_id) DO UPDATE ' +
+                    'SET holder = EXCLUDED.holder, expires_at = EXCLUDED.expires_at ' +
+                    'WHERE deadman_notice_claims.expires_at <= now() ' +
+                    'RETURNING holder',
+                [recipientAccountId, holder, Math.max(1, Math.round(leaseMs))]
+            );
+            return res.rows.length > 0 && res.rows[0].holder === holder;
+        } finally {
+            client.release?.();
+        }
+    }
+
+    /**
+     * Give up a claim, once this process's writes for the attempt (the row's
+     * end among them) have been attempted, so the next holder reads them in
+     * Postgres: the row is deleted where this holder still has it.
+     */
+    override async releaseDeadmanNoticeRecipient(
+        recipientAccountId: string,
+        holder: string
+    ): Promise<void> {
+        if (!this.pool || !this.plans.has('deadmanReleaseNotices')) return;
+        await this.drain();
+        const client = await this.pool.connect();
+        try {
+            await client.query(
+                'DELETE FROM deadman_notice_claims WHERE recipient_account_id = $1 AND holder = $2',
+                [recipientAccountId, holder]
+            );
+        } finally {
+            client.release?.();
+        }
     }
 
     /**
