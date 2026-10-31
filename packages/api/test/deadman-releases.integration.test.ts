@@ -2141,14 +2141,15 @@ test('a known trade-off, pinned (decision 18): ten accounts that each fire five 
     assert.equal((await armGenuine(alsoNamed.keySet.identity)).status, 201);
 });
 
-test('the account deletion route revokes the session, then finishes the deletion in the database once its writes are made; a failure of that last step, or one that never answers, leaves the deletion standing and answered', async () => {
+test('the account deletion route revokes the session, then waits for the deletion’s own writes with no bound and for its last statement in the database at most the bound; a failure of that last step, or one that never answers, leaves the deletion standing and answered', async () => {
     // `finishAccountDeletion` ends, in the database itself, the notice rows
     // another process wrote that this one had not heard of (round 6 of part
     // 2's review); in one process there is nothing for it to do, so here it
     // is watched rather than seen at work. Round 7: the session was revoked
-    // only after that await, so other requests on the process could run as
-    // the deleted account meanwhile, and a stalled database held the route's
-    // answer and the revocation for good.
+    // only after that await, so the token that asked for the deletion went
+    // on working on the process meanwhile, and a stalled database held the
+    // route's answer and the revocation for good. Only that token is revoked
+    // there: the account's other access tokens are not.
     const store = db as unknown as Record<string, unknown>;
     const original = db.endDeadmanReleaseNoticesOfDeletedAccount.bind(db);
     const calls: string[] = [];
@@ -2189,15 +2190,51 @@ test('the account deletion route revokes the session, then finishes the deletion
 
     // An end that never answers (a stalled connection) is waited for only up
     // to the bound, here shortened; the route passes the default.
+    const order: string[] = [];
     const stalled = {
-        endDeadmanReleaseNoticesOfDeletedAccount: () => new Promise<number>(() => {}),
+        drain: async () => {
+            order.push('drain');
+        },
+        endDeadmanReleaseNoticesOfDeletedAccount: () => {
+            order.push('end');
+            return new Promise<number>(() => {});
+        },
     };
     const started = performance.now();
     const finished = await Promise.race([
         lifecycle.finishAccountDeletion('any-account', stalled as never, 50).then(() => 'returned'),
         new Promise<string>((resolve) => setTimeout(() => resolve('still waiting'), 5000)),
     ]);
-    assert.equal(finished, 'returned', 'the wait is bounded');
+    assert.equal(finished, 'returned', 'the wait for the last statement is bounded');
     assert.ok(performance.now() - started < 3000);
+    assert.deepEqual(order, ['drain', 'end'], 'the deletion’s own writes first');
     assert.equal(lifecycle.ACCOUNT_DELETION_FINISH_TIMEOUT_MS, 10_000);
+
+    // The deletion's own writes are waited for with no bound (round 8 of part
+    // 2's review: inside the bound, the route answered before any of them was
+    // in the database): a drain that takes longer than the bound holds the
+    // answer until it ends, and the last statement runs after it.
+    let drained!: () => void;
+    const slowDrain = {
+        drain: () =>
+            new Promise<void>((resolve) => {
+                drained = resolve;
+            }),
+        endDeadmanReleaseNoticesOfDeletedAccount: async () => {
+            order.push('end after the drain');
+            return 0;
+        },
+    };
+    const pending = lifecycle
+        .finishAccountDeletion('any-account', slowDrain as never, 50)
+        .then(() => 'returned');
+    const meanwhile = await Promise.race([
+        pending,
+        new Promise<string>((resolve) => setTimeout(() => resolve('still waiting'), 300)),
+    ]);
+    assert.equal(meanwhile, 'still waiting', 'not answered while the deletion’s writes are queued');
+    assert.ok(!order.includes('end after the drain'), 'the last statement waits for the drain');
+    drained();
+    assert.equal(await pending, 'returned');
+    assert.ok(order.includes('end after the drain'));
 });

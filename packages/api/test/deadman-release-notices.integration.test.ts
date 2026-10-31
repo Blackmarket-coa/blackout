@@ -2468,9 +2468,13 @@ test('a database read that never answers ends at the call timeout as that notice
     const never = new Promise<void>((resolve) => {
         release = resolve;
     });
-    store.readDeadmanReleaseCommitted = async (switchId: string, recipientAccountId: string) => {
+    store.readDeadmanReleaseCommitted = async (
+        switchId: string,
+        recipientAccountId: string,
+        options?: { personsRoom?: boolean }
+    ) => {
         if (recipientAccountId === slow.user.id) await never;
-        return original(switchId, recipientAccountId);
+        return original(switchId, recipientAccountId, options);
     };
     const now = new Date(Math.max(first.at.getTime(), second.at.getTime()));
     try {

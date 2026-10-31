@@ -34,7 +34,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { generateTestJwtSecret } from './_fixtures/secrets';
-import { createMatrixStub } from './_fixtures/matrixStub';
+import { createMatrixStub, createdRoomState } from './_fixtures/matrixStub';
 import type { ReleaseKeySet } from '@blackout/protocol';
 
 process.env.NODE_ENV = 'test';
@@ -174,8 +174,13 @@ const release = async (recipient: { keySet: ReleaseKeySet }, beforeSweep?: () =>
 type Store = InstanceType<typeof store.PostgresBackedDb>;
 /**
  * The account deletion's release writes on the app, as the deletion and the
- * route run them. The route answers once `finishAccountDeletion` returns, so
- * by then every write the deletion queued is in Postgres.
+ * route run them. The route answers once `finishAccountDeletion` returns,
+ * which waits with no bound for every write the app had queued, the
+ * deletion's among them, to be attempted in Postgres (a write that fails
+ * twice is dropped and logged, so attempted is not always written), and then
+ * for the last statement at most its bound (round 8 of part 2's review: the
+ * bound covered the drain too, and this helper said the writes were in
+ * Postgres by the answer).
  */
 const deleteOnApp = async (app: Store, accountId: string) => {
     eraseReleaseCopiesAndNoticesOf(app, accountId);
@@ -183,7 +188,7 @@ const deleteOnApp = async (app: Store, accountId: string) => {
     assert.equal(
         (app as unknown as { queue: { depth: number } }).queue.depth,
         0,
-        'the deletion is in the database before the route answers'
+        'the deletion’s queued writes have been attempted before the route answers'
     );
 };
 
@@ -964,9 +969,40 @@ test('a leader taking over within the change notification’s lag sends nothing 
             ).length;
             const invitesBefore = matrix.invites.filter((x) => x.userId === mxid).length;
             if (variant.newSendRefused) matrix.sendStatus = 500;
-            const tick = await runDeadmanReleaseNotifier({ now: at });
-            matrix.sendStatus = 200;
+            let tick = await runDeadmanReleaseNotifier({ now: at });
             await worker.drain();
+            if (variant.oldSendRefused) {
+                // Round 8: Postgres has the old leader's retry set for 30 s
+                // on; the new leader's catch-up row was due now. It is left
+                // for its time: nothing sent, nothing written, and the
+                // mirror takes the stored row with that time.
+                assert.equal(
+                    matrix.sends.filter((x) => x.txnId.includes(switchId)).length - sendsBefore,
+                    0,
+                    `${variant.name}: not attempted before the old leader's retry time`
+                );
+                assert.ok(tick.elsewhere >= 1, `${variant.name}: counted elsewhere`);
+                assert.deepEqual(
+                    (
+                        await pg.query(
+                            'SELECT status, attempts, room_id FROM deadman_release_notices WHERE switch_id = $1 AND recipient_account_id = $2',
+                            [switchId, recipient.id]
+                        )
+                    ).rows[0],
+                    stored,
+                    `${variant.name}: Postgres as the old leader left it`
+                );
+                const waiting = worker.getDeadmanReleaseNotice(switchId, recipient.id)!;
+                assert.equal(
+                    waiting.nextAttemptAt,
+                    new Date(at.getTime() + 30_000).toISOString(),
+                    `${variant.name}: the mirror has the old leader's retry time`
+                );
+                assert.equal(waiting.attempts, 1, variant.name);
+                tick = await runDeadmanReleaseNotifier({ now: new Date(at.getTime() + 30_000) });
+                await worker.drain();
+            }
+            matrix.sendStatus = 200;
 
             const newSends = matrix.sends
                 .filter((x) => x.txnId.includes(switchId))
@@ -1176,5 +1212,471 @@ test('the row read from Postgres goes into the mirror only when this process wro
                 `${variant.name}: the mirror kept its own write`
             );
         }
+    }
+});
+
+/** Arm a release naming the recipient on the worker, unfired; its id. */
+const armed = async (recipient: { keySet: ReleaseKeySet }): Promise<string> => {
+    const owner = await person();
+    const envelope = await protocol.buildReleaseEnvelope({
+        ownerKeySet: owner.keySet,
+        recipients: [recipient.keySet.identity],
+        message: 'Synthetic test text.',
+    });
+    const outcome = await armReleaseSwitch({
+        ownerId: owner.id,
+        input: { checkInIntervalSeconds: 60, gracePeriodSeconds: 0, envelope },
+    });
+    assert.equal(outcome.kind, 'armed');
+    return envelope.releaseId;
+};
+
+const roomsMadeFor = (mxid: string): number =>
+    matrix.creates.filter((x) => JSON.stringify(x.body.invite).includes(mxid)).length;
+
+const tellWorker = async (m: string, kv: string[]) => {
+    (worker as unknown as { applyPeerChange(payload: PeerChange): void }).applyPeerChange({
+        src: 'old',
+        m,
+        op: 'u',
+        kv,
+    });
+    await settle();
+};
+
+test('a leader taking over leaves a notice whose retry the old leader set for later until that time: an alias room still being made, which the old leader looked at moments before, is looked at again only a backoff after that look, and the person gets that one room', async () => {
+    // Round 8 of part 2's review. The new leader's catch-up writes the row it
+    // lacks as due now; round 7's read put the stored row into its mirror
+    // (attempts 1, `matrix_alias_room_not_ready`) but did not compare the
+    // stored retry time with now, so the attempt went ahead seconds after the
+    // old leader's first look, took the room still being made for an
+    // abandoned one, made the person a room without the alias and sent there;
+    // the slow create then finished as a second room.
+    const notifier = await import('../src/services/deadmanReleaseNotifier');
+    const recipient = await person();
+    const mxid = `@pn-${recipient.id.slice(0, 8)}:test.local`;
+    const switchId = await armed(recipient);
+    await worker.drain();
+    const alias = notifier.noticeRoomAlias(mxid);
+    const slow = `!slow-${recipient.id.slice(0, 8)}:test.local`;
+    // A create still in progress: the alias names a room with the bot's
+    // `m.room.create` alone.
+    matrix.rooms.set(slow, [
+        {
+            type: 'm.room.create',
+            state_key: '',
+            sender: matrix.botUserId,
+            content: { room_version: '10' },
+        },
+    ]);
+    matrix.aliases.set(alias, slow);
+    try {
+        const old = new store.PostgresBackedDb();
+        await old.init(pool as never);
+        const at = new Date((clock += 300_000));
+        const retryAt = new Date(at.getTime() + notifier.noticeBackoffMs(1));
+        old.updateDeadmanSwitch(switchId, { status: 'triggered', releasedAt: at.toISOString() });
+        old.createDeadmanReleaseNotice({
+            switchId,
+            recipientAccountId: recipient.id,
+            nextAttemptAt: at.toISOString(),
+        });
+        // The old leader's first look, recorded as its notifier records it.
+        old.updateDeadmanReleaseNoticeIf(
+            switchId,
+            recipient.id,
+            { status: 'pending' },
+            {
+                attempts: 1,
+                lastError: notifier.ALIAS_ROOM_NOT_READY,
+                nextAttemptAt: retryAt.toISOString(),
+            }
+        );
+        await old.drain();
+        await tellWorker('deadmanSwitches', [switchId]);
+        assert.equal(
+            worker.getDeadmanReleaseNotice(switchId, recipient.id),
+            undefined,
+            'the new leader has not heard of the row'
+        );
+        const roomsBefore = roomsMadeFor(mxid);
+        const stateReadsBefore = matrix.stateReads.filter((r) => r === slow).length;
+
+        const early = await runDeadmanReleaseNotifier({ now: new Date(at.getTime() + 1_000) });
+        await worker.drain();
+        assert.ok(early.elsewhere >= 1, 'counted elsewhere, not sent, retried or failed');
+        assert.equal(roomsMadeFor(mxid) - roomsBefore, 0, 'no room made before the retry time');
+        assert.equal(
+            matrix.stateReads.filter((r) => r === slow).length - stateReadsBefore,
+            0,
+            'the alias room not looked at again before the retry time'
+        );
+        assert.equal(matrix.sends.filter((x) => x.txnId.includes(switchId)).length, 0);
+        const stored = (
+            await pg.query(
+                'SELECT status, attempts, last_error FROM deadman_release_notices WHERE switch_id = $1 AND recipient_account_id = $2',
+                [switchId, recipient.id]
+            )
+        ).rows[0];
+        assert.deepEqual(
+            stored,
+            { status: 'pending', attempts: 1, last_error: notifier.ALIAS_ROOM_NOT_READY },
+            'Postgres as the old leader left it'
+        );
+        assert.equal(
+            worker.getDeadmanReleaseNotice(switchId, recipient.id)?.nextAttemptAt,
+            retryAt.toISOString(),
+            'the mirror has the old leader’s retry time'
+        );
+
+        // The homeserver finishes the create meanwhile.
+        matrix.rooms.set(
+            slow,
+            createdRoomState(
+                matrix.botUserId,
+                {
+                    name: 'Blackout notices',
+                    preset: 'public_chat',
+                    initial_state: [notifier.NOTICE_ROOM_JOIN_RULE],
+                    invite: [mxid],
+                    power_level_content_override: { ...notifier.NOTICE_ROOM_POWER_LEVELS },
+                },
+                alias
+            )
+        );
+        await runDeadmanReleaseNotifier({ now: retryAt });
+        await worker.drain();
+        assert.equal(roomsMadeFor(mxid) - roomsBefore, 0, 'no room made: the one room');
+        assert.deepEqual(
+            matrix.sends.filter((x) => x.txnId.includes(switchId)).map((x) => x.roomId),
+            [slow],
+            'sent once, into the room the create made'
+        );
+        assert.deepEqual(await committed(switchId, recipient.id), {
+            status: 'sent',
+            last_error: null,
+            room_id: slow,
+        });
+    } finally {
+        matrix.purgeRoom(slow);
+    }
+});
+
+test('a leader taking over uses the room the old leader recorded on another of the person’s notices: with the alias refused, a notice its own sweep fires, or one whose mirror names a room the old leader replaced, makes no second room', async () => {
+    // Round 8 of part 2's review: round 7's read put only the notice's own
+    // row into the mirror, and `findDeadmanNoticeRoom` read the person's
+    // other rows from the mirror alone, so a new leader that had not heard
+    // of the room the old leader recorded on the person's other notice made
+    // them a second one when the homeserver refused the alias.
+    const notifier = await import('../src/services/deadmanReleaseNotifier');
+    const { matrixClient } = await import('../src/integrations/matrix-client');
+    const makeOldRoom = async (mxid: string) => {
+        const made = await matrixClient.createRoom({
+            name: 'Blackout notices',
+            visibility: 'private',
+            preset: 'public_chat',
+            encrypted: false,
+            initialState: [notifier.NOTICE_ROOM_JOIN_RULE],
+            invite: [mxid],
+            isDirect: true,
+            powerLevelOverride: { ...notifier.NOTICE_ROOM_POWER_LEVELS },
+        });
+        assert.ok(made.ok);
+        return made.roomId;
+    };
+    for (const variant of [
+        'its own sweep fires a newer release',
+        'its mirror names a room the old leader replaced',
+    ] as const) {
+        const recipient = await person();
+        const mxid = `@pn-${recipient.id.slice(0, 8)}:test.local`;
+        let staleRoom: string | undefined;
+        if (variant === 'its mirror names a room the old leader replaced') {
+            // An earlier notice, sent by the worker itself into a room the
+            // homeserver has since purged.
+            const earlier = await release(recipient);
+            await runDeadmanReleaseNotifier({ now: earlier.at });
+            await worker.drain();
+            staleRoom = worker.getDeadmanReleaseNotice(earlier.switchId, recipient.id)?.roomId;
+            assert.ok(staleRoom, variant);
+            matrix.purgeRoom(staleRoom);
+        }
+        const s1 = await armed(recipient);
+        const s2 = await armed(recipient);
+        await worker.drain();
+        matrix.aliasRefusal = { status: 403, errcode: 'M_FORBIDDEN' };
+        try {
+            const old = new store.PostgresBackedDb();
+            await old.init(pool as never);
+            const at = new Date((clock += 300_000));
+            old.updateDeadmanSwitch(s1, { status: 'triggered', releasedAt: at.toISOString() });
+            old.createDeadmanReleaseNotice({
+                switchId: s1,
+                recipientAccountId: recipient.id,
+                nextAttemptAt: at.toISOString(),
+            });
+            const oldRoom = await makeOldRoom(mxid);
+            const sentByOld = await matrixClient.sendEvent(oldRoom, notifier.noticeContent(s1), {
+                txnId: notifier.noticeTxnId(s1, recipient.id),
+            });
+            assert.ok(sentByOld.ok);
+            old.updateDeadmanReleaseNoticeIf(
+                s1,
+                recipient.id,
+                { status: 'pending' },
+                { status: 'sent', attempts: 1, sentAt: new Date().toISOString(), roomId: oldRoom }
+            );
+            if (staleRoom) {
+                // As the old leader's notifier moves every row off a room
+                // the homeserver no longer has.
+                for (const row of old.listDeadmanReleaseNoticesForRecipient(recipient.id)) {
+                    if (row.roomId === staleRoom) {
+                        old.updateDeadmanReleaseNoticeIf(
+                            row.switchId,
+                            recipient.id,
+                            { roomId: staleRoom },
+                            { roomId: oldRoom }
+                        );
+                    }
+                }
+            }
+            await old.drain();
+            // The old leader is done. The new leader hears of the trigger,
+            // not of the notice rows, and its own sweep fires the second.
+            await tellWorker('deadmanSwitches', [s1]);
+            assert.equal(worker.getDeadmanReleaseNotice(s1, recipient.id), undefined, variant);
+            if (staleRoom) {
+                assert.equal(worker.findDeadmanNoticeRoom(recipient.id), staleRoom, variant);
+            }
+            const later = new Date(at.getTime() + 5_000);
+            sweepOverdueDeadmanSwitches(later, Number.MAX_SAFE_INTEGER);
+            assert.equal(worker.getDeadmanSwitch(s2)?.status, 'triggered', variant);
+            const roomsBefore = roomsMadeFor(mxid);
+            const s1SendsBefore = matrix.sends.filter((x) => x.txnId.includes(s1)).length;
+            await runDeadmanReleaseNotifier({ now: later });
+            await worker.drain();
+            assert.equal(roomsMadeFor(mxid) - roomsBefore, 0, `${variant}: no second room`);
+            assert.deepEqual(
+                matrix.sends.filter((x) => x.txnId.includes(s2)).map((x) => x.roomId),
+                [oldRoom],
+                `${variant}: the new release’s notice in the room the old leader recorded`
+            );
+            assert.equal(
+                matrix.sends.filter((x) => x.txnId.includes(s1)).length - s1SendsBefore,
+                0,
+                `${variant}: the old leader’s notice not sent again`
+            );
+            assert.equal((await committed(s2, recipient.id)).room_id, oldRoom, variant);
+            assert.equal((await committed(s1, recipient.id)).status, 'sent', variant);
+        } finally {
+            matrix.aliasRefusal = null;
+        }
+    }
+});
+
+test('a room or a re-invite recorded on a pending row whose write was dropped is kept when the row is read from Postgres: the person is not invited twice for one notice, no second room is made with the alias refused, and the next write carries them into Postgres', async () => {
+    // Round 8 of part 2's review: the refresh put the stored row into the
+    // mirror whenever this process wrote nothing to it during the read,
+    // reasoning that the stored row was at least as new; a write that failed
+    // twice is dropped, so it can be older. The dropped write is stood in for
+    // by clearing the column in Postgres after the write was made.
+    for (const variant of ['the re-invite', 'the room, alias refused'] as const) {
+        const recipient = await person();
+        const mxid = `@pn-${recipient.id.slice(0, 8)}:test.local`;
+        if (variant === 'the re-invite') {
+            const first = await release(recipient);
+            await runDeadmanReleaseNotifier({ now: first.at });
+            await worker.drain();
+        } else {
+            matrix.aliasRefusal = { status: 403, errcode: 'M_FORBIDDEN' };
+        }
+        const leave = () => {
+            const room = worker.findDeadmanNoticeRoom(recipient.id)!;
+            const state = matrix.rooms.get(room) as Array<Record<string, unknown>>;
+            matrix.rooms.set(
+                room,
+                state.map((e) =>
+                    e.type === 'm.room.member' && e.state_key === mxid
+                        ? { ...e, content: { membership: 'leave' } }
+                        : e
+                )
+            );
+        };
+        try {
+            if (variant === 'the re-invite') leave();
+            const notice = await release(recipient);
+            matrix.sendStatus = 500;
+            await runDeadmanReleaseNotifier({ now: notice.at });
+            matrix.sendStatus = 200;
+            await worker.drain();
+            const row = worker.getDeadmanReleaseNotice(notice.switchId, recipient.id)!;
+            assert.equal(row.status, 'pending', variant);
+            const column = variant === 'the re-invite' ? 'reinvited_at' : 'room_id';
+            if (variant === 'the re-invite') assert.ok(row.reinvitedAt, variant);
+            const room = row.roomId!;
+            assert.ok(room, variant);
+            await pg.query(
+                `UPDATE deadman_release_notices SET ${column} = NULL WHERE switch_id = $1 AND recipient_account_id = $2`,
+                [notice.switchId, recipient.id]
+            );
+            // The person declined the invitation the bot sent.
+            if (variant === 'the re-invite') leave();
+            const invitesBefore = matrix.invites.filter((x) => x.userId === mxid).length;
+            const roomsBefore = roomsMadeFor(mxid);
+            await runDeadmanReleaseNotifier({ now: new Date(row.nextAttemptAt) });
+            await worker.drain();
+            assert.equal(
+                matrix.invites.filter((x) => x.userId === mxid).length - invitesBefore,
+                0,
+                `${variant}: not invited a second time for this notice`
+            );
+            assert.equal(roomsMadeFor(mxid) - roomsBefore, 0, `${variant}: no second room`);
+            assert.deepEqual(
+                matrix.sends
+                    .filter((x) => x.txnId.includes(notice.switchId) && x.roomId === room)
+                    .map((x) => x.roomId).length,
+                2,
+                `${variant}: the refused send and this one, both in the room`
+            );
+            const after = (
+                await pg.query(
+                    'SELECT status, room_id, reinvited_at FROM deadman_release_notices WHERE switch_id = $1 AND recipient_account_id = $2',
+                    [notice.switchId, recipient.id]
+                )
+            ).rows[0] as { status: string; room_id: string | null; reinvited_at: unknown };
+            assert.equal(after.status, 'sent', variant);
+            assert.equal(after.room_id, room, `${variant}: the room reached Postgres`);
+            if (variant === 'the re-invite') {
+                assert.ok(after.reinvited_at, `${variant}: the re-invite reached Postgres`);
+            }
+        } finally {
+            matrix.aliasRefusal = null;
+            matrix.sendStatus = 200;
+        }
+    }
+});
+
+test('the deletion route answers only once the deletion’s own writes have been attempted in Postgres, however long that takes, and waits for its last statement at most the bound: after the answer the worker makes no room, invites nobody and sends nothing for the person', async () => {
+    // Round 8 of part 2's review: round 7's bound covered the drain of the
+    // deletion's own writes too, so past it the route answered while
+    // Postgres still held the copy and the pending row, and the worker then
+    // made the person a room, invited them and sent the notice. The app's
+    // connections stall on a gate: every one (the drain stalls), or the last
+    // statement's alone.
+    type Variant = { name: string; stall: 'drain' | 'end'; seen: boolean };
+    const variants: Variant[] = [
+        { name: 'the drain stalls, a row the app had seen', stall: 'drain', seen: true },
+        { name: 'the last statement stalls, a row the app had seen', stall: 'end', seen: true },
+        {
+            name: 'the last statement stalls, a row the app had not seen',
+            stall: 'end',
+            seen: false,
+        },
+    ];
+    const realConnect = pool.connect;
+    for (const variant of variants) {
+        const recipient = await person();
+        const mxid = `@pn-${recipient.id.slice(0, 8)}:test.local`;
+        let open!: () => void;
+        let gate: Promise<void> | null = null;
+        const appPool = {
+            connect: async () => {
+                const client = await realConnect();
+                if (variant.stall === 'drain' && gate) await gate;
+                return {
+                    ...client,
+                    async query<T = Record<string, unknown>>(sql: string, params?: unknown[]) {
+                        if (
+                            variant.stall === 'end' &&
+                            gate &&
+                            sql.startsWith('UPDATE deadman_release_notices SET room_id = NULL')
+                        ) {
+                            await gate;
+                        }
+                        return client.query<T>(sql, params);
+                    },
+                };
+            },
+            end: async () => {},
+        };
+        const app = new store.PostgresBackedDb();
+        let notice: { switchId: string; at: Date };
+        if (variant.seen) {
+            notice = await release(recipient);
+            await worker.drain();
+            await app.init(appPool as never);
+            assert.equal(
+                app.getDeadmanReleaseNotice(notice.switchId, recipient.id)?.status,
+                'pending'
+            );
+        } else {
+            notice = await release(recipient, async () => {
+                await worker.drain();
+                await app.init(appPool as never);
+            });
+            await worker.drain();
+            assert.equal(app.getDeadmanReleaseNotice(notice.switchId, recipient.id), undefined);
+            assert.ok(app.getDeadmanReleaseWrap(notice.switchId, recipient.id)?.sealedKey);
+        }
+        const held = async () =>
+            (
+                (
+                    await pg.query(
+                        "SELECT sealed_key <> '' AS held FROM deadman_release_wraps WHERE switch_id = $1 AND recipient_account_id = $2",
+                        [notice.switchId, recipient.id]
+                    )
+                ).rows[0] as { held: boolean }
+            ).held;
+        gate = new Promise<void>((resolve) => {
+            open = resolve;
+        });
+        try {
+            eraseReleaseCopiesAndNoticesOf(app, recipient.id);
+            const answer = finishAccountDeletion(recipient.id, app, 100).then(() => 'answered');
+            const early = await Promise.race([
+                answer,
+                new Promise<string>((resolve) => setTimeout(() => resolve('waiting'), 600)),
+            ]);
+            if (variant.stall === 'drain') {
+                assert.equal(early, 'waiting', `${variant.name}: not answered before the writes`);
+                assert.equal(await held(), true, `${variant.name}: the copy still held there`);
+                open();
+                assert.equal(await answer, 'answered', variant.name);
+            } else {
+                assert.equal(early, 'answered', `${variant.name}: answered at the bound`);
+            }
+            // At the answer: the copy blanked in Postgres, and a row the app
+            // had seen ended there.
+            assert.equal(await held(), false, `${variant.name}: the copy blanked by the answer`);
+            assert.equal(
+                (await committed(notice.switchId, recipient.id)).status,
+                variant.seen ? 'failed' : 'pending',
+                variant.name
+            );
+            const roomsBefore = roomsMadeFor(mxid);
+            const invitesBefore = matrix.invites.filter((x) => x.userId === mxid).length;
+            await runDeadmanReleaseNotifier({ now: notice.at });
+            await worker.drain();
+            assert.equal(roomsMadeFor(mxid) - roomsBefore, 0, `${variant.name}: no room made`);
+            assert.equal(
+                matrix.invites.filter((x) => x.userId === mxid).length - invitesBefore,
+                0,
+                `${variant.name}: nobody invited`
+            );
+            assert.equal(
+                matrix.sends.filter((x) => x.txnId.includes(notice.switchId)).length,
+                0,
+                `${variant.name}: not sent`
+            );
+        } finally {
+            open();
+        }
+        await settle();
+        await app.drain();
+        assert.deepEqual(await committed(notice.switchId, recipient.id), {
+            status: 'failed',
+            last_error: 'recipient_gone',
+            room_id: null,
+        });
     }
 });
