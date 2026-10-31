@@ -11,10 +11,11 @@ changes no lockfile. It reported 4 advisories in 3 packages:
 | GHSA-3cmx-xjww-583x | 3.7  | i18next-http-backend | 4.0.2   | 4.0.4 |
 | GHSA-9jhj-wvmw-cfx5 | 3.1  | i18next-http-backend | 4.0.2   | 4.0.3 |
 
-`develop` (`ff7d08b`) fails the same way: the same scanner, run locally on
-develop's `pnpm-lock.yaml` and `osv-scanner.toml`, prints those four rows and
-nothing else. `security.yml`'s **Dependency vulnerability audit** job runs the
-same osv-scanner step on the same lockfile, so it fails too wherever it runs
+`develop` (`ff7d08b`) failed the same way: the same scanner, run locally on
+develop's `pnpm-lock.yaml` and `osv-scanner.toml` on 2026-10-30, printed those
+four rows and nothing else (ten rows by 00:04Z on 10-31; see Result).
+`security.yml`'s **Dependency vulnerability audit** job runs the same
+osv-scanner step on the same lockfile, so it fails too wherever it runs
 (its `pull_request` trigger is path-filtered; see
 [the react-router section](#react-router-7180--7182-appsblackout-client)).
 
@@ -43,10 +44,19 @@ are Low or Moderate, so neither Trivy's CRITICAL/HIGH gate nor
     stopped applying at 2026-10-31T00:00Z on CI, not on 2026-11-01 (measured),
     turning `ci.yml`'s audit red on every push and PR. See
     [the react-router section](#react-router-7180--7182-appsblackout-client).
--   **So this branch's OSV result no longer depends on that date.** The scan
-    exits 0 in UTC, UTC+3 and UTC+14 (Verification). The next `ignoreUntil` to
-    lapse is image-size's, at 2026-11-30T00:00Z on CI (item 8 of "Found outside
-    the gates").
+-   **So this branch's OSV result no longer depends on that date.** At 21:46
+    UTC on 2026-10-30 the scan exited 0 in UTC, UTC+3 and UTC+14, and CI's
+    audit passed on `71548f0` at 21:55 (Verification). The next `ignoreUntil`
+    to lapse is image-size's, at 2026-11-30T00:00Z on CI (item 8 of "Found
+    outside the gates").
+-   **Two newer advisories turn the OSV gates red again.** GHSA-3g3m-2fjr-6pw4
+    (glob, fixed in 14.0.2) and GHSA-g3hv-75wg-m249 (minimatch, fixed in
+    11.0.1), both Moderate, were published at 23:09Z on 2026-10-30, after the
+    runs above. At 00:04Z on 10-31 the scan of this branch exits 1 with five
+    rows: glob 11.1.0 and 13.0.6, minimatch 3.1.5, 5.1.9 and 10.2.5. develop's
+    scan has the same five, besides the four rows CI reported and
+    react-router's, whose ignore lapsed at 00:00Z as predicted. They are not
+    triaged or changed here.
 
 The lockfile moves exactly those three packages. Nothing was added to
 `.trivyignore` or `pnpm.auditConfig.ignoreGhsas`, and react-router's entry
@@ -425,15 +435,21 @@ section) rather than renewing a false reason or letting every PR go red.
     false `reason` in its "filtered out because" line.
 -   **What 7.18.2 changes.** Its changelog has one entry, "Harden RSC CSRF
     codepaths" (#15353), the PR the advisory cites. 7.18.1's says "No
-    changes". Both tarballs match the registry's `sha512`. With the version
-    string and the hash-named chunk files and their CommonJS variables
-    (`chunk-XXXXXXXX`, `_chunkXXXXXXXX`) normalised, **60 of the 64 files under
-    `dist/` are byte-identical**. The four that differ are
+    changes". Both tarballs match the registry's `sha512`. Each has 70 files
+    under `dist/`, 10 of them hash-named chunks (`chunk-XXXXXXXX.{js,mjs}`).
+    The version string, the chunk names and their CommonJS variables
+    (`_chunkXXXXXXXX`) were normalised, and each chunk was paired with its
+    7.18.0 counterpart by content. Then **66 of the 70 files are
+    byte-identical**, all 10 chunks among them. The four that differ are
     `index-react-server.{js,mjs}` in `development/` and `production/`. In their
     action path, a failed origin check now turns the request into a `GET`
-    inside the `catch`, so the action does not run. Every module the client
-    loads (`index`, `dom-export` and the shared chunks) is the same code as
-    before.
+    inside the `catch`, so the action does not run.
+-   **What the client loads is unchanged.** The browser build takes
+    `dist/development/index.mjs`, which only re-exports, and one shared chunk.
+    The build's 161 source maps list one react-router source,
+    `chunk-62JRHF6Z.mjs`, which is 7.18.0's `chunk-4ZMWKKQ3.mjs`. Vitest loads
+    `dist/development/index.js` and its three CommonJS chunks (traced with
+    `strace` on one router test). All of these are among the 66.
 -   **Why 7.18.2 and not 7.18.5.** The same rule as the other two bumps: the
     smallest fixed release. 7.18.3 to 7.18.5 change code the client does run.
     7.18.3 adds URL validation on client-side navigations and redirects and
@@ -599,8 +615,9 @@ fourth; this list is their correction:
 
 1. **"Both osv-scanner gates are red on every branch"** and **"fail on every
    PR"** were true only of `ci.yml`'s audit, which runs on every push and PR.
-   `security.yml`'s `pull_request` trigger is path-filtered. The Result
-   section and the react-router section now name that filter.
+   `security.yml`'s `pull_request` trigger is path-filtered. At `1ba075a` the
+   Result section and the react-router section named that filter. Since
+   `71548f0` the opening paragraph and the react-router section do.
 2. **"The entry stops applying at 2026-10-31T00:00 UTC"** is the moment on
    CI. The cutoff is local midnight on the scanning host (measured in the
    react-router section; item 2 of "Found outside the gates").
@@ -613,8 +630,9 @@ fourth; this list is their correction:
    `reason` now say "repo-authored objects and dependency constants" or the
    equivalent.
 5. **The react-router entry's premise was called "out of date".** Its reason
-   is false, and every OSV run prints it. The record now says so. The entry
-   is still unchanged. Item 7 (what the dead brace-expansion entries hide)
+   was false, and every OSV run printed it. At `1ba075a` the record said so
+   and the entry was unchanged. `71548f0` removed it (Changed after the third
+   review). Item 7 (what the dead brace-expansion entries hide)
    and item 8 (all 14 metro manifests checked) of "Found outside the gates"
    were also completed.
 
@@ -629,15 +647,53 @@ updated. The record's Result, Summary, react-router section, items 1, 7 and 8
 of "Found outside the gates" and Verification now describe the tree after the
 bump. The measurements made before it are kept and marked as such.
 
+A fourth review, of `71548f0`, found statements that change had got wrong or
+left stale. They are corrected above. The commit message of `71548f0` repeats
+the first, and says Verification describes the tree after the bump, which the
+second shows was incomplete. This list is their correction:
+
+1. **"60 of the 64 files under `dist/` are byte-identical."** Each tarball has
+   70 files under `dist/`. 64 is the number of distinct names once the 10
+   chunk hashes are normalised, so a comparison keyed on that name checked 4
+   of the 10 chunks. Paired by content, 66 of the 70 are identical, all 10
+   chunks among them, and the same 4 files differ. The list of what the
+   client loads also named `dom-export`, which it does not load.
+2. **The Gates preamble** still said three commits follow `a147f5c` and change
+   only documents and comments. It now names the fourth.
+3. **The migration doc's rollback sentence** said 7.18.2 "or later" keeps the
+   advisory fixed. 8.0.0 to 8.2.x are later and affected (OSV's second range,
+   8.0.0 → 8.3.0). Its step 5, option C and audit gate still treated the
+   deferral as current. They are dated or reworded.
+4. **Appendix B of `docs/audits/pre-launch-readiness-audit-2026-07.md`** still
+   called the advisory the H8 remainder, silenced until 2026-10-31. It now
+   has a dated note.
+5. **Items 1 and 5 of the second list above** read as true at HEAD. They are
+   now dated to `1ba075a`.
+6. **The bump's re-runs** were dated "21:46 to 21:56", after the commit
+   (21:53:26); they ended at 21:53. Only UTC+14 was marked as already on
+   10-31, but UTC+3 was too.
+7. **Verification** said its commands are as in `ci.yml`. The client unit
+   rows ran `test:unit`'s command, not `ci.yml`'s `test:coverage`, which also
+   enforces the coverage floors. "Not verified" said CI had not run, and
+   described one Chromium check where there are two.
+
+After midnight UTC two more things were measured. develop's react-router
+ignore lapsed at 00:00Z, as the react-router section predicted. Two
+advisories published at 23:09Z make the OSV gates red again (Result).
+
 ## Verification
 
-All runs are local, on this branch unless the row says otherwise, with Node
-22.22.0 and pnpm 9.15.4 (the pinned `packageManager`). Commands are as in
-`ci.yml` and `security.yml`. The suites ran one at a time.
+Runs are local and on this branch unless the row or section says otherwise,
+with Node 22.22.0 and pnpm 9.15.4 (the pinned `packageManager`). Commands are as in
+`ci.yml` and `security.yml`, except two client unit rows. Those ran
+`vitest run tests/unit src`, which is `test:unit` (`mobile_contract_tests.yml`
+runs it), not `ci.yml`'s `test:coverage`, which also enforces the coverage
+floors. `test:coverage` is in the last table. The suites ran one at a time.
+CI's own runs on `71548f0` are in "CI on `71548f0`" below.
 
 **Scans before the react-router bump** (osv-scanner v2.3.3,
-`--lockfile=pnpm-lock.yaml`, 2026-10-30; the scans after it are in the last
-table):
+`--lockfile=pnpm-lock.yaml`, 2026-10-30; the scans after it are in the
+react-router re-runs table and the last table):
 
 | Tree                                                         | Result                                                                                                 |
 | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
@@ -654,20 +710,22 @@ east of UTC). From then on, a scan of that tree gives the probe's result.
 react-router bump: exit 0, "4 vulnerabilities found, 1 low | 3 high (3
 ignored)". The low one is deepmerge (`--json`); the three ignored were
 image-size ×2 and react-router. The root `guard:audit-clean` script
-(`--audit-level moderate`) also exited 0. After the bump: see the last table.
+(`--audit-level moderate`) also exited 0. After the bump: see "Re-runs after the react-router bump".
 
 **Gates:**
 
 The gates below ran on the tree committed as `a147f5c`, the dependency commit.
-The three commits after it change only this document, comments and one entry in
-`osv-scanner.toml`, and the header comment of `.trivyignore`. Only the scans
-read those two files. The re-runs after each review are in the tables after
-this one.
+Four commits follow it. The first three, up to `1ba075a`, change only this
+document, comments and one entry in `osv-scanner.toml`, and the header comment
+of `.trivyignore`. Only the scans read those two files. The fourth, `71548f0`,
+moves react-router in the client manifest and the lockfile and removes its
+three ignores. Its gates are in "Re-runs after the react-router bump". The
+re-runs after each review are in the tables after this one.
 
 | Gate                     | Command                                                                                                                             | Result                                                                                                                                                                                                                                                           |
 | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | install                  | `pnpm install --frozen-lockfile --offline`; `pnpm install --frozen-lockfile --ignore-scripts` (`actions-node24-compat.yml`)         | pass                                                                                                                                                                                                                                                             |
-| lockfile diff            | resolved `packages:` of develop's lockfile against this branch's                                                                    | 2 packages changed (above); 1,496 `name@version` on both sides; no other importer, override or snapshot moved                                                                                                                                                    |
+| lockfile diff            | resolved `packages:` of develop's lockfile against this branch's                                                                    | 2 packages changed at `a147f5c`, 3 after `71548f0` (Result); 1,496 `name@version` on both sides; no other importer, override or snapshot moved                                                                                                                   |
 | API lint                 | `pnpm --filter @blackout/api lint`                                                                                                  | pass                                                                                                                                                                                                                                                             |
 | API types                | `pnpm --filter @blackout/api typecheck`                                                                                             | pass                                                                                                                                                                                                                                                             |
 | API, PR gate             | `BLACKOUT_DB_MODE=memory BLACKOUT_API_SKIP_LISTEN=1 NODE_ENV=test pnpm --filter @blackout/api test:integration`                     | 1971 / 1971, 0 skipped                                                                                                                                                                                                                                           |
@@ -719,43 +777,84 @@ change is to this document, the deepmerge entry's comment and `reason` in
 The OSV exit 0 again held only until 2026-10-31T00:00Z in UTC, before the
 react-router bump.
 
-**Re-runs after the react-router bump** (2026-10-30, 21:46 to 21:56 UTC, on
+**Re-runs after the react-router bump** (2026-10-30, 21:46 to 21:53 UTC, on
 the tree with react-router 7.18.2 and the three ignores removed):
 
-| Gate                | Command                                                                                                                    | Result                                                                                                                                                                  |
-| ------------------- | -------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| lockfile            | `pnpm install --lockfile-only --ignore-scripts`, then `pnpm install --frozen-lockfile --ignore-scripts`                    | only react-router moves (react-router section); installed version 7.18.2; the lockfile's integrity is the registry's                                                    |
-| OSV scan            | osv-scanner v2.3.3, `--lockfile=pnpm-lock.yaml`, with `TZ=UTC`, `TZ=Etc/GMT-3` and `TZ=Pacific/Kiritimati` (already 10-31) | exit 0 in all three: "No issues found", 3 filtered (deepmerge, image-size ×2), no unused-ignore line                                                                    |
-| OSV query           | `/v1/query` for react-router 7.18.2                                                                                        | no advisories                                                                                                                                                           |
-| pnpm audit          | `pnpm audit --prod --audit-level high`; `pnpm run guard:audit-clean`                                                       | exit 0 both: "3 vulnerabilities found, 1 low \| 2 high (2 ignored)"; the two are image-size                                                                             |
-| Trivy               | v0.69.3, `security.yml`'s flags, on a copy of the tracked files, DB of 2026-10-30T19:07Z                                   | exit 1 with the same 6 findings as develop, none in `pnpm-lock.yaml` (0): authlib ×3 and twisted in `poetry.lock`, zip ×2 in the desktop `Cargo.lock`                   |
-| workspace builds    | `pnpm --filter @blackout/core run build`, `… @blackout/design run build`                                                   | pass                                                                                                                                                                    |
-| client types        | `pnpm --filter @blackout/client typecheck`                                                                                 | pass                                                                                                                                                                    |
-| client unit         | `pnpm --filter @blackout/client exec vitest run tests/unit src`                                                            | 516 files; 3504 passed, 3 skipped (develop `ff7d08b`: the same)                                                                                                         |
-| client smoke        | `pnpm --filter @blackout/client test:integration`                                                                          | 3 files; 13 / 13                                                                                                                                                        |
-| client build + size | `pnpm --filter @blackout/client build`; `du -sk --exclude='*.map' dist`                                                    | pass; 25,308 KB ≤ `MAX_BUNDLE_KB` 29,696; the vendor chunk sets `__reactRouterVersion` to `7.18.2` and no chunk contains `7.18.0`                                       |
-| client in Chromium  | scratch script: the built `dist` under `vite preview`, headless Chromium 1243, a fresh context per route                   | `/`, `/login`, `/register`, `/home/`, `/messages/`, `/communities`, an unknown path and `/embed`: each stays on its path, `#root` mounts, router 7.18.2, no page errors |
-| prettier            | `prettier --check` on the changed files                                                                                    | pass                                                                                                                                                                    |
+| Gate                | Command                                                                                                    | Result                                                                                                                                                                  |
+| ------------------- | ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| lockfile            | `pnpm install --lockfile-only --ignore-scripts`, then `pnpm install --frozen-lockfile --ignore-scripts`    | only react-router moves (react-router section); installed version 7.18.2; the lockfile's integrity is the registry's                                                    |
+| OSV scan            | osv-scanner v2.3.3, `--lockfile=pnpm-lock.yaml`, with `TZ=UTC`, `TZ=Etc/GMT-3` and `TZ=Pacific/Kiritimati` | exit 0 in all three, UTC+3 and UTC+14 already on 10-31: "No issues found", 3 filtered (deepmerge, image-size ×2), no unused-ignore line                                 |
+| OSV query           | `/v1/query` for react-router 7.18.2                                                                        | no advisories                                                                                                                                                           |
+| pnpm audit          | `pnpm audit --prod --audit-level high`; `pnpm run guard:audit-clean`                                       | exit 0 both: "3 vulnerabilities found, 1 low \| 2 high (2 ignored)"; the two are image-size                                                                             |
+| Trivy               | v0.69.3, `security.yml`'s flags, on a copy of the tracked files, DB of 2026-10-30T19:07Z                   | exit 1 with the same 6 findings as develop, none in `pnpm-lock.yaml` (0): authlib ×3 and twisted in `poetry.lock`, zip ×2 in the desktop `Cargo.lock`                   |
+| workspace builds    | `pnpm --filter @blackout/core run build`, `… @blackout/design run build`                                   | pass                                                                                                                                                                    |
+| client types        | `pnpm --filter @blackout/client typecheck`                                                                 | pass                                                                                                                                                                    |
+| client unit         | `pnpm --filter @blackout/client exec vitest run tests/unit src`                                            | 516 files; 3504 passed, 3 skipped (develop `ff7d08b`: the same)                                                                                                         |
+| client smoke        | `pnpm --filter @blackout/client test:integration`                                                          | 3 files; 13 / 13                                                                                                                                                        |
+| client build + size | `pnpm --filter @blackout/client build`; `du -sk --exclude='*.map' dist`                                    | pass; 25,308 KB ≤ `MAX_BUNDLE_KB` 29,696; the vendor chunk sets `__reactRouterVersion` to `7.18.2` and no chunk contains `7.18.0`                                       |
+| client in Chromium  | scratch script: the built `dist` under `vite preview`, headless Chromium 1243, a fresh context per route   | `/`, `/login`, `/register`, `/home/`, `/messages/`, `/communities`, an unknown path and `/embed`: each stays on its path, `#root` mounts, router 7.18.2, no page errors |
+| prettier            | `prettier --check` on the changed files                                                                    | pass                                                                                                                                                                    |
 
-The API suites were not re-run: react-router is a client dependency only, and
-nothing under `packages/` resolves it.
+The API suites were not re-run locally: react-router is a client dependency
+only, and nothing under `packages/` resolves it. CI ran them (below).
+
+**CI on `71548f0`** (pushed 2026-10-30 at 21:53Z; read from the Actions API):
+
+| Workflow (event)                                                                                                               | Run                                                             | Result                                                                                                                                                                                     |
+| ------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Blackout CI (push)                                                                                                             | 41134368053                                                     | success, 23 of 23 jobs                                                                                                                                                                     |
+| Blackout CI (pull_request)                                                                                                     | 41134501169                                                     | success, 23 of 23 jobs, among them Dependency audit (exit 0, 3 filtered, at 21:55Z), Unit tests (`test:coverage`, `test:integration`), Client e2e smoke and Launch-smoke gate              |
+| Security checks (pull_request)                                                                                                 | 41134501175                                                     | **failure**: Trivy filesystem scan exit 1 with the same 6 findings as the local runs, none in `pnpm-lock.yaml`. Dependency vulnerability audit, Gitleaks, Semgrep, Hardening guards passed |
+| Centralized CI Parity, Visual regression, Mobile Contract Tests, Actions Node 24 compatibility check, Pull Request Base Branch | 41134501148, 41134501203, 41134501113, 41134501207, 41134501176 | success                                                                                                                                                                                    |
+
+So PR #994's Security checks stay red until the six Trivy findings are fixed
+(the `-v48` branch) or the operator decides otherwise. develop's last Security
+checks run (40419066923, on `ff7d08b`, 2026-10-26) was green. A local Trivy run
+on develop's tree gives the same 6 (Gates table), so develop's next run should
+fail the same way; that was not run on a runner. Both OSV jobs passed before
+the glob and minimatch advisories were published (23:09Z). With the local scan
+now exiting 1 (Result), a re-run of either should fail; none was re-run.
+
+**Re-runs after the fourth review** (2026-10-30 23:50 to 2026-10-31 00:11
+UTC). The change is to this document, `docs/migrations/react-19-and-react-router-8.md`
+and Appendix B of `docs/audits/pre-launch-readiness-audit-2026-07.md`. No
+manifest or lockfile changed:
+
+| Gate                   | Command                                                                                                                                               | Result                                                                                                                                              |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| tarball diff           | react-router 7.18.0 and 7.18.2 fetched again, `sha512` equal to the registry's; scratch script, each chunk paired by content                          | 70 files under `dist/` in each; 66 identical, all 10 chunks among them; 4 differ: `index-react-server.{js,mjs}` in `development/` and `production/` |
+| build sources          | `sources` of every `.map` in the client build of `71548f0`'s tree (21:50Z)                                                                            | 161 maps; one react-router source, `dist/development/chunk-62JRHF6Z.mjs`                                                                            |
+| Vitest load            | `strace -f -e trace=openat` on `vitest run tests/unit/components/BackRouteHandler.test.tsx`                                                           | 4 / 4 pass; opens `dist/development/index.js` and `chunk-{HHGH3NKS,7XGYIT3M,3UVS743K}.js`, no other file under `dist/`                              |
+| advisory ranges        | `api.osv.dev/v1/vulns/GHSA-qwww-vcr4-c8h2`, GitHub's advisory file, `/v1/query`                                                                       | both: 7.12.0 → 7.18.2 and 8.0.0 → 8.3.0; OSV returns it for 8.0.0 and 8.2.0, not for 7.18.2 or 8.3.0                                                |
+| client unit (`ci.yml`) | `pnpm --filter @blackout/client run test:coverage`                                                                                                    | 516 files; 3504 passed, 3 skipped; statements 45.31, branches 36.38, functions 36.24, lines 46.37 against floors 41.3, 32.2, 32.5, 42.3             |
+| OSV scan               | osv-scanner v2.3.3 (sha256 matches `osv-scanner_SHA256SUMS`), 00:04Z on 10-31, `TZ` = `UTC`, `Etc/GMT-3`, `Pacific/Kiritimati`, `America/Los_Angeles` | exit 1 in all four: 3 filtered, no unused-ignore line, 5 rows from GHSA-3g3m-2fjr-6pw4 (glob) and GHSA-g3hv-75wg-m249 (minimatch) (Result)          |
+| OSV, develop           | the same, `TZ=UTC`, on develop's `pnpm-lock.yaml` and `osv-scanner.toml`                                                                              | exit 1: unused ignore GHSA-qwww-vcr4-c8h2; 10 rows: the four CI reported, the same five, and react-router 7.18.0                                    |
+| pnpm audit             | `pnpm audit --prod --audit-level high`; `pnpm run guard:audit-clean`                                                                                  | exit 0 both, unchanged: "3 vulnerabilities found, 1 low \| 2 high (2 ignored)"                                                                      |
+| prettier               | `prettier --check` on the three changed files                                                                                                         | pass                                                                                                                                                |
+| gitleaks               | `gitleaks dir` on the three changed files                                                                                                             | no leaks                                                                                                                                            |
 
 **Not verified:**
 
--   CI itself: nothing was pushed. Every result above is a local run. That
-    GitHub's hosted runners scan in UTC was not checked on a runner; neither
-    workflow sets `TZ`.
+-   That GitHub's hosted runners scan in UTC was not checked on a runner;
+    neither workflow sets `TZ`.
 -   The metro 0.83.8 update was not tried, so it is not shown that the
     resolved tree then drops image-size. Only the 14 manifests were read.
 -   deepmerge-ts was checked only against OSV, not read.
--   The react-router bump was checked by the tarball diff, the client's unit
-    and smoke suites, its build and the Chromium route check above, all while
-    signed out. No signed-in navigation was driven.
--   The client e2e smoke (`CI=1 pnpm e2e`) was not run. Playwright 1.58.2
-    expects Chromium build 1208, and this machine has 1243. The Chromium check
-    above drove 1243 directly through `playwright-core` and looked only at the
-    translation requests, mounting and page errors.
--   Trivy's red result on develop is not addressed here (see the gates table).
+-   The react-router bump was checked locally by the tarball diff, the
+    client's unit and smoke suites, its build and the 7.18.2 route check, all
+    while signed out. No signed-in navigation was driven. What CI's e2e smoke
+    and navigation audit drive was not read.
+-   The client e2e smoke (`CI=1 pnpm e2e`) was not run locally. Playwright
+    1.58.2 expects Chromium build 1208, and this machine has 1243. CI ran it
+    on `71548f0` and it passed (above). The two local Chromium checks drove
+    1243 directly through `playwright-core`, both signed out. The one on
+    `a147f5c` looked at the translation requests, mounting and page errors.
+    The one on 7.18.2 looked at the path, mounting, `__reactRouterVersion` and
+    page errors.
+-   Trivy's red result is not addressed here. CI confirmed it on `71548f0`
+    (above).
+-   The glob and minimatch advisories were not triaged: not which packages
+    pull those versions in, nor whether the code is reachable.
 -   The node-server harness covers HTTP/1.1 only, without TLS, a proxy in
     front, slow clients, SSE streams, or the WebSocket upgrade shims
     (`/twitch-irc`, `/obs-ws/`, `/se-overlay/`) that attach to the same server.
