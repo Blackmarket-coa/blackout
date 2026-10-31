@@ -29,8 +29,10 @@ api:
         # write, and the failure is only logged), and one whose listening connection
         # dies without an error. Each serves the old row until it restarts or re-reads
         # it, so a sign-out made elsewhere can be ignored there until the token
-        # expires (up to 24 h; see KNOWN_LIMITATIONS.md). A write names only the rows
-        # it changed; see docs/security/store-cross-process-writes-2026-10-31.md for
+        # expires (up to 24 h; see KNOWN_LIMITATIONS.md). No write rewrites a whole
+        # table: a targeted write touches only the rows its call changed, and an
+        # upsert writes the one row its call returned, whole, even when the call left
+        # it unchanged; see docs/security/store-cross-process-writes-2026-10-31.md for
         # what that covers and for rolling out the release that made it so. `file`
         # (the JSON snapshot store) is single-process, and the API refuses it when
         # NODE_ENV is production (global.environment's default).

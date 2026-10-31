@@ -2366,8 +2366,8 @@ class InMemoryDb {
      * Account deletion: remove a scheduled message's text and every link to its
      * author and room. A pending row is cancelled, so nothing is ever posted
      * for a deleted account. The row itself stays (status and timestamps only):
-     * the write is an upsert of this one row, so it cannot touch a row another
-     * replica wrote.
+     * the write is an upsert of this one row, so it cannot touch any other row;
+     * it can still overwrite a newer version of this one (last writer wins).
      */
     eraseScheduledMessage(id: string): ScheduledMessageRecord | undefined {
         const record = this.scheduledMessages.get(id);
@@ -2538,7 +2538,7 @@ class InMemoryDb {
      * label. A switch that has already fired keeps its status and payload for
      * the people it named, since nothing may take a release back (cancel
      * refuses a triggered switch for the same reason); only its label goes.
-     * The row stays, as a targeted upsert like `eraseScheduledMessage`.
+     * The row stays, as an upsert like `eraseScheduledMessage`.
      */
     eraseDeadmanSwitch(id: string): DeadmanSwitchRecord | undefined {
         const record = this.deadmanSwitches.get(id);
@@ -2608,7 +2608,8 @@ class InMemoryDb {
      * its keys, signature, fingerprint and account go, and the row keeps only
      * its id, format version and times. The row stays, as `eraseScheduledMessage`
      * and `eraseDeadmanSwitch` keep theirs: the write is an upsert of this one
-     * row, so it cannot touch a row another replica wrote.
+     * row, so it cannot touch any other row; it can still overwrite a newer
+     * version of this one (last writer wins).
      */
     eraseReleaseIdentity(id: string): ReleaseIdentityRecord | undefined {
         const record = this.releaseIdentities.get(id);
@@ -8373,24 +8374,36 @@ export class FileBackedDb extends InMemoryDb {
  *
  * What is written: an upsert of the record a method returned, or a targeted
  * op (pgDescriptors) that names the rows the call changed, by key or by a
- * predicate Postgres evaluates, in one transaction. Nothing reconciles a whole
- * table against this mirror: a row another process wrote is never deleted
- * because this one has not heard of it, and a row a call did not change is
- * never rewritten. An upsert still writes its whole record, so it can
- * overwrite a newer version of that same row (the last writer wins).
+ * predicate Postgres evaluates, in one transaction. No write reconciles a
+ * whole table against this mirror, so a row another process wrote is never
+ * deleted because this one has not heard of it. A targeted op writes only the
+ * rows its call changed. An upsert writes the one row the call returned,
+ * whole, even when the call left it unchanged (markUserEmailVerified on a
+ * verified account rewrites the row, password_hash included, from this
+ * mirror's copy), so it can overwrite a newer version of that row (the last
+ * writer wins).
  *
  * Multi-replica consistency: when a change transport is supplied — Postgres
  * LISTEN/NOTIFY, ON BY DEFAULT (BLACKOUT_DB_PG_NOTIFY=1) — each replica
  * subscribes to peers' change notifications and re-reads the keys they name,
- * so a write on one replica becomes visible on the others. This is EVENTUAL
- * consistency: a read on replica B in the gap between a write committing on
- * replica A and the notification arriving still sees the old value, and a
+ * so a write on one replica becomes visible on the others once they hear of
+ * it. A read on replica B in the gap between a write committing on replica A
+ * and the notification arriving still sees the old value, and a
  * check-then-act on B's mirror in that gap (a single-use token, a rotation, a
- * bounty accept) can succeed once on each replica. Where the write is targeted,
- * Postgres keeps the first (a consume updates only an unconsumed row) and the
- * loser's mirror re-reads; where it is an upsert, the last writer wins. A
- * targeted op's notification is sent inside its transaction; an upsert's is
- * sent after it, and is lost if that send fails. With the transport disabled
+ * bounty accept) can succeed once on each replica. Where the write is
+ * targeted, Postgres keeps the first (a consume updates only an unconsumed
+ * row) and the loser's mirror re-reads; where it is an upsert, the last writer
+ * wins. A targeted op's notification is sent inside its transaction; an
+ * upsert's is sent after it, and is lost if that send fails. The gap ends only
+ * when B hears of the change, and some processes never do. One that starts
+ * while others are writing loads its copy before it starts listening, and
+ * nothing re-reads what changed in between. Most writes, a sign-out among
+ * them, send their notification after the write, and a failed send is only
+ * logged. A listening connection that dies without an error is not noticed.
+ * Such a process keeps its old copy of the row until it restarts, or until
+ * something makes it re-read the row (a later change to the same row, or its
+ * listening connection failing and being replaced); see KNOWN_LIMITATIONS.md,
+ * "Several API processes on one database". With the transport disabled
  * (BLACKOUT_DB_PG_NOTIFY=0) the store is strictly single-writer and must run
  * at exactly one replica.
  */

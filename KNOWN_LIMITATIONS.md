@@ -672,12 +672,16 @@ shipped (only incremental adoption remains).
     `worker`, and the Kubernetes deployment's three replicas. Each process
     serves reads from its own in-memory copy and tells the others, through
     Postgres notifications, which rows it changed.
--   **State:** a write names only the rows it changed. Before this release
-    some writes (deleting an account, signing out, the hourly revocation
-    prune, a vault-item or webhook delete) rewrote a whole table from one
-    process's copy and could delete or revert rows another process had just
-    written: a sign-out, another person's account. What was fixed and how, and
-    what is below, is in
+-   **State:** no write rewrites a whole table. Deletes, revocations,
+    consumes, sweeps and a few others touch only the rows their call changed.
+    Every other write saves the one row the call returned, whole, even when
+    the call changed nothing in it: marking an already-verified address
+    verified rewrites the account row from that process's copy. Before this
+    release some writes (deleting an account, signing out, the hourly
+    revocation prune, a vault-item or webhook delete) rewrote a whole table
+    from one process's copy and could delete or revert rows another process
+    had just written: a sign-out, another person's account. What was fixed
+    and how, and what is below, is in
     [`docs/security/store-cross-process-writes-2026-10-31.md`](docs/security/store-cross-process-writes-2026-10-31.md).
 -   A process can still act on a copy that has not yet heard of a change from
     another process. In that window a password-reset, verification, deletion

@@ -1,11 +1,20 @@
 // Cross-replica cache invalidation for the PostgresBackedDb mirror.
 //
 // Each replica keeps its own in-memory read mirror, so a write on replica A is
-// invisible to replica B until B is told to refresh. After every committed
-// write we publish a small change notification; every replica subscribes and
-// refreshes the affected table/key from Postgres into its mirror. This makes
-// reads eventually consistent across replicas (read-your-writes stays strong on
-// the writing replica, since its mutator updates the mirror synchronously).
+// invisible to replica B until B is told to refresh. A write publishes a small
+// change notification naming what it changed (a targeted write inside its
+// transaction, an upsert after it commits); every replica subscribes and
+// refreshes the affected table/key from Postgres into its mirror. Read-your-writes stays
+// strong on the writing replica, since its mutator updates the mirror
+// synchronously. A replica's reads lag until it hears of the change, and some
+// replicas never do. One that starts while others are writing loads its copy
+// before it starts listening, and nothing re-reads what changed in between.
+// Most writes, a sign-out among them, send their notification after the write,
+// and a failed send is only logged. A listening connection that dies without
+// an error is not noticed. Such a replica keeps its old copy of the row until
+// it restarts, or until something makes it re-read the row (a later change to
+// the same row, or its listening connection failing and being replaced); see
+// KNOWN_LIMITATIONS.md, "Several API processes on one database".
 //
 // The transport is abstracted so the Postgres LISTEN/NOTIFY implementation can
 // be swapped for an in-process one in tests (two stores sharing one database).

@@ -62,8 +62,10 @@ spec:
                       # sign-out made elsewhere can be ignored there until the token expires
                       # (up to 24 h; see KNOWN_LIMITATIONS.md). Endpoints that need
                       # read-your-write should route through the writing replica; waiting
-                      # does not help a replica that missed the notification. A write names
-                      # only the rows it changed; see
+                      # does not help a replica that missed the notification. No write
+                      # rewrites a whole table: a targeted write touches only the rows its
+                      # call changed, and an upsert writes the one row its call returned,
+                      # whole, even when the call left it unchanged; see
                       # docs/security/store-cross-process-writes-2026-10-31.md for what that
                       # covers and for rolling out the release that made it so. If pg_notify
                       # is disabled below, this deployment MUST scale to exactly one replica.
