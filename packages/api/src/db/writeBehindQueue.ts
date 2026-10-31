@@ -67,10 +67,31 @@ export class WriteBehindQueue {
     }
 
     enqueueUpsert(mapName: string, record: Record<string, unknown>): void {
-        const plan = this.plans.get(mapName);
         const fence = new Map<string, string[]>();
-        if (plan) fence.set(mapName, [plan.descriptor.keyOf(record)]);
+        const key = this.fenceKeyOf(mapName, record);
+        if (key !== undefined) fence.set(mapName, [key]);
         this.schedule({ kind: 'upsert', mapName, record, fence });
+    }
+
+    /**
+     * The mirror key an upsert writes, for the fence. Enqueueing runs inside
+     * the mutator call, after the mirror has changed, so it must never throw:
+     * a key that cannot be computed leaves the write unfenced (a peer refresh
+     * may then overwrite it until it lands), which is how it was before the
+     * fence existed.
+     */
+    private fenceKeyOf(mapName: string, record: Record<string, unknown>): string | undefined {
+        const keyOf = this.plans.get(mapName)?.descriptor.keyOf;
+        if (typeof keyOf !== 'function') return undefined;
+        try {
+            return keyOf(record);
+        } catch (err) {
+            log.warn('db_write_behind_fence_key_failed', {
+                map: mapName,
+                error: err instanceof Error ? err.message : String(err),
+            });
+            return undefined;
+        }
     }
 
     enqueueResync(mapName: string): void {
