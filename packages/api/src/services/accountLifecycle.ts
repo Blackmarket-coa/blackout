@@ -384,28 +384,51 @@ export const eraseReleaseCopiesAndNoticesOf = (
     }
 };
 
-/** How long the deletion route waits for `finishAccountDeletion` before it answers anyway. */
+/** How long the deletion route waits for the deletion's last statement before it answers anyway. */
 export const ACCOUNT_DELETION_FINISH_TIMEOUT_MS = 10 * 1000;
 
 /**
- * What an account deletion finishes once its writes are made: in the
- * database itself, every notice still pending to the account ends and every
- * notice row of theirs forgets its room, including a row another process
- * wrote that this one had not heard of (the worker's sweep, moments before;
- * `endDeadmanReleaseNoticesOfDeletedAccount`). Nothing to do with one
- * process. The route awaits it after `confirmAccountDeletion` and after it
- * revokes the session; a failure is logged, the deletion stands, and such a
- * row is then as the notifier leaves it (round 6 of part 2's review). The
- * wait is bounded: past `timeoutMs` (the database's queue or a connection
- * stalled) it is logged and this returns, and the end goes on without anyone
- * waiting for it (round 7: unbounded, a stalled pool held the route's answer
- * for good).
+ * What an account deletion finishes once its writes are made. First the
+ * deletion's own writes, in the database: the route answers only once every
+ * write this process had queued (the deletion's among them) has been
+ * attempted there, however long that takes (a write that fails twice is
+ * dropped and logged, as everywhere in Postgres mode, and the wait still
+ * ends; a connection pool that never hands out a connection holds the
+ * answer, the session having been revoked first). So by the answer the
+ * person's copies are blanked in the database and the notice rows this
+ * process had seen are ended there, unless one of those writes was dropped,
+ * and another process (the worker) makes no room, invites nobody and sends
+ * nothing for them after its next read of the database (a call it already
+ * had on its way to the homeserver can still reach them). Then, in the database itself, every notice still pending to
+ * the account ends and every notice row of theirs forgets its room,
+ * including a row another process wrote that this one had not heard of (the
+ * worker's sweep, moments before; `endDeadmanReleaseNoticesOfDeletedAccount`).
+ * Nothing to do with one process. The route awaits it after
+ * `confirmAccountDeletion` and after it revokes the session; a failure is
+ * logged, the deletion stands, and such a row is then as the notifier
+ * leaves it (round 6 of part 2's review). The wait for this last statement
+ * alone is bounded: past `timeoutMs` (its connection, or writes queued after
+ * the deletion's, stalled) it is logged and this returns, and the statement
+ * goes on without anyone waiting for it, landing when it can (round 7:
+ * unbounded, a stalled pool held the route's answer for good; round 8: the
+ * bound covered the drain of the deletion's own writes too, so the route
+ * could answer before any of them was in the database, and the worker then
+ * made the person a room, invited them and sent the notice).
  */
 export const finishAccountDeletion = async (
     accountId: string,
     store: typeof db = db,
     timeoutMs: number = ACCOUNT_DELETION_FINISH_TIMEOUT_MS
 ): Promise<void> => {
+    try {
+        await store.drain();
+    } catch (err) {
+        // The queue logs and drops a failed write itself; this is not
+        // expected, and the deletion stands either way.
+        log.warn('account_deletion_drain_failed', {
+            error: err instanceof Error ? err.message : String(err),
+        });
+    }
     let timer: ReturnType<typeof setTimeout> | undefined;
     const end = Promise.resolve()
         .then(() =>

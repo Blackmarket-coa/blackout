@@ -2842,9 +2842,15 @@ class InMemoryDb {
      * a person is left with more than one).
      */
     findDeadmanNoticeRoom(accountId: string): string | undefined {
-        return this.listDeadmanReleaseNoticesForRecipient(accountId)
-            .filter((row) => row.roomId)
-            .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0]?.roomId;
+        return this.newestDeadmanNoticeRoom(accountId)?.roomId;
+    }
+
+    /** The room `findDeadmanNoticeRoom` names, with when the row that names it was last written. */
+    newestDeadmanNoticeRoom(accountId: string): { roomId: string; updatedAt: string } | undefined {
+        const row = this.listDeadmanReleaseNoticesForRecipient(accountId)
+            .filter((r) => r.roomId)
+            .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
+        return row?.roomId ? { roomId: row.roomId, updatedAt: row.updatedAt } : undefined;
     }
 
     /**
@@ -2856,15 +2862,29 @@ class InMemoryDb {
      * deletion another process committed is seen before its change
      * notification arrives (round 6 of part 2's review), and so is a notice
      * another process has already sent or ended (round 7: a leader taking
-     * over within the notification's lag sent it again from its mirror).
+     * over within the notification's lag sent it again from its mirror), or
+     * attempted and set to retry later (round 8: the new leader attempted it
+     * at once). With `personsRoom`, also the recipient's newest recorded
+     * notices room, as `newestDeadmanNoticeRoom` finds it, from the database
+     * (round 8: a new leader whose mirror lacked the room the old leader had
+     * recorded on another of the person's notices made the person a second
+     * one).
      */
     async readDeadmanReleaseCommitted(
         switchId: string,
-        recipientAccountId: string
-    ): Promise<{ wrap?: DeadmanReleaseWrapRecord; notice?: DeadmanReleaseNoticeRecord }> {
+        recipientAccountId: string,
+        options: { personsRoom?: boolean } = {}
+    ): Promise<{
+        wrap?: DeadmanReleaseWrapRecord;
+        notice?: DeadmanReleaseNoticeRecord;
+        room?: { roomId: string; updatedAt: string };
+    }> {
         return {
             wrap: this.getDeadmanReleaseWrap(switchId, recipientAccountId),
             notice: this.getDeadmanReleaseNotice(switchId, recipientAccountId),
+            ...(options.personsRoom
+                ? { room: this.newestDeadmanNoticeRoom(recipientAccountId) }
+                : {}),
         };
     }
 
@@ -2883,6 +2903,16 @@ class InMemoryDb {
         _at: string
     ): Promise<number> {
         return 0;
+    }
+
+    /**
+     * Wait until every write this store has made has been attempted in its
+     * database. Here, and in the file store, there is nothing to wait for;
+     * the Postgres store drains its write-behind queue (a write that fails
+     * twice is dropped and logged there, and the drain still ends).
+     */
+    async drain(): Promise<void> {
+        return undefined;
     }
 
     /** Every release identity the account published, newest first. */
@@ -8926,30 +8956,48 @@ export class PostgresBackedDb extends InMemoryDb {
      *
      * The notice row as Postgres has it also goes into this mirror, when this
      * process wrote nothing to the row while it was read (the row is the same
-     * object before the drain and after the query): every write this process
-     * had made to it was queued before the drain, so the stored row is at
-     * least as new as the mirror's. So a leader taking over, whose catch-up
-     * wrote a pending row into its mirror while Postgres kept the row the old
-     * leader had already sent (the create is insert-only there), reads it
-     * sent and sends nothing, and one whose mirror lacks the room the old
-     * leader recorded uses that room rather than make another (round 7 of
-     * part 2's review: it sent the notice again, and with the alias refused
-     * made a second room). Postgres with no row leaves the mirror's alone.
+     * object before the drain and after the query). Every write this process
+     * had made to it was queued before the drain and has been attempted, so
+     * the stored row is at least as new as the mirror's unless one of those
+     * writes failed twice and was dropped (`db_write_behind_failed`): then
+     * the stored row is older than the mirror's, and the older one replaces
+     * it, except that while it is pending a room or a re-invite the mirror
+     * has and Postgres lacks is kept, so a room this process made is not
+     * made again, nor the person invited a second time for one notice, and
+     * the next full-row write of the row carries them into Postgres (round 8
+     * of part 2's review: the refresh put back a row without them). So a
+     * leader taking over, whose catch-up wrote a pending row into its mirror
+     * while Postgres kept the row the old leader had already sent (the
+     * create is insert-only there), reads it sent and sends nothing; one
+     * whose mirror lacks the room the old leader recorded on the row uses
+     * that room rather than make another (round 7: it sent the notice again,
+     * and with the alias refused made a second room); and one whose catch-up
+     * row is due while Postgres has the old leader's retry set for later
+     * leaves it for that time (round 8). Postgres with no row leaves the
+     * mirror's alone. With `personsRoom`, the recipient's newest row with a
+     * room is read from Postgres too (one indexed query, the person's rows),
+     * and nothing of it is put in the mirror.
      */
     override async readDeadmanReleaseCommitted(
         switchId: string,
-        recipientAccountId: string
-    ): Promise<{ wrap?: DeadmanReleaseWrapRecord; notice?: DeadmanReleaseNoticeRecord }> {
+        recipientAccountId: string,
+        options: { personsRoom?: boolean } = {}
+    ): Promise<{
+        wrap?: DeadmanReleaseWrapRecord;
+        notice?: DeadmanReleaseNoticeRecord;
+        room?: { roomId: string; updatedAt: string };
+    }> {
         const wraps = this.plans.get('deadmanReleaseWraps');
         const notices = this.plans.get('deadmanReleaseNotices');
         if (!this.pool || !wraps || !notices) {
-            return super.readDeadmanReleaseCommitted(switchId, recipientAccountId);
+            return super.readDeadmanReleaseCommitted(switchId, recipientAccountId, options);
         }
         const seen = this.getDeadmanReleaseNotice(switchId, recipientAccountId);
         await this.drain();
         const client = await this.pool.connect();
         let wrapRow: Record<string, unknown> | undefined;
         let noticeRow: Record<string, unknown> | undefined;
+        let roomRow: Record<string, unknown> | undefined;
         try {
             const where = 'WHERE switch_id = $1 AND recipient_account_id = $2';
             wrapRow = (
@@ -8964,18 +9012,55 @@ export class PostgresBackedDb extends InMemoryDb {
                     [switchId, recipientAccountId]
                 )
             ).rows[0];
+            if (options.personsRoom) {
+                roomRow = (
+                    await client.query<Record<string, unknown>>(
+                        `SELECT * FROM ${notices.descriptor.tableName} ` +
+                            'WHERE recipient_account_id = $1 AND room_id IS NOT NULL ' +
+                            'ORDER BY updated_at DESC LIMIT 1',
+                        [recipientAccountId]
+                    )
+                ).rows[0];
+            }
         } finally {
             client.release?.();
         }
-        const stored = noticeRow ? rowToRecord(notices, noticeRow) : undefined;
+        const stored = noticeRow
+            ? (rowToRecord(notices, noticeRow) as unknown as DeadmanReleaseNoticeRecord)
+            : undefined;
         if (stored && this.getDeadmanReleaseNotice(switchId, recipientAccountId) === seen) {
-            this.mapByName('deadmanReleaseNotices').set(notices.descriptor.keyOf(stored), stored);
+            // A room or a re-invite of this process's that Postgres lacks on
+            // a row still pending there: a write of it was dropped.
+            const kept =
+                seen && stored.status === 'pending'
+                    ? {
+                          ...(seen.roomId && !stored.roomId ? { roomId: seen.roomId } : {}),
+                          ...(seen.reinvitedAt && !stored.reinvitedAt
+                              ? { reinvitedAt: seen.reinvitedAt }
+                              : {}),
+                      }
+                    : {};
+            this.mapByName('deadmanReleaseNotices').set(
+                notices.descriptor.keyOf(stored as unknown as Record<string, unknown>),
+                { ...stored, ...kept }
+            );
         }
+        const room = roomRow
+            ? (rowToRecord(notices, roomRow) as Record<string, unknown>)
+            : undefined;
         return {
             wrap: wrapRow
                 ? (rowToRecord(wraps, wrapRow) as unknown as DeadmanReleaseWrapRecord)
                 : undefined,
-            notice: stored as unknown as DeadmanReleaseNoticeRecord | undefined,
+            notice: stored,
+            ...(options.personsRoom
+                ? {
+                      room:
+                          room && typeof room.roomId === 'string'
+                              ? { roomId: room.roomId, updatedAt: String(room.updatedAt) }
+                              : undefined,
+                  }
+                : {}),
         };
     }
 
@@ -9045,7 +9130,7 @@ export class PostgresBackedDb extends InMemoryDb {
 
     /** Flush queued writes. Does NOT close the change subscription — safe to call
      * repeatedly (e.g. to await durability) without unsubscribing from peers. */
-    async drain(): Promise<void> {
+    override async drain(): Promise<void> {
         await this.queue?.drain();
     }
 

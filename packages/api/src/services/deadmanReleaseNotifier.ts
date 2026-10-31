@@ -110,16 +110,29 @@
  * Before anything is asked of the homeserver, and again right before it makes
  * a room, invites the person and sends, the notifier reads the person's copy
  * and the notice row from the database itself, not from the mirror
- * (`checkDatabase`, through `readDeadmanReleaseCommitted`), each read bounded
- * as a homeserver call is (`database_read_timeout`, a retry). A row the
- * database has as sent or ended is taken as it is there and nothing is
- * written to it, and the stored row goes into this mirror: so a leader taking
- * over within the change notification's lag, whose catch-up wrote the row its
- * mirror lacked as pending, sends nothing the old leader sent, and takes the
- * room the old leader recorded rather than make another (round 7: insert-only
- * kept Postgres at `sent`, but the new leader's own tick sent the notice
- * again from its mirror, and with the alias refused made a second room and
- * invited the person into it). A deletion blanks every copy sealed to the
+ * (`checkDatabase`, through `readDeadmanReleaseCommitted`), and the first
+ * read also the person's newest recorded room there, each read bounded as a
+ * homeserver call is (`database_read_timeout`, a retry). A row the database
+ * has as sent or ended is taken as it is there and nothing is written to it;
+ * one it has pending with a retry set for later than now is left for that
+ * time, nothing written either; and the stored row goes into this mirror
+ * (unless this process wrote to it during the read; where a write of this
+ * process's to it was dropped, the stored row is the older, and a room or a
+ * re-invite the mirror recorded on a row still pending is kept). A notice
+ * whose own row names no room takes the newest room any row of the person's
+ * records, in the mirror or in the database. So a leader taking over within
+ * the change notification's lag, whose catch-up wrote the row its mirror
+ * lacked as pending and due, sends nothing the old leader sent, waits for a
+ * retry the old leader set (an alias room the old leader found still being
+ * made gets its whole backoff), and takes the room the old leader recorded
+ * on any of the person's notices rather than make another (round 7:
+ * insert-only kept Postgres at `sent`, but the new leader's own tick sent the
+ * notice again from its mirror, and with the alias refused made a second
+ * room and invited the person into it; round 8: it attempted at once a row
+ * the old leader had set to retry, and took a room still being made for an
+ * abandoned one, and with the alias refused it made a second room for
+ * another of the person's notices when only the old leader's rows recorded
+ * the person's room). A deletion blanks every copy sealed to the
  * account before it ends the notices and deletes the user row, so once it has
  * committed, no room is made, nobody is invited and nothing is sent for that
  * person after the next of those reads, also for a notice row the deleting
@@ -144,12 +157,22 @@
  * as on one process when the deletion lands during the send; for a row it had
  * not seen whose send was in flight, the row ends `failed` with
  * `recipient_gone` if the deletion's last statement comes first, and `sent`
- * with no room if this process's write does; two notifiers that both read one
- * notice pending before either has recorded it can both send it, with the same
- * transaction id, which the homeserver drops while it keeps the id (below);
- * and if the deletion's last statement fails (logged) or the API process stops
- * before it, a row it had not seen keeps what the notifier wrote, a room and
- * `sent` included where the send had begun before the deletion committed.
+ * with no room if this process's write does; two notifiers working on the
+ * person's notices at the same moment (one notice both read pending before
+ * either recorded it, or two of the person's notices before either recorded
+ * a room) can, where the homeserver refuses the alias, each make the person a
+ * room and send there, and the transaction id is deduplicated only within one
+ * room (below), so the person can get an invitation and the notice in each of
+ * two rooms (with the alias, the second create finds the first's room, and
+ * two sends of one notice into it are deduplicated while the homeserver keeps
+ * the id); and until the deletion's last statement has run, which can be
+ * after the route answered (it waits for it at most 10 s), and for good if it
+ * fails (logged) or the API process stops before it, a row it had not seen
+ * keeps what the notifier wrote, a room and `sent` included where the send
+ * had begun before the deletion committed (a row still pending the notifier
+ * ends itself at its next read: the route answers only once the deletion's
+ * own writes, the blanked copies among them, have been attempted in the
+ * database).
  *
  * Each homeserver call has `NOTICE_CALL_TIMEOUT_MS` to answer; one that does
  * not is that notice's retry (`matrix_<call>_timeout`) and its request is
@@ -182,7 +205,10 @@
  *
  * Matrix transaction id `deadman-release-<switch>-<recipient>`, so a resend
  * soon after a crash, or a retry of a send the homeserver accepted after the
- * call's timeout, is deduplicated for as long as the homeserver keeps the id:
+ * call's timeout, into the same room is deduplicated (the homeserver keys a
+ * transaction on the request's path, the room id in it, and its table below
+ * on the room too, so the same id in another room is another event) for as
+ * long as the homeserver keeps the id:
  * 30 to 60 minutes in its memory for a token without a device (one minted
  * through the admin API; lost on a homeserver restart), and 24 hours in its
  * database for one with a device (a `/login` token: `event_txn_id_device_id`).
@@ -299,9 +325,11 @@ export interface NotifierResult {
     failed: number;
     /**
      * Due, but another tick had it: one an overlapping tick in this process
-     * holds (skipped), or one found sent by another process (two notifiers
-     * during a leader handover, say) when this tick finished with it. Nothing
-     * is written to them here, and they are not counted as sent or failed.
+     * holds (skipped), one found sent by another process (two notifiers
+     * during a leader handover, say) when this tick finished with it, or one
+     * the database has pending with a retry another process set for later
+     * (`checkDatabase`). Nothing is written to them here, and they are not
+     * counted as sent, retried or failed.
      */
     elsewhere: number;
 }
@@ -359,7 +387,15 @@ type Step =
      * this process's mirror still read it pending: nothing is written here,
      * and it is counted as it stands there.
      */
-    | { kind: 'ended'; status: 'sent' | 'failed' };
+    | { kind: 'ended'; status: 'sent' | 'failed' }
+    /**
+     * The database has the row pending with its next attempt later than this
+     * read: another process attempted it and recorded a retry this process's
+     * mirror had not heard of (a leader taking over within the change
+     * notification's lag). Nothing is written here; the row, which the store
+     * put in the mirror, waits for its time, and is counted as elsewhere.
+     */
+    | { kind: 'notDue' };
 
 /** A homeserver call that threw, carried to `processOne` as this notice's retry. */
 class NoticeCallThrew extends Error {
@@ -417,12 +453,33 @@ const stillPending = (key: {
 
 /**
  * Read the person's copy and the notice row as the database has them, not as
- * this process's mirror does (`readDeadmanReleaseCommitted`), bounded as a
+ * this process's mirror does (`readDeadmanReleaseCommitted`), and, with
+ * `personsRoom`, the person's newest recorded room there; bounded as a
  * homeserver call is: a read that has not answered after `timeoutMs` is that
  * notice's retry (`database_read_timeout`). A database error is thrown to
- * `processOne`, a retry too (`notifier_threw`). Returns the step that ends
- * this attempt, or `undefined` to go on. Called before anything is asked of
- * the homeserver and again right before each create, re-invite and send.
+ * `processOne`, a retry too (`notifier_threw`).
+ */
+const readDatabase = async (
+    key: { switchId: string; recipientAccountId: string },
+    timeoutMs: number,
+    options: { personsRoom?: boolean } = {}
+) => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    return Promise.race([
+        db.readDeadmanReleaseCommitted(key.switchId, key.recipientAccountId, options),
+        new Promise<never>((_, reject) => {
+            timer = setTimeout(
+                () =>
+                    reject(new NoticeCallThrew({ kind: 'retry', reason: 'database_read_timeout' })),
+                timeoutMs
+            );
+        }),
+    ]).finally(() => clearTimeout(timer));
+};
+
+/**
+ * What a read of the database says of this attempt: the step that ends it,
+ * or `undefined` to go on.
  *
  * An account deletion blanks every copy sealed to the account before it ends
  * the notices and deletes the user row, so a deletion another process
@@ -435,30 +492,40 @@ const stillPending = (key: {
  * attempt's to send, and the store has put it in the mirror (round 7). A copy
  * the mirror holds and the database has no row for is one whose write failed
  * twice and was dropped: the person exists, but nothing they could read after
- * a restart is there to point at (`copy_unavailable`). On one process the
- * database is the mirror and this reads it again.
+ * a restart is there to point at (`copy_unavailable`). A row the database has
+ * pending with its next attempt later than `clock()` is another process's
+ * retry, which this process's mirror had not heard of: it is left for that
+ * time, and the store has put it in the mirror with that time (round 8). On
+ * one process the database is the mirror, and a row listed as due is due.
  */
-const checkDatabase = async (
+const judgeCommitted = (
     key: { switchId: string; recipientAccountId: string },
-    timeoutMs: number
-): Promise<Step | undefined> => {
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const committed = await Promise.race([
-        db.readDeadmanReleaseCommitted(key.switchId, key.recipientAccountId),
-        new Promise<never>((_, reject) => {
-            timer = setTimeout(
-                () =>
-                    reject(new NoticeCallThrew({ kind: 'retry', reason: 'database_read_timeout' })),
-                timeoutMs
-            );
-        }),
-    ]).finally(() => clearTimeout(timer));
+    committed: Awaited<ReturnType<typeof readDatabase>>,
+    clock: () => number
+): Step | undefined => {
     if (!stillPending(key)) return RECIPIENT_GONE;
     const stored = committed.notice;
     if (stored && stored.status !== 'pending') return { kind: 'ended', status: stored.status };
     if (!committed.wrap) return COPY_UNAVAILABLE;
-    return wrapIsHeld(committed.wrap) ? undefined : RECIPIENT_GONE;
+    if (!wrapIsHeld(committed.wrap)) return RECIPIENT_GONE;
+    // Pending there, with a retry another process recorded for later (round
+    // 8 of part 2's review: a new leader whose catch-up wrote the row due now
+    // attempted it at once, and took an alias room still being made, which
+    // the old leader had looked at seconds before, for an abandoned one).
+    if (stored && Date.parse(stored.nextAttemptAt) > clock()) return NOT_DUE;
+    return undefined;
 };
+
+/**
+ * Read the database (`readDatabase`) and judge it (`judgeCommitted`). Called
+ * before anything is asked of the homeserver (with the person's room, by
+ * `attempt`) and again right before each create, re-invite and send.
+ */
+const checkDatabase = async (
+    key: { switchId: string; recipientAccountId: string },
+    timeoutMs: number,
+    clock: () => number
+): Promise<Step | undefined> => judgeCommitted(key, await readDatabase(key, timeoutMs), clock);
 
 /**
  * The recipient is gone: the row was ended meanwhile, and nothing more is
@@ -470,6 +537,9 @@ const RECIPIENT_GONE: Step = { kind: 'failed', reason: 'recipient_gone' };
 
 /** The person's copy is in this process's mirror and not in the database (`checkDatabase`). */
 const COPY_UNAVAILABLE: Step = { kind: 'failed', reason: 'copy_unavailable' };
+
+/** The database has the row set to retry later than now (`checkDatabase`). */
+const NOT_DUE: Step = { kind: 'notDue' };
 
 /** A room found through the alias that is not yet the room the create makes: retried once (`checkRoom`). */
 export const ALIAS_ROOM_NOT_READY = 'matrix_alias_room_not_ready';
@@ -549,6 +619,7 @@ const checkRoom = async (
     mxid: string,
     matrix: MatrixForNotices,
     callTimeoutMs: number,
+    clock: () => number,
     madeBy?: string
 ): Promise<RoomCheck> => {
     const key = { switchId: current.switchId, recipientAccountId: current.recipientAccountId };
@@ -572,7 +643,7 @@ const checkRoom = async (
     if (membership !== 'join' && membership !== 'invite' && !current.reinvitedAt) {
         // From the database right before the invite: a deletion committed
         // while the state was read (round 7 of part 2's review).
-        const stop = await checkDatabase(key, callTimeoutMs);
+        const stop = await checkDatabase(key, callTimeoutMs, clock);
         if (stop) return stop;
         const invited = await guarded('invite', callTimeoutMs, (signal) =>
             matrix.inviteToRoom(roomId, mxid, undefined, { isDirect: true, signal })
@@ -649,11 +720,12 @@ const makeRoom = async (
     current: DeadmanReleaseNoticeRecord,
     mxid: string,
     matrix: MatrixForNotices,
-    callTimeoutMs: number
+    callTimeoutMs: number,
+    clock: () => number
 ): Promise<{ roomId: string } | Step> => {
     const key = { switchId: current.switchId, recipientAccountId: current.recipientAccountId };
     const withoutAlias = async (): Promise<{ roomId: string } | Step> => {
-        const stop = await checkDatabase(key, callTimeoutMs);
+        const stop = await checkDatabase(key, callTimeoutMs, clock);
         if (stop) return stop;
         const plain = await createNoticeRoom(mxid, matrix, callTimeoutMs, false);
         if (!stillPending(key)) return RECIPIENT_GONE;
@@ -662,7 +734,7 @@ const makeRoom = async (
     };
     // From the database right before the create: a deletion committed while
     // a known room's state was read (round 7 of part 2's review).
-    const stop = await checkDatabase(key, callTimeoutMs);
+    const stop = await checkDatabase(key, callTimeoutMs, clock);
     if (stop) return stop;
     const created = await createNoticeRoom(mxid, matrix, callTimeoutMs, true);
     // The row, read again before the room is recorded on it: a deletion that
@@ -687,11 +759,26 @@ const makeRoom = async (
     if (!stillPending(key)) return RECIPIENT_GONE;
     // No id (no homeserver configured, which the create would already have
     // answered) matches no creator, so the room is not taken as the bot's.
-    const room = await checkRoom(found.roomId, current, mxid, matrix, callTimeoutMs, bot ?? '');
+    const room = await checkRoom(
+        found.roomId,
+        current,
+        mxid,
+        matrix,
+        callTimeoutMs,
+        clock,
+        bot ?? ''
+    );
     if (room.kind === 'unusable') return withoutAlias();
     if (room.kind !== 'ok') return room;
     return { roomId: found.roomId };
 };
+
+/** Of two recorded rooms, the one whose row was written later (the mirror's on a tie). */
+const newer = (
+    mine: { roomId: string; updatedAt: string } | undefined,
+    stored: { roomId: string; updatedAt: string } | undefined
+): { roomId: string; updatedAt: string } | undefined =>
+    !mine || (stored && Date.parse(stored.updatedAt) > Date.parse(mine.updatedAt)) ? stored : mine;
 
 /**
  * Find or make the person's standing room, and make sure they are invited or
@@ -705,7 +792,9 @@ const resolveRoom = async (
     notice: DeadmanReleaseNoticeRecord,
     mxid: string,
     matrix: MatrixForNotices,
-    callTimeoutMs: number
+    callTimeoutMs: number,
+    clock: () => number,
+    recorded: { roomId: string; updatedAt: string } | undefined
 ): Promise<{ roomId: string } | Step> => {
     const key = { switchId: notice.switchId, recipientAccountId: notice.recipientAccountId };
     // Read again: a notice for the same person that held the slot before this
@@ -713,10 +802,18 @@ const resolveRoom = async (
     // have ended the row while this one waited for the slot.
     const current = stillPending(key);
     if (!current) return RECIPIENT_GONE;
-    let roomId = current.roomId ?? db.findDeadmanNoticeRoom(notice.recipientAccountId);
+    // The person's room: this row's, or else the newest one any row of
+    // theirs records, in this process's mirror (read now, so a room another
+    // notice of theirs made while this one waited for the slot counts) or in
+    // the database (`recorded`, read at the attempt's start: round 8 of part
+    // 2's review, a new leader whose mirror lacked the room the old leader
+    // recorded on another of the person's notices made them a second room).
+    let roomId =
+        current.roomId ??
+        newer(db.newestDeadmanNoticeRoom(notice.recipientAccountId), recorded)?.roomId;
     let deadRoom: string | undefined;
     if (roomId) {
-        const known = await checkRoom(roomId, current, mxid, matrix, callTimeoutMs);
+        const known = await checkRoom(roomId, current, mxid, matrix, callTimeoutMs, clock);
         if (known.kind === 'unusable') {
             // The room is gone (purged, say): make another, below.
             deadRoom = roomId;
@@ -726,7 +823,7 @@ const resolveRoom = async (
         }
     }
     if (!roomId) {
-        const made = await makeRoom(current, mxid, matrix, callTimeoutMs);
+        const made = await makeRoom(current, mxid, matrix, callTimeoutMs, clock);
         if (!('roomId' in made)) return made;
         roomId = made.roomId;
         // Recorded before the send, so a crash here does not make a second
@@ -774,25 +871,28 @@ const attempt = async (
     notice: DeadmanReleaseNoticeRecord,
     record: DeadmanSwitchRecord,
     matrix: MatrixForNotices,
-    callTimeoutMs: number
+    callTimeoutMs: number,
+    clock: () => number
 ): Promise<Step> => {
     const wrap = db.getDeadmanReleaseWrap(notice.switchId, notice.recipientAccountId);
     const mxid = matrixUserIdFor(notice.recipientAccountId);
     if (!wrap || !wrapIsHeld(wrap) || !mxid) return RECIPIENT_GONE;
     // From the database itself, before anything is asked of the homeserver:
     // nothing is asked for an account already deleted, or for a notice
-    // another process already sent.
-    const stop = await checkDatabase(notice, callTimeoutMs);
+    // another process already sent or set to retry later; and the person's
+    // newest recorded room, for `resolveRoom`.
+    const first = await readDatabase(notice, callTimeoutMs, { personsRoom: true });
+    const stop = judgeCommitted(notice, first, clock);
     if (stop) return stop;
 
     const room = await withRoomSlot(notice.recipientAccountId, () =>
-        resolveRoom(notice, mxid, matrix, callTimeoutMs)
+        resolveRoom(notice, mxid, matrix, callTimeoutMs, clock, first.room)
     );
     if (!('roomId' in room)) return room;
 
     // Again right before the send: a deletion committed while the room was
     // being found or made, or another process sent it meanwhile.
-    const late = await checkDatabase(notice, callTimeoutMs);
+    const late = await checkDatabase(notice, callTimeoutMs, clock);
     if (late) return late;
 
     const sent = await guarded('send', callTimeoutMs, (signal) =>
@@ -824,7 +924,8 @@ const processOne = async (
     notice: DeadmanReleaseNoticeRecord,
     now: Date,
     matrix: MatrixForNotices,
-    callTimeoutMs: number
+    callTimeoutMs: number,
+    clock: () => number
 ): Promise<Step> => {
     const record = db.getDeadmanSwitch(notice.switchId);
     // Only a release switch that fired has `releasedAt`; an empty payload is
@@ -838,7 +939,7 @@ const processOne = async (
         return { kind: 'failed', reason: 'retry_window_over' };
     }
     try {
-        return await attempt(notice, record, matrix, callTimeoutMs);
+        return await attempt(notice, record, matrix, callTimeoutMs, clock);
     } catch (err) {
         if (err instanceof NoticeCallThrew) return err.step;
         // Not a homeserver call: still this notice's failure, not the tick's.
@@ -884,8 +985,9 @@ export const runDeadmanReleaseNotifier = async (
     // in Postgres only where the table has none either, so a leader that has
     // not yet heard of a row the old one sent does not set it back to pending
     // there (round 6 of part 2's review); its own mirror then reads it
-    // pending, and `checkDatabase` reads it as Postgres has it before
-    // anything is sent (round 7).
+    // pending and due, and `checkDatabase` reads it as Postgres has it before
+    // anything is sent (round 7) or attempted at all: a retry Postgres has
+    // for later is left for that time (round 8).
     for (const record of db.listAllDeadmanSwitches()) {
         if (!record.releasedAt || record.encryptedPayload === '') continue;
         result.caughtUp += writeReleaseNotices(record, record.releasedAt);
@@ -906,7 +1008,7 @@ export const runDeadmanReleaseNotifier = async (
         }
         inFlight.add(key);
         try {
-            const step = await processOne(notice, now, matrix, callTimeoutMs);
+            const step = await processOne(notice, now, matrix, callTimeoutMs, clock);
             const at = new Date().toISOString();
             // The row, read again before anything is written to it: a deletion
             // that landed while this notice was in flight has ended the row
@@ -929,6 +1031,9 @@ export const runDeadmanReleaseNotifier = async (
                 // row (this process wrote it during the read). Nothing written.
                 if (step.status === 'sent') result.elsewhere += 1;
                 else result.failed += 1;
+            } else if (step.kind === 'notDue') {
+                // Another process's retry, set for later: nothing written.
+                result.elsewhere += 1;
             } else if (step.kind === 'sent') {
                 // The account, read again: one gone another way ends it here.
                 if (!db.getUserById(notice.recipientAccountId)) {
