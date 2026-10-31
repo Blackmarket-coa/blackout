@@ -57,6 +57,44 @@ def _parse_jwks(jwks: Optional[JsonDict]) -> Optional["JsonWebKey"]:
     return JsonWebKey.import_key(jwks)
 
 
+def _check_private_key_jwk(jwk: "JsonWebKey", client_id: str) -> None:
+    """Refuse a JWK that cannot sign the private_key_jwt client assertion.
+
+    ``PrivateKeyJWTWithKid.sign`` (``synapse/api/auth/msc3861_delegated.py``)
+    signs an RS256 assertion with this key for every token introspection.
+    From authlib 1.7.0 that goes through joserfc, which refuses a key whose
+    ``alg`` names another algorithm; a key that is public only, is not RSA,
+    or has ``use: enc`` was refused before that too. The homeserver would
+    start and then answer every authenticated request with 503. So refuse
+    such a key here, with the same call the request makes.
+    (Blackout fork patch, see PATCHES.md, 2026-10-30.)
+    """
+    path = ("experimental", "msc3861", "jwk")
+    alg = jwk.tokens.get("alg")
+    if alg is not None and alg != "RS256":
+        raise ConfigError(
+            f'The private_key_jwt client assertion is signed with RS256, but the JWK has "alg": {alg!r}',
+            path,
+        )
+
+    from authlib.oauth2.rfc7523 import private_key_jwt_sign
+
+    try:
+        # As PrivateKeyJWTWithKid.sign calls it; the endpoint is the audience.
+        private_key_jwt_sign(
+            jwk,
+            client_id=client_id,
+            token_endpoint="https://msc3861-startup-check.invalid/",
+            header={"kid": jwk["kid"]},
+        )
+    except Exception as e:
+        raise ConfigError(
+            "The JWK cannot sign the private_key_jwt client assertion: "
+            f"{type(e).__name__}: {e}",
+            path,
+        ) from e
+
+
 @attr.s(slots=True, frozen=True)
 class MSC3861:
     """Configuration for MSC3861: Matrix architecture change to delegate authentication via OIDC"""
@@ -114,12 +152,17 @@ class MSC3861:
         if not self.enabled:
             return
 
-        if value == ClientAuthMethod.PRIVATE_KEY_JWT and self.jwk is None:
-            raise ConfigError(
-                "A JWKS must be provided when using the private_key_jwt client auth method",
-                ("experimental", "msc3861", "client_auth_method"),
-            )
+        if value == ClientAuthMethod.PRIVATE_KEY_JWT:
+            if self.jwk is None:
+                raise ConfigError(
+                    "A JWKS must be provided when using the private_key_jwt client auth method",
+                    ("experimental", "msc3861", "client_auth_method"),
+                )
+            _check_private_key_jwk(self.jwk, self.client_id)
 
+        # An empty secret is refused like a missing one: MSC3861DelegatedAuth
+        # asserts it is truthy, and authlib 1.9.1 cannot sign client_secret_jwt
+        # with it. (Blackout fork patch, see PATCHES.md, 2026-10-30.)
         if (
             value
             in (
@@ -127,7 +170,7 @@ class MSC3861:
                 ClientAuthMethod.CLIENT_SECRET_BASIC,
                 ClientAuthMethod.CLIENT_SECRET_JWT,
             )
-            and self.client_secret is None
+            and not self.client_secret
         ):
             raise ConfigError(
                 f"A client secret must be provided when using the {value} client auth method",
