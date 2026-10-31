@@ -384,26 +384,51 @@ export const eraseReleaseCopiesAndNoticesOf = (
     }
 };
 
+/** How long the deletion route waits for `finishAccountDeletion` before it answers anyway. */
+export const ACCOUNT_DELETION_FINISH_TIMEOUT_MS = 10 * 1000;
+
 /**
  * What an account deletion finishes once its writes are made: in the
  * database itself, every notice still pending to the account ends and every
  * notice row of theirs forgets its room, including a row another process
  * wrote that this one had not heard of (the worker's sweep, moments before;
  * `endDeadmanReleaseNoticesOfDeletedAccount`). Nothing to do with one
- * process. The route awaits it after `confirmAccountDeletion`; a failure is
- * logged, the deletion stands, and such a row is then as the notifier leaves
- * it (round 6 of part 2's review).
+ * process. The route awaits it after `confirmAccountDeletion` and after it
+ * revokes the session; a failure is logged, the deletion stands, and such a
+ * row is then as the notifier leaves it (round 6 of part 2's review). The
+ * wait is bounded: past `timeoutMs` (the database's queue or a connection
+ * stalled) it is logged and this returns, and the end goes on without anyone
+ * waiting for it (round 7: unbounded, a stalled pool held the route's answer
+ * for good).
  */
 export const finishAccountDeletion = async (
     accountId: string,
-    store: typeof db = db
+    store: typeof db = db,
+    timeoutMs: number = ACCOUNT_DELETION_FINISH_TIMEOUT_MS
 ): Promise<void> => {
-    try {
-        await store.endDeadmanReleaseNoticesOfDeletedAccount(accountId, new Date().toISOString());
-    } catch (err) {
-        log.warn('account_deletion_finish_failed', {
-            error: err instanceof Error ? err.message : String(err),
-        });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const end = Promise.resolve()
+        .then(() =>
+            store.endDeadmanReleaseNoticesOfDeletedAccount(accountId, new Date().toISOString())
+        )
+        .then(
+            () => 'done' as const,
+            (err: unknown) => {
+                log.warn('account_deletion_finish_failed', {
+                    error: err instanceof Error ? err.message : String(err),
+                });
+                return 'failed' as const;
+            }
+        );
+    const outcome = await Promise.race([
+        end,
+        new Promise<'timeout'>((resolve) => {
+            timer = setTimeout(() => resolve('timeout'), timeoutMs);
+        }),
+    ]);
+    clearTimeout(timer);
+    if (outcome === 'timeout') {
+        log.warn('account_deletion_finish_timeout', { timeoutMs });
     }
 };
 

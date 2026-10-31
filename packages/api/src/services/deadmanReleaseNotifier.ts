@@ -6,7 +6,8 @@
  * The sweep writes one `deadman_release_notices` row per recipient as it fires
  * a release switch; this loop, beside it, sends them. Each notice is an
  * `m.text` in the recipient's standing "Blackout notices" room, a room the bot
- * creates once per account, with the person invited as a direct message and
+ * creates, one per person and reused (except where §11 and the paragraphs
+ * below say), with the person invited as a direct message and
  * power levels under which only the bot posts or invites. The room is **not
  * end-to-end encrypted**, and is made so deliberately: the bot is a plain HTTP
  * client with no Megolm implementation and cannot encrypt, so the notice is
@@ -96,45 +97,71 @@
  * later error over its reason); a row ended any other way meanwhile is left as
  * it is. That read is this process's mirror. Where the deletion runs in
  * another process (the API process, with the loops in a worker of their own,
- * as `deploy/docker/production` runs them), three things carry it into the
- * database. Every change written here is conditional in Postgres
+ * as `deploy/docker/production` runs them), or another notifier has the same
+ * notice (two leaders during a handover), four things carry the database's
+ * view here. Every change written here is conditional in Postgres
  * (`updateDeadmanReleaseNoticeIf`: applied only while the stored row is still
  * pending, or still names the room it is being moved off), and the catch-up's
  * creation of a row the mirror lacks is insert-only there
  * (`createDeadmanReleaseNotice`), so nothing here lands over a row another
  * process ended or sent (round 5 of part 2's review: the notifier's full-row
  * write landed over the deletion's, and Postgres ended `sent` with the room;
- * round 6: the catch-up's create set a sent row back to pending, and it was
- * sent again). Before it makes a room and again before it sends, the notifier
- * reads the person's copy from the database itself, not from the mirror
- * (`copyHeldInDatabase`): a deletion blanks every copy sealed to the account
- * first, so once one has committed nothing is made or sent for that person,
- * also for a notice row the deleting process had not heard of when it deleted
- * (the sweep wrote it moments before), which its own writes could not end
- * (round 6: such a notice was sent after the deletion and kept its room for
- * good). And the deletion finishes with one statement in the database
- * (`finishAccountDeletion`) that ends every notice row still pending to the
- * account and forgets the room of every one, that row included. Until the
- * other process's change notification arrives, this process's mirror and its
- * tick's count can say sent where the database says otherwise. What is left:
- * a notice whose send had begun when the deletion committed can still arrive,
- * as on one process; a deletion that commits after this process's write to a
- * row it had seen lands over it, as its own write: no room, and, unless it had
- * already seen the row sent, `failed` with `recipient_gone` for a notice the
- * homeserver accepted, as on one process when the deletion lands during the
- * send; and if the deletion's last statement fails (logged) or the API
- * process stops before it, a row it had not seen keeps what the notifier
- * wrote, a room and `sent` included where the send had begun before the
- * deletion committed.
+ * round 6: the catch-up's create set a sent row back to pending in Postgres).
+ * Before anything is asked of the homeserver, and again right before it makes
+ * a room, invites the person and sends, the notifier reads the person's copy
+ * and the notice row from the database itself, not from the mirror
+ * (`checkDatabase`, through `readDeadmanReleaseCommitted`), each read bounded
+ * as a homeserver call is (`database_read_timeout`, a retry). A row the
+ * database has as sent or ended is taken as it is there and nothing is
+ * written to it, and the stored row goes into this mirror: so a leader taking
+ * over within the change notification's lag, whose catch-up wrote the row its
+ * mirror lacked as pending, sends nothing the old leader sent, and takes the
+ * room the old leader recorded rather than make another (round 7: insert-only
+ * kept Postgres at `sent`, but the new leader's own tick sent the notice
+ * again from its mirror, and with the alias refused made a second room and
+ * invited the person into it). A deletion blanks every copy sealed to the
+ * account before it ends the notices and deletes the user row, so once it has
+ * committed, no room is made, nobody is invited and nothing is sent for that
+ * person after the next of those reads, also for a notice row the deleting
+ * process had not heard of when it deleted (the sweep wrote it moments
+ * before), which its own writes could not end (round 6: such a notice was
+ * sent after the deletion and kept its room for good; round 7: with no read
+ * right before a create or a re-invite, a deletion that committed while a
+ * known room's state was being read still got a room made for the person's
+ * Matrix id, or them invited again). A copy this process's mirror holds and
+ * the database does not (its write failed twice and was dropped) ends the
+ * notice `failed` with `copy_unavailable`, unsent. And the deletion finishes
+ * with one statement in the database (`finishAccountDeletion`) that ends
+ * every notice row still pending to the account and forgets the room of every
+ * one, that row included. Until the other process's change notification
+ * arrives, this process's mirror and its tick's count can say sent where the
+ * database says otherwise. What is left: a create, a re-invite or a send
+ * already on its way to the homeserver when the deletion committed (after the
+ * read just before it) can still reach the person, as on one process; a
+ * deletion that commits after this process's write to a row it had seen lands
+ * over it, as its own write: no room, and, unless it had already seen the row
+ * sent, `failed` with `recipient_gone` for a notice the homeserver accepted,
+ * as on one process when the deletion lands during the send; for a row it had
+ * not seen whose send was in flight, the row ends `failed` with
+ * `recipient_gone` if the deletion's last statement comes first, and `sent`
+ * with no room if this process's write does; two notifiers that both read one
+ * notice pending before either has recorded it can both send it, with the same
+ * transaction id, which the homeserver drops while it keeps the id (below);
+ * and if the deletion's last statement fails (logged) or the API process stops
+ * before it, a row it had not seen keeps what the notifier wrote, a room and
+ * `sent` included where the send had begun before the deletion committed.
  *
  * Each homeserver call has `NOTICE_CALL_TIMEOUT_MS` to answer; one that does
  * not is that notice's retry (`matrix_<call>_timeout`) and its request is
  * aborted. Without that, one connection the homeserver accepted and never
  * answered would hold the tick, and with it every other due notice, for
- * undici's default of five minutes, since the ticks do not overlap. A tick is
- * still a sequence, and a notice makes up to seven calls in turn (the state of
- * a known room, a create, the alias lookup, the bot's own id, the state of the
- * room found, a re-invite or a create without the alias, the send). The bot's
+ * undici's default of five minutes, since the ticks do not overlap. Each
+ * database read above has the same bound. A tick is still a sequence, and a
+ * notice makes up to seven homeserver calls in turn (the state of a known
+ * room, a create, the alias lookup, the bot's own id, the state of the room
+ * found, a re-invite or a create without the alias, the send) and up to four
+ * database reads among them (before the first call, and right before the
+ * first create, the second create or the re-invite, and the send). The bot's
  * id is cached for the process after the first whoami that is not cut short,
  * by this loop or any other caller in the API, a failed one included (a
  * refusal or a network error): that one caches the client's derived
@@ -142,10 +169,14 @@
  * bot's, every room found through an alias looks like another account's and is
  * replaced by one without it. So a homeserver that answers nothing holds a
  * tick of 50 notices for about 25 minutes, each notice ending at its first
- * call's timeout; one that answers slowly rather than not at all, in just
- * under the timeout each time, can hold one notice for up to seven timeouts
- * (three and a half minutes) and a tick of 50 for about three hours, with
- * every notice due beyond the 50 waiting for the next tick. The worker's
+ * call's timeout, and a database that answers nothing does the same at each
+ * notice's first read; a homeserver and a database that answer slowly rather
+ * than not at all, in just under the timeout each time, can hold one notice
+ * for up to eleven timeouts (five and a half minutes) and a tick of 50 for
+ * about four and a half hours, with every notice due beyond the 50 waiting
+ * for the next tick. A read that timed out goes on in the background (it
+ * cannot be aborted), so a stalled database can leave one waiting connection
+ * per such notice. The worker's
  * shutdown waits for a tick in flight only up to its own bound
  * (`backgroundTicks.ts`).
  *
@@ -230,7 +261,11 @@ export const noticeRoomAlias = (mxid: string): string =>
     `#${noticeRoomAliasLocalpart(mxid)}:${homeserverDomain()}`;
 
 /** Why a notice stopped being retried before the window closed. */
-export type NoticeTerminalReason = 'recipient_gone' | 'release_unavailable' | 'retry_window_over';
+export type NoticeTerminalReason =
+    | 'copy_unavailable'
+    | 'recipient_gone'
+    | 'release_unavailable'
+    | 'retry_window_over';
 
 /** The wait before attempt `attempts + 1`, given `attempts` so far. */
 export const noticeBackoffMs = (attempts: number): number =>
@@ -318,7 +353,13 @@ const withRoomSlot = async <T>(recipientAccountId: string, work: () => Promise<T
 type Step =
     | { kind: 'sent' }
     | { kind: 'retry'; reason: string }
-    | { kind: 'failed'; reason: string };
+    | { kind: 'failed'; reason: string }
+    /**
+     * The database has the row as sent or ended, by another process, while
+     * this process's mirror still read it pending: nothing is written here,
+     * and it is counted as it stands there.
+     */
+    | { kind: 'ended'; status: 'sent' | 'failed' };
 
 /** A homeserver call that threw, carried to `processOne` as this notice's retry. */
 class NoticeCallThrew extends Error {
@@ -375,30 +416,60 @@ const stillPending = (key: {
 };
 
 /**
- * Whether the person's copy of the release is still held as the database
- * has it, not as this process's mirror does, and the row is still pending.
- * An account deletion blanks every copy sealed to the account before
- * anything else, so a deletion another process committed (the API process,
- * with this loop in a worker) is seen here before its change notification
- * arrives, and also for a notice row that process had not seen when it
- * deleted (the sweep wrote it moments before), which its own writes could
- * not end: as round 5 left it the worker sent such a notice after the
- * deletion and kept its room for good (round 6 of part 2's review). On one
- * process the database is the mirror and this reads it again.
+ * Read the person's copy and the notice row as the database has them, not as
+ * this process's mirror does (`readDeadmanReleaseCommitted`), bounded as a
+ * homeserver call is: a read that has not answered after `timeoutMs` is that
+ * notice's retry (`database_read_timeout`). A database error is thrown to
+ * `processOne`, a retry too (`notifier_threw`). Returns the step that ends
+ * this attempt, or `undefined` to go on. Called before anything is asked of
+ * the homeserver and again right before each create, re-invite and send.
+ *
+ * An account deletion blanks every copy sealed to the account before it ends
+ * the notices and deletes the user row, so a deletion another process
+ * committed (the API process, with this loop in a worker) is seen here before
+ * its change notification arrives, and also for a notice row that process
+ * had not seen when it deleted (the sweep wrote it moments before), which its
+ * own writes could not end (round 6 of part 2's review; round 7 added the
+ * reads before a create and a re-invite). A row the database has as sent or
+ * ended (another notifier sent it during a leader handover, say) is not this
+ * attempt's to send, and the store has put it in the mirror (round 7). A copy
+ * the mirror holds and the database has no row for is one whose write failed
+ * twice and was dropped: the person exists, but nothing they could read after
+ * a restart is there to point at (`copy_unavailable`). On one process the
+ * database is the mirror and this reads it again.
  */
-const copyHeldInDatabase = async (key: {
-    switchId: string;
-    recipientAccountId: string;
-}): Promise<boolean> => {
-    const committed = await db.readDeadmanReleaseWrapCommitted(
-        key.switchId,
-        key.recipientAccountId
-    );
-    return committed !== undefined && wrapIsHeld(committed) && stillPending(key) !== undefined;
+const checkDatabase = async (
+    key: { switchId: string; recipientAccountId: string },
+    timeoutMs: number
+): Promise<Step | undefined> => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const committed = await Promise.race([
+        db.readDeadmanReleaseCommitted(key.switchId, key.recipientAccountId),
+        new Promise<never>((_, reject) => {
+            timer = setTimeout(
+                () =>
+                    reject(new NoticeCallThrew({ kind: 'retry', reason: 'database_read_timeout' })),
+                timeoutMs
+            );
+        }),
+    ]).finally(() => clearTimeout(timer));
+    if (!stillPending(key)) return RECIPIENT_GONE;
+    const stored = committed.notice;
+    if (stored && stored.status !== 'pending') return { kind: 'ended', status: stored.status };
+    if (!committed.wrap) return COPY_UNAVAILABLE;
+    return wrapIsHeld(committed.wrap) ? undefined : RECIPIENT_GONE;
 };
 
-/** The recipient is gone: the row was ended meanwhile, and nothing more is recorded on it. */
+/**
+ * The recipient is gone: the row was ended meanwhile, and nothing more is
+ * recorded on it. Also what a step returns for a row this process's mirror
+ * already reads as ended any other way; `processOne` counts such a row as it
+ * stands and writes nothing.
+ */
 const RECIPIENT_GONE: Step = { kind: 'failed', reason: 'recipient_gone' };
+
+/** The person's copy is in this process's mirror and not in the database (`checkDatabase`). */
+const COPY_UNAVAILABLE: Step = { kind: 'failed', reason: 'copy_unavailable' };
 
 /** A room found through the alias that is not yet the room the create makes: retried once (`checkRoom`). */
 export const ALIAS_ROOM_NOT_READY = 'matrix_alias_room_not_ready';
@@ -499,6 +570,10 @@ const checkRoom = async (
     }
     const membership = membershipOf(state.state, mxid);
     if (membership !== 'join' && membership !== 'invite' && !current.reinvitedAt) {
+        // From the database right before the invite: a deletion committed
+        // while the state was read (round 7 of part 2's review).
+        const stop = await checkDatabase(key, callTimeoutMs);
+        if (stop) return stop;
         const invited = await guarded('invite', callTimeoutMs, (signal) =>
             matrix.inviteToRoom(roomId, mxid, undefined, { isDirect: true, signal })
         );
@@ -578,11 +653,17 @@ const makeRoom = async (
 ): Promise<{ roomId: string } | Step> => {
     const key = { switchId: current.switchId, recipientAccountId: current.recipientAccountId };
     const withoutAlias = async (): Promise<{ roomId: string } | Step> => {
+        const stop = await checkDatabase(key, callTimeoutMs);
+        if (stop) return stop;
         const plain = await createNoticeRoom(mxid, matrix, callTimeoutMs, false);
         if (!stillPending(key)) return RECIPIENT_GONE;
         if (!plain.ok) return { kind: 'retry', reason: `matrix_create_${plain.reason}` };
         return { roomId: plain.roomId };
     };
+    // From the database right before the create: a deletion committed while
+    // a known room's state was read (round 7 of part 2's review).
+    const stop = await checkDatabase(key, callTimeoutMs);
+    if (stop) return stop;
     const created = await createNoticeRoom(mxid, matrix, callTimeoutMs, true);
     // The row, read again before the room is recorded on it: a deletion that
     // landed during the create has ended it and forgotten its rooms, and this
@@ -699,8 +780,10 @@ const attempt = async (
     const mxid = matrixUserIdFor(notice.recipientAccountId);
     if (!wrap || !wrapIsHeld(wrap) || !mxid) return RECIPIENT_GONE;
     // From the database itself, before anything is asked of the homeserver:
-    // no room is made, and nobody invited, for an account already deleted.
-    if (!(await copyHeldInDatabase(notice))) return RECIPIENT_GONE;
+    // nothing is asked for an account already deleted, or for a notice
+    // another process already sent.
+    const stop = await checkDatabase(notice, callTimeoutMs);
+    if (stop) return stop;
 
     const room = await withRoomSlot(notice.recipientAccountId, () =>
         resolveRoom(notice, mxid, matrix, callTimeoutMs)
@@ -708,8 +791,9 @@ const attempt = async (
     if (!('roomId' in room)) return room;
 
     // Again right before the send: a deletion committed while the room was
-    // being found or made.
-    if (!(await copyHeldInDatabase(notice))) return RECIPIENT_GONE;
+    // being found or made, or another process sent it meanwhile.
+    const late = await checkDatabase(notice, callTimeoutMs);
+    if (late) return late;
 
     const sent = await guarded('send', callTimeoutMs, (signal) =>
         matrix.sendEvent(room.roomId, noticeContent(record.id), {
@@ -799,7 +883,9 @@ export const runDeadmanReleaseNotifier = async (
     // switches' copies. A row is written only where the mirror has none, and
     // in Postgres only where the table has none either, so a leader that has
     // not yet heard of a row the old one sent does not set it back to pending
-    // (round 6 of part 2's review).
+    // there (round 6 of part 2's review); its own mirror then reads it
+    // pending, and `checkDatabase` reads it as Postgres has it before
+    // anything is sent (round 7).
     for (const record of db.listAllDeadmanSwitches()) {
         if (!record.releasedAt || record.encryptedPayload === '') continue;
         result.caughtUp += writeReleaseNotices(record, record.releasedAt);
@@ -838,6 +924,11 @@ export const runDeadmanReleaseNotifier = async (
             if (!ended || ended.status !== 'pending') {
                 if (ended?.status === 'sent') result.elsewhere += 1;
                 else result.failed += 1;
+            } else if (step.kind === 'ended') {
+                // The database has it ended or sent; the mirror kept its own
+                // row (this process wrote it during the read). Nothing written.
+                if (step.status === 'sent') result.elsewhere += 1;
+                else result.failed += 1;
             } else if (step.kind === 'sent') {
                 // The account, read again: one gone another way ends it here.
                 if (!db.getUserById(notice.recipientAccountId)) {
@@ -860,7 +951,9 @@ export const runDeadmanReleaseNotifier = async (
                         pending,
                         {
                             status: 'sent',
-                            attempts: notice.attempts + 1,
+                            // The row as read now, which the database's may
+                            // have replaced (`checkDatabase`).
+                            attempts: ended.attempts + 1,
                             sentAt: at,
                             lastError: undefined,
                         }
@@ -868,7 +961,7 @@ export const runDeadmanReleaseNotifier = async (
                     result.sent += 1;
                 }
             } else if (step.kind === 'retry') {
-                const attempts = notice.attempts + 1;
+                const attempts = ended.attempts + 1;
                 db.updateDeadmanReleaseNoticeIf(
                     notice.switchId,
                     notice.recipientAccountId,
@@ -915,8 +1008,10 @@ export const runDeadmanReleaseNotifier = async (
  * A tick that outlives the interval is not overlapped by the next one (as
  * `authRowsPruneScheduler.ts` does): the tick is asynchronous, so without this
  * a slow homeserver would stack ticks. The other side of that: a slow tick
- * holds every due notice behind it, which is why each call it makes is bounded
- * by `NOTICE_CALL_TIMEOUT_MS` (the header says what that leaves).
+ * holds every due notice behind it, which is why each homeserver call and
+ * each database read it makes for a notice is bounded by
+ * `NOTICE_CALL_TIMEOUT_MS` (the header says what that leaves). The catch-up
+ * and the due list read only this process's mirror.
  */
 export const startDeadmanReleaseNotifier = (
     intervalMs: number = DEFAULT_INTERVAL_MS

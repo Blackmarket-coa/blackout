@@ -2838,7 +2838,8 @@ class InMemoryDb {
 
     /**
      * The account's standing notices room: the room of its newest notice that
-     * has one. One room per account, reused for every release.
+     * has one, reused for every release (§11 of the envelope record says when
+     * a person is left with more than one).
      */
     findDeadmanNoticeRoom(accountId: string): string | undefined {
         return this.listDeadmanReleaseNoticesForRecipient(accountId)
@@ -2847,18 +2848,24 @@ class InMemoryDb {
     }
 
     /**
-     * One sealed copy as the database holds it, for a check that must not
-     * rest on this process's mirror alone: the notifier's, before it makes a
-     * room and before it sends. Here, and in the file store, the mirror is
-     * the database; the Postgres store reads the committed row, so an account
+     * One recipient's sealed copy and notice row as the database holds them,
+     * for the checks that must not rest on this process's mirror alone: the
+     * notifier's, before it makes a room, before it invites the person and
+     * before it sends. Here, and in the file store, the mirror is the
+     * database; the Postgres store reads the committed rows, so an account
      * deletion another process committed is seen before its change
-     * notification arrives (round 6 of part 2's review).
+     * notification arrives (round 6 of part 2's review), and so is a notice
+     * another process has already sent or ended (round 7: a leader taking
+     * over within the notification's lag sent it again from its mirror).
      */
-    async readDeadmanReleaseWrapCommitted(
+    async readDeadmanReleaseCommitted(
         switchId: string,
         recipientAccountId: string
-    ): Promise<DeadmanReleaseWrapRecord | undefined> {
-        return this.getDeadmanReleaseWrap(switchId, recipientAccountId);
+    ): Promise<{ wrap?: DeadmanReleaseWrapRecord; notice?: DeadmanReleaseNoticeRecord }> {
+        return {
+            wrap: this.getDeadmanReleaseWrap(switchId, recipientAccountId),
+            notice: this.getDeadmanReleaseNotice(switchId, recipientAccountId),
+        };
     }
 
     /**
@@ -8905,54 +8912,87 @@ export class PostgresBackedDb extends InMemoryDb {
     }
 
     /**
-     * The copy as Postgres has it, once this process's own queued writes have
-     * gone through. An account deletion blanks every copy sealed to the
-     * account before anything else, so a deletion another process (the API
-     * process, with the loops in a worker) committed is seen here even when
-     * its change notification has not reached this one: a notice row that
-     * process never saw, which its deletion could not end, is then not sent
-     * (round 6 of part 2's review). Waiting for this process's own writes
-     * first means a copy it wrote and has not yet flushed (one armed and
-     * fired in this process within the queue's lag) is not read as gone,
-     * which would end that person's notice.
+     * The copy and the notice row as Postgres has them, once this process's
+     * own queued writes have been attempted. An account deletion blanks every
+     * copy sealed to the account before it ends the notices and deletes the
+     * user row, so a deletion another process (the API process, with the
+     * loops in a worker) committed is seen here even when its change
+     * notification has not reached this one: a notice row that process never
+     * saw, which its deletion could not end, is then not sent (round 6 of
+     * part 2's review). Waiting for this process's own writes first means a
+     * copy it wrote and has not yet flushed (one armed and fired in this
+     * process within the queue's lag) is not read as gone, which would end
+     * that person's notice.
+     *
+     * The notice row as Postgres has it also goes into this mirror, when this
+     * process wrote nothing to the row while it was read (the row is the same
+     * object before the drain and after the query): every write this process
+     * had made to it was queued before the drain, so the stored row is at
+     * least as new as the mirror's. So a leader taking over, whose catch-up
+     * wrote a pending row into its mirror while Postgres kept the row the old
+     * leader had already sent (the create is insert-only there), reads it
+     * sent and sends nothing, and one whose mirror lacks the room the old
+     * leader recorded uses that room rather than make another (round 7 of
+     * part 2's review: it sent the notice again, and with the alias refused
+     * made a second room). Postgres with no row leaves the mirror's alone.
      */
-    override async readDeadmanReleaseWrapCommitted(
+    override async readDeadmanReleaseCommitted(
         switchId: string,
         recipientAccountId: string
-    ): Promise<DeadmanReleaseWrapRecord | undefined> {
-        const plan = this.plans.get('deadmanReleaseWraps');
-        if (!this.pool || !plan) {
-            return super.readDeadmanReleaseWrapCommitted(switchId, recipientAccountId);
+    ): Promise<{ wrap?: DeadmanReleaseWrapRecord; notice?: DeadmanReleaseNoticeRecord }> {
+        const wraps = this.plans.get('deadmanReleaseWraps');
+        const notices = this.plans.get('deadmanReleaseNotices');
+        if (!this.pool || !wraps || !notices) {
+            return super.readDeadmanReleaseCommitted(switchId, recipientAccountId);
         }
+        const seen = this.getDeadmanReleaseNotice(switchId, recipientAccountId);
         await this.drain();
         const client = await this.pool.connect();
+        let wrapRow: Record<string, unknown> | undefined;
+        let noticeRow: Record<string, unknown> | undefined;
         try {
-            const res = await client.query<Record<string, unknown>>(
-                `SELECT * FROM ${plan.descriptor.tableName} WHERE switch_id = $1 AND recipient_account_id = $2`,
-                [switchId, recipientAccountId]
-            );
-            const row = res.rows[0];
-            return row
-                ? (rowToRecord(plan, row) as unknown as DeadmanReleaseWrapRecord)
-                : undefined;
+            const where = 'WHERE switch_id = $1 AND recipient_account_id = $2';
+            wrapRow = (
+                await client.query<Record<string, unknown>>(
+                    `SELECT * FROM ${wraps.descriptor.tableName} ${where}`,
+                    [switchId, recipientAccountId]
+                )
+            ).rows[0];
+            noticeRow = (
+                await client.query<Record<string, unknown>>(
+                    `SELECT * FROM ${notices.descriptor.tableName} ${where}`,
+                    [switchId, recipientAccountId]
+                )
+            ).rows[0];
         } finally {
             client.release?.();
         }
+        const stored = noticeRow ? rowToRecord(notices, noticeRow) : undefined;
+        if (stored && this.getDeadmanReleaseNotice(switchId, recipientAccountId) === seen) {
+            this.mapByName('deadmanReleaseNotices').set(notices.descriptor.keyOf(stored), stored);
+        }
+        return {
+            wrap: wrapRow
+                ? (rowToRecord(wraps, wrapRow) as unknown as DeadmanReleaseWrapRecord)
+                : undefined,
+            notice: stored as unknown as DeadmanReleaseNoticeRecord | undefined,
+        };
     }
 
     /**
-     * Once this process's queued writes, the deletion's among them, are in
-     * Postgres (so the route answers only after the deletion is durable, as
-     * `flushRuntimeStoreWrites` is used elsewhere): one statement that ends
-     * every notice row still pending to the account and forgets the room of
-     * every one of theirs, as the deletion does for the rows in this mirror,
-     * and so also for a row another process wrote that this one had not heard
-     * of (the worker's sweep moments before). The rows it changed go into this
-     * mirror and are announced to the other processes. A notifier's later
-     * write to such a row is conditional on it still pending
+     * Once this process's queued writes, the deletion's among them, have been
+     * attempted (a write that fails twice is dropped and logged, as
+     * everywhere in Postgres mode, and the drain still ends): one statement
+     * that ends every notice row still pending to the account and forgets the
+     * room of every one of theirs, as the deletion does for the rows in this
+     * mirror, and so also for a row another process wrote that this one had
+     * not heard of (the worker's sweep moments before). The rows it changed go
+     * into this mirror and are announced to the other processes. A
+     * notifier's later write to such a row is conditional on it still pending
      * (`updateDeadmanReleaseNoticeIf`), so it does not land after this; one
-     * that landed first has its room forgotten here (round 6 of part 2's
-     * review).
+     * that landed first (`sent`, the send having begun before the copies were
+     * blanked) keeps its status and has its room forgotten here (round 6 of
+     * part 2's review).
      */
     override async endDeadmanReleaseNoticesOfDeletedAccount(
         accountId: string,

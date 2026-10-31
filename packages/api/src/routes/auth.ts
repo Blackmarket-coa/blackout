@@ -1091,11 +1091,10 @@ auth.post('/account/delete/confirm', async (c) => {
     const outcome = confirmAccountDeletion(parsed.token, user.sub);
     switch (outcome.kind) {
         case 'ok':
-            // In the database itself: the notice rows another process wrote
-            // that this one had not heard of end too, and forget their room.
-            await finishAccountDeletion(outcome.userId);
             // After deletion the JWT still cryptographically validates — denylist
-            // it so the holder can't replay until expiry.
+            // it so the holder can't replay until expiry. Before anything is
+            // awaited, so no other request on this process runs as the deleted
+            // account in between (round 7 of part 2's review).
             if (user.jti && user.exp) {
                 db.revokeSession({
                     jti: user.jti,
@@ -1104,6 +1103,11 @@ auth.post('/account/delete/confirm', async (c) => {
                     reason: 'account_deleted',
                 });
             }
+            // In the database itself: the notice rows another process wrote
+            // that this one had not heard of end too, and forget their room.
+            // Bounded (`ACCOUNT_DELETION_FINISH_TIMEOUT_MS`): past it, logged,
+            // and answered while the end goes on.
+            await finishAccountDeletion(outcome.userId);
             return c.json({ ok: true });
         case 'expired':
             return c.json({ code: 'delete_token_expired', message: 'Deletion token expired' }, 410);

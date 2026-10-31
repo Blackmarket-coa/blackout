@@ -217,8 +217,9 @@ export const DEADMAN_RELEASE_ERRORS = {
     /**
      * 409: a copy names an account that is already named on as many held
      * releases as are allowed, from this owner or from everyone;
-     * `recipientAccountId` says whose. One code for both bounds, so the answer
-     * does not say how many others have named that person.
+     * `recipientAccountId` says whose. One code for both bounds, which hides
+     * nothing: an owner who has named the person fewer times than its own
+     * bound allows and is refused can tell it is the bound from everyone.
      */
     recipientLimit: 'recipient_limit',
     /** 409: re-sealing a switch that is not in the release format. */
