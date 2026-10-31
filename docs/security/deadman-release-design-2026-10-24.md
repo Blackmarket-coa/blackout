@@ -512,7 +512,11 @@ screen. **Verdict:** not proposed; recorded so the trade is on paper.
     room list; its alias is in the homeserver's alias directory. The person is
     invited as a direct message (`is_direct`), and their power level is below
     the room's `events_default` so nothing can be typed there. One `m.text` per
-    recipient per release. An `m.notice` would be silent: the default rule
+    recipient per release _(two of the server's background processes working on
+    one person's notices at once during a handover can each send it, in a room
+    each where the homeserver refuses the alias, and the homeserver drops a
+    repeat only within one room: `release-envelope-2026-10-26.md` §15)_. An
+    `m.notice` would be silent: the default rule
     `.m.rule.suppress_notices` drops it
     (`apps/blackout-server/rust/src/push/base_rules.rs:80-91`). The FBM
     delivery's pointer is an `m.notice` posted before the buyer is invited, so

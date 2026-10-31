@@ -335,13 +335,20 @@ For the source-of-truth triage with tier/owner detail see
     API runs as several replicas, one that someone seals to you on another
     replica in the moment your deletion is still reaching it can stay until
     that release is cancelled or removed), a notice still owed to you is
-    dropped (one the bot was already sending at that moment can still
-    arrive, and so can the invitation to your notices room it was already
-    making), and the record of each notice (its status and attempts) stays,
-    with its room forgotten (where the server runs its background work in a
-    separate process, the last step of the deletion does that for a notice
-    the deleting process had not heard of yet; if that step fails, which the
-    server logs, such a notice the bot was already sending keeps its room). It
+    dropped once your deletion is confirmed (one the bot was already sending
+    at that moment can still arrive, and so can the invitation to your
+    notices room it was already making; where the server runs its background
+    work in a separate process, the confirmation waits until the server has
+    tried to write the deletion's changes to its database, so a database
+    that is slow or not answering holds it, and until then the bot can still
+    send you a notice),
+    and the record of each notice (its status and attempts) stays, with its
+    room forgotten (where the server runs its background work in a separate
+    process, the last step of the deletion does that for a notice the
+    deleting process had not heard of yet, and is waited for at most 10
+    seconds, so it can finish after the deletion is confirmed; until it
+    finishes, and for good if it fails, which the server logs, such a notice
+    the bot was already sending keeps its room). It
     removes the release keys you published (their public halves), except the
     copy kept with a release switch of yours that has already fired, which goes
     with that release; the fingerprint of the key each
@@ -403,12 +410,14 @@ For the source-of-truth triage with tier/owner detail see
     looked) and then makes your room without the address, and a homeserver
     that was only that slow leaves you an extra room the same way. Where the
     server runs more than one copy of its background work, as it does for a
-    moment while one takes over from another, two of them working on the
-    same notice at the same moment can each make you a room, if the
-    homeserver refuses the address, and each send the notice, which the
-    homeserver drops the second time while it still remembers the first: for
-    30 to 60 minutes, or 24 hours if the bot's token came from a sign-in, and
-    the shorter of these is forgotten if the homeserver restarts.
+    moment while one takes over from another, two of them working on your
+    notices at the same moment (the same notice, or two of yours) can each
+    make you a room, if the homeserver refuses the address, and each send
+    its notice there, so you can get an invitation and the notice in each of
+    two rooms. Within one room the homeserver drops a second send of the same
+    notice while it still remembers the first: for 30 to 60 minutes, or 24
+    hours if the bot's token came from a sign-in, and the shorter of these is
+    forgotten if the homeserver restarts.
     A fixed sentence, "There is something new for you in Blackout. Open
     Blackout to see it. This room is not end-to-end encrypted, so please
     don't reply here.", and the release's id, and nothing else: not who armed

@@ -34,7 +34,11 @@ plaintext post by the bot. The server side of the dead-man switch release
 is built: a switch can hold a message encrypted on the owner's device for the
 people named, sealed to their release keys. Arming such a switch stays closed on
 every deployment until an operator turns `BLACKOUT_DEADMAN_RELEASES` on, which
-no deployment, compose or env file does.
+no deployment, compose or env file does. This entry was corrected on
+2026-10-30 and 2026-10-31, before any of it took effect, where the independent
+review of the API side found that a sentence here, or in
+[`TRUST.md`](../../TRUST.md) §1, was not true; `git log -p` on this file shows
+each correction.
 
 ### Added
 
@@ -76,15 +80,19 @@ no deployment, compose or env file does.
     and, for each notice, its status and attempts, and its room until that
     person deletes their account.
 -   **The bot posts a notice in a room that is not encrypted.** When a release
-    switch fires, the Blackout bot makes, once per person, a "Blackout notices"
-    room, invites them as a direct message, and posts one fixed sentence with
-    the release's id (the room's alias is an HMAC of the person's Matrix id
-    under a key derived from the server's secret, so that a room the
-    homeserver finished making after the bot stopped waiting is found rather
-    than made again; in the cases
-    [`KNOWN_LIMITATIONS.md`](../../KNOWN_LIMITATIONS.md) lists a slow
-    homeserver can still leave an extra, empty one): nothing of the message,
-    nobody's name, not the owner's
+    switch fires, the Blackout bot makes a "Blackout notices" room for each
+    person named who has none yet, and reuses it for later notices, invites
+    them as a direct message, and posts one fixed sentence with the release's
+    id (the room's alias is an HMAC of the person's Matrix id under a key
+    derived from the server's secret, so that a room the homeserver finished
+    making after the bot stopped waiting is found rather than made again). In
+    the cases [`KNOWN_LIMITATIONS.md`](../../KNOWN_LIMITATIONS.md) lists a
+    person can still get an extra room: a slow or interrupted homeserver can
+    leave an extra one with only an invitation in it, and where the server runs
+    two copies of its background work for a moment while one takes over from
+    the other and the homeserver refuses the alias, the two can each make the
+    person a room and post the notice in each. The notice carries nothing of
+    the message, nobody's name, not the owner's
     label. The room is a plaintext service room like the others
     [`TRUST.md`](../../TRUST.md) §1 lists, created so that the homeserver does
     not mark it encrypted (the bot cannot encrypt, so its post is plaintext
@@ -109,11 +117,15 @@ no deployment, compose or env file does.
     account's copies are removed (across several API replicas one sealed to it
     in the moment the deletion reaches another replica can stay until that
     release is cancelled or removed), a notice still owed to it is dropped
-    (one the bot was already sending can still arrive, as can the invitation
-    to its notices room it was already making), and its notice rows
-    forget their room (across the API and worker processes through the
-    deletion's last step; if that step fails, which is logged, a notice that
-    was being sent keeps its room). The export of an account includes
+    once the deletion is confirmed (one the bot was already sending can still
+    arrive, as can the invitation to its notices room it was already making;
+    across the API and worker processes the confirmation waits until the
+    server has tried to write the deletion's changes to its database, and
+    until then the bot can still send a notice), and its notice rows forget
+    their room (across the API and worker processes through the deletion's
+    last step, which is waited for at most 10 seconds and can finish after
+    the confirmation; until it does, and for good if it fails, which is
+    logged, a notice that was being sent keeps its room). The export of an account includes
     the notice rows about it (`deadmanNotices`), for fired switches.
 
 ### Not changed

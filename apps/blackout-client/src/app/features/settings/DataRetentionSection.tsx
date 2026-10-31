@@ -249,13 +249,16 @@ export const DataRetentionSection: React.FC = () => {
                     of other people&apos;s releases sealed to you are removed (where the server runs
                     as several replicas, one sealed to you in the moment your deletion is still
                     reaching another replica can stay until that release is cancelled or removed),
-                    and a notice still owed to you is dropped (one the bot was already sending can
-                    still arrive, and so can the invitation to your notices room it was already
-                    making). The public half of your release keys is removed from Blackout&apos;s
-                    database, except the copy kept with a release switch of yours that has already
-                    fired, which goes with that release; copies in any backups the operator keeps
-                    are not removed; the private keys on your devices and in your recovery files
-                    stay there until you remove them.
+                    and a notice still owed to you is dropped once your deletion is confirmed (one
+                    the bot was already sending can still arrive, and so can the invitation to your
+                    notices room it was already making; where the server runs its background work
+                    separately, the confirmation waits until the server has tried to write the
+                    deletion to its database, and until then the bot can still send you a notice).
+                    The public half of your release keys is removed from Blackout&apos;s database,
+                    except the copy kept with a release switch of yours that has already fired,
+                    which goes with that release; copies in any backups the operator keeps are not
+                    removed; the private keys on your devices and in your recovery files stay there
+                    until you remove them.
                 </small>
                 {deleteStage === 'idle' && (
                     <div>
