@@ -8577,30 +8577,46 @@ export class PostgresBackedDb extends InMemoryDb {
 
     /**
      * Compile every targeted spec against this database's tables and PREPARE
-     * each statement, so a spec naming a column, table or type the schema
-     * lacks fails the boot instead of every later write.
+     * each statement, so a spec naming a column or type the schema lacks fails
+     * the boot instead of every later write.
+     *
+     * A step on a map whose table this database does not have yet (a
+     * migration not applied, which init has already logged as
+     * pg_store_table_missing) is left out, as an upsert to that map is: there
+     * is no row for it to change. A method left with no step writes the
+     * mirror only. A step on a map no descriptor names is a spec error and
+     * fails the boot.
      */
     private async compileTargetedSpecs(client: PgClient): Promise<void> {
         const compiled = new Map<string, CompiledStep[]>();
+        const described = new Set(TABLE_DESCRIPTORS.map((d) => d.mapName));
         for (const [method, spec] of Object.entries(MUTATOR_SPECS)) {
             if (spec.kind !== 'targeted') continue;
-            compiled.set(
-                method,
-                spec.steps.map((step, i) => {
-                    const where = `MUTATOR_SPECS.${method} step ${i + 1} (${step.op} on ${
-                        step.map
-                    })`;
-                    const plan = this.plans.get(step.map);
-                    if (!plan) throw new Error(`${where}: this database has no table for the map`);
-                    try {
-                        return compileStep(plan, step);
-                    } catch (err) {
-                        throw new Error(
-                            `${where}: ${err instanceof Error ? err.message : String(err)}`
-                        );
+            const steps: CompiledStep[] = [];
+            for (const [i, step] of spec.steps.entries()) {
+                const where = `MUTATOR_SPECS.${method} step ${i + 1} (${step.op} on ${step.map})`;
+                const plan = this.plans.get(step.map);
+                if (!plan) {
+                    if (!described.has(step.map)) {
+                        throw new Error(`${where}: no table descriptor names the map`);
                     }
-                })
-            );
+                    log.warn('pg_store_targeted_step_skipped', {
+                        method,
+                        step: i + 1,
+                        map: step.map,
+                        reason: 'table_missing',
+                    });
+                    continue;
+                }
+                try {
+                    steps.push(compileStep(plan, step));
+                } catch (err) {
+                    throw new Error(
+                        `${where}: ${err instanceof Error ? err.message : String(err)}`
+                    );
+                }
+            }
+            if (steps.length > 0) compiled.set(method, steps);
         }
         // One transaction, so a pooler that hands each statement its own
         // server connection cannot split a PREPARE from its DEALLOCATE.

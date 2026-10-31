@@ -1127,6 +1127,76 @@ test('U4: a targeted spec naming a column the schema lacks makes init reject', a
     });
 });
 
+test('U4b: init boots on a schema behind the code, leaving out the steps whose table is not there yet', async () => {
+    // As on develop, a store whose migrations are not all applied
+    // (BLACKOUT_DB_MIGRATE_ON_START=0 with ./bin/migrate not yet run) boots;
+    // what it cannot write is logged. PGlite here, whichever backend the rest uses.
+    const { PGlite } = await import('@electric-sql/pglite');
+    const latest = Math.max(
+        ...readdirSync(MIGRATIONS_DIR)
+            .filter((f) => f.endsWith('.up.sql'))
+            .map((f) => Number.parseInt(f, 10))
+    );
+    for (const ordinal of [latest - 1, 99]) {
+        const pg = new PGlite();
+        const client = {
+            async query(sql: string, params?: unknown[]) {
+                if (!params || params.length === 0) {
+                    return { rows: ((await pg.exec(sql)).at(-1)?.rows ?? []) as Row[] };
+                }
+                return { rows: (await pg.query(sql, params)).rows as Row[] };
+            },
+            release() {},
+        };
+        const pool = { connect: async () => client, end: async () => {} };
+        try {
+            await migrateUp({
+                pool: pool as never,
+                migrationsDir: MIGRATIONS_DIR,
+                targetOrdinal: ordinal,
+            });
+            const db: any = new PostgresBackedDb();
+            db.users.delete('demo-user');
+            await db.init(pool);
+            assert.equal(
+                db.compiled.has('deleteInvitationAdmissionsForUser'),
+                false,
+                `${ordinal}: its only table (migration 105) is not there, so it writes the mirror only`
+            );
+            assert.ok(db.compiled.has('deleteVaultItem'), `${ordinal}: the others are compiled`);
+            assert.equal(db.persistsRefreshTokenSessionEnds(), ordinal >= 100);
+
+            const u = mkUser(db);
+            const v = mkVault(db, u);
+            mkRefresh(db, u, randomUUID());
+            await db.drain();
+            db.deleteInvitationAdmissionsForUser(u, null);
+            assert.equal(db.deleteVaultItem(v), true);
+            db.deleteUser(u);
+            await db.drain();
+            const n = async (sql: string, p: unknown[]) =>
+                (await client.query(sql, p)).rows[0].n as number;
+            assert.equal(
+                await n('SELECT count(*)::int AS n FROM vault_items WHERE id = $1', [v]),
+                0,
+                `${ordinal}: a keyed delete reaches Postgres`
+            );
+            assert.equal(
+                await n('SELECT count(*)::int AS n FROM users WHERE id = $1', [u]),
+                0,
+                `${ordinal}: so does an account deletion`
+            );
+            assert.equal(
+                await n('SELECT count(*)::int AS n FROM refresh_tokens WHERE user_id = $1', [u]),
+                0
+            );
+            await db.shutdown();
+        } finally {
+            await pg.close();
+        }
+    }
+});
+
 test('U5: a spec naming a method InMemoryDb does not define throws when the store is built', async () => {
     await withSpec(
         'deleteNoSuchRecord',
