@@ -433,8 +433,15 @@ hourly auth-rows prune did this to `revoked_sessions` with no user action. It
 was shown on develop `ff7d08bfa0` with PGlite; the regression tests also run on
 PostgreSQL 16. Nothing records which rows were lost. The resync is gone: each
 of those mutators now writes only the rows its call changed, by key or by a
-predicate Postgres evaluates, in one transaction with its notification. What it
-closes, what it leaves open and the operator's decisions are in
+predicate Postgres evaluates, in one transaction with its notification. The
+read side is not fixed. A process that boots while others write, misses a
+notification (most writes send theirs after commit, and a failed send is only
+logged), or has a listening connection that died without an error keeps its
+stale copy of those rows until it restarts or re-reads them, so it can keep
+accepting a signed-out access token until the token expires (up to 24 hours).
+On PostgreSQL 16 a process booted during 425 sign-outs missed 229 (the
+record's O4). What it closes, what it leaves open and the operator's decisions
+are in
 [`docs/security/store-cross-process-writes-2026-10-31.md`](../security/store-cross-process-writes-2026-10-31.md).
 
 **Still deferred (need a human decision or a live stack):**

@@ -649,12 +649,25 @@ shipped (only incremental adoption remains).
     bounty accept can be accepted once on each process. The database keeps the
     first, and the other process corrects its copy, but the second request
     has already succeeded.
+-   That window ends only when the process hears of the change, and some
+    processes never do. A process that starts while others are writing loads
+    its copy before it starts listening, and nothing re-reads what changed in
+    between. Most writes, a sign-out among them, send their notification after
+    the write, and a failed send is only logged. A listening connection that
+    dies without an error is not noticed. Such a process keeps its old copy of
+    the row until it restarts, or until something makes it re-read the row (a
+    later change to the same row, or its listening connection failing and
+    being replaced). For example, after you sign out, such a process can keep
+    accepting the access token you signed out until it expires (up to 24
+    hours). On PostgreSQL 16, a process started while another recorded 425
+    sign-outs missed 229 of them. A change a process makes before it has
+    finished starting is not written to the database at all.
 -   Revoking a refresh-token family while another process is rotating a token
     of that family can leave the new token live.
 -   Other writes, including some on these same tables (a password change,
     marking an email address verified, a refresh-token rotation), replace the
     whole row, and the last one wins. A stale copy can still undo a change
-    made elsewhere in the same window, for example a password change, a
+    made elsewhere while it is stale, for example a password change, a
     moderation decision, or a vault item's contents.
 -   After you delete your account, an access token you already hold keeps
     working on the other processes until it expires (up to 24 hours), and

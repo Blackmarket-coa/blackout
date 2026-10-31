@@ -50,17 +50,23 @@ spec:
                       # in-memory mirror and returns; its Postgres write is queued and
                       # runs just after, so a crash before it runs loses it (the
                       # db_write_behind_failures_total metric counts writes that failed).
-                      # pg_notify (LISTEN/NOTIFY) tells the other replicas which rows
-                      # changed so each re-reads them. Consistency is EVENTUAL: a replica
-                      # can serve the old value until the notification arrives, and a
-                      # single-use check (a reset token, a refresh rotation) can pass once
-                      # on each replica in that window. Endpoints that need read-your-write
-                      # should route through the writing replica or re-read after a short
-                      # delay. A write names only the rows it changed; see
-                      # docs/security/store-cross-process-writes-2026-10-31.md for what
-                      # that covers and for rolling out the release that made it so. If
-                      # pg_notify is disabled below, this deployment MUST scale to exactly
-                      # one replica.
+                      # pg_notify (LISTEN/NOTIFY) tells the other replicas which rows changed
+                      # so each re-reads them. Consistency is EVENTUAL: a replica can serve
+                      # the old value until the notification arrives, and a single-use check
+                      # (a reset token, a refresh rotation) can pass once on each replica in
+                      # that window. Some replicas never hear of a change: one that starts
+                      # while others write, every one when a write's notification fails to
+                      # send (most writes send it after the write, and the failure is only
+                      # logged), and one whose listening connection dies without an error.
+                      # Each serves the old row until it restarts or re-reads it, so a
+                      # sign-out made elsewhere can be ignored there until the token expires
+                      # (up to 24 h; see KNOWN_LIMITATIONS.md). Endpoints that need
+                      # read-your-write should route through the writing replica; waiting
+                      # does not help a replica that missed the notification. A write names
+                      # only the rows it changed; see
+                      # docs/security/store-cross-process-writes-2026-10-31.md for what that
+                      # covers and for rolling out the release that made it so. If pg_notify
+                      # is disabled below, this deployment MUST scale to exactly one replica.
                       - name: BLACKOUT_DB_MODE
                         value: 'postgres'
                       - name: BLACKOUT_DB_PG_NOTIFY
