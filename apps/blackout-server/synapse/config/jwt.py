@@ -128,13 +128,22 @@ class JWTConfig(Config):
         usable key. An empty or missing secret is refused first, on any
         authlib version.
 
-        A key set is checked under each ``kid`` it names. A key that works as
-        the empty key refuses the whole set. A key that cannot be used for
+        In a key set, authlib picks the member whose ``kid`` equals the
+        token's with ``==``, whatever the JSON types. So a member whose
+        ``kid`` is present and is not a string (``5``, ``true``, ``null``) is
+        refused first, naming its index: ``kid: 5`` would be chosen by a
+        token whose ``kid`` is ``5``, and ``kid: true`` by one whose ``kid``
+        is ``true`` or ``1``, and no string ``kid`` stands for those. Then
+        the set is checked under each distinct string ``kid`` it names, or,
+        when it names none, with a token without one, which authlib serves
+        from a one-key set only. A member without a ``kid`` in a set that
+        names others is never chosen, so it is not tried. A key that works
+        as the empty key refuses the whole set. A key that cannot be used for
         the algorithm (an RSA or EC JWK, ``use: enc``) only logs a warning
         when another key in the set can be used: the handler serves the
         usable keys, and answers a token naming the other one with a 500, as
         it did before this check. A set with no usable key is refused.
-        (Blackout fork patch, see PATCHES.md, 2026-10-30.)
+        (Blackout fork patch, see PATCHES.md, 2026-10-30 and 2026-10-31.)
         """
         algorithm = self.jwt_algorithm
         if not self.jwt_enabled or algorithm not in _HMAC_DIGESTS:
@@ -163,6 +172,24 @@ class JWTConfig(Config):
 
         is_set = isinstance(raw_key, dict) and isinstance(raw_key.get("keys"), list)
         members: List[Any] = raw_key["keys"] if is_set else [raw_key]
+        # authlib picks a set's member with ``k.get("kid") == kid``, whatever
+        # the JSON types: a member filed under the kid 5 is chosen by a token
+        # whose kid is 5 or 5.0, and one under true by true, 1 or 1.0. No
+        # string kid tried below stands for those. RFC 7517 sec. 4.5 makes
+        # kid a string, so refuse any other, before the other checks.
+        if is_set:
+            for index, key in enumerate(members):
+                if (
+                    isinstance(key, dict)
+                    and "kid" in key
+                    and not isinstance(key["kid"], str)
+                ):
+                    kid_text = json.dumps(key["kid"], default=repr)
+                    raise cannot_use(
+                        f"keys[{index}] has a kid that is not a string "
+                        f"({kid_text}); a JWK kid is a string (RFC 7517)"
+                    )
+
         # An empty k fails in 1.9.1 but verifies in 1.6.12, so refuse it here
         # whichever version is installed, in a key set too.
         for key in members:
@@ -170,8 +197,10 @@ class JWTConfig(Config):
                 named = "" if key.get("kid") is None else f" (kid {key['kid']!r})"
                 raise cannot_use(f"a JWK with an empty k{named}")
 
-        # authlib picks a key from a key set by the token's kid, so try each
-        # kid the set names. With none, it takes a set's only key.
+        # Every kid in a set is a string now, and a string is equal only to a
+        # string, so a token reaches a member only by naming its kid, or, with
+        # no kid, when the member is the set's only key. Try each distinct
+        # kid; with none, try without one.
         kids: List[str] = []
         if is_set:
             for key in members:

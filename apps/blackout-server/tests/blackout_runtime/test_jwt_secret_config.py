@@ -12,10 +12,13 @@ on every verify.
 ``JWTConfig`` (``synapse/config/jwt.py``) now makes the handler's call at
 startup, with a token signed with the empty key, and refuses an empty or
 missing secret, or a JWK with an empty ``k``, before that on any authlib
-version. A key set is checked under each ``kid``: a key that cannot be used
-for HS* only logs a warning while another key can be used. It also refuses
-``algorithm: none``, with which authlib accepts an unsigned token, and any name
-that is not one of authlib's JWS algorithms.
+version. A key set whose member has a ``kid`` that is not a string is refused
+before any other key-set check (authlib matches kids with ``==``, so a member
+under ``kid: 5`` answers a token whose ``kid`` is ``5``, which no string kid
+stands for). The set is then checked under each string ``kid``: a key that
+cannot be used for HS* only logs a warning while another key can be used. It
+also refuses ``algorithm: none``, with which authlib accepts an unsigned token,
+and any name that is not one of authlib's JWS algorithms.
 
 Records: docs/security/dependency-advisories-server-desktop-2026-10-30.md
 (repository root) and PATCHES.md, 2026-10-30.
@@ -24,8 +27,10 @@ Records: docs/security/dependency-advisories-server-desktop-2026-10-30.md
 from __future__ import annotations
 
 import base64
+import hashlib
+import hmac
 import json
-from typing import Any, Dict
+from typing import Any, Dict, Tuple
 
 from cryptography.hazmat.primitives.asymmetric import ec
 
@@ -33,7 +38,12 @@ from synapse.config import ConfigError
 from synapse.config.homeserver import HomeServerConfig
 from synapse.rest.client import login
 
-from tests.unittest import HomeserverTestCase, TestCase, skip_unless
+from tests.unittest import (
+    HomeserverTestCase,
+    TestCase,
+    make_homeserver_config_obj,
+    skip_unless,
+)
 from tests.utils import HAS_AUTHLIB, default_config
 
 LOGIN_URL = b"/_matrix/client/r0/login"
@@ -128,6 +138,55 @@ MIXED_SECRETS: Dict[str, Any] = {
     },
 }
 
+
+def _zero_key_under(kid: Any) -> Dict[str, Any]:
+    """A usable key, and beside it k "AA" (one zero byte, which HMAC pads into
+    the empty key) filed under ``kid``."""
+    return {
+        "keys": [
+            _oct_jwk(b"first-secret", kid="first"),
+            {"kty": "oct", "k": "AA", "kid": kid},
+        ]
+    }
+
+
+# Refused at jwt_config.secret, naming the member: a kid that is present and
+# is not a string. Each value is the secret and the index of that member.
+NON_STRING_KID_SECRETS: Dict[str, Tuple[Any, int]] = {
+    "kid 5 holding k AA": (_zero_key_under(5), 1),
+    "kid true holding k AA": (_zero_key_under(True), 1),
+    "kid 5 holding k AA, as JSON text": (json.dumps(_zero_key_under(5)), 1),
+    "kid true holding k AA, as a list": (_zero_key_under(True)["keys"], 1),
+    # Refused by the kid's type, not by the key it names.
+    "kid 5 holding a usable key": ({"keys": [_oct_jwk(b"only-secret", kid=5)]}, 0),
+    "kid null": (
+        {"keys": [_oct_jwk(b"first-secret", kid="first"), _oct_jwk(b"x", kid=None)]},
+        1,
+    ),
+    "kid a list": ({"keys": [_oct_jwk(b"only-secret", kid=["a"])]}, 0),
+    # Before the other key-set checks: the empty k in keys[0] is not reported.
+    "kid 5 after an empty k": (
+        {
+            "keys": [
+                {"kty": "oct", "k": "", "kid": "a"},
+                {"kty": "oct", "k": "AA", "kid": 5},
+            ]
+        },
+        1,
+    ),
+}
+
+
+def _empty_key_token(kid: Any, sub: str) -> str:
+    """An HS256 token signed with the empty key, as anyone could sign one,
+    made here without authlib (which refuses to sign with an empty key)."""
+    header = _b64url(json.dumps({"alg": "HS256", "kid": kid}).encode("utf-8"))
+    payload = _b64url(json.dumps({"sub": sub}).encode("utf-8"))
+    signing_input = f"{header}.{payload}"
+    signature = hmac.new(b"", signing_input.encode("ascii"), hashlib.sha256).digest()
+    return f"{signing_input}.{_b64url(signature)}"
+
+
 # Refused at jwt_config.algorithm: none would accept an unsigned token for any
 # user, and the rest are not JWS algorithms authlib implements, so every token
 # would be refused.
@@ -171,6 +230,20 @@ class JwtSecretConfigTestCase(TestCase):
                     )
                     self.assertTrue(config.jwt.jwt_enabled)
                     self.assertEqual(config.jwt.jwt_secret, secret)
+
+    def test_key_set_members_with_a_non_string_kid_are_refused(self) -> None:
+        for algorithm in ("HS256", "HS384", "HS512"):
+            for label, (secret, index) in NON_STRING_KID_SECRETS.items():
+                with self.subTest(algorithm=algorithm, secret=label):
+                    with self.assertRaises(ConfigError) as cm:
+                        _parse(
+                            {"enabled": True, "secret": secret, "algorithm": algorithm}
+                        )
+                    self.assertEqual(cm.exception.path, ("jwt_config", "secret"))
+                    self.assertIn(
+                        f"keys[{index}] has a kid that is not a string",
+                        cm.exception.msg,
+                    )
 
     def test_mixed_key_sets_are_accepted_with_a_warning(self) -> None:
         for algorithm in ("HS256", "HS384", "HS512"):
@@ -290,3 +363,62 @@ class JwtLoginWithMixedKeySetTestCase(HomeserverTestCase):
         channel = self._login("idp-ec", b"first-secret")
         self.assertNotEqual(channel.code, 200, channel.json_body)
         self.assertNotIn("access_token", channel.json_body)
+
+
+@skip_unless(HAS_AUTHLIB, "requires authlib")
+class JwtLoginWithNonStringKidTestCase(HomeserverTestCase):
+    """A token signed with the empty key, whose kid is 5, true or 1, gets no
+    login: the config of a key set that files k "AA" under kid 5 or true does
+    not load, so no homeserver starts with it. The same /login, holding that
+    set, accepts the token, because authlib matches kids with == (5 == 5,
+    True == 1)."""
+
+    servlets = [login.register_servlets]
+
+    def default_config(self) -> Dict[str, Any]:
+        config = super().default_config()
+        config["jwt_config"] = {
+            "enabled": True,
+            "secret": ACCEPTED_SECRETS["key set"],
+            "algorithm": "HS256",
+        }
+        return config
+
+    def _login_with_empty_key(self, kid: Any) -> Any:
+        return self.make_request(
+            "POST",
+            LOGIN_URL,
+            {
+                "type": "org.matrix.login.jwt",
+                "token": _empty_key_token(kid, "mallory"),
+            },
+        )
+
+    def test_a_token_under_a_non_string_kid_gets_no_login(self) -> None:
+        # The set this homeserver started with refuses an empty-key token.
+        channel = self._login_with_empty_key("first")
+        self.assertEqual(channel.code, 403, channel.json_body)
+
+        for member_kid, token_kid in ((5, 5), (True, True), (True, 1)):
+            with self.subTest(member_kid=member_kid, token_kid=token_kid):
+                secret = _zero_key_under(member_kid)
+                config = self.default_config()
+                config["jwt_config"]["secret"] = secret
+                # setup_test_homeserver's first step; the homeserver's own
+                # startup also parses the config first, and stops here. (Not
+                # setup_test_homeserver itself: where the config loaded, on
+                # the code before this check, the homeserver it built left a
+                # thread-pool worker running and trial never exited.)
+                with self.assertRaises(ConfigError) as cm:
+                    make_homeserver_config_obj(config)
+                self.assertEqual(cm.exception.path, ("jwt_config", "secret"))
+                self.assertIn(
+                    "keys[1] has a kid that is not a string", cm.exception.msg
+                )
+
+                # What the refusal stops: given that set, this homeserver's
+                # /login lets anyone in as anyone.
+                self.hs.get_jwt_handler().jwt_secret = secret
+                channel = self._login_with_empty_key(token_kid)
+                self.assertEqual(channel.code, 200, channel.json_body)
+                self.assertEqual(channel.json_body["user_id"], "@mallory:test")

@@ -737,7 +737,9 @@ second review of
 root), and rewritten after the third, which found that the first version
 imported a string secret only and so missed a secret given as a JWK. Revised
 again after the fourth (2026-10-31): `algorithm: none` is refused, and a key
-set is no longer refused for one key HS\* cannot use.
+set is no longer refused for one key HS\* cannot use. Revised after the fifth
+(2026-10-31): a key-set member whose `kid` is not a string is refused, because
+the fourth review's version tried only the string ones.
 
 - `synapse/config/jwt.py` (`JWTConfig._check_algorithm`, fourth review): when
   JWT login is enabled, `jwt_config.algorithm` must be one of the 14 JWS
@@ -752,6 +754,19 @@ set is no longer refused for one key HS\* cannot use.
   disabled `jwt_config` is not checked.
 - `synapse/config/jwt.py` (`JWTConfig._check_hmac_secret`): when JWT login is
   enabled with HS256, HS384 or HS512:
+  - a key-set member whose `kid` is present and is not a string (`5`,
+    `true`, `null`, a list) is refused before any other key-set check, with
+    a `ConfigError` at `jwt_config.secret` that names it by its index
+    (`keys[1]`), whatever its key (fifth review). RFC 7517 sec. 4.5 makes
+    `kid` a string. authlib picks a member with `k.get("kid") == kid`, the
+    token header's value whatever its type, so a member under `kid: 5` is
+    chosen by a token whose `kid` is `5`, and one under `kid: true` by `true`
+    or `1`. The fourth review's version tried only the string `kid`s, so a
+    zero-byte `k` (`AA`, which HMAC pads into the empty key) under `kid: 5`
+    beside a usable key started, and a token with header
+    `{"alg": "HS256", "kid": 5}` signed with the empty key logged in as any
+    user. `develop`, on authlib 1.6.12, has no check and accepts the same
+    config and token;
   - an empty or missing secret (`""`, `null`, an empty mapping) is refused
     outright, on any authlib version, and so is a JWK with an empty `k`,
     alone or in a key set (fourth review; 1.9.1 refused it anyway, but
@@ -760,7 +775,11 @@ set is no longer refused for one key HS\* cannot use.
     `JsonWebToken([algorithm]).decode(token, key=secret)`, with a token
     signed with the empty HMAC key. authlib prepares the secret as it does
     for each login: a mapping or `{...}` text is read as a JWK, and a key set
-    is searched by `kid`, so the check tries each `kid` the set names. A key
+    is searched by `kid`. With every `kid` a string, a token reaches a member
+    only by naming its `kid`, or, with no `kid`, when the member is the set's
+    only key. So the check tries each distinct `kid` the set names, or no
+    `kid` when it names none; a member without a `kid` beside named ones is
+    never chosen, and is not tried. A key
     passes only when authlib reports a bad signature. A key that verifies
     the token works as the empty key, and refuses the whole secret. Any
     other exception (the `ValueError` authlib raises from 1.9.0 for a key
@@ -800,6 +819,18 @@ set is no longer refused for one key HS\* cannot use.
   refused, and the two-key set was (`Missing required field: "k"`), although
   the handler can use it. On the third review's version (`93d3024`) the
   algorithm test fails and the mixed-set tests error.
+- Same file, fifth review: eight key sets with a non-string `kid` are refused
+  for each algorithm, naming the member's index (`k` "AA" beside a usable
+  key, under `kid: 5` or `kid: true` as a mapping, under `kid: 5` as JSON
+  text, and under `kid: true` as a list; a usable key under `kid: 5`;
+  `kid: null`; `kid: ["a"]`; and `kid: 5` after an empty `k`, which reports
+  the `kid`, not the `k`).
+  `JwtLoginWithNonStringKidTestCase`: for `kid: 5` (token `kid` 5) and
+  `kid: true` (token `kid` true and 1), the config of a homeserver with that
+  set does not load, so no homeserver starts with it; and the same `/login`,
+  given that set, answers the empty-key token with 200 as `@mallory:test`,
+  which is what the refusal stops. Both new tests fail on the fourth
+  review's `config/jwt.py` (`d084e96`): no `ConfigError`.
 
 ## 2026-10-30 MSC3861 refuses a client credential that cannot sign
 
