@@ -567,34 +567,3 @@ export async function prepareCheck(
     await client.query(`PREPARE ${name} AS ${sql}`);
     await client.query(`DEALLOCATE ${name}`);
 }
-
-/**
- * Reconcile a table to the current in-memory map: delete PG rows whose key is
- * no longer in memory, then upsert every in-memory record. Used for delete /
- * bulk-revoke / consume mutators where rows may have been removed — it needs
- * only the map name, no per-method key extraction.
- */
-export async function resyncMap(
-    client: PgClient,
-    plan: TablePlan,
-    map: Map<string, Record<string, unknown>>
-): Promise<void> {
-    const conflict = plan.descriptor.conflictColumns;
-    const existing = await client.query<Row>(
-        `SELECT ${conflict.join(', ')} FROM ${plan.descriptor.tableName}`
-    );
-    const liveKeys = new Set(map.keys());
-    for (const row of existing.rows) {
-        const key = conflict.map((c) => String(row[c])).join(':');
-        if (!liveKeys.has(key)) {
-            const where = conflict.map((c, i) => `${c} = $${i + 1}`).join(' AND ');
-            await client.query(
-                `DELETE FROM ${plan.descriptor.tableName} WHERE ${where}`,
-                conflict.map((c) => row[c])
-            );
-        }
-    }
-    for (const record of map.values()) {
-        await upsertRecord(client, plan, record);
-    }
-}

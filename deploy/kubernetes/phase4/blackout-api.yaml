@@ -46,14 +46,21 @@ spec:
                         value: production
                       - name: PORT
                         value: '3000'
-                      # Write-through Postgres store. Multi-replica safe: pg_notify keeps
-                      # each replica's in-memory read mirror coherent via LISTEN/NOTIFY.
-                      # Consistency is EVENTUAL — there is a bounded (sub-second) stale-read
-                      # window equal to the NOTIFY propagation latency; durability is not
-                      # affected (writes commit to Postgres synchronously). Endpoints that
-                      # need read-your-write within that window should route through the
-                      # writing replica or re-read after a short delay. If pg_notify is
-                      # disabled below, this deployment MUST scale to exactly one replica.
+                      # Postgres store, write-behind: a mutation updates the replica's
+                      # in-memory mirror and returns; its Postgres write is queued and
+                      # runs just after, so a crash before it runs loses it (the
+                      # db_write_behind_failures_total metric counts writes that failed).
+                      # pg_notify (LISTEN/NOTIFY) tells the other replicas which rows
+                      # changed so each re-reads them. Consistency is EVENTUAL: a replica
+                      # can serve the old value until the notification arrives, and a
+                      # single-use check (a reset token, a refresh rotation) can pass once
+                      # on each replica in that window. Endpoints that need read-your-write
+                      # should route through the writing replica or re-read after a short
+                      # delay. A write names only the rows it changed; see
+                      # docs/security/store-cross-process-writes-2026-10-31.md for what
+                      # that covers and for rolling out the release that made it so. If
+                      # pg_notify is disabled below, this deployment MUST scale to exactly
+                      # one replica.
                       - name: BLACKOUT_DB_MODE
                         value: 'postgres'
                       - name: BLACKOUT_DB_PG_NOTIFY

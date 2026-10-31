@@ -629,6 +629,44 @@ shipped (only incremental adoption remains).
 
 ## Operational
 
+### Several API processes on one database (2026-10-31)
+
+-   **Where:** the API in Postgres mode (`BLACKOUT_DB_MODE=postgres`) whenever
+    more than one process shares a database: the production Docker `app` and
+    `worker`, and the Kubernetes deployment's three replicas. Each process
+    serves reads from its own in-memory copy and tells the others, through
+    Postgres notifications, which rows it changed.
+-   **State:** a write names only the rows it changed. Before this release
+    some writes (deleting an account, signing out, the hourly revocation
+    prune, a vault-item or webhook delete) rewrote a whole table from one
+    process's copy and could delete or revert rows another process had just
+    written: a sign-out, another person's account. What was fixed and how, and
+    what is below, is in
+    [`docs/security/store-cross-process-writes-2026-10-31.md`](docs/security/store-cross-process-writes-2026-10-31.md).
+-   A process can still act on a copy that has not yet heard of a change from
+    another process. In that window a password-reset, verification, deletion
+    or sign-in link, a refresh-token rotation, an invitation admission or a
+    bounty accept can be accepted once on each process. The database keeps the
+    first, and the other process corrects its copy, but the second request
+    has already succeeded.
+-   Revoking a refresh-token family while another process is rotating a token
+    of that family can leave the new token live.
+-   Writes to other tables replace the whole row, and the last one wins. A
+    stale copy can still undo a change made elsewhere in the same window, for
+    example a password change, a moderation decision, or a vault item's
+    contents.
+-   After you delete your account, an access token you already hold keeps
+    working on the other processes until it expires (up to 24 hours), and
+    deleting an account that has messages, votes or tips fails in the
+    database while the process you used no longer shows it; it comes back
+    after a restart. Both were so before this release.
+-   Until every process runs this release, the ones that do not still write
+    whole tables.
+-   Four writes never reach the database in this mode, so each is lost on
+    restart and no other process sees it: closing a governance vote, an aid
+    post mirrored from FreeBlackMarket, and a campaign's attribution and
+    engagement counts. Found while fixing the above; not fixed yet.
+
 ### Invite-only registration during the Test Flight
 
 Signup at `matrix.theblackout.app` is gated by one-time tokens issued

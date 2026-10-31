@@ -3,9 +3,12 @@
 // Most tables are regular: table name = snake_case(mapName), keyed by `id`,
 // reflection maps fields ↔ columns. The exceptions (composite/non-id keys, the
 // renamed webhook-audit table, and the nested coalition-aid location) are
-// declared explicitly. The MUTATOR_SPECS table says, for each of the 127
-// InMemoryDb mutators, whether a write-through is a targeted upsert of the
-// returned record or a (rarer) resync of the affected map(s).
+// declared explicitly. The MUTATOR_SPECS table says, for each InMemoryDb
+// mutator, what its call writes to Postgres: an upsert of the record it
+// returned, or targeted statements that name the rows it changed, by key or
+// by a predicate Postgres evaluates. No spec reconciles a whole table against
+// this process's mirror: that deleted every row another process had written
+// and this one had not heard of (docs/security/store-cross-process-writes-2026-10-31.md).
 
 import {
     camelToSnake,
@@ -563,16 +566,13 @@ export const TABLE_DESCRIPTORS: TableDescriptor[] = ALL_MAP_NAMES.map((mapName) 
 });
 
 /**
- * - `upsert`: persist the record the method returned.
- * - `resync`: reconcile whole maps against this process's mirror (being
- *   replaced by `targeted`).
+ * - `upsert`: persist the record the method returned, whole (last writer wins).
  * - `targeted`: run fixed statements (pgWriter's TargetedStep) that name the
  *   rows the call changed, by key or by a predicate Postgres evaluates, in one
  *   transaction; the statements are checked against the schema at boot.
  */
 export type MutatorSpec =
     | { kind: 'upsert'; map: string }
-    | { kind: 'resync'; maps: string[] }
     | { kind: 'targeted'; steps: TargetedStep[] };
 
 const upsert = (map: string): MutatorSpec => ({ kind: 'upsert', map });
@@ -747,11 +747,11 @@ const deleteByUser = (rows: ReadonlyArray<{ map: string; column: string }>): Tar
     rows.map(({ map, column }) => deleteWhere(map, `${column} = $1`, (c) => [c.args[0]]));
 
 /**
- * Maps each of the 127 InMemoryDb mutators to its write-through. `upsert`
- * persists the method's returned record; `resync` reconciles a map after a
- * delete / bulk-revoke / consume; `targeted` writes only the rows the call
- * changed. The `reset*ForTest` seams are intentionally absent — postgres mode
- * never calls them.
+ * Maps each InMemoryDb mutator to its write-through. `upsert` persists the
+ * method's returned record; `targeted` writes only the rows the call changed.
+ * A method that writes a map and is absent here is never written to Postgres:
+ * store-spec-coverage's U1 lists those (the `reset*ForTest` seams, in-memory
+ * diagnostics, and the known gaps) and fails on any other.
  */
 export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
     createUser: upsert('users'),
@@ -768,7 +768,7 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
     markScheduledMessageDelivered: upsert('scheduledMessages'),
     markScheduledMessageFailed: upsert('scheduledMessages'),
     cancelScheduledMessage: upsert('scheduledMessages'),
-    // Account deletion. A targeted upsert, not a resync: see the store method.
+    // Account deletion blanks the row and keeps it: see the store method.
     eraseScheduledMessage: upsert('scheduledMessages'),
     createPasswordResetToken: upsert('passwordResetTokens'),
     consumePasswordResetToken: consume('passwordResetTokens', 'id', 'id'),
@@ -837,13 +837,13 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
     openDeadDrop: upsert('deadDrops'),
     createDeadmanSwitch: upsert('deadmanSwitches'),
     updateDeadmanSwitch: upsert('deadmanSwitches'),
-    // Account deletion. A targeted upsert, not a resync: see the store method.
+    // Account deletion blanks the row and keeps it: see the store method.
     eraseDeadmanSwitch: upsert('deadmanSwitches'),
     // Publishing supersedes the current identity (its own upsert, issued
     // first by publishReleaseIdentity) and then adds the new one.
     supersedeReleaseIdentity: upsert('releaseIdentities'),
     publishReleaseIdentity: upsert('releaseIdentities'),
-    // Account deletion. A targeted upsert, not a resync: see the store method.
+    // Account deletion blanks the row and keeps it: see the store method.
     eraseReleaseIdentity: upsert('releaseIdentities'),
     createModerationAction: upsert('moderationActions'),
     upsertCreatorStreamAuth: upsert('creatorStreamAuth'),

@@ -19,8 +19,10 @@ export interface StoreChangePayload {
     m: string;
     /**
      * 'u' = one record was upserted; 'k' = these keys changed; 'r' = the whole
-     * table was resynced. A receiver re-reads every key named by 'u' or 'k': a
-     * row it finds is put into its mirror, and a key with no row is removed.
+     * table may have changed (sent only by the release before targeted writes;
+     * still received, as a table reload, for one more release). A receiver
+     * re-reads every key named by 'u' or 'k': a row it finds is put into its
+     * mirror, and a key with no row is removed.
      */
     op: 'u' | 'k' | 'r';
     /** Conflict-column values identifying the changed row (op 'u' only). */

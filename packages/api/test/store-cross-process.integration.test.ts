@@ -1114,9 +1114,10 @@ test('X4: revoke-all reaches a refresh token a peer minted', async () => {
         const u = mkUser(A.db);
         await deafen(w, B);
         const t = mkRefresh(A.db, u, randomUUID());
+        const own = mkRefresh(B.db, u, randomUUID());
         await quiesce(w);
         assert.equal(B.db.refreshTokens.get(t.id), undefined);
-        assert.equal(B.db.revokeRefreshTokensForUser(u, 'password_change'), 0);
+        assert.equal(B.db.revokeRefreshTokensForUser(u, 'password_change'), 1);
         await quiesce(w);
         const [row] = await w.sql('SELECT revoked_reason FROM refresh_tokens WHERE id = $1', [
             t.id,
@@ -1125,6 +1126,9 @@ test('X4: revoke-all reaches a refresh token a peer minted', async () => {
         for (const p of [A, B]) {
             assert.equal(p.db.refreshTokens.get(t.id)?.revokedReason, 'password_change');
         }
+        // The token B held carries, in Postgres, the time B's mirror stamped.
+        const [mine] = await w.sql('SELECT revoked_at FROM refresh_tokens WHERE id = $1', [own.id]);
+        assert.equal(iso(mine.revoked_at), B.db.refreshTokens.get(own.id)?.revokedAt);
     });
 });
 
@@ -1238,6 +1242,75 @@ test("X7: purge removes the account's auth rows written anywhere, linked account
         assert.equal(B.db.getLinkedAccount(u, 'twitch'), undefined);
         assert.ok(B.db.getLinkedAccount(v, 'twitch'));
         assert.equal(B.db.isSessionRevoked(jti), true);
+    });
+});
+
+test('X1b: the OAuth and OIDC state prunes keep an unexpired row the pruning process has not heard of', async () => {
+    await withWorld(2, 'pg', async (w) => {
+        const [app, worker] = w.procs;
+        const u = mkUser(app.db);
+        await deafen(w, worker);
+        const live = {
+            oauth: mkOAuthLink(app.db, u).stateHash,
+            oidc: mkOidcLogin(app.db).stateHash,
+        };
+        const past = new Date(Date.now() - 60_000).toISOString();
+        const gone = {
+            oauth: app.db.createPendingOAuthLink({
+                ...app.db.pendingOAuthLinks.get(live.oauth),
+                stateHash: hex(),
+                expiresAt: past,
+            }).stateHash,
+            oidc: app.db.createPendingOidcLogin({
+                ...app.db.pendingOidcLogins.get(live.oidc),
+                stateHash: hex(),
+                expiresAt: past,
+            }).stateHash,
+        };
+        await quiesce(w);
+        assert.equal(worker.db.prunePendingOAuthLinks(new Date()), 0);
+        assert.equal(worker.db.prunePendingOidcLogins(new Date()), 0);
+        await quiesce(w);
+        assert.equal(await count(w, 'pending_oauth_links', 'state_hash = $1', [live.oauth]), 1);
+        assert.equal(await count(w, 'pending_oidc_logins', 'state_hash = $1', [live.oidc]), 1);
+        assert.equal(await count(w, 'pending_oauth_links', 'state_hash = $1', [gone.oauth]), 0);
+        assert.equal(await count(w, 'pending_oidc_logins', 'state_hash = $1', [gone.oidc]), 0);
+        assert.ok(
+            app.db.pendingOAuthLinks.has(live.oauth) && app.db.pendingOidcLogins.has(live.oidc)
+        );
+        assert.equal(app.db.pendingOAuthLinks.has(gone.oauth), false, 'the app heard of the prune');
+        assert.equal(app.db.pendingOidcLogins.has(gone.oidc), false);
+    });
+});
+
+test("X7b: deleting an account's invitation admissions reaches one written elsewhere and keeps another account's", async () => {
+    await withWorld(2, 'pg', async (w) => {
+        const [A, B] = w.procs;
+        const admit = (db: any, rec: Record<string, unknown>) =>
+            db.createInvitationAdmission({
+                id: randomUUID(),
+                invitationTokenId: randomUUID(),
+                ...rec,
+            }).id as string;
+        await deafen(w, A);
+        const claimed = admit(B.db, {
+            matrixUserId: '@other:x',
+            claimedByUserId: 'acct-x7b',
+            claimedAt: new Date().toISOString(),
+        });
+        const unclaimed = admit(B.db, { matrixUserId: '@x7b:x' });
+        const theirs = admit(B.db, { matrixUserId: '@someone:x' });
+        await quiesce(w);
+        assert.equal(A.db.deleteInvitationAdmissionsForUser('acct-x7b', '@x7b:x'), 0);
+        await quiesce(w);
+        assert.equal(
+            await count(w, 'invitation_admissions', 'id = ANY($1)', [[claimed, unclaimed]]),
+            0
+        );
+        assert.equal(await count(w, 'invitation_admissions', 'id = $1', [theirs]), 1);
+        assert.equal(B.db.invitationAdmissions.has(claimed), false);
+        assert.equal(B.db.invitationAdmissions.has(unclaimed), false);
+        assert.ok(B.db.invitationAdmissions.has(theirs));
     });
 });
 
@@ -1516,6 +1589,32 @@ test('X8b: a stale accept on a process that has not heard of the first is rolled
     });
 });
 
+test('X8c: a stale accept of a bounty another process claimed directly changes no application', async () => {
+    await withWorld(2, 'pg', async (w) => {
+        const [A, B] = w.procs;
+        const bounty = mkBounty(A.db);
+        const [one, two] = [apply(A.db, bounty), apply(A.db, bounty)];
+        await deafen(w, B);
+        const claimer = randomUUID();
+        assert.ok(A.db.claimBounty(bounty, claimer));
+        await quiesce(w);
+        const want = await bountyState(w, bounty);
+        assert.deepEqual(want, {
+            bounty: `claimed:${claimer}`,
+            apps: { [one.id]: 'pending', [two.id]: 'pending' },
+        });
+        // B still sees the bounty open: its mirror accepts one applicant and declines the other.
+        assert.ok(B.db.acceptBountyApplication(bounty, two.applicantId));
+        await quiesce(w);
+        assert.deepEqual(
+            await bountyState(w, bounty),
+            want,
+            'no application was accepted or declined'
+        );
+        assert.deepEqual(mirrorBountyState(B.db, bounty, [one.id, two.id]), want, 'B converged');
+    });
+});
+
 const mkEnvelope = (id = randomUUID(), seenBy = ['n0'], ttlMs = 3600_000) => ({
     id,
     sender: 's',
@@ -1556,6 +1655,10 @@ test('X9: a mesh gossip merge writes what it changed and keeps an envelope this 
             ['n0', 'nA', 'nB'],
             'seen_by is merged, not replaced'
         );
+        // An enqueue on the same process keeps it too.
+        const queued = A.db.enqueueMeshEnvelope(mkEnvelope());
+        await quiesce(w);
+        assert.equal(await count(w, 'mesh_envelopes', 'id = ANY($1)', [[unseen.id, queued.id]]), 2);
         assert.ok(B.db.listMeshEnvelopes().some((e: any) => e.id === arrived.id));
         assert.deepEqual(
             [...B.db.listMeshEnvelopes().find((e: any) => e.id === shared.id).seenBy].sort(),

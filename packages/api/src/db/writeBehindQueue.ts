@@ -32,7 +32,6 @@ import type { PgPool } from './migrate';
 import { keyChangePayloads, type StoreChangePayload, type StoreChangeTransport } from './pgNotify';
 import {
     keyOfTuple,
-    resyncMap,
     snakeToCamel,
     upsertRecord,
     type BoundStatement,
@@ -96,14 +95,11 @@ const sizeOf = (set: KeySet) => [...set.values()].reduce((n, keys) => n + keys.s
 
 type WriteOp = (
     | { kind: 'upsert'; mapName: string; record: Record<string, unknown> }
-    | { kind: 'resync'; mapName: string }
     | { kind: 'targeted'; mapName: string; write: TargetedWrite }
 ) & {
     /** map -> mirror keys this op writes, counted in the fence while it is queued. */
     fence: Map<string, string[]>;
 };
-
-export type MapAccessor = (mapName: string) => Map<string, Record<string, unknown>> | undefined;
 
 export class WriteBehindQueue {
     private tail: Promise<void> = Promise.resolve();
@@ -116,7 +112,6 @@ export class WriteBehindQueue {
     constructor(
         private readonly pool: PgPool,
         private readonly plans: Map<string, TablePlan>,
-        private readonly getMap: MapAccessor,
         /** Cross-replica change publisher + this instance's id. Omit for single-instance. */
         private readonly transport?: StoreChangeTransport,
         private readonly instanceId = ''
@@ -183,10 +178,6 @@ export class WriteBehindQueue {
         }
     }
 
-    enqueueResync(mapName: string): void {
-        this.schedule({ kind: 'resync', mapName, fence: new Map() });
-    }
-
     private schedule(op: WriteOp): void {
         this.pending += 1;
         dbWriteBehindDepth.set(this.pending);
@@ -244,32 +235,24 @@ export class WriteBehindQueue {
             await this.withRetry(async () => {
                 const client = await this.pool.connect();
                 try {
-                    if (op.kind === 'upsert') {
-                        await upsertRecord(client, plan, op.record);
-                    } else {
-                        const map = this.getMap(op.mapName);
-                        if (map) await resyncMap(client, plan, map);
-                    }
+                    await upsertRecord(client, plan, op.record);
                 } finally {
                     client.release?.();
                 }
             });
             // Tell peer replicas to refresh their mirror for this change.
             if (this.transport) {
-                if (op.kind === 'upsert') {
-                    const kv = plan.descriptor.conflictColumns.map((col) =>
-                        String(op.record[snakeToCamel(col)])
-                    );
-                    this.transport.publish({ src: this.instanceId, m: op.mapName, op: 'u', kv });
-                } else {
-                    this.transport.publish({ src: this.instanceId, m: op.mapName, op: 'r' });
-                }
+                const kv = plan.descriptor.conflictColumns.map((col) =>
+                    String(op.record[snakeToCamel(col)])
+                );
+                this.transport.publish({ src: this.instanceId, m: op.mapName, op: 'u', kv });
             }
         } catch (err) {
             // Permanent failure after the retry: the in-memory mirror has the write
-            // but Postgres does not, so a crash before a later resync loses it. This
-            // is the data-loss condition — make it loud AND measurable so alerting
-            // can catch it rather than it being silently swallowed.
+            // but Postgres does not, so a restart loses it and no other process
+            // ever sees it. This is the data-loss condition — make it loud AND
+            // measurable so alerting can catch it rather than it being silently
+            // swallowed.
             dbWriteBehindFailuresTotal.inc({ map: op.mapName, kind: op.kind });
             log.error('db_write_behind_failed', {
                 map: op.mapName,

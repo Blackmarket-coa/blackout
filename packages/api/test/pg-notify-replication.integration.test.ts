@@ -54,6 +54,8 @@ async function waitFor(predicate: () => boolean, timeoutMs = 1500): Promise<void
 test('a write on one replica becomes visible on another via change notifications', async () => {
     const pool = await freshPool();
     const hub = new InMemoryStoreChangeHub();
+    const heard: Array<{ m: string; op: string }> = [];
+    hub.add((p) => heard.push(p));
 
     // Two replicas sharing one database + one notification hub.
     const replicaA = new PostgresBackedDb();
@@ -107,6 +109,15 @@ test('a write on one replica becomes visible on another via change notifications
     await replicaA.drain();
     await waitFor(() => replicaB.getLinkedAccount(userId, 'twitch') === undefined);
     assert.equal(replicaB.getLinkedAccount(userId, 'twitch'), undefined);
+    assert.ok(
+        heard.some((p) => p.m === 'linkedAccounts' && p.op === 'k'),
+        "the delete was announced as 'k', naming the key"
+    );
+    assert.deepEqual(
+        heard.filter((p) => p.op === 'r'),
+        [],
+        "no write sends a whole-table 'r' any more"
+    );
 
     await replicaA.drain();
     await replicaB.drain();

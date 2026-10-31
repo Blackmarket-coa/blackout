@@ -2357,10 +2357,9 @@ class InMemoryDb {
     /**
      * Account deletion: remove a scheduled message's text and every link to its
      * author and room. A pending row is cancelled, so nothing is ever posted
-     * for a deleted account. The row itself stays (status and timestamps only)
-     * because this is a targeted upsert, not a resync: on a multi-replica
-     * Postgres deployment a resync can delete rows another replica just wrote,
-     * or write back stale copies.
+     * for a deleted account. The row itself stays (status and timestamps only):
+     * the write is an upsert of this one row, so it cannot touch a row another
+     * replica wrote.
      */
     eraseScheduledMessage(id: string): ScheduledMessageRecord | undefined {
         const record = this.scheduledMessages.get(id);
@@ -2599,11 +2598,9 @@ class InMemoryDb {
     /**
      * Account deletion: blank one release identity, current or superseded:
      * its keys, signature, fingerprint and account go, and the row keeps only
-     * its id, format version and times. The row stays because this is a
-     * targeted upsert, as `eraseScheduledMessage` and `eraseDeadmanSwitch`
-     * are: the Postgres writer has no targeted delete, and a resync of the
-     * table can delete rows another replica has just written, or write back
-     * stale copies of them.
+     * its id, format version and times. The row stays, as `eraseScheduledMessage`
+     * and `eraseDeadmanSwitch` keep theirs: the write is an upsert of this one
+     * row, so it cannot touch a row another replica wrote.
      */
     eraseReleaseIdentity(id: string): ReleaseIdentityRecord | undefined {
         const record = this.releaseIdentities.get(id);
@@ -8310,21 +8307,35 @@ export class FileBackedDb extends InMemoryDb {
 }
 
 /**
- * Postgres-backed store (BLACKOUT_DB_MODE=postgres). Write-through: reads are
+ * Postgres-backed store (BLACKOUT_DB_MODE=postgres). Write-behind: reads are
  * inherited from InMemoryDb (served from the in-memory mirror hydrated on
- * boot), and every MUTATOR_SPECS mutator is wrapped to enqueue a durable
- * Postgres write after updating the mirror.
+ * boot), and every MUTATOR_SPECS mutator is wrapped to queue a Postgres write
+ * after updating the mirror. The mutator returns before that write runs, so a
+ * crash, or a write that fails twice (db_write_behind_failures_total), loses
+ * it; flushRuntimeStoreWrites awaits the queue where that matters.
+ *
+ * What is written: an upsert of the record a method returned, or a targeted
+ * op (pgDescriptors) that names the rows the call changed, by key or by a
+ * predicate Postgres evaluates, in one transaction. Nothing reconciles a whole
+ * table against this mirror: a row another process wrote is never deleted
+ * because this one has not heard of it, and a row a call did not change is
+ * never rewritten. An upsert still writes its whole record, so it can
+ * overwrite a newer version of that same row (the last writer wins).
  *
  * Multi-replica consistency: when a change transport is supplied — Postgres
  * LISTEN/NOTIFY, ON BY DEFAULT (BLACKOUT_DB_PG_NOTIFY=1) — each replica
- * subscribes to peers' change notifications and refreshes the affected mirror
- * rows, so a write on one replica becomes visible on the others. This is
- * EVENTUAL consistency with a bounded stale-read window equal to the NOTIFY
- * propagation latency (typically sub-second): a read on replica B issued in the
- * gap between a write committing on replica A and the NOTIFY arriving may still
- * observe the pre-write value. Durability is unaffected (the write is already
- * committed to Postgres). With the transport disabled (BLACKOUT_DB_PG_NOTIFY=0)
- * the store is strictly single-writer and must run at exactly one replica.
+ * subscribes to peers' change notifications and re-reads the keys they name,
+ * so a write on one replica becomes visible on the others. This is EVENTUAL
+ * consistency: a read on replica B in the gap between a write committing on
+ * replica A and the notification arriving still sees the old value, and a
+ * check-then-act on B's mirror in that gap (a single-use token, a rotation, a
+ * bounty accept) can succeed once on each replica. Where the write is targeted,
+ * Postgres keeps the first (a consume updates only an unconsumed row) and the
+ * loser's mirror re-reads; where it is an upsert, the last writer wins. A
+ * targeted op's notification is sent inside its transaction; an upsert's is
+ * sent after it, and is lost if that send fails. With the transport disabled
+ * (BLACKOUT_DB_PG_NOTIFY=0) the store is strictly single-writer and must run
+ * at exactly one replica.
  */
 type MutableMap = Map<string, Record<string, unknown>>;
 
@@ -8431,15 +8442,8 @@ export class PostgresBackedDb extends InMemoryDb {
             }
             self[method] = (...args: unknown[]): unknown => {
                 const result = original.apply(this, args);
-                const queue = this.queue;
-                if (queue) {
-                    if (spec.kind === 'upsert') {
-                        if (result && typeof result === 'object') {
-                            queue.enqueueUpsert(spec.map, result as Record<string, unknown>);
-                        }
-                    } else {
-                        for (const m of spec.maps) queue.enqueueResync(m);
-                    }
+                if (this.queue && result && typeof result === 'object') {
+                    this.queue.enqueueUpsert(spec.map, result as Record<string, unknown>);
                 }
                 return result;
             };
@@ -8653,7 +8657,6 @@ export class PostgresBackedDb extends InMemoryDb {
         this.queue = new WriteBehindQueue(
             pool,
             this.plans,
-            (name) => this.mapByName(name),
             transport ?? undefined,
             this.instanceId
         );
@@ -8829,8 +8832,11 @@ export class PostgresBackedDb extends InMemoryDb {
     /**
      * Apply a peer replica's change to the local mirror, on the FIFO apply
      * chain. 'u' and 'k' re-read the keys they name (a key whose row is gone
-     * is removed); 'r' reloads the whole table. Self-notifications are ignored
-     * (the originating mutator already updated this mirror synchronously).
+     * is removed). 'r' reloads the whole table: no process sends it any more,
+     * but one still running the previous release does after a whole-table
+     * write, so it is received for one more release and then dropped.
+     * Self-notifications are ignored (the originating mutator already updated
+     * this mirror synchronously).
      */
     private applyPeerChange(payload: StoreChangePayload): void {
         if (payload.src === this.instanceId) return;

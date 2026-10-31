@@ -149,7 +149,7 @@ test('write-through persists across a simulated restart', async () => {
         denId: '!aid:server',
     });
 
-    // Composite-key table + a resync delete (ordering: upsert then delete).
+    // Composite-key table + a keyed delete (ordering: upsert then delete).
     store1.upsertLinkedAccount({
         id: randomUUID(),
         blackoutUserId: userId,
@@ -168,7 +168,7 @@ test('write-through persists across a simulated restart', async () => {
         scopes: ['scope'],
         encryptionKeyId: 'key-1',
     });
-    // Remove the youtube link — resync must delete exactly that row.
+    // Remove the youtube link — the delete must remove exactly that row.
     store1.deleteLinkedAccount(userId, 'youtube');
 
     // Growth ledger — TEXT (prefixed, non-UUID) ids; nullable cents; jsonb criteria.
@@ -215,7 +215,7 @@ test('write-through persists across a simulated restart', async () => {
     });
 
     // Ecosystem bounty + applications — JSONB string-array columns, and the
-    // acceptBountyApplication resync path (claims the bounty, declines siblings).
+    // acceptBountyApplication's targeted op (claims the bounty, declines siblings).
     store1.createBounty({
         id: 'bounty-eco-1',
         category: 'creator',
@@ -278,7 +278,7 @@ test('write-through persists across a simulated restart', async () => {
     store1.addCircleEdge({ id: randomUUID(), followerId: userId, followeeId: 'friend-1' });
     store1.addCircleEdge({ id: randomUUID(), followerId: 'friend-1', followeeId: userId });
     store1.addCircleEdge({ id: randomUUID(), followerId: userId, followeeId: 'friend-2' });
-    // Withdrawn follow — the resync path must delete exactly this row.
+    // Withdrawn follow — the keyed delete must remove exactly this row.
     store1.addCircleEdge({ id: randomUUID(), followerId: userId, followeeId: 'friend-3' });
     store1.removeCircleEdge(userId, 'friend-3');
 
@@ -426,7 +426,7 @@ test('write-through persists across a simulated restart', async () => {
     );
 
     // Ecosystem bounty survives restart with its JSONB array columns intact, and
-    // the accept resync (claim + decline siblings) is durable.
+    // the accept (claim + decline siblings) is durable.
     const bounty = store2.listBounties().find((b) => b.id === 'bounty-eco-1');
     assert.ok(bounty, 'ecosystem bounty should hydrate');
     assert.equal(bounty?.status, 'claimed');
