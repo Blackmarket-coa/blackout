@@ -1,5 +1,6 @@
 import { log } from '../telemetry/logger';
 import { sweepOverdueDeadmanSwitches } from '../modules/deadman';
+import { trackBackgroundTick } from './backgroundTicks';
 import { BACKLOG_TOLERANCE_FLOOR_MS, backlogToleranceMs } from './backlogTolerance';
 
 /**
@@ -16,8 +17,10 @@ import { BACKLOG_TOLERANCE_FLOOR_MS, backlogToleranceMs } from './backlogToleran
  * optional integration. Single-process by design (mirrors the other
  * schedulers): in postgres mode the background-leader advisory lock
  * (services/backgroundLeader.ts) keeps the loops to one process.
- * `evaluateTransition` is idempotent for already-fired switches, so an
- * occasional overlap re-emits nothing.
+ * `evaluateTransition` is idempotent for already-fired switches, and each
+ * move is conditional in Postgres (`advanceDeadmanSwitch`), so an occasional
+ * overlap of two processes, or a standby whose mirror lags, re-emits nothing
+ * and fires nothing twice.
  *
  * Its backlog tolerance follows its cadence (backlogTolerance.ts): a switch it
  * reaches later than that gets a backlog grace window instead of firing.
@@ -38,13 +41,15 @@ export const deadmanSweepIntervalMs = (): number => {
 };
 
 let timer: ReturnType<typeof setInterval> | null = null;
+/** Whether the interval's pass is running, so one that outlives the interval is not overlapped. */
+let running = false;
 
 /** Run one sweep pass. Returns the number of switches whose status advanced. */
-export const runDeadmanSweep = (
+export const runDeadmanSweep = async (
     now: Date = new Date(),
     toleranceMs: number = BACKLOG_TOLERANCE_FLOOR_MS
-): number => {
-    const processed = sweepOverdueDeadmanSwitches(now, toleranceMs);
+): Promise<number> => {
+    const processed = await sweepOverdueDeadmanSwitches(now, toleranceMs);
     if (processed > 0) log.info('deadman_sweep_processed', { processed });
     return processed;
 };
@@ -52,6 +57,10 @@ export const runDeadmanSweep = (
 /**
  * Start the periodic sweep. Idempotent — repeat calls return the same stop
  * handle. The timer is `.unref()`'d so it never keeps the process alive alone.
+ * A pass awaits the database for each switch it moves in Postgres
+ * (`advanceDeadmanSwitch`), so, as the notifier does, the next pass does not
+ * start while one runs, and the worker's shutdown waits for a pass in flight
+ * up to its own bound (`backgroundTicks.ts`).
  */
 export const startDeadmanSweepScheduler = (
     intervalMs: number = DEFAULT_INTERVAL_MS
@@ -59,11 +68,15 @@ export const startDeadmanSweepScheduler = (
     if (timer) return { stop: stopDeadmanSweepScheduler };
     const toleranceMs = backlogToleranceMs(intervalMs);
     timer = setInterval(() => {
-        try {
-            runDeadmanSweep(new Date(), toleranceMs);
-        } catch (err) {
-            log.warn('deadman_sweep_tick_threw', { error: String(err) });
-        }
+        if (running) return;
+        running = true;
+        void trackBackgroundTick(runDeadmanSweep(new Date(), toleranceMs))
+            .catch((err) => {
+                log.warn('deadman_sweep_tick_threw', { error: String(err) });
+            })
+            .finally(() => {
+                running = false;
+            });
     }, intervalMs);
     if (typeof timer.unref === 'function') timer.unref();
     return { stop: stopDeadmanSweepScheduler };

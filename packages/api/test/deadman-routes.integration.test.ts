@@ -290,12 +290,12 @@ test('a recipient sees nothing before the trigger, and after it only the release
 
     // Armed, then in grace: the recipient is answered like a stranger.
     await nothingForTheRecipient('armed');
-    sweepOverdueDeadmanSwitches(new Date(Date.now() + 65 * 1000));
+    await sweepOverdueDeadmanSwitches(new Date(Date.now() + 65 * 1000));
     assert.equal(db.getDeadmanSwitch(seeded.id)?.status, 'grace');
     await nothingForTheRecipient('in grace');
 
     // Triggered: the released view, and nothing more.
-    sweepOverdueDeadmanSwitches(new Date(Date.now() + 200 * 1000));
+    await sweepOverdueDeadmanSwitches(new Date(Date.now() + 200 * 1000));
     const expected = {
         switchId: seeded.id,
         ownerId: owner,
@@ -345,7 +345,7 @@ test('a cancelled switch never reaches its recipient, however long after (D3)', 
     });
     assert.equal(cancel.status, 200);
 
-    sweepOverdueDeadmanSwitches(new Date(Date.now() + 30 * 24 * HOUR_MS));
+    await sweepOverdueDeadmanSwitches(new Date(Date.now() + 30 * 24 * HOUR_MS));
     assert.equal(db.getDeadmanSwitch(seeded.id)?.status, 'cancelled');
     const read = await app.request(`/v1/deadman/switches/${seeded.id}`, {
         headers: headersFor(recipient),
@@ -363,8 +363,8 @@ test('a triggered switch cannot be checked in or cancelled, and the refusal clai
     const owner = `owner-${randomUUID()}`;
     const headers = headersFor(owner);
     const seeded = seedSwitch({ ownerId: owner, encryptedPayload: 'sealed-fired' });
-    sweepOverdueDeadmanSwitches(new Date(Date.now() + 65 * 1000));
-    sweepOverdueDeadmanSwitches(new Date(Date.now() + 200 * 1000));
+    await sweepOverdueDeadmanSwitches(new Date(Date.now() + 65 * 1000));
+    await sweepOverdueDeadmanSwitches(new Date(Date.now() + 200 * 1000));
     assert.equal(db.getDeadmanSwitch(seeded.id)?.status, 'triggered');
 
     const checkIn = await app.request(`/v1/deadman/switches/${seeded.id}/check-in`, {
@@ -407,16 +407,16 @@ test('autonomous sweep fires an overdue switch without the owner present', async
     // must fire when the owner is gone.
     assert.equal(await statusOf(), 'armed');
 
-    const graced = sweepOverdueDeadmanSwitches(new Date(Date.now() + 65 * 1000));
+    const graced = await sweepOverdueDeadmanSwitches(new Date(Date.now() + 65 * 1000));
     assert.ok(graced >= 1, 'sweep should advance the overdue switch into grace');
     assert.equal(await statusOf(), 'grace');
 
-    const triggered = sweepOverdueDeadmanSwitches(new Date(Date.now() + 200 * 1000));
+    const triggered = await sweepOverdueDeadmanSwitches(new Date(Date.now() + 200 * 1000));
     assert.ok(triggered >= 1, 'sweep should advance the switch into triggered');
     assert.equal(await statusOf(), 'triggered');
 
     // Idempotent: a further sweep does not re-fire an already-triggered switch.
-    const again = sweepOverdueDeadmanSwitches(new Date(Date.now() + 400 * 1000));
+    const again = await sweepOverdueDeadmanSwitches(new Date(Date.now() + 400 * 1000));
     assert.ok(!Number.isNaN(again));
     assert.equal(await statusOf(), 'triggered');
 });
@@ -431,8 +431,8 @@ test('the event feed shows each caller only the events of switches they own', as
 
     // The background sweep drives it to grace, then triggered: those are the
     // events that also carry the recipient list.
-    sweepOverdueDeadmanSwitches(new Date(Date.now() + 65 * 1000));
-    sweepOverdueDeadmanSwitches(new Date(Date.now() + 200 * 1000));
+    await sweepOverdueDeadmanSwitches(new Date(Date.now() + 65 * 1000));
+    await sweepOverdueDeadmanSwitches(new Date(Date.now() + 200 * 1000));
 
     for (const [who, outsider] of [
         ['a stranger', stranger],
@@ -470,7 +470,7 @@ test('a switch the sweep reaches hours late gets one 72-hour grace window, and i
 
     // The sweep comes back two hours after the release: nobody was watching.
     const back = new Date(Date.now() + 2 * HOUR_MS);
-    sweepOverdueDeadmanSwitches(back);
+    await sweepOverdueDeadmanSwitches(back);
     const inWindow = db.getDeadmanSwitch(seeded.id)!;
     assert.equal(inWindow.status, 'grace', 'not fired on the first sweep back');
     assert.equal(inWindow.releaseAt, new Date(back.getTime() + 72 * HOUR_MS).toISOString());
@@ -478,12 +478,12 @@ test('a switch the sweep reaches hours late gets one 72-hour grace window, and i
     assert.equal((await readAsRecipient()).status, 404, 'nothing for the recipient in the window');
 
     // Sweeps inside the window leave it alone.
-    sweepOverdueDeadmanSwitches(new Date(back.getTime() + 71 * HOUR_MS));
+    await sweepOverdueDeadmanSwitches(new Date(back.getTime() + 71 * HOUR_MS));
     assert.equal(db.getDeadmanSwitch(seeded.id)?.status, 'grace');
     assert.equal((await readAsRecipient()).status, 404);
 
     // When the window ends it fires, and the recipient can read the payload.
-    sweepOverdueDeadmanSwitches(new Date(back.getTime() + 72 * HOUR_MS + 1000));
+    await sweepOverdueDeadmanSwitches(new Date(back.getTime() + 72 * HOUR_MS + 1000));
     const fired = await readAsRecipient();
     assert.equal(fired.status, 200);
     const released = (await fired.json()) as { status: string; encryptedPayload?: string };
@@ -506,7 +506,7 @@ test('a check-in ends the backlog window, so the next missed check-in gets its o
     const owner = `owner-${randomUUID()}`;
     const seeded = seedSwitch({ ownerId: owner });
 
-    sweepOverdueDeadmanSwitches(new Date(Date.now() + 2 * HOUR_MS));
+    await sweepOverdueDeadmanSwitches(new Date(Date.now() + 2 * HOUR_MS));
     assert.equal(db.getDeadmanSwitch(seeded.id)?.status, 'grace');
     assert.ok(db.getDeadmanSwitch(seeded.id)?.backlogGraceStartedAt);
 
@@ -520,7 +520,7 @@ test('a check-in ends the backlog window, so the next missed check-in gets its o
     assert.equal(afterCheckIn?.backlogGraceStartedAt, undefined);
 
     // A second outage: the switch gets a window again rather than firing.
-    sweepOverdueDeadmanSwitches(new Date(Date.now() + 3 * HOUR_MS));
+    await sweepOverdueDeadmanSwitches(new Date(Date.now() + 3 * HOUR_MS));
     assert.equal(db.getDeadmanSwitch(seeded.id)?.status, 'grace');
     assert.ok(db.getDeadmanSwitch(seeded.id)?.backlogGraceStartedAt);
 });

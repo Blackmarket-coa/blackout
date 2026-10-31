@@ -756,14 +756,21 @@ export const writeReleaseNotices = (record: DeadmanSwitchRecord, dueAt: string):
 /**
  * The sweep's trigger of a release switch: the status, when it fired, and
  * the notice rows, in that order. From the status change on, each
- * recipient's read lists their copy; the notifier sends the notices.
+ * recipient's read lists their copy; the notifier sends the notices. The
+ * trigger is conditional (`advanceDeadmanSwitch`, in Postgres too): a switch
+ * another process already fired, or changed since this process read it, is
+ * not fired again, keeps its first `releasedAt`, and gets no rows from here
+ * (round 9 of part 2's review).
  */
-export const recordReleaseTrigger = (
+export const recordReleaseTrigger = async (
     record: DeadmanSwitchRecord,
     now: Date
-): DeadmanSwitchRecord | undefined => {
+): Promise<DeadmanSwitchRecord | undefined> => {
     const releasedAt = now.toISOString();
-    const updated = db.updateDeadmanSwitch(record.id, { status: 'triggered', releasedAt });
+    const updated = await db.advanceDeadmanSwitch(record.id, record, {
+        status: 'triggered',
+        releasedAt,
+    });
     if (!updated) return undefined;
     writeReleaseNotices(updated, releasedAt);
     return updated;

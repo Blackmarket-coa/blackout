@@ -62,6 +62,7 @@ const { eraseReleaseCopiesAndNoticesOf, finishAccountDeletion } = await import(
     '../src/services/accountLifecycle'
 );
 const { upsertRecord } = await import('../src/db/pgWriter');
+const { computeDeadlines } = await import('../src/services/deadmanScheduler');
 
 protocol.setKemProvider(protocol.mlKem768Provider);
 
@@ -167,7 +168,7 @@ const release = async (recipient: { keySet: ReleaseKeySet }, beforeSweep?: () =>
     assert.equal(outcome.kind, 'armed');
     await beforeSweep?.();
     const at = new Date((clock += 300_000));
-    sweepOverdueDeadmanSwitches(at, Number.MAX_SAFE_INTEGER);
+    await sweepOverdueDeadmanSwitches(at, Number.MAX_SAFE_INTEGER);
     return { switchId: envelope.releaseId, at };
 };
 
@@ -678,7 +679,7 @@ test('a notice row is created only where Postgres has none: a process whose mirr
     await standby.init(pool as never);
 
     const at = new Date((clock += 300_000));
-    sweepOverdueDeadmanSwitches(at, Number.MAX_SAFE_INTEGER);
+    await sweepOverdueDeadmanSwitches(at, Number.MAX_SAFE_INTEGER);
     assert.equal((await runDeadmanReleaseNotifier({ now: at })).sent, 1);
     await worker.drain();
     const sentRow = (
@@ -954,7 +955,7 @@ test('a leader taking over within the change notification’s lag sends nothing 
                 assert.equal(worker.getDeadmanSwitch(switchId)?.status, 'triggered', variant.name);
             } else {
                 assert.equal(worker.getDeadmanSwitch(switchId)?.status, 'armed', variant.name);
-                sweepOverdueDeadmanSwitches(at, Number.MAX_SAFE_INTEGER);
+                await sweepOverdueDeadmanSwitches(at, Number.MAX_SAFE_INTEGER);
             }
             if (!variant.armedInMirror) {
                 assert.equal(
@@ -1449,7 +1450,7 @@ test('a leader taking over uses the room the old leader recorded on another of t
                 assert.equal(worker.findDeadmanNoticeRoom(recipient.id), staleRoom, variant);
             }
             const later = new Date(at.getTime() + 5_000);
-            sweepOverdueDeadmanSwitches(later, Number.MAX_SAFE_INTEGER);
+            await sweepOverdueDeadmanSwitches(later, Number.MAX_SAFE_INTEGER);
             assert.equal(worker.getDeadmanSwitch(s2)?.status, 'triggered', variant);
             const roomsBefore = roomsMadeFor(mxid);
             const s1SendsBefore = matrix.sends.filter((x) => x.txnId.includes(s1)).length;
@@ -1703,5 +1704,143 @@ test('the deletion route answers only once the deletion’s own writes have been
             last_error: 'recipient_gone',
             room_id: null,
         });
+    }
+});
+
+test('a standby whose mirror has not heard of a trigger, a check-in or a cancel does not move the switch: the sweep’s write is conditional in Postgres, the first releasedAt stands, and the standby writes no notice row and sends nothing twice', async () => {
+    // Round 9 of part 2's review (the operator's decision of 2026-10-31). The
+    // sweep's write of a switch was a full-row upsert, so a standby whose
+    // mirror still had the switch armed fired it again, Postgres took its
+    // later releasedAt (moving the notice retry window and the removal date),
+    // and its sweep wrote notice rows for it in its mirror. A check-in or a
+    // cancel another process committed was written over the same way. A
+    // second store stands in for the old leader or the API process.
+    type Variant = {
+        name: string;
+        elsewhere: 'fired' | 'firedAndSent' | 'checkedIn' | 'cancelled';
+    };
+    const variants: Variant[] = [
+        { name: 'fired and sent by the old leader', elsewhere: 'firedAndSent' },
+        { name: 'fired by the old leader, which stopped before sending', elsewhere: 'fired' },
+        { name: 'checked in on the API process', elsewhere: 'checkedIn' },
+        { name: 'cancelled on the API process', elsewhere: 'cancelled' },
+    ];
+    for (const variant of variants) {
+        const recipient = await person();
+        const owner = await person();
+        const envelope = await protocol.buildReleaseEnvelope({
+            ownerKeySet: owner.keySet,
+            recipients: [recipient.keySet.identity],
+            message: 'Synthetic test text.',
+        });
+        const armed = await armReleaseSwitch({
+            ownerId: owner.id,
+            input: { checkInIntervalSeconds: 60, gracePeriodSeconds: 0, envelope },
+        });
+        assert.equal(armed.kind, 'armed', variant.name);
+        const switchId = envelope.releaseId;
+        await worker.drain();
+        const read = worker.getDeadmanSwitch(switchId)!;
+        const other = new store.PostgresBackedDb();
+        await other.init(pool as never);
+        const firstAt = new Date((clock += 300_000));
+        const first = firstAt.toISOString();
+        if (variant.elsewhere === 'fired' || variant.elsewhere === 'firedAndSent') {
+            const fired = await other.advanceDeadmanSwitch(switchId, read, {
+                status: 'triggered',
+                releasedAt: first,
+            });
+            assert.equal(fired?.releasedAt, first, variant.name);
+            other.createDeadmanReleaseNotice({
+                switchId,
+                recipientAccountId: recipient.id,
+                nextAttemptAt: first,
+            });
+            if (variant.elsewhere === 'firedAndSent') {
+                other.updateDeadmanReleaseNoticeIf(
+                    switchId,
+                    recipient.id,
+                    { status: 'pending' },
+                    { status: 'sent', attempts: 1, sentAt: first, roomId: '!old:test.local' }
+                );
+            }
+        } else if (variant.elsewhere === 'checkedIn') {
+            other.updateDeadmanSwitch(switchId, {
+                status: 'armed',
+                lastCheckInAt: first,
+                ...computeDeadlines({
+                    lastCheckInAt: first,
+                    checkInIntervalSeconds: 60,
+                    gracePeriodSeconds: 0,
+                }),
+            });
+        } else {
+            other.updateDeadmanSwitch(switchId, { status: 'cancelled', encryptedPayload: '' });
+        }
+        await other.drain();
+        assert.equal(worker.getDeadmanSwitch(switchId)?.status, 'armed', 'not heard of');
+
+        // The standby's sweep, a few seconds later: the switch is overdue in
+        // its mirror.
+        const later = new Date(firstAt.getTime() + 5_000);
+        await sweepOverdueDeadmanSwitches(later, Number.MAX_SAFE_INTEGER);
+        const stored = (
+            await pg.query(
+                'SELECT status, released_at, last_check_in_at FROM deadman_switches WHERE id = $1',
+                [switchId]
+            )
+        ).rows[0] as { status: string; released_at: Date | null; last_check_in_at: Date };
+        const mirrored = worker.getDeadmanSwitch(switchId)!;
+        if (variant.elsewhere === 'fired' || variant.elsewhere === 'firedAndSent') {
+            assert.equal(stored.status, 'triggered', variant.name);
+            assert.equal(
+                stored.released_at?.toISOString(),
+                first,
+                `${variant.name}: the first releasedAt stands`
+            );
+            assert.equal(mirrored.status, 'triggered', variant.name);
+            assert.equal(mirrored.releasedAt, first, `${variant.name}: the mirror took it`);
+        } else if (variant.elsewhere === 'checkedIn') {
+            assert.equal(stored.status, 'armed', `${variant.name}: not fired`);
+            assert.equal(stored.released_at, null, variant.name);
+            assert.equal(stored.last_check_in_at.toISOString(), first, variant.name);
+            assert.equal(mirrored.status, 'armed', variant.name);
+            assert.equal(
+                mirrored.lastCheckInAt,
+                first,
+                `${variant.name}: the mirror took the check-in`
+            );
+        } else {
+            assert.equal(stored.status, 'cancelled', `${variant.name}: not fired`);
+            assert.equal(stored.released_at, null, variant.name);
+            assert.equal(mirrored.status, 'cancelled', variant.name);
+        }
+        assert.equal(
+            worker.getDeadmanReleaseNotice(switchId, recipient.id),
+            undefined,
+            `${variant.name}: the standby's sweep wrote no notice row`
+        );
+
+        const sendsBefore = matrix.sends.filter((x) => x.txnId.includes(switchId)).length;
+        await runDeadmanReleaseNotifier({ now: later });
+        await worker.drain();
+        const sends = matrix.sends.filter((x) => x.txnId.includes(switchId)).length - sendsBefore;
+        const rows = (
+            await pg.query('SELECT status FROM deadman_release_notices WHERE switch_id = $1', [
+                switchId,
+            ])
+        ).rows as Array<{ status: string }>;
+        if (variant.elsewhere === 'fired') {
+            // The old leader stopped before sending: the notice is sent once.
+            assert.equal(sends, 1, variant.name);
+            assert.deepEqual(rows, [{ status: 'sent' }], variant.name);
+        } else if (variant.elsewhere === 'firedAndSent') {
+            assert.equal(sends, 0, `${variant.name}: not sent again`);
+            assert.deepEqual(rows, [{ status: 'sent' }], variant.name);
+        } else {
+            assert.equal(sends, 0, variant.name);
+            assert.deepEqual(rows, [], `${variant.name}: no notice row`);
+        }
+        await other.drain();
     }
 });

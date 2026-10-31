@@ -654,7 +654,7 @@ test('at most 20 release switches per owner with content held: fired ones count 
 
     // The sweep fires 19 of them: their content is still held, so they still count.
     const firesAt = FIRES_AT();
-    sweepAt(firesAt);
+    await sweepAt(firesAt);
     assert.equal(
         ids.slice(1).filter((id) => db.getDeadmanSwitch(id)?.status === 'triggered').length,
         19
@@ -685,7 +685,7 @@ test('at most 20 release switches per owner with content held: fired ones count 
     await errorOf(await arm(owner.user, armBody(yetAnother)), 409, 'release_switch_limit');
 
     // The 365-day removal frees the fired ones' slots.
-    sweepAt(new Date(firesAt.getTime() + DEADMAN_RELEASE_RETENTION_MS));
+    await sweepAt(new Date(firesAt.getTime() + DEADMAN_RELEASE_RETENTION_MS));
     assert.equal(db.getDeadmanSwitch(ids[1])?.encryptedPayload, '');
     assert.equal((await arm(owner.user, armBody(yetAnother))).status, 201);
 
@@ -724,7 +724,7 @@ test('at most 5 held releases from one owner may name one person, and at most 50
     assert.equal((await arm(owner.user, armBody(replacement))).status, 201);
     await errorOf(await arm(owner.user, armBody(sixth)), 409, 'recipient_limit');
     // Fired ones count until their removal.
-    sweepAt(FIRES_AT());
+    await sweepAt(FIRES_AT());
     assert.equal(db.getDeadmanSwitch(ids[0])?.status, 'triggered');
     await errorOf(await arm(owner.user, armBody(sixth)), 409, 'recipient_limit');
     // Another owner may still name them: the bound is per owner here.
@@ -932,7 +932,7 @@ test('after the trigger each recipient reads their own copy and nothing of anyon
     assert.deepEqual(await releasesFor(carol.user), []);
 
     const firesAt = FIRES_AT();
-    assert.ok(sweepAt(firesAt) >= 1);
+    assert.ok((await sweepAt(firesAt)) >= 1);
     const record = db.getDeadmanSwitch(envelope.releaseId)!;
     assert.equal(record.status, 'triggered');
     assert.equal(record.releasedAt, firesAt.toISOString());
@@ -1130,7 +1130,7 @@ test('re-sealing replaces one recipient’s copy after their key changed, and re
     assert.equal(db.listDeadmanReleaseWraps(envelope.releaseId).length, 2);
 
     // After the trigger the recipient gets the new copy and opens it with the new keys.
-    sweepAt(FIRES_AT());
+    await sweepAt(FIRES_AT());
     const [release] = await releasesFor(recipient.user);
     assert.deepEqual(release.copy, newCopy);
     const opened = await protocol.openReleaseCopy({
@@ -1214,7 +1214,7 @@ test('cancel removes the content and every copy; a second cancel removes what a 
     assert.ok(db.listDeadmanReleaseWraps(earlier.releaseId).every((w) => w.sealedKey === ''));
 
     // However long after, the sweep fires neither, and the recipient gets nothing.
-    sweepAt(new Date(Date.now() + 400 * 24 * 3600 * 1000));
+    await sweepAt(new Date(Date.now() + 400 * 24 * 3600 * 1000));
     assert.equal(db.getDeadmanSwitch(envelope.releaseId)?.status, 'cancelled');
     assert.deepEqual(await releasesFor(recipient.user), []);
 });
@@ -1225,16 +1225,16 @@ test('365 days after it fired, a release’s content and copies are removed; the
     const envelope = await build(owner.keySet, [recipient.keySet.identity]);
     assert.equal((await arm(owner.user, armBody(envelope))).status, 201);
     const firesAt = FIRES_AT();
-    sweepAt(firesAt);
+    await sweepAt(firesAt);
     assert.equal((await releasesFor(recipient.user)).length, 1);
 
     const justBefore = new Date(firesAt.getTime() + DEADMAN_RELEASE_RETENTION_MS - 1000);
-    sweepAt(justBefore);
+    await sweepAt(justBefore);
     assert.equal((await releasesFor(recipient.user)).length, 1, 'held until the day');
     assert.notEqual(db.getDeadmanSwitch(envelope.releaseId)?.encryptedPayload, '');
 
     const onTheDay = new Date(firesAt.getTime() + DEADMAN_RELEASE_RETENTION_MS);
-    sweepAt(onTheDay);
+    await sweepAt(onTheDay);
     const record = db.getDeadmanSwitch(envelope.releaseId)!;
     assert.equal(record.status, 'triggered');
     assert.equal(record.releasedAt, firesAt.toISOString());
@@ -1253,7 +1253,7 @@ test('365 days after it fired, a release’s content and copies are removed; the
         'the notice rows stay'
     );
     // Idempotent.
-    sweepAt(new Date(onTheDay.getTime() + 1000));
+    await sweepAt(new Date(onTheDay.getTime() + 1000));
     assert.equal(db.getDeadmanSwitch(envelope.releaseId)?.encryptedPayload, '');
 });
 
@@ -1267,7 +1267,7 @@ test('legacy switches behave as before: status only on trigger, the payload to r
     assert.equal(view.encryptedPayload, 'sealed-legacy-payload');
     assert.equal(view.release, undefined);
 
-    sweepAt(FIRES_AT());
+    await sweepAt(FIRES_AT());
     const fired = db.getDeadmanSwitch(legacy.id)!;
     assert.equal(fired.status, 'triggered');
     assert.equal(fired.releasedAt, undefined, 'a legacy switch records no release');
@@ -1293,7 +1293,7 @@ test('legacy switches behave as before: status only on trigger, the payload to r
     assert.equal(after.notices, undefined);
     assert.equal(after.releasedAt, undefined);
     // Removal leaves legacy switches alone, however old.
-    sweepAt(new Date(Date.now() + 2 * DEADMAN_RELEASE_RETENTION_MS));
+    await sweepAt(new Date(Date.now() + 2 * DEADMAN_RELEASE_RETENTION_MS));
     assert.equal(db.getDeadmanSwitch(legacy.id)?.encryptedPayload, 'sealed-legacy-payload');
 });
 
@@ -1345,7 +1345,7 @@ test('the export lists an owner’s release switches without any copy, and a rec
     assert.deepEqual(before.deadmanReleases, [], 'nothing before the trigger');
     assert.ok(!JSON.stringify(before).includes(envelope.releaseId));
 
-    sweepAt(FIRES_AT());
+    await sweepAt(FIRES_AT());
     const owners = lifecycle.exportUserData(owner.user.id)!;
     const entry = owners.deadmanSwitches.find((s) => s.id === envelope.releaseId)!;
     assert.equal(entry.releaseFormat, 'release-v1');
@@ -1417,7 +1417,7 @@ test('deleting an owner’s account removes an unfired release’s copies and ke
         triggerAt: new Date(Date.now() - 600_000).toISOString(),
         releaseAt: new Date(Date.now() - 600_000).toISOString(),
     });
-    sweepAt(new Date());
+    await sweepAt(new Date());
     assert.equal(db.getDeadmanSwitch(fired.releaseId)?.status, 'triggered');
     assert.equal(db.getDeadmanSwitch(armed.releaseId)?.status, 'armed');
     const firedContent = db.getDeadmanSwitch(fired.releaseId)!.encryptedPayload;
@@ -1429,7 +1429,7 @@ test('deleting an owner’s account removes an unfired release’s copies and ke
         triggerAt: new Date(Date.now() - 600_000).toISOString(),
         releaseAt: new Date(Date.now() - 600_000).toISOString(),
     });
-    sweepAt(new Date());
+    await sweepAt(new Date());
     db.updateDeadmanReleaseNotice(theirs.releaseId, recipient.user.id, {
         roomId: '!notices:test.local',
     });
@@ -1577,7 +1577,7 @@ test('a release whose content is gone while a copy is still held is not served, 
     const envelope = await build(owner.keySet, [recipient.keySet.identity]);
     assert.equal((await arm(owner.user, armBody(envelope))).status, 201);
     const firesAt = FIRES_AT();
-    sweepAt(firesAt);
+    await sweepAt(firesAt);
     assert.equal((await releasesFor(recipient.user)).length, 1);
     // Half a removal (a crash between blanking the content and the copies).
     db.updateDeadmanSwitch(envelope.releaseId, { encryptedPayload: '' });
@@ -1595,7 +1595,7 @@ test('a release whose content is gone while a copy is still held is not served, 
     // the content is still there. A blank copy is not served as a copy.
     const other = await build(owner.keySet, [recipient.keySet.identity], 'second message');
     assert.equal((await arm(owner.user, armBody(other))).status, 201);
-    sweepAt(firesAt);
+    await sweepAt(firesAt);
     assert.ok((await releasesFor(recipient.user)).some((r) => r.releaseId === other.releaseId));
     blankReleaseWraps(other.releaseId);
     assert.notEqual(db.getDeadmanSwitch(other.releaseId)?.encryptedPayload, '');
@@ -1611,7 +1611,7 @@ test('a release whose content is gone while a copy is still held is not served, 
     // an identity with missing fields.
     const third = await build(owner.keySet, [recipient.keySet.identity], 'third message');
     assert.equal((await arm(owner.user, armBody(third))).status, 201);
-    sweepAt(firesAt);
+    await sweepAt(firesAt);
     const { header: thirdHeader } = JSON.parse(
         db.getDeadmanSwitch(third.releaseId)!.encryptedPayload
     ) as { header: unknown };
@@ -1651,7 +1651,7 @@ test('a legacy switch holds no release whatever its payload looks like, and a fi
     );
 
     assert.equal((await arm(owner.user, armBody(envelope))).status, 201);
-    sweepAt(FIRES_AT());
+    await sweepAt(FIRES_AT());
     const issued = lifecycle.requestAccountDeletion({ userId: owner.user.id })!;
     assert.equal(lifecycle.confirmAccountDeletion(issued.token, owner.user.id).kind, 'ok');
     // Nobody can sign in as the owner any more; the view a session would get
@@ -1915,7 +1915,7 @@ test('a recipient whose account was deleted before the trigger gets no notice ro
     assert.equal(lifecycle.confirmAccountDeletion(issued.token, leaving.user.id).kind, 'ok');
     assert.equal(db.getDeadmanReleaseWrap(envelope.releaseId, leaving.user.id)?.sealedKey, '');
 
-    sweepAt(FIRES_AT());
+    await sweepAt(FIRES_AT());
     const notices = db.listDeadmanReleaseNotices(envelope.releaseId);
     assert.deepEqual(
         notices.map((n) => n.recipientAccountId),
@@ -2072,7 +2072,7 @@ test('a key change or a deletion during a re-seal’s verification is seen befor
         [],
         'the deleted account is not listed as sealed to'
     );
-    sweepAt(FIRES_AT());
+    await sweepAt(FIRES_AT());
     assert.equal(
         db.getDeadmanReleaseNotice(deletion.envelope.releaseId, deletion.recipient.user.id),
         undefined,

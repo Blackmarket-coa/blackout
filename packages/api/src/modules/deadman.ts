@@ -204,28 +204,40 @@ const ownedSwitch = (id: string, subject: string): DeadmanSwitchRecord | undefin
  * them. A legacy switch changes status only, as before. Each pass also
  * removes the content and copies of releases that fired 365 days ago or more
  * (`removeExpiredReleases`); those are not counted as processed.
+ *
+ * Every move is conditional (`advanceDeadmanSwitch`): it lands only on a
+ * switch still as this pass read it, with the same status and last check-in
+ * and not fired, in Postgres too, so a standby whose mirror has not yet heard
+ * of a trigger, a check-in or a cancel another process committed does not
+ * write over it, and a switch it does not move gets nothing else written and
+ * no event (round 9 of part 2's review). Each switch is read from the mirror
+ * as it is reached, since a move in Postgres awaits the database.
  */
-export function sweepOverdueDeadmanSwitches(
+export async function sweepOverdueDeadmanSwitches(
     now: Date = new Date(),
     toleranceMs: number = BACKLOG_TOLERANCE_FLOOR_MS
-): number {
+): Promise<number> {
     let processed = 0;
     let backlogWindows = 0;
-    for (const record of db.listAllDeadmanSwitches()) {
+    for (const listed of db.listAllDeadmanSwitches()) {
+        const record = db.getDeadmanSwitch(listed.id);
+        if (!record) continue;
         const transition = evaluateSweepTransition(record, now, toleranceMs);
         if (transition.kind === 'none') continue;
 
         let updated: DeadmanSwitchRecord | undefined;
         if (transition.kind === 'backlog_grace') {
-            updated = db.updateDeadmanSwitch(record.id, {
+            updated = await db.advanceDeadmanSwitch(record.id, record, {
                 status: transition.record.status,
                 releaseAt: transition.record.releaseAt,
                 backlogGraceStartedAt: transition.record.backlogGraceStartedAt,
             });
         } else if (transition.kind === 'triggered' && isReleaseSwitch(record)) {
-            updated = recordReleaseTrigger(record, now);
+            updated = await recordReleaseTrigger(record, now);
         } else {
-            updated = db.setDeadmanSwitchStatus(record.id, transition.record.status);
+            updated = await db.advanceDeadmanSwitch(record.id, record, {
+                status: transition.record.status,
+            });
         }
         if (!updated) continue;
 

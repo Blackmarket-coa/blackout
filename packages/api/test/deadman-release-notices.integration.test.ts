@@ -180,7 +180,7 @@ const released = async (
     at: Date = soon()
 ) => {
     const record = await armFor(owner, recipients);
-    sweepAt(at);
+    await sweepAt(at);
     const fired = db.getDeadmanSwitch(record.id)!;
     assert.equal(fired.status, 'triggered');
     return { record: fired, at };
@@ -252,7 +252,7 @@ test('the sweep writes one pending notice per recipient with the trigger, none f
     assert.equal(db.listDeadmanReleaseNotices(record.id).length, 0, 'nothing before the trigger');
 
     const at = soon();
-    sweepAt(at);
+    await sweepAt(at);
     const notices = db.listDeadmanReleaseNotices(record.id);
     assert.deepEqual(
         notices.map((n) => n.recipientAccountId).sort(),
@@ -275,7 +275,7 @@ test('the sweep writes one pending notice per recipient with the trigger, none f
         failed: 0,
     });
     // The sweep writes each row once.
-    sweepAt(new Date(at.getTime() + 60_000));
+    await sweepAt(new Date(at.getTime() + 60_000));
     assert.equal(db.listDeadmanReleaseNotices(record.id).length, 2);
     // Sent, so that the later tests start with nothing due.
     assert.equal((await runDeadmanReleaseNotifier({ now: at })).sent, 2);
@@ -634,7 +634,7 @@ test('a fired release switch without its rows is caught up: a crash between the 
         releasedAt: at.toISOString(),
         encryptedPayload: '',
     });
-    sweepAt(at);
+    await sweepAt(at);
     assert.equal((await runDeadmanReleaseNotifier({ now: at })).caughtUp, 0);
     assert.equal(db.listDeadmanReleaseNotices(removed.id).length, 0);
 });
@@ -709,7 +709,7 @@ test('a notice row for a release switch that has not fired is left alone, and is
     assert.equal(matrix.sends.length + matrix.creates.length, 0);
     assert.deepEqual(recordToOwnerView(db.getDeadmanSwitch(armed.id)!).notices, undefined);
 
-    sweepAt(at);
+    await sweepAt(at);
     assert.equal(db.getDeadmanSwitch(armed.id)?.status, 'triggered');
     assert.equal(
         db.listDeadmanReleaseNotices(armed.id).length,

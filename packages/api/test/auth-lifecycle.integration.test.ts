@@ -341,7 +341,7 @@ test('account deletion cancels the owner’s unfired switches and clears what th
     );
 
     // The sweep, long after, fires none of them.
-    sweepOverdueDeadmanSwitches(new Date(Date.now() + 365 * 24 * 3600 * 1000));
+    await sweepOverdueDeadmanSwitches(new Date(Date.now() + 365 * 24 * 3600 * 1000));
     assert.equal(db.getDeadmanSwitch(armed.id)?.status, 'cancelled');
     assert.equal(db.getDeadmanSwitch(inGrace.id)?.status, 'cancelled');
 });
