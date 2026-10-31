@@ -321,8 +321,8 @@ const armResponse = (c: Context, outcome: ArmReleaseOutcome, subject: string) =>
                 {
                     code: DEADMAN_RELEASE_ERRORS.recipientLimit,
                     message:
-                        'A copy names an account that is already named on as many held releases ' +
-                        'as are allowed',
+                        'A copy names an account this owner already names on as many held ' +
+                        'releases, or that as many other owners already name, as are allowed',
                     recipientAccountId: outcome.recipientAccountId,
                 },
                 409

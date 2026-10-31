@@ -120,8 +120,12 @@ export type DeadmanLimits = {
     maxArmsPerDay: number;
     /** Held releases one owner may have naming one recipient (409 `recipient_limit`). */
     maxHeldReleasesPerRecipientFromOwner: number;
-    /** Held releases naming one recipient from every owner together (409 `recipient_limit`). */
-    maxHeldReleasesPerRecipient: number;
+    /**
+     * Distinct owners whose held releases may name one recipient (409
+     * `recipient_limit`): an owner's several releases naming the person count
+     * once, and are bounded by `maxHeldReleasesPerRecipientFromOwner`.
+     */
+    maxOwnersNamingRecipient: number;
     /** How late a sweep may reach a switch before it is read as an outage. */
     backlogToleranceSeconds: number;
     /** The grace a switch reached that late gets from then. */
@@ -148,8 +152,13 @@ export const DEADMAN_MAX_LIVE_RELEASE_SWITCHES = 20;
 export const DEADMAN_MAX_ARMS_PER_DAY = 10;
 /** Held releases from one owner that may name one recipient. */
 export const DEADMAN_MAX_HELD_RELEASES_PER_RECIPIENT_FROM_OWNER = 5;
-/** Held releases from every owner together that may name one recipient. */
-export const DEADMAN_MAX_HELD_RELEASES_PER_RECIPIENT = 50;
+/**
+ * Distinct owners whose held releases may name one recipient. An owner already
+ * naming the person may add releases up to the bound above; a new owner is
+ * refused once this many name them (decision 18, option (c): it counted
+ * releases until 2026-10-31, when ten accounts could fill it).
+ */
+export const DEADMAN_MAX_OWNERS_NAMING_RECIPIENT = 50;
 /** The owner-only label's length, as before. */
 export const DEADMAN_LABEL_MAX_LENGTH = 280;
 
@@ -221,11 +230,11 @@ export const DEADMAN_RELEASE_ERRORS = {
     /** 429, with `Retry-After`: the owner armed as many release switches in 24 hours as are allowed. */
     armRateLimited: 'release_arm_rate_limited',
     /**
-     * 409: a copy names an account that is already named on as many held
-     * releases as are allowed, from this owner or from everyone;
-     * `recipientAccountId` says whose. One code for both bounds, which hides
-     * nothing: an owner who has named the person fewer times than its own
-     * bound allows and is refused can tell it is the bound from everyone.
+     * 409: a copy names an account that this owner already names on as many
+     * held releases as are allowed, or that as many other owners already name
+     * as are allowed; `recipientAccountId` says whose. One code for both
+     * bounds, which hides nothing: an owner who has never named the person and
+     * is refused can tell it is the bound on owners.
      */
     recipientLimit: 'recipient_limit',
     /** 409: re-sealing a switch that is not in the release format. */

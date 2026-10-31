@@ -696,7 +696,7 @@ test('at most 20 release switches per owner with content held: fired ones count 
     assert.equal((await arm(legacyOwner.user, armBody(legacyEnvelope))).status, 201);
 });
 
-test('at most 5 held releases from one owner may name one person, and 50 from everyone; one code for both', async () => {
+test('at most 5 held releases from one owner may name one person, and at most 50 owners may name them, an owner’s several releases counting once; one code for both', async () => {
     const owner = await freshPerson();
     const victim = await freshPerson();
     const ids: string[] = [];
@@ -741,32 +741,54 @@ test('at most 5 held releases from one owner may name one person, and 50 from ev
         201
     );
 
-    // From everyone: ten owners, five each, name one person; the 51st is refused
-    // with the same code and message, so the answer does not say which bound.
+    // From everyone, counted in owners (decision 18, option (c)): one owner's
+    // five releases naming the person count once, so ten owners with five each
+    // no longer fill it (as releases were counted until 2026-10-31, they did).
     const popular = await freshPerson();
+    const nameOnce = async (namer: Awaited<ReturnType<typeof freshPerson>>, label: string) =>
+        arm(namer.user, armBody(await build(namer.keySet, [popular.keySet.identity], label)));
+    const namers: Awaited<ReturnType<typeof freshPerson>>[] = [];
     for (let o = 0; o < 10; o += 1) {
         const namer = await freshPerson();
         for (let i = 0; i < 5; i += 1) {
-            const envelope = await build(namer.keySet, [popular.keySet.identity], `p ${o} ${i}`);
-            assert.equal((await arm(namer.user, armBody(envelope))).status, 201, `${o}/${i}`);
+            assert.equal((await nameOnce(namer, `p ${o} ${i}`)).status, 201, `${o}/${i}`);
         }
+        namers.push(namer);
     }
-    const eleventhOwner = await freshPerson();
+    assert.equal(heldReleasesNaming(popular.user.id).total, 50);
+    assert.equal(heldReleasesNaming(popular.user.id).fromOwner.size, 10);
+    // Forty more owners, one release each, bring it to fifty owners: the 50th
+    // passes, the 51st is refused with the same code and message as the bound
+    // from one owner, so the answer does not say which bound.
+    for (let o = 10; o < 50; o += 1) {
+        const namer = await freshPerson();
+        assert.equal((await nameOnce(namer, `owner ${o}`)).status, 201, `owner ${o}`);
+        namers.push(namer);
+    }
+    assert.equal(heldReleasesNaming(popular.user.id).fromOwner.size, 50);
+    assert.equal(heldReleasesNaming(popular.user.id).total, 90);
+    const fiftyFirstOwner = await freshPerson();
     const fiftyFirst = await errorOf(
-        await arm(
-            eleventhOwner.user,
-            armBody(await build(eleventhOwner.keySet, [popular.keySet.identity]))
-        ),
+        await nameOnce(fiftyFirstOwner, 'one too many'),
         409,
         'recipient_limit'
     );
     assert.equal(fiftyFirst.recipientAccountId, popular.user.id);
     assert.equal(fiftyFirst.message, refused.message);
     assert.deepEqual(Object.keys(fiftyFirst).sort(), Object.keys(refused).sort());
-    // Someone else is still free to be named by that owner.
+    // An owner already among the fifty may name them again, up to its own five;
+    // one at its five is refused by its own bound.
+    assert.equal((await nameOnce(namers[49], 'again')).status, 201);
+    assert.equal(heldReleasesNaming(popular.user.id).fromOwner.size, 50);
+    await errorOf(await nameOnce(namers[0], 'a sixth'), 409, 'recipient_limit');
+    // Someone else is still free to be named by the refused owner.
     assert.equal(
-        (await arm(eleventhOwner.user, armBody(await build(eleventhOwner.keySet, [BOB.identity]))))
-            .status,
+        (
+            await arm(
+                fiftyFirstOwner.user,
+                armBody(await build(fiftyFirstOwner.keySet, [BOB.identity]))
+            )
+        ).status,
         201
     );
 });
@@ -858,17 +880,22 @@ test('arms sent at once at the edge of each bound: exactly the bound passes and 
     assert.ok(named.refused.every((body) => body.recipientAccountId === victim.user.id));
     assert.equal(heldReleasesNaming(victim.user.id).total, 5);
 
-    // Naming one person from everyone: at 45 from nine owners, ten more owners
-    // arm at once; the bound spans owners, so only the second read can hold it.
+    // Naming one person, counted in owners: at 45 owners (the first with three
+    // releases), ten more owners arm at once, and the first arms two more in
+    // the same burst; the bound spans owners, so only the second read can hold
+    // it, and an owner already naming the person is not a new one.
     const popular = await freshPerson();
-    for (let o = 0; o < 9; o += 1) {
+    const owners: Awaited<ReturnType<typeof freshPerson>>[] = [];
+    for (let o = 0; o < 45; o += 1) {
         const one = await freshPerson();
-        for (let i = 0; i < 5; i += 1) {
+        for (let i = 0; i < (o === 0 ? 3 : 1); i += 1) {
             const envelope = await build(one.keySet, [popular.keySet.identity], `p ${o} ${i}`);
             assert.equal((await arm(one.user, armBody(envelope))).status, 201, `${o}/${i}`);
         }
+        owners.push(one);
     }
-    assert.equal(heldReleasesNaming(popular.user.id).total, 45);
+    assert.equal(heldReleasesNaming(popular.user.id).fromOwner.size, 45);
+    assert.equal(heldReleasesNaming(popular.user.id).total, 47);
     const allArms = [];
     for (let o = 0; o < 10; o += 1) {
         const one = await freshPerson();
@@ -877,9 +904,17 @@ test('arms sent at once at the edge of each bound: exactly the bound passes and 
             envelope: await build(one.keySet, [popular.keySet.identity], `all ${o}`),
         });
     }
+    for (let i = 0; i < 2; i += 1) {
+        allArms.push({
+            owner: owners[0].user,
+            envelope: await build(owners[0].keySet, [popular.keySet.identity], `first ${i}`),
+        });
+    }
     const all = await burst(allArms);
-    assert.deepEqual(all.tally, { '201': 5, '409 recipient_limit': 5 });
-    assert.equal(heldReleasesNaming(popular.user.id).total, 50);
+    assert.deepEqual(all.tally, { '201': 7, '409 recipient_limit': 5 });
+    assert.equal(heldReleasesNaming(popular.user.id).fromOwner.size, 50);
+    assert.equal(heldReleasesNaming(popular.user.id).fromOwner.get(owners[0].user.id), 5);
+    assert.equal(heldReleasesNaming(popular.user.id).total, 54);
 });
 
 test('after the trigger each recipient reads their own copy and nothing of anyone else’s; the owner and strangers read none; the legacy views never list it', async () => {
@@ -1277,7 +1312,7 @@ test('GET /limits says what the arming form may say, from the deployment’s own
         maxLiveReleaseSwitches: 20,
         maxArmsPerDay: 10,
         maxHeldReleasesPerRecipientFromOwner: 5,
-        maxHeldReleasesPerRecipient: 50,
+        maxOwnersNamingRecipient: 50,
         backlogToleranceSeconds: 15 * 60,
         backlogGraceSeconds: 72 * 60 * 60,
         releaseRetentionDays: 365,
@@ -2071,40 +2106,63 @@ test('a key change or a deletion during a re-seal’s verification is seen befor
     assert.equal(copyOf(steady).sealedKey, steady.copy.sealedKey);
 });
 
-test('a known trade-off, pinned (decision 18): ten accounts that each fire five releases naming the same people keep every other owner from naming any of them, 409 recipient_limit, until the removal at least 365 days after they fired; nobody named can clear it', async () => {
-    // The bound of 50 held releases naming one person from everyone counts a
-    // fired release until its removal, so a few accounts can fill one
-    // person's 50 in a day (ten at the arming rate of decision 18, each with
-    // published release keys) and hold them for 365 days. The bound of 5 from
-    // one owner is per person, and one release names up to 64, so the same
-    // five arms fill it for everyone they name: two people here, up to 64 per
-    // five arms in the record's numbers (round 6). Which bound replaces it is
-    // the operator's decision; this pins what it does now (round 5 of part
-    // 2's review).
+test('a known trade-off, pinned (decision 18, option (c)): fifty accounts that each fire one release naming the same people keep every other new owner from naming any of them, 409 recipient_limit, until the removal at least 365 days after they fired; ten accounts no longer can; nobody named can clear it', async () => {
+    // The bound on one person counts distinct owners with a held release
+    // naming them (the operator's choice of 2026-10-31, option (c) of
+    // decision 18), and a fired release until its removal, so fifty accounts
+    // with published release keys can fill one person's fifty in a day and
+    // hold it for 365 days. One release names up to 64 people and each counts
+    // its owner once, so the same arms fill it for everyone they name: two
+    // people here, up to 1,280 per fifty accounts at their held cap in the
+    // record's numbers, about 26 per account. Counted in releases (option (a),
+    // until this choice), ten accounts with five releases each filled it. This
+    // pins what it does now.
     const target = await freshPerson();
     const alsoNamed = await freshPerson();
+    const both = [target.keySet.identity, alsoNamed.keySet.identity];
     const filled: string[] = [];
-    for (let o = 0; o < 10; o += 1) {
-        const namer = await freshPerson();
-        for (let i = 0; i < 5; i += 1) {
-            const envelope = await build(
-                namer.keySet,
-                [target.keySet.identity, alsoNamed.keySet.identity],
-                `fill ${o} ${i}`
-            );
-            assert.equal((await arm(namer.user, armBody(envelope))).status, 201, `${o}/${i}`);
-            filled.push(envelope.releaseId);
+    const namers: Awaited<ReturnType<typeof freshPerson>>[] = [];
+    const fill = async (count: number, perOwner: number, label: string, named = both) => {
+        for (let o = 0; o < count; o += 1) {
+            const namer = await freshPerson();
+            for (let i = 0; i < perOwner; i += 1) {
+                const envelope = await build(namer.keySet, named, `${label} ${o} ${i}`);
+                assert.equal((await arm(namer.user, armBody(envelope))).status, 201, `${o}/${i}`);
+                filled.push(envelope.releaseId);
+            }
+            namers.push(namer);
         }
-    }
-    const firesAt = FIRES_AT();
-    sweepAt(firesAt);
-    assert.ok(filled.every((id) => db.getDeadmanSwitch(id)?.status === 'triggered'));
-    assert.equal((await releasesFor(target.user)).length, 50);
+    };
+    // Ten accounts, five releases each: ten owners, which leaves room.
+    await fill(10, 5, 'ten');
     assert.equal(heldReleasesNaming(target.user.id).total, 50);
-    assert.equal((await releasesFor(alsoNamed.user)).length, 50);
-    assert.equal(heldReleasesNaming(alsoNamed.user.id).total, 50, 'the same arms filled both');
+    assert.equal(heldReleasesNaming(target.user.id).fromOwner.size, 10);
+    const early = await freshPerson();
+    assert.equal(
+        (await arm(early.user, armBody(await build(early.keySet, [target.keySet.identity]))))
+            .status,
+        201,
+        'ten accounts no longer fill it'
+    );
+    // Thirty-nine more, one release each naming both, bring the first person
+    // (whom the early owner names too) to fifty owners; one more naming the
+    // second brings them to fifty.
+    await fill(39, 1, 'one');
+    assert.equal(heldReleasesNaming(target.user.id).fromOwner.size, 50);
+    assert.equal(heldReleasesNaming(alsoNamed.user.id).fromOwner.size, 49);
+    await fill(1, 1, 'last', [alsoNamed.keySet.identity]);
+    assert.equal(
+        heldReleasesNaming(alsoNamed.user.id).fromOwner.size,
+        50,
+        'the same arms filled both'
+    );
+    const firesAt = FIRES_AT();
+    await sweepAt(firesAt);
+    assert.ok(filled.every((id) => db.getDeadmanSwitch(id)?.status === 'triggered'));
+    assert.equal((await releasesFor(target.user)).length, 90);
+    assert.equal((await releasesFor(alsoNamed.user)).length, 90);
 
-    // A genuine owner naming either person is refused; the owner sees the 409.
+    // A genuine new owner naming either person is refused; the owner sees the 409.
     const genuine = await freshPerson();
     const armGenuine = async (identity: ReleaseIdentity) =>
         arm(genuine.user, armBody(await build(genuine.keySet, [identity])));
@@ -2116,6 +2174,12 @@ test('a known trade-off, pinned (decision 18): ten accounts that each fire five 
         'recipient_limit'
     );
     assert.equal(refusedToo.recipientAccountId, alsoNamed.user.id);
+    // One of the fifty is not a new owner: it may name them again, up to five.
+    const oneOfThem = namers[48];
+    assert.equal(
+        (await arm(oneOfThem.user, armBody(await build(oneOfThem.keySet, both, 'again')))).status,
+        201
+    );
 
     // The person cannot clear it: new release keys change nothing, and a
     // release that names them is not theirs to cancel.
@@ -2131,12 +2195,14 @@ test('a known trade-off, pinned (decision 18): ten accounts that each fire five 
 
     // A day before the removal it still holds; at the sweep's first pass on
     // or after 365 days the releases are removed and the person can be named.
+    // (The release armed again above fires at that first pass too; its
+    // removal is a year later, and it is one owner, not fifty.)
     const day = 24 * 60 * 60 * 1000;
-    sweepAt(new Date(firesAt.getTime() + DEADMAN_RELEASE_RETENTION_MS - day));
+    await sweepAt(new Date(firesAt.getTime() + DEADMAN_RELEASE_RETENTION_MS - day));
     await errorOf(await armGenuine(rotated.identity), 409, 'recipient_limit');
-    sweepAt(new Date(firesAt.getTime() + DEADMAN_RELEASE_RETENTION_MS));
-    assert.equal(heldReleasesNaming(target.user.id).total, 0);
-    assert.equal(heldReleasesNaming(alsoNamed.user.id).total, 0);
+    await sweepAt(new Date(firesAt.getTime() + DEADMAN_RELEASE_RETENTION_MS));
+    assert.ok(heldReleasesNaming(target.user.id).fromOwner.size <= 1);
+    assert.ok(heldReleasesNaming(alsoNamed.user.id).fromOwner.size <= 1);
     assert.equal((await armGenuine(rotated.identity)).status, 201);
     assert.equal((await armGenuine(alsoNamed.keySet.identity)).status, 201);
 });

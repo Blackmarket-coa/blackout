@@ -27,8 +27,9 @@
  * until the 365-day removal), at most `DEADMAN_MAX_ARMS_PER_DAY` arms per
  * owner in any 24 hours, and per recipient at most
  * `DEADMAN_MAX_HELD_RELEASES_PER_RECIPIENT_FROM_OWNER` held releases naming
- * them from one owner and `DEADMAN_MAX_HELD_RELEASES_PER_RECIPIENT` from
- * everyone. `GET /limits` reports each. Each bound is checked before the
+ * them from one owner and at most `DEADMAN_MAX_OWNERS_NAMING_RECIPIENT`
+ * distinct owners with a held release naming them (decision 18, option (c)).
+ * `GET /limits` reports each. Each bound is checked before the
  * signatures, so a refused arm costs no verification, and again after them
  * with nothing yielding before the writes, so on one replica the bounds hold
  * against arms sent at once; across replicas the store is eventually
@@ -38,9 +39,9 @@
 import {
     DEADMAN_LABEL_MAX_LENGTH,
     DEADMAN_MAX_ARMS_PER_DAY,
-    DEADMAN_MAX_HELD_RELEASES_PER_RECIPIENT,
     DEADMAN_MAX_HELD_RELEASES_PER_RECIPIENT_FROM_OWNER,
     DEADMAN_MAX_LIVE_RELEASE_SWITCHES,
+    DEADMAN_MAX_OWNERS_NAMING_RECIPIENT,
     DEADMAN_NOTICE_RETRY_DAYS,
     DEADMAN_RELEASE_FORMAT,
     DEADMAN_RELEASE_RETENTION_DAYS,
@@ -185,7 +186,7 @@ export const releaseLimits = (sweep: { backlogToleranceMs: number }): DeadmanLim
     maxLiveReleaseSwitches: DEADMAN_MAX_LIVE_RELEASE_SWITCHES,
     maxArmsPerDay: DEADMAN_MAX_ARMS_PER_DAY,
     maxHeldReleasesPerRecipientFromOwner: DEADMAN_MAX_HELD_RELEASES_PER_RECIPIENT_FROM_OWNER,
-    maxHeldReleasesPerRecipient: DEADMAN_MAX_HELD_RELEASES_PER_RECIPIENT,
+    maxOwnersNamingRecipient: DEADMAN_MAX_OWNERS_NAMING_RECIPIENT,
     backlogToleranceSeconds: Math.round(sweep.backlogToleranceMs / 1000),
     backlogGraceSeconds: DEADMAN_BACKLOG_GRACE_SECONDS,
     releaseRetentionDays: DEADMAN_RELEASE_RETENTION_DAYS,
@@ -269,7 +270,8 @@ export const armRateState = (
 /**
  * How many held releases name `recipientAccountId`: a copy sealed to them on
  * a release switch whose content is held and which they do not own (the
- * owner's own copy names nobody). From one owner, and from everyone. Whether
+ * owner's own copy names nobody). Per owner (`fromOwner`, whose size is the
+ * number of distinct owners naming them), and in all (`total`). Whether
  * the copy itself is still held is not asked: a blanked copy on a switch
  * whose content is held means the recipient deleted their account, and
  * nobody names a deleted account, or a removal half done, whose content goes
@@ -295,18 +297,21 @@ export const heldReleasesNaming = (
 /**
  * Whether one more held release from `ownerId` may name `recipientAccountId`:
  * at most `DEADMAN_MAX_HELD_RELEASES_PER_RECIPIENT_FROM_OWNER` from this
- * owner, and `DEADMAN_MAX_HELD_RELEASES_PER_RECIPIENT` from everyone. Both are
- * refused with one code (`recipient_limit`), which hides nothing: an owner
- * who has named the person fewer than five times and is refused can tell it
- * is the bound from everyone, and so that the person is at 50 (decision 18;
- * a bound on what everyone together may do to one person cannot avoid it).
+ * owner, and at most `DEADMAN_MAX_OWNERS_NAMING_RECIPIENT` distinct owners
+ * naming them. An owner that already names the person is one of those owners,
+ * so its next release is bounded only by the first; an owner that does not is
+ * refused once that many others do (decision 18, option (c), the operator's
+ * choice of 2026-10-31: counted in releases, ten accounts filled it; counted
+ * in owners, it takes fifty). Both are refused with one code
+ * (`recipient_limit`), which hides nothing: an owner that has never named the
+ * person and is refused can tell that fifty other owners do (a bound on what
+ * everyone together may do to one person cannot avoid it).
  */
 export const recipientHasRoom = (ownerId: string, recipientAccountId: string): boolean => {
     const naming = heldReleasesNaming(recipientAccountId);
-    return (
-        (naming.fromOwner.get(ownerId) ?? 0) < DEADMAN_MAX_HELD_RELEASES_PER_RECIPIENT_FROM_OWNER &&
-        naming.total < DEADMAN_MAX_HELD_RELEASES_PER_RECIPIENT
-    );
+    const mine = naming.fromOwner.get(ownerId) ?? 0;
+    if (mine >= DEADMAN_MAX_HELD_RELEASES_PER_RECIPIENT_FROM_OWNER) return false;
+    return mine > 0 || naming.fromOwner.size < DEADMAN_MAX_OWNERS_NAMING_RECIPIENT;
 };
 
 /**
@@ -444,8 +449,9 @@ export type ArmReleaseOutcome =
  * has a current identity; every other copy names an account here whose
  * current identity is the copy's (an account without an identity, a
  * replaced identity and one never published each have their own answer) and
- * which is named on fewer held releases than the per-recipient bounds allow
- * (`recipient_limit`); every signature verifies under the owner's identity,
+ * which the per-recipient bounds still let this owner name: fewer than five
+ * held releases of this owner's, and either one of them already or fewer than
+ * fifty other owners naming it (`recipient_limit`); every signature verifies under the owner's identity,
  * which also refuses a header naming another identity than the owner's
  * current one; and, after the signatures awaited, the release id is still
  * free, every bound still has room, and the owner's and every recipient's
