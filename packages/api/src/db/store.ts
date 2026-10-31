@@ -172,11 +172,19 @@ import {
     COALITION_FEED_SEED,
     shouldSeedCoalitionDemoData,
 } from './coalitionSeed';
-import { hydrateMap, introspectColumns, rowToRecord, type TablePlan } from './pgWriter';
+import {
+    hydrateMap,
+    introspectColumns,
+    keyOfTuple,
+    kvOf,
+    rowToRecord,
+    selectByKeys,
+    type TablePlan,
+} from './pgWriter';
 import { MUTATOR_SPECS, TABLE_DESCRIPTORS } from './pgDescriptors';
 import { WriteBehindQueue } from './writeBehindQueue';
 import { PgNotifyTransport, type StoreChangePayload, type StoreChangeTransport } from './pgNotify';
-import type { PgPool } from './migrate';
+import type { PgClient, PgPool } from './migrate';
 import { log } from '../telemetry/logger';
 import { randomUUID } from 'node:crypto';
 
@@ -8320,6 +8328,14 @@ export class PostgresBackedDb extends InMemoryDb {
     private transport: StoreChangeTransport | null = null;
     /** Identifies this replica so it can ignore its own change notifications. */
     private readonly instanceId = randomUUID();
+    /**
+     * Every refresh of the mirror from Postgres (a peer's change, a re-read
+     * of a key whose queued write has landed, a reload) runs on this one FIFO
+     * chain, in the order it was asked for.
+     */
+    private applyTail: Promise<void> = Promise.resolve();
+    /** map -> key -> key column values: refreshes skipped while a local write was queued. */
+    private readonly dirtyKeys = new Map<string, Map<string, unknown[]>>();
 
     constructor() {
         super();
@@ -8391,86 +8407,187 @@ export class PostgresBackedDb extends InMemoryDb {
             transport ?? undefined,
             this.instanceId
         );
+        this.queue.onKeysLanded((mapName, keys) => this.rereadLandedKeys(mapName, keys));
         if (transport) {
             await transport.subscribe((payload) => this.applyPeerChange(payload));
             // After a dropped LISTEN connection we may have missed notifications;
             // re-hydrate everything to recover.
             transport.onReconnect(() => {
-                void this.rehydrateAll();
+                this.onApplyChain('rehydrate', () => this.rehydrateAll());
             });
+        }
+    }
+
+    /** Queue a mirror refresh on the FIFO apply chain; a failure is logged, never thrown. */
+    private onApplyChain(what: string, fn: () => Promise<void>, map?: string): void {
+        this.applyTail = this.applyTail.then(fn).catch((err) => {
+            log.warn(
+                what === 'rehydrate' ? 'pg_store_rehydrate_failed' : 'pg_store_peer_refresh_failed',
+                {
+                    ...(map ? { map } : {}),
+                    what,
+                    error: err instanceof Error ? err.message : String(err),
+                }
+            );
+        });
+    }
+
+    private async withClient<T>(fn: (client: PgClient) => Promise<T>): Promise<T> {
+        const client = await this.pool!.connect();
+        try {
+            return await fn(client);
+        } finally {
+            client.release?.();
+        }
+    }
+
+    private markDirty(mapName: string, key: string, kv: unknown[] | undefined): void {
+        if (!kv) return;
+        let keys = this.dirtyKeys.get(mapName);
+        if (!keys) {
+            keys = new Map();
+            this.dirtyKeys.set(mapName, keys);
+        }
+        keys.set(key, kv);
+    }
+
+    /** The last queued local write to these keys has run: re-read the ones a refresh skipped. */
+    private rereadLandedKeys(mapName: string, keys: string[]): void {
+        const dirty = this.dirtyKeys.get(mapName);
+        const plan = this.plans.get(mapName);
+        if (!dirty || !plan) return;
+        const kvs: unknown[][] = [];
+        for (const k of keys) {
+            const kv = dirty.get(k);
+            if (kv && dirty.delete(k)) kvs.push(kv);
+        }
+        if (dirty.size === 0) this.dirtyKeys.delete(mapName);
+        if (kvs.length > 0) {
+            this.onApplyChain('reread', () => this.refreshKeys(plan, kvs), mapName);
+        }
+    }
+
+    /**
+     * Put Postgres's current row for each key into the mirror, or remove the
+     * key when Postgres has no row. Two kinds of key are left alone:
+     * - a key this process still has a queued write for: Postgres does not hold
+     *   that write yet, so its row is older than the mirror. The key is marked
+     *   and re-read when the write lands (rereadLandedKeys).
+     * - a key the mirror changed while the SELECT was in flight: the row read
+     *   may predate that change, so the key is read again.
+     */
+    private async refreshKeys(plan: TablePlan, kvs: unknown[][]): Promise<void> {
+        const mapName = plan.descriptor.mapName;
+        const wanted = new Map<string, unknown[]>();
+        for (const kv of kvs) wanted.set(keyOfTuple(plan, kv), kv);
+        const instance = this.mapByName(mapName);
+        const seen = new Map<string, unknown>();
+        for (const k of wanted.keys()) seen.set(k, instance.get(k));
+        const rows = await this.withClient((c) => selectByKeys(c, plan, [...wanted.values()]));
+        const found = new Map<string, Record<string, unknown>>();
+        for (const row of rows) {
+            const record = rowToRecord(plan, row);
+            found.set(plan.descriptor.keyOf(record), record);
+        }
+        const map = this.mapByName(mapName);
+        const again: unknown[][] = [];
+        for (const [k, kv] of wanted) {
+            if (this.queue?.isFenced(mapName, k)) {
+                this.markDirty(mapName, k, kv);
+                continue;
+            }
+            if (map !== instance || map.get(k) !== seen.get(k)) {
+                again.push(kv);
+                continue;
+            }
+            const record = found.get(k);
+            if (record) map.set(k, record);
+            else map.delete(k);
+        }
+        if (again.length > 0) {
+            this.onApplyChain('reread', () => this.refreshKeys(plan, again), mapName);
+        }
+    }
+
+    /**
+     * Replace a map with Postgres's rows, except for the keys whose local value
+     * Postgres may not hold yet: a key with a queued write keeps the mirror's
+     * value (or absence) and is re-read when the write lands; a key the mirror
+     * changed while the SELECT was in flight keeps the mirror's value and is
+     * read again.
+     */
+    private async reloadTable(plan: TablePlan, client?: PgClient): Promise<void> {
+        const mapName = plan.descriptor.mapName;
+        const instance = this.mapByName(mapName);
+        const before = new Map(instance);
+        const select = (c: PgClient) =>
+            c.query<Record<string, unknown>>(`SELECT * FROM ${plan.descriptor.tableName}`);
+        const res = client ? await select(client) : await this.withClient(select);
+        if (this.mapByName(mapName) !== instance) {
+            // The mutator replaced the whole map meanwhile: start over.
+            this.onApplyChain('reload', () => this.reloadTable(plan), mapName);
+            return;
+        }
+        const fresh: MutableMap = new Map();
+        for (const row of res.rows) {
+            const record = rowToRecord(plan, row);
+            fresh.set(plan.descriptor.keyOf(record), record);
+        }
+        const again: unknown[][] = [];
+        const keys = new Set([
+            ...before.keys(),
+            ...instance.keys(),
+            ...(this.queue?.fencedKeys(mapName) ?? []),
+        ]);
+        for (const k of keys) {
+            const fenced = this.queue?.isFenced(mapName, k) ?? false;
+            const mine = instance.get(k);
+            if (!fenced && mine === before.get(k)) continue;
+            const known = mine ?? before.get(k) ?? fresh.get(k);
+            const kv = known ? kvOf(plan, known) : undefined;
+            if (mine) fresh.set(k, mine);
+            else fresh.delete(k);
+            if (fenced) this.markDirty(mapName, k, kv);
+            else if (kv) again.push(kv);
+        }
+        (this as unknown as Record<string, MutableMap>)[mapName] = fresh;
+        if (again.length > 0) {
+            this.onApplyChain('reread', () => this.refreshKeys(plan, again), mapName);
         }
     }
 
     /** Re-load every table from Postgres into the mirror (used on listener reconnect). */
     private async rehydrateAll(): Promise<void> {
         if (!this.pool) return;
-        const client = await this.pool.connect();
-        try {
-            for (const [mapName, plan] of this.plans) {
-                const fresh: MutableMap = new Map();
-                const res = await client.query<Record<string, unknown>>(
-                    `SELECT * FROM ${plan.descriptor.tableName}`
-                );
-                for (const row of res.rows) {
-                    const record = rowToRecord(plan, row);
-                    fresh.set(plan.descriptor.keyOf(record), record);
-                }
-                (this as unknown as Record<string, MutableMap>)[mapName] = fresh;
-            }
-        } catch (err) {
-            log.warn('pg_store_rehydrate_failed', {
-                error: err instanceof Error ? err.message : String(err),
-            });
-        } finally {
-            client.release?.();
-        }
+        await this.withClient(async (client) => {
+            for (const plan of this.plans.values()) await this.reloadTable(plan, client);
+        });
     }
 
     /**
-     * Apply a peer replica's change to the local mirror. 'u' refreshes the single
-     * changed row; 'r' reloads the whole table. Self-notifications are ignored
+     * Apply a peer replica's change to the local mirror, on the FIFO apply
+     * chain. 'u' and 'k' re-read the keys they name (a key whose row is gone
+     * is removed); 'r' reloads the whole table. Self-notifications are ignored
      * (the originating mutator already updated this mirror synchronously).
      */
     private applyPeerChange(payload: StoreChangePayload): void {
         if (payload.src === this.instanceId) return;
         const plan = this.plans.get(payload.m);
         if (!plan || !this.pool) return;
-        const pool = this.pool;
-        void (async () => {
-            const client = await pool.connect();
-            try {
-                if (payload.op === 'u' && payload.kv) {
-                    const where = plan.descriptor.conflictColumns
-                        .map((c, i) => `${c} = $${i + 1}`)
-                        .join(' AND ');
-                    const res = await client.query<Record<string, unknown>>(
-                        `SELECT * FROM ${plan.descriptor.tableName} WHERE ${where}`,
-                        payload.kv
-                    );
-                    if (res.rows.length > 0) {
-                        const record = rowToRecord(plan, res.rows[0]);
-                        this.mapByName(payload.m).set(plan.descriptor.keyOf(record), record);
-                    }
-                } else if (payload.op === 'r') {
-                    const fresh: MutableMap = new Map();
-                    const res = await client.query<Record<string, unknown>>(
-                        `SELECT * FROM ${plan.descriptor.tableName}`
-                    );
-                    for (const row of res.rows) {
-                        const record = rowToRecord(plan, row);
-                        fresh.set(plan.descriptor.keyOf(record), record);
-                    }
-                    (this as unknown as Record<string, MutableMap>)[payload.m] = fresh;
-                }
-            } catch (err) {
-                log.warn('pg_store_peer_refresh_failed', {
-                    map: payload.m,
-                    error: err instanceof Error ? err.message : String(err),
-                });
-            } finally {
-                client.release?.();
-            }
-        })();
+        const arity = plan.descriptor.conflictColumns.length;
+        const isKv = (kv: unknown): kv is unknown[] => Array.isArray(kv) && kv.length === arity;
+        if (payload.op === 'u' && isKv(payload.kv)) {
+            const kv = payload.kv;
+            this.onApplyChain('u', () => this.refreshKeys(plan, [kv]), payload.m);
+        } else if (payload.op === 'k' && Array.isArray(payload.kvs) && payload.kvs.every(isKv)) {
+            const kvs = payload.kvs;
+            if (kvs.length > 0)
+                this.onApplyChain('k', () => this.refreshKeys(plan, kvs), payload.m);
+        } else if (payload.op === 'r') {
+            this.onApplyChain('r', () => this.reloadTable(plan), payload.m);
+        } else {
+            log.warn('pg_store_peer_payload_ignored', { map: payload.m, op: payload.op });
+        }
     }
 
     /**
@@ -8483,10 +8600,13 @@ export class PostgresBackedDb extends InMemoryDb {
         return this.plans.get('refreshTokens')?.columnNames.has('session_expires_at') ?? false;
     }
 
-    /** Flush queued writes. Does NOT close the change subscription — safe to call
-     * repeatedly (e.g. to await durability) without unsubscribing from peers. */
+    /** Flush queued writes, then the mirror refreshes queued so far (including
+     * the re-reads those writes asked for). Does NOT close the change
+     * subscription — safe to call repeatedly (e.g. to await durability) without
+     * unsubscribing from peers. */
     async drain(): Promise<void> {
         await this.queue?.drain();
+        await this.applyTail;
     }
 
     /** Flush queued writes and tear down the change subscription — graceful shutdown only. */

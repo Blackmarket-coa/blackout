@@ -6,6 +6,13 @@
 // upsert followed by a delete of the same key never reorders. Failures are
 // logged (and retried once) but never thrown into the event loop; durability is
 // therefore eventual, bounded by drain() on graceful shutdown.
+//
+// The queue also keeps a per-key fence: for each (map, key), how many queued
+// ops write it. The fence is raised when an op is enqueued, right after the
+// mutator changed the mirror, and lowered after the op has run. While a key is
+// fenced, a refresh from a peer must not overwrite this process's newer value
+// with Postgres's older one; the store skips the key and re-reads it once the
+// fence comes down (onKeysLanded).
 
 import { log } from '../telemetry/logger';
 import { dbWriteBehindDepth, dbWriteBehindFailuresTotal } from '../telemetry/metrics';
@@ -13,15 +20,22 @@ import type { PgPool } from './migrate';
 import type { StoreChangeTransport } from './pgNotify';
 import { resyncMap, snakeToCamel, upsertRecord, type TablePlan } from './pgWriter';
 
-type WriteOp =
+type WriteOp = (
     | { kind: 'upsert'; mapName: string; record: Record<string, unknown> }
-    | { kind: 'resync'; mapName: string };
+    | { kind: 'resync'; mapName: string }
+) & {
+    /** map -> mirror keys this op writes, counted in the fence while it is queued. */
+    fence: Map<string, string[]>;
+};
 
 export type MapAccessor = (mapName: string) => Map<string, Record<string, unknown>> | undefined;
 
 export class WriteBehindQueue {
     private tail: Promise<void> = Promise.resolve();
     private pending = 0;
+    /** map -> mirror key -> number of queued ops that write it. */
+    private readonly fence = new Map<string, Map<string, number>>();
+    private landed: ((mapName: string, keys: string[]) => void) | null = null;
 
     constructor(
         private readonly pool: PgPool,
@@ -37,24 +51,70 @@ export class WriteBehindQueue {
         return this.pending;
     }
 
+    /** True while a queued op still has to write `key` of `mapName` to Postgres. */
+    isFenced(mapName: string, key: string): boolean {
+        return (this.fence.get(mapName)?.get(key) ?? 0) > 0;
+    }
+
+    /** Every key of `mapName` that a queued op still has to write. */
+    fencedKeys(mapName: string): string[] {
+        return [...(this.fence.get(mapName)?.keys() ?? [])];
+    }
+
+    /** Called with the keys whose last queued write has just run (the fence came down). */
+    onKeysLanded(handler: (mapName: string, keys: string[]) => void): void {
+        this.landed = handler;
+    }
+
     enqueueUpsert(mapName: string, record: Record<string, unknown>): void {
-        this.schedule({ kind: 'upsert', mapName, record });
+        const plan = this.plans.get(mapName);
+        const fence = new Map<string, string[]>();
+        if (plan) fence.set(mapName, [plan.descriptor.keyOf(record)]);
+        this.schedule({ kind: 'upsert', mapName, record, fence });
     }
 
     enqueueResync(mapName: string): void {
-        this.schedule({ kind: 'resync', mapName });
+        this.schedule({ kind: 'resync', mapName, fence: new Map() });
     }
 
     private schedule(op: WriteOp): void {
         this.pending += 1;
         dbWriteBehindDepth.set(this.pending);
+        this.raise(op.fence);
         this.tail = this.tail.then(() => this.run(op));
+    }
+
+    private raise(keys: Map<string, string[]>): void {
+        for (const [mapName, ks] of keys) {
+            let counts = this.fence.get(mapName);
+            if (!counts) {
+                counts = new Map();
+                this.fence.set(mapName, counts);
+            }
+            for (const k of ks) counts.set(k, (counts.get(k) ?? 0) + 1);
+        }
+    }
+
+    private lower(keys: Map<string, string[]>): void {
+        for (const [mapName, ks] of keys) {
+            const counts = this.fence.get(mapName);
+            if (!counts) continue;
+            const cleared: string[] = [];
+            for (const k of ks) {
+                const n = (counts.get(k) ?? 0) - 1;
+                if (n > 0) counts.set(k, n);
+                else if (counts.delete(k)) cleared.push(k);
+            }
+            if (counts.size === 0) this.fence.delete(mapName);
+            if (cleared.length > 0) this.landed?.(mapName, cleared);
+        }
     }
 
     private async run(op: WriteOp): Promise<void> {
         const plan = this.plans.get(op.mapName);
         if (!plan) {
             this.pending -= 1;
+            this.lower(op.fence);
             return;
         }
         try {
@@ -96,6 +156,7 @@ export class WriteBehindQueue {
         } finally {
             this.pending -= 1;
             dbWriteBehindDepth.set(this.pending);
+            this.lower(op.fence);
         }
     }
 
