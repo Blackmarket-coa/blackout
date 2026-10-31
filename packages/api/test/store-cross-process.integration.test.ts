@@ -842,6 +842,70 @@ test('drainWrites waits for the queued writes only, not for a peer refresh still
     });
 });
 
+/** A mirror map that keeps its own index (owner -> keys), as an indexed map would. */
+class OwnerIndexedMap extends Map<string, any> {
+    readonly byOwner = new Map<string, Set<string>>();
+    override set(key: string, value: any): this {
+        this.unindex(key);
+        super.set(key, value);
+        let keys = this.byOwner.get(value.ownerUserId);
+        if (!keys) this.byOwner.set(value.ownerUserId, (keys = new Set()));
+        keys.add(key);
+        return this;
+    }
+    override delete(key: string): boolean {
+        this.unindex(key);
+        return super.delete(key);
+    }
+    private unindex(key: string): void {
+        const was = super.get(key);
+        if (was) this.byOwner.get(was.ownerUserId)?.delete(key);
+    }
+    owned(owner: string): string[] {
+        return [...(this.byOwner.get(owner) ?? [])].sort();
+    }
+}
+
+test('a mirror map of its own kind keeps its kind and its index through a targeted write, a reload and a rehydrate', async () => {
+    await withWorld(1, 'hub', async (w) => {
+        const [A] = w.procs;
+        const u = mkUser(A.db);
+        const [v1, v2] = [mkVault(A.db, u), mkVault(A.db, u)];
+        await quiesce(w);
+        const indexed = new OwnerIndexedMap();
+        for (const [k, v] of A.db.vaultItems) indexed.set(k, v);
+        A.db.vaultItems = indexed;
+        assert.deepEqual(indexed.owned(u), [v1, v2].sort());
+
+        // A targeted keyed delete: the capture's shadow calls the map's own delete.
+        assert.equal(A.db.deleteVaultItem(v1), true);
+        assert.deepEqual(indexed.owned(u), [v2], 'the targeted write kept the index current');
+        await quiesce(w);
+        assert.equal(await vaultCount(w, v1), 0);
+
+        // Another process adds one and removes one; a reload and a rehydrate bring both in.
+        const v3 = randomUUID();
+        await w.sql(
+            `INSERT INTO vault_items (id, owner_user_id, label, ciphertext, iv, algo) VALUES ($1, $2, 'l', 'c', 'i', 'AES-GCM')`,
+            [v3, u]
+        );
+        await w.sql('DELETE FROM vault_items WHERE id = $1', [v2]);
+        await w.emit({ src: 'elsewhere', m: 'vaultItems', op: 'r' });
+        await quiesce(w);
+        assert.equal(A.db.vaultItems, indexed, "'r' kept the same map");
+        assert.deepEqual(indexed.owned(u), [v3], "and its index matches Postgres's rows");
+        const v4 = randomUUID();
+        await w.sql(
+            `INSERT INTO vault_items (id, owner_user_id, label, ciphertext, iv, algo) VALUES ($1, $2, 'l', 'c', 'i', 'AES-GCM')`,
+            [v4, u]
+        );
+        A.tap.reconnect!();
+        await quiesce(w);
+        assert.equal(A.db.vaultItems, indexed, 'the rehydrate kept the same map');
+        assert.deepEqual(indexed.owned(u), [v3, v4].sort());
+    });
+});
+
 // ------------------------------------------------------------------ writer
 
 test('X6: removing a circle edge deletes that one row by key, and keeps an edge the remover has not heard of', async () => {

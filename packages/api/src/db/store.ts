@@ -8349,11 +8349,14 @@ const activeCaptures = new WeakMap<MutableMap, Set<Map<string, Prior>>>();
 /**
  * Record, for one synchronous mutator call, what each key of `map` held before
  * the call first wrote it (ABSENT for a key it added). set/delete/clear are
- * shadowed on the instance for the duration of the call only. A mutator that
- * calls another shares one shadow between the two captures.
+ * shadowed on the instance for the duration of the call only, and the shadows
+ * call the instance's own methods, so a Map subclass that keeps an index over
+ * its rows still sees every write. A mutator that calls another shares one
+ * shadow between the two captures.
  */
 function captureWrites(map: MutableMap): { prior: Map<string, Prior>; stop(): void } {
     const target = map as unknown as Record<string, unknown>;
+    const own = Object.getPrototypeOf(map) as MutableMap;
     let recorders = activeCaptures.get(map);
     if (!recorders) {
         const active = new Set<Map<string, Prior>>();
@@ -8371,15 +8374,15 @@ function captureWrites(map: MutableMap): { prior: Map<string, Prior>; stop(): vo
         };
         target.set = function (this: MutableMap, k: string, v: Record<string, unknown>) {
             note(k);
-            return Map.prototype.set.call(this, k, v);
+            return own.set.call(this, k, v);
         };
         target.delete = function (this: MutableMap, k: string) {
             note(k);
-            return Map.prototype.delete.call(this, k);
+            return own.delete.call(this, k);
         };
         target.clear = function (this: MutableMap) {
             for (const k of Map.prototype.keys.call(this) as IterableIterator<string>) note(k);
-            return Map.prototype.clear.call(this);
+            return own.clear.call(this);
         };
     }
     const prior = new Map<string, Prior>();
@@ -8844,7 +8847,15 @@ export class PostgresBackedDb extends InMemoryDb {
             if (fenced) this.markDirty(mapName, k, kv);
             else if (kv) again.push(kv);
         }
-        (this as unknown as Record<string, MutableMap>)[mapName] = fresh;
+        if (Object.getPrototypeOf(instance) === Map.prototype) {
+            (this as unknown as Record<string, MutableMap>)[mapName] = fresh;
+        } else {
+            // A map of its own kind (a Map subclass that keeps an index over
+            // its rows) is updated in place, through its own delete and set,
+            // so it keeps its kind and its index stays current.
+            for (const k of [...instance.keys()]) if (!fresh.has(k)) instance.delete(k);
+            for (const [k, v] of fresh) if (instance.get(k) !== v) instance.set(k, v);
+        }
         if (again.length > 0) {
             this.onApplyChain('reread', () => this.refreshKeys(plan, again), mapName);
         }
