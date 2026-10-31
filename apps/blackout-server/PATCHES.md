@@ -981,3 +981,12 @@ service files, which upstream does not have. Found by the sixth review of
   On `05dfc10`'s `config/jwt.py` the refusal test fails (no `ConfigError`),
   and with `05dfc10`'s template the template test fails
   (`'${JWT_ENABLED:-false}' is not False`).
+
+## 2026-10-31 operator notes for authlib 1.9.1
+
+- `docs/upgrade.md`: a Blackout section, "Upgrading to authlib 1.9.1
+  (2026-10-30)", above the other Blackout sections. It lists each
+  configuration that now stops at startup (`jwt_config`, experimental
+  MSC3861) or is refused at sign-in, with the error text and the fix, and
+  the Railway template change, and points at the record. Upstream's
+  `docs/upgrade.md` has no such section; keep it through a reconciliation.

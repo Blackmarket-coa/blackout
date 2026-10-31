@@ -97,6 +97,137 @@ v1.61.0.
 
 <!-- REPLACE_WITH_SCHEMA_VERSIONS -->
 
+# Upgrading to authlib 1.9.1 (2026-10-30)
+
+Blackout fork builds move authlib from 1.6.12 to 1.9.1, for three
+authentication-bypass advisories in authlib (GHSA-6v38-4h7w-rj9h,
+GHSA-7vr2-2fgp-9w7p, GHSA-8m4g-j4wp-wgcg). With them come startup checks on
+JWT login and on experimental MSC3861: a configuration that authlib 1.9.1
+cannot use, or that would let anyone sign in, now stops the homeserver with a
+config error that names the setting, where it used to start and then fail, or
+let anyone in, on each request. Only operator configuration reaches any of
+this; no configuration shipped in this repository is refused. The reasons, and
+what was measured, are in
+`docs/security/dependency-advisories-server-desktop-2026-10-30.md` at the
+repository root.
+
+If the homeserver stops at startup after this upgrade, find its error below.
+
+## JWT login (`jwt_config`): refused at startup
+
+`enabled` is checked whenever `jwt_config` is present. The algorithm is
+checked when `enabled` is `true`, and the secret when the algorithm is also
+`HS256`, `HS384` or `HS512`.
+
+* **`enabled` that is not `true` or `false`**: a quoted `"false"` or `"true"`,
+  `null`, an empty value, `0` or `1`, or a `${VAR:-default}` that `envsubst`
+  left as text.
+  Error: `jwt_config.enabled must be true or false (a YAML boolean), not 'false'`.
+  Fix: write `true` or `false`, unquoted. Before this release any non-empty
+  string, `"false"` included, turned JWT login on.
+* **`algorithm: none`**.
+  Error: `jwt_config.algorithm cannot be none: an unsigned token would log in as any user`.
+  Fix: use a signing algorithm. With `none`, any unsigned token logged in as
+  any user.
+* **An algorithm authlib does not implement for signatures** (`hs256`, `NONE`,
+  `dir`, a typo).
+  Error: `jwt_config.algorithm must be one of ES256, ES256K, ES384, ES512, EdDSA, HS256, HS384, HS512, PS256, PS384, PS512, RS256, RS384, RS512, not 'hs256'`.
+  Fix: use one of the listed names, in that case. Every login was refused
+  before.
+* **An empty or missing secret**.
+  Error: `jwt_config.secret must be set to a non-empty HS256 key`.
+  Fix: set a long random secret.
+* **A secret that contains `-----BEGIN `, `---- BEGIN `, `ssh-rsa `,
+  `ssh-dss `, `ssh-ed25519 ` or `ecdsa-sha2-` anywhere**, as text or as a
+  JWK's `k`.
+  Error: `jwt_config.secret cannot be used as an HS256 key: ValueError: This key may not be safe to import`.
+  Fix: rotate to a random secret without those markers, at every token issuer
+  too. Under authlib 1.9.1 every JWT login with such a secret answered 500.
+* **A secret that works as the empty key**: `"\x00"`, or a JWK whose `k` is
+  `AA`. HMAC pads a key with zero bytes.
+  Error: `jwt_config.secret works as an empty HS256 key, so anyone could sign a login token`.
+  Fix: rotate the secret.
+* **A JWK with an empty `k`**, alone or in a key set.
+  Error: `jwt_config.secret cannot be used as an HS256 key: a JWK with an empty k`.
+  Fix: rotate the secret.
+* **A key set member whose `kid` is not a string** (`5`, `true`, `null`, a
+  list), whatever its key. This refuses some key sets that started and worked
+  before.
+  Error: `jwt_config.secret cannot be used as an HS256 key: keys[0] has a kid that is not a string (5); a JWK kid is a string (RFC 7517)`.
+  Fix: quote the `kid` (`"kid": "5"`), and have the token issuer send the same
+  string. authlib compares `kid`s with `==`, so a token whose `kid` is the
+  number `5` does not select the member `"5"`. Drop the `kid` of a one-key set
+  rather than writing `null`.
+* **A key set none of whose keys can be used for the algorithm** (RSA or EC
+  JWKs, `use: enc`, `key_ops` without `verify`).
+  Error: `jwt_config.secret cannot be used as an HS256 key: no key in the set can be used (kid '...': ...)`.
+  Fix: put a usable `oct` key in the set. A set where some key is usable
+  still starts, with a warning naming each key that is not; a token naming
+  one of those still fails.
+* **A key set of two or more keys, none of them with a `kid`**.
+  Error: `jwt_config.secret cannot be used as an HS256 key: ValueError: Invalid JSON Web Key Set`.
+  Fix: give each key a string `kid`, and send it in the token header.
+
+## Experimental MSC3861 (`experimental_features.msc3861`): refused at startup
+
+* **`client_auth_method: private_key_jwt` with a JWK whose `alg` is set and is
+  not `RS256`**.
+  Error: `The private_key_jwt client assertion is signed with RS256, but the JWK has "alg": 'RS512'`.
+  Fix: remove `alg` from the JWK, or set it to `RS256`. Under authlib 1.9.1
+  such a homeserver started and then answered every authenticated request
+  with 503.
+* **A JWK that cannot sign**: a public key only, a key that is not RSA,
+  `use: enc`, or `key_ops` without `sign`.
+  Error: `The JWK cannot sign the private_key_jwt client assertion: ...`, with
+  authlib's reason.
+  Fix: configure the RSA private key the authorization server knows.
+* **A JWK without a `kid`**.
+  Error: `The JWK cannot sign the private_key_jwt client assertion: KeyError: 'kid'`.
+  Fix: add the `kid` the authorization server knows the key by. The client
+  assertion always carries it.
+* **An empty `client_secret`** with `client_secret_post`,
+  `client_secret_basic` or `client_secret_jwt`.
+  Error: `A client secret must be provided when using the ClientAuthMethod.CLIENT_SECRET_JWT client auth method`
+  (with the method in use).
+  Fix: set the secret. Such a homeserver already stopped during setup, with
+  `AssertionError: No client_secret provided`.
+
+## Refused at sign-in rather than at startup
+
+* **JWT login tokens and OIDC back-channel logout tokens with a boolean `exp`,
+  `nbf` or `iat`.** JWT login answers 403 `M_FORBIDDEN`
+  (`JWT validation failed: invalid_claim: Invalid claim 'iat'`), and the
+  logout endpoint 400 (`Invalid logout_token`). authlib 1.6.12 accepted
+  `iat: true` and `nbf: true`. Fix: the issuer sends numbers (seconds since
+  the epoch).
+* **OIDC id_tokens whose `sub` or `jti` is not a string, or whose `aud` holds
+  a non-string.** The sign-in fails with `invalid_token`. A provider that
+  sends an integer user id only from its userinfo endpoint, with no id_token,
+  still signs in. See `KNOWN_LIMITATIONS.md`, "OIDC sign-in checks", at the
+  repository root.
+* **Unsigned OIDC back-channel logout tokens** are refused with 400, even when
+  the provider lists `none` among its signing algorithms.
+* **OIDC provider metadata URLs:** an `https://` URL with no host is refused,
+  and `http://` to a loopback host (`localhost`, `127.0.0.1`, `[::1]`) is now
+  accepted with or without a port.
+
+## The Railway service template
+
+`services/blackout-server/homeserver.yaml.template` now writes
+`jwt_config.enabled: false`, and the `JWT_ENABLED` variable is no longer
+read. It used `${JWT_ENABLED:-false}` and `${JWT_SECRET:-}`, which
+`envsubst` does not expand: JWT login rendered as on, with a secret anyone
+could read in the template. To use JWT login there, write `enabled: true` in
+the template and set `JWT_SECRET` to a long random value. The template's other
+`${VAR:-default}` values (the listener port, the database name, user and port,
+the Redis port, TURN) render as text too, so that service does not start as
+rendered; the record lists them.
+
+### Rollback notes
+
+* There is no switch for these checks. Going back to authlib 1.6.12 brings
+  back the three advisories.
+
 # Upgrading to managed-hosting readiness controls (post-2026-03-19)
 
 ## Managed profile startup preflight checks and verification hooks
