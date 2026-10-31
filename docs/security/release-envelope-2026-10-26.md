@@ -4215,7 +4215,7 @@ and the mutation table follow.
     notice after the answer, for a row the API process had seen as well as
     one it had not (the verifiers' probe:
     `fix/claims-r7v/stalled-deletion.mts`). Decision 27 and the user-facing
-    texts said less than that. Done in code, as the lead preferred:
+    texts said less than that. Done in code:
     `finishAccountDeletion` first waits, with no bound, for the drain of
     every write the process had queued (the deletion's among them), and
     bounds only the last statement. So by the answer the copies are blank
@@ -4256,8 +4256,8 @@ and the mutation table follow.
     paragraph say the deduplication is per room; design §5 item 2 qualifies
     "one `m.text` per recipient per release"; `TRUST.md` §1 (and
     `trust.html`, regenerated), the threat model's row and the changelog
-    agree. Not changed in code (the lead's instruction: the two documented
-    residuals stay documented).
+    agree. Not changed in code: two notifiers at once during a handover
+    stays a documented residual (Still open).
 -   **§15's "does not finish within the route's 10 s" (Low, a claim).** The
     statement goes on after the bound and lands. Now "until it has run,
     which can be after the route answered".
@@ -4278,8 +4278,9 @@ and the mutation table follow.
     middleware refuses only a revoked jti or a token issued before a
     per-user cutoff the deletion does not set). Done: the route's comment,
     test 27's comment and the round-7 entry say so. Setting the per-user
-    cutoff at deletion would refuse them, and is not done here: it is the
-    aside in Still open, which is being handled in its own change.
+    cutoff at deletion would refuse them; it is not done here, since it is
+    the review's aside in Still open (a still-valid token of a deleted
+    account answered 200), outside this PR.
 -   **A test helper still stated claim 71 (Low).** `deleteOnApp` in the
     Postgres notices file said every write the deletion queued "is in
     Postgres" by the answer. Done: its comment and its message say the
