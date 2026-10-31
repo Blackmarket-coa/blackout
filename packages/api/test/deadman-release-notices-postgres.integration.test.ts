@@ -34,7 +34,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { generateTestJwtSecret } from './_fixtures/secrets';
-import { createMatrixStub, createdRoomState } from './_fixtures/matrixStub';
+import { createMatrixStub, createdRoomState, memberEvent } from './_fixtures/matrixStub';
 import type { ReleaseKeySet } from '@blackout/protocol';
 
 process.env.NODE_ENV = 'test';
@@ -969,10 +969,21 @@ test('a leader taking over within the change notification’s lag sends nothing 
                 JSON.stringify(x.body.invite).includes(mxid)
             ).length;
             const invitesBefore = matrix.invites.filter((x) => x.userId === mxid).length;
+            const stateReadsBefore = matrix.stateReads.filter((r) => r === oldRoom).length;
             if (variant.newSendRefused) matrix.sendStatus = 500;
             let tick = await runDeadmanReleaseNotifier({ now: at });
             await worker.drain();
             if (variant.oldSendRefused) {
+                // Judged at the attempt's first read, before anything is asked
+                // of the homeserver: the known room's state is not read
+                // either (round 9 of part 2's review: with that judgement
+                // removed, a later read stopped the attempt, but only after
+                // the room's state had been read).
+                assert.equal(
+                    matrix.stateReads.filter((r) => r === oldRoom).length - stateReadsBefore,
+                    0,
+                    `${variant.name}: the room's state not read before the old leader's retry time`
+                );
                 // Round 8: Postgres has the old leader's retry set for 30 s
                 // on; the new leader's catch-up row was due now. It is left
                 // for its time: nothing sent, nothing written, and the
@@ -1066,6 +1077,14 @@ test('a copy this process’s mirror holds and Postgres does not (its write was 
     // by deleting the committed row.
     const recipient = await person();
     const mxid = `@pn-${recipient.id.slice(0, 8)}:test.local`;
+    // An earlier notice made the person's room, so the attempt has a known
+    // room whose state it could read (round 9: nothing is asked of the
+    // homeserver once the first read has found the copy missing).
+    const earlier = await release(recipient);
+    await runDeadmanReleaseNotifier({ now: earlier.at });
+    await worker.drain();
+    const knownRoom = worker.getDeadmanReleaseNotice(earlier.switchId, recipient.id)?.roomId;
+    assert.ok(knownRoom, 'the person has a room');
     const createsBefore = matrix.creates.filter((x) =>
         JSON.stringify(x.body.invite).includes(mxid)
     ).length;
@@ -1075,6 +1094,7 @@ test('a copy this process’s mirror holds and Postgres does not (its write was 
             recipient.id,
         ]);
     });
+    const stateReadsBefore = matrix.stateReads.filter((r) => r === knownRoom).length;
     assert.ok(
         worker.getDeadmanReleaseWrap(notice.switchId, recipient.id)?.sealedKey,
         'the mirror still holds the copy'
@@ -1093,6 +1113,11 @@ test('a copy this process’s mirror holds and Postgres does not (its write was 
         matrix.creates.filter((x) => JSON.stringify(x.body.invite).includes(mxid)).length,
         createsBefore,
         'no room made'
+    );
+    assert.equal(
+        matrix.stateReads.filter((r) => r === knownRoom).length - stateReadsBefore,
+        0,
+        'the known room’s state not read'
     );
 });
 
@@ -1582,7 +1607,7 @@ test('a room or a re-invite recorded on a pending row whose write was dropped is
     assert.equal(mirrored.roomId, undefined, 'ended elsewhere: the mirror does not keep its room');
 });
 
-test('the deletion route answers only once the deletion’s own writes have been attempted in Postgres, however long that takes, and waits for its last statement at most the bound: after the answer the worker makes no room, invites nobody and sends nothing for the person', async () => {
+test('finishAccountDeletion, which the deletion route awaits before it answers, returns only once the deletion’s own writes have been attempted in Postgres, however long that takes, and waits for its last statement at most the bound: after it returns the worker makes no room, invites nobody, reads no room’s state and sends nothing for the person', async () => {
     // Round 8 of part 2's review: round 7's bound covered the drain of the
     // deletion's own writes too, so past it the route answered while
     // Postgres still held the copy and the pending row, and the worker then
@@ -1603,6 +1628,15 @@ test('the deletion route answers only once the deletion’s own writes have been
     for (const variant of variants) {
         const recipient = await person();
         const mxid = `@pn-${recipient.id.slice(0, 8)}:test.local`;
+        // An earlier notice made the person's room, so the worker has a known
+        // room whose state it could read (round 9 of part 2's review: the
+        // first read's judgement stops the attempt before that, for a row
+        // Postgres still has pending whose copy is blank there).
+        const earlier = await release(recipient);
+        await runDeadmanReleaseNotifier({ now: earlier.at });
+        await worker.drain();
+        const knownRoom = worker.getDeadmanReleaseNotice(earlier.switchId, recipient.id)?.roomId;
+        assert.ok(knownRoom, `${variant.name}: the person has a room`);
         let open!: () => void;
         let gate: Promise<void> | null = null;
         const appPool = {
@@ -1681,9 +1715,15 @@ test('the deletion route answers only once the deletion’s own writes have been
             );
             const roomsBefore = roomsMadeFor(mxid);
             const invitesBefore = matrix.invites.filter((x) => x.userId === mxid).length;
+            const stateReadsBefore = matrix.stateReads.filter((r) => r === knownRoom).length;
             await runDeadmanReleaseNotifier({ now: notice.at });
             await worker.drain();
             assert.equal(roomsMadeFor(mxid) - roomsBefore, 0, `${variant.name}: no room made`);
+            assert.equal(
+                matrix.stateReads.filter((r) => r === knownRoom).length - stateReadsBefore,
+                0,
+                `${variant.name}: the person's room's state not read`
+            );
             assert.equal(
                 matrix.invites.filter((x) => x.userId === mxid).length - invitesBefore,
                 0,
@@ -1841,6 +1881,120 @@ test('a standby whose mirror has not heard of a trigger, a check-in or a cancel 
             assert.equal(sends, 0, variant.name);
             assert.deepEqual(rows, [], `${variant.name}: no notice row`);
         }
+        await other.drain();
+    }
+});
+
+test('a retry another process records after this attempt’s first read stops the attempt at its next read of Postgres: no re-invite, no create without the alias and no send before that time', async () => {
+    // Round 9 of part 2's review: `judgeCommitted` answers the not-due step at
+    // every read, but only its removal from every read at once was caught.
+    // The reads after the first are what keep this process from inviting,
+    // creating or sending once another process has set a retry between its
+    // first read and its call (since the claim, another process works on the
+    // same person at once only when a claim outlived its lease). The other
+    // process's write is by hand, while this one is parked on a homeserver
+    // call.
+    const variants = [
+        { name: 'parked on the known room’s state; the person has left it', park: 'state' },
+        { name: 'parked on the create with the alias, which is refused', park: 'create' },
+    ] as const;
+    for (const variant of variants) {
+        const recipient = await person();
+        const mxid = `@pn-${recipient.id.slice(0, 8)}:test.local`;
+        let knownRoom: string | undefined;
+        if (variant.park === 'state') {
+            const earlier = await release(recipient);
+            await runDeadmanReleaseNotifier({ now: earlier.at });
+            await worker.drain();
+            knownRoom = worker.getDeadmanReleaseNotice(earlier.switchId, recipient.id)?.roomId;
+            assert.ok(knownRoom, variant.name);
+            const state = matrix.rooms.get(knownRoom) as Array<{
+                type: string;
+                state_key?: string;
+            }>;
+            matrix.rooms.set(knownRoom, [
+                ...(state.filter(
+                    (e) => !(e.type === 'm.room.member' && e.state_key === mxid)
+                ) as ReturnType<typeof memberEvent>[]),
+                memberEvent(mxid, 'leave'),
+            ]);
+        } else {
+            matrix.aliasRefusal = { status: 403, errcode: 'M_FORBIDDEN' };
+        }
+        const notice = await release(recipient);
+        await worker.drain();
+        const other = new store.PostgresBackedDb();
+        await other.init(pool as never);
+        const retryAt = new Date(notice.at.getTime() + 30_000).toISOString();
+        let reached!: () => void;
+        let open!: () => void;
+        const atCall = new Promise<void>((resolve) => {
+            reached = resolve;
+        });
+        const gate = new Promise<void>((resolve) => {
+            open = resolve;
+        });
+        let parked = false;
+        globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+            const url = urlOf(input);
+            const hit =
+                variant.park === 'state'
+                    ? url.includes('/_synapse/admin/v1/rooms/') &&
+                      decodeURIComponent(url).includes(`${knownRoom}/state`)
+                    : /\/createRoom/.test(url) &&
+                      String(init?.body ?? '').includes(mxid) &&
+                      String(init?.body ?? '').includes('room_alias_name');
+            if (!parked && hit) {
+                parked = true;
+                reached();
+                await gate;
+            }
+            return matrix.fetch(input, init);
+        }) as typeof fetch;
+        const ours = () => ({
+            invites: matrix.invites.filter((x) => x.userId === mxid).length,
+            rooms: roomsMadeFor(mxid),
+            sends: matrix.sends.filter((x) => x.txnId.includes(notice.switchId)).length,
+        });
+        const before = ours();
+        try {
+            const tick = runDeadmanReleaseNotifier({ now: notice.at });
+            await atCall;
+            other.updateDeadmanReleaseNoticeIf(
+                notice.switchId,
+                recipient.id,
+                { status: 'pending' },
+                { attempts: 1, lastError: 'matrix_send_status_500', nextAttemptAt: retryAt }
+            );
+            await other.drain();
+            open();
+            const result = await tick;
+            await worker.drain();
+            assert.ok(result.elsewhere >= 1, `${variant.name}: counted elsewhere`);
+        } finally {
+            globalThis.fetch = matrix.fetch;
+            matrix.aliasRefusal = null;
+        }
+        assert.deepEqual(ours(), before, `${variant.name}: no invite, no room, no send`);
+        const stored = (
+            await pg.query(
+                'SELECT status, attempts, next_attempt_at FROM deadman_release_notices WHERE switch_id = $1 AND recipient_account_id = $2',
+                [notice.switchId, recipient.id]
+            )
+        ).rows[0] as { status: string; attempts: number; next_attempt_at: Date };
+        assert.equal(stored.status, 'pending', variant.name);
+        assert.equal(stored.attempts, 1, `${variant.name}: as the other process left it`);
+        assert.equal(stored.next_attempt_at.toISOString(), retryAt, variant.name);
+        if (variant.park === 'create')
+            matrix.aliasRefusal = { status: 403, errcode: 'M_FORBIDDEN' };
+        try {
+            await runDeadmanReleaseNotifier({ now: new Date(retryAt) });
+            await worker.drain();
+        } finally {
+            matrix.aliasRefusal = null;
+        }
+        assert.equal(ours().sends - before.sends, 1, `${variant.name}: sent once, at that time`);
+        assert.equal((await committed(notice.switchId, recipient.id)).status, 'sent');
         await other.drain();
     }
 });

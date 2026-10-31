@@ -891,6 +891,69 @@ test('a purged room is replaced once per person: every notice row that pointed a
     assert.equal(matrix.sendsTo(roomY).length, 2);
 });
 
+test('a notice that waited for the slot while another of the person’s notices replaced their purged room uses the replacement: the room is read again after the wait, and no third room is made (overlapping ticks, the alias refused)', async () => {
+    // Round 9 of part 2's review: `resolveRoom` takes the newer of the room the
+    // mirror names when the slot is taken and the one read at the attempt's
+    // start, and the half where the room read after the wait wins was not
+    // pinned. Room A is purged; tick 1 replaces it for one notice while tick
+    // 2, with the person's other notice, read A at its start and waits.
+    const dee = await freshPerson();
+    const deeMxid = matrixUserIdFor(dee.user.id)!;
+    pushEarlierRowsOut();
+    const first = await released(await freshPerson(), [dee.keySet.identity]);
+    assert.equal((await runDeadmanReleaseNotifier({ now: first.at })).sent, 1);
+    const roomA = db.getDeadmanReleaseNotice(first.record.id, dee.user.id)!.roomId!;
+    matrix.purgeRoom(roomA);
+    const later = new Date(first.at.getTime() + 1000);
+    const one = await released(await freshPerson(), [dee.keySet.identity], later);
+    const two = await released(await freshPerson(), [dee.keySet.identity], later);
+    matrix.clearCalls();
+    matrix.aliasRefusal = { status: 403, errcode: 'M_FORBIDDEN' };
+    let open!: () => void;
+    const gate = new Promise<void>((resolve) => {
+        open = resolve;
+    });
+    let plainCreates = 0;
+    const stubFetch = matrix.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url =
+            typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+        if (url.includes('/createRoom') && !String(init?.body ?? '').includes('room_alias_name')) {
+            plainCreates += 1;
+            if (plainCreates === 1) await gate;
+        }
+        return stubFetch(input, init);
+    }) as typeof fetch;
+    try {
+        const tick1 = runDeadmanReleaseNotifier({ now: later });
+        while (plainCreates < 1) await new Promise((resolve) => setTimeout(resolve, 5));
+        // Tick 1 is making the replacement for one notice; tick 2 takes the
+        // other, reads A as the person's room and waits for the slot.
+        const tick2 = runDeadmanReleaseNotifier({ now: later });
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        open();
+        const results = await within(5000, Promise.all([tick1, tick2]));
+        assert.notEqual(results, 'pending', 'both ticks finished');
+        const [r1, r2] = results as [Awaited<typeof tick1>, Awaited<typeof tick2>];
+        assert.equal(r1.sent + r2.sent, 2);
+    } finally {
+        globalThis.fetch = matrix.fetch;
+        matrix.aliasRefusal = null;
+    }
+    const creates = matrix.creates.filter((c) => (c.body.invite as string[]).includes(deeMxid));
+    assert.equal(creates.length, 1, 'one replacement, no third room');
+    const roomB = creates[0].roomId;
+    assert.equal(db.getDeadmanReleaseNotice(one.record.id, dee.user.id)!.roomId, roomB);
+    assert.equal(db.getDeadmanReleaseNotice(two.record.id, dee.user.id)!.roomId, roomB);
+    assert.equal(db.getDeadmanReleaseNotice(first.record.id, dee.user.id)!.roomId, roomB);
+    assert.equal(matrix.sendsTo(roomB).length, 2);
+    assert.equal(
+        matrix.stateReads.filter((r) => r === roomA).length,
+        1,
+        'A looked at once, by the notice that replaced it'
+    );
+});
+
 test('an account deletion that lands during a send stands: the row stays failed with recipient_gone and is not marked sent', async () => {
     const leaving = await freshPerson();
     const { record, at } = await released(await freshPerson(), [leaving.keySet.identity]);
