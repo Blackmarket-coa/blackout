@@ -109,7 +109,8 @@ no deployment, compose or env file does.
     account's copies are removed (across several API replicas one sealed to it
     in the moment the deletion reaches another replica can stay until that
     release is cancelled or removed), a notice still owed to it is dropped
-    (one the bot was already sending can still arrive), and its notice rows
+    (one the bot was already sending can still arrive, as can the invitation
+    to its notices room it was already making), and its notice rows
     forget their room (across the API and worker processes through the
     deletion's last step; if that step fails, which is logged, a notice that
     was being sent keeps its room). The export of an account includes

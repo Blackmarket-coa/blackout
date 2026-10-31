@@ -489,7 +489,8 @@ screen. **Verdict:** not proposed; recorded so the trade is on paper.
 
 1.  **The Released to you view** in the app is the source of truth. It works
     without a notice.
-2.  **A bot notice** in one standing room per account, "Blackout notices":
+2.  **A bot notice** in a standing room, one per person and reused (except
+    where `release-envelope-2026-10-26.md` §11 says), "Blackout notices":
     created by the bot and not end-to-end encrypted, because the bot cannot
     encrypt, and a room whose state said "encrypted" around a plaintext post
     would overstate what it is. The homeserver's backstop

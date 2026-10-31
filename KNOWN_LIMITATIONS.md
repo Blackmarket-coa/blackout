@@ -336,7 +336,8 @@ For the source-of-truth triage with tier/owner detail see
     replica in the moment your deletion is still reaching it can stay until
     that release is cancelled or removed), a notice still owed to you is
     dropped (one the bot was already sending at that moment can still
-    arrive), and the record of each notice (its status and attempts) stays,
+    arrive, and so can the invitation to your notices room it was already
+    making), and the record of each notice (its status and attempts) stays,
     with its room forgotten (where the server runs its background work in a
     separate process, the last step of the deletion does that for a notice
     the deleting process had not heard of yet; if that step fails, which the
@@ -382,7 +383,8 @@ For the source-of-truth triage with tier/owner detail see
     a room's state says, and the room is created so that the homeserver's
     encryption backstop (above) does not mark it encrypted (the `public_chat`
     preset with an invite-only join rule; the backstop keys on the preset).
-    The bot makes one such room for you and reuses it. The room is not in the
+    The bot makes one such room for you and reuses it; the cases below can
+    leave you an extra one. The room is not in the
     homeserver's public room list. It has an address made from your Matrix id
     under a secret the server keeps, so nobody without that secret can work
     it out from your Matrix id or tell from it whose room it is; it is there
@@ -399,7 +401,14 @@ For the source-of-truth triage with tier/owner detail see
     The bot uses a room at that address only once it is finished and the bot
     is in it; otherwise it waits one retry (at least 30 seconds after it first
     looked) and then makes your room without the address, and a homeserver
-    that was only that slow leaves you an extra room the same way.
+    that was only that slow leaves you an extra room the same way. Where the
+    server runs more than one copy of its background work, as it does for a
+    moment while one takes over from another, two of them working on the
+    same notice at the same moment can each make you a room, if the
+    homeserver refuses the address, and each send the notice, which the
+    homeserver drops the second time while it still remembers the first: for
+    30 to 60 minutes, or 24 hours if the bot's token came from a sign-in, and
+    the shorter of these is forgotten if the homeserver restarts.
     A fixed sentence, "There is something new for you in Blackout. Open
     Blackout to see it. This room is not end-to-end encrypted, so please
     don't reply here.", and the release's id, and nothing else: not who armed
@@ -409,10 +418,12 @@ For the source-of-truth triage with tier/owner detail see
     The bot retries a notice the homeserver refuses for 30 days, then records
     it as failed, and gives up on a call the homeserver does not answer within
     30 seconds the same way. It sends one notice at a time, and one notice can
-    take up to seven calls, so a homeserver that answers nothing holds every
-    notice due behind it, each for up to 30 seconds, and one that answers
-    slowly, just inside the 30 seconds each time, can hold each for about
-    three and a half minutes and a batch of 50 for about three hours. Whether
+    take up to seven calls to the homeserver and four reads of the server's
+    own database, each given 30 seconds, so a homeserver or a database that
+    answers nothing holds every notice due behind it, each for up to 30
+    seconds, and ones that answer slowly, just inside the 30 seconds each
+    time, can hold each for about five and a half minutes and a batch of 50
+    for about four and a half hours. Whether
     a notice reaches you depends on the homeserver and your client, and the
     release does not: it is released when the API's own store says so, and
     the view the next PR adds reads that store.
@@ -508,7 +519,14 @@ For the source-of-truth triage with tier/owner detail see
     missing; nothing detects the orphaned copies. A copy's write that fails
     twice is dropped (`db_write_behind_failed` in the logs) while the switch's
     may succeed, which leaves a switch missing that copy with no crash;
-    nothing detects that either.
+    nothing detects that either. The API process that made the write still
+    holds the copy in memory, and serves it to that person when their request
+    reaches that process, until it restarts; no other process has it. The bot
+    reads each copy from the database before it makes a room, invites or
+    sends, so that person is not sent a notice: where the bot runs in that
+    same process the notice is recorded as failed with `copy_unavailable`,
+    and where it runs in a separate worker, which never had the copy, no
+    notice is written for them at all.
 -   The switches that exist were armed through the API before this. Their
     payload is whatever was sent: the server never decrypts it and cannot
     tell whether it is ciphertext. Recipients named by Blackout account id

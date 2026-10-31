@@ -15,8 +15,10 @@ how the notices room is made unencrypted and kept to one per person except in
 the cases [KNOWN_LIMITATIONS.md](KNOWN_LIMITATIONS.md) lists, the safety-code
 condition on "never reaches the server readable", the bounds on who can name
 you, exact on one API server and not across replicas, and what a few accounts
-can do with the bound of 50, to up to 64 people per five switches. Changes
-to anything here are
+can do with the bound of 50, to up to 64 people per five switches; section 1
+updated 2026-10-31 with the extra notices room two of the server's background
+processes can make while one takes over from the other. Changes to anything
+here are
 recorded in the [policy changelog](docs/legal/CHANGELOG.md).
 
 ---
@@ -112,9 +114,11 @@ Encryption claims are only worth something with the exceptions attached.
     until it lands, this list stands and stays here.
 -   **Dead-man release notices.** When a dead-man switch armed in the release
     format fires, the bot makes one "Blackout notices" room per person named and
-    reuses it (a homeserver slow to make it can still leave someone an extra,
-    empty one in the cases [`KNOWN_LIMITATIONS.md`](KNOWN_LIMITATIONS.md)
-    lists), invites them, and posts one fixed sentence with the release's id —
+    reuses it (a homeserver slow to make it, or two of the server's background
+    processes working on one notice at once while one takes over from the
+    other, can still leave someone an extra one in the cases
+    [`KNOWN_LIMITATIONS.md`](KNOWN_LIMITATIONS.md) lists), invites them, and
+    posts one fixed sentence with the release's id —
     nothing of the message, nobody's name, not the owner's label. The room is
     not end-to-end encrypted, on purpose: the bot cannot encrypt, so its post is
     plaintext whatever a room's state says, and the room is created so that the
