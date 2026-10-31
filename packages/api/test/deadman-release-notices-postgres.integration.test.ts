@@ -89,6 +89,35 @@ function poolFor(pg: AnyPg) {
 const pg = new PGlite() as unknown as AnyPg;
 const pool = poolFor(pg);
 await migrateUp({ pool: pool as never, migrationsDir: MIGRATIONS_DIR });
+// Every change to a notice row, in order, so a test can see what Postgres held
+// between two moments and not only at the end (a write that set a deleted
+// person's row back to pending, later ended again, shows here).
+await pg.exec(`
+    CREATE TABLE notice_audit (
+        seq SERIAL PRIMARY KEY,
+        switch_id TEXT NOT NULL,
+        recipient_account_id TEXT NOT NULL,
+        status TEXT NOT NULL,
+        room_id TEXT
+    );
+    CREATE FUNCTION notice_audit_row() RETURNS trigger AS $$
+    BEGIN
+        INSERT INTO notice_audit (switch_id, recipient_account_id, status, room_id)
+        VALUES (NEW.switch_id, NEW.recipient_account_id, NEW.status, NEW.room_id);
+        RETURN NEW;
+    END
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER notice_audit_after AFTER INSERT OR UPDATE ON deadman_release_notices
+        FOR EACH ROW EXECUTE FUNCTION notice_audit_row();
+`);
+const auditMark = async (): Promise<number> =>
+    Number(
+        (
+            (await pg.query('SELECT coalesce(max(seq), 0) AS n FROM notice_audit')).rows[0] as {
+                n: number;
+            }
+        ).n
+    );
 const worker = store.db as InstanceType<typeof store.PostgresBackedDb>;
 assert.ok(worker instanceof store.PostgresBackedDb, 'the singleton is the Postgres store');
 await worker.init(pool as never); // no transport: peer changes are delivered by hand
@@ -357,8 +386,10 @@ test('an account deletion the API process committed while the worker had a notic
             const peer = worker as unknown as { applyPeerChange(payload: PeerChange): void };
             for (const payload of announced.splice(0)) peer.applyPeerChange(payload);
         };
+        let deletedAt = 0;
         const deleteAndCheck = async () => {
             await deleteOnApp(app, recipient.id);
+            deletedAt = await auditMark();
             assert.deepEqual(
                 await committed(notice.switchId, recipient.id),
                 expected,
@@ -435,6 +466,24 @@ test('an account deletion the API process committed while the worker had a notic
                 `${variant.name}: rooms made for the person`
             );
         }
+        // Nor did Postgres hold anything else in between: once the deletion
+        // committed, no write set a row of the person's back to pending or gave
+        // one a room, even for a moment before a later write ended it again.
+        assert.ok(deletedAt > 0, variant.name);
+        assert.deepEqual(
+            (
+                await pg.query(
+                    'SELECT status, room_id FROM notice_audit WHERE seq > $1 AND recipient_account_id = $2 ORDER BY seq',
+                    [deletedAt, recipient.id]
+                )
+            ).rows.filter(
+                (row) =>
+                    (row as { status: string }).status === 'pending' ||
+                    (row as { room_id: string | null }).room_id !== null
+            ),
+            [],
+            `${variant.name}: nothing after the deletion put a row back`
+        );
         if (earlier) {
             const kept = await committed(earlier.switchId, recipient.id);
             assert.equal(kept.status, 'sent', variant.name);
