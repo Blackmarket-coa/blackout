@@ -299,7 +299,7 @@ const armResponse = (c: Context, outcome: ArmReleaseOutcome, subject: string) =>
         case 'held_limit':
             return c.json(
                 {
-                    code: DEADMAN_RELEASE_ERRORS.heldLimit,
+                    code: DEADMAN_RELEASE_ERRORS.liveLimit,
                     message:
                         'This account has as many release switches with their content still held ' +
                         '(armed, in grace, or fired and not yet removed) as are allowed',

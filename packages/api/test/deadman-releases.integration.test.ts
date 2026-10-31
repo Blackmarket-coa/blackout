@@ -1274,7 +1274,7 @@ test('GET /limits says what the arming form may say, from the deployment’s own
         maxMessageBytes: 65536,
         paddedSizes: [1024, 16384, 262144],
         labelMaxLength: 280,
-        maxHeldReleaseSwitches: 20,
+        maxLiveReleaseSwitches: 20,
         maxArmsPerDay: 10,
         maxHeldReleasesPerRecipientFromOwner: 5,
         maxHeldReleasesPerRecipient: 50,

@@ -111,9 +111,11 @@ export type DeadmanLimits = {
      * pass at least 365 days after the trigger). A cancelled switch holds no
      * content and does not count; legacy switches never count. The bound on
      * the content one account can make the server keep, not on its rows: a
-     * cancelled switch's rows stay.
+     * cancelled switch's rows stay. The name is the one part 1 shipped, when
+     * the bound counted armed and in-grace switches only; part 2 widened what
+     * it counts (P3b-H1) and kept the name, so nothing built on it breaks.
      */
-    maxHeldReleaseSwitches: number;
+    maxLiveReleaseSwitches: number;
     /** Release arms one owner may make in any 24 hours (429 `release_arm_rate_limited`). */
     maxArmsPerDay: number;
     /** Held releases one owner may have naming one recipient (409 `recipient_limit`). */
@@ -138,9 +140,10 @@ export const DEADMAN_NOTICE_RETRY_DAYS = 30;
  * Release switches per owner whose content is still held (armed, in grace, or
  * fired until the 365-day removal): what bounds the content one account can
  * make the server keep, about 7 MiB of headers and up to about 2.3 MiB of
- * copies at the largest sizes (`release-envelope-2026-10-26.md` §15).
+ * copies at the largest sizes (`release-envelope-2026-10-26.md` §15). Part
+ * 1's name, kept (`DeadmanLimits.maxLiveReleaseSwitches` says why).
  */
-export const DEADMAN_MAX_HELD_RELEASE_SWITCHES = 20;
+export const DEADMAN_MAX_LIVE_RELEASE_SWITCHES = 20;
 /** Release arms per owner in any 24 hours. */
 export const DEADMAN_MAX_ARMS_PER_DAY = 10;
 /** Held releases from one owner that may name one recipient. */
@@ -210,8 +213,11 @@ export const DEADMAN_RELEASE_ERRORS = {
     invalidSignature: 'invalid_release_signature',
     /** 409: the release id is already a switch's. */
     releaseIdTaken: 'release_id_taken',
-    /** 409: the owner has as many release switches with content still held as are allowed. */
-    heldLimit: 'release_switch_limit',
+    /**
+     * 409: the owner has as many release switches with content still held as
+     * are allowed (part 1's key, kept: `DeadmanLimits.maxLiveReleaseSwitches`).
+     */
+    liveLimit: 'release_switch_limit',
     /** 429, with `Retry-After`: the owner armed as many release switches in 24 hours as are allowed. */
     armRateLimited: 'release_arm_rate_limited',
     /**

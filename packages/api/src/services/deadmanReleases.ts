@@ -22,7 +22,7 @@
  * (a flag that could hold a release back would be one more way to do it).
  *
  * What one account can make the server keep is bounded (independent review
- * of part 2, P3b-H1): at most `DEADMAN_MAX_HELD_RELEASE_SWITCHES` release
+ * of part 2, P3b-H1): at most `DEADMAN_MAX_LIVE_RELEASE_SWITCHES` release
  * switches per owner whose content is still held (armed, in grace, or fired
  * until the 365-day removal), at most `DEADMAN_MAX_ARMS_PER_DAY` arms per
  * owner in any 24 hours, and per recipient at most
@@ -40,7 +40,7 @@ import {
     DEADMAN_MAX_ARMS_PER_DAY,
     DEADMAN_MAX_HELD_RELEASES_PER_RECIPIENT,
     DEADMAN_MAX_HELD_RELEASES_PER_RECIPIENT_FROM_OWNER,
-    DEADMAN_MAX_HELD_RELEASE_SWITCHES,
+    DEADMAN_MAX_LIVE_RELEASE_SWITCHES,
     DEADMAN_NOTICE_RETRY_DAYS,
     DEADMAN_RELEASE_FORMAT,
     DEADMAN_RELEASE_RETENTION_DAYS,
@@ -182,7 +182,7 @@ export const releaseLimits = (sweep: { backlogToleranceMs: number }): DeadmanLim
     maxMessageBytes: RELEASE_MESSAGE_MAX_BYTES,
     paddedSizes: [...RELEASE_PADDED_SIZES],
     labelMaxLength: DEADMAN_LABEL_MAX_LENGTH,
-    maxHeldReleaseSwitches: DEADMAN_MAX_HELD_RELEASE_SWITCHES,
+    maxLiveReleaseSwitches: DEADMAN_MAX_LIVE_RELEASE_SWITCHES,
     maxArmsPerDay: DEADMAN_MAX_ARMS_PER_DAY,
     maxHeldReleasesPerRecipientFromOwner: DEADMAN_MAX_HELD_RELEASES_PER_RECIPIENT_FROM_OWNER,
     maxHeldReleasesPerRecipient: DEADMAN_MAX_HELD_RELEASES_PER_RECIPIENT,
@@ -407,7 +407,7 @@ const ownerBoundsRefusal = (
     ownerId: string,
     now: Date
 ): { kind: 'held_limit' } | { kind: 'rate_limited'; retryAfterSeconds: number } | null => {
-    if (heldReleaseSwitchCount(ownerId) >= DEADMAN_MAX_HELD_RELEASE_SWITCHES) {
+    if (heldReleaseSwitchCount(ownerId) >= DEADMAN_MAX_LIVE_RELEASE_SWITCHES) {
         return { kind: 'held_limit' };
     }
     const rate = armRateState(ownerId, now);
