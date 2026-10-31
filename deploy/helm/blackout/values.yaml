@@ -4,114 +4,126 @@
 # `helm install --set image.tag=...`.
 
 global:
-  environment: production
-  domain: blackout.example.com
+    environment: production
+    domain: blackout.example.com
 
 api:
-  image:
-    repository: ghcr.io/blackout/api
-    tag: stable
-    pullPolicy: IfNotPresent
-  replicaCount: 3
-  port: 3000
-  store:
-    # Runtime datastore mode. `postgres` uses the write-through Postgres store
-    # (migrate-on-boot, hydrate, write-through). Safe at >1 replica because
-    # pgNotify keeps each replica's in-memory mirror coherent via LISTEN/NOTIFY.
-    # Set to `file` to fall back to the JSON snapshot store.
-    mode: postgres
-    # Cross-replica cache invalidation. Keep true for any multi-replica deploy.
-    pgNotify: true
-  resources:
-    requests:
-      cpu: 100m
-      memory: 256Mi
-    limits:
-      cpu: 1000m
-      memory: 1Gi
-  hpa:
-    enabled: true
-    minReplicas: 3
-    maxReplicas: 12
-    targetCpuUtilization: 65
-  pdb:
-    minAvailable: 2
-  cors:
-    # Required. Comma-separated absolute origins.
-    allowedOrigins: "https://blackout.example.com"
-    allowCredentials: true
-  rateLimit:
-    authMax: 10
-  bugReport:
-    # Bug-report intake forwarders (POST /bug-report, /v1/bug-report).
-    # All optional — when unset the API degrades to a dev no-op that files
-    # nothing. To file real GitHub issues, set github.owner/repo and supply
-    # GitHub App (or PAT) credentials via externalSecrets.remoteRefs below.
-    rageshakeEndpointUrl: ""
-    github:
-      # Defaults to Blackmarket-coa/blackout in the API when left blank.
-      owner: ""
-      repo: ""
-      labels: ""
-  metrics:
-    # When true, the chart annotates pods for Prometheus scraping. The api
-    # gates /metrics with INTERNAL_METRICS_TOKEN so this is safe even if
-    # the cluster does not run a private Prometheus.
-    enabled: true
-    # The token is sourced from external-secrets. See externalSecrets below.
-    tokenSecretKey: INTERNAL_METRICS_TOKEN
-  observability:
-    sentry:
-      enabled: false
-      tracesSampleRate: 0.1
-    otel:
-      enabled: false
-      endpoint: http://otel-collector:4318
+    image:
+        repository: ghcr.io/blackout/api
+        tag: stable
+        pullPolicy: IfNotPresent
+    replicaCount: 3
+    port: 3000
+    store:
+        # Runtime datastore mode. `postgres` is the Postgres store, write-behind:
+        # it migrates on boot and hydrates an in-memory mirror; a mutation updates
+        # the replica's mirror and returns, and its Postgres write is queued and runs
+        # just after, so a crash before it runs loses it (the
+        # db_write_behind_failures_total metric counts writes that failed).
+        # pgNotify (LISTEN/NOTIFY) tells the other replicas which rows changed so
+        # each re-reads them. Consistency is EVENTUAL: a replica can serve the old
+        # value until the notification arrives, and a single-use check (a reset
+        # token, a refresh rotation) can pass once on each replica in that window.
+        # A write names only the rows it changed; see
+        # docs/security/store-cross-process-writes-2026-10-31.md for what that
+        # covers and for rolling out the release that made it so. `file` (the JSON
+        # snapshot store) is single-process, and the API refuses it when NODE_ENV
+        # is production (global.environment's default).
+        mode: postgres
+        # Cross-process change notifications. Keep true whenever more than one
+        # process shares the database (replicaCount above 1, the HPA, a worker);
+        # with it false, run exactly one process.
+        pgNotify: true
+    resources:
+        requests:
+            cpu: 100m
+            memory: 256Mi
+        limits:
+            cpu: 1000m
+            memory: 1Gi
+    hpa:
+        enabled: true
+        minReplicas: 3
+        maxReplicas: 12
+        targetCpuUtilization: 65
+    pdb:
+        minAvailable: 2
+    cors:
+        # Required. Comma-separated absolute origins.
+        allowedOrigins: 'https://blackout.example.com'
+        allowCredentials: true
+    rateLimit:
+        authMax: 10
+    bugReport:
+        # Bug-report intake forwarders (POST /bug-report, /v1/bug-report).
+        # All optional — when unset the API degrades to a dev no-op that files
+        # nothing. To file real GitHub issues, set github.owner/repo and supply
+        # GitHub App (or PAT) credentials via externalSecrets.remoteRefs below.
+        rageshakeEndpointUrl: ''
+        github:
+            # Defaults to Blackmarket-coa/blackout in the API when left blank.
+            owner: ''
+            repo: ''
+            labels: ''
+    metrics:
+        # When true, the chart annotates pods for Prometheus scraping. The api
+        # gates /metrics with INTERNAL_METRICS_TOKEN so this is safe even if
+        # the cluster does not run a private Prometheus.
+        enabled: true
+        # The token is sourced from external-secrets. See externalSecrets below.
+        tokenSecretKey: INTERNAL_METRICS_TOKEN
+    observability:
+        sentry:
+            enabled: false
+            tracesSampleRate: 0.1
+        otel:
+            enabled: false
+            endpoint: http://otel-collector:4318
 
 redis:
-  enabled: true
-  image:
-    repository: redis
-    tag: 7-alpine
-  storage: 5Gi
-  resources:
-    requests: { cpu: 50m, memory: 256Mi }
-    limits: { cpu: 500m, memory: 1Gi }
+    enabled: true
+    image:
+        repository: redis
+        tag: 7-alpine
+    storage: 5Gi
+    resources:
+        requests: { cpu: 50m, memory: 256Mi }
+        limits: { cpu: 500m, memory: 1Gi }
 
 # External Secrets Operator integration. Set enabled=true and provide a
 # ClusterSecretStore name + remote secret keys. The chart wires the
 # api Deployment's secret references to the synced secret.
 externalSecrets:
-  enabled: false
-  refreshInterval: 1h
-  clusterSecretStore: aws-secrets-manager
-  remoteRefs:
-    JWT_SECRET_PRIMARY: blackout/api/jwt_primary
-    JWT_SECRET_ROLLOVER: blackout/api/jwt_rollover
-    DATABASE_URL: blackout/api/database_url
-    REDIS_URL: blackout/api/redis_url
-    SENTRY_DSN: blackout/api/sentry_dsn
-    INTERNAL_METRICS_TOKEN: blackout/api/internal_metrics_token
-    # Bug-report → GitHub issue credentials (optional). Uncomment and point at
-    # your secret-store keys to turn on automatic issue creation. The API reads
-    # the GitHub App trio first, falling back to GITHUB_BUG_REPORT_PAT.
-    # GITHUB_APP_ID: blackout/api/github_app_id
-    # GITHUB_APP_INSTALLATION_ID: blackout/api/github_app_installation_id
-    # GITHUB_APP_PRIVATE_KEY: blackout/api/github_app_private_key
-    # GITHUB_BUG_REPORT_PAT: blackout/api/github_bug_report_pat
+    enabled: false
+    refreshInterval: 1h
+    clusterSecretStore: aws-secrets-manager
+    remoteRefs:
+        JWT_SECRET_PRIMARY: blackout/api/jwt_primary
+        JWT_SECRET_ROLLOVER: blackout/api/jwt_rollover
+        DATABASE_URL: blackout/api/database_url
+        REDIS_URL: blackout/api/redis_url
+        SENTRY_DSN: blackout/api/sentry_dsn
+        INTERNAL_METRICS_TOKEN: blackout/api/internal_metrics_token
+        # Bug-report → GitHub issue credentials (optional). Uncomment and point at
+        # your secret-store keys to turn on automatic issue creation. The API reads
+        # the GitHub App trio first, falling back to GITHUB_BUG_REPORT_PAT.
+        # GITHUB_APP_ID: blackout/api/github_app_id
+        # GITHUB_APP_INSTALLATION_ID: blackout/api/github_app_installation_id
+        # GITHUB_APP_PRIVATE_KEY: blackout/api/github_app_private_key
+        # GITHUB_BUG_REPORT_PAT: blackout/api/github_bug_report_pat
 
 # Argo Rollouts: enables a canary deploy strategy that ships 10% → wait → 30% → wait → 100%
 # with metric-driven analysis against http_request_duration_seconds and
 # http_requests_total. Disabled by default; enable per-environment.
 canary:
-  enabled: false
-  steps:
-    - setWeight: 10
-    - pause: { duration: 5m }
-    - setWeight: 30
-    - pause: { duration: 5m }
-    - setWeight: 60
-    - pause: { duration: 5m }
-  analysis:
-    successRateThreshold: 0.99
-    p95LatencyThresholdSeconds: 0.5
+    enabled: false
+    steps:
+        - setWeight: 10
+        - pause: { duration: 5m }
+        - setWeight: 30
+        - pause: { duration: 5m }
+        - setWeight: 60
+        - pause: { duration: 5m }
+    analysis:
+        successRateThreshold: 0.99
+        p95LatencyThresholdSeconds: 0.5

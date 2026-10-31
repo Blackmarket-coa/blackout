@@ -1,4 +1,4 @@
-// Per-table descriptors + per-mutator write-through specs for PostgresBackedDb.
+// Per-table descriptors + per-mutator write specs for the PostgresBackedDb write-behind store.
 //
 // Most tables are regular: table name = snake_case(mapName), keyed by `id`,
 // reflection maps fields ↔ columns. The exceptions (composite/non-id keys, the
@@ -658,10 +658,14 @@ const revokeRefreshTokensWhere = (column: string): MutatorSpec =>
 /**
  * Every descriptor table with an `ON DELETE CASCADE` foreign key to `users`,
  * and its column. Postgres deletes these rows with the account; deleteUser
- * also deletes them explicitly, first and in the same transaction, so their
- * keys come back from RETURNING and every mirror is told they are gone (the
- * cascade itself tells no one). A test checks this list, with
- * USER_CASCADE_LEFT_IN_MIRRORS, against the live foreign-key catalogue.
+ * also deletes them explicitly, first and in the same transaction, so the
+ * keys of every child row those DELETEs see come back from RETURNING and
+ * every mirror is told they are gone (the cascade itself tells no one). A
+ * child row another process inserts after its table's DELETE has run and
+ * before the account's is removed by the cascade alone, unannounced
+ * (docs/security/store-cross-process-writes-2026-10-31.md, O15). A test
+ * checks this list, with USER_CASCADE_LEFT_IN_MIRRORS, against the live
+ * foreign-key catalogue.
  */
 export const USER_CASCADE_CHILDREN: ReadonlyArray<{ map: string; column: string }> = [
     { map: 'passwordResetTokens', column: 'user_id' },
@@ -749,7 +753,7 @@ const deleteByUser = (rows: ReadonlyArray<{ map: string; column: string }>): Tar
     rows.map(({ map, column }) => deleteWhere(map, `${column} = $1`, (c) => [c.args[0]]));
 
 /**
- * Maps each InMemoryDb mutator to its write-through. `upsert` persists the
+ * Maps each InMemoryDb mutator to its Postgres write. `upsert` persists the
  * method's returned record; `targeted` writes only the rows the call changed.
  * A method that writes a map and is absent here is never written to Postgres:
  * store-spec-coverage's U1 lists those (the `reset*ForTest` seams, in-memory

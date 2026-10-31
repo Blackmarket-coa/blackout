@@ -1,4 +1,4 @@
-// Introspection-driven SQL writer for the PostgresBackedDb write-through store.
+// Introspection-driven SQL writer for the PostgresBackedDb write-behind store.
 //
 // Rather than hand-maintain a column list per table, we read the actual column
 // names + types from information_schema at init and drive INSERT/SELECT

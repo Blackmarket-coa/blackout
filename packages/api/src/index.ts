@@ -396,8 +396,8 @@ if (shouldListen && process.env.NODE_ENV === 'production') {
     if (RUNTIME_DB_MODE !== 'postgres') {
         throw new Error(
             `BLACKOUT_DB_MODE=${RUNTIME_DB_MODE} is not permitted in production; ` +
-                'set BLACKOUT_DB_MODE=postgres (with DATABASE_URL) for a durable, ' +
-                'multi-replica-safe store.'
+                'set BLACKOUT_DB_MODE=postgres (with DATABASE_URL), the store that ' +
+                'persists to Postgres and keeps several processes eventually consistent.'
         );
     }
     if (!process.env.LOG_HASH_SALT) {
