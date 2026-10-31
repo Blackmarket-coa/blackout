@@ -9,16 +9,26 @@
  * database, `updateDeadmanReleaseNoticeIf`). As round 4 built it the worker's
  * full-row upsert landed over the app's committed `failed` / `recipient_gone`
  * / no room, and Postgres ended `sent` with the room (round 5 of part 2's
- * review, `release-envelope-2026-10-26.md`).
+ * review, `release-envelope-2026-10-26.md`). Round 6: the same for a notice
+ * row the app had not yet heard of when it deleted (the worker's sweep wrote
+ * it moments before), which the app's own writes cannot reach: the worker
+ * reads the person's copy from the database before it makes a room and
+ * before it sends, and the deletion's end pass (`finishAccountDeletion`)
+ * ends and forgets the room of every row of theirs in the database; the
+ * catch-up's creation of a row is insert-only there; and the notifier's end
+ * for an account found gone after a send does not land over a `sent` that
+ * another notifier committed during a leader handover.
  *
  * The worker is this process's store singleton (`BLACKOUT_DB_MODE=postgres`)
  * on an in-process PGlite with every migration applied, running the real
  * notifier against the stand-in homeserver; the app is a second
- * PostgresBackedDb on the same database, making the account deletion's
- * notice and copy writes (`accountLifecycle.ts`; the user row is left, since
- * the notifier reads it from the worker's mirror, which has it until the
- * notification arrives either way). Change notifications are delivered by
- * hand, so the only variable is when the app's reaches the worker.
+ * PostgresBackedDb on the same database, running the account deletion's own
+ * release writes (`eraseReleaseCopiesAndNoticesOf`, then
+ * `finishAccountDeletion`, as `confirmAccountDeletion` and the route call
+ * them; the user row and the rest of the deletion are left, since neither the
+ * notifier's read of the copy nor the end pass reads them). Change
+ * notifications are delivered by hand, so the only variable is when the app's
+ * reaches the worker.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -48,6 +58,10 @@ const { armReleaseSwitch } = await import('../src/services/deadmanReleases');
 const { NOTICE_RETRY_WINDOW_MS, runDeadmanReleaseNotifier } = await import(
     '../src/services/deadmanReleaseNotifier'
 );
+const { eraseReleaseCopiesAndNoticesOf, finishAccountDeletion } = await import(
+    '../src/services/accountLifecycle'
+);
+const { upsertRecord } = await import('../src/db/pgWriter');
 
 protocol.setKemProvider(protocol.mlKem768Provider);
 
@@ -80,22 +94,6 @@ assert.ok(worker instanceof store.PostgresBackedDb, 'the singleton is the Postgr
 await worker.init(pool as never); // no transport: peer changes are delivered by hand
 
 type PeerChange = { src: string; m: string; op: 'u' | 'r'; kv?: string[] };
-/** The app's change notification for one person's notice and copy, as the transport would deliver it. */
-const deliverToWorker = (switchId: string, accountId: string) => {
-    const peer = worker as unknown as { applyPeerChange(payload: PeerChange): void };
-    peer.applyPeerChange({
-        src: 'app',
-        m: 'deadmanReleaseNotices',
-        op: 'u',
-        kv: [switchId, accountId],
-    });
-    peer.applyPeerChange({
-        src: 'app',
-        m: 'deadmanReleaseWraps',
-        op: 'u',
-        kv: [switchId, accountId],
-    });
-};
 const settle = () => new Promise((resolve) => setTimeout(resolve, 200));
 
 const person = async (): Promise<{ id: string; keySet: ReleaseKeySet }> => {
@@ -125,7 +123,8 @@ const person = async (): Promise<{ id: string; keySet: ReleaseKeySet }> => {
 };
 
 let clock = Date.now() + 100_000;
-const release = async (recipient: { keySet: ReleaseKeySet }) => {
+/** Arm a release naming the recipient on the worker, and fire it (`beforeSweep` runs between). */
+const release = async (recipient: { keySet: ReleaseKeySet }, beforeSweep?: () => Promise<void>) => {
     const owner = await person();
     const envelope = await protocol.buildReleaseEnvelope({
         ownerKeySet: owner.keySet,
@@ -137,25 +136,18 @@ const release = async (recipient: { keySet: ReleaseKeySet }) => {
         input: { checkInIntervalSeconds: 60, gracePeriodSeconds: 0, envelope },
     });
     assert.equal(outcome.kind, 'armed');
+    await beforeSweep?.();
     const at = new Date((clock += 300_000));
     sweepOverdueDeadmanSwitches(at, Number.MAX_SAFE_INTEGER);
     return { switchId: envelope.releaseId, at };
 };
 
-/** The account deletion's writes for a recipient's copies and notices, on the app (`accountLifecycle.ts`). */
-const deleteOnApp = (app: InstanceType<typeof store.PostgresBackedDb>, accountId: string) => {
-    for (const wrap of app.listDeadmanReleaseWrapsForRecipient(accountId)) {
-        app.eraseDeadmanReleaseWrap(wrap.switchId, wrap.recipientAccountId);
-    }
-    const goneAt = new Date().toISOString();
-    for (const notice of app.listDeadmanReleaseNoticesForRecipient(accountId)) {
-        app.updateDeadmanReleaseNotice(notice.switchId, notice.recipientAccountId, {
-            roomId: undefined,
-            ...(notice.status === 'pending'
-                ? { status: 'failed', failedAt: goneAt, lastError: 'recipient_gone' }
-                : {}),
-        });
-    }
+type Store = InstanceType<typeof store.PostgresBackedDb>;
+/** The account deletion's release writes on the app, as the deletion and the route run them. */
+const deleteOnApp = async (app: Store, accountId: string) => {
+    eraseReleaseCopiesAndNoticesOf(app, accountId);
+    await finishAccountDeletion(accountId, app);
+    await app.drain();
 };
 
 const committed = async (switchId: string, accountId: string) =>
@@ -169,7 +161,9 @@ const committed = async (switchId: string, accountId: string) =>
 const urlOf = (input: RequestInfo | URL): string =>
     typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
 
-test('an account deletion the API process committed while the worker had a notice in hand stands in Postgres, whenever its change notification reaches the worker', async () => {
+test('an account deletion the API process committed while the worker had a notice in hand stands in Postgres, whenever its change notification reaches the worker, and whether or not the API process had seen the notice row', async () => {
+    type Row = { status: string; last_error: string | null; room_id: string | null };
+    const GONE: Row = { status: 'failed', last_error: 'recipient_gone', room_id: null };
     type Variant = {
         name: string;
         /**
@@ -177,14 +171,29 @@ test('an account deletion the API process committed while the worker had a notic
          * has since lost it (`purged`); or the person has left it (`left`).
          */
         room: 'none' | 'known' | 'purged' | 'left';
-        /** The homeserver call the deletion lands during; `none`: before the tick. */
-        park: 'send' | 'create' | 'invite' | 'none';
+        /**
+         * The homeserver call the deletion lands during; `none`: before the
+         * tick; `after`: once the tick's writes are in Postgres.
+         */
+        park: 'send' | 'create' | 'invite' | 'none' | 'after';
         /** The notification reaches the worker while that call is in flight, not after. */
         early?: boolean;
         /** The parked send is refused, so the worker records a retry. */
         refused?: boolean;
         /** The tick comes after the retry window, so the worker ends the row itself. */
         late?: boolean;
+        /**
+         * The app booted before the sweep wrote the notice row and has not
+         * heard of it when it deletes (round 6), so its own writes cannot
+         * reach the row.
+         */
+        unseen?: boolean;
+        /** What Postgres must hold for the row at the end (default: ended, no room). */
+        expect?: Row;
+        /** Sends of this notice the homeserver saw (default: not checked). */
+        sends?: number;
+        /** Rooms made for the person in this notice's tick (default: not checked). */
+        creates?: number;
     };
     const variants: Variant[] = [
         { name: 'room known, during the send, told after', room: 'known', park: 'send' },
@@ -214,8 +223,48 @@ test('an account deletion the API process committed while the worker had a notic
             park: 'none',
             late: true,
         },
+        {
+            name: 'a row the app had not seen, deleted before the tick, told after',
+            room: 'none',
+            park: 'none',
+            unseen: true,
+            sends: 0,
+            creates: 0,
+        },
+        {
+            name: 'a row the app had not seen, room known, deleted before the tick, told after',
+            room: 'known',
+            park: 'none',
+            unseen: true,
+            sends: 0,
+            creates: 0,
+        },
+        {
+            name: 'a row the app had not seen, deleted during the create, told after',
+            room: 'none',
+            park: 'create',
+            unseen: true,
+            sends: 0,
+            creates: 1,
+        },
+        {
+            name: 'a row the app had not seen, deleted during the send, told after',
+            room: 'none',
+            park: 'send',
+            unseen: true,
+            sends: 1,
+        },
+        {
+            name: 'a row the app had not seen, deleted after the worker recorded it sent, told after',
+            room: 'none',
+            park: 'after',
+            unseen: true,
+            expect: { status: 'sent', last_error: null, room_id: null },
+            sends: 1,
+        },
     ];
     for (const variant of variants) {
+        const expected = variant.expect ?? GONE;
         const recipient = await person();
         const mxid = `@pn-${recipient.id.slice(0, 8)}:test.local`;
         let earlier: { switchId: string } | undefined;
@@ -246,10 +295,33 @@ test('an account deletion the API process committed while the worker had a notic
                 ]);
             }
         }
-        const notice = await release(recipient);
+        let app!: Store;
+        // What the app announces to the other processes, delivered to the
+        // worker by hand below, as the transport would deliver it.
+        const announced: PeerChange[] = [];
+        const bootApp = async () => {
+            await worker.drain();
+            app = new store.PostgresBackedDb();
+            await app.init(pool as never, {
+                publish: (payload) => announced.push(payload as PeerChange),
+                subscribe: async () => undefined,
+                onReconnect: () => undefined,
+                close: async () => undefined,
+            });
+        };
+        // The app boots after the arm (it has the copy) and, unless the row
+        // is to be one it never saw, after the sweep wrote the notice row.
+        const notice = await release(recipient, variant.unseen ? bootApp : undefined);
+        if (!variant.unseen) await bootApp();
         await worker.drain();
-        const app = new store.PostgresBackedDb();
-        await app.init(pool as never);
+        if (variant.unseen) {
+            assert.equal(
+                app.getDeadmanReleaseNotice(notice.switchId, recipient.id),
+                undefined,
+                `${variant.name}: the app has not heard of the row`
+            );
+            assert.equal((await committed(notice.switchId, recipient.id)).status, 'pending');
+        }
 
         // The call is parked until the app has committed the deletion.
         let open!: () => void;
@@ -274,24 +346,38 @@ test('an account deletion the API process committed while the worker had a notic
             return matrix.fetch(input, init);
         }) as typeof fetch;
         const tellWorker = () => {
-            for (const row of app.listDeadmanReleaseNoticesForRecipient(recipient.id)) {
-                deliverToWorker(row.switchId, recipient.id);
-            }
+            const peer = worker as unknown as { applyPeerChange(payload: PeerChange): void };
+            for (const payload of announced.splice(0)) peer.applyPeerChange(payload);
         };
         const deleteAndCheck = async () => {
-            deleteOnApp(app, recipient.id);
-            await app.drain();
+            await deleteOnApp(app, recipient.id);
             assert.deepEqual(
                 await committed(notice.switchId, recipient.id),
-                { status: 'failed', last_error: 'recipient_gone', room_id: null },
+                expected,
                 `${variant.name}: the app committed the deletion`
             );
+            const own = app.getDeadmanReleaseNotice(notice.switchId, recipient.id)!;
+            assert.equal(own.status, expected.status, `${variant.name}: the app's own mirror`);
+            assert.equal(own.roomId, undefined, variant.name);
         };
+        const sendsBefore = matrix.sends.filter((x) => x.txnId.includes(notice.switchId)).length;
+        const createsBefore = matrix.creates.filter((x) =>
+            JSON.stringify(x.body.invite).includes(mxid)
+        ).length;
         try {
             if (variant.park === 'none') {
                 await deleteAndCheck();
-                const after = new Date(notice.at.getTime() + NOTICE_RETRY_WINDOW_MS + 1000);
+                const after = variant.late
+                    ? new Date(notice.at.getTime() + NOTICE_RETRY_WINDOW_MS + 1000)
+                    : notice.at;
                 assert.equal((await runDeadmanReleaseNotifier({ now: after })).failed, 1);
+                tellWorker();
+                await settle();
+            } else if (variant.park === 'after') {
+                assert.equal((await runDeadmanReleaseNotifier({ now: notice.at })).sent, 1);
+                await worker.drain();
+                assert.equal((await committed(notice.switchId, recipient.id)).status, 'sent');
+                await deleteAndCheck();
                 tellWorker();
                 await settle();
             } else {
@@ -323,9 +409,24 @@ test('an account deletion the API process committed while the worker had a notic
 
         assert.deepEqual(
             await committed(notice.switchId, recipient.id),
-            { status: 'failed', last_error: 'recipient_gone', room_id: null },
+            expected,
             `${variant.name}: Postgres keeps the deletion's row`
         );
+        if (variant.sends !== undefined) {
+            assert.equal(
+                matrix.sends.filter((x) => x.txnId.includes(notice.switchId)).length - sendsBefore,
+                variant.sends,
+                `${variant.name}: sends of this notice`
+            );
+        }
+        if (variant.creates !== undefined) {
+            assert.equal(
+                matrix.creates.filter((x) => JSON.stringify(x.body.invite).includes(mxid)).length -
+                    createsBefore,
+                variant.creates,
+                `${variant.name}: rooms made for the person`
+            );
+        }
         if (earlier) {
             const kept = await committed(earlier.switchId, recipient.id);
             assert.equal(kept.status, 'sent', variant.name);
@@ -336,12 +437,16 @@ test('an account deletion the API process committed while the worker had a notic
             );
         }
         const mirrored = worker.getDeadmanReleaseNotice(notice.switchId, recipient.id)!;
-        assert.equal(mirrored.status, 'failed', `${variant.name}: the worker's mirror, once told`);
+        assert.equal(
+            mirrored.status,
+            expected.status,
+            `${variant.name}: the worker's mirror, once told`
+        );
         assert.equal(mirrored.roomId, undefined, variant.name);
         const booted = new store.PostgresBackedDb();
         await booted.init(pool as never);
         const fresh = booted.getDeadmanReleaseNotice(notice.switchId, recipient.id)!;
-        assert.equal(fresh.status, 'failed', `${variant.name}: a replica booting now`);
+        assert.equal(fresh.status, expected.status, `${variant.name}: a replica booting now`);
         assert.equal(fresh.roomId, undefined, variant.name);
     }
 });
@@ -410,4 +515,174 @@ test('the store’s conditional notice write: applied in Postgres only while the
         undefined
     );
     assert.equal(worker.getDeadmanReleaseNotice(notice.switchId, recipient.id)!.attempts, 0);
+});
+
+test('a notice row is created only where Postgres has none: a process whose mirror has the fired switch but not yet the row another process sent does not set it back to pending', async () => {
+    // A leader handover: the old leader (the worker here) fired the switch and
+    // sent the notice; the new one has the switch's change notification but
+    // not yet the row's, so its catch-up writes the row its mirror lacks. As
+    // a plain upsert that write set Postgres back to pending with no attempts,
+    // and the notice was sent again (round 6 of part 2's review).
+    const recipient = await person();
+    const owner = await person();
+    const envelope = await protocol.buildReleaseEnvelope({
+        ownerKeySet: owner.keySet,
+        recipients: [recipient.keySet.identity],
+        message: 'Synthetic test text.',
+    });
+    const armed = await armReleaseSwitch({
+        ownerId: owner.id,
+        input: { checkInIntervalSeconds: 60, gracePeriodSeconds: 0, envelope },
+    });
+    assert.equal(armed.kind, 'armed');
+    await worker.drain();
+    const standby = new store.PostgresBackedDb();
+    await standby.init(pool as never);
+
+    const at = new Date((clock += 300_000));
+    sweepOverdueDeadmanSwitches(at, Number.MAX_SAFE_INTEGER);
+    assert.equal((await runDeadmanReleaseNotifier({ now: at })).sent, 1);
+    await worker.drain();
+    const sentRow = (
+        await pg.query(
+            'SELECT status, attempts, room_id, sent_at FROM deadman_release_notices WHERE switch_id = $1 AND recipient_account_id = $2',
+            [envelope.releaseId, recipient.id]
+        )
+    ).rows[0] as { status: string; attempts: number; room_id: string; sent_at: unknown };
+    assert.equal(sentRow.status, 'sent');
+    assert.ok(sentRow.room_id);
+
+    // The standby hears of the switch, not yet of the row.
+    (standby as unknown as { applyPeerChange(payload: PeerChange): void }).applyPeerChange({
+        src: 'worker',
+        m: 'deadmanSwitches',
+        op: 'u',
+        kv: [envelope.releaseId],
+    });
+    await settle();
+    assert.equal(standby.getDeadmanSwitch(envelope.releaseId)?.status, 'triggered');
+    assert.equal(standby.getDeadmanReleaseNotice(envelope.releaseId, recipient.id), undefined);
+    const created = standby.createDeadmanReleaseNotice({
+        switchId: envelope.releaseId,
+        recipientAccountId: recipient.id,
+        nextAttemptAt: at.toISOString(),
+    });
+    assert.equal(created?.status, 'pending', 'its mirror lacked the row, so it wrote one');
+    await standby.drain();
+
+    assert.deepEqual(
+        (
+            await pg.query(
+                'SELECT status, attempts, room_id, sent_at FROM deadman_release_notices WHERE switch_id = $1 AND recipient_account_id = $2',
+                [envelope.releaseId, recipient.id]
+            )
+        ).rows[0],
+        sentRow,
+        'Postgres keeps the sent row'
+    );
+    const booted = new store.PostgresBackedDb();
+    await booted.init(pool as never);
+    assert.equal(booted.getDeadmanReleaseNotice(envelope.releaseId, recipient.id)?.status, 'sent');
+    // Told of the row, the standby reads it as Postgres has it.
+    (standby as unknown as { applyPeerChange(payload: PeerChange): void }).applyPeerChange({
+        src: 'worker',
+        m: 'deadmanReleaseNotices',
+        op: 'u',
+        kv: [envelope.releaseId, recipient.id],
+    });
+    await settle();
+    assert.equal(standby.getDeadmanReleaseNotice(envelope.releaseId, recipient.id)?.status, 'sent');
+});
+
+test('after a send, the end for an account found gone is conditional too: during a leader handover a sent that another notifier committed stands', async () => {
+    // The worker's send is in flight; meanwhile another notifier (a standby
+    // that took over) sent the same notice and committed `sent` with its
+    // room, and the account is gone from the worker's view another way (not
+    // through the deletion, which would have blanked the copy). The worker's
+    // end, written unconditionally, turned that `sent` into `failed` (round 6
+    // of part 2's review: the record had called the guard on this write
+    // equivalent).
+    const recipient = await person();
+    const notice = await release(recipient);
+    await worker.drain();
+    const other = new store.PostgresBackedDb();
+    await other.init(pool as never);
+
+    let open!: () => void;
+    const gate = new Promise<void>((resolve) => {
+        open = resolve;
+    });
+    let parked = false;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = urlOf(input);
+        if (url.includes('/send/') && url.includes(notice.switchId) && !parked) {
+            parked = true;
+            await gate;
+        }
+        return matrix.fetch(input, init);
+    }) as typeof fetch;
+    try {
+        const tick = runDeadmanReleaseNotifier({ now: notice.at });
+        for (let i = 0; i < 200 && !parked; i += 1) {
+            await new Promise((r) => setTimeout(r, 10));
+        }
+        assert.ok(parked, 'the send was reached');
+        other.updateDeadmanReleaseNotice(notice.switchId, recipient.id, {
+            status: 'sent',
+            attempts: 1,
+            sentAt: new Date().toISOString(),
+            roomId: '!other-room:test.local',
+        });
+        await other.drain();
+        (worker as unknown as { users: Map<string, unknown> }).users.delete(recipient.id);
+        open();
+        const result = await tick;
+        assert.equal(result.failed, 1, 'this tick ended it as gone');
+        await worker.drain();
+    } finally {
+        open();
+        globalThis.fetch = matrix.fetch;
+    }
+    assert.deepEqual(await committed(notice.switchId, recipient.id), {
+        status: 'sent',
+        last_error: null,
+        room_id: '!other-room:test.local',
+    });
+    const booted = new store.PostgresBackedDb();
+    await booted.init(pool as never);
+    assert.equal(booted.getDeadmanReleaseNotice(notice.switchId, recipient.id)?.status, 'sent');
+});
+
+test('the writer refuses a conditional write it cannot carry into Postgres, and writes nothing', async () => {
+    const recipient = await person();
+    const notice = await release(recipient);
+    await worker.drain();
+    const plan = (worker as unknown as { plans: Map<string, never> }).plans.get(
+        'deadmanReleaseNotices'
+    )!;
+    const client = await pool.connect();
+    const before = await committed(notice.switchId, recipient.id);
+    const record = {
+        ...worker.getDeadmanReleaseNotice(notice.switchId, recipient.id)!,
+        status: 'failed',
+        lastError: 'should-not-land',
+    };
+    // A guard field with no column, one with no value, and a guard on an
+    // insert-only write: each throws rather than drop the condition.
+    await assert.rejects(
+        upsertRecord(client as never, plan, record, { noSuchField: 'pending' }),
+        /names a field with no column or value/
+    );
+    await assert.rejects(
+        upsertRecord(client as never, plan, record, { status: 'pending', roomId: undefined }),
+        /names a field with no column or value/
+    );
+    await assert.rejects(
+        upsertRecord(client as never, plan, record, { status: 'pending' }, true),
+        /carries a guard/
+    );
+    assert.deepEqual(await committed(notice.switchId, recipient.id), before, 'nothing written');
+    // With a guard it can carry, the same record lands.
+    await upsertRecord(client as never, plan, record, { status: 'pending' });
+    assert.equal((await committed(notice.switchId, recipient.id)).last_error, 'should-not-land');
 });

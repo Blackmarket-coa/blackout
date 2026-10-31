@@ -24,7 +24,7 @@ test.after(() => {
     rmSync(tmpDir, { recursive: true, force: true });
 });
 
-test('a release switch, its copies and its notices survive a restart of the file store', () => {
+test('a release switch, its copies and its notices survive a restart of the file store, the notifier’s conditional writes included', () => {
     const owner = randomUUID();
     const bob = randomUUID();
     const sw = db.createDeadmanSwitch({
@@ -102,6 +102,21 @@ test('a release switch, its copies and its notices survive a restart of the file
         undefined,
         'one notice per recipient per release'
     );
+    // The notifier writes through the conditional method (round 5); its file
+    // override must persist too, or a restart would forget the room, the
+    // retries and the sends, and the notices would go again (round 6).
+    assert.ok(
+        db.updateDeadmanReleaseNoticeIf(
+            sw.id,
+            bob,
+            { status: 'pending' },
+            { roomId: '!first:test.local', attempts: 1, lastError: 'matrix_send_status_500' }
+        )
+    );
+    const afterRetry = new FileBackedDb().getDeadmanReleaseNotice(sw.id, bob);
+    assert.equal(afterRetry?.status, 'pending');
+    assert.equal(afterRetry?.roomId, '!first:test.local', 'a conditional write survives a restart');
+    assert.equal(afterRetry?.attempts, 1);
     db.updateDeadmanReleaseNotice(sw.id, bob, {
         roomId: '!notices:test.local',
         attempts: 1,
@@ -116,6 +131,40 @@ test('a release switch, its copies and its notices survive a restart of the file
     assert.equal(notice?.roomId, '!notices:test.local');
     assert.equal(notice?.attempts, 1);
     assert.equal(afterRelease.findDeadmanNoticeRoom(bob), '!notices:test.local');
+
+    // Refused by its condition (the row is sent, not pending): nothing written,
+    // before or after a restart.
+    assert.equal(
+        db.updateDeadmanReleaseNoticeIf(
+            sw.id,
+            bob,
+            { status: 'pending' },
+            { status: 'failed', lastError: 'recipient_gone', roomId: undefined }
+        ),
+        undefined
+    );
+    const afterRefusal = new FileBackedDb().getDeadmanReleaseNotice(sw.id, bob);
+    assert.equal(afterRefusal?.status, 'sent');
+    assert.equal(afterRefusal?.lastError, 'matrix_send_status_500', 'not the refused write’s');
+    assert.equal(afterRefusal?.roomId, '!notices:test.local');
+    // Applied by room (a purged room's rows move to its replacement), and
+    // found by the room lookup after a restart.
+    assert.ok(
+        db.updateDeadmanReleaseNoticeIf(
+            sw.id,
+            bob,
+            { roomId: '!notices:test.local' },
+            { roomId: '!moved:test.local' }
+        )
+    );
+    const afterMove = new FileBackedDb();
+    assert.equal(afterMove.getDeadmanReleaseNotice(sw.id, bob)?.roomId, '!moved:test.local');
+    assert.equal(afterMove.getDeadmanReleaseNotice(sw.id, bob)?.status, 'sent');
+    assert.equal(afterMove.findDeadmanNoticeRoom(bob), '!moved:test.local');
+    assert.deepEqual(
+        afterMove.listDeadmanReleaseNotices(sw.id).map((n) => n.recipientAccountId),
+        [bob]
+    );
 
     assert.ok(db.eraseDeadmanReleaseWrap(sw.id, bob));
     assert.equal(db.eraseDeadmanReleaseWrap(sw.id, randomUUID()), undefined);

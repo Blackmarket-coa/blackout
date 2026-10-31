@@ -13,6 +13,7 @@ import {
     noticeCounts,
     releasedCopiesFor,
 } from './deadmanReleases';
+import { log } from '../telemetry/logger';
 import { recordToReleaseIdentity } from './releaseIdentities';
 import { matrixUserIdFor } from './userIdentity';
 
@@ -353,6 +354,59 @@ export const requestAccountDeletion = (
     return { token, user, expiresAt };
 };
 
+/**
+ * The account deletion's writes for what release switches hold for the
+ * account as a recipient, on the store given (`confirmAccountDeletion` passes
+ * the process's own; the cross-process test passes a second store as the API
+ * process). Every copy sealed to the account goes, fired or not: the copies
+ * on other people's switches (nobody is left to open them; the owner's view
+ * then shows no copy held for this recipient) and its own copies on its own
+ * switches. A notice still to be sent to the account ends, and every notice
+ * row of theirs forgets the room that tied the account to a Matrix id. These
+ * reach the rows this store's mirror has; rows another process wrote that it
+ * has not heard of yet are reached by `finishAccountDeletion`.
+ */
+export const eraseReleaseCopiesAndNoticesOf = (
+    store: typeof db,
+    accountId: string,
+    at: string = new Date().toISOString()
+): void => {
+    for (const wrap of store.listDeadmanReleaseWrapsForRecipient(accountId)) {
+        store.eraseDeadmanReleaseWrap(wrap.switchId, wrap.recipientAccountId);
+    }
+    for (const notice of store.listDeadmanReleaseNoticesForRecipient(accountId)) {
+        store.updateDeadmanReleaseNotice(notice.switchId, notice.recipientAccountId, {
+            roomId: undefined,
+            ...(notice.status === 'pending'
+                ? { status: 'failed', failedAt: at, lastError: 'recipient_gone' }
+                : {}),
+        });
+    }
+};
+
+/**
+ * What an account deletion finishes once its writes are made: in the
+ * database itself, every notice still pending to the account ends and every
+ * notice row of theirs forgets its room, including a row another process
+ * wrote that this one had not heard of (the worker's sweep, moments before;
+ * `endDeadmanReleaseNoticesOfDeletedAccount`). Nothing to do with one
+ * process. The route awaits it after `confirmAccountDeletion`; a failure is
+ * logged, the deletion stands, and such a row is then as the notifier leaves
+ * it (round 6 of part 2's review).
+ */
+export const finishAccountDeletion = async (
+    accountId: string,
+    store: typeof db = db
+): Promise<void> => {
+    try {
+        await store.endDeadmanReleaseNoticesOfDeletedAccount(accountId, new Date().toISOString());
+    } catch (err) {
+        log.warn('account_deletion_finish_failed', {
+            error: err instanceof Error ? err.message : String(err),
+        });
+    }
+};
+
 export type ConfirmDeletionOutcome =
     | { kind: 'ok'; userId: string }
     | { kind: 'invalid' }
@@ -392,24 +446,10 @@ export const confirmAccountDeletion = (
         db.eraseDeadmanSwitch(sw.id);
         if (!fired && isReleaseSwitch(sw)) blankReleaseWraps(sw.id);
     }
-    // Every copy sealed to this account goes, fired or not: its own copies on
-    // its own switches, and the copies on other people's switches (nobody is
-    // left to open them; the owner's view then shows no copy held for this
-    // recipient). A notice still to be sent to this account ends, and every
-    // notice row of theirs forgets the room that tied the account to a Matrix
-    // id.
-    for (const wrap of db.listDeadmanReleaseWrapsForRecipient(record.userId)) {
-        db.eraseDeadmanReleaseWrap(wrap.switchId, wrap.recipientAccountId);
-    }
-    const goneAt = new Date().toISOString();
-    for (const notice of db.listDeadmanReleaseNoticesForRecipient(record.userId)) {
-        db.updateDeadmanReleaseNotice(notice.switchId, notice.recipientAccountId, {
-            roomId: undefined,
-            ...(notice.status === 'pending'
-                ? { status: 'failed', failedAt: goneAt, lastError: 'recipient_gone' }
-                : {}),
-        });
-    }
+    // Every copy sealed to this account goes, and the notices owed to it
+    // end and forget their room (`eraseReleaseCopiesAndNoticesOf`; the route
+    // then runs `finishAccountDeletion` for rows another process wrote).
+    eraseReleaseCopiesAndNoticesOf(db, record.userId);
     // Invitation admissions (the use an account-number sign-up spent) hold the
     // account's Matrix id, so they go with it, claimed or not. The redemption
     // row a claim wrote stays, as every redemption row does. Read the Matrix id

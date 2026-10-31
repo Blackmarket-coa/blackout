@@ -96,18 +96,36 @@
  * later error over its reason); a row ended any other way meanwhile is left as
  * it is. That read is this process's mirror. Where the deletion runs in
  * another process (the API process, with the loops in a worker of their own,
- * as `deploy/docker/production` runs them), every write here is also
- * conditional in Postgres (`updateDeadmanReleaseNoticeIf`: applied only while
- * the stored row is still pending, or still names the room it is being moved
- * off), so a deletion the other process committed first stands in the
- * database whenever its change notification reaches this one; until it does,
- * this process's mirror and its tick's count say sent. A deletion that commits
- * after this process's write lands over it, as its own write: no room, and,
- * unless the deleting process had already seen the row sent, `failed` with
- * `recipient_gone` for a notice the homeserver accepted, as on one process
- * when the deletion lands during the send (round 5 of part 2's review: the
- * notifier's full-row write landed over the deletion's, and Postgres ended
- * `sent` with the room).
+ * as `deploy/docker/production` runs them), three things carry it into the
+ * database. Every change written here is conditional in Postgres
+ * (`updateDeadmanReleaseNoticeIf`: applied only while the stored row is still
+ * pending, or still names the room it is being moved off), and the catch-up's
+ * creation of a row the mirror lacks is insert-only there
+ * (`createDeadmanReleaseNotice`), so nothing here lands over a row another
+ * process ended or sent (round 5 of part 2's review: the notifier's full-row
+ * write landed over the deletion's, and Postgres ended `sent` with the room;
+ * round 6: the catch-up's create set a sent row back to pending, and it was
+ * sent again). Before it makes a room and again before it sends, the notifier
+ * reads the person's copy from the database itself, not from the mirror
+ * (`copyHeldInDatabase`): a deletion blanks every copy sealed to the account
+ * first, so once one has committed nothing is made or sent for that person,
+ * also for a notice row the deleting process had not heard of when it deleted
+ * (the sweep wrote it moments before), which its own writes could not end
+ * (round 6: such a notice was sent after the deletion and kept its room for
+ * good). And the deletion finishes with one statement in the database
+ * (`finishAccountDeletion`) that ends every notice row still pending to the
+ * account and forgets the room of every one, that row included. Until the
+ * other process's change notification arrives, this process's mirror and its
+ * tick's count can say sent where the database says otherwise. What is left:
+ * a notice whose send had begun when the deletion committed can still arrive,
+ * as on one process; a deletion that commits after this process's write to a
+ * row it had seen lands over it, as its own write: no room, and, unless it had
+ * already seen the row sent, `failed` with `recipient_gone` for a notice the
+ * homeserver accepted, as on one process when the deletion lands during the
+ * send; and if the deletion's last statement fails (logged) or the API
+ * process stops before it, a row it had not seen keeps what the notifier
+ * wrote, a room and `sent` included where the send had begun before the
+ * deletion committed.
  *
  * Each homeserver call has `NOTICE_CALL_TIMEOUT_MS` to answer; one that does
  * not is that notice's retry (`matrix_<call>_timeout`) and its request is
@@ -354,6 +372,29 @@ const stillPending = (key: {
 }): DeadmanReleaseNoticeRecord | undefined => {
     const row = db.getDeadmanReleaseNotice(key.switchId, key.recipientAccountId);
     return row && row.status === 'pending' ? row : undefined;
+};
+
+/**
+ * Whether the person's copy of the release is still held as the database
+ * has it, not as this process's mirror does, and the row is still pending.
+ * An account deletion blanks every copy sealed to the account before
+ * anything else, so a deletion another process committed (the API process,
+ * with this loop in a worker) is seen here before its change notification
+ * arrives, and also for a notice row that process had not seen when it
+ * deleted (the sweep wrote it moments before), which its own writes could
+ * not end: as round 5 left it the worker sent such a notice after the
+ * deletion and kept its room for good (round 6 of part 2's review). On one
+ * process the database is the mirror and this reads it again.
+ */
+const copyHeldInDatabase = async (key: {
+    switchId: string;
+    recipientAccountId: string;
+}): Promise<boolean> => {
+    const committed = await db.readDeadmanReleaseWrapCommitted(
+        key.switchId,
+        key.recipientAccountId
+    );
+    return committed !== undefined && wrapIsHeld(committed) && stillPending(key) !== undefined;
 };
 
 /** The recipient is gone: the row was ended meanwhile, and nothing more is recorded on it. */
@@ -657,11 +698,18 @@ const attempt = async (
     const wrap = db.getDeadmanReleaseWrap(notice.switchId, notice.recipientAccountId);
     const mxid = matrixUserIdFor(notice.recipientAccountId);
     if (!wrap || !wrapIsHeld(wrap) || !mxid) return RECIPIENT_GONE;
+    // From the database itself, before anything is asked of the homeserver:
+    // no room is made, and nobody invited, for an account already deleted.
+    if (!(await copyHeldInDatabase(notice))) return RECIPIENT_GONE;
 
     const room = await withRoomSlot(notice.recipientAccountId, () =>
         resolveRoom(notice, mxid, matrix, callTimeoutMs)
     );
     if (!('roomId' in room)) return room;
+
+    // Again right before the send: a deletion committed while the room was
+    // being found or made.
+    if (!(await copyHeldInDatabase(notice))) return RECIPIENT_GONE;
 
     const sent = await guarded('send', callTimeoutMs, (signal) =>
         matrix.sendEvent(room.roomId, noticeContent(record.id), {
@@ -748,7 +796,10 @@ export const runDeadmanReleaseNotifier = async (
     // nothing, since a fired release switch with a held copy and no row is
     // treated as due (§5, "Sending it"). The copies are listed by switch, an
     // indexed lookup, so this costs every switch row once and the fired
-    // switches' copies.
+    // switches' copies. A row is written only where the mirror has none, and
+    // in Postgres only where the table has none either, so a leader that has
+    // not yet heard of a row the old one sent does not set it back to pending
+    // (round 6 of part 2's review).
     for (const record of db.listAllDeadmanSwitches()) {
         if (!record.releasedAt || record.encryptedPayload === '') continue;
         result.caughtUp += writeReleaseNotices(record, record.releasedAt);

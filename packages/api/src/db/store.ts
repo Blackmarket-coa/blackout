@@ -2846,6 +2846,38 @@ class InMemoryDb {
             .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0]?.roomId;
     }
 
+    /**
+     * One sealed copy as the database holds it, for a check that must not
+     * rest on this process's mirror alone: the notifier's, before it makes a
+     * room and before it sends. Here, and in the file store, the mirror is
+     * the database; the Postgres store reads the committed row, so an account
+     * deletion another process committed is seen before its change
+     * notification arrives (round 6 of part 2's review).
+     */
+    async readDeadmanReleaseWrapCommitted(
+        switchId: string,
+        recipientAccountId: string
+    ): Promise<DeadmanReleaseWrapRecord | undefined> {
+        return this.getDeadmanReleaseWrap(switchId, recipientAccountId);
+    }
+
+    /**
+     * The end of an account deletion, in the database itself: every notice
+     * still pending to the account ends (`recipient_gone`) and every notice
+     * row of theirs forgets its room, rows this process's mirror has not
+     * heard of yet included (one another process wrote moments before).
+     * In one process the deletion's own writes (`confirmAccountDeletion`)
+     * have already reached every row, so there is nothing more to do; the
+     * Postgres store does it with one statement. Returns how many rows it
+     * changed.
+     */
+    async endDeadmanReleaseNoticesOfDeletedAccount(
+        _accountId: string,
+        _at: string
+    ): Promise<number> {
+        return 0;
+    }
+
     /** Every release identity the account published, newest first. */
     listReleaseIdentitiesForAccount(accountId: string): ReleaseIdentityRecord[] {
         // Erased rows have no account; nothing finds them by one. Through the
@@ -8741,7 +8773,8 @@ export class PostgresBackedDb extends InMemoryDb {
                             queue.enqueueUpsert(
                                 spec.map,
                                 result as Record<string, unknown>,
-                                spec.guardOf?.(args)
+                                spec.guardOf?.(args),
+                                spec.insertOnly
                             );
                         }
                     } else {
@@ -8869,6 +8902,93 @@ export class PostgresBackedDb extends InMemoryDb {
                 client.release?.();
             }
         })();
+    }
+
+    /**
+     * The copy as Postgres has it committed. An account deletion blanks every
+     * copy sealed to the account before anything else, so a deletion another
+     * process (the API process, with the loops in a worker) committed is seen
+     * here even when its change notification has not reached this one: a
+     * notice row that process never saw, which its deletion could not end, is
+     * then not sent (round 6 of part 2's review). This process's own queued
+     * writes are not waited for: the one reader, the notifier, reads a copy
+     * written at arming, long before the switch could fire, and a deletion in
+     * this process is seen in the mirror first.
+     */
+    override async readDeadmanReleaseWrapCommitted(
+        switchId: string,
+        recipientAccountId: string
+    ): Promise<DeadmanReleaseWrapRecord | undefined> {
+        const plan = this.plans.get('deadmanReleaseWraps');
+        if (!this.pool || !plan) {
+            return super.readDeadmanReleaseWrapCommitted(switchId, recipientAccountId);
+        }
+        const client = await this.pool.connect();
+        try {
+            const res = await client.query<Record<string, unknown>>(
+                `SELECT * FROM ${plan.descriptor.tableName} WHERE switch_id = $1 AND recipient_account_id = $2`,
+                [switchId, recipientAccountId]
+            );
+            const row = res.rows[0];
+            return row
+                ? (rowToRecord(plan, row) as unknown as DeadmanReleaseWrapRecord)
+                : undefined;
+        } finally {
+            client.release?.();
+        }
+    }
+
+    /**
+     * Once this process's queued writes, the deletion's among them, are in
+     * Postgres (so the route answers only after the deletion is durable, as
+     * `flushRuntimeStoreWrites` is used elsewhere): one statement that ends
+     * every notice row still pending to the account and forgets the room of
+     * every one of theirs, as the deletion does for the rows in this mirror,
+     * and so also for a row another process wrote that this one had not heard
+     * of (the worker's sweep moments before). The rows it changed go into this
+     * mirror and are announced to the other processes. A notifier's later
+     * write to such a row is conditional on it still pending
+     * (`updateDeadmanReleaseNoticeIf`), so it does not land after this; one
+     * that landed first has its room forgotten here (round 6 of part 2's
+     * review).
+     */
+    override async endDeadmanReleaseNoticesOfDeletedAccount(
+        accountId: string,
+        at: string
+    ): Promise<number> {
+        const plan = this.plans.get('deadmanReleaseNotices');
+        if (!this.pool || !plan) return 0;
+        await this.drain();
+        const table = plan.descriptor.tableName;
+        const client = await this.pool.connect();
+        let rows: Record<string, unknown>[];
+        try {
+            const res = await client.query<Record<string, unknown>>(
+                `UPDATE ${table} SET room_id = NULL, ` +
+                    `failed_at = CASE WHEN status = 'pending' THEN $2::timestamptz ELSE failed_at END, ` +
+                    `last_error = CASE WHEN status = 'pending' THEN 'recipient_gone' ELSE last_error END, ` +
+                    `status = CASE WHEN status = 'pending' THEN 'failed' ELSE status END, ` +
+                    `updated_at = $2::timestamptz ` +
+                    `WHERE recipient_account_id = $1 AND (room_id IS NOT NULL OR status = 'pending') ` +
+                    `RETURNING *`,
+                [accountId, at]
+            );
+            rows = res.rows;
+        } finally {
+            client.release?.();
+        }
+        const map = this.mapByName('deadmanReleaseNotices');
+        for (const row of rows) {
+            const record = rowToRecord(plan, row);
+            map.set(plan.descriptor.keyOf(record), record);
+            this.transport?.publish({
+                src: this.instanceId,
+                m: 'deadmanReleaseNotices',
+                op: 'u',
+                kv: plan.descriptor.conflictColumns.map((c) => String(row[c])),
+            });
+        }
+        return rows.length;
     }
 
     /**

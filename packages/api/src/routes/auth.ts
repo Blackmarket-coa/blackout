@@ -46,6 +46,7 @@ import {
 import { homeserverDomain } from '../services/userIdentity';
 import {
     confirmAccountDeletion,
+    finishAccountDeletion,
     exportUserData,
     requestAccountDeletion,
 } from '../services/accountLifecycle';
@@ -1090,6 +1091,9 @@ auth.post('/account/delete/confirm', async (c) => {
     const outcome = confirmAccountDeletion(parsed.token, user.sub);
     switch (outcome.kind) {
         case 'ok':
+            // In the database itself: the notice rows another process wrote
+            // that this one had not heard of end too, and forget their room.
+            await finishAccountDeletion(outcome.userId);
             // After deletion the JWT still cryptographically validates — denylist
             // it so the holder can't replay until expiry.
             if (user.jti && user.exp) {

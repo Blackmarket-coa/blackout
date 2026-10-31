@@ -578,10 +578,19 @@ export type MutatorSpec =
            * update to apply (`upsertRecord`'s guard).
            */
           guardOf?: (args: unknown[]) => Record<string, unknown>;
+          /**
+           * For a mutator that only ever creates a row the mirror lacks: the
+           * Postgres write inserts it only where the table has no row with
+           * its key either (`ON CONFLICT ... DO NOTHING`), so a process whose
+           * mirror has not yet heard of a row another process wrote does not
+           * write over it.
+           */
+          insertOnly?: boolean;
       }
     | { kind: 'resync'; maps: string[] };
 
 const upsert = (map: string): MutatorSpec => ({ kind: 'upsert', map });
+const insertIfAbsent = (map: string): MutatorSpec => ({ kind: 'upsert', map, insertOnly: true });
 const upsertGuarded = (
     map: string,
     guardOf: (args: unknown[]) => Record<string, unknown>
@@ -651,8 +660,14 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
     // targeted upsert, never a resync.
     putDeadmanReleaseWrap: upsert('deadmanReleaseWraps'),
     eraseDeadmanReleaseWrap: upsert('deadmanReleaseWraps'),
-    // The sweep writes a notice with the trigger; the notifier updates it.
-    createDeadmanReleaseNotice: upsert('deadmanReleaseNotices'),
+    // The sweep writes a notice with the trigger, and the notifier's catch-up
+    // writes one a fired switch lacks: in the mirror only where there is no
+    // row, and in Postgres the same (insert-only), so a process whose mirror
+    // has the fired switch but not yet the row another process wrote, a
+    // leader taking over, does not set a sent or ended notice back to pending
+    // (round 6 of part 2's review: as a plain upsert it did, and the notice
+    // was sent again).
+    createDeadmanReleaseNotice: insertIfAbsent('deadmanReleaseNotices'),
     updateDeadmanReleaseNotice: upsert('deadmanReleaseNotices'),
     // The notifier's writes: applied in Postgres only while the stored row
     // still holds what the notifier read (`status = 'pending'`, or the room it

@@ -2122,3 +2122,41 @@ test('a known trade-off, pinned (decision 18): ten accounts that each fire five 
     assert.equal(heldReleasesNaming(target.user.id).total, 0);
     assert.equal((await armGenuine(rotated.identity)).status, 201);
 });
+
+test('the account deletion route finishes the deletion in the database once its writes are made, and a failure of that last step leaves the deletion standing and answered', async () => {
+    // `finishAccountDeletion` ends, in the database itself, the notice rows
+    // another process wrote that this one had not heard of (round 6 of part
+    // 2's review); in one process there is nothing for it to do, so here it
+    // is watched rather than seen at work.
+    const store = db as unknown as Record<string, unknown>;
+    const original = db.endDeadmanReleaseNoticesOfDeletedAccount.bind(db);
+    const calls: string[] = [];
+    const confirm = (user: User, token: string) =>
+        app.request('/v1/auth/account/delete/confirm', {
+            method: 'POST',
+            headers: headers(user),
+            body: JSON.stringify({ token }),
+        });
+    try {
+        store.endDeadmanReleaseNoticesOfDeletedAccount = async (accountId: string, at: string) => {
+            assert.equal(db.getUserById(accountId), undefined, 'after the deletion’s writes');
+            calls.push(accountId);
+            return original(accountId, at);
+        };
+        const first = await freshPerson();
+        const issued = lifecycle.requestAccountDeletion({ userId: first.user.id })!;
+        assert.equal((await confirm(first.user, issued.token)).status, 200);
+        assert.deepEqual(calls, [first.user.id]);
+
+        store.endDeadmanReleaseNoticesOfDeletedAccount = async () => {
+            throw new Error('the database is unavailable');
+        };
+        const second = await freshPerson();
+        const issued2 = lifecycle.requestAccountDeletion({ userId: second.user.id })!;
+        const answered = await confirm(second.user, issued2.token);
+        assert.equal(answered.status, 200, 'the deletion stands and is answered');
+        assert.equal(db.getUserById(second.user.id), undefined);
+    } finally {
+        delete store.endDeadmanReleaseNoticesOfDeletedAccount;
+    }
+});

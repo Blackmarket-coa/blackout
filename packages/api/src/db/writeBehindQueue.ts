@@ -20,6 +20,8 @@ type WriteOp =
           record: Record<string, unknown>;
           /** Fields the stored row must still hold for the update to apply (`upsertRecord`). */
           guard?: Record<string, unknown>;
+          /** Written only where no row has the record's key (`ON CONFLICT ... DO NOTHING`). */
+          insertOnly?: boolean;
       }
     | { kind: 'resync'; mapName: string };
 
@@ -46,9 +48,16 @@ export class WriteBehindQueue {
     enqueueUpsert(
         mapName: string,
         record: Record<string, unknown>,
-        guard?: Record<string, unknown>
+        guard?: Record<string, unknown>,
+        insertOnly = false
     ): void {
-        this.schedule({ kind: 'upsert', mapName, record, ...(guard ? { guard } : {}) });
+        this.schedule({
+            kind: 'upsert',
+            mapName,
+            record,
+            ...(guard ? { guard } : {}),
+            ...(insertOnly ? { insertOnly } : {}),
+        });
     }
 
     enqueueResync(mapName: string): void {
@@ -72,7 +81,7 @@ export class WriteBehindQueue {
                 const client = await this.pool.connect();
                 try {
                     if (op.kind === 'upsert') {
-                        await upsertRecord(client, plan, op.record, op.guard);
+                        await upsertRecord(client, plan, op.record, op.guard, op.insertOnly);
                     } else {
                         const map = this.getMap(op.mapName);
                         if (map) await resyncMap(client, plan, map);
