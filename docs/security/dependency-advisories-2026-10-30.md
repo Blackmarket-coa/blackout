@@ -885,7 +885,7 @@ manifest or lockfile changed:
 | prettier               | `prettier --check` on the three changed files                                                                                                         | pass                                                                                                                                                |
 | gitleaks               | `gitleaks dir` on the three changed files                                                                                                             | no leaks                                                                                                                                            |
 
-**Re-runs after the fifth review** (2026-10-31, 02:45 to 03:00 UTC, on the
+**Re-runs after the fifth review** (2026-10-31, 02:45 to 02:55 UTC, on the
 tree with the 2026-10-31 change). The change is to this document only:
 
 | Gate              | Command                                                                                                               | Result                                                                                                                          |
