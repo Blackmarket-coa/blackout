@@ -639,6 +639,14 @@ reconciliation with upstream; after this they match upstream's for authlib.
   and 1.9.1 signs with it and emits joserfc's `SecurityWarning`. It is this
   homeserver's own secret for signing its requests, not a key it verifies
   tokens with, so that was left.
+- `synapse/api/auth/msc3861_delegated.py` (`PrivateKeyJWTWithKid.sign`,
+  recorded after the fifth review, 2026-10-31): annotated `-> str`, was
+  `-> bytes`. From 1.7.0 both MSC3861 signers (`private_key_jwt_sign` here,
+  authlib's own `ClientSecretJWT.sign`) return joserfc's `jwt.encode` result,
+  a `str`; 1.6.12 returned `bytes`. The one consumer, authlib's
+  `ClientSecretJWT.__call__`, adds the value to a `str` request body either
+  way, so no behaviour changed. mypy could not see it: `mypy.ini` ignores
+  authlib's types (`[mypy-authlib.*]`).
 - Behaviour change in provider metadata validation (`_validate_metadata` in
   `synapse/handlers/oidc.py`, recorded after the second review). authlib
   1.8.0 rewrote `is_secure_transport`, which `validate_issuer`,
