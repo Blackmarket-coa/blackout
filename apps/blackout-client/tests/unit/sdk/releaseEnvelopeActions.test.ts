@@ -3,10 +3,13 @@
  * arming sends only the envelope, the timer and the label, and refuses, before
  * the envelope is sent (the directory is read first), a recipient whose
  * comparison does not count now (H1) and an owner key the directory does not
- * list as current, saying which key the directory served (P3-M3); re-sealing
+ * list as current, saying which key the directory served (P3-M3), and a
+ * directory answer that is not an entry gets that refusal, not a TypeError
+ * (the fourth reading); re-sealing
  * opens the owner's own copy and sends one new copy, and refuses an owner view
- * that is not the switch's (P3-H1); the release list refuses an entry whose
- * unsigned ids differ from its header's (P3-M2). Against a fake API.
+ * that is not the switch's (P3-H1); the release list refuses an entry that is
+ * not one, whose ids are not of the id forms, or whose unsigned ids differ
+ * from its header's (P3-M2). Against a fake API.
  */
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {
@@ -194,7 +197,7 @@ describe('armReleaseSwitch', () => {
             aliceNow = await createReleaseKeySet(ALICE.identity.accountId);
         });
 
-        /** The refusal, with nothing sent; returns the error so its details can be checked. */
+        /** The refusal, with no envelope sent (the directory is read first); returns the error so its details can be checked. */
         const refusal = async (
             entries: Map<string, ReleaseIdentityDirectoryEntry>,
             input: Record<string, unknown>,
@@ -301,6 +304,45 @@ describe('armReleaseSwitch', () => {
             const nothing = await refusal(strangers, {}, 'owner_key_not_current');
             expect(nothing.servedFingerprint).toBeNull();
         });
+
+        it('a directory answer that is not an entry, with the refusal the contract names and not a TypeError (the fourth reading)', async () => {
+            // A hostile or buggy server answering a directory read with
+            // something that is not an entry made the protocol function throw
+            // a raw TypeError, which the SDK passed on. Each is now the
+            // ReleaseActionError the contract promises, and no envelope is sent.
+            const bobEntry = entryFor(BOB.identity.accountId, BOB.identity);
+            for (const shape of [
+                { ...bobEntry, superseded: undefined },
+                { ...bobEntry, superseded: null },
+                { ...bobEntry, superseded: 42 },
+                { ...bobEntry, superseded: {} },
+                { ...bobEntry, current: 'x' },
+                'x',
+            ]) {
+                const entries = directory();
+                entries.set(BOB.identity.accountId, shape as ReleaseIdentityDirectoryEntry);
+                const error = await refusal(entries, {}, 'recipient_comparison', 'stale');
+                expect(error.accountId).toBe(BOB.identity.accountId);
+                // Nothing verified, so nothing was served that counts.
+                expect(error.servedFingerprint).toBeNull();
+            }
+            // The owner's own entry, likewise.
+            for (const shape of [
+                null,
+                'x',
+                { ...entryFor(ALICE.identity.accountId, ALICE.identity), superseded: undefined },
+            ]) {
+                const entries = directory();
+                entries.set('me', shape as ReleaseIdentityDirectoryEntry);
+                await refusal(
+                    entries,
+                    {},
+                    shape === null || shape === 'x'
+                        ? 'owner_key_not_published'
+                        : 'owner_key_not_current'
+                );
+            }
+        });
     });
 });
 
@@ -350,7 +392,7 @@ describe('resealRecipient', () => {
         ).toMatchObject({ ok: true, text: 'Kept for Bob' });
     });
 
-    it('refuses a switch that holds no release, and a stale comparison, sending nothing', async () => {
+    it('refuses a switch that holds no release, and a stale comparison, sending no copy', async () => {
         const noRelease = fakeApi(directory(), { switchId: 'x' });
         await expect(
             createDeadmanReleaseActions(noRelease.client).resealRecipient('x', {
@@ -388,7 +430,8 @@ describe('resealRecipient', () => {
         // Alice has release A to Bob and release B to Carol. A hostile server
         // answers GET /switches/A with B's header and B's own copy, both
         // genuine, hoping Alice's device seals B's key to Bob under her
-        // signature. Nothing may be signed or sent.
+        // signature. Nothing may be signed and no copy sent: the owner's view
+        // is read first (that GET is what is being checked), and nothing after.
         const carol = await createReleaseKeySet('c1c2c3c4-d1d2-4e1e-af1f-a1a2a3a4a5a6');
         const releaseA = await buildReleaseEnvelope({
             ownerKeySet: vectorKeySet(ALICE),
@@ -443,6 +486,61 @@ describe('resealRecipient', () => {
             `/v1/deadman/switches/${releaseA.releaseId}/reseal`,
         ]);
     });
+
+    it("refuses, with release_mismatch and not a TypeError, an owner view whose header is not an object, or whose ids are not the switch's (the fifth reading)", async () => {
+        // The owner's view is the server's answer, whatever its shape. A
+        // header that is null or a string, a header whose release id is a
+        // number and a view with no switch id are each refused as another
+        // switch's, before the directory is read or anything is signed, with
+        // the SDK's own error and not a TypeError from reading `releaseId`
+        // off a null header; no copy is sent. The guard that makes the null
+        // case a refusal was the one check no test had pinned.
+        const release = await buildReleaseEnvelope({
+            ownerKeySet: vectorKeySet(ALICE),
+            recipients: [BOB.identity],
+            message: 'x',
+        });
+        const honest = {
+            switchId: release.releaseId,
+            release: {
+                header: releaseHeaderOf(release),
+                ownerIdentity: ALICE.identity,
+                ownCopy: release.copies[0],
+                sealedTo: [],
+            },
+        };
+        const withHeader = (header: unknown) => ({
+            ...honest,
+            release: { ...honest.release, header },
+        });
+        const malformed: unknown[] = [
+            withHeader(null),
+            withHeader('x'),
+            withHeader({ ...honest.release.header, releaseId: 7 }),
+            { release: honest.release },
+        ];
+        const reseal = (api: ReturnType<typeof fakeApi>) =>
+            createDeadmanReleaseActions(api.client).resealRecipient(release.releaseId, {
+                ownerKeySet: vectorKeySet(ALICE),
+                recipient: { accountId: BOB.identity.accountId, comparison: bobComparison() },
+            });
+        for (const view of malformed) {
+            const api = fakeApi(directory(), view);
+            const attempt = reseal(api);
+            await expect(attempt).rejects.toBeInstanceOf(ReleaseActionError);
+            await expect(attempt).rejects.toMatchObject({ code: 'release_mismatch' });
+            expect(api.sent()).toEqual([]);
+            expect(api.requests.map((request) => `${request.method} ${request.path}`)).toEqual([
+                `GET /v1/deadman/switches/${release.releaseId}`,
+            ]);
+        }
+        // The honest view re-seals, so the cases above are refusals of shape.
+        const api = fakeApi(directory(), honest);
+        await reseal(api);
+        expect(api.sent().map((request) => request.path)).toEqual([
+            `/v1/deadman/switches/${release.releaseId}/reseal`,
+        ]);
+    });
 });
 
 describe('the read calls', () => {
@@ -457,13 +555,14 @@ describe('the read calls', () => {
         ]);
     });
 
-    it("refuses a released copy whose unsigned release id or owner differ from its header's (P3-M2)", async () => {
+    /** One honest released entry: Bob's copy of a release of Alice's, as the API lists it. */
+    const releasedEntry = async () => {
         const envelope = await buildReleaseEnvelope({
             ownerKeySet: vectorKeySet(ALICE),
             recipients: [BOB.identity],
             message: 'x',
         });
-        const released = {
+        return {
             releaseId: envelope.releaseId,
             ownerAccountId: ALICE.identity.accountId,
             releasedAt: '2026-10-29T00:00:00.000Z',
@@ -472,10 +571,12 @@ describe('the read calls', () => {
             ownerIdentity: ALICE.identity,
             copy: envelope.copies[1],
         };
-        const list = (entries: unknown) =>
-            createDeadmanReleaseActions(
-                fakeApi(directory(), undefined, entries).client
-            ).listReleases();
+    };
+    const list = (entries: unknown) =>
+        createDeadmanReleaseActions(fakeApi(directory(), undefined, entries).client).listReleases();
+
+    it("refuses a released copy whose unsigned release id or owner differ from its header's, and an entry that is not one (P3-M2)", async () => {
+        const released = await releasedEntry();
         // The honest entry comes back as it was.
         expect(await list({ releases: [released] })).toEqual({ releases: [released] });
         // The server names another owner, or another release, beside Alice's signed header.
@@ -490,5 +591,57 @@ describe('the read calls', () => {
             code: 'server_mismatch',
         });
         await expect(list({})).rejects.toMatchObject({ code: 'server_mismatch' });
+        // Entries that are not entries. Two absent ids are not an agreement:
+        // each of these has no header id and no top-level id to differ, and
+        // a check that only compared the two let them all through (the
+        // second reading of P3-M2).
+        const nonEntries: unknown[] = [
+            null,
+            {},
+            'x',
+            42,
+            [],
+            { header: {} },
+            { header: { releaseId: undefined, ownerAccountId: undefined } },
+            { ...released, header: undefined, releaseId: undefined, ownerAccountId: undefined },
+            { ...released, header: { v: 1 }, releaseId: undefined, ownerAccountId: undefined },
+            { ...released, header: [] },
+            { ...released, header: { ...released.header, releaseId: 7 }, releaseId: 7 },
+        ];
+        for (const nonEntry of nonEntries) {
+            await expect(list({ releases: [released, nonEntry] })).rejects.toMatchObject({
+                code: 'server_mismatch',
+            });
+        }
+    });
+
+    it('refuses a released entry whose ids agree but are not of the id forms (the third reading of P3-M2)', async () => {
+        const released = await releasedEntry();
+        // Each of these agrees with itself, so a check that compared the two
+        // sides alone passed it on. openReleaseCopy refuses such a header
+        // later (release_id, account_id), but a client that keys or routes
+        // by an entry's id before opening it would have carried these bytes.
+        const upper = released.releaseId.toUpperCase();
+        const withIds = (releaseId: string, ownerAccountId: string) => ({
+            ...released,
+            header: { ...released.header, releaseId, ownerAccountId },
+            releaseId,
+            ownerAccountId,
+        });
+        const malformed = [
+            withIds('../x', released.ownerAccountId),
+            withIds(upper, released.ownerAccountId),
+            withIds(`${released.releaseId}\n`, released.ownerAccountId),
+            withIds(released.releaseId, '<script>'),
+            withIds(released.releaseId, ''),
+            withIds(released.releaseId, `${released.ownerAccountId} `),
+        ];
+        for (const entry of malformed) {
+            await expect(list({ releases: [released, entry] })).rejects.toMatchObject({
+                code: 'server_mismatch',
+            });
+        }
+        // The honest entry, whose ids are of their forms, still comes back as it was.
+        expect(await list({ releases: [released] })).toEqual({ releases: [released] });
     });
 });

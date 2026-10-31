@@ -12,6 +12,13 @@ on:
             - 'deploy/**'
             # So a change to the panel proxy framing guard alone runs it.
             - 'tools/ci/check-embed-proxy-framing*'
+            # The Trivy step scans the desktop app's Cargo.lock and
+            # services/perturbation's requirements.txt, and reads
+            # .trivyignore: without these, a PR that moved only one of them
+            # got no Trivy result until the push to develop.
+            - 'blackout-desktop/**'
+            - 'services/**'
+            - '.trivyignore'
             - 'pnpm-lock.yaml'
             - 'package.json'
             - '.github/workflows/security.yml'
@@ -171,8 +178,9 @@ jobs:
                   # builds into the blackout-synapse image, and nothing else
                   # gates them (upstream-advisories.yml lists element-hq/synapse's
                   # own advisories, not advisories against its dependencies). The
-                  # three Twisted advisories whose fix exists only in a pre-release
-                  # are explained in .trivyignore. Nothing is skipped: the legacy
+                  # four Twisted advisories fixed in 26.10.0 (final since
+                  # 2026-10-30, not yet locked) are explained in .trivyignore,
+                  # where they expire on 2026-11-30. Nothing is skipped: the legacy
                   # FastAPI service under the fork directory
                   # (services/blackout-api, built by deploy.sh as
                   # blackout-api:stable though that stack runs the Hono API) was

@@ -38,7 +38,11 @@ export type DeadmanSwitchStatus = 'armed' | 'grace' | 'triggered' | 'cancelled';
  * only; a recipient gets `DeadmanReleasedSwitch`, and only after the trigger.
  */
 export interface DeadmanSwitchPayload {
-    /** Stable switch id (server-issued). */
+    /**
+     * Stable switch id. A legacy switch's is server-issued; a release
+     * switch's is the release id the owner's device chose, which the API
+     * refuses if taken, so `resealRecipient` can hold the server to it.
+     */
     switchId: string;
     /** Owner of the switch (the subject who must check in). */
     ownerId: string;

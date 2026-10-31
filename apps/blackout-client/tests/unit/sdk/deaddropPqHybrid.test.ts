@@ -586,6 +586,7 @@ describe('one hybrid sealing function for dead drops and release copies (hybridS
         // Node's WebCrypto throws on small-order keys, so the zero check is
         // reached only by an engine that returns zeros; this stands in for one.
         const { randomness, recipient } = await fixed();
+        expect(randomness.encapsulation.sharedSecret.some((byte) => byte !== 0)).toBe(true);
         const deriveBits = vi
             .spyOn(globalThis.crypto.subtle, 'deriveBits')
             .mockResolvedValueOnce(new ArrayBuffer(32));
@@ -596,6 +597,10 @@ describe('one hybrid sealing function for dead drops and release copies (hybridS
         } finally {
             deriveBits.mockRestore();
         }
+        // The ML-KEM secret it was given is cleared on this path too, not
+        // only once a key is derived (best effort; the envelope review's
+        // P3-L3, fourth reading).
+        expect(randomness.encapsulation.sharedSecret.every((byte) => byte === 0)).toBe(true);
     });
 
     it('refuses an all-zero X25519 output when opening, a dead drop included', async () => {
@@ -629,7 +634,7 @@ describe('one hybrid sealing function for dead drops and release copies (hybridS
         }
     });
 
-    it('refuses a nonce that is not 12 bytes', async () => {
+    it('refuses a nonce that is not 12 bytes, and clears the ML-KEM secret even then', async () => {
         const { randomness, recipient } = await fixed();
         await expect(
             hybridSealWith(
@@ -637,5 +642,6 @@ describe('one hybrid sealing function for dead drops and release copies (hybridS
                 { ...randomness, nonce: new Uint8Array(8) }
             )
         ).rejects.toThrow(/nonce must be 12 bytes/);
+        expect(randomness.encapsulation.sharedSecret.every((byte) => byte === 0)).toBe(true);
     });
 });

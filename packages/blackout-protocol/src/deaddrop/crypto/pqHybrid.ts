@@ -144,7 +144,15 @@ export const deriveHybridAeadKey = async (input: DeriveHybridKeyInput): Promise<
         input.transcript && input.transcript.length > 0
             ? concat(PQ_HYBRID_INFO, input.transcript)
             : PQ_HYBRID_INFO;
-    return hkdfSha256(ikm, salt, info, 32);
+    try {
+        return await hkdfSha256(ikm, salt, info, 32);
+    } finally {
+        // The copy of both shared secrets made for the KDF, cleared once it
+        // has run, best effort (the envelope review, P3-L3, second reading).
+        // The two inputs are the caller's to clear (`hybridSeal.ts` does);
+        // the salt and the info are public.
+        ikm.fill(0);
+    }
 };
 
 /** Fixed 1-byte domain tag distinguishing v1 (classical) from v2 (hybrid). */
