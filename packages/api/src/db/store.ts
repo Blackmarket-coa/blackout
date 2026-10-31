@@ -8881,10 +8881,22 @@ export class PostgresBackedDb extends InMemoryDb {
         return this.plans.get('refreshTokens')?.columnNames.has('session_expires_at') ?? false;
     }
 
+    /**
+     * Await the write-behind queue only: every op queued so far has run
+     * (committed, or failed after its retry and been counted). Mirror
+     * refreshes still on the apply chain (a peer's table reload, the
+     * rehydrate after a reconnect) are not waited for; they are reads, not
+     * durability. flushRuntimeStoreWrites uses this.
+     */
+    async drainWrites(): Promise<void> {
+        await this.queue?.drain();
+    }
+
     /** Flush queued writes, then the mirror refreshes queued so far (including
-     * the re-reads those writes asked for). Does NOT close the change
-     * subscription — safe to call repeatedly (e.g. to await durability) without
-     * unsubscribing from peers. */
+     * the re-reads those writes asked for, and any peer reload or rehydrate
+     * already on the apply chain). For shutdown and tests; a request path that
+     * needs durability calls drainWrites. Does NOT close the change
+     * subscription. */
     async drain(): Promise<void> {
         await this.queue?.drain();
         await this.applyTail;
@@ -8934,7 +8946,7 @@ export async function drainRuntimeStore(): Promise<void> {
  * BLACKOUT_DB_MODE=postgres.
  */
 export async function flushRuntimeStoreWrites(): Promise<void> {
-    if (db instanceof PostgresBackedDb) await db.drain();
+    if (db instanceof PostgresBackedDb) await db.drainWrites();
 }
 
 /** Runtime store mode, for boot wiring. */

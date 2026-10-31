@@ -808,6 +808,40 @@ test("X16d (fence): a refresh whose SELECT ran before this process's queued writ
     });
 });
 
+test('drainWrites waits for the queued writes only, not for a peer refresh still on the apply chain', async () => {
+    await withWorld(1, 'hub', async (w) => {
+        const [A] = w.procs;
+        const u = mkUser(A.db);
+        const v = mkVault(A.db, u);
+        await quiesce(w);
+        const answered = deferred();
+        const reply = deferred();
+        A.ctl.hold = (sql) =>
+            /^SELECT x\.\* FROM vault_items/.test(sql)
+                ? (answered.resolve(), reply.promise)
+                : undefined;
+        await w.emit({ src: 'elsewhere', m: 'vaultItems', op: 'k', kvs: [[v]] });
+        await answered.promise;
+
+        try {
+            const jti = revoke(A.db, u);
+            const race = (p: Promise<void>, ms: number) =>
+                Promise.race([p.then(() => 'done'), sleep(ms).then(() => 'waiting')]);
+            assert.equal(
+                await race(A.db.drainWrites(), 3000),
+                'done',
+                'the durability wait does not wait for the held refresh'
+            );
+            assert.equal(await count(w, 'revoked_sessions', 'jti = $1', [jti]), 1);
+            assert.equal(await race(A.db.drain(), 100), 'waiting', 'drain() still waits for it');
+        } finally {
+            A.ctl.hold = () => undefined;
+            reply.resolve();
+        }
+        await A.db.drain();
+    });
+});
+
 // ------------------------------------------------------------------ writer
 
 test('X6: removing a circle edge deletes that one row by key, and keeps an edge the remover has not heard of', async () => {
