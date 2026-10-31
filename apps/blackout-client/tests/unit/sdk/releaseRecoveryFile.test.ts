@@ -339,6 +339,21 @@ describe('what a recovery file holds', () => {
         expect(more.length).toBe(few.length);
     });
 
+    it('seals and opens a file past the 16 KiB bucket, such as three key sets', async () => {
+        // Someone who replaced their keys twice. Until randomBytes split its
+        // getRandomValues calls, padding to the 256 KiB bucket threw
+        // QuotaExceededError and no such file could be saved.
+        const three = structuredClone(vectorContents);
+        for (let i = 0; i < 2; i += 1) {
+            three.keySets.push({ ...vectorContents.keySets[0], status: 'superseded' });
+        }
+        expect(Buffer.byteLength(JSON.stringify(three))).toBeGreaterThan(16 * 1024 - 16);
+        const sealed = await sealRecoveryFile(three, vectorKey, salt, nonce);
+        const parsed = parseRecoveryFile(sealed);
+        expect(parsed.ciphertext.length).toBe(256 * 1024 + 16);
+        expect(await openRecoveryFile(parsed, vectorKey)).toEqual(three);
+    });
+
     it('refuses more than one file can hold', async () => {
         // Within the per-file caps (64 key sets, 2000 comparisons), but past 1 MiB.
         const huge = structuredClone(vectorContents);

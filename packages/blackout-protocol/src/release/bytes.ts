@@ -84,14 +84,21 @@ export const fromHex = (value: unknown, length: number): Uint8Array | null => {
     return out;
 };
 
+/** The length of the standard padded base64 of `length` bytes. */
+const base64Length = (length: number): number => 4 * Math.ceil(length / 3);
+
 /**
  * Standard padded base64 of exactly `length` bytes, or null. The dead-drop
  * decoder skips whitespace and ignores non-zero trailing bits, so `AA==` and
  * `AB==` decode alike; a value is accepted here only if encoding what it
- * decodes to gives back the same string, so one value has one form.
+ * decodes to gives back the same string, so one value has one form. When a
+ * length is given, a string of any other length than that many bytes encode
+ * to is refused before anything is decoded, so a very long string from a
+ * server costs nothing (the envelope review, P3-L5).
  */
 export const decodeCanonicalBase64 = (value: unknown, length?: number): Uint8Array | null => {
     if (typeof value !== 'string' || value.length === 0) return null;
+    if (length !== undefined && value.length !== base64Length(length)) return null;
     let decoded: Uint8Array;
     try {
         decoded = fromBase64(value);

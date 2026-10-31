@@ -21,6 +21,7 @@ export * from './federated-ops/events';
 export * from './auth-threads/events';
 export * from './education/events';
 export * from './deadman/events';
+export * from './deadman/releases';
 export * from './release';
 
 export * from './governance/contracts';

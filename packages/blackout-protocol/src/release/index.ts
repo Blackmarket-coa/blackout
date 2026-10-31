@@ -1,11 +1,13 @@
 /**
  * Release identities: the keys a dead-man switch release is sealed to and
  * signed with, their directory contracts, the safety code two people compare,
- * and the recovery file. Review and format:
- * `docs/security/release-identities-2026-10-26.md`.
+ * and the recovery file (`docs/security/release-identities-2026-10-26.md`);
+ * and the release envelope sealed to them, with the rule for when a
+ * comparison counts (`docs/security/release-envelope-2026-10-26.md`).
  *
- * The fixed test vectors (`testVectors.ts`) are not exported here, so they
- * stay out of application bundles; tests import them by path.
+ * The fixed test vectors (`testVectors.ts`, `envelopeVectors.ts`) are not
+ * exported here, so they stay out of application bundles; tests import them
+ * by path.
  */
 
 export {
@@ -83,3 +85,63 @@ export {
     type ReleaseIdentityDirectoryEntry,
     type ReleaseIdentityPublishResult,
 } from './contracts';
+export {
+    RELEASE_ENVELOPE_VERSION,
+    RELEASE_SEAL_LABEL,
+    RELEASE_SEAL_SIGNATURE_LABEL,
+    RELEASE_KEY_COMMITMENT_LABEL,
+    RELEASE_CONTENT_LABEL,
+    RELEASE_ID_PATTERN,
+    RELEASE_MESSAGE_MAX_BYTES,
+    RELEASE_PADDED_SIZES,
+    RELEASE_CONTENT_KEY_BYTES,
+    RELEASE_NONCE_BYTES,
+    RELEASE_KEY_COMMITMENT_BYTES,
+    RELEASE_SEALED_KEY_BYTES,
+    RELEASE_MAX_RECIPIENTS,
+    RELEASE_MAX_COPIES,
+    ReleaseEnvelopeError,
+    newReleaseId,
+    releaseContentCiphertextIsPadded,
+    parseReleaseHeader,
+    parseReleaseCopy,
+    parseReleaseEnvelope,
+    releaseHeaderOf,
+    releaseSealTranscript,
+    releaseCopySignedBytes,
+    releaseContentAssociatedData,
+    releaseKeyCommitment,
+    releaseContentHash,
+    encodeSealedKey,
+    decodeSealedKey,
+    encodeReleaseMessage,
+    encryptReleaseContentWith,
+    decryptReleaseContent,
+    sealReleaseCopyWith,
+    sealReleaseCopy,
+    buildReleaseEnvelope,
+    releaseSignatureVerifier,
+    openReleaseCopy,
+    resealReleaseCopy,
+    type ReleaseHeader,
+    type ReleaseCopy,
+    type ReleaseEnvelope,
+    type ReleaseEnvelopeProblem,
+    type ReleaseEnvelopeErrorCode,
+    type ReleaseParse,
+    type ReleaseCopyContext,
+    type SealReleaseCopyInput,
+    type BuildReleaseEnvelopeInput,
+    type ReleaseSignatureVerifier,
+    type ReleaseOpenProblem,
+    type OpenReleaseCopyInput,
+    type ReleaseOpenResult,
+    type ResealReleaseCopyInput,
+} from './envelope';
+export {
+    releaseComparisonState,
+    releaseDirectoryFingerprints,
+    type ReleaseComparisonState,
+    type ReleaseComparisonStateInput,
+    type ReleaseDirectoryFingerprints,
+} from './comparison';

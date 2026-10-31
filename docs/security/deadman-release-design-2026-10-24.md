@@ -19,6 +19,15 @@ day found two high, five medium and seven low findings; that record's section
 §4(a) steps 2 and 5, the safety-code row in §4 and in §7, and PR 2's entry in
 §8; those passages say so. Arming stays closed until PR 4.
 
+**Status, 2026-10-26, PR 3:** before PR 3's code, the release envelope was
+written down and reviewed in
+[`release-envelope-2026-10-26.md`](release-envelope-2026-10-26.md): what is
+sealed to whom, the key encapsulation against HPKE and X-Wing, the labels,
+the commitment, what the owner signs, the bytes, padding, validators, test
+vectors and what a hostile server can and cannot do. PR 3 is built on two
+stacked branches: the protocol and SDK first (that record's §14), then the
+API.
+
 The switch may be relied on for someone's physical safety. Every property
 below is stated with its limits, and §7 gives the wording the app may use and
 the claims it must never make.

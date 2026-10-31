@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { randomBytes } from '../../../../../packages/blackout-protocol/src/deaddrop/crypto/random';
 import {
     DEAD_DROP_PADDING_BUCKETS,
     decryptDeadDrop,
@@ -120,6 +121,41 @@ describe('@blackout/protocol dead-drop crypto core', () => {
                 recipientPrivateKeyJwk: recipient.privateKeyJwk,
             })
         ).rejects.toBeDefined();
+    });
+});
+
+describe('@blackout/protocol dead-drop randomness and large buckets', () => {
+    // WebCrypto fills at most 65,536 bytes per getRandomValues call. padding.ts
+    // fills each padded buffer through randomBytes, so until randomBytes split
+    // its calls every bucket past 64 KiB threw QuotaExceededError.
+    it('fills more than one getRandomValues call can', () => {
+        const bytes = randomBytes(262_144);
+        expect(bytes.length).toBe(262_144);
+        // Each 64 KiB chunk was filled, not only the first.
+        for (let chunk = 0; chunk < 4; chunk += 1) {
+            const part = bytes.subarray(chunk * 65_536, (chunk + 1) * 65_536);
+            expect(part.some((byte) => byte !== 0)).toBe(true);
+        }
+        expect(randomBytes(65_537).length).toBe(65_537);
+        expect(randomBytes(0).length).toBe(0);
+    });
+
+    it('round-trips a drop padded to the 256 KiB bucket', async () => {
+        const recipient = await generateRecipientKeyPair();
+        const plaintext = new Uint8Array(20_000).fill(0x61);
+        const envelope = await encryptDeadDrop({
+            plaintext,
+            recipientPublicKeyBase64: recipient.publicKeyBase64,
+            paddingStrategy: 'bucket',
+            expiresAt: new Date(Date.now() + 60_000).toISOString(),
+        });
+        const ct = Uint8Array.from(Buffer.from(envelope.ct, 'base64'));
+        expect(ct.length).toBe(DEAD_DROP_PADDING_BUCKETS[2] + 16);
+        const recovered = await decryptDeadDrop({
+            envelope,
+            recipientPrivateKeyJwk: recipient.privateKeyJwk,
+        });
+        expect(recovered).toEqual(plaintext);
     });
 });
 

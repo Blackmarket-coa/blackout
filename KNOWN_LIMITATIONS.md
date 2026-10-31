@@ -607,6 +607,42 @@ For the source-of-truth triage with tier/owner detail see
     nothing. No app sends the ping yet, so through the apps no challenge shows
     as seen.
 
+### OIDC sign-in checks (2026-10-30)
+
+-   **Where:** the homeserver's OIDC login (`oidc_providers`,
+    `apps/blackout-server/synapse/handlers/oidc.py`);
+    [`docs/security/dependency-advisories-server-desktop-2026-10-30.md`](docs/security/dependency-advisories-server-desktop-2026-10-30.md),
+    sections "Claim checks the bump did not change" and "The claim-type
+    checks". The first two gaps below are in upstream Synapse too, and
+    neither changed with the authlib 1.9.1 bump. The third came with the
+    bump, as it did upstream.
+-   **Unsigned id_tokens:** the id_token's signature is checked against the
+    algorithms the identity provider lists in
+    `id_token_signing_alg_values_supported`. If that list has `none`, an
+    unsigned id_token is accepted. What then stops a forged one is the TLS
+    connection to the provider's token endpoint, the one place the id_token
+    is taken from. Metadata validation requires that endpoint to be `https`,
+    or `http` to a loopback address, unless the provider's
+    `skip_verification` is set. OIDC allows this for the code flow. Keycloak and Authentik, the
+    providers the shipped template names, do not list `none` for id_tokens
+    (read from their source, not from running instances). Back-channel logout
+    tokens refuse `none` whatever the provider lists.
+-   **Audience:** `aud` is not compared with this homeserver's client id when
+    the token's `azp` names it. An id_token with `aud: "other"` and `azp` set
+    to our client id is accepted, as is one listing extra audiences. OIDC Core
+    3.1.3.7 says such a token must be rejected. The token must still be
+    signed by the provider and come from its token endpoint.
+-   **Claim types (since the authlib 1.9.1 bump):** an identity provider
+    whose id_token carries a `sub` or `jti` that is not a string, or an
+    `aud` list with a member that is not a string, can no longer sign in;
+    the callback shows `invalid_token`. This holds with
+    `user_profile_method: userinfo_endpoint` too, whenever the `openid`
+    scope makes the provider send an id_token. An integer user id still
+    works only from the userinfo endpoint of a provider that sends no
+    id_token (GitHub-style OAuth2, or scopes without `openid`).
+-   **Not there yet:** refusing `none` for id_tokens (it could break a
+    compliant provider), and comparing `aud` with the client id.
+
 ## Deferred multi-week workstreams
 
 These are tracked in

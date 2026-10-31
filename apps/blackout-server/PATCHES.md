@@ -565,3 +565,431 @@ of these converge with upstream rather than diverge from it.
   not touch it; it is recorded here because it sits outside
   `blackout_runtime/`. Record:
   `docs/security/synapse-dependencies-triage-2026-10-25.md` (last section).
+
+## 2026-10-30 authlib 1.9.1 (JWS and HMAC key advisories)
+
+Edits outside `blackout_runtime/` for the authlib advisories recorded in
+`docs/security/dependency-advisories-server-desktop-2026-10-30.md` (repository
+root). Ported from upstream `b20ae98` (#20415, "Bump authlib from 1.6.12 to
+1.9.1", element-hq/synapse develop, 2026-10-27), which changed only
+`poetry.lock` and `tests/handlers/test_oidc.py`. Re-check both files during any
+reconciliation with upstream; after this they match upstream's for authlib.
+
+- `pyproject.toml`: `authlib = ">=1.9.1,<1.10"` (was `>=1.6.12,<1.7`). 1.9.1
+  fixes GHSA-6v38-4h7w-rj9h (Critical), GHSA-7vr2-2fgp-9w7p and
+  GHSA-8m4g-j4wp-wgcg (High), and five Moderate/Low advisories. It also fixes
+  GHSA-c73q-w75p-j82v (High, published 2026-10-30 23:09 UTC, after the rest;
+  added after the fourth review): the documented RFC 7592
+  `ClientConfigurationEndpoint` examples do not bind the registration access
+  token to the client. That is authorization-server code. Synapse is an OAuth
+  client here, and nothing in `synapse/` or `blackout_runtime/` uses an
+  RFC 7591 or 7592 endpoint, so it was not reachable. Upstream has no
+  upper bound (`authlib>=0.15.1`); this tree caps below the next minor, which
+  has not been released or checked. The cap also covers
+  `synapse/config/jwt.py`'s use of `authlib.jose.rfc7519.jwt.prepare_raw_key`,
+  a module-level helper outside authlib's documented API.
+- `poetry.lock`: `poetry lock --no-update` under poetry 1.3.2. authlib 1.6.12 to
+  1.9.1, and `joserfc` 1.7.7 is added (authlib 1.7+ requires `joserfc>=1.6.8`
+  and `cryptography>=45.0.1`; the lock already has cryptography 50.0.2). The
+  file hashes are the ones upstream's lock carries. Nothing else moved apart
+  from `content-hash`.
+- `tests/handlers/test_oidc.py` (`test_map_userinfo_to_user`): the integer
+  `sub` case now arrives from the userinfo endpoint
+  (`_user_profile_method = "userinfo_endpoint"`, `scope=""`, so the fake
+  provider issues no id_token), as in upstream. An integer id from the
+  userinfo endpoint (GitHub-style OAuth2) still maps when the provider sends
+  no id_token: scopes without `openid`, or a plain OAuth2 provider. With the
+  `openid` scope the provider's id_token carries the same `sub`, and
+  `oidc.py` validates any id_token it is sent, even with
+  `user_profile_method: userinfo_endpoint`, so that login is refused with
+  `invalid_token` (qualified after the third review; this bullet said the
+  integer id "still maps" without the condition).
+- Behaviour change (corrected 2026-10-30; the first version of this entry
+  named the integer `sub` alone). Since 1.7.0 authlib validates an id_token's
+  registered claims with joserfc, which type-checks each one present (RFC
+  7519). An id_token is now refused with `invalid_token` when its `sub` or
+  `jti` is not a string, or when its `aud` is neither a string nor a list of
+  strings (`["<client_id>", 5]` is refused even with a matching `azp`). A
+  non-string `iss` is refused too, as it was before, because `oidc.py` always
+  checks `iss` against the issuer. No probe case that 1.6.12 refused is
+  accepted by 1.9.1 (the record lists them).
+- Behaviour change in JWT login (`synapse/handlers/jwt.py`) and the
+  back-channel logout token (corrected after a second review; this entry used
+  to say both were unchanged). They validate with authlib.jose's `JWTClaims`,
+  not joserfc, so an integer `jti` is still accepted. But since 1.9.0 a
+  boolean `exp`, `nbf` or `iat` is refused in both; 1.6.12 accepted
+  `iat: true` and `nbf: true`. And authlib's `OctKey` now refuses an HMAC key
+  that contains `-----BEGIN `, `---- BEGIN `, `ssh-rsa `, `ssh-dss `,
+  `ssh-ed25519 ` or `ecdsa-sha2-` anywhere (1.9.0; 1.6.12 checked only the
+  start), or that is empty (1.9.1). It raises `ValueError`, which `jwt.py`
+  does not catch, so with such a `jwt_config.secret` every JWT login
+  answered 500. The fork now refuses that secret at startup: see "2026-10-30
+  JWT login refuses an HMAC secret authlib cannot use" below.
+- Behaviour change in MSC3861's client assertions (recorded after the third
+  review). authlib 1.9.1 signs `client_secret_jwt` and `private_key_jwt`
+  assertions with joserfc, which refuses a JWK whose `alg` is not the
+  assertion's RS256; 1.6.12 ignored `alg`. A homeserver with such a JWK
+  started and answered every authenticated request with 503. joserfc also
+  refuses to sign with an empty `client_secret`, but that path never ran:
+  `MSC3861DelegatedAuth` asserts the secret is truthy, so such a homeserver
+  stopped during setup on either version. The fork now refuses both when the
+  config loads: see "2026-10-30 MSC3861 refuses a client credential that
+  cannot sign" below. A `client_secret` that starts with `-----BEGIN ` and
+  does not parse as a key goes the other way: 1.6.12 refused to sign with it,
+  and 1.9.1 signs with it and emits joserfc's `SecurityWarning`. It is this
+  homeserver's own secret for signing its requests, not a key it verifies
+  tokens with, so that was left.
+- `synapse/api/auth/msc3861_delegated.py` (`PrivateKeyJWTWithKid.sign`,
+  recorded after the fifth review, 2026-10-31): annotated `-> str`, was
+  `-> bytes`. From 1.7.0 both MSC3861 signers (`private_key_jwt_sign` here,
+  authlib's own `ClientSecretJWT.sign`) return joserfc's `jwt.encode` result,
+  a `str`; 1.6.12 returned `bytes`. The one consumer, authlib's
+  `ClientSecretJWT.__call__`, adds the value to a `str` request body either
+  way, so no behaviour changed. mypy could not see it: `mypy.ini` ignores
+  authlib's types (`[mypy-authlib.*]`).
+- Behaviour change in provider metadata validation (`_validate_metadata` in
+  `synapse/handlers/oidc.py`, recorded after the second review). authlib
+  1.8.0 rewrote `is_secure_transport`, which `validate_issuer`,
+  `validate_authorization_endpoint`, `validate_token_endpoint` and
+  `validate_jwks_uri` use. 1.6.12 accepted `https://` and the prefixes
+  `http://localhost:` and `http://127.0.0.1:`. 1.9.1 accepts `https://` with
+  a host, and `http://` to any loopback host, with or without a port
+  (`http://localhost/`, `http://127.0.0.1/`, `http://[::1]:8080/`). An
+  `https://` URL with no host is now refused. Only loopback hosts are
+  loosened, so no fork check was added.
+- The id_token checks in `synapse/handlers/oidc.py`, which this entry does not
+  change: the signature, with whatever algorithms the provider lists in
+  `id_token_signing_alg_values_supported`, so an unsigned id_token passes when
+  the list has `none` (OIDC allows that for a token fetched from the token
+  endpoint); `iss` against the issuer; `exp`, `nbf` and `iat` with 120 s of
+  leeway; `nonce`; `at_hash`. `aud` is checked only through authlib's `azp`
+  rule: when `aud` is anything but this client id (or a one-element list of
+  it), `azp` must equal the client id, and when it does, `aud` is not
+  compared at all. OIDC Core 3.1.3.7 step 3 asks for that comparison; neither
+  authlib version makes it, and upstream does not ask for it. The record says
+  why neither gap was patched here.
+- Tests added in the fork's own directory on 2026-10-30, after the bump,
+  because the two paths joserfc rewrote had no test. They use helpers from
+  `tests/handlers/test_oidc.py`, `tests/handlers/test_oauth_delegation.py`
+  and `tests/test_utils/oidc.py`; check them after any sync that touches
+  those.
+  - `tests/blackout_runtime/test_oidc_claim_types.py`: an id_token with an
+    integer `sub`, an integer `jti`, or `aud: ["<client_id>", 5]` with a
+    matching `azp`, renders `invalid_token`; a string `jti` still logs in.
+    These fail under authlib 1.6.12, which accepted all three.
+  - `tests/blackout_runtime/test_msc3861_client_assertion.py`: sends an
+    MSC3861 introspection request with `private_key_jwt` and with
+    `client_secret_jwt`, and checks the posted assertion without authlib: the
+    RS256 or HS256 signature, `kid`, `iss`, `sub`, `aud`, `jti` and the
+    3600 s lifetime. They pass under 1.6.12 and 1.9.1 because their JWK has
+    no `alg` member; with `"alg": "RS512"` 1.9.1 does not sign at all (see the
+    MSC3861 entry below, which adds those cases). Upstream has removed
+    experimental MSC3861 (its config now refuses
+    `experimental_features.msc3861`), so an upstream sync brings no coverage.
+
+## 2026-10-30 back-channel logout refuses unsigned logout tokens
+
+A fork patch with no upstream counterpart: element-hq/synapse `develop` at
+`cc172f7` (2026-10-30) still passes the provider's list unchanged. Record:
+`docs/security/dependency-advisories-server-desktop-2026-10-30.md` (repository
+root).
+
+- `synapse/handlers/oidc.py` (`OidcProvider.handle_backchannel_logout`): `none`
+  is dropped from the provider's `id_token_signing_alg_values_supported`
+  before the logout token is verified, as OIDC Back-Channel Logout 1.0 sec.
+  2.6 step 2 requires ("an alg with the value none MUST NOT be used for Logout
+  Tokens"). Before this, when a provider listed `none` (OIDC Discovery allows
+  it for ID tokens in the code flow), anyone could POST an unsigned logout
+  token to `/_synapse/client/oidc/backchannel_logout` and end any session
+  whose `sid` they knew. When the provider lists only `none`, every logout
+  token is now refused. ID token verification is unchanged.
+- `tests/blackout_runtime/test_backchannel_logout_alg.py`: an unsigned logout
+  token is refused when `none` is listed, and a signed one still ends the
+  session; with only `none` listed, both are refused. Both tests fail on the
+  code before this patch. The file sits in the fork's own test directory but
+  uses helpers from `tests/rest/client/test_auth.py` and
+  `tests/test_utils/oidc.py`, so check it after any sync that touches those.
+
+## 2026-10-30 back-channel logout answers 400 for a key authlib cannot use
+
+A fork patch with no upstream counterpart (element-hq/synapse `develop` at
+`cc172f7` catches only `JoseError` here). Recorded after the second review of
+`docs/security/dependency-advisories-server-desktop-2026-10-30.md` (repository
+root).
+
+- `synapse/handlers/oidc.py` (`OidcProvider.handle_backchannel_logout`):
+  `except (JoseError, ValueError)` where it was `except JoseError`. authlib
+  raises `ValueError`, not a `JoseError`, when it cannot use a key for the
+  token: a `kid` the provider's JWKS lacks (`Invalid JSON Web Key Set`), or
+  an HS\* header whose `kid` names an RSA or EC key
+  (`Missing required field: "k"`). Anyone can POST such a token, and it
+  escaped as a 500 with `M_UNKNOWN`. OIDC Back-Channel Logout 1.0 sec. 2.8 asks for 400 when the
+  request is invalid or the logout failed. No session was ended before or
+  after; the change is the status code.
+- Not changed: `_verify_jwt` still reloads the JWKS once after any
+  `ValueError` from the first decode, so each such token makes one request to
+  the provider's `jwks_uri`, and each invalid token still logs a traceback
+  (`logger.exception`). The record says why that was left.
+- `tests/blackout_runtime/test_backchannel_logout_alg.py`
+  (`test_logout_token_with_unusable_key_is_refused_with_400`): HS256 with the
+  provider's EC `kid`, and HS256 and ES256 with an unknown `kid`, each get 400
+  and leave the session alone; a signed token still ends it. The test fails
+  on the code before this patch (500).
+
+## 2026-10-30 JWT login refuses an HMAC secret authlib cannot use
+
+A fork patch with no upstream counterpart (upstream's `synapse/config/jwt.py`
+at `cc172f7` reads the secret and the algorithm verbatim). Recorded after the
+second review of
+`docs/security/dependency-advisories-server-desktop-2026-10-30.md` (repository
+root), and rewritten after the third, which found that the first version
+imported a string secret only and so missed a secret given as a JWK. Revised
+again after the fourth (2026-10-31): `algorithm: none` is refused, and a key
+set is no longer refused for one key HS\* cannot use. Revised after the fifth
+(2026-10-31): a key-set member whose `kid` is not a string is refused, because
+the fourth review's version tried only the string ones. Corrected after the
+sixth (2026-10-31): this entry said no Blackout template enables
+`jwt_config`, and one did; and the `kid` refusal is now said to refuse key
+sets that `develop` serves.
+
+- `synapse/config/jwt.py` (`JWTConfig._check_algorithm`, fourth review): when
+  JWT login is enabled, `jwt_config.algorithm` must be one of the 14 JWS
+  algorithms other than `none` that authlib registers
+  (`JsonWebSignature.ALGORITHMS_REGISTRY`, the same in 1.6.12 and 1.9.1).
+  Otherwise a `ConfigError` at `jwt_config.algorithm`. `JwtHandler` passes the one algorithm to
+  `JsonWebToken([algorithm])`, and with `none` authlib accepts an unsigned
+  token for any user, whatever the secret: the review logged in as
+  `@anyone:test` that way under both versions. Any other name (`NONE`,
+  `hs256`, a JWE algorithm such as `dir`, a typo) refused every token,
+  because a JWE token would need its `enc` in the same one-entry list. A
+  disabled `jwt_config` is not checked.
+- `synapse/config/jwt.py` (`JWTConfig._check_hmac_secret`): when JWT login is
+  enabled with HS256, HS384 or HS512:
+  - a key-set member whose `kid` is present and is not a string (`5`,
+    `true`, `null`, a list) is refused before any other key-set check, with
+    a `ConfigError` at `jwt_config.secret` that names it by its index
+    (`keys[1]`), whatever its key (fifth review). RFC 7517 sec. 4.5 makes
+    `kid` a string. authlib picks a member with `k.get("kid") == kid`, the
+    token header's value whatever its type, so a member under `kid: 5` is
+    chosen by a token whose `kid` is `5`, and one under `kid: true` by `true`
+    or `1`. The fourth review's version tried only the string `kid`s, so a
+    zero-byte `k` (`AA`, which HMAC pads into the empty key) under `kid: 5`
+    beside a usable key started, and a token with header
+    `{"alg": "HS256", "kid": 5}` signed with the empty key logged in as any
+    user. `develop`, on authlib 1.6.12, has no check and accepts the same
+    config and token. Because the refusal goes by the `kid`'s type, it also
+    refuses key sets that `develop` starts and serves (said after the sixth
+    review): a strong `oct` key under `kid: 5`, a one-key set under
+    `kid: null`, and strong keys under `kid: "a"` and `kid: 7` each load on
+    `develop` under authlib 1.6.12 and 1.9.1, and `JwtHandler`'s call logs in
+    with each `kid`; on this tree each stops at startup. That is kept on
+    purpose, to fail closed: RFC 7517 makes `kid` a string, and the operator's
+    fix is to quote it (`docs/upgrade.md`, "Upgrading to authlib 1.9.1");
+  - an empty or missing secret (`""`, `null`, an empty mapping) is refused
+    outright, on any authlib version, and so is a JWK with an empty `k`,
+    alone or in a key set (fourth review; 1.9.1 refused it anyway, but
+    1.6.12 verifies with it);
+  - then the check makes `JwtHandler`'s own call,
+    `JsonWebToken([algorithm]).decode(token, key=secret)`, with a token
+    signed with the empty HMAC key. authlib prepares the secret as it does
+    for each login: a mapping or `{...}` text is read as a JWK, and a key set
+    is searched by `kid`. With every `kid` a string, a token reaches a member
+    only by naming its `kid`, or, with no `kid`, when the member is the set's
+    only key. So the check tries each distinct `kid` the set names, or no
+    `kid` when it names none; a member without a `kid` beside named ones is
+    never chosen, and is not tried. A key
+    passes only when authlib reports a bad signature. A key that verifies
+    the token works as the empty key, and refuses the whole secret. Any
+    other exception (the `ValueError` authlib raises from 1.9.0 for a key
+    holding PEM or SSH key text anywhere, an RSA or EC JWK, `use: enc`, an
+    empty key set, JSON text that does not parse) becomes a `ConfigError` at
+    `jwt_config.secret`, for a secret that is not a key set and for a key
+    set none of whose keys can be used.
+  - In a key set where some key can be used, a key that cannot is logged as
+    a warning that names its `kid`, and the homeserver starts (fourth
+    review). The handler serves the usable keys, and answers a token naming
+    the other one with 500, as it did before the check. The third review's
+    version refused such a set (`Missing required field: "k"` for an RSA or
+    EC JWK beside an `oct` key), which stopped a homeserver that `develop`
+    starts and serves.
+- Before this, under authlib 1.9.1, such a homeserver started and answered
+  every JWT login with 500; under 1.6.12 an empty secret, or a JWK with an
+  empty `k`, accepted tokens anyone could sign (GHSA-8m4g-j4wp-wgcg). Under
+  1.6.12 the check still refuses every empty-key form. PEM or SSH key text is
+  refused wherever it appears only under the locked `>=1.9.1`; 1.6.12 refuses
+  only a string secret that starts with it, and uses any other as an HMAC
+  key. The secret of an asymmetric algorithm, and a disabled `jwt_config`,
+  are not checked. Until the sixth review this bullet ended "No Blackout
+  template enables `jwt_config`". One did, without meaning to:
+  `services/blackout-server/homeserver.yaml.template` rendered
+  `enabled: ${JWT_ENABLED:-false}` as a non-empty string, with the literal
+  secret `${JWT_SECRET:-}`, which this check accepts. See "2026-10-31 JWT
+  login refuses a non-boolean `enabled`; the Railway template's JWT login is
+  off" below.
+- `tests/blackout_runtime/test_jwt_secret_config.py`: eighteen refused
+  secrets for each of HS256, HS384 and HS512, among them a JWK mapping and
+  JWK JSON text with an empty `k` or a PEM `k`, and key sets with an empty
+  `k` or a zero byte beside a usable key, with no usable key, or of two
+  keys without a `kid`; five accepted ones (a plain secret, a JWK mapping,
+  JWK JSON text, a two-key set, a one-key set without a `kid`); two mixed
+  sets (an `oct` key beside an EC public JWK, or beside an `oct` key whose
+  `key_ops` allow only `sign`) accepted with one warning naming the other
+  key; eight refused algorithms (`none`, `NONE`, `hs256`, `dir`, `HS1024`,
+  `""`, `null`, a list); a PEM for RS256, ES256, PS512 and EdDSA, and an
+  empty secret with JWT login disabled (`HS256` or `none`), still parse;
+  `/login` with each key of the accepted set returns 200; and with the
+  EC-mixed set, the `oct` key logs in and a token naming the EC key does
+  not. On the first version of this patch (`5bad47c`) the JWK forms were not
+  refused, and the two-key set was (`Missing required field: "k"`), although
+  the handler can use it. On the third review's version (`93d3024`) the
+  algorithm test fails and the mixed-set tests error.
+- Same file, fifth review: eight key sets with a non-string `kid` are refused
+  for each algorithm, naming the member's index (`k` "AA" beside a usable
+  key, under `kid: 5` or `kid: true` as a mapping, under `kid: 5` as JSON
+  text, and under `kid: true` as a list; a usable key under `kid: 5`;
+  `kid: null`; `kid: ["a"]`; and `kid: 5` after an empty `k`, which reports
+  the `kid`, not the `k`).
+  `JwtLoginWithNonStringKidTestCase`: for `kid: 5` (token `kid` 5) and
+  `kid: true` (token `kid` true and 1), the config of a homeserver with that
+  set does not load, so no homeserver starts with it; and the same `/login`,
+  given that set, answers the empty-key token with 200 as `@mallory:test`,
+  which is what the refusal stops. Both new tests fail on the fourth
+  review's `config/jwt.py` (`d084e96`): no `ConfigError`.
+
+## 2026-10-30 MSC3861 refuses a client credential that cannot sign
+
+A fork patch with no upstream counterpart. Upstream removed experimental
+MSC3861 in `v1.157.0` (2026-07-21), replacing it with
+`matrix_authentication_service` and a shared secret; `develop` at `cc172f7`
+refuses `experimental_features.msc3861`. Every upstream release up to
+`v1.164.1` locks authlib 1.6.12 or older, and `develop` moved to 1.9.1 only
+with `b20ae98` (2026-10-27), so upstream never ran MSC3861 under joserfc and
+there is nothing to port. Recorded after the third review of
+`docs/security/dependency-advisories-server-desktop-2026-10-30.md` (repository
+root).
+
+- `synapse/config/experimental.py` (`_check_private_key_jwk`, called from
+  `MSC3861._check_client_auth_method` for `private_key_jwt`): a JWK whose
+  `alg` is set and is not `RS256` is refused with a `ConfigError` at
+  `experimental_features.msc3861.jwk`, on any authlib version.
+  `PrivateKeyJWTWithKid.sign` (`synapse/api/auth/msc3861_delegated.py`)
+  signs RS256, and from 1.7.0 authlib signs through joserfc, whose
+  `Key.check_alg` refuses such a key. Then the check signs one assertion
+  with `private_key_jwt_sign` and the same arguments `sign` passes, and turns
+  any exception into the same `ConfigError`. That also refuses, on both
+  versions, a JWK that is public only, is not RSA, or has `use: enc` or
+  `key_ops` without `sign`, and one without a `kid` (`KeyError: 'kid'`:
+  `sign` sends the `kid` header); none of them could ever sign. Before this, each
+  of these let the homeserver start and then answer every authenticated
+  request with 503 `Unable to introspect the access token`, the alg case
+  under 1.9.1 only. Keep `_check_private_key_jwk` in step with
+  `PrivateKeyJWTWithKid.sign`.
+- Same validator: an empty `client_secret` is refused like a missing one
+  (`not self.client_secret`, was `is None`) for `client_secret_post`,
+  `client_secret_basic` and `client_secret_jwt`. `MSC3861DelegatedAuth`
+  already asserted it truthy, so such a homeserver stopped during setup with
+  `AssertionError: No client_secret provided`, on both authlib versions (run
+  for `client_secret_jwt` and `client_secret_post`; `client_secret_basic`
+  takes the same branch); it now stops with the config path. Under
+  `python -O`, which no Dockerfile or deploy script in the tree sets, the
+  assertion would be gone and authlib 1.9.1 would refuse to sign
+  `client_secret_jwt` on every request.
+- `tests/blackout_runtime/test_msc3861_client_assertion.py`: a JWK naming
+  RS384, RS512, PS256 or ES256 is refused at `experimental_features.msc3861.jwk`;
+  so are a public JWK, `use: enc`, `key_ops: ["verify"]` and an EC key; an
+  RSA JWK with no `alg`, `alg: RS256`, `use: sig` or `key_ops: ["sign"]` is
+  accepted; an empty secret is refused for each of the three methods; and
+  an `alg: RS256`, `use: sig` JWK still sends a verified RS256 assertion.
+  The alg and empty-secret refusals fail on the code before this patch.
+
+## 2026-10-31 pyasn1 0.6.5 (four decoder advisories)
+
+Edits outside `blackout_runtime/` for four High pyasn1 advisories that GitHub
+reviewed on 2026-10-30 between 23:03 and 23:07 UTC, after Trivy's database of
+19:07 UTC, so the gate did not report them yet. Recorded in
+`docs/security/dependency-advisories-server-desktop-2026-10-30.md` (repository
+root). Upstream element-hq/synapse `develop` at `cc172f7` still locks 0.6.4,
+so there was nothing to port; re-check both lines during any reconciliation.
+
+- `pyproject.toml`: `pyasn1 = ">=0.6.5"` (was `>=0.6.4`). 0.6.5 (PyPI,
+  2026-10-27) fixes GHSA-fm9c-5rcf-2q5p, GHSA-9m75-vc3g-4x39,
+  GHSA-2qm8-x737-gmw5 and GHSA-mm57-4v3p-rchx: quadratic CPU in decoding
+  schemaless containers, constructed strings, constructed BIT STRINGs and
+  binary REALs. `service_identity` decodes each peer certificate's SRV-ID
+  otherName with pyasn1's DER decoder and no schema, during the hostname
+  check that Twisted and `synapse/crypto/context_factory.py` run after the
+  certificate chain has validated.
+- `poetry.lock`: `poetry lock --no-update` under poetry 1.3.2. pyasn1 0.6.4 to
+  0.6.5, with the hashes PyPI lists, and `content-hash`. Nothing else moves;
+  the image's `--extras all` export changes by that one package.
+  `pyasn1-modules` 0.4.2 requires `pyasn1>=0.6.1,<0.7.0`.
+
+## 2026-10-31 JWT login refuses a non-boolean `enabled`; the Railway template's JWT login is off
+
+A fork patch with no upstream counterpart (upstream's `synapse/config/jwt.py`
+at `cc172f7` reads `enabled` as given), and edits to Blackout's own Railway
+service files, which upstream does not have. Found by the sixth review of
+`docs/security/dependency-advisories-server-desktop-2026-10-30.md`
+(repository root), which records the render.
+
+- `services/blackout-server/homeserver.yaml.template`: `jwt_config` read
+  `enabled: ${JWT_ENABLED:-false}` and `secret: "${JWT_SECRET:-}"`. The
+  image `railway.toml` deploys renders this file at every start of the
+  `managed` profile with `entrypoint.sh`'s plain `envsubst`, and gettext's
+  `envsubst` expands only `$NAME` and `${NAME}`. Both stayed as text,
+  whatever the environment held. YAML then gave `enabled` the string
+  `${JWT_ENABLED:-false}`, which Synapse treats as on, and `secret` the
+  string `${JWT_SECRET:-}`, which anyone can read in this file. The secret
+  check this tree added on 2026-10-30 accepts it (it is not empty), and a
+  token signed with it verifies, as any user.
+  Two unrelated faults kept that from running. The same render leaves the
+  listener's `port: ${PORT:-8008}` as text, and Synapse refuses the listener
+  before it reads `jwt_config`:
+  `Listener configuration is lacking a valid 'port' option`. And the
+  service's `Dockerfile` exports the lock without extras, so authlib is
+  not installed, and `check_requirements("jwt")` stops startup for any
+  non-empty `jwt_config`, `enabled: false` included
+  (`DependencyException ['authlib']`). Each fault alone stops startup, so
+  JWT login opened to anyone who signs with the literal only once both were
+  fixed, which making this service work needs. The template is the same on
+  `develop`. It now writes `enabled: false` and
+  `secret: "${SYNAPSE_JWT_LOGIN_SECRET}"`, under a comment, so no environment
+  variable turns JWT login on; an operator who writes `enabled: true` gets
+  `SYNAPSE_JWT_LOGIN_SECRET`'s
+  value, or, when it is unset, an empty secret that the startup check
+  refuses. Neither of the two faults is fixed here; the record lists every
+  `${VAR:-default}` in the template, what it renders to, and what Synapse
+  does with it. Only `jwt_config` was a security defect.
+- `services/blackout-server/.env.example`: `JWT_ENABLED=false` is gone (no
+  longer read), and `JWT_SECRET` is renamed `SYNAPSE_JWT_LOGIN_SECRET` and left
+  empty, where it was `change-me`, with a
+  comment saying when it is used.
+- `synapse/config/jwt.py` (`JWTConfig._check_enabled`): `jwt_config.enabled`
+  must be a YAML boolean, or absent (off). Anything else (a string such as
+  `"false"` or `${JWT_ENABLED:-false}`, `null`, an empty value, a number) is
+  a `ConfigError` at `jwt_config.enabled`, before the algorithm and secret
+  checks, with the text
+  `jwt_config.enabled must be true or false (a YAML boolean), not '${JWT_ENABLED:-false}'`.
+  So a template that renders badly stops at startup instead of turning JWT
+  login on. This refuses configs that `develop` starts: any non-empty
+  string, `"false"` included, and `1` turned JWT login on there, and `null`,
+  `""` and `0` left it off.
+- `tests/blackout_runtime/test_jwt_secret_config.py`: seven `enabled`
+  values are refused at that path (the `envsubst` text, `"false"`,
+  `"true"`, `""`, `null`, `0`, `1`); `true`, `false` and a missing `enabled`
+  load; and the template, rendered as `envsubst` renders it, has
+  `enabled: false` with or without `JWT_ENABLED=true` in the environment.
+  The test's `_envsubst` gave output byte-identical to gettext-base 0.21's
+  `envsubst` for the old and the new template, each under two environments.
+  On `05dfc10`'s `config/jwt.py` the refusal test fails (no `ConfigError`),
+  and with `05dfc10`'s template the template test fails
+  (`'${JWT_ENABLED:-false}' is not False`).
+
+## 2026-10-31 operator notes for authlib 1.9.1
+
+- `docs/upgrade.md`: a Blackout section, "Upgrading to authlib 1.9.1
+  (2026-10-30)", above the other Blackout sections. It lists each
+  configuration that now stops at startup (`jwt_config`, experimental
+  MSC3861) or is refused at sign-in, with the error text and the fix, and
+  the Railway template change, and points at the record. Upstream's
+  `docs/upgrade.md` has no such section; keep it through a reconciliation.

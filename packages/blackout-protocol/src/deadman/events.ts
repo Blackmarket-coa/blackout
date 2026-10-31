@@ -1,4 +1,5 @@
 import type { EventEnvelope } from '../common/types';
+import type { DeadmanNoticeCounts, DeadmanOwnerRelease, DeadmanReleaseFormat } from './releases';
 
 /**
  * Dead-man switch contracts.
@@ -19,9 +20,14 @@ import type { EventEnvelope } from '../common/types';
  * account for a switch that has not fired; a fired switch keeps it for the
  * people it named.
  *
- * Arming is closed until the API can release a message to the people the
- * owner names (`POST /v1/deadman/switches` answers 409 `arming_unavailable`);
- * `docs/security/deadman-release-design-2026-10-24.md` is the plan. Nothing
+ * Switches armed before the release migration (PR 3, part 2) are in the
+ * `legacy` format and behave as described above; arming in that format has
+ * been closed since PR 1. A switch in the `release-v1` format holds a release
+ * envelope instead (`release/envelope.ts`): when it fires, each recipient can
+ * fetch their own sealed copy (`GET /v1/deadman/releases`) and the bot posts
+ * a notice that only points (`releases.ts`). Arming answers 409
+ * `arming_unavailable` until an operator turns `BLACKOUT_DEADMAN_RELEASES` on
+ * (`docs/security/deadman-release-design-2026-10-24.md` §8, PR 4). Nothing
  * mirrors a switch into Matrix room state: room state is never encrypted.
  */
 
@@ -32,12 +38,19 @@ export type DeadmanSwitchStatus = 'armed' | 'grace' | 'triggered' | 'cancelled';
  * only; a recipient gets `DeadmanReleasedSwitch`, and only after the trigger.
  */
 export interface DeadmanSwitchPayload {
-    /** Stable switch id (server-issued). */
+    /**
+     * Stable switch id. A legacy switch's is server-issued; a release
+     * switch's is the release id the owner's device chose, which the API
+     * refuses if taken, so `resealRecipient` can hold the server to it.
+     */
     switchId: string;
     /** Owner of the switch (the subject who must check in). */
     ownerId: string;
-    /** Room the switch was armed with. Any string; nothing checked it. */
-    roomId: string;
+    /**
+     * Room a legacy switch was armed with: any string, nothing checked it. A
+     * release switch has none.
+     */
+    roomId: string | null;
     /** Current lifecycle status. */
     status: DeadmanSwitchStatus;
     /** Heartbeat interval in seconds. */
@@ -71,6 +84,14 @@ export interface DeadmanSwitchPayload {
     createdAt: string;
     /** ISO-8601 timestamp of the last status change. */
     updatedAt: string;
+    /** `legacy` for a switch armed before the release format; absent from older servers. */
+    releaseFormat?: DeadmanReleaseFormat;
+    /** When a release switch fired. */
+    releasedAt?: string;
+    /** A release switch's envelope, the owner's copy and whom it is sealed to, while held. */
+    release?: DeadmanOwnerRelease;
+    /** A fired release switch's notices. */
+    notices?: DeadmanNoticeCounts;
 }
 
 /**
@@ -89,30 +110,22 @@ export interface DeadmanReleasedSwitch {
     encryptedPayload: string;
 }
 
-export type DeadmanSwitchArmedEvent = EventEnvelope<
-    'blackout.deadman.switch.armed',
-    DeadmanSwitchPayload
->;
+/** A dead-man envelope: the shared shape, except that a release switch has no room. */
+export type DeadmanEventEnvelope<TName extends DeadmanEventName> = Omit<
+    EventEnvelope<TName, DeadmanSwitchPayload>,
+    'roomId'
+> & { roomId: string | null };
 
-export type DeadmanSwitchCheckedInEvent = EventEnvelope<
-    'blackout.deadman.switch.checked_in',
-    DeadmanSwitchPayload
->;
+export type DeadmanSwitchArmedEvent = DeadmanEventEnvelope<'blackout.deadman.switch.armed'>;
 
-export type DeadmanSwitchGraceEvent = EventEnvelope<
-    'blackout.deadman.switch.grace',
-    DeadmanSwitchPayload
->;
+export type DeadmanSwitchCheckedInEvent =
+    DeadmanEventEnvelope<'blackout.deadman.switch.checked_in'>;
 
-export type DeadmanSwitchTriggeredEvent = EventEnvelope<
-    'blackout.deadman.switch.triggered',
-    DeadmanSwitchPayload
->;
+export type DeadmanSwitchGraceEvent = DeadmanEventEnvelope<'blackout.deadman.switch.grace'>;
 
-export type DeadmanSwitchCancelledEvent = EventEnvelope<
-    'blackout.deadman.switch.cancelled',
-    DeadmanSwitchPayload
->;
+export type DeadmanSwitchTriggeredEvent = DeadmanEventEnvelope<'blackout.deadman.switch.triggered'>;
+
+export type DeadmanSwitchCancelledEvent = DeadmanEventEnvelope<'blackout.deadman.switch.cancelled'>;
 
 export const DEADMAN_EVENT_NAMES = {
     armed: 'blackout.deadman.switch.armed',
@@ -134,7 +147,7 @@ const DEADMAN_STATUSES: readonly DeadmanSwitchStatus[] = [
 const isDeadmanEnvelope = (
     value: unknown
 ): value is {
-    roomId: string;
+    roomId: string | null;
     senderId: string;
     occurredAt: string;
     event: string;
@@ -142,13 +155,13 @@ const isDeadmanEnvelope = (
 } => {
     if (!value || typeof value !== 'object') return false;
     const candidate = value as Partial<{
-        roomId: string;
+        roomId: string | null;
         senderId: string;
         occurredAt: string;
         event: string;
     }>;
     return (
-        typeof candidate.roomId === 'string' &&
+        (typeof candidate.roomId === 'string' || candidate.roomId === null) &&
         typeof candidate.senderId === 'string' &&
         typeof candidate.occurredAt === 'string' &&
         typeof candidate.event === 'string'
@@ -161,7 +174,7 @@ const isDeadmanPayload = (payload: unknown): payload is DeadmanSwitchPayload => 
     return (
         typeof candidate.switchId === 'string' &&
         typeof candidate.ownerId === 'string' &&
-        typeof candidate.roomId === 'string' &&
+        (typeof candidate.roomId === 'string' || candidate.roomId === null) &&
         typeof candidate.checkInIntervalSeconds === 'number' &&
         typeof candidate.gracePeriodSeconds === 'number' &&
         typeof candidate.lastCheckInAt === 'string' &&
@@ -191,10 +204,10 @@ export const isDeadmanReleasedSwitch = (value: unknown): value is DeadmanRelease
 const isDeadmanEventOfType = <TName extends DeadmanEventName>(
     value: unknown,
     name: TName
-): value is EventEnvelope<TName, DeadmanSwitchPayload> => {
+): value is DeadmanEventEnvelope<TName> => {
     if (!isDeadmanEnvelope(value)) return false;
     if (value.event !== name) return false;
-    return isDeadmanPayload((value as EventEnvelope<TName, DeadmanSwitchPayload>).payload);
+    return isDeadmanPayload((value as DeadmanEventEnvelope<TName>).payload);
 };
 
 export const isDeadmanSwitchArmed = (value: unknown): value is DeadmanSwitchArmedEvent =>

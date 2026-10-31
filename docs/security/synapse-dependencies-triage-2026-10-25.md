@@ -473,3 +473,41 @@ short `JWT_SECRET` keeps working and logs the warning.
 With the pins moved, the Trivy gate's `skip-dirs` is removed and the gate
 scans the whole tree. Not verified: a Docker build of the image, and the
 service against a running Synapse or Postgres.
+
+## 2026-10-30: authlib past 1.7, and a fourth Twisted High
+
+Three entries above have changed (the third, pyasn1, after that record's
+fourth review on 2026-10-31). The detail is in
+`dependency-advisories-server-desktop-2026-10-30.md`.
+
+-   **The authlib `<1.7` bound is gone.** Three new advisories (one Critical,
+    two High) are fixed only in 1.9.0 and 1.9.1, so the fork now locks 1.9.1,
+    as upstream does since `b20ae98` (#20415). The integer-`sub` question
+    above was settled upstream's way. An integer `sub` from the userinfo
+    endpoint still logs in when the provider sends no id_token; one inside
+    an id_token is refused, as joserfc requires, even with
+    `user_profile_method: userinfo_endpoint` (qualified after the third
+    review of the 2026-10-30 record). `test_map_userinfo_to_user` carries
+    upstream's change.
+    joserfc also refuses an id_token whose `jti` is not a string, or whose
+    `aud` holds a non-string. The 2026-10-30 record lists the whole change.
+-   **Twisted 26.4.0 has a fourth High:** GHSA-vpp8-g58w-m8mp, HTTP/2 rapid
+    reset, fixed in 26.10.0rc1. No Blackout listener can speak HTTP/2, so it
+    joins the three above in `.trivyignore`, with an expiry of 2026-11-30.
+    **Twisted 26.10.0 final was published on 2026-10-30.** It fixes all four.
+    The plan is to lock it in its own change before 2026-11-30, then delete
+    the four entries.
+-   **The three Twisted entries above now expire on 2026-11-30 too.** The
+    [Twisted section](#twisted-three-highs-fixed-only-in-a-pre-release) gives
+    them a review date of 2026-12-31, which was only prose: Trivy would have
+    gone on ignoring them after it. Each now carries `exp:2026-11-30`, on its
+    GHSA and CVE lines both, so all four Twisted entries come back together.
+    Their `.trivyignore` comment no longer calls the pre-release their only
+    fix.
+-   **pyasn1 0.6.4, the floor above, has four more Highs**, all quadratic
+    CPU in its decoder: GHSA-fm9c-5rcf-2q5p, GHSA-9m75-vc3g-4x39,
+    GHSA-2qm8-x737-gmw5 and GHSA-mm57-4v3p-rchx. GitHub reviewed them on
+    2026-10-30 after 23:00 UTC, so the Trivy database of that day does not
+    have them yet. They are fixed in 0.6.5, which the fork now locks; its
+    `pyproject.toml` floor is 0.6.5. `service_identity` decodes the SRV-ID
+    of each peer certificate it checks with pyasn1.
