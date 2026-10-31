@@ -2,10 +2,14 @@
 # An advisory accepted in osv-scanner.toml is mirrored here, and in
 # pnpm.auditConfig.ignoreGhsas (package.json), only where Trivy or pnpm audit
 # would otherwise report it. Keep the rationale in sync wherever an entry
-# appears. The lists differ on purpose, as of 2026-10-30:
+# appears. The lists differ on purpose, as of 2026-10-31:
 #   - deepmerge GHSA-gcqx-w48m-w2h4 is in osv-scanner.toml only. GitHub rates
 #     it Low, below this scan's CRITICAL/HIGH and below both levels the repo
 #     runs pnpm audit at (high in security.yml, moderate in guard:audit-clean).
+#   - minimatch GHSA-g3hv-75wg-m249 is in osv-scanner.toml and pnpm.auditConfig
+#     only. GitHub rates it Moderate, below this scan's CRITICAL/HIGH;
+#     guard:audit-clean (moderate) reports it, so pnpm.auditConfig needs the
+#     mirror.
 #   - The Twisted entries below are here only: the OSV gates and pnpm audit
 #     read pnpm-lock.yaml, not poetry.lock.
 #   - brace-expansion GHSA-mh99-v99m-4gvg is here and in pnpm.auditConfig, but
@@ -15,7 +19,8 @@
 #     a regression below the override pins from Trivy and pnpm audit (only the
 #     OSV gates would catch it), and the comment below names versions the
 #     lockfile no longer has.
-# Record: docs/security/dependency-advisories-2026-10-30.md.
+# Records: docs/security/dependency-advisories-2026-10-30.md and
+# docs/security/dependency-advisories-2026-10-31.md.
 
 # brace-expansion ReDoS. The tree resolves to 1.1.16/2.1.2/5.0.8, all at or
 # above the maintainer's per-line security patches (1.1.12/2.0.2/5.0.8); OSV's

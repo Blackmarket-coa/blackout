@@ -26,17 +26,19 @@ so neither advisory can fail it.
 **Result:**
 
 -   **glob 11.1.0 and 13.0.6 → 14.0.3**, by one override,
-    `"glob@>=9 <14.0.2": "^14.0.3"`. No consumer has a release that takes a
+    `"glob@>=9 <14.0.3": "^14.0.3"`. No consumer has a release that takes a
     fixed glob. The floor is 14.0.3, not 14.0.2: glob 14 runs its own bundled
     copy of minimatch, and 14.0.2's copy is minimatch 11.0.0's code, which
-    still has the minimatch flaw. 14.0.3's copy has 11.0.1's fix.
+    still has the minimatch flaw. 14.0.3's copy has 11.0.1's fix. So the
+    selector takes in 14.0.2 as well.
 -   **minimatch 10.2.5 is gone.** Its only consumers were those two globs.
     glob 14.0.3 depends on minimatch `^11.0.2` (11.0.3).
--   **minimatch 5.1.9 → 11.0.3**, by `"minimatch@5": "^11.0.3"`. 5.1.9 does
-    not contain the flawed code, and nothing here loads its consumer. But its
-    one consumer, filelist 1.0.6, calls only `minimatch.match()`, and it
-    returns the same file lists with 11.0.3 (harness below). An override that
-    works comes before an ignore.
+-   **minimatch 5.1.9 → 11.0.3**, by `"filelist@1>minimatch": "^11.0.3"`.
+    5.1.9 does not contain the flawed code, and nothing here loads its
+    consumer. But its one consumer, filelist 1.0.6, calls only
+    `minimatch.match()`, and with 11.0.3 it returns the same lists for 15 of
+    16 patterns tested; `**/.*` no longer finds `.` (harness below). An
+    override that works comes before an ignore.
 -   **minimatch 3.1.5 is ignored**, until 2026-12-01. It does not contain the
     flawed code, which first appears in minimatch 7.0.0. The 3.x line has no
     fix, and its consumers (glob 7.2.3, test-exclude 6.0.0, eslint 8's tooling)
@@ -97,10 +99,10 @@ builds or deploys, on input an attacker controls.
 
 | Row              | Consumer                                                            | Change                              | Now    | Reachable here                                     |
 | ---------------- | ------------------------------------------------------------------- | ----------------------------------- | ------ | -------------------------------------------------- |
-| glob 11.1.0      | workbox-build 7.4.0 (vite-plugin-pwa, client devDependency)         | override `glob@>=9 <14.0.2`         | 14.0.3 | No: loaded by the client build, never called       |
+| glob 11.1.0      | workbox-build 7.4.0 (vite-plugin-pwa, client devDependency)         | override `glob@>=9 <14.0.3`         | 14.0.3 | No: loaded by the client build, never called       |
 | glob 13.0.6      | rimraf 6.1.3 ← @capacitor/cli 7.6.9 (blackout-mobile devDependency) | the same override                   | 14.0.3 | No: loaded by `cap sync`, never called             |
 | minimatch 10.2.5 | glob 11.1.0, glob 13.0.6                                            | consumer release (glob 14.0.3)      | 11.0.3 | No: only glob uses it, and glob is never called    |
-| minimatch 5.1.9  | filelist 1.0.6 ← jake 10.9.4 ← ejs 3.1.10 ← workbox-build's plugin  | override `minimatch@5`              | 11.0.3 | No: the code is absent, and nothing loads filelist |
+| minimatch 5.1.9  | filelist 1.0.6 ← jake 10.9.4 ← ejs 3.1.10 ← workbox-build's plugin  | override `filelist@1>minimatch`     | 11.0.3 | No: the code is absent, and nothing loads filelist |
 | minimatch 3.1.5  | glob 7.2.3, test-exclude 6.0.0, eslint 8.29.0 and its plugins       | `[[IgnoredVulns]]` until 2026-12-01 | 3.1.5  | No: the code is absent                             |
 
 OSV `/v1/query` returns no advisories for glob 14.0.2 or 14.0.3, minimatch
@@ -249,14 +251,17 @@ brace-expansion 5.0.12. It returns GHSA-3g3m for glob 11.1.0, 13.0.6 and
     -   Windows `//?/UNC/host/share` roots, in glob and in path-scurry 3.0.0.
         path-scurry's other changes from 2.0.2 are internal or syntax only.
     -   The abort fix.
--   **Outcome:** `"glob@>=9 <14.0.2": "^14.0.3"` in `pnpm.overrides`. The
-    selector is the advisory's range, so any glob request from 9.0.0 to
-    14.0.1 resolves to 14.0.3 or later, and glob 7.2.3 (react-native,
-    test-exclude, rimraf 3) is untouched. The caret matches the other
-    overrides. Engines: glob 14.0.3, minimatch 11.0.3 and path-scurry 3.0.0 all
-    require `18 || 20 || >=22`; this machine runs Node 22.22.0, CI's
-    `setup-node` uses `22`, and `apps/blackout-client/Dockerfile` uses Node
-    24.13.1.
+-   **Outcome:** `"glob@>=9 <14.0.3": "^14.0.3"` in `pnpm.overrides`. pnpm
+    9.15.4 rewrites a request whose range overlaps the selector
+    (`semver.intersects`, in `overrideDeps`). So any glob request that admits
+    a version from 9.0.0 to 14.0.2 resolves to 14.0.3 or later, and glob 7.2.3
+    (react-native, test-exclude, rimraf 3) is untouched. The selector ends
+    above the advisory's fix: with `<14.0.2`, a request for exactly `14.0.2`
+    would not overlap it, and would keep 14.0.2 and its bundled minimatch
+    11.0.0 code. The caret matches the other overrides. Engines: glob
+    14.0.3, minimatch 11.0.3 and path-scurry 3.0.0 all require
+    `18 || 20 || >=22`; this machine runs Node 22.22.0, CI's `setup-node`
+    uses `22`, and `apps/blackout-client/Dockerfile` uses Node 24.13.1.
 -   **Measured after the change:**
     -   **Client build.** `pnpm --filter @blackout/client build`, five times:
         three on `741f903442` (one traced), one with the glob override alone
@@ -282,7 +287,8 @@ brace-expansion 5.0.12. It returns GHSA-3g3m for glob 11.1.0, 13.0.6 and
 ## minimatch: 10.2.5 and 5.1.9 → 11.0.3, 3.1.5 ignored (GHSA-g3hv-75wg-m249)
 
 -   **What:** GHSA-g3hv (CVE-2026-118764, Moderate, CWE-405). At
-    `optimizationLevel >= 2`, `firstPhasePreProcess()` rewrites
+    `optimizationLevel >= 2` (in 7.0.0 and 7.0.1, at any level; below),
+    `firstPhasePreProcess()` rewrites
     `<pre>/**/../<p>/<p2>/<rest>` by cloning the row and pushing the clone onto
     the same array, inside a `do … while (didSomething)` loop. Each `**/..`
     doubles the rows. `secondPhasePreProcess()` then compares every pair.
@@ -298,15 +304,19 @@ brace-expansion 5.0.12. It returns GHSA-3g3m for glob 11.1.0, 13.0.6 and
 -   **What each version contains**, searched in every `.js` file of the
     tarball:
 
-    | minimatch                                          | `firstPhasePreProcess` and the `**/..` clone | `optimizationLevel` | Fix (`braceExpandMax` cap, >1000 skip) |
-    | -------------------------------------------------- | -------------------------------------------- | ------------------- | -------------------------------------- |
-    | 3.1.5, 4.2.6, 5.0.0, 5.1.9, 6.0.0, 6.2.0, 6.2.3    | absent                                       | absent              | —                                      |
-    | 7.0.0, 7.0.1                                       | present                                      | absent              | no                                     |
-    | 7.3.0, 7.4.0, 7.4.9, 9.0.9, 10.2.5, 10.2.6, 11.0.0 | present                                      | present             | no                                     |
-    | 11.0.1, 11.0.3                                     | present                                      | present             | yes                                    |
+    | minimatch                                                 | `firstPhasePreProcess` and the `**/..` clone | `optimizationLevel` | Fix (`braceExpandMax` cap, >1000 skip) |
+    | --------------------------------------------------------- | -------------------------------------------- | ------------------- | -------------------------------------- |
+    | 3.1.5, 4.2.6, 5.0.0, 5.1.9, 6.0.0, 6.2.0, 6.2.3           | absent                                       | absent              | —                                      |
+    | 7.0.0, 7.0.1                                              | present                                      | absent              | no                                     |
+    | 7.1.0, 7.3.0, 7.4.0, 7.4.9, 9.0.9, 10.2.5, 10.2.6, 11.0.0 | present                                      | present             | no                                     |
+    | 11.0.1, 11.0.3                                            | present                                      | present             | yes                                    |
 
-    So the flawed code first appears in **7.0.0**. In 3.1.5 the only file is
-    `minimatch.js`; in 5.1.9, `minimatch.js` and `lib/path.js`.
+    So the flawed code first appears in **7.0.0**. There `preprocess()` calls
+    both phases with no option check (`dist/cjs/index.js:308-309`), so they
+    run with default options. `optimizationLevel` arrives in 7.1.0, whose
+    `preprocess()` runs them only at `optimizationLevel >= 2` (`:308-312`).
+    In 3.1.5 the only file is `minimatch.js`; in 5.1.9, `minimatch.js` and
+    `lib/path.js`.
 
 -   **What 11.0.1 to 11.0.3 change** (diffs of the sources in the tarballs'
     maps):
@@ -358,6 +368,17 @@ brace-expansion 5.0.12. It returns GHSA-3g3m for glob 11.1.0, 13.0.6 and
         2.2.3 (2021) is its last release. workbox-build 7.4.1 swaps it for
         @trickfilm400/rollup-plugin-off-main-thread `^3.0.0-pre1`, whose two
         3.x releases take ejs `^3.1.10`, so the chain stays.
+    -   A newer ejs would remove the chain. ejs 5.0.1 (2026-03-05) and
+        every later release, up to 7.0.2 (`latest`), have no dependencies,
+        and @trickfilm400/rollup-plugin-off-main-thread 4.0.0 (2026-10-06,
+        `latest`) takes ejs `^7.0.1`. In ejs 3.1.10 only `bin/cli.js`
+        requires jake. So `"ejs@3": "^7.0.2"` would take jake, filelist and
+        minimatch 5.1.9 out of the tree. It was not taken: the plugin renders
+        its loader template with `ejs.render` (`index.js:66`) when
+        workbox-build's `generateSW` bundles a service worker
+        (`lib/bundle.js:75`). Moving that template engine four majors needs
+        its own build and output check, while filelist's one minimatch call
+        was checked here.
     -   filelist's one call is `minimatch.match(files, pat, opts)`
         (`index.js:201`). minimatch 11.0.3's CommonJS build exports `match`.
         A harness ran five `FileList` include patterns (globstar, `*`, a
@@ -367,7 +388,16 @@ brace-expansion 5.0.12. It returns GHSA-3g3m for glob 11.1.0, 13.0.6 and
         the same. The brace pattern finds nothing in all three, because
         filelist reads the part before the first wildcard as a literal
         directory.
-    -   So the override is `"minimatch@5": "^11.0.3"`. It also takes
+    -   A second harness drove 16 patterns through jake's own resolution of
+        filelist, on a planted tree of 48 entries with dot files, a dot
+        directory, symlinks, and bracket, brace and space names. 15 give the
+        same lists with 5.1.9 and 11.0.3. The 16th, `**/.*`, gives `.`,
+        `.dotfile.js` and `.hidden` with 5.1.9, and only the last two with
+        11.0.3: minimatch 11 no longer matches `.` with `.*`.
+    -   So the override is `"filelist@1>minimatch": "^11.0.3"`, scoped to
+        filelist 1, whose call was checked. A bare `minimatch@5` would also
+        move any later request for minimatch 5 to 11.0.3, whose CommonJS
+        export is an object, not the function 5.1.9 exports. It also takes
         brace-expansion 2.1.7, used only by 5.1.9, out of the lockfile; the
         `brace-expansion@2` override now binds nothing and stays as a guard.
 -   **minimatch 3.1.5: ignored.** It has no flawed code (table above), the
@@ -400,26 +430,31 @@ brace-expansion 5.0.12. It returns GHSA-3g3m for glob 11.1.0, 13.0.6 and
     -   **Not in `.trivyignore`.** Trivy's gate is `CRITICAL,HIGH`, and this
         is Moderate. Trivy was not run (Verification).
 -   **What a regression would look like.** The ignore is per ID, not per
-    version. A minimatch that does contain the code, 7.0.0 to 11.0.0, entering
+    version or package. It would also hide this advisory for any package
+    GitHub adds to it later, such as a glob that bundles minimatch. A
+    minimatch that does contain the code, 7.0.0 to 11.0.0, entering
     the lockfile would pass every gate. Examples: 10.2.6 through eslint 10,
     test-exclude 8 or filelist 2. The OSV gates and `guard:audit-clean`
     would pass because of this entry and its mirror; Trivy and `security.yml`'s
     `pnpm audit` because it is Moderate. The OSV scan would print only its
-    "filtered out" line, as it does now. A glob from 9.0.0 to 14.0.1, or a
-    minimatch 5.x, cannot come back that way: the two overrides move them to
-    14.0.3 and 11.0.3.
+    "filtered out" line, as it does now. A glob from 9.0.0 to 14.0.2 cannot
+    come back that way: the glob override moves any request that overlaps
+    that range to 14.0.3. A minimatch 5.x can, through a consumer other than
+    filelist 1; like 3.1.5, it lacks the code.
 -   **Plan:**
-    1. The range starts at 0, but the code starts at 7.0.0. The operator can
-       ask `github/advisory-database` to correct `introduced`, citing the
-       table above. Once OSV follows, the scanner reports this entry as
+    1. The range starts at 0, but the code starts at 7.0.0. It runs with
+       default options in 7.0.0 and 7.0.1, and from 7.1.0 only at
+       `optimizationLevel >= 2`. The operator can ask
+       `github/advisory-database` to correct `introduced`, citing the table
+       above. Once OSV follows, the scanner reports this entry as
        unused, and it and its mirror are deleted.
     2. Moving eslint does not clear it: 9.39.5 keeps minimatch `^3.1.5`, and
        10.14.0 brings `^10.2.6`, which has the flaw and would be hidden by
        this entry.
     3. Re-check by 2026-12-01.
 -   **Source:** OSV and GitHub advisory files; minimatch 3.1.5, 4.2.6, 5.0.0,
-    5.1.9, 6.0.0, 6.2.0, 6.2.3, 7.0.0, 7.0.1, 7.3.0, 7.4.0, 7.4.9, 9.0.9,
-    10.2.0 to 10.2.6 and 11.0.0 to 11.0.3 tarballs and source maps;
+    5.1.9, 6.0.0, 6.2.0, 6.2.3, 7.0.0, 7.0.1, 7.1.0, 7.3.0, 7.4.0, 7.4.9,
+    9.0.9, 10.2.0 to 10.2.6 and 11.0.0 to 11.0.3 tarballs and source maps;
     @isaacs/nonrecursive-glob-match 1.0.0 to 1.0.3; the registry for filelist,
     jake, ejs, both off-main-thread plugins, eslint, @eslint/eslintrc and
     test-exclude; `pnpm audit --json`; the harnesses above.
@@ -491,6 +526,50 @@ change's:
    not hide one. It binds nothing today, and it would push a future consumer
    (eslint 10, for example) across a major without asking. Not added.
 
+## Corrected after review
+
+The first version of this record (`196c52dde4`) said two things that were
+not true and left out four. They are corrected above. The commit message of
+`196c52dde4` repeats the first two, and this section is their correction.
+
+1. **"firstPhasePreProcess and optimizationLevel first appear in 7.0.0."**
+   Only `firstPhasePreProcess` does. `optimizationLevel` arrives in 7.1.0;
+   in 7.0.0 and 7.0.1 the preprocessing runs with default options. The
+   GHSA-g3hv entry's `reason`, which both OSV gates print, said the same.
+   The table in the minimatch section was right.
+2. **filelist "returns the same file lists with 11.0.3."** That held for
+   the five patterns tested. A 16-pattern harness finds one difference:
+   `**/.*` no longer finds `.`. Nothing here loads filelist.
+3. **"The selector is the advisory's range."** pnpm applies an override to a
+   request that overlaps the selector. A request for exactly `14.0.2` does
+   not overlap `<14.0.2`, and would have kept glob 14.0.2, whose bundle has
+   minimatch 11.0.0's code.
+4. **"No release on this chain takes minimatch ≥ 11.0.1."** True, but ejs
+   5.0.1 and later drop jake, and with it filelist and minimatch 5. The
+   minimatch section now names that route and why it was not taken.
+5. **The gitleaks row** cited only `gitleaks dir`, not `security.yml`'s
+   range scan. It now cites both.
+6. **`.trivyignore`'s header** lists where the mirrored lists differ, and
+   left out GHSA-g3hv.
+
+## Changed after the first review
+
+1. **The glob selector is `glob@>=9 <14.0.3`** (was `<14.0.2`), for item 3
+   above.
+2. **The minimatch override is `filelist@1>minimatch`** (was
+   `minimatch@5`). pnpm applies a bare `minimatch@5` to any request that
+   overlaps 5.x. A later consumer of minimatch 5 would have been moved to
+   11.0.3, whose export is not the function 5.1.9 exports, with install and
+   `--frozen-lockfile` still green. Such a move buys nothing: 5.x lacks the
+   code. The scoped selector moves only filelist 1, whose call was checked.
+3. **`.trivyignore`'s header** lists GHSA-g3hv, in `osv-scanner.toml` and
+   `pnpm.auditConfig` only, and is dated 2026-10-31.
+
+Both keys bind what the old ones bound. A full re-resolution with them gives
+`196c52dde4`'s lockfile except for the two keys (Re-runs after the first
+review). So the builds, traces and harnesses above, which ran with the old
+keys, ran on the same resolved tree.
+
 ---
 
 ## Verification
@@ -499,30 +578,45 @@ Runs are local, with Node 22.22.0 and pnpm 9.15.4 (the pinned
 `packageManager`), between 00:41Z and the commit on 2026-10-31. Commands
 are as in `ci.yml` and `security.yml` where those run them.
 
-| Gate                    | Command                                                                                                                                 | Result                                                                                                                             |
-| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| OSV, before             | osv-scanner v2.3.3 (sha256 matches `osv-scanner_SHA256SUMS`), `TZ=UTC`, `--lockfile=pnpm-lock.yaml`, on `741f903442`, 00:58Z            | exit 1: 3 filtered, 5 rows (the table at the top)                                                                                  |
-| OSV, glob override only | the same, with only `glob@>=9 <14.0.2`, 01:02Z                                                                                          | exit 1: 2 rows, minimatch 3.1.5 and 5.1.9                                                                                          |
-| OSV, no minimatch entry | the same on the final lockfile, with the GHSA-g3hv entry removed from a copy of `osv-scanner.toml`                                      | exit 1: 1 row, minimatch 3.1.5                                                                                                     |
-| OSV                     | the same on this change, `TZ` = `UTC`, `Etc/GMT-3`, `Pacific/Kiritimati`                                                                | exit 0 in all three: "No issues found", 4 filtered (deepmerge, image-size ×2, minimatch), no unused-ignore line                    |
-| install                 | `pnpm install` with the two overrides; then, in a fresh copy of the tracked files, `pnpm install --frozen-lockfile --ignore-scripts`    | pass; the frozen install leaves `pnpm-lock.yaml` unchanged and installs glob 14.0.3, minimatch 11.0.3 and 3.1.5, path-scurry 3.0.0 |
-| lockfile diff           | scratch script, parsed YAML                                                                                                             | as in Lockfile                                                                                                                     |
-| pnpm audit              | `pnpm audit --prod --audit-level high` (`security.yml`)                                                                                 | before: exit 0, "4 vulnerabilities found, 1 low \| 1 moderate \| 2 high (2 ignored)". After: exit 0, "… 1 moderate (1 ignored) …"  |
-| guard:audit-clean       | `pnpm run guard:audit-clean`                                                                                                            | before: exit 1 (minimatch 3.1.5, Moderate, 42 paths). After: exit 0                                                                |
-| pnpm audit, whole tree  | `pnpm audit --json` (dev included)                                                                                                      | before: deepmerge (low), glob 11.1.0 and 13.0.6, minimatch 3.1.5 (197 paths), 5.1.9 and 10.2.5. After: deepmerge only              |
-| client build            | `pnpm --filter @blackout/client build`, three times on `741f903442`, then with the glob override alone and on this change               | pass; all five `dist` trees byte-identical (390 files); 25,308 KB without maps                                                     |
-| build trace             | the same build with a `--require` hook logging loads of and calls into `glob` / `minimatch`                                             | workbox-build loads glob (11.1.0 then 14.0.3); no call                                                                             |
-| workbox-build           | scratch harness, `getManifest()` on the built `dist`, four configurations                                                               | identical between glob 11.1.0 and 14.0.3                                                                                           |
-| rimraf `glob: true`     | scratch harness, 7 patterns × sync/async, and a pre-aborted signal                                                                      | identical between glob 13.0.6 and 14.0.3                                                                                           |
-| `clean` scripts         | `pnpm --filter <pkg> run clean` for the eight packages, in scratch copies of `741f903442` and of this change, with planted `dist` files | exit 1, `rimraf: not found`, nothing removed, in both                                                                              |
-| `cap sync android`      | `CI=1 pnpm exec cap sync android` in `blackout-mobile` of each scratch copy, with the trace hook                                        | exit 1 at "Could not find the web assets directory" in both; rimraf loads glob 13.0.6, then 14.0.3; no call                        |
-| filelist                | scratch harness, five `FileList` patterns                                                                                               | the same lists with minimatch 5.1.9 and 11.0.3                                                                                     |
-| PoCs                    | the two harnesses above                                                                                                                 | as in the tables above                                                                                                             |
-| client types            | `pnpm --filter @blackout/client typecheck`                                                                                              | pass                                                                                                                               |
-| lint                    | none run: no lint toolchain moved (Lockfile)                                                                                            | —                                                                                                                                  |
-| Trivy                   | not run: both advisories are Moderate, below its CRITICAL/HIGH gate, and OSV lists no advisory for any of the four added versions       | —                                                                                                                                  |
-| prettier                | `prettier --check` on the changed files (lint-staged runs `prettier --write` on commit)                                                 | pass                                                                                                                               |
-| gitleaks                | 8.21.2, `gitleaks dir --no-banner --redact` on each of the four changed files, before the commit                                        | no leaks found                                                                                                                     |
+| Gate                    | Command                                                                                                                                                                                                       | Result                                                                                                                             |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| OSV, before             | osv-scanner v2.3.3 (sha256 matches `osv-scanner_SHA256SUMS`), `TZ=UTC`, `--lockfile=pnpm-lock.yaml`, on `741f903442`, 00:58Z                                                                                  | exit 1: 3 filtered, 5 rows (the table at the top)                                                                                  |
+| OSV, glob override only | the same, with only `glob@>=9 <14.0.2`, 01:02Z                                                                                                                                                                | exit 1: 2 rows, minimatch 3.1.5 and 5.1.9                                                                                          |
+| OSV, no minimatch entry | the same on the final lockfile, with the GHSA-g3hv entry removed from a copy of `osv-scanner.toml`                                                                                                            | exit 1: 1 row, minimatch 3.1.5                                                                                                     |
+| OSV                     | the same on this change, `TZ` = `UTC`, `Etc/GMT-3`, `Pacific/Kiritimati`                                                                                                                                      | exit 0 in all three: "No issues found", 4 filtered (deepmerge, image-size ×2, minimatch), no unused-ignore line                    |
+| install                 | `pnpm install` with the two overrides; then, in a fresh copy of the tracked files, `pnpm install --frozen-lockfile --ignore-scripts`                                                                          | pass; the frozen install leaves `pnpm-lock.yaml` unchanged and installs glob 14.0.3, minimatch 11.0.3 and 3.1.5, path-scurry 3.0.0 |
+| lockfile diff           | scratch script, parsed YAML                                                                                                                                                                                   | as in Lockfile                                                                                                                     |
+| pnpm audit              | `pnpm audit --prod --audit-level high` (`security.yml`)                                                                                                                                                       | before: exit 0, "4 vulnerabilities found, 1 low \| 1 moderate \| 2 high (2 ignored)". After: exit 0, "… 1 moderate (1 ignored) …"  |
+| guard:audit-clean       | `pnpm run guard:audit-clean`                                                                                                                                                                                  | before: exit 1 (minimatch 3.1.5, Moderate, 42 paths). After: exit 0                                                                |
+| pnpm audit, whole tree  | `pnpm audit --json` (dev included)                                                                                                                                                                            | before: deepmerge (low), glob 11.1.0 and 13.0.6, minimatch 3.1.5 (197 paths), 5.1.9 and 10.2.5. After: deepmerge only              |
+| client build            | `pnpm --filter @blackout/client build`, three times on `741f903442`, then with the glob override alone and on this change                                                                                     | pass; all five `dist` trees byte-identical (390 files); 25,308 KB without maps                                                     |
+| build trace             | the same build with a `--require` hook logging loads of and calls into `glob` / `minimatch`                                                                                                                   | workbox-build loads glob (11.1.0 then 14.0.3); no call                                                                             |
+| workbox-build           | scratch harness, `getManifest()` on the built `dist`, four configurations                                                                                                                                     | identical between glob 11.1.0 and 14.0.3                                                                                           |
+| rimraf `glob: true`     | scratch harness, 7 patterns × sync/async, and a pre-aborted signal                                                                                                                                            | identical between glob 13.0.6 and 14.0.3                                                                                           |
+| `clean` scripts         | `pnpm --filter <pkg> run clean` for the eight packages, in scratch copies of `741f903442` and of this change, with planted `dist` files                                                                       | exit 1, `rimraf: not found`, nothing removed, in both                                                                              |
+| `cap sync android`      | `CI=1 pnpm exec cap sync android` in `blackout-mobile` of each scratch copy, with the trace hook                                                                                                              | exit 1 at "Could not find the web assets directory" in both; rimraf loads glob 13.0.6, then 14.0.3; no call                        |
+| filelist                | scratch harness, five `FileList` patterns; after the first review, a second with 16                                                                                                                           | five: the same lists with minimatch 5.1.9 and 11.0.3. 16: 15 the same; `**/.*` finds `.` only with 5.1.9                           |
+| PoCs                    | the two harnesses above                                                                                                                                                                                       | as in the tables above                                                                                                             |
+| client types            | `pnpm --filter @blackout/client typecheck`                                                                                                                                                                    | pass                                                                                                                               |
+| lint                    | none run: no lint toolchain moved (Lockfile)                                                                                                                                                                  | —                                                                                                                                  |
+| Trivy                   | not run: both advisories are Moderate, below its CRITICAL/HIGH gate, and OSV lists no advisory for any of the four added versions                                                                             | —                                                                                                                                  |
+| prettier                | `prettier --check` on the changed files (lint-staged runs `prettier --write` on commit)                                                                                                                       | pass                                                                                                                               |
+| gitleaks                | 8.21.2: `gitleaks dir --no-banner --redact` on each changed file, before the commit; `security.yml`'s `gitleaks detect --redact --no-banner --log-opts=…` over `741f903442..196c52dde4`, at 01:21Z and 02:05Z | no leaks found; the range scan: 1 commit scanned, exit 0                                                                           |
+
+**Re-runs after the first review** (2026-10-31, 02:00Z to the commit), with
+the two new override keys:
+
+| Gate              | Command                                                                                                                  | Result                                                                                                                                         |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| lockfile          | `pnpm install --lockfile-only --ignore-scripts --prefer-offline`                                                         | exit 0; `pnpm-lock.yaml` differs from `196c52dde4`'s only in the two `overrides` keys                                                          |
+| lockfile, control | the same with `filelist@1>minimatch` removed                                                                             | filelist goes back to minimatch 5.1.9; 5.1.9 and brace-expansion 2.1.7 return                                                                  |
+| install           | `pnpm install --frozen-lockfile --offline --ignore-scripts`                                                              | exit 0, "Lockfile is up to date". With `196c52dde4`'s lockfile: exit 1, `ERR_PNPM_LOCKFILE_CONFIG_MISMATCH`                                    |
+| OSV               | osv-scanner v2.3.3, `--lockfile=pnpm-lock.yaml`, `TZ` = `UTC`, `Etc/GMT-3`, `Pacific/Kiritimati`                         | exit 0 in all three: "No issues found", 4 filtered, no unused-ignore or multiple-ignore line; the GHSA-g3hv line prints the corrected `reason` |
+| pnpm audit        | `pnpm audit --prod --audit-level high`; `pnpm run guard:audit-clean`                                                     | exit 0 both: "4 vulnerabilities found", "1 low \| 1 moderate (1 ignored) \| 2 high (2 ignored)"                                                |
+| minimatch 7.x     | minimatch 7.0.0, 7.0.1 and 7.1.0 tarballs, checked against the registry's `sha512`, searched as in the minimatch section | `firstPhasePreProcess` in all three; `optimizationLevel` only in 7.1.0                                                                         |
+| ejs chain         | the registry for ejs, @trickfilm400/rollup-plugin-off-main-thread and workbox-build, 02:00Z                              | as in the minimatch section                                                                                                                    |
+| prettier          | `prettier --check` on the changed files                                                                                  | pass                                                                                                                                           |
+| gitleaks          | `gitleaks dir --no-banner --redact` on each changed file, before the commit                                              | no leaks found                                                                                                                                 |
 
 **Not verified:**
 
@@ -542,5 +636,8 @@ are as in `ci.yml` and `security.yml` where those run them.
 -   Trivy was not run (Verification table). At the end of this work the
     disk had 1.5 GB free, shared with other runs, so nothing heavier was
     started.
+-   After the first review, the client build, the `dist` comparison and
+    `cap sync` were not repeated: free disk stayed under 1.5 GB, shared with
+    other runs (1.18 GB at 02:08Z). The resolved tree did not change.
 -   CI did not run on this change; nothing was pushed.
 -   The range correction was not reported upstream.
