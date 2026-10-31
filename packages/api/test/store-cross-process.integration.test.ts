@@ -1417,3 +1417,315 @@ test('U7: USER_CASCADE_CHILDREN, with the rows left in mirrors, is every cascadi
         );
     });
 });
+
+// ------------------------------------------------------------------ the rest
+
+const mkBounty = (db: any) =>
+    db.createBounty({
+        id: randomUUID(),
+        category: 'design',
+        title: 't',
+        description: 'd',
+        creatorId: randomUUID(),
+        rewardType: 'cash',
+        rewardSummary: 'r',
+    }).id as string;
+
+const apply = (db: any, bountyId: string) => {
+    const applicantId = randomUUID();
+    const app = db.createBountyApplication({ id: randomUUID(), bountyId, applicantId });
+    assert.equal(typeof app, 'object', `application refused: ${String(app)}`);
+    return { id: app.id as string, applicantId };
+};
+
+const bountyState = async (w: World, bountyId: string) => {
+    const [b] = await w.sql('SELECT status, claimed_by FROM bounties WHERE id = $1', [bountyId]);
+    const apps = await w.sql('SELECT id, status FROM bounty_applications WHERE bounty_id = $1', [
+        bountyId,
+    ]);
+    return {
+        bounty: `${b.status}:${b.claimed_by ?? ''}`,
+        apps: Object.fromEntries(apps.map((a) => [a.id, a.status])),
+    };
+};
+
+const mirrorBountyState = (db: any, bountyId: string, appIds: string[]) => {
+    const b = db.bounties.get(bountyId);
+    return {
+        bounty: `${b.status}:${b.claimedBy ?? ''}`,
+        apps: Object.fromEntries(appIds.map((id) => [id, db.bountyApplications.get(id)?.status])),
+    };
+};
+
+test('X8: accepting an applicant declines a sibling application the accepting process has not heard of', async () => {
+    await withWorld(2, 'pg', async (w) => {
+        const [A, B] = w.procs;
+        const bounty = mkBounty(A.db);
+        const chosen = apply(A.db, bounty);
+        await deafen(w, A);
+        const unseen = apply(B.db, bounty);
+        await quiesce(w);
+        assert.equal(A.db.bountyApplications.get(unseen.id), undefined);
+        assert.ok(A.db.acceptBountyApplication(bounty, chosen.applicantId));
+        await quiesce(w);
+        const want = {
+            bounty: `claimed:${chosen.applicantId}`,
+            apps: { [chosen.id]: 'accepted', [unseen.id]: 'declined' },
+        };
+        assert.deepEqual(await bountyState(w, bounty), want);
+        assert.deepEqual(
+            mirrorBountyState(A.db, bounty, [chosen.id, unseen.id]),
+            want,
+            'A read the sibling in'
+        );
+        assert.deepEqual(mirrorBountyState(B.db, bounty, [chosen.id, unseen.id]), want);
+    });
+});
+
+test('X8b: a stale accept on a process that has not heard of the first is rolled back by its gate, and both mirrors converge', async () => {
+    await withWorld(2, 'pg', async (w) => {
+        const [A, B] = w.procs;
+        const bounty = mkBounty(A.db);
+        const [first, second] = [apply(A.db, bounty), apply(A.db, bounty)];
+        await deafen(w, B);
+        const conflicts = metric('db_targeted_write_conflicts_total', {
+            map: 'bounties',
+            method: 'acceptBountyApplication',
+        });
+        assert.ok(A.db.acceptBountyApplication(bounty, first.applicantId));
+        await quiesce(w);
+        const want = await bountyState(w, bounty);
+        assert.deepEqual(want, {
+            bounty: `claimed:${first.applicantId}`,
+            apps: { [first.id]: 'accepted', [second.id]: 'declined' },
+        });
+        // B still sees the bounty open, so its mirror accepts the other applicant.
+        assert.ok(B.db.acceptBountyApplication(bounty, second.applicantId));
+        await quiesce(w);
+        assert.deepEqual(await bountyState(w, bounty), want, "Postgres keeps A's accept");
+        assert.equal(
+            metric('db_targeted_write_conflicts_total', {
+                map: 'bounties',
+                method: 'acceptBountyApplication',
+            }),
+            conflicts + 1
+        );
+        for (const p of [A, B]) {
+            assert.deepEqual(mirrorBountyState(p.db, bounty, [first.id, second.id]), want);
+        }
+    });
+});
+
+const mkEnvelope = (id = randomUUID(), seenBy = ['n0'], ttlMs = 3600_000) => ({
+    id,
+    sender: 's',
+    recipient: 'r',
+    payload: 'p',
+    createdAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + ttlMs).toISOString(),
+    hopCount: 0,
+    maxHops: 5,
+    seenBy,
+});
+
+test('X9: a mesh gossip merge writes what it changed and keeps an envelope this process has not heard of', async () => {
+    await withWorld(2, 'pg', async (w) => {
+        const [A, B] = w.procs;
+        const shared = A.db.enqueueMeshEnvelope(mkEnvelope(undefined, ['n0']));
+        const dying = A.db.enqueueMeshEnvelope(mkEnvelope(undefined, ['n0'], 200));
+        await deafen(w, A);
+        const unseen = B.db.enqueueMeshEnvelope(mkEnvelope());
+        // B also records another node on the shared envelope; A has not heard.
+        B.db.replaceMeshEnvelopes([
+            ...B.db.listMeshEnvelopes().filter((e: any) => e.id !== shared.id),
+            { ...shared, seenBy: ['n0', 'nB'] },
+        ]);
+        await quiesce(w);
+        await sleep(250);
+        // A's merge: the expired envelope is dropped, the shared one gains a node, one arrives.
+        const arrived = mkEnvelope(undefined, ['peer']);
+        A.db.replaceMeshEnvelopes([{ ...shared, seenBy: ['n0', 'nA'] }, arrived]);
+        await quiesce(w);
+        const rows = await w.sql('SELECT id, seen_by FROM mesh_envelopes');
+        const byId = new Map(rows.map((r) => [r.id, [...r.seen_by].sort()]));
+        assert.ok(byId.has(unseen.id), 'the unseen envelope is kept');
+        assert.ok(byId.has(arrived.id), 'the arrival is written');
+        assert.equal(byId.has(dying.id), false, 'the dropped envelope is deleted');
+        assert.deepEqual(
+            byId.get(shared.id),
+            ['n0', 'nA', 'nB'],
+            'seen_by is merged, not replaced'
+        );
+        assert.ok(B.db.listMeshEnvelopes().some((e: any) => e.id === arrived.id));
+        assert.deepEqual(
+            [...B.db.listMeshEnvelopes().find((e: any) => e.id === shared.id).seenBy].sort(),
+            ['n0', 'nA', 'nB'],
+            "the peer re-read Postgres's row"
+        );
+    });
+});
+
+test('X10: a coliseum score recompute writes the arguments it changed and keeps one it has not heard of', async () => {
+    await withWorld(2, 'pg', async (w) => {
+        const [A, B] = w.procs;
+        const arg = (id = randomUUID(), voteScore = 0) => ({
+            id,
+            topicId: 't',
+            authorId: 'a',
+            stance: 'for',
+            stanceWeight: 1,
+            body: 'b',
+            citations: [],
+            createdAt: new Date().toISOString(),
+            voteScore,
+            nuanceScore: 0,
+        });
+        const mine = A.db.upsertColiseumArgument(arg());
+        await deafen(w, A);
+        const unseen = B.db.upsertColiseumArgument(arg());
+        await quiesce(w);
+        A.db.upsertColiseumArguments([{ ...mine, voteScore: 7 }]);
+        await quiesce(w);
+        const rows = await w.sql('SELECT id, vote_score FROM coliseum_arguments');
+        const score = new Map(rows.map((r) => [r.id, Number(r.vote_score)]));
+        assert.equal(score.get(mine.id), 7);
+        assert.ok(score.has(unseen.id), 'the unseen argument is kept');
+        assert.equal(B.db.coliseumArguments.get(mine.id)?.voteScore, 7);
+    });
+});
+
+const mkReply = (db: any, receivedAt = new Date(Date.now() - 400 * 86400_000).toISOString()) =>
+    db.upsertCoalitionExternalActivity({
+        id: randomUUID(),
+        campaignPostId: 'cp',
+        campaignId: 'c',
+        coalitionId: 'co',
+        sourcePlatform: 'bluesky',
+        externalAuthor: 'someone',
+        content: 'words',
+        moderationStatus: 'pending',
+        receivedAt,
+    }).id as string;
+
+test('X11: the retention sweep deletes a reply it judged unchanged, and keeps one a peer changed since', async () => {
+    await withWorld(2, 'pg', async (w) => {
+        const [A, B] = w.procs;
+        const [changed, unchanged] = [mkReply(A.db), mkReply(A.db)];
+        await deafen(w, B);
+        await sleep(5);
+        // A steward on A approves one; B has not heard.
+        A.db.upsertCoalitionExternalActivity({
+            ...A.db.coalitionExternalActivity.get(changed),
+            moderationStatus: 'approved',
+            reviewedAt: new Date().toISOString(),
+            receivedAt: new Date().toISOString(),
+        });
+        await quiesce(w);
+        assert.deepEqual(
+            B.db.deleteCoalitionExternalActivities([changed, unchanged]).sort(),
+            [changed, unchanged].sort()
+        );
+        await quiesce(w);
+        assert.equal(await count(w, 'coalition_external_activity', 'id = $1', [unchanged]), 0);
+        assert.equal(
+            await count(w, 'coalition_external_activity', 'id = $1', [changed]),
+            1,
+            'kept'
+        );
+        assert.equal(
+            B.db.coalitionExternalActivity.get(changed)?.moderationStatus,
+            'approved',
+            'B re-read it'
+        );
+        assert.equal(A.db.coalitionExternalActivity.has(unchanged), false);
+        assert.ok(A.db.coalitionExternalActivity.has(changed));
+    });
+});
+
+/** Insert a row whose updated_at carries microseconds (as DEFAULT NOW() does on PostgreSQL), and let every mirror read it. */
+async function microsecondRow(
+    w: World,
+    table: string,
+    map: string,
+    insert: string,
+    params: unknown[]
+) {
+    const [row] = await w.sql(insert, params);
+    await w.emit({ src: 'elsewhere', m: map, op: 'k', kvs: [[row.id]] });
+    await quiesce(w);
+    return row.id as string;
+}
+
+test('X11b: a reply whose updated_at carries microseconds is still deleted by the sweep (millisecond guard)', async () => {
+    await withWorld(2, 'pg', async (w) => {
+        const [A] = w.procs;
+        const id = await microsecondRow(
+            w,
+            'coalition_external_activity',
+            'coalitionExternalActivity',
+            `INSERT INTO coalition_external_activity (id, campaign_post_id, campaign_id, coalition_id, source_platform,
+               external_author, content, moderation_status, received_at, created_at, updated_at)
+             VALUES ($1, 'cp', 'c', 'co', 'bluesky', 'x', 'w', 'pending', now() - interval '400 days', now(),
+               '2026-10-31 10:00:00.123456+00') RETURNING id`,
+            [randomUUID()]
+        );
+        assert.ok(A.db.coalitionExternalActivity.has(id));
+        assert.deepEqual(A.db.deleteCoalitionExternalActivities([id]), [id]);
+        await quiesce(w);
+        assert.equal(await count(w, 'coalition_external_activity', 'id = $1', [id]), 0);
+        assert.equal(A.db.coalitionExternalActivity.has(id), false);
+    });
+});
+
+const mkPin = (db: any, id = randomUUID(), title = 'sale') =>
+    db.upsertCoalitionSpatialItem({
+        id,
+        layer: 'vendors',
+        title,
+        latitude: 1,
+        longitude: 2,
+        visibility: 'public',
+        eventType: 'flash_sale',
+        startsAt: new Date().toISOString(),
+        status: 'live',
+        meta: { ephemeral: true, purgeAt: new Date(Date.now() - 1000).toISOString() },
+    }).id as string;
+
+test('X12: the pin sweeper deletes a pin it judged unchanged, keeps one a peer rewrote, and deletes a pin stamped by DEFAULT NOW()', async () => {
+    await withWorld(2, 'pg', async (w) => {
+        const [A, B] = w.procs;
+        const [rewritten, unchanged] = [mkPin(A.db), mkPin(A.db)];
+        const micro = await microsecondRow(
+            w,
+            'coalition_spatial_items',
+            'coalitionSpatialItems',
+            `INSERT INTO coalition_spatial_items (id, layer, title, latitude, longitude, visibility, event_type,
+               starts_at, meta, updated_at)
+             VALUES ($1, 'vendors', 't', 1, 2, 'public', 'flash_sale', now(), '{}', '2026-10-31 10:00:00.654321+00')
+             RETURNING id`,
+            [randomUUID()]
+        );
+        const defaulted = await microsecondRow(
+            w,
+            'coalition_spatial_items',
+            'coalitionSpatialItems',
+            `INSERT INTO coalition_spatial_items (id, layer, title, latitude, longitude, visibility, event_type,
+               starts_at, meta) VALUES ($1, 'vendors', 't', 1, 2, 'public', 'flash_sale', now(), '{}') RETURNING id`,
+            [randomUUID()]
+        );
+        await deafen(w, B);
+        await sleep(5);
+        mkPin(A.db, rewritten, 'restarted');
+        await quiesce(w);
+        for (const id of [rewritten, unchanged, micro, defaulted]) {
+            assert.equal(B.db.deleteCoalitionSpatialItem(id), true);
+        }
+        await quiesce(w);
+        assert.equal(await count(w, 'coalition_spatial_items', 'id = $1', [rewritten]), 1, 'kept');
+        for (const id of [unchanged, micro, defaulted]) {
+            assert.equal(await count(w, 'coalition_spatial_items', 'id = $1', [id]), 0);
+            assert.equal(A.db.coalitionSpatialItems.has(id), false);
+        }
+        assert.equal(B.db.coalitionSpatialItems.get(rewritten)?.title, 'restarted', 'B re-read it');
+    });
+});

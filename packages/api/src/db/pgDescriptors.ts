@@ -576,7 +576,6 @@ export type MutatorSpec =
     | { kind: 'targeted'; steps: TargetedStep[] };
 
 const upsert = (map: string): MutatorSpec => ({ kind: 'upsert', map });
-const resync = (...maps: string[]): MutatorSpec => ({ kind: 'resync', maps });
 const targeted = (...steps: TargetedStep[]): MutatorSpec => ({ kind: 'targeted', steps });
 
 /**
@@ -709,6 +708,40 @@ const USER_AUTH_ARTIFACTS: ReadonlyArray<{ map: string; column: string }> = [
     { map: 'linkedAccounts', column: 'blackout_user_id' },
     { map: 'pendingOAuthLinks', column: 'blackout_user_id' },
 ];
+
+/** The records the call left in `map` for the keys it changed (what an upsertEach writes). */
+const changedRecords = (ctx: StepContext, map: string): Array<Record<string, unknown>> =>
+    ctx.changed(map).flatMap((c) => (c.after ? [c.after] : []));
+
+/** The keys the call removed from `map`, as deleteKeys entries (single-column keys). */
+const removedKeys = (ctx: StepContext, map: string) =>
+    ctx.changed(map).flatMap((c) => (c.after ? [] : [{ kv: [c.key] }]));
+
+/**
+ * A mesh envelope's `seen_by` merges with whatever Postgres already holds, so
+ * a concurrent write from another process keeps the nodes it recorded.
+ */
+const MESH_SEEN_BY_UNION = {
+    seen_by:
+        'ARRAY(SELECT DISTINCT s FROM unnest(mesh_envelopes.seen_by || EXCLUDED.seen_by) AS s)',
+};
+
+/**
+ * An enqueue or a gossip merge writes exactly what it changed in the mirror:
+ * each new or changed envelope (with `seen_by` merged), and a delete by id of
+ * each envelope the call dropped (the oldest past the cap, or one the merge
+ * found expired). An envelope this process has not heard of is never touched.
+ */
+const meshEnvelopeWrites = (): MutatorSpec =>
+    targeted(
+        {
+            op: 'upsertEach',
+            map: 'meshEnvelopes',
+            records: (c) => changedRecords(c, 'meshEnvelopes'),
+            onConflictSet: MESH_SEEN_BY_UNION,
+        },
+        { op: 'deleteKeys', map: 'meshEnvelopes', keys: (c) => removedKeys(c, 'meshEnvelopes') }
+    );
 
 const deleteByUser = (rows: ReadonlyArray<{ map: string; column: string }>): TargetedStep[] =>
     rows.map(({ map, column }) => deleteWhere(map, `${column} = $1`, (c) => [c.args[0]]));
@@ -853,9 +886,48 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
     updateBountyStatus: upsert('bounties'),
     claimBounty: upsert('bounties'),
     createBountyApplication: upsert('bountyApplications'),
-    // Accepting one applicant also claims the bounty and declines every sibling
-    // pending application, so resync both maps rather than upsert a single record.
-    acceptBountyApplication: resync('bounties', 'bountyApplications'),
+    // Accepting one applicant claims the bounty and declines every other pending
+    // application, in one transaction. The first two statements are gates: if
+    // Postgres no longer has the bounty open or the application pending (another
+    // process got there first), the op rolls back and this mirror re-reads.
+    // The decline reaches siblings this process has not heard of.
+    acceptBountyApplication: targeted(
+        {
+            ...updateWhere(
+                'bounties',
+                "status = 'claimed', claimed_by = $2, updated_at = $3",
+                "id = $1 AND status = 'open'",
+                (c) => {
+                    const r = c.result as { bounty: Record<string, unknown> } | undefined;
+                    return r ? [r.bounty.id, r.bounty.claimedBy, r.bounty.updatedAt] : undefined;
+                }
+            ),
+            required: true,
+        },
+        {
+            ...updateWhere(
+                'bountyApplications',
+                "status = 'accepted', updated_at = $2",
+                "id = $1 AND status = 'pending'",
+                (c) => {
+                    const r = c.result as { application: Record<string, unknown> } | undefined;
+                    return r ? [r.application.id, r.application.updatedAt] : undefined;
+                }
+            ),
+            required: true,
+        },
+        updateWhere(
+            'bountyApplications',
+            "status = 'declined', updated_at = $3",
+            "bounty_id = $1 AND id <> $2 AND status = 'pending'",
+            (c) => {
+                const r = c.result as { application: Record<string, unknown> } | undefined;
+                return r
+                    ? [r.application.bountyId, r.application.id, r.application.updatedAt]
+                    : undefined;
+            }
+        )
+    ),
     insertCreatorSubscriptionTier: upsert('creatorSubscriptionTiers'),
     updateCreatorSubscriptionTier: upsert('creatorSubscriptionTiers'),
     insertCreatorSubscription: upsert('creatorSubscriptions'),
@@ -938,7 +1010,19 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
     deleteChannelPointsReward: deleteById('channelPointsRewards'),
     appendChannelPointsLedger: upsert('channelPointsLedger'),
     upsertCoalitionSpatialItem: upsert('coalitionSpatialItems'),
-    deleteCoalitionSpatialItem: resync('coalitionSpatialItems'),
+    // The sweeper deletes the pin it judged expired, and only while Postgres
+    // still holds that version: a pin another process has since rewritten (a
+    // restarted sale) is kept, re-read here, and judged again at the next sweep.
+    deleteCoalitionSpatialItem: targeted({
+        op: 'deleteKey',
+        map: 'coalitionSpatialItems',
+        key: (c) => [c.args[0]],
+        guard: {
+            column: 'updated_at',
+            nullMatchesAny: true,
+            value: (c) => c.before('coalitionSpatialItems', String(c.args[0]))?.updatedAt ?? null,
+        },
+    }),
     createCoalitionAidPost: upsert('coalitionAidPosts'),
     upsertCoalitionEvent: upsert('coalitionEvents'),
     upsertEventRsvp: upsert('eventRsvps'),
@@ -958,7 +1042,21 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
     upsertCoalitionCampaignPost: upsert('coalitionCampaignPosts'),
     upsertCoalitionExternalActivity: upsert('coalitionExternalActivity'),
     deleteCoalitionExternalActivity: deleteById('coalitionExternalActivity'),
-    deleteCoalitionExternalActivities: resync('coalitionExternalActivity'),
+    // The retention sweep deletes the replies it judged past due, each only while
+    // Postgres still holds the version it judged. A reply another process has
+    // since changed (a steward's decision restarts its window) is kept and
+    // re-read; the next daily sweep judges it again.
+    deleteCoalitionExternalActivities: targeted({
+        op: 'deleteKeys',
+        map: 'coalitionExternalActivity',
+        keys: (c) =>
+            c
+                .changed('coalitionExternalActivity')
+                .flatMap((ch) =>
+                    ch.after ? [] : [{ kv: [ch.key], guard: ch.before?.updatedAt ?? null }]
+                ),
+        guard: { column: 'updated_at', nullMatchesAny: true },
+    }),
     upsertCoalitionCampaignSyncOptIn: upsert('coalitionCampaignSyncOptIns'),
     upsertCoalitionBoost: upsert('coalitionBoosts'),
     upsertCoalitionCampaignContribution: upsert('coalitionCampaignContributions'),
@@ -1007,9 +1105,9 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
     addSubscriptionAuditEvent: upsert('subscriptionAuditEvents'),
     markBillingWebhookEventProcessed: upsert('processedBillingWebhookEvents'),
     upsertSubscriptionGift: upsert('subscriptionGifts'),
-    // Whole-set reconciles: enqueue may evict the oldest; replace swaps the set.
-    enqueueMeshEnvelope: resync('meshEnvelopes'),
-    replaceMeshEnvelopes: resync('meshEnvelopes'),
+    enqueueMeshEnvelope: meshEnvelopeWrites(),
+    // Replaces the mirror's whole map: the wrapper diffs the old map against the new.
+    replaceMeshEnvelopes: meshEnvelopeWrites(),
     upsertClip: upsert('clips'),
     updateClip: upsert('clips'),
     deleteClip: deleteById('clips'),
@@ -1021,8 +1119,12 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
     upsertChallengeEntry: upsert('challengeEntries'),
     addChallengeVote: upsert('challengeVotes'),
     upsertColiseumArgument: upsert('coliseumArguments'),
-    // Bulk insert returns void; resync persists every in-memory argument.
-    upsertColiseumArguments: resync('coliseumArguments'),
+    // A score recompute writes each argument it changed, whole; no deletes.
+    upsertColiseumArguments: targeted({
+        op: 'upsertEach',
+        map: 'coliseumArguments',
+        records: (c) => changedRecords(c, 'coliseumArguments'),
+    }),
     upsertColiseumVote: upsert('coliseumVotes'),
     upsertColiseumLiveSession: upsert('coliseumLiveSessions'),
     upsertColiseumMatch: upsert('coliseumMatches'),
