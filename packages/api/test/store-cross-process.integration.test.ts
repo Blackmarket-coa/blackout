@@ -1867,6 +1867,44 @@ test('X8b: a stale accept on a process that has not heard of the first is rolled
     });
 });
 
+test('X8d: an accept whose first COMMIT reply was lost is not counted as a conflict on its retry, and converges', async () => {
+    await withWorld(2, 'pg', async (w) => {
+        const [A, B] = w.procs;
+        const bounty = mkBounty(A.db);
+        const [chosen, other] = [apply(A.db, bounty), apply(A.db, bounty)];
+        await quiesce(w);
+        const conflicts = metric('db_targeted_write_conflicts_total', {
+            map: 'bounties',
+            method: 'acceptBountyApplication',
+        });
+        // The server commits the accept; the reply to COMMIT is lost. The
+        // retry's first gate (status = 'open') then misses on that commit.
+        let commits = 0;
+        A.ctl.log.length = 0;
+        A.ctl.fault = (sql) => (sql === 'COMMIT' && ++commits === 1 ? 'after' : undefined);
+        assert.ok(A.db.acceptBountyApplication(bounty, chosen.applicantId));
+        await quiesce(w);
+        assert.equal(A.ctl.log.filter((q) => q === 'BEGIN').length, 2, 'the op was retried');
+        assert.ok(A.ctl.log.includes('ROLLBACK'), "the retry's gate missed and rolled back");
+        const want = {
+            bounty: `claimed:${chosen.applicantId}`,
+            apps: { [chosen.id]: 'accepted', [other.id]: 'declined' },
+        };
+        assert.deepEqual(await bountyState(w, bounty), want);
+        assert.equal(
+            metric('db_targeted_write_conflicts_total', {
+                map: 'bounties',
+                method: 'acceptBountyApplication',
+            }),
+            conflicts,
+            'no other process was involved'
+        );
+        for (const p of [A, B]) {
+            assert.deepEqual(mirrorBountyState(p.db, bounty, [chosen.id, other.id]), want);
+        }
+    });
+});
+
 test('X8c: a stale accept of a bounty another process claimed directly changes no application', async () => {
     await withWorld(2, 'pg', async (w) => {
         const [A, B] = w.procs;

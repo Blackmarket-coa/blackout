@@ -297,8 +297,22 @@ export class WriteBehindQueue {
                 this.transport.publish(p);
         }
         if (result?.outcome === 'conflict') {
-            dbTargetedWriteConflictsTotal.inc({ map: result.at.map, method: write.method });
-            log.warn('db_targeted_write_conflict', { map: result.at.map, method: write.method });
+            if (sizeOf(uncertain) > 0) {
+                // An earlier attempt sent COMMIT and heard nothing back. A
+                // required step that misses now may be missing that attempt's
+                // own committed effect, so this is not counted as another
+                // process getting there first. The keys are re-read either way.
+                log.warn('db_targeted_write_conflict_after_uncertain_commit', {
+                    map: result.at.map,
+                    method: write.method,
+                });
+            } else {
+                dbTargetedWriteConflictsTotal.inc({ map: result.at.map, method: write.method });
+                log.warn('db_targeted_write_conflict', {
+                    map: result.at.map,
+                    method: write.method,
+                });
+            }
             return union(write.touched, uncertain);
         }
         if (result?.outcome === 'committed') {
