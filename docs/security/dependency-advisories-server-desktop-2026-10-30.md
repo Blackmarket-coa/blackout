@@ -13,6 +13,11 @@ same `poetry.lock`. GitHub reviewed them after the Trivy database the gate used
 (2026-10-30 19:07 UTC), so the gate did not report them, and would have from
 the next one: four against pyasn1 0.6.4, and a fourth against authlib 1.6.12.
 
+A fifth review (2026-10-31) found that the fourth review's JWT startup check
+missed a key-set `kid` that is not a string, which left open the login bypass
+that `develop` has, and three smaller gaps in the code and this record. They
+are answered in [What the review changed](#what-the-review-changed).
+
 | Package (lock)        | Advisory                              | Severity | Fixed in   | Outcome                                         |
 | --------------------- | ------------------------------------- | -------- | ---------- | ----------------------------------------------- |
 | authlib 1.6.12 (fork) | GHSA-6v38-4h7w-rj9h (CVE-2026-96760)  | Critical | 1.9.0      | bumped to 1.9.1                                 |
@@ -68,7 +73,13 @@ the next one: four against pyasn1 0.6.4, and a fourth against authlib 1.6.12.
     with it an unsigned token logged in as any user. And a key set is
     refused only when none of its keys can be used. The third review's
     version refused a set that `develop` serves, for one key HS\* cannot
-    use; that key is now a warning.
+    use; that key is now a warning. After the fifth review, a key-set member
+    whose `kid` is not a string is refused too (`6484756`). The check had
+    tried only the string `kid`s, and authlib matches a token's `kid` with
+    `==`: `k: "AA"` (one zero byte, which HMAC pads into the empty key)
+    under `kid: 5`, beside a usable key, started, and a token with `kid` 5
+    signed with the empty key logged in as anyone. `develop`, with no
+    check, lets the same token in.
 -   **A logout token whose key authlib cannot use gets 400, not 500 (fork
     patch).** An unknown `kid`, or HS256 naming the provider's EC key, raised
     `ValueError` past the handler. Each such token still makes Synapse refetch
@@ -78,7 +89,9 @@ the next one: four against pyasn1 0.6.4, and a fourth against authlib 1.6.12.
     is not RS256 let the homeserver start and then answer every
     authenticated request with 503. Such a JWK, a JWK that cannot sign at
     all, and an empty `client_secret` are now refused when the config loads.
-    No shipped configuration enables MSC3861 on the fork image. See
+    No shipped configuration enables MSC3861 on the fork image. Since the
+    fifth review the fork's signer is annotated as returning `str`, which
+    it has under authlib 1.7+ (`823530e`); nothing behaved differently. See
     [Two side effects](#two-side-effects).
 -   **pyasn1 moves to 0.6.5 (fourth review).** GitHub reviewed four High
     advisories against 0.6.4, all quadratic CPU in pyasn1's decoder, between
@@ -108,10 +121,17 @@ the next one: four against pyasn1 0.6.4, and a fourth against authlib 1.6.12.
     2026-10-31 00:58 UTC. That database predates the five advisories added
     in the fourth review. For the next one, OSV was queried on 2026-10-31
     between 00:35 and 00:58 UTC over every package of the five lockfiles
-    other than `pnpm-lock.yaml`. On this branch it lists no High/Critical
-    beyond the four ignored Twisted entries and black, a dev dependency,
-    which Trivy skips. `pnpm-lock.yaml` is `-v47`'s and was not queried
-    here.
+    other than `pnpm-lock.yaml`. On this branch it lists no advisory whose
+    GHSA severity is High or Critical beyond the four ignored Twisted
+    entries and black, a dev dependency, which Trivy skips. That sentence
+    counted GHSA severity labels only (corrected after the fifth review).
+    RustSec advisories carry none, and four in the desktop lock score High
+    or have no rating: RUSTSEC-2026-0194 and -0195 (quick-xml),
+    RUSTSEC-2026-0382 (rustls-webpki) and RUSTSEC-2026-0383
+    (webpki-root-certs). They are on `develop` at the same versions, Trivy
+    does not load them, and they are
+    [found outside scope](#found-outside-scope-not-fixed-here) with their
+    exposure. `pnpm-lock.yaml` is `-v47`'s and was not queried here.
 -   **The Trivy check now runs on more pull requests (fourth review,
     `b3cd1b3`).** A PR that changed only `blackout-desktop/**`,
     `services/**` or `.trivyignore` got no Trivy result before the push to
@@ -136,7 +156,11 @@ the next one: four against pyasn1 0.6.4, and a fourth against authlib 1.6.12.
     the advisory data no longer supports. The `-v47` branch (PR #994) fixes
     the react-router one (react-router 7.18.2, `71548f0350`) and corrects
     `.trivyignore`'s header (`26e6ce5`). The plan is to merge this branch
-    into PR #994, so that the two land together. See
+    into PR #994, so that the two land together. After the fifth review the
+    list also has the four RustSec advisories above: the quick-xml code
+    paths do not run, webpki-root-certs is not built for any desktop target,
+    and rustls-webpki is reached only by the updater on Linux, which nothing
+    calls. See
     [Found outside scope](#found-outside-scope-not-fixed-here).
 
 Commits, on top of `ff7d08b`: `21c9591` (authlib, with the `PATCHES.md`
@@ -156,8 +180,10 @@ credentials), `3ca628a` (the authlib comment in `pyproject.toml`), `4403f4c`
 `a8ba5a3` (pyasn1 0.6.5, with its `PATCHES.md` entry), `d084e96` (the JWT
 algorithm and key-set checks), `bd9ceae` (GHSA-c73q and `prepare_raw_key` in
 the authlib `PATCHES.md` entry), `b3cd1b3` (the Security checks paths filter),
-then this version of the record, with `KNOWN_LIMITATIONS.md` and the
-2026-10-25 record's addendum.
+then `b0b738f` (the record, with `KNOWN_LIMITATIONS.md` and the 2026-10-25
+record's addendum). After the fifth review: `6484756` (the JWT key-set `kid`
+type, with its `PATCHES.md` entry), `823530e` (the MSC3861 signer's return
+type, with the authlib `PATCHES.md` entry), then this version of the record.
 
 ## What the review changed
 
@@ -211,6 +237,15 @@ A fourth review found eight more. Each is answered here:
 | The JWT secret check refused a key set that `develop` serves, because one member could not be used for HS\*.                                         | That member is a warning naming its `kid` now; a set with no usable key is still refused (`d084e96`).                                                  |
 | `KNOWN_LIMITATIONS.md` did not say that an id_token with a non-string `sub`, `jti` or `aud` member can no longer sign in.                            | It does.                                                                                                                                               |
 
+A fifth review found four more. Each is answered here:
+
+| Finding                                                                                                                                                                                                                                                                                                         | Now                                                                                                                                                            |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The JWT startup check tried a key set only under its string `kid`s. authlib matches a token's `kid` with `==`, so `k: "AA"` under `kid: 5` or `kid: true`, beside a usable key, started, and an empty-key token whose `kid` is 5, `true` or 1 logged in as anyone. `develop` has no check and the same opening. | Such a member is refused at startup, naming its index, before any other key-set check (`6484756`). [Below](#jwt-login-the-logout-token-and-provider-metadata). |
+| `PrivateKeyJWTWithKid.sign` is annotated `-> bytes`, but under 1.9.1 both MSC3861 signers return `str`. Neither this record nor `PATCHES.md` said so.                                                                                                                                                           | Annotated `-> str` (`823530e`), and recorded in both. No behaviour changed. [Two side effects](#two-side-effects).                                             |
+| "OSV lists no High/Critical beyond" counted GHSA severity labels only; four RustSec advisories in the desktop lock score High or are unrated.                                                                                                                                                                   | The sentence says what it counts, and the four are [found outside scope](#found-outside-scope-not-fixed-here), each with its path and exposure.                |
+| The record called the HTTP-test failures the fork's. The federation-agent ones come from this sandbox's proxy variables, so no passing test reaches the certificate check after a handshake.                                                                                                                    | [Validation](#validation) gives the cause, with the evidence, and says that those TLS tests could not run here.                                                |
+
 ---
 
 ## Method
@@ -231,7 +266,10 @@ A fourth review found eight more. Each is answered here:
     `/v1/querybatch` over every package of the fork's `poetry.lock` and
     `Cargo.lock`, the desktop `Cargo.lock` and both `requirements.txt`
     files, and `/v1/vulns/<id>` for each hit; the five new advisories were
-    read in full there.
+    read in full there. After the fifth review the same sweep ran again on
+    2026-10-31 at 02:09 UTC, now with each advisory's CVSS v3 base score
+    computed from its vector, so that advisories with no GHSA severity are
+    counted too.
 -   **Upstream Synapse:** `element-hq/synapse` `develop` at `1a5fec6`, read
     through git (a blobless clone) and `raw.githubusercontent.com`. Re-checked
     after review at `cc172f7` (2026-10-30 20:47 UTC): `oidc.py` and the lock's
@@ -302,8 +340,9 @@ review this list had four, and left out the fork's own startup check:
 -   `synapse/config/jwt.py`, at startup only (fork patch, `5bad47c` and
     later): `JsonWebSignature.ALGORITHMS_REGISTRY` for the algorithm check,
     and for HS\*, `prepare_raw_key` and one
-    `JsonWebToken([algorithm]).decode()` per `kid`, of a token it signs itself
-    with the empty key.
+    `JsonWebToken([algorithm]).decode()` per distinct string `kid`, of a
+    token it signs itself with the empty key. Since the fifth review a key
+    set with a `kid` that is not a string is refused before any decode.
 
 **The production image installs authlib.** `docker/Dockerfile` runs
 `poetry export --extras all`, and `all` includes the `oidc` and `jwt` extras.
@@ -398,6 +437,10 @@ Per advisory:
     login's own verify call, and `config/experimental.py` refuses an MSC3861
     client credential that cannot sign. Again each has its `PATCHES.md`
     entry and tests.
+-   After the fifth review: the JWT check refuses a key-set `kid` that is
+    not a string (`6484756`), and `PrivateKeyJWTWithKid.sign` is annotated
+    as returning `str` (`823530e`). Both are in `PATCHES.md`; the first has
+    tests.
 
 ### The claim-type checks
 
@@ -533,7 +576,12 @@ them). The release each change arrived in was read from the 1.7.2, 1.8.0 and
         `JsonWebToken([algorithm]).decode(token, key=secret)`, with a token
         signed with the empty HMAC key. authlib prepares the secret as it
         does for each login: a mapping or `{...}` text is read as a JWK, and
-        a key set is tried under each `kid` it names. The secret passes only
+        a key set is searched by `kid`. A set whose member has a `kid` that
+        is not a string is refused first (fifth review, below); the set is
+        then tried under each distinct string `kid` it names, or with no
+        `kid` when it names none. (Until the fifth review this sentence said
+        "under each `kid` it names", and the code tried only the string
+        ones.) The secret passes only
         when authlib reports a bad signature. Any other exception becomes a
         `ConfigError` at `jwt_config.secret`, and so does a token that
         verifies, since the secret then works as the empty key (`"\x00"`
@@ -572,7 +620,9 @@ them). The release each change arrived in was read from the 1.7.2, 1.8.0 and
         1.6.12 and 1.9.1 except those PEM and SSH forms: the new key-set
         cases (an empty `k` or a zero byte beside a usable key, no usable
         key, two keys without a `kid`), the two mixed sets with one warning
-        each, and every refused algorithm.
+        each, and every refused algorithm. After the fifth review it also
+        has eight sets with a `kid` that is not a string, and a `/login`
+        case; they are refused the same way under both versions.
     -   Catching the `ValueError` in `jwt.py` (a 403 per login) was the
         alternative. A startup error tells the operator; a 403 on every login
         only tells the user.
@@ -612,6 +662,39 @@ them). The release each change arrived in was read from the 1.7.2, 1.8.0 and
         token: a JWE token needs its `enc` in the same one-entry list, and a
         `dir`/`A256GCM` token was refused with `["dir"]` and accepted only
         with `["dir", "A256GCM"]`. A disabled `jwt_config` is not checked.
+    -   **A `kid` that is not a string (fifth review, `6484756`).**
+        `d084e96` tried a key set under its string `kid`s only. authlib picks
+        a set's member with `k.get("kid") == kid`, using the token header's
+        value whatever its JSON type, so a member under `kid: 5` is chosen
+        by a token whose `kid` is `5` or `5.0`, and one under `kid: true` by
+        `true` or `1`. The review started a homeserver with
+        `{kty: oct, k: <32 bytes>, kid: g}` and `{kty: oct, k: AA, kid: 5}`
+        (`AA` is one zero byte, which HMAC pads into the empty key), and a
+        token with header `{"alg": "HS256", "kid": 5}` signed with the empty
+        key logged in; so did `kid: true`, with a token `kid` of `true` or
+        `1`. A probe here of `JwtHandler`'s call accepted those tokens
+        under 1.6.12 and 1.9.1 alike, and refused a member `kid` of `"5"`
+        for a token `kid` of `5`, and the reverse
+        (`Invalid JSON Web Key Set`). `develop` has no check, so it starts
+        with the same set and lets the same token in. Only an operator's
+        `jwt_config` reaches it, as with GHSA-8m4g.
+        -   RFC 7517 sec. 4.5 makes `kid` a string. `JWTConfig` now
+            refuses, before any other key-set check, a member whose `kid`
+            is present and is not a string (`5`, `true`, `null`, a list),
+            with a `ConfigError` at `jwt_config.secret` naming its index
+            (`keys[1] has a kid that is not a string (5)`). With every `kid`
+            a string, a token reaches a member only by naming its `kid`, or,
+            with no `kid`, when the member is the set's only key, and that
+            is what the rest of the check tries. A member without a `kid`,
+            in a set that names others, is never chosen, and is not tried.
+        -   The test module has the eight sets (`AA` beside a usable key,
+            under `kid: 5` or `kid: true` as a mapping, under `kid: 5` as
+            JSON text, and under `kid: true` as a list; a usable key under
+            `kid: 5`; `kid: null`; `kid: ["a"]`; `kid: 5` after an empty
+            `k`), and a `/login` case: for `kid: 5` and `kid: true` the
+            homeserver's config does not load, and the same `/login`, given
+            that set, answers the empty-key token with 200 as
+            `@mallory:test`.
 -   **Loopback `http` metadata (1.8.0).** `is_secure_transport`, which
     `validate_issuer`, `validate_authorization_endpoint`,
     `validate_token_endpoint` and `validate_jwks_uri` use, now parses the URL.
@@ -702,6 +785,17 @@ them). The release each change arrived in was read from the 1.7.2, 1.8.0 and
         homeserver's own secret for signing its requests to the provider,
         not a key it verifies tokens with, so GHSA-7vr2's key confusion does
         not arise. Left as it is.
+    -   **The signers return `str` (fifth review, `823530e`).** From 1.7.0,
+        authlib's `private_key_jwt_sign`, which `PrivateKeyJWTWithKid.sign`
+        calls, and `ClientSecretJWT.sign` end in joserfc's `jwt.encode`,
+        which returns `str`. A probe of both got `str` from three calls each
+        under 1.9.1, and `bytes` under 1.6.12 on `develop`. The fork's
+        `PrivateKeyJWTWithKid.sign` was still annotated `-> bytes`, and mypy
+        could not see it, because `mypy.ini` ignores authlib's types
+        (`[mypy-authlib.*]`). Nothing behaved differently: the one consumer,
+        authlib's `ClientSecretJWT.__call__`, adds the value to a `str`
+        request body either way, and the MSC3861 test modules pass. The
+        annotation is `str` now; the lock requires `>=1.9.1`.
     -   No shipped configuration reaches any of this.
         `infra/single-server-baseline` uses classic `oidc_providers`, and the
         MAS stack runs the upstream image. If the fork ever enables
@@ -1195,6 +1289,7 @@ libayatana-appindicator3-dev librsvg2-dev`):
 | after the second review (`b37a2cd`)                     | none                                                                             | 0    |
 | after the third review (`3ca628a`)                      | none                                                                             | 0    |
 | after the fourth review (`b3cd1b3`)                     | none                                                                             | 0    |
+| after the fifth review (`823530e`)                      | none                                                                             | 0    |
 
 The last two rows show that Trivy 0.69.3 honours the `exp:` date, now on all
 four Twisted entries. Nothing from authlib or zip remains with the ignore file
@@ -1229,6 +1324,15 @@ the gap: it lists all five against `develop`'s lock, and none against pyasn1
 0.6.5 or authlib 1.9.1 on this branch's. So at the next database update the
 gate fails on `develop`, and on this branch it does not for these lockfiles.
 
+After the fifth review the same binary (the tarball's `sha256` checked
+against `trivy_0.69.3_checksums.txt`, and the extracted binary's against the
+one in the tarball) was run over the worktree at `823530e`, plain and with
+`--show-suppressed`, against the same database, still the newest
+(`NextUpdate` 2026-10-31 19:07 UTC). No finding, exit 0, and the same seven
+suppressed. That round changed no lockfile. Trivy loads no RustSec-only
+advisory, so it cannot show the four in
+[Found outside scope](#found-outside-scope-not-fixed-here).
+
 ## Validation
 
 -   **Lock:** `poetry lock --check`, `.ci/scripts/check_lockfile.py` and
@@ -1240,6 +1344,8 @@ gate fails on `develop`, and on this branch it does not for these lockfiles.
 -   **Lock, after the fourth review:** `poetry lock --check`,
     `check_lockfile.py` and `check_locked_deps_have_sdists.py` (151
     packages) pass with pyasn1 0.6.5.
+-   **Lock, after the fifth review:** `poetry lock --check` (poetry 1.3.2)
+    passes. Neither `pyproject.toml` nor `poetry.lock` changed in that round.
 -   **The auth tests, before and after:** 231 tests in 13 modules. All pass
     on both sides, and none is skipped, so authlib was loaded. After review,
     with the three new modules (`test_oidc_claim_types`,
@@ -1254,11 +1360,17 @@ gate fails on `develop`, and on this branch it does not for these lockfiles.
     For pyasn1 that run also took the TLS and HTTP modules: `tests.http`,
     `tests.crypto` and `tests.replication.test_multi_media_repo`, 166 tests.
     Of those, 33 fail, 7 error and 8 skip: the same ids, with the same
-    outcomes, as in the third review's full run under 0.6.4. They are the
-    fork's existing federation-agent, federation-client and proxy-agent
-    failures. The certificates in those tests carry no SRV-ID, so they do
-    not reach the pyasn1 decode; the probe above does. The original 13
-    modules:
+    outcomes, as in the third review's full run under 0.6.4. All 40
+    failures and errors are in `tests.http`: 19 in the federation agent's
+    module, 19 in the federation client's and 2 in the proxy agent's. This
+    record called them the fork's existing failures. They come from this
+    sandbox's proxy variables instead (fifth review; see the next item).
+    After the fifth review, the same modules and `tests.config`, with
+    `tests.config.test_oauth_delegation` run once, inside `tests.config`:
+    339 tests, all passing, none skipped. The fourth review's 358 named
+    that module alone and inside `tests.config`, and trial ran its 21 tests
+    twice; without the repeat that run was 337, and `test_jwt_secret_config`
+    has two more. The original 13 modules:
     -   `tests.handlers.test_oidc`, `test_sso`, `test_auth` and
         `test_oauth_delegation`;
     -   `tests.rest.client.test_login` (JWT login lives here; there is no
@@ -1267,6 +1379,43 @@ gate fails on `develop`, and on this branch it does not for these lockfiles.
     -   `tests.api.test_auth`, `tests.config.test_oauth_delegation`,
         `tests.rest.admin.test_jwks`, `tests.rest.test_well_known` and
         `tests.blackout_runtime.test_session_length`.
+-   **The HTTP-test failures come from this sandbox's proxy, not from the
+    fork (fifth review).** Every process here has `https_proxy` and
+    `HTTPS_PROXY` set to a local agent proxy on `127.0.0.1`, and a
+    `no_proxy` list. `MatrixFederationAgent` and `ProxyAgent` read them
+    with `urllib.request.getproxies_environment()`, which is upstream's
+    code; the fork does not change it. So the federation tests' agents
+    send their requests to the proxy, and the tests' fake reactor has no
+    address for it. 15 of the 40 tracebacks name
+    `DNSLookupError: DNS lookup failed: no results for hostname lookup: 127.0.0.1.`,
+    the proxy's host. The other 25 find no connection, or one fewer, where
+    the test expects a direct one (`0 != 1`, `1 != 2`, or `IndexError` on
+    the list of connections). The two proxy-agent tests show the cause
+    directly. They patch only upper-case variables (`HTTPS_PROXY`, or
+    `NO_PROXY=test.com`), and Python lets the sandbox's lower-case ones
+    win: under the same patches, `getproxies_environment()` still returns
+    the sandbox's proxy, and `test.com` is not bypassed. The tests that set
+    a proxy of their own (`test_get_via_https_proxy` and four others) pass.
+    The federation agent's module gives the same 18 failures and 1 error
+    on `develop` with pyasn1 0.6.4 and on this branch (the fifth review
+    compared the ids), and again in this round. A runner without proxy
+    variables would not take this path, so another machine could show a
+    different result; no root workflow runs trial, and the fork's own
+    workflows do not run. None of the other 104 failures and errors in the
+    full run names the proxy. `HTTPS_PROXY` was not unset to run any of
+    this.
+    -   So the tests that check a peer's certificate after the handshake
+        (`test_get_hostname_bad_cert`, `test_get_ip_address_bad_cert`,
+        `test_idna_servername`) could not run here, under either pyasn1
+        version. They reach `service_identity`, whose pyasn1 decode runs
+        only for an SRV-ID; none of the tests' certificates has one (their
+        names are DNS and IP entries). The pyasn1 bump rests on the direct
+        probe in [pyasn1](#pyasn1-quadratic-decoding), not on the suite.
+        The fifth review ran two more under 0.6.4 and 0.6.5, with the same
+        result on each: `service_identity`'s `extract_patterns` and
+        `verify_certificate_hostname` over DNS, wildcard, IP and URI names
+        and SRV-IDs (primitive, constructed, not IA5, an unknown
+        `otherName`), and an ldap3 bind and search.
 -   **The full trial suite, before and after** (`-j3`):
 
     |               | Tests | OK    | Skipped | Failure | Error |
@@ -1287,8 +1436,12 @@ gate fails on `develop`, and on this branch it does not for these lockfiles.
     each with the same outcome, and the 7 added tests pass. After the
     fourth review, with pyasn1 0.6.5, compared by test id with the third
     review's run: the same 316 ids, each with the same outcome, and the 4
-    added tests pass. The 144 failures and errors are the fork's existing
-    ones (see the 2026-10-25 record). None is in an auth module.
+    added tests pass. Of the 144 failures and errors, the 40 in
+    `tests.http` come from this sandbox's proxy variables (above); the
+    other 104 are the fork's existing ones (see the 2026-10-25 record).
+    None is in an auth module. After the fifth review the full suite was
+    not run again: that round changed `config/jwt.py`, its test module and
+    one annotation, and the targeted run covers each.
 
 -   **The new tests against the code they pin:**
 
@@ -1324,9 +1477,24 @@ gate fails on `develop`, and on this branch it does not for these lockfiles.
         (`Missing required field: "k"`). With `d084e96` all 10 pass. Under
         1.6.12 with `d084e96` only `test_unusable_hmac_secrets_are_refused`
         fails, on the PEM and SSH forms, as before.
+    -   After the fifth review, `test_jwt_secret_config` on `d084e96`'s
+        `config/jwt.py` (the one at `b0b738f`), under 1.9.1:
+        `test_key_set_members_with_a_non_string_kid_are_refused` and
+        `test_a_token_under_a_non_string_kid_gets_no_login` fail (no
+        `ConfigError`), and the other 10 pass. A probe of the eight sets
+        and the `/login` test's two through `HomeServerConfig` on that code
+        accepted nine of the ten, under 1.6.12 and 1.9.1, and refused the
+        tenth, `kid: 5` after an empty `k`, for the `k`. With `6484756` all
+        12 pass under 1.9.1, and under 1.6.12 only
+        `test_unusable_hmac_secrets_are_refused` fails, on the PEM and SSH
+        forms, as before. The first draft of the `/login` test built the
+        homeserver with `setup_test_homeserver`. On the old code that
+        homeserver left a thread-pool worker running and trial never
+        exited, so the test parses the config instead, as that helper does
+        first.
 
 -   **`blackout_runtime_tests`:** 85 passed before and after, and again after
-    each of the four reviews, run with `pytest -q` as the fork's
+    each of the five reviews, run with `pytest -q` as the fork's
     `docs/ops/upstream_sync_runbook.md` says. pytest is not in
     the lock: 8.3.5 was added to each venv with `--no-deps`, because 9.x would
     have moved the locked `packaging`. `tests/blackout_runtime` is part of the
@@ -1353,7 +1521,11 @@ gate fails on `develop`, and on this branch it does not for these lockfiles.
     it had rewrapped four lines of the test. mypy first reported a 57th
     error, in `config/jwt.py` (a `[None]` list where `List[str]` was
     inferred); with that fixed it reports the same 56, line for line, as
-    the third review's run.
+    the third review's run. After the fifth review, ruff, black and isort
+    pass on `config/jwt.py`, `api/auth/msc3861_delegated.py` and the JWT
+    test module, and mypy on the three reports the same 56 errors, line for
+    line, as on `b0b738f` and as the fourth review's run, none in the
+    three.
 -   **Desktop:** as in [Verification](#verification).
 -   **gitleaks 8.21.2** over `origin/develop..HEAD`: no leaks, after each
     review too. The MSC3861 test generates its RSA and EC keys at run time,
@@ -1363,7 +1535,7 @@ gate fails on `develop`, and on this branch it does not for these lockfiles.
 -   **No pre-commit hook ran.** `core.hooksPath` is `.husky/_`, which this
     worktree does not have (pnpm's `prepare` script creates it), so git ran no
     hook. The hook's two steps were run by hand before each commit, the
-    fourth review's included, and both passed: lint-staged's
+    fourth and fifth reviews' included, and both passed: lint-staged's
     `prettier --write --ignore-unknown` on the staged files (as `--check`),
     and `tools/ci/check-auth-secrets.mjs`.
 
@@ -1432,6 +1604,58 @@ gate fails on `develop`, and on this branch it does not for these lockfiles.
         the header alone so the two do not conflict (`git merge-tree` of the
         two branches reports none), and says it in the Twisted block instead.
 
+4.  **Four RustSec advisories in the desktop lock (fifth review).** OSV lists
+    them without a GHSA severity, so the gate summary, which counted GHSA
+    severities, did not name them, and Trivy, which loads no RustSec-only
+    advisory, does not see them. All four are on `develop` at the same
+    versions. None is changed here; each is left for its own change. The
+    paths are from `cargo tree -i <crate> --target <triple> --locked`, and
+    each use was read in the crate's source:
+
+    -   **RUSTSEC-2026-0194 and RUSTSEC-2026-0195, quick-xml 0.37.5 and
+        0.38.4** (CVSS 3.1 `AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H`, 7.5; fixed
+        in 0.41.0): quadratic time in the duplicate-attribute check of
+        `BytesStart::attributes()`, and unbounded allocation in `NsReader`'s
+        namespace resolution. 0.37.5 is built for Windows only, through
+        tauri-plugin-notification 2.3.3, notify-rust 4.12.0 and
+        tauri-winrt-notification 0.7.2. That crate calls only
+        `quick_xml::escape::escape`, to build a toast's XML; it parses
+        none. 0.38.4 comes in through plist 1.8.0, from tauri-utils 2.10.2
+        on every platform and from tauri 2.12.5 on macOS. plist reads XML
+        with quick-xml's plain `Reader`, never `NsReader`, and never asks
+        for a tag's attributes. tauri-utils only writes a plist (file
+        associations). At run time tauri reads only the app bundle's own
+        `Info.plist`, on macOS, when the app restarts itself; at build time
+        tauri-codegen reads the project's. Neither advisory's code path
+        runs, and no XML the app parses comes from outside its own bundle.
+    -   **RUSTSEC-2026-0382, rustls-webpki 0.103.13** (no rating; fixed in
+        0.103.16; also CVE-2026-111943): a certificate path through one of
+        the distrusted emSign intermediates, whose private keys are known,
+        may be accepted. On every desktop target it comes in through
+        rustls 0.23.37, reqwest 0.13.2 and tauri-plugin-updater 2.14.1. The
+        updater is the only Rust code in the app that makes TLS
+        connections: tauri's own reqwest is built for Android and iOS only,
+        and the webview has its own TLS stack. The updater's reqwest checks
+        certificates with rustls-platform-verifier 0.6.2, which on Linux
+        verifies the chain with rustls-webpki against the system roots, and
+        on Windows and macOS hands it to the operating system. So on Linux
+        the updater's HTTPS fetch of `latest.json` and of the package could
+        accept such a path while the system store trusts the emSign root.
+        Nothing in the app calls the updater today (the main window is
+        granted `updater:default`, but no shipped code invokes it), and a
+        package must still pass the minisign signature check before it is
+        installed.
+    -   **RUSTSEC-2026-0383, webpki-root-certs 1.0.6** (no rating; fixed in
+        1.0.10): its bundled roots include emSign ECC Root CA - G3. In this
+        lock only rustls-platform-verifier depends on it, and only for
+        wasm32. `cargo tree -i webpki-root-certs` finds it for no Linux,
+        Windows or macOS target, so no desktop build contains it.
+
+    OSV also lists seven RustSec notices with no rating in the same lock:
+    unsoundness in anyhow 1.0.102, event-listener 5.4.1 and tokio 1.50.0,
+    and four unmaintained crates (proc-macro-error, zbus_names, zvariant,
+    zvariant_derive). They are not triaged here.
+
 ## Not verified
 
 -   A desktop build on Windows, macOS or ubuntu-22.04, a bundle, a build with
@@ -1461,7 +1685,13 @@ gate fails on `develop`, and on this branch it does not for these lockfiles.
     one. The cost was measured on `extract_patterns` directly. That the
     hostname check runs only after the chain has validated, on the reactor
     thread, was read from Twisted's and Synapse's code. ldap3's use of
-    pyasn1 was not measured.
+    pyasn1 was not measured here; the fifth review's ldap3 bind and search
+    gave the same result under 0.6.4 and 0.6.5.
+-   The trial tests that check a peer's certificate after a TLS handshake.
+    This sandbox's proxy variables stop them (see [Validation](#validation)),
+    and `HTTPS_PROXY` was not unset to run them.
+-   The four RustSec advisories in the desktop lock against a running app.
+    Their exposure was read from `cargo tree` and the crates' source.
 -   The Trivy gate with the database due 2026-10-31 19:07 UTC, the first that
     will hold the pyasn1 and GHSA-c73q advisories. OSV stood in for it.
     Whether that database adds advisories against `pnpm-lock.yaml` is for
