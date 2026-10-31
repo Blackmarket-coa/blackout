@@ -1497,7 +1497,7 @@ test('X4: revoke-all reaches a refresh token a peer minted', async () => {
     });
 });
 
-test('X5: a single-use row consumed on two processes keeps the first consumption, and the stale mirror re-reads it', async () => {
+test('X5: a single-use row consumed on two processes keeps the first consumption, and the stale mirror re-reads it; a consume of a row Postgres holds as expired records nothing', async () => {
     await withWorld(2, 'pg', async (w) => {
         const [A, B] = w.procs;
         const u = mkUser(A.db);
@@ -1555,6 +1555,45 @@ test('X5: a single-use row consumed on two processes keeps the first consumption
             const [row] = await w.sql(`SELECT consumed_at FROM ${table} WHERE ${col} = $1`, [key]);
             assert.equal(iso(row.consumed_at), first.get(key), `${method}: Postgres keeps A's`);
             assert.equal(B.db[map].get(key).consumedAt, first.get(key), `${method}: B re-read it`);
+        }
+
+        // A consume of a row Postgres holds as expired, on a process whose copy
+        // is not, records nothing there (#12, #14), and that process re-reads it.
+        const expiring = [
+            [
+                'pending_oauth_links',
+                mkOAuthLink(B.db, u).stateHash,
+                'consumePendingOAuthLink',
+                'pendingOAuthLinks',
+            ],
+            [
+                'pending_oidc_logins',
+                mkOidcLogin(B.db).stateHash,
+                'consumePendingOidcLogin',
+                'pendingOidcLogins',
+            ],
+        ] as const;
+        await quiesce(w);
+        for (const [table, key] of expiring) {
+            await w.sql(
+                `UPDATE ${table} SET expires_at = now() - interval '1 minute' WHERE state_hash = $1`,
+                [key]
+            );
+        }
+        for (const [, key, method] of expiring) {
+            assert.ok(B.db[method](key)?.consumedAt, `${method}: B's copy is not expired`);
+        }
+        await quiesce(w);
+        for (const [table, key, method, map] of expiring) {
+            const [row] = await w.sql(`SELECT consumed_at FROM ${table} WHERE state_hash = $1`, [
+                key,
+            ]);
+            assert.equal(row.consumed_at, null, `${method}: Postgres records no consume`);
+            assert.equal(B.db[map].get(key)?.consumedAt, undefined, `${method}: B re-read it`);
+            assert.ok(
+                new Date(B.db[map].get(key).expiresAt).getTime() < Date.now(),
+                `${method}: B holds Postgres's expiry`
+            );
         }
     });
 });
@@ -1679,7 +1718,7 @@ test("X7b: deleting an account's invitation admissions reaches one written elsew
     });
 });
 
-test('X13: a superseded verification token and its sent time reach Postgres, including a token a peer issued', async () => {
+test("X13: a superseded verification token and its sent time reach Postgres, including a token a peer issued; a stale revoke or sent mark keeps a peer's consume and first sent time", async () => {
     await withWorld(2, 'pg', async (w) => {
         const [A, B] = w.procs;
         const u = mkUser(A.db);
@@ -1707,6 +1746,34 @@ test('X13: a superseded verification token and its sent time reach Postgres, inc
         }
         assert.equal(B.db.emailVerificationTokens.get(unseen)?.revokedReason, 'superseded');
         assert.equal(B.db.emailVerificationTokens.get(t1)?.sentAt, sent);
+
+        // On A, which has not heard of either: a revoke leaves a token B
+        // consumed as it is (#41), and a second sent mark keeps B's sent_at
+        // (#40). A re-reads both.
+        const consumed = mkVerify(A.db, u).id;
+        const resent = mkVerify(A.db, u).id;
+        await quiesce(w);
+        assert.ok(B.db.consumeEmailVerificationToken(consumed)?.consumedAt);
+        const firstSent = B.db.markEmailVerificationTokenSent(resent).sentAt;
+        await quiesce(w);
+        await sleep(5);
+        A.db.revokeEmailVerificationTokensForUser(u, 'superseded');
+        const secondSent = A.db.markEmailVerificationTokenSent(resent).sentAt;
+        assert.ok(secondSent > firstSent, "A had not heard of B's mark");
+        await quiesce(w);
+        const [c] = await w.sql(
+            'SELECT consumed_at, revoked_reason FROM email_verification_tokens WHERE id = $1',
+            [consumed]
+        );
+        assert.ok(c.consumed_at, 'consumed on B');
+        assert.equal(c.revoked_reason, null, 'a consumed token is not superseded');
+        assert.equal(A.db.emailVerificationTokens.get(consumed)?.revokedReason, undefined);
+        assert.ok(A.db.emailVerificationTokens.get(consumed)?.consumedAt, 'A re-read it');
+        const [s] = await w.sql('SELECT sent_at FROM email_verification_tokens WHERE id = $1', [
+            resent,
+        ]);
+        assert.equal(iso(s.sent_at), firstSent, 'Postgres keeps the first sent_at');
+        assert.equal(A.db.emailVerificationTokens.get(resent)?.sentAt, firstSent, 'A re-read it');
     });
 });
 
@@ -2118,7 +2185,7 @@ const mkReply = (db: any, receivedAt = new Date(Date.now() - 400 * 86400_000).to
         receivedAt,
     }).id as string;
 
-test('X11: the retention sweep deletes a reply it judged unchanged, and keeps one a peer changed since', async () => {
+test('X11: the retention sweep deletes a reply it judged unchanged, keeps one a peer changed since, and deletes one whose copy has no updatedAt', async () => {
     await withWorld(2, 'pg', async (w) => {
         const [A, B] = w.procs;
         const [changed, unchanged] = [mkReply(A.db), mkReply(A.db)];
@@ -2150,6 +2217,18 @@ test('X11: the retention sweep deletes a reply it judged unchanged, and keeps on
         );
         assert.equal(A.db.coalitionExternalActivity.has(unchanged), false);
         assert.ok(A.db.coalitionExternalActivity.has(changed));
+
+        // A mirror copy with no updatedAt is deleted whatever Postgres holds
+        // (#32's nullMatchesAny, D5). No method writes such a copy today
+        // (every upsert stamps it), so the test removes it from the copy.
+        const bare = mkReply(A.db);
+        const copy = { ...A.db.coalitionExternalActivity.get(bare) };
+        delete copy.updatedAt;
+        A.db.coalitionExternalActivity.set(bare, copy);
+        assert.deepEqual(A.db.deleteCoalitionExternalActivities([bare]), [bare]);
+        await quiesce(w);
+        assert.equal(await count(w, 'coalition_external_activity', 'id = $1', [bare]), 0);
+        assert.equal(A.db.coalitionExternalActivity.has(bare), false);
     });
 });
 
