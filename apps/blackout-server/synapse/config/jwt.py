@@ -16,12 +16,15 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 from typing import Any, Callable, Dict, List, Optional
 
 from synapse.types import JsonDict
 from synapse.util.check_dependencies import check_requirements
 
 from ._base import Config, ConfigError
+
+logger = logging.getLogger(__name__)
 
 # The HMAC algorithms authlib implements for JWT login, and their hashes.
 _HMAC_DIGESTS: Dict[str, Callable[..., Any]] = {
@@ -67,6 +70,7 @@ class JWTConfig(Config):
             self.jwt_issuer = jwt_config.get("issuer")
             self.jwt_audiences = jwt_config.get("audiences")
             check_requirements("jwt")
+            self._check_algorithm()
             self._check_hmac_secret()
         else:
             self.jwt_enabled = False
@@ -75,6 +79,37 @@ class JWTConfig(Config):
             self.jwt_subject_claim = None
             self.jwt_issuer = None
             self.jwt_audiences = None
+
+    def _check_algorithm(self) -> None:
+        """Refuse an algorithm that would let anyone log in, or no one.
+
+        ``JwtHandler`` passes the one configured algorithm to
+        ``JsonWebToken([algorithm])``. With ``none``, authlib accepts an
+        unsigned token for any user, whatever the secret. With a name that is
+        not one of authlib's JWS algorithms (a JWE algorithm, a typo, a
+        lowercase name), every token is refused, because a JWE token would
+        need its ``enc`` in the same list. (Blackout fork patch, see
+        PATCHES.md, 2026-10-30.)
+        """
+        if not self.jwt_enabled:
+            return
+
+        from authlib.jose import JsonWebSignature
+
+        algorithm = self.jwt_algorithm
+        usable = sorted(a for a in JsonWebSignature.ALGORITHMS_REGISTRY if a != "none")
+        if algorithm == "none":
+            raise ConfigError(
+                "jwt_config.algorithm cannot be none: an unsigned token would "
+                "log in as any user",
+                ("jwt_config", "algorithm"),
+            )
+        if not isinstance(algorithm, str) or algorithm not in usable:
+            raise ConfigError(
+                "jwt_config.algorithm must be one of %s, not %r"
+                % (", ".join(usable), algorithm),
+                ("jwt_config", "algorithm"),
+            )
 
     def _check_hmac_secret(self) -> None:
         """Refuse an HS* secret that JWT login could not use, or that anyone could.
@@ -86,12 +121,20 @@ class JWTConfig(Config):
         is empty, so every JWT login would answer 500. Before 1.9.1 an empty
         key verified a token anyone could sign (GHSA-8m4g-j4wp-wgcg).
 
-        So this makes the handler's own call once, with a token signed with
-        the empty key. authlib prepares the secret as it would for a login (a
-        JWK given as a mapping or as JSON text included) and checks the
-        signature. The secret passes only when that check fails, as it must
-        for a usable key. An empty or missing secret is refused first, on any
-        authlib version. (Blackout fork patch, see PATCHES.md, 2026-10-30.)
+        So this makes the handler's own call, with a token signed with the
+        empty key. authlib prepares the secret as it would for a login (a JWK
+        given as a mapping or as JSON text included) and checks the
+        signature. A key passes only when that check fails, as it must for a
+        usable key. An empty or missing secret is refused first, on any
+        authlib version.
+
+        A key set is checked under each ``kid`` it names. A key that works as
+        the empty key refuses the whole set. A key that cannot be used for
+        the algorithm (an RSA or EC JWK, ``use: enc``) only logs a warning
+        when another key in the set can be used: the handler serves the
+        usable keys, and answers a token naming the other one with a 500, as
+        it did before this check. A set with no usable key is refused.
+        (Blackout fork patch, see PATCHES.md, 2026-10-30.)
         """
         algorithm = self.jwt_algorithm
         if not self.jwt_enabled or algorithm not in _HMAC_DIGESTS:
@@ -107,31 +150,71 @@ class JWTConfig(Config):
         from authlib.jose.errors import BadSignatureError
         from authlib.jose.rfc7519.jwt import prepare_raw_key
 
-        jwt = JsonWebToken([algorithm])
-        try:
-            # authlib picks a key from a key set by the token's kid, so try
-            # each kid the set names. With none, it takes a set's only key.
-            raw_key = prepare_raw_key(self.jwt_secret)
-            kids: List[Optional[str]] = []
-            if isinstance(raw_key, dict) and isinstance(raw_key.get("keys"), list):
-                for key in raw_key["keys"]:
-                    if isinstance(key, dict) and key.get("kid") is not None:
-                        kids.append(key["kid"])
-            for kid in kids or [None]:
-                try:
-                    jwt.decode(_empty_key_token(algorithm, kid), key=self.jwt_secret)
-                except BadSignatureError:
-                    continue
-                raise ConfigError(
-                    f"jwt_config.secret works as an empty {algorithm} key, "
-                    "so anyone could sign a login token",
-                    path,
-                )
-        except ConfigError:
-            raise
-        except Exception as e:
-            raise ConfigError(
-                f"jwt_config.secret cannot be used as an {algorithm} key: "
-                f"{type(e).__name__}: {e}",
+        def cannot_use(reason: str) -> ConfigError:
+            return ConfigError(
+                f"jwt_config.secret cannot be used as an {algorithm} key: {reason}",
                 path,
-            ) from e
+            )
+
+        try:
+            raw_key = prepare_raw_key(self.jwt_secret)
+        except Exception as e:
+            raise cannot_use(f"{type(e).__name__}: {e}") from e
+
+        is_set = isinstance(raw_key, dict) and isinstance(raw_key.get("keys"), list)
+        members: List[Any] = raw_key["keys"] if is_set else [raw_key]
+        # An empty k fails in 1.9.1 but verifies in 1.6.12, so refuse it here
+        # whichever version is installed, in a key set too.
+        for key in members:
+            if isinstance(key, dict) and key.get("k") == "":
+                named = "" if key.get("kid") is None else f" (kid {key['kid']!r})"
+                raise cannot_use(f"a JWK with an empty k{named}")
+
+        # authlib picks a key from a key set by the token's kid, so try each
+        # kid the set names. With none, it takes a set's only key.
+        kids: List[str] = []
+        if is_set:
+            for key in members:
+                kid = key.get("kid") if isinstance(key, dict) else None
+                if isinstance(kid, str) and kid not in kids:
+                    kids.append(kid)
+
+        jwt = JsonWebToken([algorithm])
+        unusable: Dict[Optional[str], Exception] = {}
+        candidates: List[Optional[str]] = [*kids] if kids else [None]
+        for kid in candidates:
+            try:
+                jwt.decode(_empty_key_token(algorithm, kid), key=self.jwt_secret)
+            except BadSignatureError:
+                continue
+            except Exception as e:
+                unusable[kid] = e
+                continue
+            where = "" if kid is None else f" (the key with kid {kid!r})"
+            raise ConfigError(
+                f"jwt_config.secret{where} works as an empty {algorithm} key, "
+                "so anyone could sign a login token",
+                path,
+            )
+
+        if not unusable:
+            return
+        if not kids:
+            error = unusable[None]
+            raise cannot_use(f"{type(error).__name__}: {error}") from error
+
+        reasons = [
+            f"kid {kid!r}: {type(error).__name__}: {error}"
+            for kid, error in unusable.items()
+        ]
+        if len(unusable) == len(kids):
+            raise cannot_use(
+                "no key in the set can be used (%s)" % "; ".join(reasons)
+            ) from next(iter(unusable.values()))
+        for reason in reasons:
+            logger.warning(
+                "jwt_config.secret: a key cannot be used as an %s key, so a login "
+                "token naming it will fail: %s",
+                algorithm,
+                reason,
+            )

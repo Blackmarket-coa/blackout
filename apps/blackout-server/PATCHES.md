@@ -723,42 +723,75 @@ root).
 ## 2026-10-30 JWT login refuses an HMAC secret authlib cannot use
 
 A fork patch with no upstream counterpart (upstream's `synapse/config/jwt.py`
-at `cc172f7` reads the secret verbatim). Recorded after the second review of
+at `cc172f7` reads the secret and the algorithm verbatim). Recorded after the
+second review of
 `docs/security/dependency-advisories-server-desktop-2026-10-30.md` (repository
 root), and rewritten after the third, which found that the first version
-imported a string secret only and so missed a secret given as a JWK.
+imported a string secret only and so missed a secret given as a JWK. Revised
+again after the fourth (2026-10-31): `algorithm: none` is refused, and a key
+set is no longer refused for one key HS\* cannot use.
 
+- `synapse/config/jwt.py` (`JWTConfig._check_algorithm`, fourth review): when
+  JWT login is enabled, `jwt_config.algorithm` must be one of the 14 JWS
+  algorithms other than `none` that authlib registers
+  (`JsonWebSignature.ALGORITHMS_REGISTRY`, the same in 1.6.12 and 1.9.1).
+  Otherwise a `ConfigError` at `jwt_config.algorithm`. `JwtHandler` passes the one algorithm to
+  `JsonWebToken([algorithm])`, and with `none` authlib accepts an unsigned
+  token for any user, whatever the secret: the review logged in as
+  `@anyone:test` that way under both versions. Any other name (`NONE`,
+  `hs256`, a JWE algorithm such as `dir`, a typo) refused every token,
+  because a JWE token would need its `enc` in the same one-entry list. A
+  disabled `jwt_config` is not checked.
 - `synapse/config/jwt.py` (`JWTConfig._check_hmac_secret`): when JWT login is
   enabled with HS256, HS384 or HS512:
   - an empty or missing secret (`""`, `null`, an empty mapping) is refused
-    outright, on any authlib version;
+    outright, on any authlib version, and so is a JWK with an empty `k`,
+    alone or in a key set (fourth review; 1.9.1 refused it anyway, but
+    1.6.12 verifies with it);
   - then the check makes `JwtHandler`'s own call,
-    `JsonWebToken([algorithm]).decode(token, key=secret)`, once, with a token
+    `JsonWebToken([algorithm]).decode(token, key=secret)`, with a token
     signed with the empty HMAC key. authlib prepares the secret as it does
     for each login: a mapping or `{...}` text is read as a JWK, and a key set
-    is searched by `kid`, so the check tries each `kid` the set names. The
-    secret passes only when authlib reports a bad signature. Any other
-    exception (the `ValueError` authlib raises from 1.9.0 for a key holding
-    PEM or SSH key text anywhere and from 1.9.1 for an empty key, an empty
-    key set, JSON text that does not parse) becomes a `ConfigError` at
-    `jwt_config.secret`, and so does a token that verifies, because then the
-    secret works as the empty key.
+    is searched by `kid`, so the check tries each `kid` the set names. A key
+    passes only when authlib reports a bad signature. A key that verifies
+    the token works as the empty key, and refuses the whole secret. Any
+    other exception (the `ValueError` authlib raises from 1.9.0 for a key
+    holding PEM or SSH key text anywhere, an RSA or EC JWK, `use: enc`, an
+    empty key set, JSON text that does not parse) becomes a `ConfigError` at
+    `jwt_config.secret`, for a secret that is not a key set and for a key
+    set none of whose keys can be used.
+  - In a key set where some key can be used, a key that cannot is logged as
+    a warning that names its `kid`, and the homeserver starts (fourth
+    review). The handler serves the usable keys, and answers a token naming
+    the other one with 500, as it did before the check. The third review's
+    version refused such a set (`Missing required field: "k"` for an RSA or
+    EC JWK beside an `oct` key), which stopped a homeserver that `develop`
+    starts and serves.
 - Before this, under authlib 1.9.1, such a homeserver started and answered
   every JWT login with 500; under 1.6.12 an empty secret, or a JWK with an
   empty `k`, accepted tokens anyone could sign (GHSA-8m4g-j4wp-wgcg). Under
   1.6.12 the check still refuses every empty-key form. PEM or SSH key text is
   refused wherever it appears only under the locked `>=1.9.1`; 1.6.12 refuses
   only a string secret that starts with it, and uses any other as an HMAC
-  key. Asymmetric algorithms and disabled JWT login are not checked. No
-  Blackout template enables `jwt_config`.
-- `tests/blackout_runtime/test_jwt_secret_config.py`: fourteen refused
+  key. The secret of an asymmetric algorithm, and a disabled `jwt_config`,
+  are not checked. No Blackout template enables `jwt_config`.
+- `tests/blackout_runtime/test_jwt_secret_config.py`: eighteen refused
   secrets for each of HS256, HS384 and HS512, among them a JWK mapping and
-  JWK JSON text with an empty `k` or a PEM `k`; four accepted ones (a plain
-  secret, a JWK mapping, JWK JSON text, a two-key set); a PEM for RS256 and
-  an empty secret with JWT login disabled still parse; and `/login` with
-  each key of the accepted set returns 200. On the first version of this
-  patch (`5bad47c`) the JWK forms were not refused, and the two-key set was
-  (`Missing required field: "k"`), although the handler can use it.
+  JWK JSON text with an empty `k` or a PEM `k`, and key sets with an empty
+  `k` or a zero byte beside a usable key, with no usable key, or of two
+  keys without a `kid`; five accepted ones (a plain secret, a JWK mapping,
+  JWK JSON text, a two-key set, a one-key set without a `kid`); two mixed
+  sets (an `oct` key beside an EC public JWK, or beside an `oct` key whose
+  `key_ops` allow only `sign`) accepted with one warning naming the other
+  key; eight refused algorithms (`none`, `NONE`, `hs256`, `dir`, `HS1024`,
+  `""`, `null`, a list); a PEM for RS256, ES256, PS512 and EdDSA, and an
+  empty secret with JWT login disabled (`HS256` or `none`), still parse;
+  `/login` with each key of the accepted set returns 200; and with the
+  EC-mixed set, the `oct` key logs in and a token naming the EC key does
+  not. On the first version of this patch (`5bad47c`) the JWK forms were not
+  refused, and the two-key set was (`Missing required field: "k"`), although
+  the handler can use it. On the third review's version (`93d3024`) the
+  algorithm test fails and the mixed-set tests error.
 
 ## 2026-10-30 MSC3861 refuses a client credential that cannot sign
 
