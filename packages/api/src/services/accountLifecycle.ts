@@ -393,8 +393,17 @@ export const ACCOUNT_DELETION_FINISH_TIMEOUT_MS = 10 * 1000;
  * write this process had queued (the deletion's among them) has been
  * attempted there, however long that takes (a write that fails twice is
  * dropped and logged, as everywhere in Postgres mode, and the wait still
- * ends; a connection pool that never hands out a connection holds the
- * answer, the session having been revoked first). So by the answer the
+ * ends). Nothing bounds that wait: a pool that never hands out a connection,
+ * or a query that never answers (a lock wait, a connection the network
+ * dropped after it connected), holds the answer, the session having been
+ * revoked first; the pool is given neither a connection timeout nor a
+ * statement timeout (`config/postgres.ts`), and a connection timeout alone
+ * would not end the second. A reverse proxy in front ends the request at its
+ * read timeout instead (the nginx configs' `proxy_read_timeout`), and the
+ * screen then says the deletion may not have finished, although this process
+ * has applied it to its mirror, revoked the token and queued its writes,
+ * which land when the database answers and are lost if the process stops
+ * first (decision 27). So by the answer the
  * person's copies are blanked in the database and the notice rows this
  * process had seen are ended there, unless one of those writes was dropped,
  * and another process (the worker) makes no room, invites nobody and sends

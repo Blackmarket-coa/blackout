@@ -178,7 +178,9 @@
  * have an invitation in each (with the alias, the next create finds the
  * first's room); two notifiers work on one person's notices at once only when
  * one holds the claim past its lease (an attempt slower than
- * `NOTICE_CLAIM_LEASE_CALLS` call timeouts, a paused process), and can then,
+ * `NOTICE_CLAIM_LEASE_CALLS` call timeouts, a paused process, or one whose
+ * queued writes are still waiting on a stalled database when its release
+ * timed out and the lease ends), and can then,
  * where the homeserver refuses the alias, each make the person a room and
  * send there, the transaction id being deduplicated only within one room
  * (below); and until the deletion's last statement has run, which can be

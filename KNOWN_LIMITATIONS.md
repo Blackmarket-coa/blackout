@@ -337,12 +337,18 @@ For the source-of-truth triage with tier/owner detail see
     that release is cancelled or removed), a notice still owed to you is
     dropped once your deletion is confirmed (one the bot was already sending
     at that moment can still arrive, and so can the invitation to your
-    notices room it was already making; where the server runs its background
-    work in a separate process, the confirmation waits until the server has
-    tried to write the deletion's changes to its database, so a database
-    that is slow or not answering holds it, and until then the bot can still
-    send you a notice),
-    and the record of each notice (its status and attempts) stays, with its
+    notices room it was already making). Wherever the server keeps its data
+    in a database, the confirmation waits until the server has tried to write
+    the deletion's changes there, one server process included, so a database
+    that is slow or not answering holds it; behind a proxy that gives up
+    first, the screen says the deletion may not have finished although the
+    server has already applied it, and if the server then restarts before
+    its database answers, the deletion is lost and the account is back.
+    Where the server also runs its background work in a separate process,
+    the bot can still send you a notice until the confirmation, and after it
+    too if the server's write removing your copy fails (it logs that) before
+    the deletion's last step below has run.
+    The record of each notice (its status and attempts) stays, with its
     room forgotten (where the server runs its background work in a separate
     process, the last step of the deletion does that for a notice the
     deleting process had not heard of yet, and is waited for at most 10
@@ -408,13 +414,21 @@ For the source-of-truth triage with tier/owner detail see
     The bot uses a room at that address only once it is finished and the bot
     is in it; otherwise it waits one retry (at least 30 seconds after it first
     looked) and then makes your room without the address, and a homeserver
-    that was only that slow leaves you an extra room the same way. Where the
-    server runs more than one copy of its background work, as it does for a
-    moment while one takes over from another, two of them working on your
-    notices at the same moment (the same notice, or two of yours) can each
-    make you a room, if the homeserver refuses the address, and each send
-    its notice there, so you can get an invitation and the notice in each of
-    two rooms. Within one room the homeserver drops a second send of the same
+    that was only that slow leaves you an extra room the same way. If the
+    server's background work stops right after the homeserver made your room
+    (a crash, or a restart while its database is stalled), before its
+    database has a record of the room, the next attempt finds no room and,
+    if the homeserver refuses the address, makes you another, so you have an
+    invitation in each and the notice in the second. Where the server runs
+    more than one copy of its background work, as it does for a moment while
+    one takes over from another, each takes a hold on your notices in the
+    server's database before it works on them, and the other leaves them
+    alone while it is held; only if one holds on past that hold's time limit
+    (7.5 minutes: a copy that stalled or was paused, or whose database writes
+    are still waiting when it ends) can two of them work on your notices at
+    the same moment and, if the homeserver refuses the address, each make you
+    a room and send its notice there, so you can get an invitation and the
+    notice in each of two rooms. Within one room the homeserver drops a second send of the same
     notice while it still remembers the first: for 30 to 60 minutes, or 24
     hours if the bot's token came from a sign-in, and the shorter of these is
     forgotten if the homeserver restarts.
@@ -427,12 +441,13 @@ For the source-of-truth triage with tier/owner detail see
     The bot retries a notice the homeserver refuses for 30 days, then records
     it as failed, and gives up on a call the homeserver does not answer within
     30 seconds the same way. It sends one notice at a time, and one notice can
-    take up to seven calls to the homeserver and four reads of the server's
-    own database, each given 30 seconds, so a homeserver or a database that
-    answers nothing holds every notice due behind it, each for up to 30
-    seconds, and ones that answer slowly, just inside the 30 seconds each
-    time, can hold each for about five and a half minutes and a batch of 50
-    for about four and a half hours. Whether
+    take up to seven calls to the homeserver and six to the server's own
+    database (four reads, and taking and giving up its hold on your notices),
+    each given 30 seconds, so a homeserver or a database that answers nothing
+    holds every notice due behind it, each for up to 30 seconds, and ones
+    that answer slowly, just inside the 30 seconds each time, can hold each
+    for about six and a half minutes and a batch of 50 for about five and a
+    half hours. Whether
     a notice reaches you depends on the homeserver and your client, and the
     release does not: it is released when the API's own store says so, and
     the view the next PR adds reads that store.
@@ -440,8 +455,9 @@ For the source-of-truth triage with tier/owner detail see
     account on this server with release keys can name you on a release switch
     without your agreement; the design asks the owner to compare a safety code
     with you first, and the server cannot tell whether they did. The API
-    bounds it: one account can name you on at most 5 held releases, and
-    everyone together on at most 50 (`GET /v1/deadman/limits`; a release is
+    bounds it: one account can name you on at most 5 held releases, and at
+    most 50 accounts can name you at a time, so at most 250 held releases
+    name you (`GET /v1/deadman/limits`; a release is
     held from arming until it is removed, at the server's first sweep at
     least 365 days after it fires). The bounds hold on one
     API server against requests sent all at once. A deployment running
@@ -455,27 +471,32 @@ For the source-of-truth triage with tier/owner detail see
     invites you back, once per notice. You cannot yet refuse an owner, and
     release keys cannot be unpublished, so the only way to stop being named is
     to delete your account.
--   **The bound of 50 can be used to stop others naming you, and many people at
-    once.** One release switch can name up to 64 people, and the bound of 5 per
-    account is counted for each person named, so ten accounts on this server,
-    each with release keys, naming the same 64 people on five release switches
-    each, fill the 50 for all 64 of them. At the limit of 10 arms a day that is
-    128 people a day, and 256 people (in two days) before those accounts reach
-    their limit of 20 held switches each: about 26 people for every account
-    someone controls. From then on anyone else who names one of those people on
-    a release switch is refused (they see the refusal, 409 `recipient_limit`,
-    and can tell it is not their own bound if they named the person fewer than
-    five times), for as long as those accounts keep their switches armed, which
-    takes one check-in per switch per interval, and an interval can be as long
-    as 365 days, and for at least 365 days after the switches fire; deleting
-    those accounts does not free the places of switches that have fired, since
-    a fired release stays for the people it named. Neither you nor anyone else
-    can clear it through the app or the API: new release keys change nothing,
-    you cannot cancel someone else's switch, and no administrator route removes a release
-    (short of an operator editing the database). Which bound replaces this is an
-    open decision for the operator
+-   **The bound of 50 accounts can be used to stop others naming you, and many
+    people at once.** One release switch can name up to 64 people, and an
+    account counts once toward each person it names, so fifty accounts on this
+    server, each with release keys and each naming the same 64 people on one
+    release switch, fill the bound for all 64 of them; each of those accounts
+    can hold 20 switches naming 64 different people, so fifty accounts can do
+    it to 1,280 people, in two days at the limit of 10 arms a day: about 26
+    people for every account someone controls. From then on any other account
+    that names one of those people on a release switch is refused (it sees
+    the refusal, 409 `recipient_limit`, and, if it names the person on no
+    release of its own, can tell it is the bound on accounts), for as long as
+    those accounts keep their switches armed, which takes one check-in per
+    switch per interval, and an interval can be as long as 365 days, and for
+    at least 365 days after the switches fire; deleting those accounts does
+    not free the places of switches that have fired, since a fired release
+    stays for the people it named. Neither you nor anyone else can clear it
+    through the app or the API: new release keys change nothing, you cannot
+    cancel someone else's switch, and no administrator route removes a
+    release (short of an operator editing the database). Until 2026-10-31
+    the bound counted releases (50 from everyone), and ten accounts could do
+    the same; the operator chose to count accounts, which raises what it
+    takes to fifty accounts, not the number of people each account can
+    block, and lets 250 releases name one person rather than 50
     ([`docs/security/release-envelope-2026-10-26.md`](docs/security/release-envelope-2026-10-26.md),
-    decision 18).
+    decision 18). A way for you to refuse an owner, which would let you clear
+    it yourself, is not built.
 -   **What the server can do with a release.** It keeps the timer and the
     sealed copies, so whoever runs or compels it can hold a release back,
     delay it, or give the people named their copies early; nobody is told. As
@@ -507,8 +528,8 @@ For the source-of-truth triage with tier/owner detail see
     content the server still holds (armed, in grace, or fired until the
     removal), about 7 MiB of encrypted headers and up to about 2.3 MiB of
     sealed copies at the largest sizes; can arm at most 10 in any 24 hours;
-    and can name one person on at most 5 held releases, who can be named on at
-    most 50 from everyone (which a few accounts can fill: above).
+    and can name one person on at most 5 held releases, who can be named by
+    at most 50 accounts at a time (which fifty accounts can fill: above).
     `GET /v1/deadman/limits` reports each. The bounds
     hold on one API server against requests sent all at once; across several
     API replicas a burst can exceed each by up to its own size until the

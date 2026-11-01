@@ -18,7 +18,13 @@ you, exact on one API server and not across replicas, and what a few accounts
 can do with the bound of 50, to up to 64 people per five switches; section 1
 updated 2026-10-31 with the extra notices room two of the server's background
 processes can make while one takes over from the other, and that a notice can
-then arrive in each of the two rooms. Changes to anything here are recorded in
+then arrive in each of the two rooms; section 1 updated 2026-11-01 with the
+notices room as the one exception to "every direct message is encrypted", the
+bound of 50 counted in accounts rather than releases (the operator's choice of
+2026-10-31), the hold that keeps two background processes off one person's
+notices at once, and the extra room left when that work stops right after the
+homeserver made a room.
+Changes to anything here are recorded in
 the [policy changelog](docs/legal/CHANGELOG.md).
 
 ---
@@ -36,7 +42,8 @@ tier tables unioned in
 there is no switch. Turning encryption into a paid feature would require adding
 one, in a diff, in public.
 
-**Every private room and direct message is end-to-end encrypted by default.**
+**Every private room and direct message is end-to-end encrypted by default,
+with one exception: the Blackout bot's notices room (below).**
 
 -   The API cannot create a room without deciding: `createRoom` takes a
     **required** `encrypted` flag
@@ -114,11 +121,14 @@ Encryption claims are only worth something with the exceptions attached.
     until it lands, this list stands and stays here.
 -   **Dead-man release notices.** When a dead-man switch armed in the release
     format fires, the bot makes one "Blackout notices" room per person named and
-    reuses it (a homeserver slow to make it, or two of the server's background
-    processes working on one person's notices at once while one takes over
-    from the other, can still leave someone an extra one, and in the second
-    case the notice in each, in the cases
-    [`KNOWN_LIMITATIONS.md`](KNOWN_LIMITATIONS.md) lists), invites them, and
+    reuses it (in the cases [`KNOWN_LIMITATIONS.md`](KNOWN_LIMITATIONS.md)
+    lists someone can still get an extra one: a homeserver slow or interrupted
+    while making it, or the server's background work stopping right after the
+    homeserver made it, can leave an extra room with only an invitation in
+    it; and two copies of that work on one person's notices at once, which
+    the server keeps apart with a hold in its database unless one holds on
+    past the hold's time limit, can leave an extra room with the notice in
+    each), invites them, and
     posts one fixed sentence with the release's id —
     nothing of the message, nobody's name, not the owner's label. The room is
     not end-to-end encrypted, on purpose: the bot cannot encrypt, so its post is
@@ -134,21 +144,23 @@ Encryption claims are only worth something with the exceptions attached.
     ([`deadmanReleaseNotifier.ts`](packages/api/src/services/deadmanReleaseNotifier.ts),
     [`release-envelope-2026-10-26.md`](docs/security/release-envelope-2026-10-26.md)
     §11). Any account with release keys can name you on a switch, within bounds
-    the API enforces (5 held releases naming you from one account, 50 from
-    everyone: exact on one API server against requests sent at once; across
-    several replicas a burst of requests can exceed them by up to its own size
-    until the replicas' queued writes reach each other); you cannot yet refuse
-    an owner. The bound of 50 can be turned against you, and against many
-    people at once: one release switch can name up to 64 people and the bound
-    of 5 is counted per person, so ten accounts with release keys can fill it
-    for 64 people with five switches each, 128 people a day and 256 within
-    their limit of held switches, and then nobody else can name any of them on
-    a release switch (an owner refused that way is told so, 409
+    the API enforces (5 held releases naming you from one account, and 50
+    accounts in all, so 250 releases at most: exact on one API server
+    against requests sent at once; across several replicas a burst of requests
+    can exceed them by up to its own size until the replicas' queued writes
+    reach each other); you cannot yet refuse an owner. The bound of 50 accounts
+    can be turned against you, and against many people at once: one release
+    switch can name up to 64 people and each account counts once toward each
+    person it names, so fifty accounts with release keys, each with its 20
+    held switches naming 64 people, can fill it for 1,280 people in two days
+    (about 26 people per account), and then no other account can name any of
+    them on a release switch (an owner refused that way is told so, 409
     `recipient_limit`) for as long as those accounts keep their switches armed
     (one check-in per switch per interval, which can be up to a year), and for
     at least 365 days after the switches fire, whether or not the accounts are
     deleted; neither you nor anyone else can clear it through the app or the
-    API, and which bound replaces it is an open decision
+    API. The operator chose to count accounts on 2026-10-31; counting
+    releases, as before, let ten accounts do the same
     ([`KNOWN_LIMITATIONS.md`](KNOWN_LIMITATIONS.md)). No deployment can arm such
     a switch yet: arming is refused until an operator turns
     `BLACKOUT_DEADMAN_RELEASES` on, and no deployment file does.

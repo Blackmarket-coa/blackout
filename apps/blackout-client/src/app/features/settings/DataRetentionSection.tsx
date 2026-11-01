@@ -144,9 +144,17 @@ export const DataRetentionSection: React.FC = () => {
             });
             trackSettingsInteraction('privacy', 'delete_account', 'success');
         } catch (err) {
+            // A request cut off before the server answered (a proxy in front
+            // of a server waiting on its database, say) may have been applied
+            // all the same: the server deletes the account in memory and
+            // revokes this session before it waits for its database, and the
+            // deletion is lost if the server restarts before that answers
+            // (decision 27 of the release envelope record).
             setDeleteStatus({
                 kind: 'error',
-                message: `Deletion failed: ${(err as Error).message}`,
+                message: `Deletion may not have finished: ${
+                    (err as Error).message
+                }. If the server stopped answering rather than refusing, it may have deleted your account all the same, and could still lose that deletion if it restarts before its database has it.`,
             });
             trackSettingsInteraction('privacy', 'delete_account', 'error');
         }
@@ -251,14 +259,16 @@ export const DataRetentionSection: React.FC = () => {
                     reaching another replica can stay until that release is cancelled or removed),
                     and a notice still owed to you is dropped once your deletion is confirmed (one
                     the bot was already sending can still arrive, and so can the invitation to your
-                    notices room it was already making; where the server runs its background work
-                    separately, the confirmation waits until the server has tried to write the
-                    deletion to its database, and until then the bot can still send you a notice).
-                    The public half of your release keys is removed from Blackout&apos;s database,
-                    except the copy kept with a release switch of yours that has already fired,
-                    which goes with that release; copies in any backups the operator keeps are not
-                    removed; the private keys on your devices and in your recovery files stay there
-                    until you remove them.
+                    notices room it was already making; where the server keeps its data in a
+                    database, the confirmation waits until the server has tried to write the
+                    deletion there, and where it also runs its background work separately the bot
+                    can still send you a notice until then, and after it too if the server&apos;s
+                    write removing your copy fails, which it logs, before the deletion&apos;s last
+                    step has run). The public half of your release keys is removed from
+                    Blackout&apos;s database, except the copy kept with a release switch of yours
+                    that has already fired, which goes with that release; copies in any backups the
+                    operator keeps are not removed; the private keys on your devices and in your
+                    recovery files stay there until you remove them.
                 </small>
                 {deleteStage === 'idle' && (
                     <div>

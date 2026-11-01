@@ -35,7 +35,7 @@ is built: a switch can hold a message encrypted on the owner's device for the
 people named, sealed to their release keys. Arming such a switch stays closed on
 every deployment until an operator turns `BLACKOUT_DEADMAN_RELEASES` on, which
 no deployment, compose or env file does. This entry was corrected on
-2026-10-30 and 2026-10-31, before any of it took effect, where the independent
+2026-10-30, 2026-10-31 and 2026-11-01, before any of it took effect, where the independent
 review of the API side found that a sentence here, or in
 [`TRUST.md`](../../TRUST.md) §1, was not true; `git log -p` on this file shows
 each correction.
@@ -55,20 +55,22 @@ each correction.
     switch fires and who fetched their copy. The content one account can make
     it keep is bounded (its rows are not: a cancelled switch's stay, below):
     20 release switches with content held, 10 arms in 24 hours, 5
-    held releases naming one person from one owner and 50 from everyone
+    held releases naming one person from one owner and 50 distinct owners
+    naming one person, so 250 releases at most
     (`GET /v1/deadman/limits` reports each; exact on one API server against
     requests sent at once; across several replicas a burst of requests can
     exceed them by up to its own size until the replicas' queued writes reach
-    each other). The bound of 50 can be filled on purpose, for many people at
-    once: one release names up to 64 people and the bound of 5 is per person,
-    so ten accounts with release keys, five arms each naming the same 64, keep
-    every other owner from naming any of them (the owner is refused, 409
-    `recipient_limit`, and sees it), 128 people a day and 256 within the cap of
-    held switches, about 26 for each account used, while those switches stay
-    armed (one check-in per switch per interval, which can be up to 365 days)
-    and for at least 365 days after they fire, and neither a person named nor
-    anyone else can clear it through the app or the API; which bound replaces
-    it is an open decision
+    each other). The bound of 50 owners can be filled on purpose, for many
+    people at once: one release names up to 64 people and each account
+    counts once toward each person it names, so fifty accounts with release
+    keys, each with its 20 held switches naming 64 people, keep every other
+    owner from naming any of 1,280 people (the owner is refused, 409
+    `recipient_limit`, and sees it), in two days, about 26 for each account
+    used, while those switches stay armed (one check-in per switch per
+    interval, which can be up to 365 days) and for at least 365 days after
+    they fire, and neither a person named nor anyone else can clear it
+    through the app or the API. The operator chose on 2026-10-31 to count
+    owners rather than releases, under which ten accounts did the same
     ([`release-envelope-2026-10-26.md`](../security/release-envelope-2026-10-26.md),
     decision 18). The rows of a cancelled switch stay, blank. Cancelling removes
     the message and the copies from its database (backups aside; across several
@@ -87,11 +89,17 @@ each correction.
     derived from the server's secret, so that a room the homeserver finished
     making after the bot stopped waiting is found rather than made again). In
     the cases [`KNOWN_LIMITATIONS.md`](../../KNOWN_LIMITATIONS.md) lists a
-    person can still get an extra room: a slow or interrupted homeserver can
-    leave an extra one with only an invitation in it, and where the server runs
-    two copies of its background work for a moment while one takes over from
-    the other and the homeserver refuses the alias, the two can each make the
-    person a room and post the notice in each. The notice carries nothing of
+    person can still get an extra room: a slow or interrupted homeserver, or
+    the server's background work stopping right after the homeserver made the
+    room while the homeserver refuses the alias, can leave an extra one with
+    only an invitation in it; and where two copies of the server's background
+    work are at work on one person's notices at once, which a claim on the
+    person in its database prevents unless one holds it past its time limit,
+    and the homeserver refuses the alias, the two can each make the person a
+    room and post the notice in each. While the bot works on a person's
+    notices the server keeps that claim (the account id, a random token and
+    an expiry); one left by a process that stopped stays until the next claim
+    for that person replaces it. The notice carries nothing of
     the message, nobody's name, not the owner's
     label. The room is a plaintext service room like the others
     [`TRUST.md`](../../TRUST.md) §1 lists, created so that the homeserver does
@@ -119,9 +127,11 @@ each correction.
     release is cancelled or removed), a notice still owed to it is dropped
     once the deletion is confirmed (one the bot was already sending can still
     arrive, as can the invitation to its notices room it was already making;
-    across the API and worker processes the confirmation waits until the
-    server has tried to write the deletion's changes to its database, and
-    until then the bot can still send a notice), and its notice rows forget
+    wherever the server keeps its data in a database the confirmation waits
+    until the server has tried to write the deletion's changes there, and
+    across the API and worker processes the bot can still send a notice
+    until then, and after it if the write removing the account's copy fails,
+    which is logged, before the deletion's last step has run), and its notice rows forget
     their room (across the API and worker processes through the deletion's
     last step, which is waited for at most 10 seconds and can finish after
     the confirmation; until it does, and for good if it fails, which is
