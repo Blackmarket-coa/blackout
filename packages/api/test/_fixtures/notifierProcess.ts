@@ -62,7 +62,8 @@ type Loaded = {
     db: { drain(): Promise<void>; rehydrateAll(): Promise<void> };
     tick: (options: { now: Date; callTimeoutMs?: number }) => Promise<unknown>;
 };
-let loaded: Promise<Loaded> | undefined;
+// Set once, below, after the listener is in place.
+const state: { loaded?: Promise<Loaded> } = {};
 
 // Listening before anything is loaded: the store's boot reads Postgres
 // through `ask`, whose answers arrive as messages.
@@ -77,8 +78,8 @@ port.on('message', (message: Record<string, unknown>) => {
     }
     void (async () => {
         try {
-            if (!loaded) throw new Error('not loaded yet');
-            const { db, tick } = await loaded;
+            if (!state.loaded) throw new Error('not loaded yet');
+            const { db, tick } = await state.loaded;
             let value: unknown;
             if (message.type === 'tick') {
                 value = await tick({
@@ -100,7 +101,7 @@ port.on('message', (message: Record<string, unknown>) => {
     })();
 });
 
-loaded = (async (): Promise<Loaded> => {
+state.loaded = (async (): Promise<Loaded> => {
     // The test runner's TypeScript loader is not registered in a worker
     // thread (Node strips this file's types itself); register it here, before
     // the API's modules are imported, so their extensionless imports resolve.
@@ -118,7 +119,7 @@ loaded = (async (): Promise<Loaded> => {
         tick: (options) => notifier.runDeadmanReleaseNotifier(options),
     };
 })();
-loaded.then(
+state.loaded.then(
     () => port.postMessage({ type: 'ready' }),
     (err: unknown) => port.postMessage({ type: 'failed', error: String(err) })
 );
