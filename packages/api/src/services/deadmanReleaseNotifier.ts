@@ -180,7 +180,9 @@
  * one holds the claim past its lease (an attempt slower than
  * `NOTICE_CLAIM_LEASE_CALLS` call timeouts, a paused process, or one whose
  * queued writes are still waiting on a stalled database when its release
- * timed out and the lease ends), and can then,
+ * timed out and the lease ends; one whose claim statement fails or times out
+ * writes nothing, which until round 10 of the review was a second way in:
+ * its retry landed over the holder's row), and can then,
  * where the homeserver refuses the alias, each make the person a room and
  * send there, the transaction id being deduplicated only within one room
  * (below); and until the deletion's last statement has run, which can be
@@ -428,9 +430,11 @@ type Step =
     | { kind: 'notDue' }
     /**
      * Another process holds the person's claim (`claimDeadmanNoticeRecipient`):
-     * it is finding or making their room or sending them a notice. Nothing is
-     * asked of the homeserver or written here; the row stays due, and is
-     * counted as elsewhere.
+     * it is finding or making their room or sending them a notice. Or the
+     * claim's statement failed or did not answer in time, so this process
+     * cannot tell whether another holds it. Nothing is asked of the
+     * homeserver or written here; the row stays due, and is counted as
+     * elsewhere.
      */
     | { kind: 'claimed' };
 
@@ -947,17 +951,32 @@ const attempt = async (
     // at once, the alias refused, each made the person a room and sent
     // there). Taken first, so the read below sees everything the previous
     // holder wrote: it gave the claim up only once those writes had been
-    // attempted. One that times out is a retry; if it landed after all, it
-    // ends at its expiry.
-    const claimed = await boundedDatabase(
-        db.claimDeadmanNoticeRecipient(
-            notice.recipientAccountId,
-            claim.holder,
-            NOTICE_CLAIM_LEASE_CALLS * callTimeoutMs
-        ),
-        callTimeoutMs,
-        'database_claim_timeout'
+    // attempted. One whose statement fails or does not answer in time is
+    // treated as held elsewhere, and nothing is written for the notice: a
+    // retry written then landed over the row the holder was working on, and
+    // with the person's room replaced put the gone one back, so the next
+    // attempt made the person a second replacement (round 10 of part 2's
+    // review). One that lands after all is given up when it does, or ends at
+    // its expiry if that fails.
+    const claiming = db.claimDeadmanNoticeRecipient(
+        notice.recipientAccountId,
+        claim.holder,
+        NOTICE_CLAIM_LEASE_CALLS * callTimeoutMs
     );
+    let claimed: boolean;
+    try {
+        claimed = await boundedDatabase(claiming, callTimeoutMs, 'database_claim_timeout');
+    } catch (err) {
+        const reason = err instanceof NoticeCallThrew ? err.step.reason : 'database_claim_failed';
+        log.warn('deadman_release_notice_claim_unanswered', { error: reason });
+        void claiming.then(
+            (took) => {
+                if (took) void releaseClaim(notice.recipientAccountId, claim.holder, callTimeoutMs);
+            },
+            () => undefined
+        );
+        return CLAIMED_ELSEWHERE;
+    }
     if (!claimed) return CLAIMED_ELSEWHERE;
     claim.toRelease = true;
     // From the database itself, before anything is asked of the homeserver:

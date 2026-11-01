@@ -2487,3 +2487,171 @@ test('two notifiers working on one person’s notices at the same moment make th
         await second.stop();
     }
 });
+
+test('a notifier whose claim on the person fails or is not answered in time writes nothing over the row the holder is working on: with the person’s room purged, the person gets one replacement room and the notice once', async () => {
+    // Round 10 of part 2's review. A claim statement that timed out (or
+    // threw) became a retry, written full-row over the row the claim's holder
+    // was working on: it carried the room this process's mirror held, so
+    // with the person's room purged and replaced it put the gone room back,
+    // the holder stopped before its send, and the next attempt made the
+    // person a second replacement room. Now such a claim is treated as held
+    // elsewhere: nothing is asked or written, and the row stays due. The
+    // worker is the process whose claim is slow; a worker thread with its own
+    // store and notifier holds the claim.
+    const second = await startSecondProcess();
+    const realConnect = pool.connect;
+    /** The worker's own claim statements: `slow` answers them after 1 s, `fail` throws once. */
+    const claimTrouble: { slow: boolean; fail: number } = { slow: false, fail: 0 };
+    pool.connect = async () => {
+        const client = await realConnect();
+        return {
+            ...client,
+            async query<T = Record<string, unknown>>(sql: string, params?: unknown[]) {
+                if (sql.startsWith('INSERT INTO deadman_notice_claims')) {
+                    if (claimTrouble.fail > 0) {
+                        claimTrouble.fail -= 1;
+                        throw new Error('connection reset (test)');
+                    }
+                    if (claimTrouble.slow) await new Promise((r) => setTimeout(r, 1_000));
+                }
+                return client.query<T>(sql, params);
+            },
+        };
+    };
+    const row = async (switchId: string, accountId: string) =>
+        (
+            await pg.query(
+                'SELECT status, attempts, last_error, room_id, next_attempt_at FROM deadman_release_notices WHERE switch_id = $1 AND recipient_account_id = $2',
+                [switchId, accountId]
+            )
+        ).rows[0] as Record<string, unknown>;
+    const claimsOf = async (accountId: string) =>
+        (
+            await pg.query(
+                'SELECT holder FROM deadman_notice_claims WHERE recipient_account_id = $1',
+                [accountId]
+            )
+        ).rows.length;
+    try {
+        matrix.aliasRefusal = { status: 403, errcode: 'M_FORBIDDEN' };
+        for (const trouble of ['timeout', 'failure'] as const) {
+            const recipient = await person();
+            const mxid = `@pn-${recipient.id.slice(0, 8)}:test.local`;
+            // Notice a is sent into the person's room X; notice b records X
+            // and its send is refused, so it is pending at X; then X is purged.
+            const a = await release(recipient);
+            await runDeadmanReleaseNotifier({ now: a.at, callTimeoutMs: 300 });
+            await worker.drain();
+            const X = worker.getDeadmanReleaseNotice(a.switchId, recipient.id)?.roomId;
+            assert.ok(X, trouble);
+            const b = await release(recipient);
+            matrix.sendStatus = 500;
+            await runDeadmanReleaseNotifier({ now: b.at, callTimeoutMs: 300 });
+            matrix.sendStatus = 200;
+            await worker.drain();
+            assert.equal((await row(b.switchId, recipient.id)).room_id, X, trouble);
+            matrix.purgeRoom(X!);
+            await second.rehydrate();
+            const due = new Date(b.at.getTime() + 60_000);
+            // The refused send into X is in the stub's list too.
+            const sendsBefore = matrix.sends.filter((x) => x.txnId.includes(b.switchId)).length;
+
+            // The other process holds the claim, finds X gone, makes the
+            // replacement, records it, and is held on its read right before
+            // the send.
+            let recorded = false;
+            const preSend = second.hold((sql, params) => {
+                if (
+                    sql.startsWith('INSERT INTO deadman_release_notices') &&
+                    params.some((p) => typeof p === 'string' && p.startsWith('!') && p !== X)
+                ) {
+                    recorded = true;
+                }
+                return (
+                    recorded &&
+                    sql.startsWith('SELECT * FROM deadman_release_wraps') &&
+                    params.includes(recipient.id)
+                );
+            });
+            const secondTick = second.tick(due);
+            await preSend.reached;
+            assert.equal(await claimsOf(recipient.id), 1, `${trouble}: the other process holds it`);
+            const whileHeld = await row(b.switchId, recipient.id);
+            assert.notEqual(whileHeld.room_id, X, `${trouble}: the replacement recorded`);
+            const replacement = whileHeld.room_id as string;
+
+            // The worker's tick: its claim statement is not answered within
+            // its 300 ms bound, or fails.
+            if (trouble === 'timeout') claimTrouble.slow = true;
+            else claimTrouble.fail = 1;
+            const callsBefore = matrix.creates.length + matrix.createRefusals.length;
+            const ours = await runDeadmanReleaseNotifier({ now: due, callTimeoutMs: 300 });
+            await worker.drain();
+            claimTrouble.slow = false;
+            assert.ok(ours.elsewhere >= 1, `${trouble}: counted elsewhere`);
+            assert.equal(ours.retried, 0, `${trouble}: no retry written`);
+            assert.equal(
+                matrix.creates.length + matrix.createRefusals.length,
+                callsBefore,
+                `${trouble}: no room asked for`
+            );
+            // The late claim lands, refused, since the other holds it.
+            await new Promise((r) => setTimeout(r, 1_200));
+            await worker.drain();
+            assert.deepEqual(
+                await row(b.switchId, recipient.id),
+                whileHeld,
+                `${trouble}: nothing written over the holder's row`
+            );
+
+            preSend.open();
+            const theirs = await secondTick;
+            assert.ok(theirs.sent >= 1, `${trouble}: the holder sent it`);
+            await runDeadmanReleaseNotifier({
+                now: new Date(due.getTime() + 600_000),
+                callTimeoutMs: 300,
+            });
+            await worker.drain();
+            assert.deepEqual(
+                matrix.sends
+                    .filter((x) => x.txnId.includes(b.switchId))
+                    .slice(sendsBefore)
+                    .map((x) => x.roomId),
+                [replacement],
+                `${trouble}: the notice once, into the one replacement`
+            );
+            const rooms = matrix.creates
+                .filter((x) => JSON.stringify(x.body.invite ?? []).includes(mxid))
+                .map((x) => x.roomId);
+            assert.deepEqual(rooms, [X, replacement], `${trouble}: one replacement room`);
+            assert.equal((await row(b.switchId, recipient.id)).status, 'sent', trouble);
+        }
+
+        // A claim that lands after the bound with nobody else holding it is
+        // given up when it lands: it does not hold the person's notices for
+        // its lease, and the row, untouched, is sent at the next tick.
+        {
+            const recipient = await person();
+            const notice = await release(recipient);
+            await worker.drain();
+            claimTrouble.slow = true;
+            const first = await runDeadmanReleaseNotifier({ now: notice.at, callTimeoutMs: 300 });
+            claimTrouble.slow = false;
+            assert.ok(first.elsewhere >= 1);
+            assert.equal(first.retried, 0);
+            await new Promise((r) => setTimeout(r, 1_500));
+            assert.equal(await claimsOf(recipient.id), 0, 'the late claim given up');
+            const row0 = await row(notice.switchId, recipient.id);
+            assert.equal(row0.attempts, 0, 'nothing written');
+            assert.equal(row0.last_error, null);
+            const next = await runDeadmanReleaseNotifier({ now: notice.at, callTimeoutMs: 300 });
+            await worker.drain();
+            assert.ok(next.sent >= 1, 'sent at the next tick');
+        }
+    } finally {
+        pool.connect = realConnect;
+        matrix.aliasRefusal = null;
+        matrix.sendStatus = 200;
+        await second.stop();
+    }
+});
