@@ -1755,10 +1755,23 @@ test('a standby whose mirror has not heard of a trigger, a check-in or a cancel 
     // and its sweep wrote notice rows for it in its mirror. A check-in or a
     // cancel another process committed was written over the same way. A
     // second store stands in for the old leader or the API process.
+    //
+    // Round 10: the mirror takes nothing of the move until Postgres has
+    // answered, and only what this process's own writes changed during the
+    // statement is kept over Postgres's row. The owner's deletion here during
+    // the statement acts on what the mirror then has (armed), as it does a
+    // moment before the statement, so it cancels the switch over a trigger
+    // the old leader committed (a deletion in a process whose mirror has not
+    // heard of a trigger does that with or without a sweep running: the
+    // record's §15); a label written here is kept over a trigger; and a
+    // deletion here during this process's own move stands over the move,
+    // which then writes no notice row.
     type Elsewhere =
         | 'fired'
         | 'firedAndSent'
         | 'firedErasedHere'
+        | 'firedLabelledHere'
+        | 'erasedHereOnly'
         | 'checkedIn'
         | 'cancelled'
         | 'labelled';
@@ -1766,8 +1779,16 @@ test('a standby whose mirror has not heard of a trigger, a check-in or a cancel 
         { name: 'fired and sent by the old leader', elsewhere: 'firedAndSent' },
         { name: 'fired by the old leader, which stopped before sending', elsewhere: 'fired' },
         {
-            name: 'fired by the old leader while this process erased the label (the owner’s deletion) during the statement',
+            name: 'fired by the old leader while this process erased the switch (the owner’s deletion) during the statement: the deletion’s cancel is kept over the trigger, as it is when it comes just before the statement',
             elsewhere: 'firedErasedHere',
+        },
+        {
+            name: 'fired by the old leader while this process changed the label during the statement: the trigger and that label are kept',
+            elsewhere: 'firedLabelledHere',
+        },
+        {
+            name: 'fired nowhere else, and this process erased it (the owner’s deletion) while its own move ran: the deletion stands over the move, which writes no notice row',
+            elsewhere: 'erasedHereOnly',
         },
         { name: 'checked in on the API process', elsewhere: 'checkedIn' },
         { name: 'cancelled on the API process', elsewhere: 'cancelled' },
@@ -1781,7 +1802,12 @@ test('a standby whose mirror has not heard of a trigger, a check-in or a cancel 
         const firedElsewhere =
             variant.elsewhere === 'fired' ||
             variant.elsewhere === 'firedAndSent' ||
-            variant.elsewhere === 'firedErasedHere';
+            variant.elsewhere === 'firedErasedHere' ||
+            variant.elsewhere === 'firedLabelledHere';
+        const writesHere =
+            variant.elsewhere === 'firedErasedHere' ||
+            variant.elsewhere === 'firedLabelledHere' ||
+            variant.elsewhere === 'erasedHereOnly';
         const recipient = await person();
         const owner = await person();
         const envelope = await protocol.buildReleaseEnvelope({
@@ -1837,17 +1863,18 @@ test('a standby whose mirror has not heard of a trigger, a check-in or a cancel 
             });
         } else if (variant.elsewhere === 'cancelled') {
             other.updateDeadmanSwitch(switchId, { status: 'cancelled', encryptedPayload: '' });
-        } else {
+        } else if (variant.elsewhere === 'labelled') {
             other.updateDeadmanSwitch(switchId, { headline: 'changed elsewhere' });
         }
         await other.drain();
         assert.equal(worker.getDeadmanSwitch(switchId)?.status, 'armed', 'not heard of');
 
         // The standby's sweep, a few seconds later: the switch is overdue in
-        // its mirror. In one variant this process erases the switch's label
-        // while the sweep's statement runs.
+        // its mirror. In three variants this process writes the switch while
+        // the sweep's statement runs.
         let erased = false;
-        if (variant.elsewhere === 'firedErasedHere') {
+        let statusDuring: string | undefined;
+        if (writesHere) {
             pool.connect = async () => {
                 const client = await realConnect();
                 return {
@@ -1855,7 +1882,12 @@ test('a standby whose mirror has not heard of a trigger, a check-in or a cancel 
                     async query<T = Record<string, unknown>>(sql: string, params?: unknown[]) {
                         if (!erased && sql.startsWith('UPDATE deadman_switches')) {
                             erased = true;
-                            worker.eraseDeadmanSwitch(switchId);
+                            statusDuring = worker.getDeadmanSwitch(switchId)?.status;
+                            if (variant.elsewhere === 'firedLabelledHere') {
+                                worker.updateDeadmanSwitch(switchId, { headline: 'changed here' });
+                            } else {
+                                worker.eraseDeadmanSwitch(switchId);
+                            }
                         }
                         return client.query<T>(sql, params);
                     },
@@ -1869,10 +1901,17 @@ test('a standby whose mirror has not heard of a trigger, a check-in or a cancel 
         } finally {
             pool.connect = realConnect;
         }
-        if (variant.elsewhere === 'firedErasedHere') assert.ok(erased, variant.name);
+        if (writesHere) {
+            assert.ok(erased, variant.name);
+            assert.equal(
+                statusDuring,
+                'armed',
+                `${variant.name}: nothing of the move in the mirror yet`
+            );
+        }
         const stored = (
             await pg.query(
-                'SELECT status, released_at, last_check_in_at, headline FROM deadman_switches WHERE id = $1',
+                'SELECT status, released_at, last_check_in_at, headline, encrypted_payload FROM deadman_switches WHERE id = $1',
                 [switchId]
             )
         ).rows[0] as {
@@ -1880,9 +1919,23 @@ test('a standby whose mirror has not heard of a trigger, a check-in or a cancel 
             released_at: Date | null;
             last_check_in_at: Date;
             headline: string | null;
+            encrypted_payload: string;
         };
         const mirrored = worker.getDeadmanSwitch(switchId)!;
-        if (firedElsewhere) {
+        if (variant.elsewhere === 'firedErasedHere' || variant.elsewhere === 'erasedHereOnly') {
+            assert.equal(stored.status, 'cancelled', `${variant.name}: the deletion's cancel kept`);
+            assert.equal(
+                stored.released_at?.toISOString(),
+                variant.elsewhere === 'firedErasedHere' ? first : later.toISOString(),
+                variant.name
+            );
+            assert.equal(stored.headline, null, variant.name);
+            assert.equal(stored.encrypted_payload, '', variant.name);
+            assert.equal(mirrored.status, 'cancelled', `${variant.name}: the mirror as Postgres`);
+            assert.equal(mirrored.releasedAt, stored.released_at?.toISOString(), variant.name);
+            assert.equal(mirrored.headline, undefined, variant.name);
+            assert.equal(mirrored.encryptedPayload, '', variant.name);
+        } else if (firedElsewhere) {
             assert.equal(stored.status, 'triggered', variant.name);
             assert.equal(
                 stored.released_at?.toISOString(),
@@ -1891,9 +1944,9 @@ test('a standby whose mirror has not heard of a trigger, a check-in or a cancel 
             );
             assert.equal(mirrored.status, 'triggered', variant.name);
             assert.equal(mirrored.releasedAt, first, `${variant.name}: the mirror took it`);
-            if (variant.elsewhere === 'firedErasedHere') {
-                assert.equal(stored.headline, null, `${variant.name}: the erase kept`);
-                assert.equal(mirrored.headline, undefined, variant.name);
+            if (variant.elsewhere === 'firedLabelledHere') {
+                assert.equal(stored.headline, 'changed here', `${variant.name}: this label kept`);
+                assert.equal(mirrored.headline, 'changed here', variant.name);
             } else {
                 assert.equal(stored.headline, 'owner label', variant.name);
             }
@@ -1940,6 +1993,14 @@ test('a standby whose mirror has not heard of a trigger, a check-in or a cancel 
         if (variant.elsewhere === 'firedAndSent') {
             assert.equal(sends, 0, `${variant.name}: not sent again`);
             assert.deepEqual(rows, [{ status: 'sent' }], variant.name);
+        } else if (variant.elsewhere === 'firedErasedHere') {
+            // The old leader's row, which this process has not heard of, is
+            // not sent from here: its release's content is gone.
+            assert.equal(sends, 0, variant.name);
+            assert.deepEqual(rows, [{ status: 'pending' }], variant.name);
+        } else if (variant.elsewhere === 'erasedHereOnly') {
+            assert.equal(sends, 0, variant.name);
+            assert.deepEqual(rows, [], `${variant.name}: no notice row`);
         } else if (firedElsewhere || variant.elsewhere === 'labelled') {
             // Fired, and not yet sent: the notice is sent once.
             assert.equal(sends, 1, variant.name);

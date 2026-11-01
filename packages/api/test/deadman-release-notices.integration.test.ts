@@ -2093,11 +2093,22 @@ test('the sweep’s interval does not start a pass while the previous one runs',
         await gate;
         return undefined;
     }) as typeof db.advanceDeadmanSwitch;
+    // A tick the guard skips is logged (round 10 of part 2's review: nothing
+    // said a pass was holding every later one).
+    const { log } = await import('../src/telemetry/logger');
+    const warn = log.warn;
+    let skipped = 0;
+    log.warn = (msg: string, fields?: Record<string, unknown>) => {
+        if (msg === 'deadman_sweep_tick_skipped') skipped += 1;
+        else warn(msg, fields as never);
+    };
     const loop = startDeadmanSweepScheduler(15);
     try {
         await new Promise((resolve) => setTimeout(resolve, 150));
         assert.equal(calls, 1, 'one pass in flight after ten intervals');
+        assert.ok(skipped >= 1, 'the skipped ticks logged');
     } finally {
+        log.warn = warn;
         loop.stop();
         stopDeadmanSweepScheduler();
         release();

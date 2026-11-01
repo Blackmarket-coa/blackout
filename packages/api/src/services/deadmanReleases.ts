@@ -760,7 +760,9 @@ export const writeReleaseNotices = (record: DeadmanSwitchRecord, dueAt: string):
  * trigger is conditional (`advanceDeadmanSwitch`, in Postgres too): a switch
  * another process already fired, or changed since this process read it, is
  * not fired again, keeps its first `releasedAt`, and gets no rows from here
- * (round 9 of part 2's review).
+ * (round 9 of part 2's review). In Postgres the status change reaches this
+ * process's mirror, and so the reads and the notifier, only once Postgres has
+ * applied it (round 10).
  */
 export const recordReleaseTrigger = async (
     record: DeadmanSwitchRecord,

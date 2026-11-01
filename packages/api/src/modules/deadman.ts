@@ -110,6 +110,37 @@ const SWITCH_NOT_FOUND = { code: 'switch_not_found', message: 'Switch not found'
 const notFound = (c: Context) => c.json(SWITCH_NOT_FOUND, 404);
 
 /**
+ * How many times a check-in or a cancel is tried against a switch another
+ * write changed between this process's read and its own (another check-in,
+ * the sweep's move into grace) before the route gives up.
+ */
+const SWITCH_WRITE_ATTEMPTS = 3;
+
+/** The switch kept changing under a check-in or a cancel: nothing was written. */
+const switchChanged = (c: Context) =>
+    c.json(
+        {
+            code: 'switch_changed',
+            message: 'The switch changed while this was being written. Read it and try again.',
+        },
+        409
+    );
+
+/**
+ * The database did not answer a check-in or a cancel in time
+ * (`updateDeadmanSwitchIf`): it may or may not have been recorded. Doing it
+ * again is safe, since each is conditional on the switch as it is read.
+ */
+const switchWriteUnanswered = (c: Context, what: 'check-in' | 'cancel') =>
+    c.json(
+        {
+            code: 'switch_write_unanswered',
+            message: `The server could not confirm the ${what} in time. It may not have been recorded; try again.`,
+        },
+        503
+    );
+
+/**
  * The switch as its owner sees it. A legacy switch's `encryptedPayload` is
  * present while the store still holds one: cancel clears it (as account
  * deletion does for a switch that has not fired), so a cancelled switch's
@@ -210,8 +241,12 @@ const ownedSwitch = (id: string, subject: string): DeadmanSwitchRecord | undefin
  * (a fired switch is `triggered`), in Postgres too, so a standby whose mirror has not yet heard
  * of a trigger, a check-in or a cancel another process committed does not
  * write over it, and a switch it does not move gets nothing else written and
- * no event (round 9 of part 2's review). Each switch is read from the mirror
- * as it is reached, since a move in Postgres awaits the database.
+ * no event (round 9 of part 2's review). The mirror takes a move only once
+ * Postgres has applied it, so nothing here serves, notifies or reports a
+ * trigger Postgres then refuses, and a move whose statement fails or does not
+ * answer in time is left for the next pass (round 10). Each switch is read
+ * from the mirror as it is reached, since a move in Postgres awaits the
+ * database.
  */
 export async function sweepOverdueDeadmanSwitches(
     now: Date = new Date(),
@@ -514,7 +549,7 @@ function createDeadmanRouter() {
         }
     );
 
-    deadman.post('/switches/:id/check-in', (c) => {
+    deadman.post('/switches/:id/check-in', async (c) => {
         const denied = requireDomainCapability(c, 'deadman', 'write');
         if (denied) return denied;
 
@@ -524,27 +559,49 @@ function createDeadmanRouter() {
         }
 
         const id = c.req.param('id');
-        const existing = ownedSwitch(id, subject);
-        if (!existing) return notFound(c);
-        if (existing.status === 'triggered') {
-            // Triggering only changes the switch's status: the server sends
-            // the payload to no one, so the message must not say it shipped.
-            return c.json({ code: 'switch_triggered', message: 'Switch already triggered' }, 409);
+        let existing = ownedSwitch(id, subject);
+        let updated: DeadmanSwitchRecord | undefined;
+        // Conditional on the switch being as read here (`updateDeadmanSwitchIf`,
+        // in Postgres too): one the worker fired, or cancelled elsewhere, after
+        // this process last heard of it is refused below rather than set back
+        // to armed. One another check-in or the sweep's move into grace
+        // changed meanwhile is checked in again over what it now is.
+        for (let attempt = 0; ; attempt += 1) {
+            if (!existing) return notFound(c);
+            if (existing.status === 'triggered') {
+                // Triggering only changes the switch's status: the server sends
+                // the payload to no one, so the message must not say it shipped.
+                return c.json(
+                    { code: 'switch_triggered', message: 'Switch already triggered' },
+                    409
+                );
+            }
+            if (existing.status === 'cancelled') {
+                return c.json(
+                    { code: 'switch_cancelled', message: 'Switch has been cancelled' },
+                    409
+                );
+            }
+            const refreshed = applyCheckIn(existing, new Date());
+            const outcome = await db.updateDeadmanSwitchIf(id, existing, {
+                status: refreshed.status,
+                lastCheckInAt: refreshed.lastCheckInAt,
+                triggerAt: refreshed.triggerAt,
+                releaseAt: refreshed.releaseAt,
+                // Ends a backlog window, so the next missed check-in can have one.
+                backlogGraceStartedAt: refreshed.backlogGraceStartedAt,
+            });
+            if (outcome.kind === 'applied') {
+                updated = outcome.record;
+                break;
+            }
+            if (outcome.kind === 'unanswered') return switchWriteUnanswered(c, 'check-in');
+            if (attempt >= SWITCH_WRITE_ATTEMPTS - 1) return switchChanged(c);
+            existing =
+                outcome.current && outcome.current.ownerId === subject
+                    ? outcome.current
+                    : undefined;
         }
-        if (existing.status === 'cancelled') {
-            return c.json({ code: 'switch_cancelled', message: 'Switch has been cancelled' }, 409);
-        }
-
-        const refreshed = applyCheckIn(existing, new Date());
-        const updated = db.updateDeadmanSwitch(id, {
-            status: refreshed.status,
-            lastCheckInAt: refreshed.lastCheckInAt,
-            triggerAt: refreshed.triggerAt,
-            releaseAt: refreshed.releaseAt,
-            // Ends a backlog window, so the next missed check-in can have one.
-            backlogGraceStartedAt: refreshed.backlogGraceStartedAt,
-        });
-        if (!updated) return notFound(c);
 
         emitDomainEvent({
             module: 'deadman',
@@ -555,7 +612,7 @@ function createDeadmanRouter() {
         return c.json(envelope(DEADMAN_EVENT_NAMES.checkedIn, updated, subject));
     });
 
-    deadman.post('/switches/:id/cancel', (c) => {
+    deadman.post('/switches/:id/cancel', async (c) => {
         const denied = requireDomainCapability(c, 'deadman', 'write');
         if (denied) return denied;
 
@@ -565,30 +622,54 @@ function createDeadmanRouter() {
         }
 
         const id = c.req.param('id');
-        const existing = ownedSwitch(id, subject);
-        if (!existing) return notFound(c);
-        if (existing.status === 'triggered') {
-            return c.json(
-                { code: 'switch_triggered', message: 'Switch already triggered; cannot cancel' },
-                409
-            );
-        }
-        if (existing.status === 'cancelled') {
-            // Cancelled before cancel cleared payloads: a second cancel is how
-            // the owner removes what the store still holds.
-            const cleared = existing.encryptedPayload
-                ? db.updateDeadmanSwitch(id, { encryptedPayload: '' }) ?? existing
-                : existing;
-            if (isReleaseSwitch(existing)) blankReleaseWraps(id);
-            return c.json(envelope(DEADMAN_EVENT_NAMES.cancelled, cleared, subject));
-        }
+        let existing = ownedSwitch(id, subject);
+        let updated: DeadmanSwitchRecord | undefined;
+        // Conditional as the check-in is: a switch that fired in Postgres
+        // after this process last heard of it is not cancelled, since nothing
+        // may take a release back.
+        for (let attempt = 0; ; attempt += 1) {
+            if (!existing) return notFound(c);
+            if (existing.status === 'triggered') {
+                return c.json(
+                    {
+                        code: 'switch_triggered',
+                        message: 'Switch already triggered; cannot cancel',
+                    },
+                    409
+                );
+            }
+            if (existing.status === 'cancelled') {
+                // Cancelled before cancel cleared payloads: a second cancel is
+                // how the owner removes what the store still holds. A
+                // cancelled switch never moves again, so this needs no
+                // condition.
+                const cleared = existing.encryptedPayload
+                    ? db.updateDeadmanSwitch(id, { encryptedPayload: '' }) ?? existing
+                    : existing;
+                if (isReleaseSwitch(existing)) blankReleaseWraps(id);
+                return c.json(envelope(DEADMAN_EVENT_NAMES.cancelled, cleared, subject));
+            }
 
-        // The payload goes with the cancel, and so do a release switch's
-        // sealed copies, the owner's own included. The store keeps the rows,
-        // so the owner's list still shows the switch and what became of it;
-        // backups keep the payload until they expire (KNOWN_LIMITATIONS.md).
-        const updated = db.updateDeadmanSwitch(id, { status: 'cancelled', encryptedPayload: '' });
-        if (!updated) return notFound(c);
+            // The payload goes with the cancel, and so do a release switch's
+            // sealed copies, the owner's own included, once the cancel has
+            // applied. The store keeps the rows, so the owner's list still
+            // shows the switch and what became of it; backups keep the payload
+            // until they expire (KNOWN_LIMITATIONS.md).
+            const outcome = await db.updateDeadmanSwitchIf(id, existing, {
+                status: 'cancelled',
+                encryptedPayload: '',
+            });
+            if (outcome.kind === 'applied') {
+                updated = outcome.record;
+                break;
+            }
+            if (outcome.kind === 'unanswered') return switchWriteUnanswered(c, 'cancel');
+            if (attempt >= SWITCH_WRITE_ATTEMPTS - 1) return switchChanged(c);
+            existing =
+                outcome.current && outcome.current.ownerId === subject
+                    ? outcome.current
+                    : undefined;
+        }
         if (isReleaseSwitch(updated)) blankReleaseWraps(id);
 
         emitDomainEvent({

@@ -179,6 +179,7 @@ import {
     introspectColumns,
     recordToRow,
     rowToRecord,
+    snakeToCamel,
     type TablePlan,
 } from './pgWriter';
 import { MUTATOR_SPECS, TABLE_DESCRIPTORS } from './pgDescriptors';
@@ -199,6 +200,12 @@ const switchStillAsRead = (
     current: DeadmanSwitchRecord,
     read: Pick<DeadmanSwitchRecord, 'status' | 'lastCheckInAt'>
 ): boolean => current.status === read.status && current.lastCheckInAt === read.lastCheckInAt;
+
+/** How a conditional write of a switch ended (`updateDeadmanSwitchIf`). */
+export type DeadmanSwitchWriteOutcome =
+    | { kind: 'applied'; record: DeadmanSwitchRecord }
+    | { kind: 'refused'; current: DeadmanSwitchRecord | undefined }
+    | { kind: 'unanswered' };
 
 /** Coalition demo seed rows, or none when demo seeding is off (default in production). */
 const demoSeedRows = <T>(rows: T[]): T[] => (shouldSeedCoalitionDemoData() ? rows : []);
@@ -2695,6 +2702,34 @@ class InMemoryDb {
         const current = this.deadmanSwitches.get(id);
         if (!current || !switchStillAsRead(current, read)) return undefined;
         return this.updateDeadmanSwitch(id, patch);
+    }
+
+    /**
+     * The owner's check-in or cancel of a switch, applied only while the
+     * switch is still as the route read it (`read`: the same status and the
+     * same last check-in), as the sweep's move is. `applied` with the
+     * updated record; `refused` with the switch as it now stands (one that
+     * fired is `triggered`), so the route can answer from it or apply the
+     * check-in again over another check-in or the sweep's move into grace;
+     * `unanswered` when the database did not answer in time, so the write
+     * may or may not have landed (the Postgres store only). Here, and in the
+     * file store, the mirror is the database, so it is refused only where
+     * the switch changed since the read; the Postgres store carries the
+     * condition into the database (round 10 of part 2's review: the API
+     * process accepted a check-in after the worker's trigger had committed,
+     * its full-row write set the switch back to armed while the release
+     * stayed readable and its notice was sent, and the owner was told the
+     * check-in had worked).
+     */
+    async updateDeadmanSwitchIf(
+        id: string,
+        read: Pick<DeadmanSwitchRecord, 'status' | 'lastCheckInAt'>,
+        patch: Partial<Omit<DeadmanSwitchRecord, 'id' | 'createdAt' | 'ownerId' | 'releasedAt'>>
+    ): Promise<DeadmanSwitchWriteOutcome> {
+        const current = this.deadmanSwitches.get(id);
+        if (!current || !switchStillAsRead(current, read)) return { kind: 'refused', current };
+        const record = this.updateDeadmanSwitch(id, patch);
+        return record ? { kind: 'applied', record } : { kind: 'refused', current: undefined };
     }
 
     /**
@@ -8869,7 +8904,22 @@ export class PostgresBackedDb extends InMemoryDb {
             const original = proto[method];
             if (typeof original !== 'function') continue;
             self[method] = (...args: unknown[]): unknown => {
+                // A write of a switch whose conditional write is in flight
+                // here: what it changes is noted for that write's merge.
+                const switchId =
+                    spec.kind === 'upsert' &&
+                    spec.map === 'deadmanSwitches' &&
+                    typeof args[0] === 'string' &&
+                    this.switchWritesInFlight.has(args[0])
+                        ? args[0]
+                        : undefined;
+                const prior = switchId
+                    ? this.mapByName('deadmanSwitches').get(switchId)
+                    : undefined;
                 const result = original.apply(this, args);
+                if (switchId && prior && result && typeof result === 'object') {
+                    this.noteOwnSwitchWrite(switchId, prior, result as Record<string, unknown>);
+                }
                 const queue = this.queue;
                 if (queue) {
                     if (spec.kind === 'upsert') {
@@ -9186,25 +9236,15 @@ export class PostgresBackedDb extends InMemoryDb {
     }
 
     /**
-     * The sweep's move of a switch, conditional in Postgres: one `UPDATE ...
-     * WHERE` the stored switch still has the status and the last check-in the
-     * sweep read (a fired one's status is `triggered`), `RETURNING` the row,
-     * run in the write-behind queue's order (`enqueueCall`): after every
-     * write this process queued before it (its arming of the switch among
-     * them), and before any it queues meanwhile. The mirror takes the move at once, as
-     * the sweep's write always did, so a check-in or a cancel on this process
-     * sees it. When the statement changes no row, another process got there
-     * first: a leader that fired the switch before this standby's mirror
-     * heard of it (round 9 of part 2's review: the standby fired it again and
-     * Postgres took its later `releasedAt`), a check-in or a cancel on the API
-     * process; the switch is read from Postgres into the mirror and
-     * `undefined` is returned, so the sweep writes nothing else for it (no
-     * notice rows, no event). Where this process wrote the switch while the
-     * statement ran, what that write changed is kept over Postgres's row and
-     * the result written after it. Only the moved columns are written, so a
-     * label another process wrote stays.
-     * A database error is logged and the move kept in the mirror, as a
-     * write-behind write that failed twice is (`db_write_behind_failed`).
+     * The sweep's move of a switch, conditional in Postgres
+     * (`writeDeadmanSwitchIf`): the updated record once Postgres has applied
+     * it, otherwise `undefined`, and the sweep writes nothing else for the
+     * switch (no notice rows, no event). A move another process's write beat
+     * (a leader that fired the switch before this standby's mirror heard of
+     * it, a check-in or a cancel on the API process), one whose statement
+     * failed or did not answer in time, and one this process's own write
+     * moved elsewhere while it ran (the owner's deletion cancelling it) all
+     * return `undefined`.
      */
     override async advanceDeadmanSwitch(
         id: string,
@@ -9216,84 +9256,242 @@ export class PostgresBackedDb extends InMemoryDb {
             >
         >
     ): Promise<DeadmanSwitchRecord | undefined> {
+        if (!this.pool || !this.plans.has('deadmanSwitches') || !this.queue) {
+            return super.advanceDeadmanSwitch(id, read, patch);
+        }
+        const outcome = await this.writeDeadmanSwitchIf(id, read, patch);
+        return outcome.kind === 'applied' && !outcome.statusMovedHere ? outcome.record : undefined;
+    }
+
+    /** The owner's check-in or cancel, conditional in Postgres (`writeDeadmanSwitchIf`). */
+    override async updateDeadmanSwitchIf(
+        id: string,
+        read: Pick<DeadmanSwitchRecord, 'status' | 'lastCheckInAt'>,
+        patch: Partial<Omit<DeadmanSwitchRecord, 'id' | 'createdAt' | 'ownerId' | 'releasedAt'>>
+    ): Promise<DeadmanSwitchWriteOutcome> {
+        if (!this.pool || !this.plans.has('deadmanSwitches') || !this.queue) {
+            return super.updateDeadmanSwitchIf(id, read, patch);
+        }
+        const outcome = await this.writeDeadmanSwitchIf(id, read, patch);
+        if (outcome.kind !== 'applied') return outcome;
+        return { kind: 'applied', record: outcome.record };
+    }
+
+    /**
+     * How long a conditional write of a switch waits for Postgres, its turn
+     * in the write-behind queue and the statement together, as the notifier
+     * bounds its reads (round 10 of part 2's review: the sweep waited behind
+     * a stalled queue with no limit, and its running guard then held every
+     * later pass). A field, so a test can shorten it.
+     */
+    switchStatementTimeoutMs = 30_000;
+
+    /**
+     * The switches with a conditional write in flight here, each with one
+     * note per write in flight of the fields this process's own writes to
+     * the switch changed while it ran (`noteOwnSwitchWrite`). A change
+     * notification's refresh of the mirror is not a write of this process's
+     * and is not noted (round 10: taken for one, it put an older status over
+     * a cancel another process had committed).
+     */
+    private readonly switchWritesInFlight = new Map<string, Set<Map<string, unknown>>>();
+
+    /**
+     * A conditional statement of a switch's that did not answer in time and
+     * has not settled since: every write of this process's is queued behind
+     * it, so while it is set no other conditional write of a switch is queued
+     * (each is `unanswered` at once), and a stalled database costs a pass
+     * one bound, not one per switch.
+     */
+    private stalledSwitchStatement: Promise<unknown> | null = null;
+
+    private noteOwnSwitchWrite(
+        id: string,
+        prior: Record<string, unknown>,
+        next: Record<string, unknown>
+    ): void {
+        const notes = this.switchWritesInFlight.get(id);
+        if (!notes) return;
+        for (const key of new Set([...Object.keys(prior), ...Object.keys(next)])) {
+            if (key === 'id' || key === 'createdAt' || prior[key] === next[key]) continue;
+            for (const note of notes) note.set(key, next[key]);
+        }
+    }
+
+    /**
+     * A switch's write, conditional in Postgres: one `UPDATE ... WHERE` the
+     * stored switch still has the status and the last check-in this process
+     * read (a fired one's status is `triggered`), `RETURNING` the row, run in
+     * the write-behind queue's order (`enqueueCall`): after every write this
+     * process queued before it (its arming of the switch among them), and
+     * before any it queues meanwhile. Only the written columns are in the
+     * statement, so a label another process wrote stays.
+     *
+     * The mirror takes nothing of it until Postgres has answered (round 10
+     * of part 2's review: it took the move at once, so while the statement
+     * waited this process served the people named their copies and sent them
+     * a notice for a trigger Postgres then refused). Then, applied, the
+     * mirror takes the row Postgres returned; refused, the row Postgres has,
+     * read in the same turn, and the result is announced to the other
+     * processes either way, so they refresh too. Where this process wrote the
+     * switch while the statement ran (only the owner's deletion can: a
+     * check-in, a cancel and another move are conditional writes themselves),
+     * what those writes changed is kept over Postgres's row and the result
+     * written after them, so the mirror and Postgres agree; otherwise
+     * Postgres's row is taken as it is and nothing is written
+     * (round 10: what a change notification had put in the mirror was taken
+     * for a write of this process's, and an older status written over a
+     * cancel another process had committed).
+     *
+     * Where Postgres has no row for the switch at all, this process's own
+     * write of it failed twice and was dropped (`db_write_behind_failed`):
+     * nothing deletes a switch row. The record is then written whole, as the
+     * sweep's full-row write did before round 9, insert-only, and the write
+     * applies (round 10: such a switch never fired, and nothing said so).
+     *
+     * A statement that fails is logged and `unanswered`: nothing of it is in
+     * the mirror, it is safe to repeat, and the sweep's next pass does (round
+     * 10: one failure kept the move in the mirror only, and no pass tried it
+     * again). One that does not answer within `switchStatementTimeoutMs` is
+     * the same, and is not run if its turn in the queue has not yet come;
+     * one already sent can still land later, and the next pass then finds it
+     * applied: the mirror takes it from Postgres, the notifier's catch-up
+     * writes a release's notice rows, and only its event is not emitted.
+     */
+    private async writeDeadmanSwitchIf(
+        id: string,
+        read: Pick<DeadmanSwitchRecord, 'status' | 'lastCheckInAt'>,
+        patch: Partial<Omit<DeadmanSwitchRecord, 'id' | 'createdAt' | 'ownerId'>>
+    ): Promise<
+        | { kind: 'applied'; record: DeadmanSwitchRecord; statusMovedHere: boolean }
+        | { kind: 'refused'; current: DeadmanSwitchRecord | undefined }
+        | { kind: 'unanswered' }
+    > {
         const plan = this.plans.get('deadmanSwitches');
         const queue = this.queue;
-        if (!this.pool || !plan || !queue) return super.advanceDeadmanSwitch(id, read, patch);
+        if (!plan || !queue) return { kind: 'unanswered' };
         const before = this.getDeadmanSwitch(id);
-        if (!before || !switchStillAsRead(before, read)) return undefined;
-        const next: DeadmanSwitchRecord = { ...before, ...patch, updatedAt: nowIso() };
-        const map = this.mapByName('deadmanSwitches');
-        map.set(id, next as unknown as Record<string, unknown>);
-        const moved = recordToRow(plan, { ...patch, updatedAt: next.updatedAt });
-        const columns = Object.keys(moved);
+        if (!before || !switchStillAsRead(before, read))
+            return { kind: 'refused', current: before };
+        if (this.stalledSwitchStatement) return { kind: 'unanswered' };
+        const updatedAt = nowIso();
+        const written = recordToRow(plan, { ...patch, updatedAt });
+        const whole = recordToRow(plan, { ...before, ...patch, updatedAt } as unknown as Record<
+            string,
+            unknown
+        >);
+        const columns = Object.keys(written);
         const table = plan.descriptor.tableName;
         const n = columns.length;
-        let applied: Record<string, unknown> | undefined;
-        let stored: Record<string, unknown> | undefined;
-        try {
-            // In the write-behind queue's order: after every write this process
-            // queued before it (the arming of the switch among them), and
-            // before any it queues meanwhile.
-            ({ applied, stored } = await queue.enqueueCall(async (client) => {
-                const row = (
-                    await client.query<Record<string, unknown>>(
-                        `UPDATE ${table} SET ${columns
-                            .map((c, i) => `${c} = $${i + 1}`)
-                            .join(', ')} ` +
-                            `WHERE id = $${n + 1} AND status = $${n + 2} ` +
-                            `AND last_check_in_at = $${n + 3}::timestamptz ` +
-                            'RETURNING *',
-                        [...columns.map((c) => moved[c]), id, read.status, read.lastCheckInAt]
-                    )
-                ).rows[0];
-                if (row) return { applied: row, stored: undefined };
-                const found = (
+        const note = new Map<string, unknown>();
+        const notes = this.switchWritesInFlight.get(id) ?? new Set<Map<string, unknown>>();
+        notes.add(note);
+        this.switchWritesInFlight.set(id, notes);
+        const call = { abandoned: false };
+        const statement = queue.enqueueCall(async (client) => {
+            // Its turn came after the caller stopped waiting: not run.
+            if (call.abandoned) return { skipped: true as const };
+            const row = (
+                await client.query<Record<string, unknown>>(
+                    `UPDATE ${table} SET ${columns.map((c, i) => `${c} = $${i + 1}`).join(', ')} ` +
+                        `WHERE id = $${n + 1} AND status = $${n + 2} ` +
+                        `AND last_check_in_at = $${n + 3}::timestamptz ` +
+                        'RETURNING *',
+                    [...columns.map((c) => written[c]), id, read.status, read.lastCheckInAt]
+                )
+            ).rows[0];
+            if (row) return { applied: row, inserted: false };
+            const select = async () =>
+                (
                     await client.query<Record<string, unknown>>(
                         `SELECT * FROM ${table} WHERE id = $1`,
                         [id]
                     )
                 ).rows[0];
-                return { applied: undefined, stored: found };
-            }));
+            const found = await select();
+            if (found) return { stored: found };
+            const wholeColumns = Object.keys(whole);
+            const inserted = (
+                await client.query<Record<string, unknown>>(
+                    `INSERT INTO ${table} (${wholeColumns.join(', ')}) VALUES (${wholeColumns
+                        .map((_, i) => `$${i + 1}`)
+                        .join(', ')}) ON CONFLICT (id) DO NOTHING RETURNING *`,
+                    wholeColumns.map((c) => whole[c])
+                )
+            ).rows[0];
+            if (inserted) return { applied: inserted, inserted: true };
+            return { stored: await select() };
+        });
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        let answer: Awaited<typeof statement> | 'timeout';
+        try {
+            answer = await Promise.race([
+                statement,
+                new Promise<'timeout'>((resolve) => {
+                    timer = setTimeout(() => resolve('timeout'), this.switchStatementTimeoutMs);
+                }),
+            ]);
         } catch (err) {
-            log.error('deadman_switch_advance_failed', {
+            log.error('deadman_switch_write_failed', {
                 error: err instanceof Error ? err.message : String(err),
             });
-            return next;
+            return { kind: 'unanswered' };
+        } finally {
+            clearTimeout(timer);
+            notes.delete(note);
+            if (notes.size === 0) this.switchWritesInFlight.delete(id);
         }
-        if (applied) {
-            this.transport?.publish({
-                src: this.instanceId,
-                m: 'deadmanSwitches',
-                op: 'u',
-                kv: [id],
+        if (answer === 'timeout') {
+            call.abandoned = true;
+            const stalled: Promise<unknown> = statement
+                .catch(() => undefined)
+                .finally(() => {
+                    if (this.stalledSwitchStatement === stalled) {
+                        this.stalledSwitchStatement = null;
+                        log.info('deadman_switch_write_settled', {});
+                    }
+                });
+            this.stalledSwitchStatement = stalled;
+            log.error('deadman_switch_write_failed', {
+                error: 'timeout',
+                timeoutMs: this.switchStatementTimeoutMs,
             });
-            return next;
+            return { kind: 'unanswered' };
         }
-        const current = map.get(id);
-        if (current === (next as unknown as Record<string, unknown>)) {
-            if (stored) map.set(id, rowToRecord(plan, stored));
-            else map.set(id, before as unknown as Record<string, unknown>);
-        } else if (current && stored) {
-            // This process wrote the switch while the statement ran (its
-            // owner's deletion erasing the label, say; a check-in and a cancel
-            // refuse the moved switch): what that write changed is kept, the
-            // rest is Postgres's, and the result is written after it, so the
-            // mirror and Postgres agree and the other process's move stands.
-            const theirs = rowToRecord(plan, stored);
-            const mine = next as unknown as Record<string, unknown>;
+        if ('skipped' in answer) return { kind: 'unanswered' };
+        const map = this.mapByName('deadmanSwitches');
+        const fromPostgres =
+            'applied' in answer
+                ? answer.applied
+                : (answer.stored as Record<string, unknown> | undefined);
+        if (!fromPostgres) {
+            // Postgres has no row, and its insert met one: nothing to take.
+            return { kind: 'refused', current: this.getDeadmanSwitch(id) };
+        }
+        if ('applied' in answer && answer.inserted) {
+            log.warn('deadman_switch_row_restored', {});
+        }
+        const stored = rowToRecord(plan, fromPostgres);
+        if (note.size > 0) {
+            // This process's own writes are queued after the statement: what
+            // they changed is kept over Postgres's row, and the whole row is
+            // written after them, every column (a field neither has is
+            // written empty), so Postgres ends as the mirror is.
             const merged: Record<string, unknown> = {};
-            for (const key of new Set([
-                ...Object.keys(mine),
-                ...Object.keys(current),
-                ...Object.keys(theirs),
-            ])) {
-                if (key === 'id' || key === 'createdAt') continue;
-                merged[key] = current[key] !== mine[key] ? current[key] : theirs[key];
-            }
-            this.updateDeadmanSwitch(id, merged as Partial<DeadmanSwitchRecord>);
+            for (const column of plan.columns) merged[snakeToCamel(column.name)] = undefined;
+            Object.assign(merged, stored);
+            for (const [key, value] of note) merged[key] = value;
+            map.set(id, merged);
+            queue.enqueueUpsert('deadmanSwitches', merged);
+        } else {
+            map.set(id, stored);
         }
-        return undefined;
+        this.transport?.publish({ src: this.instanceId, m: 'deadmanSwitches', op: 'u', kv: [id] });
+        const current = this.getDeadmanSwitch(id);
+        if ('applied' in answer && current) {
+            return { kind: 'applied', record: current, statusMovedHere: note.has('status') };
+        }
+        return { kind: 'refused', current };
     }
 
     /**

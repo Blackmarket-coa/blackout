@@ -18,9 +18,13 @@ import { BACKLOG_TOLERANCE_FLOOR_MS, backlogToleranceMs } from './backlogToleran
  * schedulers): in postgres mode the background-leader advisory lock
  * (services/backgroundLeader.ts) keeps the loops to one process.
  * `evaluateTransition` is idempotent for already-fired switches, and each
- * move is conditional in Postgres (`advanceDeadmanSwitch`), so an occasional
- * overlap of two processes, or a standby whose mirror lags, re-emits nothing
- * and fires nothing twice.
+ * move is conditional in Postgres (`advanceDeadmanSwitch`) and reaches this
+ * process's mirror only once Postgres has applied it, so an occasional overlap
+ * of two processes, or a standby whose mirror lags, re-emits nothing and fires
+ * nothing twice; a move whose statement fails or does not answer in time is
+ * not made here, and the next pass tries it again (round 10 of part 2's
+ * review: on a database error the move was kept in the mirror and its event
+ * emitted, and no pass tried it again).
  *
  * Its backlog tolerance follows its cadence (backlogTolerance.ts): a switch it
  * reaches later than that gets a backlog grace window instead of firing.
@@ -43,6 +47,8 @@ export const deadmanSweepIntervalMs = (): number => {
 let timer: ReturnType<typeof setInterval> | null = null;
 /** Whether the interval's pass is running, so one that outlives the interval is not overlapped. */
 let running = false;
+/** Ticks skipped in a row because a pass was still running. */
+let skipped = 0;
 
 /** Run one sweep pass. Returns the number of switches whose status advanced. */
 export const runDeadmanSweep = async (
@@ -60,7 +66,12 @@ export const runDeadmanSweep = async (
  * A pass awaits the database for each switch it moves in Postgres
  * (`advanceDeadmanSwitch`), so, as the notifier does, the next pass does not
  * start while one runs, and the worker's shutdown waits for a pass in flight
- * up to its own bound (`backgroundTicks.ts`).
+ * up to its own bound (`backgroundTicks.ts`). Each of those waits is bounded
+ * (`switchStatementTimeoutMs`, 30 seconds), and while one has not answered
+ * the store queues no further move, so a stalled database ends a pass after
+ * about one bound rather than holding it, and later passes end at once until
+ * the statement settles; a tick skipped because a pass is still running is
+ * logged (`deadman_sweep_tick_skipped`), counts only.
  */
 export const startDeadmanSweepScheduler = (
     intervalMs: number = DEFAULT_INTERVAL_MS
@@ -68,8 +79,13 @@ export const startDeadmanSweepScheduler = (
     if (timer) return { stop: stopDeadmanSweepScheduler };
     const toleranceMs = backlogToleranceMs(intervalMs);
     timer = setInterval(() => {
-        if (running) return;
+        if (running) {
+            skipped += 1;
+            log.warn('deadman_sweep_tick_skipped', { skipped });
+            return;
+        }
         running = true;
+        skipped = 0;
         void trackBackgroundTick(runDeadmanSweep(new Date(), toleranceMs))
             .catch((err) => {
                 log.warn('deadman_sweep_tick_threw', { error: String(err) });
