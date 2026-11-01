@@ -399,7 +399,9 @@ export const ACCOUNT_DELETION_FINISH_TIMEOUT_MS = 10 * 1000;
  * revoked first; the pool is given neither a connection timeout nor a
  * statement timeout (`config/postgres.ts`), and a connection timeout alone
  * would not end the second. A reverse proxy in front ends the request at its
- * read timeout instead (the nginx configs' `proxy_read_timeout`), and the
+ * read timeout instead, where it has one (an hour in the nginx site configs'
+ * `location /v1/`, which the app calls same-origin; production's Caddy sets
+ * none, so there the browser gives up first), and the
  * screen then says the deletion may not have finished, although this process
  * has applied it to its mirror, revoked the token and queued its writes,
  * which land when the database answers and are lost if the process stops

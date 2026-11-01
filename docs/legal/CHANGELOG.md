@@ -96,11 +96,12 @@ each correction.
     work are at work on one person's notices at once, which a claim on the
     person in its database prevents unless one holds it past its time limit,
     and the homeserver refuses the alias, the two can each make the person a
-    room and post the notice in each. While the bot works on a person's
-    notices the server keeps that claim (the account id, a random token and
-    an expiry); one left by a process that stopped stays until the next claim
-    for that person replaces it, and for good if their account is deleted
-    first. The notice carries nothing of
+    room and post the notice in each (a copy whose request for the claim
+    fails or goes unanswered leaves the person's notices alone). While the
+    bot works on a person's notices the server keeps that claim (the account
+    id, a random token and an expiry); one left behind by a process that
+    stopped or could not give it up stays until the next claim for that
+    person replaces it, and for good if their account is deleted first. The notice carries nothing of
     the message, nobody's name, not the owner's
     label. The room is a plaintext service room like the others
     [`TRUST.md`](../../TRUST.md) §1 lists, created so that the homeserver does
@@ -116,7 +117,9 @@ each correction.
     `deadmanReleases` (`account.deadmanReleases` in the self-service export).
     [`TRUST.md`](../../TRUST.md) §2 says so.
 -   **Deleting an account** removes the sealed copies of its unfired release
-    switches with their content; a fired one keeps its content, the copies for
+    switches with their content (across the API and worker processes, also of
+    one that fired in the moment before the deletion reached the API process,
+    which had not yet heard of it); a fired one keeps its content, the copies for
     the people it named and the public key it was signed with, until they are
     removed at the first sweep 365 days or more after it fired, and only the
     owner's own copy and the label go, so that what was

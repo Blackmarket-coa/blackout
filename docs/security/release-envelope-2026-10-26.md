@@ -38,6 +38,11 @@ notifiers at once on one person to be fixed (round 9), and approved PR 4,
 the client and device side of the design's build plan
 (`deadman-release-design-2026-10-24.md` §8). PR 4 is not built here, and
 `BLACKOUT_DEADMAN_RELEASES` stays off everywhere until it is.
+**2026-11-01:** a tenth round read round 9's fixes; its high finding (the
+sweep's trigger reached the mirror before Postgres accepted it, so a notice
+could be sent and a copy listed for a trigger Postgres refused), four medium
+and one low in the conditional move, and six untrue or incomplete sentences
+are each fixed or explained under the same heading, with decision 30 new.
 
 **State read:** the PR 2 branch at `6ae33bc2e2` (#991), on `develop` at
 `8a20ad6a0b`; PR 2 then merged as `e1d4cec964`, which this branch merged. **Read** means a claim rests on the code or a standard; **Run**
@@ -674,10 +679,14 @@ longer current.
     is sent once the switch fires (P3b-L1). Legacy switches change status
     only, as today.
 -   **The room.** One standing room per person and reused (the cases below
-    can leave an extra one, and so can two notifiers working on one person's
+    can leave an extra one; so can two notifiers working on one person's
     notices at once, which a claim on the person in Postgres prevents since
     round 9 unless one holds it past its lease, §15, with the notice in
-    each), named "Blackout notices", created by the bot with the `public_chat`
+    each; and so can a notifier that stops after a create has answered and
+    before its queued record of the room reaches Postgres, where the
+    homeserver refuses the alias: the next attempt finds no room and makes
+    another, so the person has an invitation in each and the notice in the
+    second, §15 and Still open), named "Blackout notices", created by the bot with the `public_chat`
     preset, an invite-only
     `m.room.join_rules` in `initial_state` and `visibility: private`, the
     person invited with `is_direct`, and power levels that let only the bot
@@ -765,8 +774,12 @@ invite`, set by every in-repo template, adds `m.room.encryption` to every
     (`@<MATRIX_BOT_LOCALPART or blackout>:<domain>`), and if that is not the
     bot's, every room found through an alias looks like another account's
     and is replaced by one without the alias, the behaviour before it.
-    A room the homeserver no longer has is replaced once per person: every
-    row of theirs that pointed at it moves to the replacement (P3b-L3).
+    A room the homeserver no longer has is replaced once per person, except
+    in the cases this bullet names: every row of theirs that pointed at it
+    moves to the replacement (P3b-L3). Until round 10 a notifier whose claim
+    statement timed out or failed wrote a retry over the row the claim's
+    holder was working on, which could put the gone room back and so lead
+    to a second replacement; such a claim now writes nothing (§15).
 -   **The notice:** an `m.text` (an `m.notice` would be silent under
     `.m.rule.suppress_notices`) with the fixed body "There is something new
     for you in Blackout. Open Blackout to see it. This room is not end-to-end
@@ -1283,19 +1296,68 @@ message, and nothing here makes a release happen on time (§10, R12).
     the same last check-in. In Postgres that is one statement,
     `UPDATE ... WHERE status = ... AND last_check_in_at = ... RETURNING *`
     on the switch's id, run in the write-behind queue's order (after every write the process queued before
-    it, before any queued after) and writing only the moved columns; when it
-    changes no row, another process moved, checked in or cancelled the switch
-    first, the switch is read from Postgres into the mirror (keeping what
-    this process wrote to it meanwhile, written after), and the sweep writes
-    nothing else for it: no notice rows, no event (round 9 of the review: a
-    standby whose mirror had not heard of the old leader's trigger fired the
-    switch again with a full-row write, and Postgres took its later
-    `releasedAt`, which moved the notice window and the removal date; a
-    check-in or a cancel the API process committed within the change
-    notification's lag was written over the same way). A database error
-    there is logged (`deadman_switch_advance_failed`) and the move kept in
-    the mirror, as a dropped write-behind write is. The sweep is
-    asynchronous, and the scheduler does not start a pass while one runs.
+    it, before any queued after) and writing only the moved columns
+    (`writeDeadmanSwitchIf` in `db/store.ts`). The mirror takes nothing of
+    the move until Postgres has answered: applied, the mirror takes the row
+    Postgres returned; refused (another process moved, checked in or
+    cancelled the switch first), the row Postgres has, read in the same
+    turn, and the sweep writes nothing else for it: no notice rows, no event
+    (round 9 of the review: a standby whose mirror had not heard of the old
+    leader's trigger fired the switch again with a full-row write, and
+    Postgres took its later `releasedAt`, which moved the notice window and
+    the removal date; a check-in or a cancel the API process committed
+    within the change notification's lag was written over the same way).
+    Either way the result is announced to the other processes. Until round
+    10 the mirror took the move before the statement ran, so while the
+    statement waited, the notifier in the same process wrote and sent a
+    notice, and the person's read on that process listed their copy, for a
+    trigger Postgres then refused; now nothing that process serves or sends
+    rests on a move Postgres has not applied. Where this process itself
+    wrote the switch while the statement ran (only the owner's deletion
+    can: a check-in, a cancel and another move are conditional writes
+    themselves), the fields those writes changed are kept over Postgres's
+    row and the whole row written after them; a change notification's
+    refresh of the mirror is not such a write (round 10: taken for one, it
+    put an older status over a cancel another process had committed). So
+    the owner's deletion during the statement acts on the switch as the
+    mirror then has it, armed, as it does a moment before the statement: it
+    cancels the switch and removes its content and copies even over a
+    trigger another process committed that this one had not heard of, which
+    a deletion in a lagging process does with or without a sweep running
+    (the deletion's write is not conditional), and a deletion during this
+    process's own move stands over the move, which then writes no notice
+    row. Where Postgres has no row for the switch, this process's own write
+    of it was dropped (`db_write_behind_failed`; nothing deletes a switch
+    row), and the move writes the record whole, insert-only, and applies,
+    logged `deadman_switch_row_restored` (round 10: such a switch matched no
+    row on every pass and never fired, and nothing said so). A statement
+    that fails, or that does not answer within 30 seconds (its turn in the
+    queue and the statement together, `switchStatementTimeoutMs`), is logged
+    (`deadman_switch_write_failed`) and not made here; it is safe to repeat,
+    and the next pass does (round 10: one failure kept the move in the
+    mirror only, and no pass tried it again, while every other process read
+    the switch armed). One whose turn has not come when the bound runs out
+    is not run when it comes; one already sent can still land, and the next
+    pass then finds it applied: the mirror takes it from Postgres, the
+    notifier's catch-up writes a release's notice rows, and only its event
+    is not emitted. While such a statement has not settled, every write of
+    the process is queued behind it, so no other conditional write of a
+    switch is queued (each is unanswered at once) and a stalled database
+    ends a pass after about one bound. The owner's check-in and cancel are
+    conditional the same way (`updateDeadmanSwitchIf`), on the status and
+    the last check-in the route read: one that Postgres refuses because the
+    switch fired is answered 409 `switch_triggered` and nothing is written,
+    one refused because another check-in or the sweep's move into grace
+    came first is made again over what Postgres has (up to three tries, then
+    409 `switch_changed`), and one the database does not answer in time is
+    answered 503 `switch_write_unanswered`, since it may or may not have
+    landed and doing it again is safe (round 10: the routes wrote full rows
+    from their own mirror, so a check-in the app accepted after the worker's
+    trigger had committed set the switch back to armed while its
+    `releasedAt` stayed set, the person's copy stayed readable and their
+    notice was sent, and the owner was told it had checked in). The sweep is
+    asynchronous, and the scheduler does not start a pass while one runs,
+    and logs a tick it skips for that (`deadman_sweep_tick_skipped`).
     Each pass also removes the content and every copy of
     releases that fired 365 days ago or more, once; the rows stay, the notice
     counts stay. The copies and the notices are listed by switch through an
@@ -1389,12 +1451,20 @@ message, and nothing here makes a release happen on time (§10, R12).
     clock, `NOTICE_CLAIM_LEASE_CALLS` call timeouts after it was taken, 7.5
     minutes, longer than the thirteen bounded steps of an attempt); no
     transaction is held open across homeserver calls. A process that cannot
-    take it asks the homeserver nothing for the person, writes nothing, and
-    counts the notice `elsewhere`; its row stays due. The claim is given up
+    take it, or cannot tell whether it has (its claim statement failed or
+    did not answer within the call timeout), asks the homeserver nothing for
+    the person, writes nothing, and counts the notice `elsewhere`; its row
+    stays due (round 10 of the review: a claim that timed out or failed
+    became a retry, written over the row the holder was working on with
+    the room this process's mirror held, so with the person's room purged
+    and replaced it put the gone room back, the holder stopped before its
+    send, and the next attempt made a second replacement, with no lease
+    overrun and no stopped process). The claim is given up
     after the row's write, once the process's queued writes have been
     attempted (`releaseDeadmanNoticeRecipient` drains first, then deletes the
     row where this holder still has it), so the next holder's first read sees
-    them; one whose request timed out is not given up and ends at its expiry.
+    them; one whose statement timed out and then landed is given up when it
+    lands, and one whose giving up fails or times out ends at its expiry.
     It is not mirrored, and on one process (the memory and file stores) it is
     always granted (round 9 of the review, the operator's request of
     2026-10-31: two notifiers at once, the alias refused, each made the
@@ -1472,7 +1542,8 @@ message, and nothing here makes a release happen on time (§10, R12).
     one person's notices at once only when one holds the claim past its
     lease (an attempt slower than its thirteen bounded steps, a process
     paused, or its writes still queued behind a stalled database when the
-    lease ends), and can then, with the alias refused, each make the person
+    lease ends; since round 10, one whose claim statement fails or times
+    out writes nothing, which as round 9 left it was a second way in), and can then, with the alias refused, each make the person
     a room and send there, and the transaction id is deduplicated only
     within one room, so the person can get an invitation and the notice in
     each of two rooms (in one room, a second send of one notice is dropped
@@ -1979,9 +2050,15 @@ records what the API sends.
     neither a connection timeout nor a statement timeout
     (`config/postgres.ts`), and a connection timeout alone would not end the
     second case (a statement or query timeout would). In front of a reverse
-    proxy the request ends at the proxy's read timeout instead
-    (`proxy_read_timeout`, 300 s in the nginx configs' shared proxy snippet;
-    nginx's default is 60 s), and the deletion screen then says the deletion
+    proxy the request ends at the proxy's read timeout instead, where it has
+    one: the app calls the API same-origin, through the site configs'
+    `location /v1/`, which sets `proxy_read_timeout 1h` in both nginx site
+    configs (`infra/nginx/sites-available/theblackout.app.conf` and the
+    single-server baseline's), over the shared snippet's 300 s; production's
+    Caddy (`deploy/docker/production/Caddyfile`, `reverse_proxy app:3000`)
+    sets no read timeout at all (round 10 of the review: this said 300 s), so
+    a stalled deletion holds the screen for up to an hour behind nginx, and
+    behind Caddy until the browser gives up, and the deletion screen then says the deletion
     may not have finished (round 9: it said "Deletion failed"), although the
     API process has already deleted the account in its mirror, revoked the
     token and queued the deletion's writes: they land when the database
@@ -2025,6 +2102,23 @@ records what the API sends.
     change for anything built on `develop`, which nothing in the tree uses.
     Confirm the old names, or rename them in a change of their own that
     exports both names for a release and says so in the protocol's notes.
+30. (Part 2, after its review's round 10.) The owner's account deletion
+    writes each of their switches from the deleting process's mirror,
+    unconditionally (`eraseDeadmanSwitch`, a full-row write; the copies are
+    blanked the same way), so where the API runs as more than one process a
+    deletion that reaches a process which has not yet heard of a trigger
+    another process committed cancels that release and removes its content
+    and copies, although it fired; the people named may already have been
+    sent their notice, and one not yet sent ends unsent (`copy_unavailable`
+    or `release_unavailable`). Round 10 made the check-in, the cancel and
+    the sweep's moves conditional in Postgres; the deletion was left as it
+    was, and §15, `KNOWN_LIMITATIONS.md`, the deletion screen, the changelog
+    and the threat model's row now state it. Confirm it (the deletion and
+    the trigger at the same moment, the owner present to delete, and either
+    order defensible), or have the deletion's erase and its copy blanking
+    conditional on the switch not having fired in Postgres (erase as fired
+    when it has, keeping the copies), at the cost of the deletion awaiting a
+    statement per switch, as the check-in now does.
 
 ## Not verified here
 
@@ -4532,7 +4626,12 @@ rest. Each item is fixed or explained here; the mutation table follows.
     statement, Postgres keeps the first `releasedAt` and the erase; and
     another process having changed the label, the switch fires and the label
     stays, only the moved columns written).
-    T01 to T08. Moved from Still open.
+    T01 to T08. Moved from Still open. (Round 10: the move was in the
+    mirror while its statement waited, so the notice could be sent and the
+    copy listed for a trigger Postgres then refused; the error path kept it
+    in the mirror after one failure; the merge took a change notification
+    for this process's write; and a switch whose arming write was dropped
+    never fired. Fixed in round 10; claims 92 and 93.)
 -   **Two notifiers on one person's notices at once (rounds 7 and 8's
     residual; done: `bba364c5d8`).** Before an attempt reads anything from
     the database or asks the homeserver anything for a person, the notifier
@@ -4547,7 +4646,10 @@ rest. Each item is fixed or explained here; the mutation table follows.
     writes nothing and counts the notice `elsewhere`; its row stays due. The
     claim is given up after the row's write, once the process's queued
     writes have been attempted, so the next holder's first read sees them;
-    one whose request timed out is not given up and ends at its expiry. On
+    one whose request timed out is not given up and ends at its expiry
+    (round 10: a claim that timed out or failed wrote a retry over the
+    holder's row; now it writes nothing and is given up if it lands; claim
+    95). On
     one process (the memory and file stores) it is always granted and the
     per-recipient slot does the work, as before; in Postgres a second notice
     of the same person in an overlapping tick of one process is left too.
@@ -4671,6 +4773,229 @@ Not done this round, unchanged: decisions 27 and 29 are the operator's, as
 written; the "aside found while probing round 6" stays as it is in Still
 open. No new operator decision this round; decisions 18 and 28 are marked
 decided, and decisions 14 and 27 are rewritten for the verifiers' findings.
+
+### Round 10: what the verifiers found in round 9's fixes
+
+A tenth pass read round 9's head (`4d963efd46`) and found, in round 9's
+conditional move of a switch, one High and four Medium findings and one Low
+(fix quality), and in the documents one Medium and five Low (claims). The
+High: the sweep put the trigger into the mirror before Postgres had accepted
+it, so in the deployed worker, where the notifier runs beside the sweep at
+the same cadence, a notice was written and sent, and on a process that also
+serves the API a person's copy was listed, for a trigger Postgres then
+refused. Each is fixed or explained here; the mutation table follows the
+round-9 one. `origin/develop` is still `f6da7b7d16`, so nothing was merged.
+
+-   **The trigger reached the mirror before Postgres accepted it (High, fix
+    quality; done).** `advanceDeadmanSwitch` set the moved record in the
+    mirror and then awaited the conditional `UPDATE`. While it waited, the
+    notifier's catch-up saw the mirror's `releasedAt` and wrote the notice
+    row (insert-only, so it reached Postgres), its due list passed it, and
+    the send went out; `releasedCopiesFor` listed the person's copy; and
+    when Postgres refused the move (the owner's check-in on the API process
+    had committed first), the mirror went back to armed while Postgres kept
+    the notice row `sent`, so the real trigger later wrote no row and sent
+    nothing (the verifiers' `notice-during-statement.mts` and
+    `copy-during-statement.mts`). Now the shared conditional write
+    (`writeDeadmanSwitchIf` in `db/store.ts`) leaves the mirror alone until
+    Postgres has answered: applied, the mirror takes the row Postgres
+    returned; refused, the row Postgres has, read in the same turn; either
+    way the result is announced to the other processes. The verifiers'
+    other suggestion, holding `releasedAt` back and putting only the status
+    in the mirror, was not taken: a legacy switch's recipient read keys on
+    the status alone (`GET /switches?scope=recipient`), so it would have
+    served a legacy payload for a trigger Postgres then refused. Test: test 1
+    of the new `deadman-switch-writes-postgres.integration.test.ts` (two
+    stores on PGlite; the check-in committed on the other store; a notifier
+    tick and the person's read while this process's statement waits: the
+    mirror has the switch armed with no `releasedAt`, the read lists nothing,
+    the tick sends nothing, no notice row; afterwards the mirror has the
+    committed check-in; the real trigger an hour later is notified once). W01,
+    W09.
+-   **One failure of the statement lost the trigger in Postgres for good
+    (Medium, fix quality; done).** The catch logged and returned the moved
+    record, so the move stayed in the mirror; `enqueueCall` does not retry,
+    every later pass saw the mirror triggered and tried nothing, the notice
+    was sent from the worker, and every other process read the switch armed
+    until the worker restarted (`one-blip.mts`). The comment and §15 said
+    "as a write-behind write that failed twice is". Now a failed statement is
+    logged (`deadman_switch_write_failed`) and nothing of it is in the
+    mirror; the statement is safe to repeat, and the next pass makes it.
+    Test 2 of the new file (the first `UPDATE` throws once: no move, nothing
+    in the mirror, no copy listed, nothing sent; the next pass fires it in
+    Postgres, a fresh store hydrates it fired, and the notice is sent once).
+    W02.
+-   **A switch whose own arming write was dropped never fired (Medium, fix
+    quality, a regression of round 9; done).** The `UPDATE` matched no row,
+    the read found none, and the sweep put `before` back and returned with
+    no log, on every pass, while the owner's list showed the switch armed
+    (`dropped-arm-never-fires.mts`); the full-row upsert before round 9 had
+    inserted it. Nothing deletes a switch row, so a missing row is a dropped
+    write: the statement now inserts the record whole, insert-only, applies,
+    and logs `deadman_switch_row_restored`. `KNOWN_LIMITATIONS.md`'s
+    Durability item says what that leaves (the switch is in that process's
+    memory only until then). Test 3 (the switch's `INSERT` fails twice: the
+    pass fires it, Postgres has it whole and triggered, the person's copy is
+    listed and the notice sent). W06.
+-   **The no-row merge put an older status over a committed cancel (Medium,
+    fix quality; done).** Round 9 took anything in the mirror that was not
+    its own moved record for a write of this process's, and wrote the
+    mirror's fields over the row Postgres had; a change notification's
+    refresh does that too, and in this very race (the check-in that defeats
+    the move also notifies), so a check-in's notification applied during the
+    statement and a cancel committed after it ended with Postgres armed again
+    (`merge-over-cancel.mts`); and when the move applied, a pre-move entry a
+    notification had put in the mirror was left there. Now this process's
+    own writes to the switch while its statement runs are noted as they are
+    made (the write-through wrapper, `noteOwnSwitchWrite`): only the fields
+    they changed are kept over Postgres's row, and the whole row is written
+    after them, every column, so Postgres ends as the mirror is; with no
+    such write, Postgres's row is taken as it is and nothing is written, and
+    the applied branch takes Postgres's row too. Only the owner's deletion
+    can write a switch blindly now (below), so that is the one case the
+    merge serves. Tests: test 4 of the new file (the verifiers' sequence:
+    the cancel stands in Postgres and in the mirror, and nothing is queued),
+    and test 13 of the Postgres notices file, whose variants changed: the
+    owner's deletion during the statement, over a trigger the old leader
+    committed, now leaves the switch cancelled and emptied with the first
+    `releasedAt` (it acts on the switch as the mirror then has it, armed, as
+    it does a moment before the statement; round 9's test expected the
+    trigger kept, which was an effect of the move already being in the
+    mirror); a label this process writes during the statement is kept over a
+    trigger; and a deletion during this process's own move stands over the
+    move, which then writes no notice row (`advanceDeadmanSwitch` returns
+    nothing when this process's own write moved the status). W07, W08, W10.
+-   **A check-in the app accepted after the worker's trigger set the switch
+    back to armed (Medium, fix quality; done).** The check-in and cancel
+    routes wrote full rows from their own mirror, unconditionally; the
+    app's upsert set `armed` while `released_at`, absent from its record,
+    stayed set, so the person's copy stayed readable and their notice was
+    sent, the owner was told it had checked in, the owner's view showed no
+    notice counts, and later check-ins were accepted
+    (`checkin-over-trigger.mts`; it existed before round 9 in this order).
+    Now both routes write through `updateDeadmanSwitchIf`, conditional in
+    Postgres the same way on the status and the last check-in the route
+    read: refused because the switch fired, they answer 409
+    `switch_triggered` and write nothing (cancel blanks the copies only after
+    its write applied); refused because another check-in or the sweep's move
+    into grace came first, the check-in is made again over what Postgres has
+    (three tries, then 409 `switch_changed`); not answered in time, 503
+    `switch_write_unanswered`, since it may or may not have landed and doing
+    it again is safe. In memory and in the file store the condition is
+    checked against the mirror, which is the database. Test 5 of the new
+    file, through the routes (`app.request`): on a process whose mirror has
+    not heard of the trigger, the check-in and the cancel answer 409
+    `switch_triggered`, Postgres keeps the trigger, its `releasedAt` and the
+    content, the mirror takes it, the copy stays held and listed, and a later
+    check-in is refused too; a check-in after another process's check-in is
+    made over it with its own time. Test 2 has the 503. R01 to R05. The
+    verifiers' probe writes the route's old full-row write itself, not
+    through the route, so run again it still shows the old outcome; test 5
+    is that sequence through the route.
+-   **The statement waited behind the queue with no limit, and the running
+    guard then held every later pass (Low, fix quality; done).** Now the
+    wait for the queue's turn and the statement together is bounded
+    (`switchStatementTimeoutMs`, 30 seconds, a field a test shortens). A
+    statement that does not answer in time is logged and not made here; if
+    its turn has not come when the bound runs out, it is not run when it
+    comes; one already sent can still land, and the next pass then finds it
+    applied in Postgres and takes it, the notifier's catch-up writes a
+    release's notice rows, and only its event is not emitted. While such a
+    statement has not settled, every write of the process is queued behind
+    it, so no further conditional write of a switch is queued (each is
+    unanswered at once): a stalled database ends a pass after about one
+    bound, and the check-in route answers 503. The scheduler logs each tick
+    its guard skips (`deadman_sweep_tick_skipped`, counts only). Tests: test
+    2 of the new file (a statement held past a 200 ms bound: the pass ends,
+    nothing in the mirror, a second pass while it stands queues nothing and
+    waits out no bound, the owner's check-in answers 503; once it lands, the
+    next pass takes it from Postgres, the catch-up writes the row, and the
+    notice is sent once; a move queued behind a held write past the bound is
+    not run when its turn comes, and the next pass makes it), and test 24 of
+    the notices file (the skipped ticks are logged). W03, W04, W05, K01.
+-   **A notifier whose claim statement timed out or failed wrote over the
+    holder's row (Medium, claims; fixed in code).** `boundedDatabase` threw
+    `database_claim_timeout`, `processOne` made that a retry, and the tick
+    wrote it with `updateDeadmanReleaseNoticeIf`, guarded only on `pending`,
+    as a full-row upsert of this process's mirror row: `attempts`, the
+    error, a later `nextAttemptAt` and whatever room the mirror held, over
+    the row the claim's holder was working on. With the person's room
+    purged and replaced, that put the gone room back, the holder stopped
+    before its send (`elsewhere`), and the next attempt made a second
+    replacement, with no lease overrun and no stopped process (the
+    verifiers' `claim-timeout-write.mts` and `claim-timeout-purged.mts`). A
+    claim statement that throws did the same as `notifier_threw`. Now a
+    claim whose statement fails or does not answer in time is treated as
+    held elsewhere: nothing is asked of the homeserver or written, the row
+    stays due, and the notice is counted `elsewhere`
+    (`deadman_release_notice_claim_unanswered` logged); one that lands after
+    the bound is given up when it lands. So the sentences the verifiers named
+    ("a process that cannot take it ... writes nothing", "only where one
+    holds the claim past its lease", §11's "replaced once per person") are
+    true again; §15, §11, the notifier's header, `KNOWN_LIMITATIONS.md` and
+    the changelog now also say that a failed or unanswered claim writes
+    nothing, and §11 that until round 10 it was a second way to an extra
+    room. Both probes run again: `retried` 0 and `elsewhere` 1, the holder's
+    row unchanged, the notice accepted once, and "ONE ROOM" and "ONE
+    REPLACEMENT ROOM". Test 16 of the
+    Postgres notices file (the worker thread holds the claim, has replaced
+    the purged room and is held before its send; the worker's claim
+    statement times out, and in a second run throws: counted elsewhere, no
+    retry, no room asked for, the holder's row unchanged in Postgres, the
+    notice sent once into the one replacement; and a late claim with no
+    other holder is given up when it lands, the row untouched and sent at
+    the next tick). N01, N02.
+-   **§11's room bullet left out the stopped worker (Low, claims; done).**
+    Its list of what can leave an extra room now includes a notifier that
+    stops after a create has answered and before its queued record of the
+    room reaches Postgres, with the alias refused, so design §5 item 2's
+    pointer to §11 is complete.
+-   **The sweep scheduler's comment, "re-emits nothing and fires nothing
+    twice" (Low, claims).** On a database error it did both in the
+    standby's own process. True now: a failed or unanswered move is not
+    made, and the comment says so.
+-   **Decision 27's proxy timeout (Low, claims; done).** It said 300 s, the
+    nginx configs' shared snippet. The app calls the API same-origin through
+    `location /v1/`, which sets `proxy_read_timeout 1h` in both nginx site
+    configs, and production's Caddy (`reverse_proxy app:3000`) sets no read
+    timeout at all; checked with `git grep proxy_read_timeout -- infra
+deploy` and the Caddyfile. Decision 27 and the `accountLifecycle.ts`
+    comment now say so.
+-   **"A hold ... left behind when it stopped" (Low, claims; done).** A
+    claim the notifier gave up on that landed later, and one whose giving
+    up failed, were left too, for good if the account is deleted first.
+    The first is now given up when it lands; `KNOWN_LIMITATIONS.md`, the
+    changelog and migration 106's comment say "left behind when it stopped
+    or could not give it up". Migration 106 is this PR's own and on no
+    deployment (`origin/develop` lacks it), so its comment can change
+    without a checksum mismatch anywhere it has been applied for real.
+-   **Model names in the history (Low).** No action, as in rounds 5 to 9:
+    the two trailer lines are required on this branch's commits; the older
+    documents on `develop` that name a model need their own change.
+
+What the round also found by reading, and states. The owner's deletion
+writes a switch from the deleting process's mirror, unconditionally
+(`eraseDeadmanSwitch`, a full-row write), so a deletion in a process that
+has not yet heard of a trigger another process committed cancels and empties
+that release, its copies included; it did so before round 9 and does with or
+without a sweep running. §15, `KNOWN_LIMITATIONS.md`'s deletion paragraph,
+the deletion screen, the changelog and the threat model's row now say so,
+and decision 30 asks whether to make it conditional.
+
+Run: the verifiers' eight probes, again, on this round's code (in scratch,
+`fix/r10/probes/`): `notice-during-statement` (mirror armed when the tick
+started, the tick `due` 0 and `sent` 0, no room, no notice row, and the real
+trigger an hour later sent once), `copy-during-statement` (mirror armed and
+nothing listed during the statement), `one-blip` (no move on the failed
+pass, Postgres triggered at the next one, a fresh store sees it),
+`dropped-arm-never-fires` (fired at the first pass, the copy listed),
+`merge-over-cancel` (Postgres and both mirrors cancelled),
+`checkin-over-trigger` (unchanged, as above: it writes the old route's
+write itself), and the two claim probes (above).
+
+Not done this round, unchanged: decisions 27 and 29 are the operator's, as
+written; the "aside found while probing round 6" stays as it is in Still
+open. New operator decision: 30.
 
 ### Claims that were not true, and what they say now
 
@@ -4987,6 +5312,45 @@ decided, and decisions 14 and 27 are rewritten for the verifiers' findings.
 91. (Round 9.) Test 12's title, round 8's entry and §15: "the deletion
     route answers ...". The test calls `finishAccountDeletion`, which the
     route awaits. Now retitled, and the record says so.
+92. (Round 10.) Round 9's entry and test 13's comment: a check-in the API
+    process committed within the lag "stands", and the notice "is sent
+    once in all, or not at all". While the sweep's statement waited, the
+    same process wrote and sent the notice and listed the person's copy for
+    a trigger Postgres then refused, and the real trigger later sent
+    nothing; test 13 ran the notifier only after the sweep had finished.
+    Now true in code (the mirror takes a move only once Postgres has applied
+    it), and test 1 of the switch-writes file runs a tick during the
+    statement.
+93. (Round 10.) Round 9's entry, §15 and the store's comment: a database
+    error keeps the move in the mirror "as a write-behind write that failed
+    twice is". It had failed once, and nothing retried it. Now the move is
+    not made and the next pass makes it; said in §15 and the comment.
+94. (Round 10.) The sweep scheduler's comment: the conditional move
+    "re-emits nothing and fires nothing twice". On a database error it did
+    both in the standby's own process. True now; the comment says why.
+95. (Round 10.) §15 and round 9's entry: "a process that cannot take [the
+    claim] ... writes nothing ... its row stays due", and in §15, §11, the
+    notifier's header, `KNOWN_LIMITATIONS.md`, `TRUST.md` §1, the threat
+    model and the changelog, two notifiers work on one person's notices at
+    once "only" where one holds the claim past its lease, and §11's "a room
+    the homeserver no longer has is replaced once per person". A claim
+    statement that timed out or threw wrote a retry over the holder's row,
+    which could lead to a second replacement room. Now true in code (such a
+    claim writes nothing); §15, §11, the notifier's header,
+    `KNOWN_LIMITATIONS.md` and the changelog also say a failed or unanswered
+    claim leaves the person's notices alone.
+96. (Round 10.) §11's room bullet: its list of what can leave an extra room
+    lacked the notifier that stops after a create has answered (round 8's
+    R8-5), which design §5 item 2 points readers to. Now listed.
+97. (Round 10.) Decision 27: the proxy's read timeout is "300 s in the nginx
+    configs' shared proxy snippet". The app's same-origin `location /v1/`
+    sets 1 hour in both site configs, and production's Caddy sets none. Now
+    said there and in the deletion's comment.
+98. (Round 10.) `KNOWN_LIMITATIONS.md`, the changelog and migration 106's
+    comment: a leftover claim row is one "left behind when it stopped". One
+    the notifier gave up on that landed later, or whose giving up failed,
+    was left too. The first is now given up when it lands; the sentences say
+    "stopped or could not give it up".
 
 ### Raised and refuted
 
@@ -5355,6 +5719,38 @@ they spelled them.
 | V02: the later reads ignore the not-due step (F02)                                       | `deadman-release-notices-postgres.integration.test.ts` | test 14, parked on the known room's state: not counted elsewhere                          |
 | V03: the room read at the attempt's start wins over the mirror's (F05, `stored ?? mine`) | `deadman-release-notices.integration.test.ts`          | the slot test: a third room                                                               |
 
+Round 10's checks, the same way (`fix/mut/spec-round10.py`, run with
+`run7.py` on a copy of the worktree's packages with this round's edits, in
+scratch outside the worktree, waiting for the machine's load before each,
+every source restored afterwards; the test numbers are the files' after
+round 10: notices 32, notices on Postgres 16, the new switch-writes file 5).
+Eighteen mutants, all caught. W04 survived its first run: the second pass's
+statement, queued behind the held one, timed out unseen and was then
+skipped, so nothing the test asserted changed; test 2 now counts the
+bound's log lines during that pass (none with the guard, one without), and
+W04 failed on the second run, as did W05 and R05 run again with it.
+
+| Check removed                                                                            | Test file                                              | What failed                                                                              |
+| ---------------------------------------------------------------------------------------- | ------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| W01: the mirror takes the move before Postgres answers (round 9's order)                 | `deadman-switch-writes-postgres.integration.test.ts`   | test 1: the move in the mirror while its statement waits                                 |
+| W02: a failed statement keeps the move in the mirror, counted as made                    | `deadman-switch-writes-postgres.integration.test.ts`   | test 2: counted as moved                                                                 |
+| W03: no bound on the statement (the timeout 100 times longer)                            | `deadman-switch-writes-postgres.integration.test.ts`   | test 2: the pass did not end after the bound                                             |
+| W04: while one stands unanswered, further statements still queued                        | `deadman-switch-writes-postgres.integration.test.ts`   | second run, test 2: the second pass waited out the bound                                 |
+| W05: a statement whose turn came after the bound still run                               | `deadman-switch-writes-postgres.integration.test.ts`   | test 2: the move run when its turn came                                                  |
+| W06: no row in Postgres: nothing inserted (round 9)                                      | `deadman-switch-writes-postgres.integration.test.ts`   | test 3: it did not fire                                                                  |
+| W07: this process's own writes during the statement not noted                            | `deadman-release-notices-postgres.integration.test.ts` | test 13, the deletion here over the old leader's trigger: the mirror not as Postgres     |
+| W08: anything in the mirror unlike the read taken for an own write (a refresh included)  | `deadman-switch-writes-postgres.integration.test.ts`   | test 4: a write queued over the committed cancel                                         |
+| W09: refused: the mirror not refreshed from Postgres                                     | `deadman-switch-writes-postgres.integration.test.ts`   | test 1: the mirror did not take the committed check-in                                   |
+| W10: the move counted as made though this process's own write moved the status meanwhile | `deadman-release-notices-postgres.integration.test.ts` | test 13, the deletion here during its own move: the sweep wrote a notice row             |
+| R01: the Postgres store's check-in and cancel conditional on the mirror only             | `deadman-switch-writes-postgres.integration.test.ts`   | test 5: the check-in answered 200 over the trigger                                       |
+| R02: the check-in an unconditional full-row write again                                  | `deadman-switch-writes-postgres.integration.test.ts`   | test 5: 200 where 409                                                                    |
+| R03: the cancel an unconditional full-row write again                                    | `deadman-switch-writes-postgres.integration.test.ts`   | test 5: the cancel answered 200 over the trigger                                         |
+| R04: a check-in refused over another check-in not tried again                            | `deadman-switch-writes-postgres.integration.test.ts`   | test 5: `switch_changed` where `switch_triggered`, and the check-in over another refused |
+| R05: an unanswered check-in answered as made, from the mirror                            | `deadman-switch-writes-postgres.integration.test.ts`   | test 2: 200 where 503                                                                    |
+| N01: a claim that timed out or threw is a retry again (round 9)                          | `deadman-release-notices-postgres.integration.test.ts` | test 16, the claim timed out: not counted elsewhere                                      |
+| N02: a claim that lands after the bound not given up                                     | `deadman-release-notices-postgres.integration.test.ts` | test 16: the late claim still held                                                       |
+| K01: a tick the sweep's guard skips not logged                                           | `deadman-release-notices.integration.test.ts`          | test 24: the skipped ticks not logged                                                    |
+
 ### Still open
 
 -   **A recipient-side refusal of an owner** (decision 19), which the
@@ -5390,7 +5786,21 @@ they spelled them.
     since round 6 their creation is insert-only in Postgres and the
     deletion ends them there with one statement; since round 9 the sweep's
     moves of a switch are conditional there too (`advanceDeadmanSwitch`),
-    and the notifier takes a claim on each person there.
+    and the notifier takes a claim on each person there; since round 10 the
+    owner's check-in and cancel are conditional there as well
+    (`updateDeadmanSwitchIf`), and a move reaches a process's mirror only
+    once Postgres has applied it.
+-   **The owner's deletion over a trigger another process committed**
+    (decision 30): the deletion writes each switch from the deleting
+    process's mirror, unconditionally, so where that mirror has not heard of
+    the trigger it cancels the release and removes its content and copies;
+    the people named may have been told by then, and their notice ends
+    unsent if it had not gone. Stated in §15, `KNOWN_LIMITATIONS.md`, the
+    deletion screen, the changelog and the threat model's row; a conditional
+    erase was not built here.
+-   **A switch move whose statement answered after its bound and landed**
+    is found applied at the next pass and its notice rows written by the
+    notifier's catch-up, but its domain event is not emitted (round 10).
 -   **The notices room's alias** (decisions 25 and 26): its key, and what it
     leaves (§11): a room made without the alias where the homeserver refuses it
     or the alias names a room that is gone, not the bot's, one the bot has left,
@@ -5417,7 +5827,9 @@ they spelled them.
 -   **Two notifiers with one person's notices at once** only where one holds
     the person's claim past its lease (an attempt slower than its thirteen
     bounded steps, a paused process, or its writes still queued behind a
-    stalled database when the lease ends): both can then, where the
+    stalled database when the lease ends; since round 10, one whose claim
+    statement fails or times out writes nothing, which as round 9 left it
+    was a second way in): both can then, where the
     homeserver refuses the alias, each make the person a room and send there,
     and the transaction id is deduplicated only within one room, so the
     person can get an invitation and the notice in each of two rooms (round

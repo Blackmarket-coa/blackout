@@ -324,7 +324,10 @@ For the source-of-truth triage with tier/owner detail see
 -   **State:** Deleting your Blackout account removes the account, its sessions
     and linked services, and cancels and erases your unsent scheduled messages.
     It cancels your dead-man switches that have not fired and removes what you
-    put in them, a release switch's sealed copies included. A release switch
+    put in them, a release switch's sealed copies included (where the server
+    runs as more than one process, a switch that fired in the moment before
+    your deletion reached a process that had not yet heard of it is
+    cancelled and emptied with the rest). A release switch
     that has already fired stays readable to the people it named, with the
     public release key it was signed with, until at least 365 days after it
     fired (it is removed at the server's first sweep after that); a switch
@@ -355,8 +358,8 @@ For the source-of-truth triage with tier/owner detail see
     seconds, so it can finish after the deletion is confirmed; until it
     finishes, and for good if it fails, which the server logs, such a notice
     the bot was already sending keeps its room). A hold on your notices that
-    the bot's work left behind when it stopped (your account id, a random
-    token and when it expires) stays too. It
+    the bot's work left behind when it stopped or could not give it up (your
+    account id, a random token and when it expires) stays too. It
     removes the release keys you published (their public halves), except the
     copy kept with a release switch of yours that has already fired, which goes
     with that release; the fingerprint of the key each
@@ -425,7 +428,8 @@ For the source-of-truth triage with tier/owner detail see
     more than one copy of its background work, as it does for a moment while
     one takes over from another, each takes a hold on your notices in the
     server's database before it works on them, and the other leaves them
-    alone while it is held; only if one holds on past that hold's time limit
+    alone while it is held, and also when its own request for the hold fails
+    or goes unanswered; only if one holds on past that hold's time limit
     (7.5 minutes: a copy that stalled or was paused, or whose database writes
     are still waiting when it ends) can two of them work on your notices at
     the same moment and, if the homeserver refuses the address, each make you
@@ -558,7 +562,24 @@ For the source-of-truth triage with tier/owner detail see
     sends, so that person is not sent a notice: where the bot runs in that
     same process the notice is recorded as failed with `copy_unavailable`,
     and where it runs in a separate worker, which never had the copy, no
-    notice is written for them at all.
+    notice is written for them at all. A switch whose own write is dropped
+    the same way is in that process's memory only, so no other process lists
+    it; where that process runs the sweep, the sweep writes it whole to the
+    database when it fires it (`deadman_switch_row_restored` in the logs),
+    so it still fires.
+-   **Check-ins and cancels are checked against the database.** Where the
+    API runs as more than one process, the one your check-in or cancel
+    reaches may not yet have heard that your switch fired; the write is made
+    only if the database still has the switch as that process read it, so
+    one that comes after the switch fired is refused (409
+    `switch_triggered`) rather than setting the switch back to armed while
+    its release stays out. One the database does not confirm within 30
+    seconds is answered 503 (`switch_write_unanswered`): it may or may not
+    have been recorded, and doing it again is safe. The server's own move of
+    a switch (into grace, or firing it) is checked the same way and reaches
+    the process's memory only once the database has it, so nothing is
+    served or sent for a firing the database refused; one the database does
+    not confirm within 30 seconds is tried again at the next pass.
 -   The switches that exist were armed through the API before this. Their
     payload is whatever was sent: the server never decrypts it and cannot
     tell whether it is ciphertext. Recipients named by Blackout account id
