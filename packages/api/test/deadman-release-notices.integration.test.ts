@@ -60,6 +60,9 @@ const {
     stopDeadmanReleaseNotifier,
 } = await import('../src/services/deadmanReleaseNotifier');
 const { computeDeadlines } = await import('../src/services/deadmanScheduler');
+const { startDeadmanSweepScheduler, stopDeadmanSweepScheduler } = await import(
+    '../src/services/deadmanSweepScheduler'
+);
 const { matrixUserIdFor } = await import('../src/services/userIdentity');
 const { matrixClient } = await import('../src/integrations/matrix-client');
 const lifecycle = await import('../src/services/accountLifecycle');
@@ -2051,6 +2054,57 @@ test('the interval does not start a tick while the previous one runs', async () 
     }
     assert.equal(matrix.sends.length, 2, 'both were sent by later ticks');
     assert.equal(matrix.creates.length, 2, 'one room each');
+});
+
+test('the sweep’s interval does not start a pass while the previous one runs', async () => {
+    // Round 9 of part 2's review: a pass now awaits the database for each
+    // switch it moves (`advanceDeadmanSwitch`, conditional in Postgres), so a
+    // pass can outlive the interval. Without the running guard each interval
+    // would start another pass beside the first, over the same overdue switch.
+    const owner = await freshPerson();
+    const lastCheckInAt = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+    const { triggerAt, releaseAt } = computeDeadlines({
+        lastCheckInAt,
+        checkInIntervalSeconds: 60,
+        gracePeriodSeconds: 0,
+    });
+    const overdue = db.createDeadmanSwitch({
+        id: randomUUID(),
+        ownerId: owner.user.id,
+        roomId: '!legacy:example.org',
+        status: 'armed',
+        checkInIntervalSeconds: 60,
+        gracePeriodSeconds: 0,
+        lastCheckInAt,
+        triggerAt,
+        releaseAt,
+        recipients: [],
+        encryptedPayload: 'sealed-legacy',
+    });
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+        release = resolve;
+    });
+    let calls = 0;
+    const original = db.advanceDeadmanSwitch;
+    // Parked, and then moving nothing, so no other test's switch changes.
+    db.advanceDeadmanSwitch = (async () => {
+        calls += 1;
+        await gate;
+        return undefined;
+    }) as typeof db.advanceDeadmanSwitch;
+    const loop = startDeadmanSweepScheduler(15);
+    try {
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        assert.equal(calls, 1, 'one pass in flight after ten intervals');
+    } finally {
+        loop.stop();
+        stopDeadmanSweepScheduler();
+        release();
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        db.advanceDeadmanSwitch = original;
+        db.updateDeadmanSwitch(overdue.id, { status: 'cancelled', encryptedPayload: '' });
+    }
 });
 
 test('the notifier starts and stops like the other loops', () => {
