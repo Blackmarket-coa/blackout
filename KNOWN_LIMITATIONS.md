@@ -354,7 +354,9 @@ For the source-of-truth triage with tier/owner detail see
     deleting process had not heard of yet, and is waited for at most 10
     seconds, so it can finish after the deletion is confirmed; until it
     finishes, and for good if it fails, which the server logs, such a notice
-    the bot was already sending keeps its room). It
+    the bot was already sending keeps its room). A hold on your notices that
+    the bot's work left behind when it stopped (your account id, a random
+    token and when it expires) stays too. It
     removes the release keys you published (their public halves), except the
     copy kept with a release switch of yours that has already fired, which goes
     with that release; the fingerprint of the key each

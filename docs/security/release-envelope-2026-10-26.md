@@ -4573,7 +4573,9 @@ rest. Each item is fixed or explained here; the mutation table follows.
     §15 and `KNOWN_LIMITATIONS.md` counted seven calls and four reads, five
     and a half minutes and four and a half hours, and now count these. A
     claim left by a stopped process keeps the account id and an expiry until
-    the next claim for that person replaces it; the changelog says so.
+    the next claim for that person replaces it, and for good if the account
+    is deleted first (the deletion does not remove it); the changelog and
+    `KNOWN_LIMITATIONS.md`'s deletion paragraph say so.
 -   **PR 4 approved.** Recorded in this record's status, the design's status
     and Still open; PR 4 is not built here, and `BLACKOUT_DEADMAN_RELEASES`
     stays off everywhere.

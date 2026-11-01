@@ -99,7 +99,8 @@ each correction.
     room and post the notice in each. While the bot works on a person's
     notices the server keeps that claim (the account id, a random token and
     an expiry); one left by a process that stopped stays until the next claim
-    for that person replaces it. The notice carries nothing of
+    for that person replaces it, and for good if their account is deleted
+    first. The notice carries nothing of
     the message, nobody's name, not the owner's
     label. The room is a plaintext service room like the others
     [`TRUST.md`](../../TRUST.md) §1 lists, created so that the homeserver does

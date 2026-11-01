@@ -73,7 +73,8 @@ CREATE INDEX IF NOT EXISTS idx_deadman_release_notices_recipient
 -- upsert, expires at expires_at (the database's clock), and is deleted when
 -- the attempt ends; it is not mirrored in memory. One left by a process that
 -- stopped holds the account id and an expiry, as the person's notice rows
--- already do, until the next claim for that person replaces it.
+-- already do, until the next claim for that person replaces it, and for good
+-- if the account is deleted first.
 CREATE TABLE IF NOT EXISTS deadman_notice_claims (
   recipient_account_id TEXT PRIMARY KEY,
   holder TEXT NOT NULL,
