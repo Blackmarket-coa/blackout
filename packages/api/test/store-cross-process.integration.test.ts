@@ -2317,5 +2317,22 @@ test('X12: the pin sweeper deletes a pin it judged unchanged, keeps one a peer r
             assert.equal(A.db.coalitionSpatialItems.has(id), false);
         }
         assert.equal(B.db.coalitionSpatialItems.get(rewritten)?.title, 'restarted', 'B re-read it');
+
+        // A mirror copy with no updatedAt is deleted whatever Postgres holds
+        // (#30's nullMatchesAny, the same rule as #32's in X11). No method
+        // writes such a copy today, so the test removes it from the copy.
+        const bare = mkPin(A.db);
+        await quiesce(w);
+        const copy = { ...A.db.coalitionSpatialItems.get(bare) };
+        delete copy.updatedAt;
+        A.db.coalitionSpatialItems.set(bare, copy);
+        assert.equal(A.db.deleteCoalitionSpatialItem(bare), true);
+        await quiesce(w);
+        assert.equal(
+            await count(w, 'coalition_spatial_items', 'id = $1', [bare]),
+            0,
+            'a pin whose copy has no updatedAt is deleted'
+        );
+        assert.equal(A.db.coalitionSpatialItems.has(bare), false);
     });
 });

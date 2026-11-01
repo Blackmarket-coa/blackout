@@ -21,7 +21,7 @@ api:
         # just after, so a crash before it runs loses it (the
         # db_write_behind_failures_total metric counts writes that failed).
         # pgNotify (LISTEN/NOTIFY) tells the other replicas which rows changed so each
-        # re-reads them. Consistency is EVENTUAL: a replica can serve the old value
+        # re-reads them. Reads are stale for a time: a replica can serve the old value
         # until the notification arrives, and a single-use check (a reset token, a
         # refresh rotation) can pass once on each replica in that window. Some
         # replicas never hear of a change: one that starts while others write, every
