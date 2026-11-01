@@ -39,7 +39,9 @@ record's section "Independent review of part 2, 2026-10-30"). It changed §5:
 the notices room is now created so that the homeserver's encryption backstop
 leaves it unencrypted, as this design said it was, which as first built it was
 not; and what one account can make the server keep or send is bounded (that
-record's §15).
+record's §15). **2026-10-31:** the operator approved PR 4 (§8, "Arming and
+opening (client)"); it is not built yet, and until it is, the flag stays off
+everywhere and arming stays closed.
 
 The switch may be relied on for someone's physical safety. Every property
 below is stated with its limits, and §7 gives the wording the app may use and
@@ -512,10 +514,14 @@ screen. **Verdict:** not proposed; recorded so the trade is on paper.
     room list; its alias is in the homeserver's alias directory. The person is
     invited as a direct message (`is_direct`), and their power level is below
     the room's `events_default` so nothing can be typed there. One `m.text` per
-    recipient per release _(two of the server's background processes working on
-    one person's notices at once during a handover can each send it, in a room
-    each where the homeserver refuses the alias, and the homeserver drops a
-    repeat only within one room: `release-envelope-2026-10-26.md` §15)_. An
+    recipient per release _(a repeat of it is dropped only within one room and
+    only while the homeserver keeps the transaction id, 30 to 60 minutes or 24
+    hours, so a send the homeserver accepted and answered too late can show
+    twice once that has passed, `release-envelope-2026-10-26.md` §11,
+    "Sending"; and two of the server's background processes working on one
+    person's notices at once, which a claim on the person prevents unless one
+    holds it past its time limit, can each send it, in a room each where the
+    homeserver refuses the alias: that record's §15)_. An
     `m.notice` would be silent: the default rule
     `.m.rule.suppress_notices` drops it
     (`apps/blackout-server/rust/src/push/base_rules.rs:80-91`). The FBM
