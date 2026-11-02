@@ -2185,10 +2185,8 @@ test('the owner’s deletion where the database does not answer, is not sent, or
         // content and nobody able to read it). A sweep pass here now blanks
         // nothing, and the switch is not served here meanwhile. (The other
         // two erases, queued in their own switches' lanes, may already have
-        // landed.)
-        assert.equal(here.deadmanSwitchErasePending(firedOne.switchId), true, 'marked');
-        assert.equal(here.getDeadmanSwitch(firedOne.switchId)?.status, 'armed', 'as it had it');
-        assert.equal(here.getDeadmanSwitch(firedOne.switchId)?.encryptedPayload !== '', true);
+        // landed.) The sweep pass first, so that what it does is what fails
+        // where this process's view is wrong.
         await sweepOverdueDeadmanSwitches(
             new Date(firedAt.getTime() + 1_000),
             Number.MAX_SAFE_INTEGER
@@ -2203,7 +2201,9 @@ test('the owner’s deletion where the database does not answer, is not sent, or
                 'a sweep pass here blanked nothing'
             );
         }
-        assert.equal(here.deadmanSwitchErasePending(firedOne.switchId), true, 'still queued');
+        assert.equal(here.getDeadmanSwitch(firedOne.switchId)?.status, 'armed', 'as it had it');
+        assert.equal(here.getDeadmanSwitch(firedOne.switchId)?.encryptedPayload !== '', true);
+        assert.equal(here.deadmanSwitchErasePending(firedOne.switchId), true, 'marked');
         assert.equal(
             releasedCopiesFor(firedOne.recipient.id).some((r) => r.releaseId === firedOne.switchId),
             false,
@@ -2954,9 +2954,13 @@ test('an account that owns a switch, deleted while a notice to it is being sent:
         // (the tick itself then waits for the queue, which the held
         // statement is in, so it ends after).
         let noticeWhileHeld: string | undefined;
+        let copyWhileHeld: string | undefined;
         intercept(
             (sql) => sql.startsWith('UPDATE deadman_switches SET headline = NULL'),
             async () => {
+                // The account's copy is already blanked: everything but the
+                // switches goes before the first await.
+                copyWhileHeld = here.getDeadmanReleaseWrap(account.switchId, deleted.id)?.sealedKey;
                 openSend();
                 for (let i = 0; i < 300 && !answered; i += 1) {
                     await new Promise((r) => setTimeout(r, 10));
@@ -2973,6 +2977,7 @@ test('an account that owns a switch, deleted while a notice to it is being sent:
         restore();
         assert.equal(answered, true, 'the send answered while the statement was held');
         assert.equal(noticeWhileHeld, 'failed', 'and the notice was already ended then');
+        assert.equal(copyWhileHeld, '', 'the copy sealed to the account went before the await');
         await finishAccountDeletion(deleted.id, here);
         await tick;
     } finally {
