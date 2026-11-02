@@ -1,5 +1,16 @@
 # Blackout image lifecycle ownership (Week 3)
 
+> **2026-11-02.** The workflow this page describes,
+> `.github/workflows/blackout-image-lifecycle.yml`, and the Dockerfile it
+> built, `services/blackout-server/Dockerfile`, were removed with the Railway
+> template in `42f68f2`; the operator chose removal over fixing the template. That
+> workflow sat under `apps/blackout-server/.github/workflows/`, which GitHub
+> does not read, so it was never registered as a workflow of this repository
+> and never ran. The fork image built today is `blackout-synapse:stable`, from
+> `docker/Dockerfile`, by `infra/single-server-baseline/deploy.sh`.
+> `release/train/image_provenance.json` and the release gate's checks of it
+> remain.
+
 This document defines fork-owned image publishing strategy for `blackout-server`.
 
 ## Tag strategy

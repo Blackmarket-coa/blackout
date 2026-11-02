@@ -37,6 +37,10 @@ Last updated: 2026-04-09
     - `docs/railway_deploy.md`
   - Exit criteria:
     - Registry entry reflects shipped deployment scaffolding + remaining go-live gate.
+  - 2026-11-02: all four evidence targets were removed with the Railway
+    template in `42f68f2`; the operator chose removal over fixing the template. No
+    Railway path for the Synapse homeserver remains, so this reclassification
+    has nothing left to point at.
 
 - [ ] FR-003 Reclassify `Data Retention Policies` from `Not Started` to `Partial`
       (capability present, rollout may be pending).

@@ -825,7 +825,8 @@ sets that `develop` serves.
   `enabled: ${JWT_ENABLED:-false}` as a non-empty string, with the literal
   secret `${JWT_SECRET:-}`, which this check accepts. See "2026-10-31 JWT
   login refuses a non-boolean `enabled`; the Railway template's JWT login is
-  off" below.
+  off" below. (2026-11-02: that template was removed in `42f68f2`; see "2026-11-02
+  the Railway template is removed".)
 - `tests/blackout_runtime/test_jwt_secret_config.py`: eighteen refused
   secrets for each of HS256, HS384 and HS512, among them a JWK mapping and
   JWK JSON text with an empty `k` or a PEM `k`, and key sets with an empty
@@ -932,6 +933,13 @@ service files, which upstream does not have. Found by the sixth review of
 `docs/security/dependency-advisories-server-desktop-2026-10-30.md`
 (repository root), which records the render.
 
+2026-11-02: the template, its `.env.example` and the template test
+(`test_railway_template_leaves_jwt_login_off`) described below were removed in
+`42f68f2`, with the rest of the Railway service; the operator chose removal over
+fixing the template. `JWTConfig._check_enabled` and
+`test_non_boolean_enabled_is_refused` stay. See "2026-11-02 the Railway
+template is removed" below.
+
 - `services/blackout-server/homeserver.yaml.template`: `jwt_config` read
   `enabled: ${JWT_ENABLED:-false}` and `secret: "${JWT_SECRET:-}"`. The
   image `railway.toml` deploys renders this file at every start of the
@@ -993,6 +1001,9 @@ service files, which upstream does not have. Found by the sixth review of
   MSC3861) or is refused at sign-in, with the error text and the fix, and
   the Railway template change, and points at the record. Upstream's
   `docs/upgrade.md` has no such section; keep it through a reconciliation.
+  (2026-11-02: that Railway template section, and the managed-preflight and
+  `BLACKOUT_PROFILE` sections, carry a dated note that the template and its
+  entrypoint were removed in `42f68f2`.)
 
 ## 2026-11-02 the Railway template is removed
 

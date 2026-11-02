@@ -213,6 +213,11 @@ checked when `enabled` is `true`, and the secret when the algorithm is also
 
 ## The Railway service template
 
+> **2026-11-02.** Removed in `42f68f2`: the template, its `Dockerfile`,
+> `entrypoint.sh` and `.env.example`, and `railway.toml`. The operator chose
+> removal over fixing the template. What follows describes it as it was on
+> 2026-10-31. The `jwt_config.enabled` check above stays, for any template.
+
 `services/blackout-server/homeserver.yaml.template` now writes
 `jwt_config.enabled: false`, and the `JWT_ENABLED` variable is no longer
 read. It used `${JWT_ENABLED:-false}` and `${JWT_SECRET:-}`, which
@@ -233,6 +238,13 @@ rendered; the record lists them.
 # Upgrading to managed-hosting readiness controls (post-2026-03-19)
 
 ## Managed profile startup preflight checks and verification hooks
+
+> **2026-11-02.** The startup that ran these checks was
+> `services/blackout-server/entrypoint.sh`, the Railway template's
+> entrypoint, and it was removed with the template in `42f68f2`; the operator
+> chose removal over fixing the template. No image in the tree runs them at
+> startup now. The `synapse.util.managed_hosting` commands remain, and can be
+> run by hand (`docs/ops/managed_hosting_readiness.md`).
 
 When `BLACKOUT_PROFILE=managed`, startup now executes:
 
@@ -258,6 +270,13 @@ When `BLACKOUT_PROFILE=managed`, startup now executes:
 # Upgrading to deterministic `BLACKOUT_PROFILE` startup handling (post-2026-03-19)
 
 ## Explicit profile selection for `blackout-server`
+
+> **2026-11-02.** Profile selection ran in
+> `services/blackout-server/entrypoint.sh`, the Railway template's
+> entrypoint, which was removed with the template in `42f68f2`; the operator chose
+> removal over fixing the template. No image in the tree selects a profile at
+> startup now, and nothing in this fork outside its tests reads
+> `BLACKOUT_PROFILE`. The `synapse.util.blackout_profiles` helpers remain.
 
 Startup now uses deterministic profile selection:
 

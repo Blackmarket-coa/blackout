@@ -1,5 +1,11 @@
 # Railway Deployment Hardening Guide
 
+> **2026-11-02.** The fork's Railway template (`railway.toml` and
+> `services/blackout-server/`) was removed in `42f68f2`; the operator chose removal
+> over fixing the template. No Railway deploy path for the Synapse homeserver
+> remains in the tree, so this guide describes a deployment nothing here
+> builds. It is kept as guidance.
+
 ## Worker split
 Run dedicated Railway services for:
 - main client reader

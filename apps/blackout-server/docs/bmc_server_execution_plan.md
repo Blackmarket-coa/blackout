@@ -75,6 +75,11 @@ Exit criteria:
 
 ### 5) Cloud (Railway) deployment hardening (P2)
 
+> **2026-11-02.** The fork's Railway template (`railway.toml` and
+> `services/blackout-server/`) was removed in `42f68f2`; the operator chose removal
+> over fixing the template. No Railway deploy path for the Synapse homeserver
+> remains in the tree.
+
 1. Split Synapse worker roles into distinct Railway services.
 2. Use MinIO via Synapse S3 media storage configuration.
 3. Add PostgreSQL pooling recommendation (`PgBouncer`) to deploy docs.
