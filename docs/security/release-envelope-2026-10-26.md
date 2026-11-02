@@ -623,7 +623,9 @@ follow from §1–§9 and from the design's §3, which accepted the first three.
     at any time from arming on, a cancelled switch's included if it kept a
     copy (cancel removes them from an honest server's database on one API
     process, a cancel the database confirms after the route answered 503
-    when it lands; across replicas a re-seal on another replica in the
+    when it lands, while the process that sent it runs, and otherwise when
+    the sweep's process next writes the switch or a check-in or second
+    cancel finds it cancelled; across replicas a re-seal on another replica in the
     refresh window can leave a copy on a cancelled switch until the next
     sweep pass blanks it, §15; backups keep them until they expire). Only the named
     recipients can read it, and, until PR 4 keeps the device-side record of
@@ -857,14 +859,15 @@ invite`, set by every in-repo template, adds `m.room.encryption` to every
     once, before the signature awaits, and a burst of N arms passed every one:
     round 2 of the review). Across API replicas each replica checks against its
     own mirror, which shows another replica's arms only once that replica's
-    write-behind queue has written them to Postgres and told its peers; the
-    queue writes one row at a time, in order, and an arm queues one write per
-    copy and one for the switch (up to 66), so a burst is itself what lengthens
-    the delay, and across replicas a burst can exceed each bound by up to its
-    own size until the queues drain. How long that takes was not measured (round
-    3 of the review: as written in round 2 this said "typically under a second",
-    which nothing measured and the queue's design contradicts in exactly the
-    burst case). So, on one process, at most 250 notice rows name one person
+    awaited arm call has written them to Postgres and its change notification
+    has reached this one (since round 11 the arm's rows are one awaited call in
+    the switch's lane, not write-behind upserts, so a burst no longer lengthens
+    that delay by one queued write per row; a re-seal's single copy is still a
+    queued upsert), so across replicas a burst can exceed each bound by up to
+    its own size for as long as that takes. How long that is was not measured
+    (round 3 of the review: as written in round 2 this said "typically under a
+    second", which nothing measured; round 12: as written in round 11 this
+    still described the arm's rows as 66 queued upserts). So, on one process, at most 250 notice rows name one person
     in any 365 days (50 owners, five each; 50 while the bound counted
     releases), each with at most one re-invite, and each sent once the
     homeserver has accepted it; a send the homeserver accepted but answered
@@ -1216,27 +1219,50 @@ message, and nothing here makes a release happen on time (§10, R12).
     connection, in the switch's lane of the write-behind queue (after this
     process's earlier writes of that switch, of which a fresh id has none,
     not after its writes to other tables): no switch has the id, the copies
-    insert-only, then the switch insert-only `RETURNING` the row; the mirror
-    takes the rows only once Postgres has them, they are announced to the
-    other processes, and only then is the owner answered 201 (round 11 of
-    the review: the rows were write-behind upserts committed after the 201,
-    so one dropped left a switch only that process listed, which in the
+    as upserts (over any row of the same key: what an earlier arm of the id
+    left when it failed), then the switch insert-only `RETURNING` the row;
+    the mirror takes the rows only once Postgres has them, they are announced
+    to the other processes, and only then is the owner answered 201 (round
+    11 of the review: the rows were write-behind upserts committed after the
+    201, so one dropped left a switch only that process listed, which in the
     deployed layout, where the sweep runs in another process, never fired).
-    A stop between the copies and the switch leaves copies no switch names,
-    which nothing lists or serves and the named account's deletion blanks
-    like any other, and never a switch without copies, which would fire and
-    release to nobody. Where the switch's insert finds the id taken after all
-    or fails, the copies the call wrote are deleted again, best effort (by
-    the call's own `created_at`), and the owner is answered 409
-    `release_id_taken` or 500 `switch_write_failed`, nothing in the mirror;
-    a call the database does not answer within 30 seconds is 503
-    `switch_write_unanswered` with nothing in the mirror, and if it lands
+    Nothing deletes a copy row. A stop between the copies and the switch, a
+    statement that fails, and one that finds the id taken after writing its
+    copies all leave copies no switch names, which nothing lists, serves or
+    counts, which the named account's deletion blanks like any other, and
+    which the next arm of the same envelope writes over; and never a switch
+    without copies, which would fire and release to nobody (round 12 of the
+    review: a call that found the id taken deleted "its own" copies by their
+    `created_at`, which were the rows the winning arm's switch relied on, so
+    two replicas arming one envelope could leave Postgres an armed switch
+    with no copies, while the winner's mirror showed them to the owner).
+    Where a switch with the id exists, before the writes or by the time of
+    the insert, the owner is answered 409 `release_id_taken`, and that switch
+    and its copies, read in the same call, are taken into the mirror where it
+    lacked them and announced, so the owner's list, check-in and cancel on
+    this process know it. A statement that fails is an unknown outcome (the
+    connection can die after the server committed the insert; round 12: it
+    was answered 500 "nothing was armed" while Postgres held the switch,
+    which the owner could neither see nor cancel on that process and a fresh
+    worker fired): the switch is read again in its lane, and found, it and
+    its copies are taken into the mirror and announced and the owner is
+    answered 201; not found, 500 `switch_write_failed` with nothing in the
+    mirror (a statement the database was still running when its client was
+    lost can commit after that read, which the next arm of the envelope then
+    finds as `release_id_taken` and takes into the mirror); where that read
+    fails too, 503. A call the database does not answer within 30 seconds is
+    503 `switch_write_unanswered` with nothing in the mirror, and if it lands
     later the switch and its copies are taken into the mirror and announced
     then (`settleSwitchStatement`), so the owner's list shows it, and arming
-    the same envelope again is refused `release_id_taken`. Until the store
+    the same envelope again is refused `release_id_taken`; one sent while
+    another switch statement already stands unanswered on the process is 503
+    at once and was not sent, so it cannot land. Until the store
     answers, the arm counts toward every bound and its id is taken
     (`armsInFlight`), so a second arm sent meanwhile reads the counts with
-    it. A re-seal's copy is still a write-behind upsert: one that failed
+    it; and a stall stands until the landed row is in the mirror, not only
+    until the statement answered, so an arm sent between the two is refused
+    503 rather than read against bounds that lack the landed switch (round
+    12: it passed them). A re-seal's copy is still a write-behind upsert: one that failed
     twice and was dropped (`db_write_behind_failed`, `writeBehindQueue.ts`)
     leaves the new copy in that process's mirror only; nothing detects the
     orphaned copies or the missing one (P3b-L5). On one replica two arms with
@@ -1287,9 +1313,9 @@ message, and nothing here makes a release happen on time (§10, R12).
     of the review: it keyed on `releasedAt` alone, which a switch cancelled
     by its owner's deletion over a trigger committed elsewhere keeps,
     decision 30, and only the emptied content kept such a switch from being
-    served), and blanked by the next sweep pass, which blanks the held
-    copies of any cancelled release switch (round 11), or by a second
-    cancel; a re-seal there racing the
+    served), and blanked by the next sweep pass of a process whose mirror
+    has the switch cancelled, which blanks the held copies of any cancelled
+    release switch (round 11), or by a second cancel; a re-seal there racing the
     recipient's deletion or rotation on another replica can likewise write a
     copy for the deleted account or sealed to the replaced key (P3b-L6). Not
     gated on the flag, which gates arming only (§13).
@@ -1318,7 +1344,14 @@ message, and nothing here makes a release happen on time (§10, R12).
     retention, 30 days of notice retries.
 -   **Cancel** blanks every copy, the owner's own included, once its
     conditional write has applied; one answered 503 whose statement lands
-    later has them blanked when it settles (`settleSwitchStatement`), and a
+    later has them blanked when it settles (`settleSwitchStatement`), while
+    the process that sent it is running (round 12 of the review: the settle
+    runs in that process alone and a landed statement is announced to no
+    other; if the process stopped first, the copies stay held until the
+    sweep's process next writes the switch, its refused move at the old
+    deadline, or a check-in or second cancel finds it cancelled, since the
+    sweep's blanking below acts on its own mirror, which still says armed),
+    and a
     write that finds Postgres has the switch cancelled, and each sweep pass
     (`removeExpiredReleases`), blank any copy a cancelled release switch
     still holds (round 11 of the review: until then a cancel that landed
@@ -1360,22 +1393,38 @@ message, and nothing here makes a release happen on time (§10, R12).
     notice, and the person's read on that process listed their copy, for a
     trigger Postgres then refused; now nothing that process serves or sends
     rests on a move Postgres has not applied. Where this process itself
-    wrote the switch while the statement ran (only the owner's deletion
-    can: a check-in, a cancel, the second cancel's and the removal's
-    blanking of the content and another move are conditional writes
-    themselves, the last two since round 11), the fields those writes
+    wrote the switch plainly while the statement ran (no route does in
+    Postgres mode since round 12: a check-in, a cancel, the second cancel's
+    and the removal's blanking of the content, another move and the owner's
+    deletion are all statements in the switch's lane, run one after
+    another; the deletion's fallback where the database does not answer is
+    the one plain write left), the fields those writes
     changed are kept over Postgres's
     row and the whole row written after them; a change notification's
     refresh of the mirror is not such a write (round 10: taken for one, it
-    put an older status over a cancel another process had committed). So
-    the owner's deletion during the statement acts on the switch as the
-    mirror then has it, armed, as it does a moment before the statement: it
-    cancels the switch and removes its content and copies even over a
-    trigger another process committed that this one had not heard of, which
-    a deletion in a lagging process does with or without a sweep running
-    (the deletion's write is not conditional), and a deletion during this
-    process's own move stands over the move, which then writes no notice
-    row. Where Postgres has no row for the switch, this process's own write
+    put an older status over a cancel another process had committed). The
+    owner's deletion is decided in Postgres since round 12 (decision 30,
+    the operator's choice of 2026-11-02): one statement per switch, in the
+    switch's lane, that erases the label and, by a `CASE` on the stored
+    status, cancels and empties a switch that has not fired there and leaves
+    a fired one fired, with its content and `releasedAt`
+    (`eraseDeadmanSwitchUnlessFired`); the mirror takes the row Postgres
+    returns and announces it, and the copies are blanked only where it says
+    the switch is not fired. So a deletion on a process that has not heard
+    of a trigger another process committed erases the release as fired (the
+    label and the owner's own copy go, the content and the recipients'
+    copies stay until the removal, as decision 12 describes), the notice
+    sent stands and one not yet sent still goes; a deletion during this
+    process's own move runs after it in the lane, and finds the switch
+    fired; and a legacy switch fired elsewhere is erased as fired the same
+    way, its payload kept (until round 12 the deletion wrote the switch from
+    the deleting process's mirror, armed, so it cancelled such a release and
+    removed its content and copies). Where the database does not answer the
+    deletion's statement within the bound, or fails it, the switch is erased
+    from the mirror and written whole from it as before (logged,
+    `account_deletion_switch_erase_unconfirmed`), so in that case alone a
+    trigger committed elsewhere in the same moment can still be written
+    over. Where Postgres has no row for the switch, this process's own write
     of it was dropped (`db_write_behind_failed`; nothing deletes a switch
     row), and the move writes the record whole, insert-only, and applies,
     logged `deadman_switch_row_restored` (round 10: such a switch matched no
@@ -1414,9 +1463,15 @@ message, and nothing here makes a release happen on time (§10, R12).
     the owner's check-in at once, and the first pass after it, within the
     tolerance, fired the switch). Only the process that runs the sweep knows
     its own stalls and refusals: in the deployed layout a check-in the API
-    process refused during a database outage that the worker's own
-    statements did not meet does not hold the switch back, and it fires at
-    its deadline if the database answers within the tolerance (decision 31).
+    process refused during a database outage never holds the switch back by
+    itself; the worker's sweep gives the window only to a switch whose
+    deadline falls inside one of the worker's own recorded stalls, or whose
+    check-in the worker itself refused, so a check-in refused on the API
+    process during an outage that ends before the deadline, whether or not
+    the worker's own statements met that outage, leaves the switch to fire
+    at its deadline unless the owner checks in again (decision 31; round 12
+    of the review: this said the gap needed an outage the worker's
+    statements did not meet, which is not a condition the code has).
     The owner's check-in and cancel are conditional the same way
     (`updateDeadmanSwitchIf`), on the status and the last check-in the route
     read, and the switch as each refusal read it is looked at before every
@@ -1672,7 +1727,20 @@ message, and nothing here makes a release happen on time (§10, R12).
     of the account's loses its copies with its content; a fired one keeps its
     content, the owner's identity it was signed with (E13) and the recipients'
     copies, and only the owner's own copy and the label go, since nothing is
-    re-sealed after the trigger and nobody is left to open it. As a recipient:
+    re-sealed after the trigger and nobody is left to open it. Which of the
+    two a switch is, the database decides, by one statement per switch in
+    the switch's lane (`eraseDeadmanSwitchUnlessFired`, decision 30, built
+    in round 12 of the review), so a switch that fired on another process
+    moments before the deletion reached a process not yet told of it is
+    erased as fired, its release standing, and a legacy switch fired
+    elsewhere keeps its payload; where the database does not answer that
+    statement within the bound, or fails it, the switch is erased from the
+    deleting process's mirror as before (logged), and only then can a
+    trigger committed elsewhere in the same moment be written over. The
+    release identities are erased first, before anything is awaited, so an
+    arm or a re-seal by one of the account's other sessions that reaches
+    this process while the statements run is refused for want of an owner
+    identity. As a recipient:
     the account's copies on others' switches go, fired or not, and on one API
     process none is written after it, since an arm or a re-seal that was
     verifying meanwhile reads the identities again before it writes (round 3
@@ -1725,19 +1793,28 @@ message, and nothing here makes a release happen on time (§10, R12).
     legacy payload that is. A notice row's status at send time is checked
     now, since the review's P3b-L14 found a deletion could land during the
     send. Each bound of P3b-H1 is checked twice on purpose: before the
-    signatures, so a refused arm costs no verification, and again with
-    nothing yielding before the writes, so on one replica exactly the bound
-    passes a burst of arms (round 2 of the review: checked once, a burst of
-    N passed every bound, and "two arms racing can exceed one by one" was
-    not true, since N racing exceeded it by N − 1); across replicas by up to
-    the size of a burst, until the replicas' write-behind queues drain (§11).
+    signatures, so a refused arm costs no verification, and again right
+    before the store call, with the arms this process is still writing
+    counted (`armsInFlight`) and, since round 12, with a stall standing
+    until a landed statement's row is in the mirror, so on one replica
+    exactly the bound passes a burst of arms (round 2 of the review: checked
+    once, a burst of N passed every bound, and "two arms racing can exceed
+    one by one" was not true, since N racing exceeded it by N − 1; round 12:
+    between a stalled arm's insert landing and its re-read putting the row in
+    the mirror, an arm read the bounds without it and passed); across
+    replicas by up to the size of a burst, for as long as one replica's arm
+    is not yet in the others' mirrors: the arm's awaited call plus the change
+    notification's lag (§11), unmeasured.
     The held cap is what bounds the content
     one account can make the server keep; the rows are not bounded: a
     cancelled release switch's row and its blanked copy rows stay, so an
     account that arms and cancels at the rate adds up to 10 switch rows and
     650 blanked copy rows a day for good, about 230 KB a day as JSON in the
     mirror at 64 recipients and a full label (about 11 KB at one recipient),
-    which decision 24 asks about. The per-recipient bounds are read twice
+    which decision 24 asks about; and an arm whose statement failed or found
+    the id taken after writing its copies leaves up to 65 held copy rows that
+    no switch names (round 12), which only a database failure or a race
+    between replicas produces, not a request. The per-recipient bounds are read twice
     per copy per arm (before the signatures and again before the writes),
     each time through the store's by-recipient index (round 2: as first
     fixed, a scan of every copy row per copy), and the owner's two bounds
@@ -1955,7 +2032,9 @@ records what the API sends.
     230 KB a day as JSON at 64 recipients and a full label, about 11 KB at
     one recipient (decision 24). The bounds hold on one API process against
     arms sent at once; across replicas a burst can exceed each by up to its
-    own size until the replicas' write-behind queues drain (§11).
+    own size for as long as one replica's arm is not yet in the others'
+    mirrors, the arm's awaited call plus the change notification's lag,
+    unmeasured (§11).
 5.  The header is signed inside each copy's signature rather than once
     (E7); recipients learn they read the same text only by comparing.
 6.  Transferable signatures, held by the server from arming (C15, E8).
@@ -2116,7 +2195,9 @@ records what the API sends.
     the alias, and its admin token may) so that a later create is covered by
     the alias again, at the cost of one more homeserver call that can fail.
 27. (Part 2, after its review's round 7; changed in round 8; its costs
-    completed in round 9.) The account
+    completed in round 9. **Decided by the operator on 2026-11-02: confirmed
+    as built.** The two waits stay as described here; no code changed for
+    it.) The account
     deletion route revokes the deleting session's token first (only that
     token: the account's other access tokens are not revoked there), then
     waits, with no bound, until every write the API process had queued, the
@@ -2175,7 +2256,8 @@ records what the API sends.
     before round 6 on one process), which points the person at a release
     that process serves until it restarts and nothing serves after. The
     operator confirmed ending it unsent.
-29. (Part 2, after its review's round 8.) The held cap keeps the names part 1
+29. (Part 2, after its review's round 8. **Decided by the operator on
+    2026-11-02: keep the names.** No code changed for it.) The held cap keeps the names part 1
     shipped on `develop`: `DeadmanLimits.maxLiveReleaseSwitches` in
     `GET /v1/deadman/limits`, `DEADMAN_MAX_LIVE_RELEASE_SWITCHES` and
     `DEADMAN_RELEASE_ERRORS.liveLimit` (wire value `release_switch_limit`),
@@ -2185,23 +2267,30 @@ records what the API sends.
     change for anything built on `develop`, which nothing in the tree uses.
     Confirm the old names, or rename them in a change of their own that
     exports both names for a release and says so in the protocol's notes.
-30. (Part 2, after its review's round 10.) The owner's account deletion
-    writes each of their switches from the deleting process's mirror,
-    unconditionally (`eraseDeadmanSwitch`, a full-row write; the copies are
-    blanked the same way), so where the API runs as more than one process a
-    deletion that reaches a process which has not yet heard of a trigger
-    another process committed cancels that release and removes its content
-    and copies, although it fired; the people named may already have been
-    sent their notice, and one not yet sent ends unsent (`copy_unavailable`
-    or `release_unavailable`). Round 10 made the check-in, the cancel and
-    the sweep's moves conditional in Postgres; the deletion was left as it
-    was, and §15, `KNOWN_LIMITATIONS.md`, the deletion screen, the changelog
-    and the threat model's row now state it. Confirm it (the deletion and
-    the trigger at the same moment, the owner present to delete, and either
-    order defensible), or have the deletion's erase and its copy blanking
-    conditional on the switch not having fired in Postgres (erase as fired
-    when it has, keeping the copies), at the cost of the deletion awaiting a
-    statement per switch, as the check-in now does.
+30. (Part 2, after its review's round 10. **Decided by the operator on
+    2026-11-02: build the conditional erase; built in round 12.**) Until
+    round 12 the owner's account deletion wrote each of their switches from
+    the deleting process's mirror, unconditionally (`eraseDeadmanSwitch`, a
+    full-row write; the copies were blanked the same way), so where the API
+    runs as more than one process a deletion that reached a process which
+    had not yet heard of a trigger another process committed cancelled that
+    release and removed its content and copies, although it fired. Now the
+    deletion's erase of each switch is one statement decided in Postgres
+    (`eraseDeadmanSwitchUnlessFired`, §15): a switch the database has as not
+    fired is cancelled and emptied and a release switch's copies are blanked;
+    one it has as fired, on any process, is erased as fired, exactly as
+    decision 12 describes a fired release at its owner's deletion: the label
+    and the owner's own copy go, the content, the owner's identity,
+    `releasedAt` and the recipients' copies stay until the removal 365 days
+    after the trigger, the notice already sent stands and one not yet sent
+    still goes; a legacy switch fired elsewhere is erased as fired the same
+    way, its payload kept for the people it named. The deletion awaits one
+    statement per switch (within the stall's 30-second bound, process-wide),
+    and where the database does not answer it, or fails it, falls back to the
+    mirror's erase as before, logged, so in that case alone the old behaviour
+    remains; the deletion route's wait for its writes (decision 27) covers
+    that write. §15, `KNOWN_LIMITATIONS.md`, the deletion screen, the
+    changelog and the threat model's row say so.
 31. (Part 2, after its review's round 11.) A database that does not answer a
     process's switch statements is treated by the sweep in that process as
     an outage of its own: a switch due while they stood, or whose owner's
@@ -2209,15 +2298,21 @@ records what the API sends.
     backlog window instead of firing (§15). The stall and the refusal are
     known to that process alone. In `deploy/docker/production` the API
     process refuses the check-ins and the worker runs the sweep, so a
-    check-in refused on the API during a database outage that the worker's
-    own statements did not meet (no switch of its own was due then) does not
-    hold the switch back, and it fires at its deadline if the database
-    answers within the tolerance. Confirm it (the outage must coincide with
-    both the owner's check-in and no due switch of the worker's, and the
-    owner can check in again once the database answers), or have the API
-    process carry the refused attempt into Postgres once the database
-    answers (a column on the switch, written then, which the sweep reads), at
-    the cost of a write per refusal and a migration.
+    check-in refused on the API process never holds the switch back by
+    itself: the worker gives the window only to a switch whose deadline
+    falls inside one of the worker's own recorded stalls, or whose check-in
+    the worker itself refused, so a check-in refused on the API process
+    during a database outage that ends before the deadline (the common
+    shape: a short blip hours before it) leaves the switch to fire at its
+    deadline unless the owner checks in again, whether or not the worker's
+    own statements met that outage. _(Round 12 of the review: as written in
+    round 11 this confined the gap to an outage the worker's statements did
+    not meet, which is not a condition the code has.)_ Confirm it (the owner
+    can check in again once the database answers, and the API's 503 tells
+    them the check-in was not recorded), or have the API process carry the
+    refused attempt into Postgres once the database answers (a column on the
+    switch, written then, which the sweep reads), at the cost of a write per
+    refusal and a migration.
 
 ## Not verified here
 
@@ -5173,7 +5268,8 @@ the mutation table follows round 10's. `origin/develop` is still
     the mirror takes the rows only once Postgres has them, they are
     announced, and only then is the owner answered 201. A statement that
     finds the id taken after all, or fails, deletes the copies it wrote
-    (best effort, by the call's own `created_at`) and is answered 409
+    (best effort, by the call's own `created_at`; round 12 removed this: the
+    rows it deleted were the winner's) and is answered 409
     `release_id_taken` or 500 `switch_write_failed`, nothing in the mirror;
     one not answered within the bound is 503 `switch_write_unanswered` with
     nothing in the mirror, and if it lands later the switch and its copies
@@ -5217,11 +5313,14 @@ the mutation table follows round 10's. `origin/develop` is still
     write of the switch applies, when a check-in landed anywhere, or when
     the switch is terminal. Only the process that runs the sweep knows its
     own stalls and refusals: in the deployed layout a check-in the API
-    process refused during a database outage that the worker's own
-    statements did not meet (no switch of the worker's was due then) does
-    not hold the switch back, and §15, `KNOWN_LIMITATIONS.md` and the threat
-    model say so (decision 31 asks whether to carry the refusal into
-    Postgres once it answers). The sentences now say that during a stall the
+    process refused does not hold the switch back by itself, since the
+    worker gives the window only to a switch whose deadline fell in one of
+    its own stalls or whose check-in it refused itself (round 12 of the
+    review: as written here in round 11, the gap needed "an outage the
+    worker's own statements did not meet", a condition the code does not
+    have; §15, `KNOWN_LIMITATIONS.md`, the threat model and decision 31, which
+    asks whether to carry the refusal into Postgres once it answers, say the
+    true one now). The sentences now say that during a stall the
     statement is not sent, so it was certainly not recorded, that an
     unconfirmed move is tried at the first pass after the database answers,
     that no switch moves on the process while one stands, and that an outage
@@ -5298,8 +5397,12 @@ the mutation table follows round 10's. `origin/develop` is still
     test 13 asserts it), and `releasedCopiesFor`, the notifier's `processOne`,
     its catch-up and `awaitsTrigger` keyed on `releasedAt` alone, so only the
     emptied content kept such a switch unserved. Now `standsFired`
-    (`triggered` with `releasedAt`) is what every reader asks, and the
-    removal pass too; §15's two sentences and "Checks not written" say so.
+    (`triggered` with `releasedAt`) is what every reader that serves or
+    notifies asks, and the removal pass too; §15's two sentences and "Checks
+    not written" say so (round 12 of the review: the account export's
+    notice filter was the one reader left on `releasedAt` alone, which
+    listed the notice rows of such a switch, metadata only; it asks
+    `standsFired` now, and test 14 pins it).
     Test 14 (a fired and listed release, cancelled with `releasedAt` and
     content kept: not listed, the catch-up writes nothing, its pending
     notice ends `release_unavailable`, nothing sent). Q19, Q20.
@@ -5380,6 +5483,250 @@ found while probing round 6" stays as it is in Still open. New operator
 decision: 31. Not pinned by a test: the reverse lane order (a plain write of
 a switch queued while its statement is in flight waiting for the statement),
 stated in Still open.
+
+### Round 12: the operator's decisions of 2026-11-02, and what the verifiers found in round 11's fixes
+
+A twelfth pass read round 11's head (`e9556d76dd`). Three decisions came
+from the operator on 2026-11-02, not from a reviewer: decision 27 confirmed
+as built, decision 29's names kept, and decision 30's conditional erase to be
+built. The verifiers found, in round 11's fixes, two Medium in fix quality
+(the losing arm of a cross-replica race deleting the winner's copy rows; an
+arm answered 500 "nothing was armed" after its insert had committed), one
+Medium and one Low in the attack replay (the same race in the same
+millisecond; a one-round-trip window after a stalled arm landed in which an
+arm slipped past a bound), and one Medium and five Low in the claims (the
+deployed-layout stall gap stated under a condition the code does not have;
+the cancel-503 blanking stated for a process that has stopped; "may still
+land" for an arm that was never sent; the changelog's "nothing is armed"; the
+export's notice filter; §11's write-behind mechanism for the arm). Each is
+built, fixed or explained here; the mutation table follows round 11's.
+`origin/develop` is still `f6da7b7d16`, so nothing was merged.
+
+-   **Decision 27 (the operator: confirmed as built).** The deletion route's
+    two waits stay: unbounded for the process's queued writes, 10 s for the
+    last statement. Marked decided; no code changed.
+-   **Decision 29 (the operator: keep the names).** `maxLiveReleaseSwitches`,
+    `DEADMAN_MAX_LIVE_RELEASE_SWITCHES` and `release_switch_limit` stay, their
+    docstrings saying what they count. Marked decided; no code changed.
+-   **Decision 30 (the operator: build the conditional erase; done).** The
+    owner's deletion wrote each switch from the deleting process's mirror
+    (`eraseDeadmanSwitch`, a full-row upsert), so on a process that had not
+    heard of a trigger another process committed it cancelled a release that
+    had fired and removed its content and copies. Now each switch is one
+    statement in the switch's lane, decided on the row Postgres holds
+    (`eraseDeadmanSwitchUnlessFired` in `db/store.ts`): it erases the label
+    and, by a `CASE` on the stored status, cancels and empties a switch that
+    has not fired there and leaves a fired one fired, with its content and
+    `releasedAt`; it always applies to a row that exists, so nothing is
+    refused and no retry is needed; the mirror takes the row Postgres returns
+    (what this process's own writes changed meanwhile kept over it, as the
+    other statements do) and announces it; and `confirmAccountDeletion` blanks
+    a release switch's copies only where the answer says it is not fired. So
+    a release that fired elsewhere is erased exactly as decision 12 describes
+    a fired release at its owner's deletion: the label and the owner's own
+    copy go (the latter with every copy sealed to the account), the content,
+    the owner's identity, `releasedAt` and the recipients' copies stay until
+    the removal, the notice already sent stands and one not yet sent still
+    goes; a legacy switch fired elsewhere is erased as fired the same way,
+    its payload kept; a deletion during this process's own move runs after it
+    in the lane and finds the switch fired. Where the database does not
+    answer the statement within the bound (30 s, and at once once a stall
+    stands) or fails it, the deletion falls back to the mirror's erase as
+    before, logged `account_deletion_switch_erase_unconfirmed`, so in that
+    case alone a trigger committed elsewhere in the same moment can still be
+    written over; where Postgres has no row (a write dropped before round
+    11), the mirror's erase is written whole, as the other statements do.
+    `confirmAccountDeletion` is async now; the route passes it the deleting
+    token's revocation, run once the deletion token is consumed and before
+    anything is awaited, so round 7's order holds; and the release
+    identities are erased first, before any await, so an arm or a re-seal by
+    one of the account's other sessions that reaches the process while the
+    statements run is refused `owner_identity_missing` rather than leaving an
+    armed switch behind the deletion. §15, decision 30, `KNOWN_LIMITATIONS.md`
+    (the deletion section and the dead-man section's deletion paragraph), the
+    deletion screen, the changelog and the threat model's row say what the
+    code does, and the Still-open entry became the fallback's. Tests: test 18
+    of `deadman-switch-writes-postgres.integration.test.ts` (two processes:
+    the worker fires two releases and a legacy switch and sends one notice;
+    the API process, not told, deletes the owner: the two releases stand
+    fired in Postgres with `releasedAt`, label null, content kept, the
+    owner's copy blanked and the recipient's held, served on the API process
+    too and announced; the sent notice stands and the pending one is sent by
+    the notifier afterwards; the legacy switch keeps its payload with its
+    label gone; the unfired release is cancelled, emptied and its copies
+    blanked; one erase statement per switch; the token revocation runs before
+    the first statement; an arm by the owner during the first statement is
+    `owner_identity_missing`; the worker told of the writes agrees); the
+    round-10 variants `firedErasedHere` and `erasedHereOnly` of the notices
+    file's test 13 now expect the switch erased as fired with the first
+    `releasedAt` and the notice sent once, and say why; the backlog file's
+    deletion test calls the new method. R05, R06, R07, R08, R10.
+-   **Two replicas arming one envelope: the loser deleted the winner's copies
+    (Medium, fix quality; Medium, attack replay; done).** Round 11's
+    `armDeadmanSwitch` took back "the copies this call wrote" by their
+    `created_at` when its switch insert found the id taken (or failed), but
+    those were the winning arm's rows too: its copy inserts had been no-ops
+    on them, and in the same millisecond the timestamps matched, so Postgres
+    held an armed switch with no copies, which fires and releases to nobody,
+    while the winner's mirror showed them to the owner (the verifiers'
+    `arm-race.mts` A and `h1-pg-edge.mts` E, the latter 29 of 30 races).
+    Now nothing deletes a copy row: the copies are written as upserts (over
+    any row of the same key, which the next arm of the same envelope writes
+    over) and the switch insert-only, so a stop between them, a failed
+    statement and a lost race all leave at most copies no switch names, which
+    nothing lists, serves or counts (`releasedCopiesFor`,
+    `heldReleasesNaming` and the owner's view each need the switch) and the
+    named account's deletion blanks like any other. The cost: a failed arm
+    leaves up to 65 held copy rows for good, which only a database failure
+    or a race between replicas produces (§15). An arm that finds the id
+    taken, before its writes or at the insert, reads that switch and its
+    copies in the same call and takes them into the mirror where it lacked
+    them, announced, so the owner's list, check-in and cancel on that
+    process know it. §15, the store's comments and the service's say so.
+    Test 15 of the switch-writes file (A, through the service, held at its
+    switch insert after writing its copies; B, another store, arms the same
+    envelope and wins; A resumes: `id_taken`, both copy rows held, A's mirror
+    has B's switch and copies, announced once, the owner's list on A shows
+    it, a fresh process hydrates both copies, and the owner's cancel on A
+    blanks them; then both stores arm one envelope at once with nothing held:
+    one `armed`, one `id_taken`, both copies held) and test 7's first case
+    (a failed insert leaves its two copy rows, held, named by no switch,
+    served to nobody and counted toward no bound, and the retry arms over
+    them). R01, R02.
+-   **An arm answered 500 "nothing was armed" after its insert had committed
+    (Medium, fix quality; done).** A statement that threw was `failed`, and
+    the route answered 500 with nothing re-read; a connection that died
+    between the server committing the insert and the client reading the
+    answer left Postgres with the armed switch, invisible to the owner,
+    uncancellable on that process, refused `release_id_taken` on retry
+    without being taken into the mirror, and fired by a fresh worker (the
+    verifiers' `arm-race.mts` B). Now a thrown statement is an unknown
+    outcome: the switch is read again in its lane, and found, it and its
+    copies are taken into the mirror and announced and the arm is answered
+    201; not found, 500 `switch_write_failed`, whose message now says the
+    server "finds nothing armed" (a statement the database was still running
+    when its client was lost can commit after that read, and the next arm of
+    the envelope then finds it as `release_id_taken` and takes it into the
+    mirror); where the read fails too, 503 `switch_write_unanswered`. §15,
+    `KNOWN_LIMITATIONS.md`'s Durability item and the route's comments say
+    so. Test 16 of the switch-writes file (the insert executed, then the
+    connection "dies": 201, the failure logged once, the switch and its two
+    copies in the mirror, announced, listed, the same envelope
+    `release_id_taken`, and the owner's cancel 200 with the copies blanked;
+    every statement on the switch table thrown: 503, nothing in the mirror or
+    in Postgres, and the same envelope then arms). R03.
+-   **A one-round-trip window after a stalled arm landed (Low, attack
+    replay; done).** `awaitSwitchStatement` cleared the stall when the
+    statement answered, before `settleSwitchStatement`'s re-read had put the
+    landed row in the mirror, and the service had already dropped the arm
+    from `armsInFlight` when it answered 503, so an arm whose bounds check
+    ran in that window read the counts without the landed switch and passed
+    (the verifiers' `h1-pg-edge.mts` F2: 21 held on one process). Now the
+    settle returns its re-read's promise and the stall is cleared only once
+    the row is in the mirror (or the re-read has failed, logged), so an arm
+    sent in that window is 503 `switch_write_unanswered` at once, as during
+    the stall; §15 and `KNOWN_LIMITATIONS.md` say so. Test 17 of the
+    switch-writes file (four releases naming one person; the fifth's insert
+    held past a 200 ms bound, 503; the insert lands with the settle's re-read
+    held: the stall still stands, the mirror counts four, and a sixth arm
+    naming the person is 503 at once; the read released: five counted, five
+    in Postgres, and the sixth is 409 `recipient_limit`). R04.
+-   **The deployed-layout stall gap was stated under a wrong condition
+    (Medium, claims; done).** `KNOWN_LIMITATIONS.md`, §15, decision 31, the
+    round-11 entry and Still open confined the gap to "a database outage
+    that the worker's own statements did not meet (no switch of its own was
+    due then)". The code has no such condition: the worker's sweep gives the
+    window only to a switch whose due moment overlaps one of the worker's
+    own stall intervals or that the worker itself refused, and a check-in
+    refused on the API process is noted in the API store alone, so whenever
+    the deadline falls outside the worker's recorded stalls the switch fires
+    at its deadline whether or not the worker met the outage (the verifiers'
+    `stall-cross-process.mts`: the worker met the outage, the owner's
+    check-in was refused on the API process an hour before the deadline, and
+    the first pass at the deadline fired the switch, while the control
+    refused on the worker's own process got the window). All five places say
+    the true condition now, and decision 31's choice is between accepting
+    that and carrying the refusal into Postgres.
+-   **The cancel-503 blanking and the sweep's blanking were stated for a
+    process that has stopped (Low, claims; done).** The settle runs only in
+    the process that sent the cancel, a landed statement is announced to no
+    other, and `removeExpiredReleases` and the refused-branch blanking act on
+    the sweep process's mirror, which still says armed, so with the sending
+    process gone the copies stay held until the worker's own move on the
+    switch is refused at its former deadline (the verifiers'
+    `cancel-503-process-gone.mts`). The Retention bullet, §15 (twice), §10
+    and the threat model's row now say "while the process that sent it is
+    running", and what blanks them otherwise. Retention only: a cancelled
+    switch is served to nobody.
+-   **"May still land" for an arm refused during a stall (Low, claims;
+    done).** An arm sent while a switch statement already stands unanswered
+    is 503 at once with no statement sent, so it cannot land; the check-in
+    bullet said so, the arming sentences did not. The Durability bullet, §15
+    and the store's `DeadmanSwitchArmOutcome` comment now distinguish the
+    two.
+-   **The legal changelog's "nothing is armed" (Low, claims; done).** A 503
+    arm whose insert lands is armed and fires; the changelog's sentence now
+    carries the Durability bullet's cases (an error with nothing armed; an
+    unconfirmed answer that may still be recorded, and then appears in the
+    list; the same message armed again refused as taken). Its "until it is
+    cancelled again" for a copy left on a cancelled switch, which round 11
+    corrected elsewhere, says "removed by the sweep's next pass" now.
+-   **"What every reader asks" (Low, claims; fixed in code).** The account
+    export's notice filter was the one reader left on `releasedAt` alone,
+    listing the notice rows (metadata) of a switch cancelled with its
+    `releasedAt` kept. It asks `standsFired` now; the round-11 entry says
+    which reader it missed, and test 14 asserts the export lists the notice
+    while the switch stands fired and nothing once it is cancelled. R09.
+-   **§11, decision 18 and the threat model's write-behind mechanism (Low,
+    claims; done).** Since round 11 an arm's rows are one awaited call in
+    the switch's lane, not 66 queued upserts, so a burst no longer lengthens
+    the cross-replica window by a write per row; the window is the arm's
+    awaited call plus the change notification's lag (a re-seal's single copy
+    is still a queued upsert), unmeasured. §11, §15, decisions 4 and 18,
+    Still open, `KNOWN_LIMITATIONS.md` (twice), `TRUST.md` §1 (and the
+    generated trust page), the changelog and the threat model's row say that
+    now.
+-   **Model names in the history (Low).** No action, as in rounds 5 to 11.
+
+Claims that were not true, and what they say now (this round's): §15's
+"never a switch without copies" and "the copies the call wrote are deleted
+again, best effort (by the call's own `created_at`)", the store's "a row
+another arm of this id left is kept as it is" and the service's "never a
+switch without its copies" (now: nothing deletes a copy row, and what a
+failed or lost arm leaves); `KNOWN_LIMITATIONS.md`'s "an arm whose write the
+database refuses or fails is answered 500 with nothing armed anywhere" and
+§15's "500 `switch_write_failed`, nothing in the mirror" (now: read again,
+and 201 where the switch is found); the route's "Nothing was armed; try
+again" (now "finds nothing armed"); `KNOWN_LIMITATIONS.md`'s "The bounds hold
+on one API server against requests sent all at once" and §15's "with nothing
+yielding before the writes, so on one replica exactly the bound passes" (now
+with the arms in flight and the stall that stands until the landed row is in
+the mirror); the five "did not meet (no switch of its own was due then)"
+sentences (now the worker's own stalls and refusals as the only ones that
+count); "a cancel the database confirms only after the server has answered
+503 removes the copies when it does" and "each sweep pass ... blank[s] any
+copy a cancelled release switch still holds" in `KNOWN_LIMITATIONS.md`, §15
+(twice), §10 and the threat model (now while the sending process runs, and
+what blanks them otherwise); "one the database does not confirm within 30
+seconds 503, in which case it may still land" and the store's "the write may
+still land" (now only one that was sent); the changelog's "otherwise an
+error, and nothing is armed" and "until it is cancelled again"; round 11's
+"what every reader asks" (now every reader that serves or notifies, the
+export named); and §11's, §15's, decisions 4 and 18's and the threat model's
+"until the replicas' write-behind queues drain" (now the awaited call plus
+the notification's lag); and the deletion's "cancelled and emptied with the
+rest ... in the moments before your deletion" in `KNOWN_LIMITATIONS.md`, the
+deletion screen, the changelog, the threat model's row, §15 and decision 30
+(now decided on the database's row, with the fallback named).
+
+Raised and refuted: nothing this round; every finding stood.
+
+Not done this round, unchanged: the recipient-side refusal (decision 19), the
+legacy retention decision (20), the rows of cancelled switches (24), the
+alias's key (25, 26) and decision 31 are the operator's, as written; the
+"aside found while probing round 6" stays as it is in Still open. The
+deletion's fallback where the database does not answer is a new Still-open
+entry in decision 30's place. No new operator decision this round.
 
 ### Claims that were not true, and what they say now
 
@@ -6177,6 +6524,30 @@ the sixth is sent). Each then failed on its second run.
 | Q23: the memory and file arm does not refuse a taken id                              | `deadman-releases-file.integration.test.ts`          | test 2: `armed` where `id_taken`                                                              |
 | Q25: the announcement after a conditional switch write removed (the verifiers' X1)   | `deadman-switch-writes-postgres.integration.test.ts` | test 11: no `deadmanSwitches` `u` published for the applied move                              |
 
+Round 12's mutants (`fix/mut/spec-round12.py`, run with the round-7 runner
+against the worktree, every source restored afterwards and `git diff --stat`
+checked unchanged; the test numbers are the switch-writes file's after round
+12, 18 tests). Ten mutants, all caught. One, R08, survived its first run
+because the arm started while the deletion's first statement was held was
+refused at its second identity check once the deletion had finished, so the
+test could not tell when the identities went; test 18 now records the arm's
+answer while the statement is still held (300 ms, against an arm that
+returns in microtasks) and asserts that no switch of the deleted owner's
+stays armed, and R08 failed on its second run.
+
+| Check removed                                                                          | Test file                                              | What failed                                                                    |
+| -------------------------------------------------------------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------ |
+| R01: the losing arm deletes the copy rows of its id again (round 11's take-back)       | `deadman-switch-writes-postgres.integration.test.ts`   | test 15: the winner's copies gone from Postgres                                |
+| R02: a taken id is answered `id_taken` without taking the switch into the mirror       | `deadman-switch-writes-postgres.integration.test.ts`   | test 15: A's mirror lacks B's switch                                           |
+| R03: a failed arm statement is answered `failed` without reading the switch again      | `deadman-switch-writes-postgres.integration.test.ts`   | test 16: 500 where 201, the committed switch invisible                         |
+| R04: the stall ends when the statement answers, before the landed row is in the mirror | `deadman-switch-writes-postgres.integration.test.ts`   | test 17: the sixth arm `armed` during the window where 503                     |
+| R05: the deletion writes each switch from the deleting process's mirror (round 11)     | `deadman-switch-writes-postgres.integration.test.ts`   | test 18: the fired release cancelled, its content gone                         |
+| R06: the erase statement cancels and empties a fired switch too (no `CASE`)            | `deadman-switch-writes-postgres.integration.test.ts`   | test 18: `cancelled` where `triggered`                                         |
+| R07: the deletion blanks a release switch's copies whatever the statement answered     | `deadman-switch-writes-postgres.integration.test.ts`   | test 18: the recipient's copy blanked on the fired release                     |
+| R08: the release identities erased after the switches' statements, not before          | `deadman-switch-writes-postgres.integration.test.ts`   | second run, test 18: the arm during the deletion still verifying where refused |
+| R09: the export's notice filter keys on `releasedAt` alone                             | `deadman-switch-writes-postgres.integration.test.ts`   | test 14: the cancelled switch's notice row listed in the export                |
+| R10: the deletion during a move writes the switch plainly from the mirror (round 11)   | `deadman-release-notices-postgres.integration.test.ts` | test 13: the fired variants `cancelled` where `triggered`, the notice not sent |
+
 ### Still open
 
 -   **A recipient-side refusal of an owner** (decision 19), which the
@@ -6201,7 +6572,9 @@ the sixth is sent). Each then failed on its second run.
 -   **The rows of cancelled release switches** stay for good (decision 24);
     deleting them after some time is the operator's.
 -   **Across API replicas** a burst can exceed each bound by up to its own
-    size until the replicas' write-behind queues drain, and how long that
+    size for as long as one replica's arm is not yet in the others' mirrors
+    (the arm's awaited call plus the change notification's lag; since round
+    11 the arm's rows are not write-behind upserts), and how long that
     takes was not measured; in the same window an arm or a re-seal on one
     replica can seal a copy to a key another replica has seen replaced or to
     an account whose deletion it has not seen yet, and a re-seal can leave a
@@ -6218,14 +6591,13 @@ the sixth is sent). Each then failed on its second run.
     once Postgres has applied it; since round 11 an arm's rows are one
     awaited insert-only call, so they are in Postgres at the 201, though the
     bounds are still read from the mirror.
--   **The owner's deletion over a trigger another process committed**
-    (decision 30): the deletion writes each switch from the deleting
-    process's mirror, unconditionally, so where that mirror has not heard of
-    the trigger it cancels the release and removes its content and copies;
-    the people named may have been told by then, and their notice ends
-    unsent if it had not gone. Stated in §15, `KNOWN_LIMITATIONS.md`, the
-    deletion screen, the changelog and the threat model's row; a conditional
-    erase was not built here.
+-   **The owner's deletion where the database does not answer** (decision
+    30, built in round 12): the deletion's erase of a switch is decided in
+    Postgres, so a release that fired on another process stays fired; only
+    where the database does not answer that statement within the bound, or
+    fails it, does the deletion fall back to writing the switch from its own
+    mirror, and a trigger committed elsewhere in that same moment can then
+    still be written over. Stated in §15 and `KNOWN_LIMITATIONS.md`.
 -   **A switch move whose statement answered after its bound and landed**
     is read again, taken into the mirror and announced to the other
     processes when it settles (round 11; until then it was found only when
@@ -6236,10 +6608,13 @@ the sixth is sent). Each then failed on its second run.
     database stall is recorded, and a check-in or cancel refused unanswered
     noted, in the process where they happened, and the sweep there gives
     such a switch the backlog window; in the deployed layout the worker's
-    sweep does not learn of a check-in the API process refused during a
-    database outage its own statements did not meet, and such a switch fires
-    at its deadline if the database answers within the tolerance. Carrying
-    the refused attempt into Postgres once it answers was not built here.
+    sweep never learns of a check-in the API process refused, so a switch
+    whose deadline falls outside the worker's own recorded stalls fires at
+    its deadline however the owner's check-in was refused during an outage
+    before it, unless the owner checks in again (round 12 of the review: as
+    stated in round 11 the gap needed an outage the worker's statements did
+    not meet, which the code does not ask). Carrying the refused attempt
+    into Postgres once it answers was not built here.
 -   **A plain write of a switch queued while that switch's conditional
     statement is in flight** waits for the statement (the row's lane), and so
     does everything queued after it; the other order, the statement waiting

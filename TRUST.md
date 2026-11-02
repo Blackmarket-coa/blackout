@@ -23,7 +23,9 @@ notices room as the one exception to "every direct message is encrypted", the
 bound of 50 counted in accounts rather than releases (the operator's choice of
 2026-10-31), the hold that keeps two background processes off one person's
 notices at once, and the extra room left when that work stops right after the
-homeserver made a room.
+homeserver made a room; section 1 updated 2026-11-02 with how long several
+API replicas can exceed the bounds on who can name you (until each replica's
+arms are confirmed by the database and announced to the others).
 Changes to anything here are recorded in
 the [policy changelog](docs/legal/CHANGELOG.md).
 
@@ -147,8 +149,8 @@ Encryption claims are only worth something with the exceptions attached.
     the API enforces (5 held releases naming you from one account, and 50
     accounts in all, so 250 releases at most: exact on one API server
     against requests sent at once; across several replicas a burst of requests
-    can exceed them by up to its own size until the replicas' queued writes
-    reach each other); you cannot yet refuse an owner. The bound of 50 accounts
+    can exceed them by up to its own size until each replica's arms are
+    confirmed by the database and announced to the others); you cannot yet refuse an owner. The bound of 50 accounts
     can be turned against you, and against many people at once: one release
     switch can name up to 64 people and each account counts once toward each
     person it names, so fifty accounts with release keys, each with its 20

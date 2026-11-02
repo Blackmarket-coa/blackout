@@ -59,8 +59,8 @@ each correction.
     naming one person, so 250 releases at most
     (`GET /v1/deadman/limits` reports each; exact on one API server against
     requests sent at once; across several replicas a burst of requests can
-    exceed them by up to its own size until the replicas' queued writes reach
-    each other). The bound of 50 owners can be filled on purpose, for many
+    exceed them by up to its own size until each replica's arms are
+    confirmed by the database and announced to the others). The bound of 50 owners can be filled on purpose, for many
     people at once: one release names up to 64 people and each account
     counts once toward each person it names, so fifty accounts with release
     keys, each with its 20 held switches naming 64 people, keep every other
@@ -76,7 +76,7 @@ each correction.
     the message and the copies from its database (backups aside; across several
     API replicas a re-seal on another replica in the moment the cancel reaches
     it can leave one copy on the cancelled switch, given to nobody, until it is
-    cancelled again); 365 days after a switch fires they are removed, at the
+    removed by the sweep's next pass); 365 days after a switch fires they are removed, at the
     sweep's first pass after that, and the rows stay, saying what the switch
     was, whom it was for and the fingerprint of the key each copy was sealed to,
     and, for each notice, its status and attempts, and its room until that
@@ -130,9 +130,11 @@ each correction.
     runs the sweep
     ([`KNOWN_LIMITATIONS.md`](../../KNOWN_LIMITATIONS.md)).
 -   **Deleting an account** removes the sealed copies of its unfired release
-    switches with their content (across the API and worker processes, also of
-    one that fired elsewhere in the moments before the deletion reached the
-    API process, which had not yet been told of it); a fired one keeps its
+    switches with their content (whether a switch has fired is decided on
+    the database's row, so one that fired on another process stays released
+    even where the process handling the deletion had not yet been told of
+    it; only where the database does not answer that question in time does
+    the deletion go by what that process knew); a fired one keeps its
     content, the copies for
     the people it named and the public key it was signed with, until they are
     removed at the first sweep 365 days or more after it fired, and only the

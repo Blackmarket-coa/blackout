@@ -324,12 +324,14 @@ For the source-of-truth triage with tier/owner detail see
 -   **State:** Deleting your Blackout account removes the account, its sessions
     and linked services, and cancels and erases your unsent scheduled messages.
     It cancels your dead-man switches that have not fired and removes what you
-    put in them, a release switch's sealed copies included (where the server
-    runs as more than one process, a switch that fired on another process in
-    the moments before your deletion reached one that had not yet been told
-    of it is cancelled and emptied with the rest; a firing is announced to
-    the other processes once the database confirms it, a late-confirmed one
-    when it settles). A release switch
+    put in them, a release switch's sealed copies included. Whether a switch
+    has fired is decided on the row the database holds, not on what the
+    process handling your deletion knew: where the server runs as more than
+    one process, a switch that fired on another process moments before your
+    deletion reached one that had not yet been told stays fired, and is
+    erased as a fired switch is (below); only where the database does not
+    answer that question in time, or fails it, does the deletion go by what
+    that process knew, which it logs. A release switch
     that has already fired stays readable to the people it named, with the
     public release key it was signed with, until at least 365 days after it
     fired (it is removed at the server's first sweep after that); a switch
@@ -468,12 +470,14 @@ For the source-of-truth triage with tier/owner detail see
     name you (`GET /v1/deadman/limits`; a release is
     held from arming until it is removed, at the server's first sweep at
     least 365 days after it fires). The bounds hold on one
-    API server against requests sent all at once. A deployment running
-    several API replicas can exceed each: a replica sees another's arms only
-    once that replica's queued database writes have gone through, one after
-    another, and a burst of requests is itself what fills that queue, so
-    across replicas a burst can exceed a bound by up to its own size until
-    the queues drain; how long that takes was not measured. Each one that
+    API server against requests sent all at once (the server counts the arms
+    it is still writing, and while a database write of a switch stands
+    unanswered it refuses every arm until that write's row is in its memory).
+    A deployment running several API replicas can exceed each: a replica
+    sees another's arms only once that replica's database has confirmed them
+    and its change notice has arrived, so across replicas a burst can exceed
+    a bound by up to its own size for that long; how long that is was not
+    measured. Each one that
     fires puts
     one notice in your notices room, and if you left that room the bot
     invites you back, once per notice. You cannot yet refuse an owner, and
@@ -530,9 +534,13 @@ For the source-of-truth triage with tier/owner detail see
     sent. Save the message before then if you need it after. Cancelling a
     release switch removes its encrypted message and every copy (a cancel the
     database confirms only after the server has answered 503 removes the
-    copies when it does, and the switch then shows cancelled; the sweep's
-    pass also removes any copy still held on a cancelled release switch);
-    backups keep them until they expire. Where the API runs as several
+    copies when it does, and the switch then shows cancelled, as long as the
+    server process that sent it is still running; if that process stopped
+    first, the copies stay until the server's background work next writes
+    that switch, at the switch's former deadline, or a check-in or a second
+    cancel finds it cancelled; the sweep's pass also removes any copy still
+    held on a cancelled release switch that its own process knows is
+    cancelled); backups keep them until they expire. Where the API runs as several
     replicas, a re-seal the owner's device makes on another replica in the
     moment the cancel is reaching it can leave one sealed copy on the
     cancelled switch, given to nobody (a cancelled switch is never released),
@@ -545,8 +553,9 @@ For the source-of-truth triage with tier/owner detail see
     at most 50 accounts at a time (which fifty accounts can fill: above).
     `GET /v1/deadman/limits` reports each. The bounds
     hold on one API server against requests sent all at once; across several
-    API replicas a burst can exceed each by up to its own size until the
-    replicas' queued writes have reached each other (above). An owner whose 20
+    API replicas a burst can exceed each by up to its own size until each
+    replica's arms are confirmed by the database and announced to the others
+    (above). An owner whose 20
     switches all fired cannot arm
     again until the oldest is removed; cancelling an unfired one frees its
     place. These bound content, not rows: a cancelled release switch leaves
@@ -558,14 +567,26 @@ For the source-of-truth triage with tier/owner detail see
     commit (a write-behind queue, drained on shutdown), so a crash in that
     window can lose the newest rows. Arming is the exception: it is answered
     201 only once the database holds the switch and its sealed copies, written
-    in one call in that order, so a stop between them leaves copies no switch
-    names, which nothing lists or serves and the named person's account
-    deletion removes like any other, and never a switch that fires with copies
-    missing; an arm whose write the database refuses or fails is answered 500
-    with nothing armed anywhere, and one the database does not confirm within
-    30 seconds 503, in which case it may still land, and the switch then
-    appears in your list (arming the same message again is then refused as
-    already taken). A re-seal's copy is still a write-behind write: one that
+    in one call in that order and never deleted, so a stop between them, a
+    failed arm, or two servers arming the same message at once leave at most
+    copies no switch names, which nothing lists, serves or counts, which the
+    named person's account deletion removes like any other and which arming
+    the same message again writes over, and never a switch that fires with
+    copies missing. An arm whose statement the database fails is looked up
+    again: if the switch is there (the connection can drop after the database
+    committed it), it is answered 201 and listed; if it is not, 500 with
+    nothing armed (except that a statement the database was still running
+    when it lost its client can commit after that look, in which case arming
+    the same message again is refused as already taken and the switch then
+    appears in your list); if the look-up fails too, 503. One the database
+    does not confirm within 30 seconds is 503, in which case it may still
+    land, and the switch then appears in your list (arming the same message
+    again is then refused as already taken); one sent while an earlier write
+    of a switch on that server still stands unconfirmed is 503 at once
+    without being sent, so it cannot land, until that write's row is in the
+    server's memory. If a switch with the same id already exists in the
+    database, the arm is refused as already taken and that switch is taken
+    into the server's memory, so your list shows it. A re-seal's copy is still a write-behind write: one that
     fails twice is dropped (`db_write_behind_failed` in the logs), and the API
     process that made it alone holds the new copy, serving it to that person
     when their request reaches that process, until it restarts. The bot reads
@@ -594,7 +615,8 @@ For the source-of-truth triage with tier/owner detail see
     have been recorded, and doing it again is safe. While such a write stands
     unconfirmed, every further check-in and cancel on that process is
     answered 503 at once, without being sent, so those were certainly not
-    recorded, until it settles; a cancel the database confirms late takes
+    recorded, until it settles, which is when its row is in that server's
+    memory; a cancel the database confirms late takes
     effect then (the switch shows cancelled and its copies are removed), and
     a check-in confirmed late counts. The server's own move of a switch
     (into grace, or firing it) is checked the same way and reaches the
@@ -608,10 +630,14 @@ For the source-of-truth triage with tier/owner detail see
     (below) at the first pass after it rather than firing, within the 15
     minutes or not. Where the API and the sweep are separate processes
     (`deploy/docker/production`), the sweep knows only its own process's
-    stalls: a check-in refused on an API process during a database outage
-    that the worker's sweep did not itself meet (no switch of its own was due
-    then) does not hold the switch back, and it fires at its deadline if the
-    database answers within the 15 minutes.
+    stalls and refusals: a check-in refused on an API process never holds
+    the switch back by itself. The worker gives the window only to a switch
+    whose deadline falls inside one of the worker's own stalls, or whose
+    check-in the worker itself refused, so a check-in refused on the API
+    process during a database outage that ends before the deadline leaves
+    the switch to fire at its deadline unless you check in again once the
+    database answers (the 503 tells you the check-in was not recorded),
+    whether or not the worker met that outage.
 -   The switches that exist were armed through the API before this. Their
     payload is whatever was sent: the server never decrypts it and cannot
     tell whether it is ciphertext. Recipients named by Blackout account id
@@ -624,7 +650,8 @@ For the source-of-truth triage with tier/owner detail see
     began removing payloads still holds its payload until you cancel it again
     ("Remove message" in the panel). Deleting your account cancels your switches that
     have not fired and removes their payloads and labels, and a release
-    switch's sealed copies; a switch that has already fired keeps what it
+    switch's sealed copies; a switch that has already fired, by the database's
+    row rather than by what the process handling the deletion knew, keeps what it
     holds for the people it named, because a release is not taken back: a
     release switch its encrypted message until at least 365 days after it
     fired, a switch armed before releases (every switch that exists today)

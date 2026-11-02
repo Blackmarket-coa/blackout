@@ -249,12 +249,14 @@ export const DataRetentionSection: React.FC = () => {
                     deactivate your Matrix account. Posts and messages remain visible to communities
                     you participated in. Scheduled messages you have not sent yet are cancelled.
                     Dead-man switches you own that have not fired are cancelled, and what you put in
-                    them is removed from Blackout&apos;s database (where the server runs as several
-                    processes, so is one that fired elsewhere in the moments before your deletion
-                    reached a process that had not yet been told of it). A release switch that has
-                    already fired stays readable to the people it named until at least 365 days
-                    after it fired (it is removed at the server&apos;s first sweep after that); a
-                    switch armed before Blackout could release messages (every switch that exists
+                    them is removed from Blackout&apos;s database (whether a switch has fired is
+                    decided on the database&apos;s own record of it, so one that fired on another
+                    server process moments before your deletion stays released even if the process
+                    handling your deletion had not yet been told; only if the database does not
+                    answer in time does the deletion go by what that process knew). A release switch
+                    that has already fired stays readable to the people it named until at least 365
+                    days after it fired (it is removed at the server&apos;s first sweep after that);
+                    a switch armed before Blackout could release messages (every switch that exists
                     today) keeps what you put in it for the people it named, with no removal date.
                     Copies of other people&apos;s releases sealed to you are removed (where the
                     server runs as several replicas, one sealed to you in the moment your deletion
