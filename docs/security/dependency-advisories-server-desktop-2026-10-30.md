@@ -240,7 +240,9 @@ second review: `1296b78` (the check's comments), then `f0b6469` (the
 record). After the check's first run: `9eab8c9` (the tool bag's entries
 module renamed). After a third review and the second run: `9298f9d`
 (the check's comments and path filter, with `KNOWN_LIMITATIONS.md`), then
-this version of the record. The versions since `ddd4a41` also correct
+`fae2abe` (the record). After a fourth review: `04f8f22` (the path
+filter's comment, with `KNOWN_LIMITATIONS.md`), then this version of the
+record. The versions since `ddd4a41` also correct
 what this branch's commit messages got wrong
 ([Before merge or release](#before-merge-or-release), last bullet).
 
@@ -260,15 +262,15 @@ A review of the first version found seven problems. Each is answered here:
 
 A second review found seven more. Each is answered here:
 
-| Finding                                                                                                                                                      | Now                                                                                                                                                                                       |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pyproject.toml`'s Twisted comment still called 26.10.0 a pre-release and named three advisories.                                                            | It names all four, says 26.10.0 is final and not locked, and gives the ignore's expiry (`b37a2cd`).                                                                                       |
-| This record said `-v47` asks the operator to choose a react-router option; `-v47` has since bumped it. `.trivyignore`'s header says every entry is mirrored. | [Found outside scope](#found-outside-scope-not-fixed-here) points at `71548f0`. The header is `-v47`'s to correct (`26e6ce5`); the Twisted block now says it is not mirrored (`b37a2cd`). |
-| A logout token with an unknown `kid`, or HS256 naming an EC key, got a 500 and a JWKS refetch.                                                               | 400 now (`85df7cc`). The refetch is [recorded, not patched](#malformed-logout-tokens).                                                                                                    |
-| The two id_token gaps were not in `THREAT_MODEL.md` or `KNOWN_LIMITATIONS.md`.                                                                               | Both are, in this version.                                                                                                                                                                |
-| `PATCHES.md` and this record said JWT login and the logout token were unchanged.                                                                             | Corrected: boolean time claims are refused, and an unusable HMAC secret gave 500. That secret is now refused at startup (`5bad47c`).                                                      |
-| Metadata validation's new acceptance of `http://` loopback URLs was not recorded.                                                                            | [Recorded](#jwt-login-the-logout-token-and-provider-metadata), in `PATCHES.md` too. No code change.                                                                                       |
-| The desktop lock was only checked, never built, and no CI job builds it before a release.                                                                    | Still true. The build to run, and how not to run it, are under [Before merge or release](#before-merge-or-release).                                                                       |
+| Finding                                                                                                                                                      | Now                                                                                                                                                                                                                         |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pyproject.toml`'s Twisted comment still called 26.10.0 a pre-release and named three advisories.                                                            | It names all four, says 26.10.0 is final and not locked, and gives the ignore's expiry (`b37a2cd`).                                                                                                                         |
+| This record said `-v47` asks the operator to choose a react-router option; `-v47` has since bumped it. `.trivyignore`'s header says every entry is mirrored. | [Found outside scope](#found-outside-scope-not-fixed-here) points at `71548f0`. The header is `-v47`'s to correct (`26e6ce5`); the Twisted block now says it is not mirrored (`b37a2cd`).                                   |
+| A logout token with an unknown `kid`, or HS256 naming an EC key, got a 500 and a JWKS refetch.                                                               | 400 now (`85df7cc`). The refetch is [recorded, not patched](#malformed-logout-tokens).                                                                                                                                      |
+| The two id_token gaps were not in `THREAT_MODEL.md` or `KNOWN_LIMITATIONS.md`.                                                                               | Both are, in this version.                                                                                                                                                                                                  |
+| `PATCHES.md` and this record said JWT login and the logout token were unchanged.                                                                             | Corrected: boolean time claims are refused, and an unusable HMAC secret gave 500. That secret is now refused at startup (`5bad47c`).                                                                                        |
+| Metadata validation's new acceptance of `http://` loopback URLs was not recorded.                                                                            | [Recorded](#jwt-login-the-logout-token-and-provider-metadata), in `PATCHES.md` too. No code change.                                                                                                                         |
+| The desktop lock was only checked, never built, and no CI job builds it before a release.                                                                    | No longer true. It was built on Linux after the third review, and in CI by the build check on pull requests (on all three runners in run 41461856327, 2026-11-02). See [Before merge or release](#before-merge-or-release). |
 
 A third review found six more, and asked for a real desktop build. Each is
 answered here:
@@ -1400,10 +1402,14 @@ its toolchain-free notification harness; its `build` job has
 `release-*` and `v*` tags, and on `workflow_dispatch`. PRs here target
 `develop`. So tauri 2.10.3 → 2.12.5, wry 0.54 → 0.57, tao, tray-icon, muda and
 the 28 added package versions (15 of them crates new to the lock, dbus and
-libdbus-sys among them) would first be linked and bundled in CI by the release
-job. They have been linked once outside CI, after the third review, on Ubuntu
-24.04 (see [Verification](#verification)). That job bundles with `@tauri-apps/cli`
-2.10.1 (`pnpm-lock.yaml`), two minors behind the crate.
+libdbus-sys among them) were first linked in CI by the build check, not the
+release job: in run 41461043012 its ubuntu-22.04 leg linked the app and made
+the deb and rpm before the run was cancelled, and in run 41461856327 all three
+legs linked and bundled it. Outside CI they were linked on Ubuntu 24.04 after
+the third review (see [Verification](#verification)) and in the local
+`tauri build` runs of 2026-11-02 (below). The release job and the check both
+bundle with `@tauri-apps/cli` 2.10.1 (`pnpm-lock.yaml`), two minors behind the
+crate.
 
 -   **The CLI and crate versions.** tauri-cli 2.10.1's
     `check_mismatched_packages` (`src/info/plugins.rs`, read from the crate)
@@ -1465,7 +1471,8 @@ libayatana-appindicator3-dev librsvg2-dev`):
     member's `package.json`, the client's build configuration or its
     desktop bridge (`src/platform`), and on `workflow_dispatch`, which,
     once the workflow is on `develop`, builds the head of any branch or tag
-    that has it. The members' manifests were added after the third review:
+    that has it. The members' manifests were added after the build check's
+    third review (`9298f9d`):
     the install step runs every member's install scripts on all three
     runners, and adding one does not change `pnpm-lock.yaml`; only the root
     has one today (`prepare: husky`). It has `contents: read`, references
@@ -1504,11 +1511,12 @@ libayatana-appindicator3-dev librsvg2-dev`):
     `f0b6469` (the pull request as opened): the windows-latest and
     macos-latest legs failed in the build step's `beforeBuildCommand` (the
     third fault, below); the ubuntu-22.04 leg was still building when the
-    next push cancelled the run, so the run concluded "cancelled". Run
-    41461856327, on `9eab8c9`: all three legs passed, each with its check
-    step (every expected bundle present, no `.sig`, updater archive or
-    `latest.json`, `Cargo.lock` unchanged). Times and bundles, from the
-    check step's log:
+    next push cancelled the run, so the run concluded "cancelled" (its log
+    shows the app linked and the deb and rpm made, and the AppImage being
+    made). Run 41461856327, on `9eab8c9`: all three legs passed, each with
+    its check step (every expected bundle present, no `.sig`, updater
+    archive or `latest.json`, `Cargo.lock` unchanged). Times from the jobs
+    API, bundles from the check step's log:
 
     -   ubuntu-22.04: build step 7 min 23 s (14:28:23-14:35:46 UTC), job
         8 min 16 s; `deb/Blackout_0.1.0_amd64.deb` 18,626,332 bytes,
@@ -1527,8 +1535,7 @@ libayatana-appindicator3-dev librsvg2-dev`):
     ubuntu-22.04 leg made the AppImage with the release job's apt packages
     alone, so that runner has xdg-utils. The Windows leg compiled zip
     9.1.3, which only the Windows target builds, through the updater. None
-    of the bundles was started: the runners have no display, and the check
-    only builds.
+    of the bundles was started: the check only builds.
 
 -   **2026-11-02: two `tauri.conf.json` faults, one of which, the bundle
     category, stopped every `tauri build` that bundles, so it would also
@@ -1575,9 +1582,12 @@ libayatana-appindicator3-dev librsvg2-dev`):
     earlier, at signtool with the literal thumbprint. The macOS leg, if the
     Apple secrets are set and the imported certificate is the configured
     identity ("Developer ID Application: Blackout"), now signs the `.app`
-    with it, submits the app to Apple's notary service (with `APPLE_ID`,
-    `APPLE_PASSWORD` and `APPLE_TEAM_ID`), signs the dmg, makes the updater
-    archive, and then stops at updater signing, like Linux. Before `6bea1c9`
+    with it and submits the app to Apple's notary service (with `APPLE_ID`,
+    `APPLE_PASSWORD` and `APPLE_TEAM_ID`), waiting for the result. If
+    notarization is accepted it then signs the dmg, makes the updater
+    archive, and stops at updater signing, like Linux; with any other
+    result it stops there (tauri-macos-sign 2.3.3, `lib.rs` 214-241, from
+    the same tauri tag as the CLI). Before `6bea1c9`
     it stopped before any signing, because the category is parsed while the
     bundler settings are built, before bundling. With the secrets unset it
     would stop before the build, at the "Import Apple certificate" step,
@@ -1585,8 +1595,9 @@ libayatana-appindicator3-dev librsvg2-dev`):
     are set could not be read here (the proxy refuses the actions/secrets
     API). So the release job can now make a Developer ID
     signature and a notarization submission, though it publishes nothing.
-    On the Linux leg, and on the macOS leg with the Apple secrets set, the
-    placeholder pubkey is now
+    On the Linux leg, and on the macOS leg if the Apple secrets are set,
+    the certificate is the configured identity and notarization is
+    accepted, the placeholder pubkey is now
     the only barrier between a dispatch from `develop` and a public release that
     becomes latest and serves `latest.json` (item 6 of
     [Found outside scope](#found-outside-scope-not-fixed-here)). Item 6's
@@ -1623,11 +1634,11 @@ libayatana-appindicator3-dev librsvg2-dev`):
     notices (the deprecated `inlineDynamicImports` option,
     `PREFER_BUILTIN_FEATURE` and `INEFFECTIVE_DYNAMIC_IMPORT`).
 
-    Run again after the review, from an empty target directory, at
-    `ddd4a41` (the build reads nothing `b5f4398` changed), with the same
-    host, compiler and xdg-utils: the same command gave rc 0 in 592 s, the
-    compile 7 m 33 s, and made `Blackout_0.1.0_amd64.deb` (18,595,430
-    bytes), `Blackout-0.1.0-1.x86_64.rpm` (18,595,700) and
+    Run again after the build check's first review, from an empty target
+    directory, at `ddd4a41` (the build reads nothing `b5f4398` changed),
+    with the same host, compiler and xdg-utils: the same command gave rc 0
+    in 592 s, the compile 7 m 33 s, and made `Blackout_0.1.0_amd64.deb`
+    (18,595,430 bytes), `Blackout-0.1.0-1.x86_64.rpm` (18,595,700) and
     `Blackout_0.1.0_amd64.AppImage` (94,054,904). The deb's desktop entry
     has `Categories=Network;` and the `matrix` and `blackout` scheme
     handlers. The workflow's check step, taken from the workflow file and
@@ -1635,8 +1646,8 @@ libayatana-appindicator3-dev librsvg2-dev`):
     archive or `latest.json`, and `Cargo.lock` unchanged (`pnpm-lock.yaml`
     too, by checksum).
 
-    Run a third time after the second review, from an empty target
-    directory, at `a29c3bf` (the build reads nothing `1296b78` or this
+    Run a third time after the build check's second review, from an empty
+    target directory, at `a29c3bf` (the build reads nothing `1296b78` or this
     version of the record changed), with the same host, compiler and
     xdg-utils. The load was 3.09 when the build started; it was not logged
     while the build ran. The same command
@@ -1671,11 +1682,34 @@ libayatana-appindicator3-dev librsvg2-dev`):
     in the build step's `beforeBuildCommand`. Both files came in with
     `be4d8cd` (2026-08-05) and are on `develop` at `f6da7b7`, this
     branch's base. Every CI build of the client before this check ran on
-    Linux, whose filesystem is case-sensitive, so none could show it. It
-    also broke `vite build` on every Windows developer machine and on
-    every Mac with the default, case-insensitive filesystem, and it would
-    have stopped the release job's macOS and Windows legs at the frontend
-    hook (the bullet above).
+    Linux, whose filesystem is case-sensitive, so none could show it. Three
+    other workflows build the client on macOS, for iOS, through
+    `blackout-mobile`'s `sync:ios` (`pnpm build:web`, then `cap sync ios`):
+    `release.yml`'s `build-mobile-ios` on `v*` tags, `blackout-mobile.yml`'s
+    `ios` on `mobile-release-*` tags and dispatch, and
+    `mobile-native-ci.yml`'s `ios-internal` on pushes to `main` and
+    dispatch. Each would have stopped at the same import, at the latest, but
+    none of those jobs has run: on 2026-11-02 the API lists no run of
+    `release.yml` or `blackout-mobile.yml`, and 41 of `mobile-native-ci.yml`,
+    all for pull requests, on which `ios-internal` is skipped. That, and
+    the desktop release job never having run, is why every CI build of the
+    client so far was on Linux. `9eab8c9` also lets a `v*` tag's
+    `build-mobile-ios` past the client build. `release.yml`'s `release` job
+    needs it, and creates the GitHub release, pushes
+    `ghcr.io/blackmarket-coa/blackout` as `latest` and `stable`, signs it
+    with cosign and calls the production deploy webhook; what comes after
+    the client build in `build-mobile-ios` (`cap sync ios`, an unsigned
+    `xcodebuild`) and the workflow's other jobs have never run, so how far
+    a tag would now get is not known (read from the workflows, not run).
+
+    The fault also broke `vite build` on a Windows or macOS developer
+    machine whose filesystem is case-insensitive, the default on both
+    (inferred from the runners; no developer machine was measured, and a
+    checkout on a case-sensitive filesystem, such as inside WSL, resolves
+    as Linux does). It would have stopped the release job's macOS and
+    Windows legs at the latest at the frontend hook (on macOS with the
+    Apple secrets unset, at the "Import Apple certificate" step before it;
+    the `tauri.conf.json` bullet above).
 
     `9eab8c9` renames the entries module to `toolBagEntries.ts` and changes
     its two importers, `index.ts` and `ToolBag.tsx`, and its unit test.
@@ -1686,13 +1720,17 @@ libayatana-appindicator3-dev librsvg2-dev`):
     41461856327 then built the client on all three runners. Over
     `git ls-files`, no other two files in one directory have names that
     differ only by case, compared whole or without the last extension, and
-    no two directories do (re-run for this version of the record at
-    `9eab8c9`: 6,600 files, none; the same script at `f0b6469` finds only
-    the tool-bag pair). No guard against a recurrence was added: nothing
-    in CI looks for such names, and a pull request that changes the client
-    outside the check's path filter is built on Linux only. A check over
-    `git ls-files` in `ci.yml`, which runs on every pull request, is a
-    follow-up the operator may want.
+    no two directories do (re-run at `9eab8c9` and again for this version
+    of the record: 6,600 files, none; the same script at `f0b6469` finds
+    only the tool-bag pair). A whole-name comparison alone, such as
+    `git ls-files | sort -f | uniq -di`, finds nothing even at `f0b6469`:
+    the two names differ in extension too, and collide only because an
+    import without one is tried as `ToolBag.ts` first. No guard against a
+    recurrence was added: nothing in CI looks for such names, and a pull
+    request that changes the client outside the check's path filter is
+    built on Linux only. A check over `git ls-files` in `ci.yml`, which
+    runs on every pull request, comparing names without the extension, is
+    a follow-up the operator may want.
 
 -   **2026-11-02: what this branch's commit messages got wrong.** History
     is not rewritten here, so the corrections are recorded instead.
@@ -1715,7 +1753,9 @@ libayatana-appindicator3-dev librsvg2-dev`):
         says that before `6bea1c9` the release legs stopped "at the frontend
         hook or the bundle category". On a runner the old hook probably
         built this checkout's client and did not stop the build (the
-        bullet above). `6bea1c9`'s account of the hook, that pnpm "matched
+        `tauri.conf.json` bullet above); on macOS and Windows that client
+        build would itself have stopped, for the third fault. `6bea1c9`'s
+        account of the hook, that pnpm "matched
         no project and exited 0, and on a fresh checkout `tauri build` then
         stopped at 'Unable to find your web assets'", was measured only in
         the scout's export, a layout no checkout has, and its "The build
@@ -1725,7 +1765,8 @@ libayatana-appindicator3-dev librsvg2-dev`):
         Linux, macOS and Windows alike": only Linux was run, and macOS and
         Windows were read from the code. It also presents the release-job
         fix only as a benefit, though it takes the release job past its
-        build to updater signing (the bullet above), and says xdg-utils is
+        build to updater signing (the `tauri.conf.json` bullet above), and
+        says xdg-utils is
         on the runner, which was inferred from the runner image's build
         scripts, not seen (run 41461856327 has since shown it is).
     -   `659f6ed` says a dispatch of the release workflow "would publish" a
@@ -1747,7 +1788,8 @@ libayatana-appindicator3-dev librsvg2-dev`):
         updater signing (tauri-bundler 2.8.1 runs `try_sign` while bundling,
         and tauri-cli 2.10.1 runs `sign_updaters` after `bundle_project`
         returns, `bundle.rs` 219-221), and the macOS leg, with the Apple
-        secrets unset, stops before the build (the fault bullet above).
+        secrets unset, stops before the build (the `tauri.conf.json`
+        bullet above).
         `b5f4398` and `a29c3bf` give the
         release's command as `npm run tauri --`; tauri-action builds
         `npm run tauri build -- <args>`. `b5f4398` says the npm and pnpm
@@ -1765,7 +1807,22 @@ libayatana-appindicator3-dev librsvg2-dev`):
     -   `9eab8c9` says the entries module's "three importers and its unit
         test follow": it has two importers, `index.ts` and `ToolBag.tsx`,
         and the unit test. Its "a Windows or macOS developer machine" holds
-        for a Mac only with the default, case-insensitive filesystem.
+        only on a case-insensitive filesystem, the default on both, and was
+        inferred from the runners, not measured.
+    -   `9298f9d` and `fae2abe` call the build check's third review "the
+        third review", the name this record gives the October review that
+        `3ca628a` followed. `fae2abe` says the leg times come "from the
+        check step's log": they come from the jobs API, and the check step
+        logs only the bundles. It says the release job's macOS and Windows
+        legs "would have stopped at the client build" until `9eab8c9`: at
+        the latest, and on macOS with the Apple secrets unset before it, at
+        the certificate import. Its macOS leg that "submits it for
+        notarization and signs the dmg" signs the dmg only if notarization
+        is accepted. Its open item "the release's npm invocation on macOS
+        and Windows" leaves out Linux, where that path has run only as far
+        as the version-mismatch check, with a probe hook. Its "broke
+        `vite build` on Windows and default macOS developer machines" is
+        inferred in the same way.
 
 ## The gate
 
@@ -2093,7 +2150,8 @@ The record's own commit changes no file Trivy reads.
     runs a toolchain-free harness on pull requests to `main`. It runs the
     bundle build only on pushes to `main` and on tags, and the default branch
     is `develop`. The stub-library `cargo check` above found no compile error
-    from this update, but in CI one would first show on a release build.
+    from this update; until the build check, one would first have shown in
+    CI on a release build.
     For this change, see [Before merge or release](#before-merge-or-release).
     Making the workflow build on pull requests to `develop` is the lasting
     fix, and is left to whoever owns that workflow. Since 2026-11-02 a
@@ -2346,8 +2404,10 @@ The record's own commit changes no file Trivy reads.
         category, after the compile; on a runner the old frontend hook
         probably built this checkout's client, and on Linux did not stop it
         ([Before merge or release](#before-merge-or-release)). On macOS and
-        Windows the client build itself would have stopped it, before the
-        compile, until `9eab8c9` (the third fault). This branch fixes the category, which
+        Windows the client build itself would have stopped it, at the
+        latest, before the compile, until `9eab8c9` (the third fault); on
+        macOS with the Apple secrets unset the leg stops earlier, at the
+        "Import Apple certificate" step. This branch fixes the category, which
         the build check needs, the hook, so that it builds this checkout's
         client wherever the checkout lies, and the client's file name. What is
         left is the CLI's updater signing (`sign_updaters`, tauri-cli
@@ -2358,8 +2418,9 @@ The record's own commit changes no file Trivy reads.
         (`certificate.pfx` is written but never imported). Neither is a
         control, and a real release has to fix both. With these fixes the
         Linux leg stops only at the pubkey, and so does the macOS leg if
-        the Apple secrets are set, after signing the app and submitting it
-        for notarization; so with the signing-key secret set, fixing the
+        the Apple secrets are set, the certificate is the configured
+        identity and notarization is accepted, after signing the app and
+        having it notarized; so with the signing-key secret set, fixing the
         pubkey alone would let a dispatch from `develop` publish a release
         that becomes latest and serves `latest.json`.
 
@@ -2385,9 +2446,11 @@ The record's own commit changes no file Trivy reads.
     every build that bundles, and the frontend hooks, which could build
     another checkout's client; and a client file name that stopped the
     client build on macOS and Windows, found by the check's first run
-    (41461043012). The macOS leg builds aarch64 only. Still not verified: a run of the app on any
-    platform, an x86_64 macOS build, the release job's own npm invocation
-    on macOS and Windows, and the updater against a real release.
+    (41461043012). The macOS leg builds aarch64 only. Still not verified:
+    a run of the app on any platform, an x86_64 macOS build, the release
+    job's own npm invocation (on Linux only as far as the version-mismatch
+    check and a probe hook, on macOS and Windows not at all), and the
+    updater against a real release.
 -   That libdbus-1-dev is installed on the runner was read from jammy's
     package dependencies, not from a run of the release job. The check's
     ubuntu-22.04 leg, with the same apt packages, compiled the lock, which
