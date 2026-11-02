@@ -144,9 +144,11 @@ test('account deletion’s erasure reaches Postgres: an unfired switch is cancel
         const unfired = seed('armed', 'sealed-unfired');
         const fired = seed('triggered', 'sealed-fired');
 
-        // What confirmAccountDeletion calls for each of the owner's switches.
-        store.eraseDeadmanSwitch(unfired.id);
-        store.eraseDeadmanSwitch(fired.id);
+        // What confirmAccountDeletion calls for each of the owner's switches:
+        // since round 12 of part 2's review one statement each, decided on
+        // the row Postgres holds (`eraseDeadmanSwitchUnlessFired`).
+        assert.equal((await store.eraseDeadmanSwitchUnlessFired(unfired.id)).kind, 'applied');
+        assert.equal((await store.eraseDeadmanSwitchUnlessFired(fired.id)).kind, 'applied');
         await store.drain();
 
         const rowOf = async (id: string) => {

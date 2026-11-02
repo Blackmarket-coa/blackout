@@ -1088,23 +1088,26 @@ auth.post('/account/delete/confirm', async (c) => {
     const parsed = await readJsonBody(c, accountDeleteConfirmSchema);
     if (parsed instanceof Response) return parsed;
 
-    const outcome = confirmAccountDeletion(parsed.token, user.sub);
+    // After deletion the JWT still cryptographically validates — denylist it
+    // so the holder can't replay until expiry. Run by `confirmAccountDeletion`
+    // once the token is consumed and before anything is awaited (the
+    // switches' statements in Postgres, since round 12 of part 2's review),
+    // so this token is refused on this process from that moment (round 7).
+    // Only the token that made this request is revoked here: the account's
+    // other access tokens (its other sessions') are not.
+    const revokeThisToken = () => {
+        if (user.jti && user.exp) {
+            db.revokeSession({
+                jti: user.jti,
+                userId: user.sub,
+                expiresAt: new Date(user.exp * 1000).toISOString(),
+                reason: 'account_deleted',
+            });
+        }
+    };
+    const outcome = await confirmAccountDeletion(parsed.token, user.sub, revokeThisToken);
     switch (outcome.kind) {
         case 'ok':
-            // After deletion the JWT still cryptographically validates — denylist
-            // it so the holder can't replay until expiry. Before anything is
-            // awaited, so this token is refused on this process from here on
-            // (round 7 of part 2's review). Only the token that made this
-            // request is revoked here: the account's other access tokens (its
-            // other sessions') are not.
-            if (user.jti && user.exp) {
-                db.revokeSession({
-                    jti: user.jti,
-                    userId: user.sub,
-                    expiresAt: new Date(user.exp * 1000).toISOString(),
-                    reason: 'account_deleted',
-                });
-            }
             // In the database itself: the deletion's own writes first, waited
             // for, then the notice rows another process wrote that this one
             // had not heard of end too, and forget their room. Only that last

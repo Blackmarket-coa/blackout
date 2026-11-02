@@ -459,9 +459,14 @@ export type ArmReleaseOutcome =
     | { kind: 'rate_limited'; retryAfterSeconds: number }
     | { kind: 'recipient_limit'; recipientAccountId: string }
     | { kind: 'id_taken' }
-    /** The database did not answer the switch's write in time: it may still land (Postgres). */
+    /**
+     * The database did not answer the switch's write in time (Postgres): one
+     * that was sent may still land; one refused at once while another switch
+     * statement stood unanswered was not sent, and cannot. Or the write
+     * failed and the switch could not be read afterwards.
+     */
     | { kind: 'write_unanswered' }
-    /** The switch's write failed: nothing is armed. */
+    /** The switch's write failed and a read afterwards found no switch: nothing is armed. */
     | { kind: 'write_failed' }
     | OwnerIdentityRefusal
     | RecipientRefusal
@@ -483,9 +488,10 @@ export type ArmReleaseOutcome =
  * current one; and, after the signatures awaited, the release id is still
  * free, every bound still has room, and the owner's and every recipient's
  * current identity is still the one checked. The writes follow with no await
- * between, the copies first and the switch last, so a crash between them
- * leaves copies without a switch, which nothing lists or serves, rather than
- * a switch without copies, which would fire and release to nobody. The bounds
+ * between, the copies first and the switch last, and nothing deletes a copy,
+ * so a crash between them, a failed arm or one that finds the id taken leaves
+ * copies without a switch, which nothing lists or serves, rather than a
+ * switch without copies, which would fire and release to nobody. The bounds
  * and the identities are checked twice on purpose: before the signatures, so
  * a refused arm costs no verification, and after them, because a burst of
  * arms that all passed the first checks against the same counts resumes here
@@ -564,13 +570,16 @@ export const armReleaseSwitch = async (input: {
         checkInIntervalSeconds: input.input.checkInIntervalSeconds,
         gracePeriodSeconds: input.input.gracePeriodSeconds,
     });
-    // One store call writes the copies first and the switch last, insert-only
-    // (`armDeadmanSwitch`): in Postgres on one connection, awaited, so the
-    // switch is in the database before the owner is answered, a stop between
-    // the rows leaves copies that no switch names (listed and served by
-    // nothing) and never a switch without its copies, which would fire and
-    // release to nobody, and a write that fails or is not answered arms
-    // nothing the store lists (round 11 of part 2's review: the owner was
+    // One store call writes the copies first (over any row of the same key)
+    // and the switch last, insert-only (`armDeadmanSwitch`): in Postgres on
+    // one connection, awaited, so the switch is in the database before the
+    // owner is answered; a stop between the rows, a failed arm or one that
+    // finds the id taken leaves copies that no switch names (listed and
+    // served by nothing; nothing deletes them, since another process's switch
+    // for the same envelope may rely on them: round 12 of part 2's review)
+    // and never a switch without its copies, which would fire and release to
+    // nobody; and a write that fails arms nothing the store lists unless the
+    // switch is found in the database afterwards (round 11: the owner was
     // answered 201 before the write-behind upsert ran, and a dropped one left
     // a switch only that process listed, which in the deployed layout never
     // fired). Until the store answers, the arm counts toward every bound.

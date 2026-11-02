@@ -128,11 +128,15 @@ const switchChanged = (c: Context) =>
 
 /**
  * The database did not answer a check-in, a cancel or an arm in time
- * (`updateDeadmanSwitchIf`, `armDeadmanSwitch`): it may or may not have been
- * recorded, and nothing of it is in this process's memory until it is. Doing
- * a check-in or a cancel again is safe, since each is conditional on the
- * switch as it is read; an arm done again with the same envelope is refused
- * `release_id_taken` if the first landed after all.
+ * (`updateDeadmanSwitchIf`, `armDeadmanSwitch`): one that was sent may or may
+ * not have been recorded, and nothing of it is in this process's memory until
+ * it is; one refused at once because another switch statement already stood
+ * unanswered was not sent, so it was not recorded. Doing a check-in or a
+ * cancel again is safe, since each is conditional on the switch as it is
+ * read; an arm done again with the same envelope is refused
+ * `release_id_taken` if the first landed after all, and the switch is then
+ * in the owner's list. Also an arm whose statement failed and whose switch
+ * could not be read afterwards either.
  */
 const switchWriteUnanswered = (c: Context, what: 'check-in' | 'cancel' | 'arm') =>
     c.json(
@@ -143,12 +147,18 @@ const switchWriteUnanswered = (c: Context, what: 'check-in' | 'cancel' | 'arm') 
         503
     );
 
-/** The database refused or failed the arm's write: nothing was armed. */
+/**
+ * The arm's statement failed, and the switch read again afterwards was not
+ * there: nothing is armed (a statement the database was still running when
+ * its client was lost can commit after that read; the next arm of the same
+ * envelope then finds it and answers `release_id_taken`, with the switch in
+ * the owner's list).
+ */
 const switchWriteFailed = (c: Context) =>
     c.json(
         {
             code: 'switch_write_failed',
-            message: 'The server could not record the switch. Nothing was armed; try again.',
+            message: 'The server could not record the switch and finds nothing armed; try again.',
         },
         500
     );

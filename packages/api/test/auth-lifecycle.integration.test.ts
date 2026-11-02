@@ -245,10 +245,13 @@ test('account deletion confirms and purges user + tokens; rejects cross-user', a
     assert.ok(issued);
 
     // Cross-user token use is rejected.
-    assert.equal(lifecycle.confirmAccountDeletion(issued!.token, userB.id).kind, 'user_mismatch');
+    assert.equal(
+        (await lifecycle.confirmAccountDeletion(issued!.token, userB.id)).kind,
+        'user_mismatch'
+    );
 
     // Correct user succeeds.
-    const ok = lifecycle.confirmAccountDeletion(issued!.token, userA.id);
+    const ok = await lifecycle.confirmAccountDeletion(issued!.token, userA.id);
     assert.equal(ok.kind, 'ok');
 
     // The user record is gone.
@@ -260,7 +263,7 @@ test('account deletion confirms and purges user + tokens; rejects cross-user', a
     // artifacts during deletion, so the second lookup returns 'invalid'. Either
     // 'invalid' or 'consumed' is acceptable here; the security property is that
     // a successful deletion cannot be replayed.
-    const replay = lifecycle.confirmAccountDeletion(issued!.token, userA.id);
+    const replay = await lifecycle.confirmAccountDeletion(issued!.token, userA.id);
     assert.ok(
         replay.kind === 'invalid' || replay.kind === 'consumed',
         `unexpected replay outcome: ${replay.kind}`
@@ -312,7 +315,7 @@ test('account deletion cancels the owner’s unfired switches and clears what th
 
     const issued = lifecycle.requestAccountDeletion({ userId: user.id });
     assert.ok(issued);
-    assert.equal(lifecycle.confirmAccountDeletion(issued!.token, user.id).kind, 'ok');
+    assert.equal((await lifecycle.confirmAccountDeletion(issued!.token, user.id)).kind, 'ok');
     assert.equal(db.getUserById(user.id), undefined);
 
     for (const id of [armed.id, inGrace.id]) {
@@ -368,7 +371,7 @@ test('account deletion erases the account’s release identities and nobody else
 
     const issued = lifecycle.requestAccountDeletion({ userId: user.id });
     assert.ok(issued);
-    assert.equal(lifecycle.confirmAccountDeletion(issued!.token, user.id).kind, 'ok');
+    assert.equal((await lifecycle.confirmAccountDeletion(issued!.token, user.id)).kind, 'ok');
 
     assert.equal(db.listReleaseIdentitiesForAccount(user.id).length, 0);
     // Each row is blanked in place: no key, signature, fingerprint or account.
@@ -397,7 +400,7 @@ test('account deletion rejects expired tokens', async () => {
         ...stored!,
         expiresAt: new Date(Date.now() - 1000).toISOString(),
     });
-    assert.equal(lifecycle.confirmAccountDeletion(issued!.token, user.id).kind, 'expired');
+    assert.equal((await lifecycle.confirmAccountDeletion(issued!.token, user.id)).kind, 'expired');
 });
 
 test('revokeSession denylist blocks reuse of a still-valid jwt', async () => {

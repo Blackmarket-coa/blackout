@@ -1440,7 +1440,7 @@ test('deleting an owner’s account removes an unfired release’s copies and ke
     });
 
     const issued = lifecycle.requestAccountDeletion({ userId: owner.user.id })!;
-    assert.equal(lifecycle.confirmAccountDeletion(issued.token, owner.user.id).kind, 'ok');
+    assert.equal((await lifecycle.confirmAccountDeletion(issued.token, owner.user.id)).kind, 'ok');
 
     const cancelled = db.getDeadmanSwitch(armed.releaseId)!;
     assert.equal(cancelled.status, 'cancelled');
@@ -1487,7 +1487,10 @@ test('deleting an owner’s account removes an unfired release’s copies and ke
 
     // Now the recipient deletes their account.
     const issued2 = lifecycle.requestAccountDeletion({ userId: recipient.user.id })!;
-    assert.equal(lifecycle.confirmAccountDeletion(issued2.token, recipient.user.id).kind, 'ok');
+    assert.equal(
+        (await lifecycle.confirmAccountDeletion(issued2.token, recipient.user.id)).kind,
+        'ok'
+    );
     for (const id of [fired.releaseId, theirs.releaseId]) {
         assert.equal(
             db.getDeadmanReleaseWrap(id, recipient.user.id)?.sealedKey,
@@ -1653,7 +1656,7 @@ test('a legacy switch holds no release whatever its payload looks like, and a fi
     assert.equal((await arm(owner.user, armBody(envelope))).status, 201);
     await sweepAt(FIRES_AT());
     const issued = lifecycle.requestAccountDeletion({ userId: owner.user.id })!;
-    assert.equal(lifecycle.confirmAccountDeletion(issued.token, owner.user.id).kind, 'ok');
+    assert.equal((await lifecycle.confirmAccountDeletion(issued.token, owner.user.id)).kind, 'ok');
     // Nobody can sign in as the owner any more; the view a session would get
     // holds the counts and no release, since the owner's own copy is gone.
     const orphaned = recordToOwnerView(db.getDeadmanSwitch(envelope.releaseId)!);
@@ -1912,7 +1915,10 @@ test('a recipient whose account was deleted before the trigger gets no notice ro
     const envelope = await build(owner.keySet, [leaving.keySet.identity, staying.keySet.identity]);
     assert.equal((await arm(owner.user, armBody(envelope))).status, 201);
     const issued = lifecycle.requestAccountDeletion({ userId: leaving.user.id })!;
-    assert.equal(lifecycle.confirmAccountDeletion(issued.token, leaving.user.id).kind, 'ok');
+    assert.equal(
+        (await lifecycle.confirmAccountDeletion(issued.token, leaving.user.id)).kind,
+        'ok'
+    );
     assert.equal(db.getDeadmanReleaseWrap(envelope.releaseId, leaving.user.id)?.sealedKey, '');
 
     await sweepAt(FIRES_AT());
@@ -2030,13 +2036,15 @@ test('a key change or a deletion during a re-seal’s verification is seen befor
         return { owner, recipient, envelope, copy, before };
     };
     type SetUp = Awaited<ReturnType<typeof setUp>>;
-    const during = async (setup: SetUp, change: () => void) => {
+    const during = async (setup: SetUp, change: () => void | Promise<void>) => {
         const resealing = resealReleaseCopy({
             ownerId: setup.owner.user.id,
             switchId: setup.envelope.releaseId,
             copy: setup.copy,
         });
-        change();
+        // A deletion awaits its switches' erase (round 12): its identity and
+        // copy writes still land before the re-seal's awaits resolve.
+        await change();
         return resealing;
     };
     const copyOf = (setup: SetUp) =>
@@ -2054,12 +2062,13 @@ test('a key change or a deletion during a re-seal’s verification is seen befor
     // The recipient's account is deleted during it.
     const deletion = await setUp();
     assert.deepEqual(
-        await during(deletion, () => {
+        await during(deletion, async () => {
             const issued = lifecycle.requestAccountDeletion({
                 userId: deletion.recipient.user.id,
             })!;
             assert.equal(
-                lifecycle.confirmAccountDeletion(issued.token, deletion.recipient.user.id).kind,
+                (await lifecycle.confirmAccountDeletion(issued.token, deletion.recipient.user.id))
+                    .kind,
                 'ok'
             );
         }),

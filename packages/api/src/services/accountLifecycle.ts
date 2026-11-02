@@ -12,6 +12,7 @@ import {
     isReleaseSwitch,
     noticeCounts,
     releasedCopiesFor,
+    standsFired,
 } from './deadmanReleases';
 import { log } from '../telemetry/logger';
 import { recordToReleaseIdentity } from './releaseIdentities';
@@ -269,7 +270,12 @@ export const exportUserData = (userId: string): AccountExport | null => {
     const deadmanReleases = releasedCopiesFor(userId);
     const deadmanNotices: AccountExport['deadmanNotices'] = db
         .listDeadmanReleaseNoticesForRecipient(userId)
-        .filter((notice) => db.getDeadmanSwitch(notice.switchId)?.releasedAt)
+        .filter((notice) => {
+            // A switch that stands fired (`standsFired`), as every reader
+            // asks: one cancelled with its `releasedAt` kept is not listed.
+            const record = db.getDeadmanSwitch(notice.switchId);
+            return record !== undefined && standsFired(record);
+        })
         .map((notice) => ({
             switchId: notice.switchId,
             ...(notice.roomId ? { roomId: notice.roomId } : {}),
@@ -473,10 +479,41 @@ export type ConfirmDeletionOutcome =
     | { kind: 'consumed' }
     | { kind: 'user_mismatch' };
 
-export const confirmAccountDeletion = (
+/**
+ * Confirm and carry out an account deletion. Everything but the switches is
+ * written to this process's mirror synchronously, before the first `await`;
+ * `onConfirmed` runs then too, once the token is consumed and before anything
+ * is awaited (the route revokes the deleting session's token in it, so the
+ * token is refused on this process from that moment: round 7 of part 2's
+ * review). The release identities go first, so that an arm or a re-seal by
+ * one of the account's other sessions that reaches this process while the
+ * switches' statements are awaited is refused for want of an owner identity
+ * rather than leaving an armed switch behind the deletion.
+ *
+ * Each switch of the owner's is erased by one statement decided in the
+ * database (`eraseDeadmanSwitchUnlessFired`, decision 30, built in round 12
+ * of part 2's review): one that has not fired there is cancelled and emptied,
+ * and a release switch's sealed copies go with it; one the database shows
+ * fired, on this process or another this process had not heard from, is
+ * erased as fired: its label goes, and so does the owner's own copy (below,
+ * with every copy sealed to this account), while its content, the owner's
+ * identity it was signed with (E13), its `releasedAt` and the recipients'
+ * copies stay until the removal at least 365 days after it fired, as decision
+ * 12 describes, since nothing can be re-sealed after the trigger and nobody
+ * is left to open the owner's copy. The same statement erases a legacy
+ * switch that fired elsewhere as fired (its payload stays for the people it
+ * named, as before; its label goes). Where the database does not answer the
+ * statement in time, or fails it, the switch is erased from this process's
+ * mirror as before round 12 (`eraseDeadmanSwitch`, a plain write the
+ * write-behind queue lands later, which the route's wait covers): in that
+ * case alone a trigger another process committed in the same moment can
+ * still be written over, and the fallback is logged.
+ */
+export const confirmAccountDeletion = async (
     presentedToken: string,
-    authedUserId: string
-): ConfirmDeletionOutcome => {
+    authedUserId: string,
+    onConfirmed?: (userId: string) => void
+): Promise<ConfirmDeletionOutcome> => {
     const record = db.findAccountDeletionTokenByHash(sha256(presentedToken));
     if (!record) return { kind: 'invalid' };
     if (record.consumedAt) return { kind: 'consumed' };
@@ -486,6 +523,14 @@ export const confirmAccountDeletion = (
 
     // Mark the token consumed before purging so a partial failure can't double-delete.
     db.consumeAccountDeletionToken(record.id);
+    onConfirmed?.(record.userId);
+    // Release identities: the public keys go with the account, one row at a
+    // time, so nothing but this account's rows is written. The private halves
+    // are on the person's devices and in their recovery files, which the
+    // server never had. First, before any await: see above.
+    for (const identity of db.listReleaseIdentitiesForAccount(record.userId)) {
+        db.eraseReleaseIdentity(identity.id);
+    }
     // Scheduled messages: remove their text and author link, and cancel the
     // pending ones, so nothing is posted for this account after it is gone.
     for (const msg of db.listScheduledMessagesForUser(record.userId)) {
@@ -493,17 +538,22 @@ export const confirmAccountDeletion = (
     }
     // Dead-man switches: cancel the ones that have not fired and remove what
     // the owner put in them, so none fires for an account that is gone. One
-    // that has fired stays readable to the people it named; its label goes.
-    // A release switch that has not fired loses its sealed copies with its
-    // content; a fired one keeps its content, the owner's identity it was
-    // signed with (E13) and the recipients' copies, and only the owner's own
-    // copy goes (below, with every copy sealed to this account), since
-    // nothing can be re-sealed after the trigger and nobody is left to open
-    // it.
+    // that has fired, in the database's judgement, stays readable to the
+    // people it named; its label goes (above).
     for (const sw of db.listDeadmanSwitchesForOwner(record.userId)) {
-        const fired = sw.status === 'triggered';
-        db.eraseDeadmanSwitch(sw.id);
-        if (!fired && isReleaseSwitch(sw)) blankReleaseWraps(sw.id);
+        const outcome = await db.eraseDeadmanSwitchUnlessFired(sw.id);
+        let erased: typeof sw | undefined;
+        if (outcome.kind === 'applied') {
+            erased = outcome.record;
+        } else if (outcome.kind === 'absent') {
+            continue;
+        } else {
+            log.warn('account_deletion_switch_erase_unconfirmed', { outcome: outcome.kind });
+            erased = db.eraseDeadmanSwitch(sw.id);
+        }
+        if (erased && erased.status !== 'triggered' && isReleaseSwitch(erased)) {
+            blankReleaseWraps(sw.id);
+        }
     }
     // Every copy sealed to this account goes, and the notices owed to it
     // end and forget their room (`eraseReleaseCopiesAndNoticesOf`; the route
@@ -517,13 +567,6 @@ export const confirmAccountDeletion = (
         record.userId,
         matrixUserIdFor(record.userId) ?? undefined
     );
-    // Release identities: the public keys go with the account, one row at a
-    // time, so nothing but this account's rows is written. The private halves
-    // are on the person's devices and in their recovery files, which the
-    // server never had.
-    for (const identity of db.listReleaseIdentitiesForAccount(record.userId)) {
-        db.eraseReleaseIdentity(identity.id);
-    }
     db.purgeUserAuthArtifacts(record.userId);
     db.deleteUser(record.userId);
     return { kind: 'ok', userId: record.userId };

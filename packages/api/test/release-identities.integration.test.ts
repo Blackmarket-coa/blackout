@@ -463,7 +463,7 @@ test('account deletion removes the account’s identities, current and supersede
 
     const issued = lifecycle.requestAccountDeletion({ userId: user.id });
     assert.ok(issued);
-    assert.equal(lifecycle.confirmAccountDeletion(issued!.token, user.id).kind, 'ok');
+    assert.equal((await lifecycle.confirmAccountDeletion(issued!.token, user.id)).kind, 'ok');
 
     assert.equal(db.listReleaseIdentitiesForAccount(user.id).length, 0);
     assert.equal((await get(reader, `/${user.id}`)).status, 404);

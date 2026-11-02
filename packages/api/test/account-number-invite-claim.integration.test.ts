@@ -332,7 +332,7 @@ test('deleting the account removes its admission, claimed or not; the redemption
         assert.ok(admissionOf(record.id, account.matrixUserId));
         const issued = requestAccountDeletion({ userId: account.userId });
         assert.ok(issued);
-        assert.equal(confirmAccountDeletion(issued.token, account.userId).kind, 'ok');
+        assert.equal((await confirmAccountDeletion(issued.token, account.userId)).kind, 'ok');
         assert.equal(admissionOf(record.id, account.matrixUserId), undefined);
     }
     assert.deepEqual(redeemersOf(record.id), [claimed.userId]);

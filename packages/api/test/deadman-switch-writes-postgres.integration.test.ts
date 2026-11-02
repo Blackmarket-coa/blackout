@@ -43,8 +43,11 @@ const protocol = await import('@blackout/protocol');
 const { default: app } = await import('../src/index');
 const { signJwt } = await import('../src/services/auth');
 const { sweepOverdueDeadmanSwitches } = await import('../src/modules/deadman');
-const { armReleaseSwitch, armsInFlightCount, releasedCopiesFor } = await import(
+const { armReleaseSwitch, armsInFlightCount, heldReleasesNaming, releasedCopiesFor } = await import(
     '../src/services/deadmanReleases'
+);
+const { confirmAccountDeletion, exportUserData, requestAccountDeletion } = await import(
+    '../src/services/accountLifecycle'
 );
 const { runDeadmanReleaseNotifier } = await import('../src/services/deadmanReleaseNotifier');
 const { applyCheckIn } = await import('../src/services/deadmanScheduler');
@@ -864,7 +867,7 @@ test('arming answers 201 only once Postgres holds the switch: a failed insert is
                 restore();
             }
         });
-        const { envelope, res } = armedRes!;
+        const { envelope, res, recipient } = armedRes!;
         assert.equal(res.status, 500);
         assert.equal(((await res.json()) as { code: string }).code, 'switch_write_failed');
         assert.equal(failures, 1, 'one statement, not retried');
@@ -873,11 +876,18 @@ test('arming answers 201 only once Postgres holds the switch: a failed insert is
         assert.deepEqual(here.listDeadmanReleaseWraps(envelope.releaseId), [], 'no copies either');
         await here.drain();
         assert.equal(await stored(envelope.releaseId), undefined, 'no row');
+        // Round 12: the copies written before the switch stay, as a stop
+        // between the two writes leaves them (nothing deletes a copy row,
+        // since another process's switch for the same envelope may be about
+        // to land on them); no switch names them, so nothing lists, serves or
+        // counts them.
         assert.deepEqual(
-            await storedCopies(envelope.releaseId),
-            [],
-            'the copies written first were taken back'
+            (await storedCopies(envelope.releaseId)).map((c) => c.held),
+            [true, true],
+            'the copies written first stay, named by no switch'
         );
+        assert.equal(releasedCopiesFor(recipient.id).length, 0, 'served to nobody');
+        assert.equal(heldReleasesNaming(recipient.id).total, 0, 'counted toward no bound');
         const worker = await otherProcess();
         assert.equal(
             worker.getDeadmanSwitch(envelope.releaseId),
@@ -891,6 +901,15 @@ test('arming answers 201 only once Postgres holds the switch: a failed insert is
             [],
             'not in the owner’s list'
         );
+        // Arming the same envelope again writes over those rows and arms.
+        const again = await post(owner, '/switches', armBody(envelope));
+        assert.equal(again.status, 201, 'the retry arms');
+        assert.equal((await stored(envelope.releaseId))?.status, 'armed');
+        assert.deepEqual(
+            (await storedCopies(envelope.releaseId)).map((c) => c.held),
+            [true, true]
+        );
+        assert.equal(heldReleasesNaming(recipient.id).total, 1, 'counted now');
     }
 
     // The insert is not answered in time: 503, nothing in the mirror; when
@@ -1494,12 +1513,23 @@ test('a release switch cancelled with its releasedAt kept (the owner’s deletio
     await here.drain();
     assert.equal(releasedCopiesFor(recipient.id).length, 1, 'listed while fired');
     assert.equal((await noticeRows(switchId)).length, 1, 'its notice owed');
-    // Cancelled with the content and `releasedAt` kept, as the merge of the
-    // deletion over the trigger leaves it but for the content.
+    assert.equal(
+        exportUserData(recipient.id)?.deadmanNotices.length,
+        1,
+        'the export lists the notice while fired'
+    );
+    // Cancelled with the content and `releasedAt` kept, as a plain cancel
+    // written elsewhere over a trigger leaves it but for the content (since
+    // round 12 the deletion itself leaves a fired switch fired).
     here.updateDeadmanSwitch(switchId, { status: 'cancelled' });
     await here.drain();
     assert.equal(here.getDeadmanSwitch(switchId)?.releasedAt, firesAt.toISOString());
     assert.equal(releasedCopiesFor(recipient.id).length, 0, 'not listed');
+    assert.deepEqual(
+        exportUserData(recipient.id)?.deadmanNotices,
+        [],
+        'the export’s notice filter asks standsFired too (round 12)'
+    );
     const tick = await runDeadmanReleaseNotifier({ now: new Date(firesAt.getTime() + 1_000) });
     await here.drain();
     assert.equal(tick.caughtUp, 0, 'the catch-up writes nothing for it');
@@ -1508,4 +1538,549 @@ test('a release switch cancelled with its releasedAt kept (the owner’s deletio
     const notice = here.getDeadmanReleaseNotice(switchId, recipient.id);
     assert.equal(notice?.status, 'failed');
     assert.equal(notice?.lastError, 'release_unavailable');
+});
+
+/** A release switch of `owner`'s naming a fresh recipient, through the service; its rows in Postgres. */
+const armedFor = async (
+    owner: Awaited<ReturnType<typeof person>>,
+    checkInIntervalSeconds: number,
+    label: string
+) => {
+    const recipient = await person();
+    const envelope = await protocol.buildReleaseEnvelope({
+        ownerKeySet: owner.keySet,
+        recipients: [recipient.keySet.identity],
+        message: 'Synthetic test text.',
+    });
+    const outcome = await armReleaseSwitch({
+        ownerId: owner.id,
+        input: { checkInIntervalSeconds, gracePeriodSeconds: 0, envelope, label },
+    });
+    assert.equal(outcome.kind, 'armed');
+    await here.drain();
+    return { recipient, envelope, switchId: envelope.releaseId };
+};
+
+/** What another process's arm of the same envelope writes (the service's row, as `armDeadmanSwitch` takes it). */
+const switchInputFor = (
+    envelope: Awaited<ReturnType<typeof protocol.buildReleaseEnvelope>>,
+    ownerId: string
+) => {
+    const now = new Date();
+    const later = new Date(now.getTime() + 3_600_000).toISOString();
+    return {
+        input: {
+            id: envelope.releaseId,
+            ownerId,
+            status: 'armed' as const,
+            checkInIntervalSeconds: 3600,
+            gracePeriodSeconds: 0,
+            lastCheckInAt: now.toISOString(),
+            triggerAt: later,
+            releaseAt: later,
+            recipients: envelope.copies
+                .map((copy) => copy.recipientAccountId)
+                .filter((id) => id !== ownerId),
+            encryptedPayload: '{"header":{},"ownerIdentity":{}}',
+            releaseFormat: 'release-v1' as const,
+        },
+        copies: envelope.copies.map((copy) => ({
+            switchId: envelope.releaseId,
+            recipientAccountId: copy.recipientAccountId,
+            recipientFingerprint: copy.recipientFingerprint,
+            sealedKey: copy.sealedKey,
+            signature: copy.signature,
+        })),
+    };
+};
+
+test('two processes arm one envelope: the arm that finds the id taken deletes nothing, takes the winner’s switch and copies into its mirror and answers id_taken, so Postgres never holds a switch without its copies and the owner can see and cancel it on either process', async () => {
+    // Round 12 of part 2's review (the verifiers' `arm-race.mts` A and
+    // `h1-pg-edge.mts` E): the losing arm "took back the copies it wrote" by
+    // their `created_at`, which were the rows the winning arm's switch relied
+    // on (its own copy inserts had been no-ops on them), so Postgres held an
+    // armed switch with no copies, which fires and releases to nobody, while
+    // the winner's mirror still showed them to the owner. Now nothing deletes
+    // a copy row, and a taken id is taken into the mirror.
+    const owner = await person();
+    const recipient = await person();
+    const envelope = await protocol.buildReleaseEnvelope({
+        ownerKeySet: owner.keySet,
+        recipients: [recipient.keySet.identity],
+        message: 'Synthetic test text.',
+    });
+    const id = envelope.releaseId;
+    const other = await otherProcess();
+    const theirs = switchInputFor(envelope, owner.id);
+    // A (this process, through the service) has written its copies and is
+    // held at its switch insert; B (the other process) arms the same envelope
+    // meanwhile and wins.
+    let open!: () => void;
+    const gate = new Promise<void>((resolve) => {
+        open = resolve;
+    });
+    let reached!: () => void;
+    const atTheGate = new Promise<void>((resolve) => {
+        reached = resolve;
+    });
+    intercept(
+        (sql) => sql.startsWith('INSERT INTO deadman_switches'),
+        () => {
+            reached();
+            return gate;
+        }
+    );
+    const announcedBefore = announcedFor(id).length;
+    let a: Awaited<ReturnType<typeof armReleaseSwitch>>;
+    try {
+        const armA = armReleaseSwitch({
+            ownerId: owner.id,
+            input: { checkInIntervalSeconds: 3600, gracePeriodSeconds: 0, envelope },
+        });
+        await atTheGate;
+        assert.equal((await storedCopies(id)).length, 2, 'A has written its copies');
+        const b = await other.armDeadmanSwitch(theirs.input, theirs.copies);
+        assert.equal(b.kind, 'armed', 'B wins');
+        assert.equal((await stored(id))?.status, 'armed');
+        open();
+        a = await armA;
+    } finally {
+        open();
+        restore();
+    }
+    assert.equal(a.kind, 'id_taken', 'A finds the id taken');
+    assert.equal((await stored(id))?.status, 'armed', 'B’s switch stands');
+    assert.deepEqual(
+        (await storedCopies(id)).map((c) => c.held),
+        [true, true],
+        'B’s copies survive A’s loss'
+    );
+    assert.equal(here.getDeadmanSwitch(id)?.status, 'armed', 'A’s mirror took B’s switch');
+    assert.equal(here.listDeadmanReleaseWraps(id).length, 2, 'and its copies');
+    assert.equal(announcedFor(id).length - announcedBefore, 1, 'announced once it was taken');
+    assert.equal(armsInFlightCount(), 0);
+    const list = await app.request('/v1/deadman/switches', { headers: auth(owner) });
+    assert.ok(
+        ((await list.json()) as { switches: Array<{ switchId: string }> }).switches.some(
+            (sw) => sw.switchId === id
+        ),
+        'in the owner’s list on A'
+    );
+    const fresh = await otherProcess();
+    assert.equal(fresh.getDeadmanSwitch(id)?.status, 'armed');
+    assert.equal(
+        fresh.listDeadmanReleaseWraps(id).filter((w) => w.sealedKey !== '').length,
+        2,
+        'a fresh process (the worker) hydrates both copies'
+    );
+    // The owner cancels on A: the copies go.
+    const cancel = await post(owner, `/switches/${id}/cancel`);
+    assert.equal(cancel.status, 200, 'cancellable on A');
+    await here.drain();
+    assert.equal((await stored(id))?.status, 'cancelled');
+    assert.deepEqual(
+        (await storedCopies(id)).map((c) => c.held),
+        [false, false]
+    );
+    await other.drain();
+
+    // The same, with nothing held: both stores arm at once (the same
+    // millisecond included); exactly one arms, and both copies stay.
+    const envelope2 = await protocol.buildReleaseEnvelope({
+        ownerKeySet: owner.keySet,
+        recipients: [recipient.keySet.identity],
+        message: 'Synthetic test text.',
+    });
+    const mine = switchInputFor(envelope2, owner.id);
+    const [x, y] = await Promise.all([
+        here.armDeadmanSwitch(mine.input, mine.copies),
+        other.armDeadmanSwitch(mine.input, mine.copies),
+    ]);
+    assert.deepEqual([x.kind, y.kind].sort(), ['armed', 'id_taken']);
+    assert.equal((await stored(envelope2.releaseId))?.status, 'armed');
+    assert.deepEqual(
+        (await storedCopies(envelope2.releaseId)).map((c) => c.held),
+        [true, true]
+    );
+    assert.equal(here.listDeadmanReleaseWraps(envelope2.releaseId).length, 2);
+    assert.equal(other.listDeadmanReleaseWraps(envelope2.releaseId).length, 2);
+    here.updateDeadmanSwitch(envelope2.releaseId, { status: 'cancelled', encryptedPayload: '' });
+    await here.drain();
+    await other.drain();
+});
+
+test('an arm whose statement fails after its insert committed is answered 201 from the row read again, listed, announced and cancellable; one whose statement and re-read both fail is 503 with nothing written, and the same envelope then arms', async () => {
+    // Round 12 of part 2's review (the verifiers' `arm-race.mts` B): a
+    // connection that died between the server committing the insert and the
+    // client reading the answer was answered 500 "Nothing was armed", while
+    // Postgres held the armed switch: invisible to the owner, uncancellable
+    // on that process, and fired by a fresh worker.
+    {
+        const owner = await person();
+        const recipient = await person();
+        const envelope = await protocol.buildReleaseEnvelope({
+            ownerKeySet: owner.keySet,
+            recipients: [recipient.keySet.identity],
+            message: 'Synthetic test text.',
+        });
+        const id = envelope.releaseId;
+        pool.connect = async () => {
+            const client = await realConnect();
+            let dead = false;
+            return {
+                ...client,
+                async query<T = Record<string, unknown>>(sql: string, params?: unknown[]) {
+                    if (dead) throw new Error('Connection terminated unexpectedly (test)');
+                    if (sql.startsWith('INSERT INTO deadman_switches')) {
+                        await client.query<T>(sql, params); // the server commits it
+                        dead = true;
+                        throw new Error('Connection terminated unexpectedly (test)');
+                    }
+                    return client.query<T>(sql, params);
+                },
+            };
+        };
+        let res!: Response;
+        const failed = await logged('deadman_switch_write_failed', async () => {
+            try {
+                res = await post(owner, '/switches', armBody(envelope, 3600));
+            } finally {
+                restore();
+            }
+        });
+        assert.equal(res.status, 201, 'armed: the row was there when read again');
+        assert.equal(failed, 1, 'the failure is logged');
+        assert.equal(here.getDeadmanSwitch(id)?.status, 'armed', 'in the mirror');
+        assert.equal(here.listDeadmanReleaseWraps(id).length, 2, 'with its copies');
+        assert.equal(announcedFor(id).length, 1, 'announced');
+        assert.equal((await stored(id))?.status, 'armed');
+        const list = await app.request('/v1/deadman/switches', { headers: auth(owner) });
+        assert.ok(
+            ((await list.json()) as { switches: Array<{ switchId: string }> }).switches.some(
+                (sw) => sw.switchId === id
+            ),
+            'in the owner’s list'
+        );
+        const again = await post(owner, '/switches', armBody(envelope, 3600));
+        assert.equal(again.status, 409);
+        assert.equal(((await again.json()) as { code: string }).code, 'release_id_taken');
+        const cancel = await post(owner, `/switches/${id}/cancel`);
+        assert.equal(cancel.status, 200, 'cancellable here');
+        await here.drain();
+        assert.equal((await stored(id))?.status, 'cancelled');
+        assert.deepEqual(
+            (await storedCopies(id)).map((c) => c.held),
+            [false, false]
+        );
+    }
+    // The statement fails before anything is written, and the read afterwards
+    // fails too: 503, nothing anywhere; the same envelope then arms.
+    {
+        const owner = await person();
+        const recipient = await person();
+        const envelope = await protocol.buildReleaseEnvelope({
+            ownerKeySet: owner.keySet,
+            recipients: [recipient.keySet.identity],
+            message: 'Synthetic test text.',
+        });
+        const id = envelope.releaseId;
+        pool.connect = async () => {
+            const client = await realConnect();
+            return {
+                ...client,
+                async query<T = Record<string, unknown>>(sql: string, params?: unknown[]) {
+                    if (/deadman_switches/.test(sql)) throw new Error('connection reset (test)');
+                    return client.query<T>(sql, params);
+                },
+            };
+        };
+        let res!: Response;
+        try {
+            res = await post(owner, '/switches', armBody(envelope, 3600));
+        } finally {
+            restore();
+        }
+        assert.equal(res.status, 503);
+        assert.equal(((await res.json()) as { code: string }).code, 'switch_write_unanswered');
+        assert.equal(here.getDeadmanSwitch(id), undefined, 'nothing in the mirror');
+        assert.equal(await stored(id), undefined, 'no row');
+        assert.deepEqual(await storedCopies(id), [], 'no copies: the statement failed before them');
+        assert.equal(armsInFlightCount(), 0);
+        const again = await post(owner, '/switches', armBody(envelope, 3600));
+        assert.equal(again.status, 201, 'the same envelope arms once the database answers');
+        assert.equal((await stored(id))?.status, 'armed');
+        here.updateDeadmanSwitch(id, { status: 'cancelled', encryptedPayload: '' });
+        await here.drain();
+    }
+});
+
+test('a switch statement’s stall stands until the landed row is in the mirror: an arm sent after the insert landed but before the re-read has put it there is 503, not let past a bound', async () => {
+    // Round 12 of part 2's review (the verifiers' `h1-pg-edge.mts` F2): the
+    // stall was cleared when the statement answered, before the settle's
+    // re-read put the row in the mirror, so an arm sent in that window read
+    // the bounds without the landed switch and passed them (21 held on one
+    // process, a sixth release naming one person from one owner here).
+    const owner = await person();
+    const named = await person();
+    const armNaming = async () => {
+        const envelope = await protocol.buildReleaseEnvelope({
+            ownerKeySet: owner.keySet,
+            recipients: [named.keySet.identity],
+            message: 'Synthetic test text.',
+        });
+        return armReleaseSwitch({
+            ownerId: owner.id,
+            input: { checkInIntervalSeconds: 3600, gracePeriodSeconds: 0, envelope },
+        });
+    };
+    const stallFlag = () =>
+        (here as unknown as { stalledSwitchStatement: unknown }).stalledSwitchStatement;
+    for (let i = 0; i < 4; i += 1) assert.equal((await armNaming()).kind, 'armed');
+    await here.drain();
+    here.switchStatementTimeoutMs = 200;
+    let openInsert!: () => void;
+    const insertGate = new Promise<void>((resolve) => {
+        openInsert = resolve;
+    });
+    intercept(
+        (sql) => sql.startsWith('INSERT INTO deadman_switches'),
+        () => insertGate
+    );
+    let openRead!: () => void;
+    const readGate = new Promise<void>((resolve) => {
+        openRead = resolve;
+    });
+    let readReached!: () => void;
+    const atRead = new Promise<void>((resolve) => {
+        readReached = resolve;
+    });
+    try {
+        // The fifth arm's insert is held past the bound: 503, a stall.
+        const fifth = await armNaming();
+        assert.equal(fifth.kind, 'write_unanswered');
+        assert.ok(stallFlag(), 'a stall stands');
+        assert.equal(armsInFlightCount(), 0, 'the route no longer counts it');
+        // The insert lands, and the settle's re-read is held.
+        restore();
+        intercept(
+            (sql) => sql.startsWith('SELECT * FROM deadman_switches WHERE id'),
+            () => {
+                readReached();
+                return readGate;
+            }
+        );
+        openInsert();
+        await atRead;
+        assert.ok(stallFlag(), 'the stall still stands: the row is not in the mirror yet');
+        assert.equal(heldReleasesNaming(named.id).total, 4, 'the mirror lacks the fifth');
+        // An arm naming the person now would be the sixth: refused at once,
+        // not written.
+        const started = Date.now();
+        const sixth = await armNaming();
+        assert.equal(sixth.kind, 'write_unanswered', 'refused while the stall stands');
+        assert.ok(Date.now() - started < 1_000, 'at once');
+    } finally {
+        openInsert();
+        openRead();
+        restore();
+    }
+    await settled();
+    here.switchStatementTimeoutMs = 30_000;
+    assert.equal(stallFlag(), null, 'the stall ended once the row was in the mirror');
+    assert.equal(heldReleasesNaming(named.id).total, 5, 'the fifth is counted now');
+    const pgNaming = (
+        await pg.query(
+            "SELECT count(*)::int AS n FROM deadman_release_wraps w JOIN deadman_switches s ON s.id = w.switch_id WHERE w.recipient_account_id = $1 AND s.owner_id = $2 AND s.encrypted_payload <> ''",
+            [named.id, owner.id]
+        )
+    ).rows[0] as { n: number };
+    assert.equal(pgNaming.n, 5, 'five in Postgres');
+    assert.equal((await armNaming()).kind, 'recipient_limit', 'the sixth is refused by the bound');
+    await here.drain();
+});
+
+test('the owner’s deletion is decided in Postgres: on a process that has not heard of a trigger another process committed it erases the release as fired (label and the owner’s copy gone; content, releasedAt and the recipients’ copies kept and served; a notice sent stands and one not yet sent still goes), a legacy switch fired elsewhere keeps its payload, an unfired switch loses everything, and an arm by the owner during the deletion is refused', async () => {
+    // Decision 30, decided by the operator on 2026-11-02 and built in round
+    // 12 of part 2's review: the deletion wrote each switch from the deleting
+    // process's mirror, unconditionally, so on a process that had not heard of
+    // a trigger another process committed it cancelled a release that had
+    // fired and removed its content and copies. Now each switch is one
+    // statement decided on the row Postgres holds.
+    const owner = await person();
+    const sent = await armedFor(owner, 60, 'label a');
+    const pending = await armedFor(owner, 60, 'label b');
+    const unfired = await armedFor(owner, 3600, 'label c');
+    const legacyRecipient = await person();
+    const legacy = here.createDeadmanSwitch({
+        id: randomUUID(),
+        ownerId: owner.id,
+        roomId: '!room:test.local',
+        status: 'armed',
+        checkInIntervalSeconds: 60,
+        gracePeriodSeconds: 0,
+        lastCheckInAt: new Date().toISOString(),
+        triggerAt: new Date(Date.now() + 60_000).toISOString(),
+        releaseAt: new Date(Date.now() + 60_000).toISOString(),
+        recipients: [legacyRecipient.id],
+        encryptedPayload: 'legacy-payload',
+        headline: 'label l',
+    });
+    await here.drain();
+    // Another envelope of the owner's, to arm during the deletion.
+    const extraRecipient = await person();
+    const extra = await protocol.buildReleaseEnvelope({
+        ownerKeySet: owner.keySet,
+        recipients: [extraRecipient.keySet.identity],
+        message: 'Synthetic test text.',
+    });
+
+    // The worker fires three of them and writes the two releases' notices,
+    // sending one; this process is not told.
+    const worker = await otherProcess();
+    const firedAt = nextMoment();
+    for (const sw of [sent, pending]) {
+        const fired = await worker.advanceDeadmanSwitch(
+            sw.switchId,
+            worker.getDeadmanSwitch(sw.switchId)!,
+            { status: 'triggered', releasedAt: firedAt.toISOString() }
+        );
+        assert.ok(fired);
+        worker.createDeadmanReleaseNotice({
+            switchId: sw.switchId,
+            recipientAccountId: sw.recipient.id,
+            nextAttemptAt: firedAt.toISOString(),
+        });
+    }
+    worker.updateDeadmanReleaseNoticeIf(
+        sent.switchId,
+        sent.recipient.id,
+        { status: 'pending' },
+        {
+            status: 'sent',
+            attempts: 1,
+            sentAt: firedAt.toISOString(),
+            roomId: '!notices-a:test.local',
+        }
+    );
+    assert.ok(
+        await worker.advanceDeadmanSwitch(legacy.id, worker.getDeadmanSwitch(legacy.id)!, {
+            status: 'triggered',
+        })
+    );
+    await worker.drain();
+    for (const id of [sent.switchId, pending.switchId, legacy.id]) {
+        assert.equal(here.getDeadmanSwitch(id)?.status, 'armed', 'this process has not heard');
+    }
+
+    // The owner deletes their account on this process. While the first
+    // switch's erase statement runs, the owner's other session arms another
+    // release here: refused, the owner's identity is already gone.
+    const issued = requestAccountDeletion({ userId: owner.id })!;
+    let armDuring: ReturnType<typeof armReleaseSwitch> | undefined;
+    // What the arm had answered while the deletion's first statement was
+    // still held: refused for want of an owner identity before any signature
+    // was checked, since the identities go before the first await (an arm
+    // refused only at its second identity check, once the deletion had
+    // finished, would read 'still verifying' here).
+    let armWhileHeld: string | undefined;
+    const erases = intercept(
+        (sql) => sql.startsWith('UPDATE deadman_switches SET headline = NULL'),
+        async () => {
+            armDuring = armReleaseSwitch({
+                ownerId: owner.id,
+                input: { checkInIntervalSeconds: 3600, gracePeriodSeconds: 0, envelope: extra },
+            });
+            armWhileHeld = await Promise.race([
+                armDuring.then((o) => o.kind),
+                new Promise<string>((r) => setTimeout(() => r('still verifying'), 300)),
+            ]);
+        }
+    );
+    let revokedAt: 'before the awaits' | 'later' | undefined;
+    let outcome: Awaited<ReturnType<typeof confirmAccountDeletion>>;
+    try {
+        const confirming = confirmAccountDeletion(issued.token, owner.id, () => {
+            revokedAt = erases.calls() === 0 ? 'before the awaits' : 'later';
+        });
+        outcome = await confirming;
+    } finally {
+        restore();
+    }
+    assert.equal(outcome.kind, 'ok');
+    assert.equal(revokedAt, 'before the awaits', 'the token is revoked before any statement');
+    assert.equal(erases.calls(), 4, 'one statement per switch');
+    assert.equal(
+        armWhileHeld,
+        'owner_identity_missing',
+        'the arm during the deletion is refused at once: the identities are already gone'
+    );
+    assert.equal((await armDuring!).kind, 'owner_identity_missing');
+    await here.drain();
+    assert.ok(
+        here.listDeadmanSwitchesForOwner(owner.id).every((sw) => sw.status !== 'armed'),
+        'no switch of the deleted owner’s stays armed'
+    );
+    assert.equal(await stored(extra.releaseId), undefined, 'the arm during it wrote nothing');
+
+    // The two fired releases: erased as fired, served to the people named.
+    for (const sw of [sent, pending]) {
+        const row = await stored(sw.switchId);
+        assert.equal(row?.status, 'triggered', 'fired, as Postgres had it');
+        assert.equal(row?.released_at?.toISOString(), firedAt.toISOString(), 'releasedAt kept');
+        assert.equal(row?.headline, null, 'the label gone');
+        assert.notEqual(row?.encrypted_payload, '', 'the content kept');
+        const copies = await storedCopies(sw.switchId);
+        assert.equal(copies.find((c) => c.recipient_account_id === owner.id)?.held, false);
+        assert.equal(copies.find((c) => c.recipient_account_id === sw.recipient.id)?.held, true);
+        const mirrored = here.getDeadmanSwitch(sw.switchId)!;
+        assert.equal(mirrored.status, 'triggered', 'the mirror took Postgres’s row');
+        assert.equal(mirrored.releasedAt, firedAt.toISOString());
+        assert.equal(mirrored.headline, undefined);
+        assert.equal(
+            releasedCopiesFor(sw.recipient.id).some((r) => r.releaseId === sw.switchId),
+            true,
+            'served to the person named, on this process too'
+        );
+        assert.ok(announcedFor(sw.switchId).length >= 1, 'announced');
+    }
+    // The notice sent stands; the one not yet sent still goes.
+    assert.deepEqual(await noticeRows(sent.switchId), [{ status: 'sent' }]);
+    deliver(here, {
+        src: 'x',
+        m: 'deadmanReleaseNotices',
+        op: 'u',
+        kv: [pending.switchId, pending.recipient.id],
+    });
+    await new Promise((r) => setTimeout(r, 100));
+    await runDeadmanReleaseNotifier({ now: new Date(firedAt.getTime() + 1_000) });
+    await here.drain();
+    assert.equal(sendsFor(pending.switchId).length, 1, 'the pending notice is sent');
+    assert.deepEqual(await noticeRows(pending.switchId), [{ status: 'sent' }]);
+    assert.equal(sendsFor(sent.switchId).length, 0, 'the sent one is not sent again');
+
+    // The legacy switch fired elsewhere: erased as fired, its payload kept.
+    const legacyRow = await stored(legacy.id);
+    assert.equal(legacyRow?.status, 'triggered');
+    assert.equal(legacyRow?.encrypted_payload, 'legacy-payload');
+    assert.equal(legacyRow?.headline, null);
+    // The unfired release: cancelled, emptied, every copy blanked.
+    const unfiredRow = await stored(unfired.switchId);
+    assert.equal(unfiredRow?.status, 'cancelled');
+    assert.equal(unfiredRow?.encrypted_payload, '');
+    assert.equal(unfiredRow?.headline, null);
+    assert.deepEqual(
+        (await storedCopies(unfired.switchId)).map((c) => c.held),
+        [false, false]
+    );
+    assert.equal(releasedCopiesFor(unfired.recipient.id).length, 0);
+    // The worker, told of the deletion's writes, agrees.
+    for (const sw of [sent, pending]) {
+        deliver(worker, announcedFor(sw.switchId).at(-1)!);
+    }
+    await new Promise((r) => setTimeout(r, 100));
+    for (const sw of [sent, pending]) {
+        assert.equal(worker.getDeadmanSwitch(sw.switchId)?.status, 'triggered');
+        assert.equal(worker.getDeadmanSwitch(sw.switchId)?.headline, undefined);
+    }
+    await worker.drain();
 });
