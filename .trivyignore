@@ -47,9 +47,12 @@ CVE-2026-14257
 # pipeline. metro 0.83.8 (the 0.83-stable tag, 2026-08-19) dropped image-size
 # for its own parser and is inside the plugin's ^0.83.1, so a metro update
 # within range removes the package and these entries; that is a React Native
-# toolchain refresh of its own, not done here. Build-time only: no metro
-# config, script or workflow in this repository runs metro, and the images it
-# would parse are this repo's committed assets, not remote input. Mirrored in
+# toolchain refresh of its own, not done here and due before 2026-11-30.
+# Build-time only: no metro config, script or workflow in this repository runs
+# metro. If something did, metro would parse only image files on disk at
+# bundle time: files in this repository (packages/ui and legacy/blackout-web
+# track no image file) and files of installed packages, such as
+# react-native's LogBox PNGs; never remote or user-supplied input. Mirrored in
 # osv-scanner.toml (ignoreUntil 2026-11-30) and pnpm.auditConfig.ignoreGhsas
 # (no expiry there). Here each line carries exp:2026-11-30, which Trivy
 # honours. Until 2026-11-02 this comment said no fixed version existed; that

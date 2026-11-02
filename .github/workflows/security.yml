@@ -171,7 +171,8 @@ jobs:
                   # Vulnerabilities only — secret scanning is owned by the
                   # dedicated gitleaks job (with .gitleaksignore), so Trivy does
                   # not double-report the vendored Synapse test-key fixtures
-                  # (e.g. synapse/util/manhole.py's upstream demo RSA key).
+                  # (e.g. apps/blackout-server/tests/http/ca.key and server.key,
+                  # which Trivy's secret scanner reports as private keys).
                   scanners: vuln
                   # apps/blackout-server (the Synapse fork) is scanned: its
                   # poetry.lock and Cargo.lock are what infra/single-server-baseline
