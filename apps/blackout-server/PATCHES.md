@@ -1033,7 +1033,9 @@ requires `zope-interface>=8`).
   `dns.Message` class attributes and `IProcessProtocol` without
   `processExited` are not used.
 - `synapse/util/manhole.py` (`_ephemeral_rsa_key`), found by the second
-  review of this change and fixed in its own commit: `Key(keyObject)` in
+  review of this change and fixed in commit `20362e4`, separate from the lock
+  and ignore commits (it also carries the record's second-round corrections):
+  `Key(keyObject)` in
   place of `Key.fromCryptographyKey(...)`, a method
   `twisted.conch.ssh.keys.Key` has never had (26.4.0 and 26.10.0 both offer
   `fromFile`, `fromString` and the constructor, which takes a cryptography

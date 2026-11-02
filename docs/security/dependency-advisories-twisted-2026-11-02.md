@@ -17,8 +17,11 @@ has been false since 2026-09-14. The operator approved the one PR on
 2026-11-02. The second review of the change found that the fork's manhole
 could not start on either Twisted version, a fork bug from 2026-09-13 that the
 bump neither caused nor changed; it is fixed here as a one-line change with
-tests, in its own commit, so the operator can split it out if the approved
-scope is to stay exact ([The manhole](#the-manhole-could-not-start)).
+tests, in commit `20362e4` (which also carries this record's second-round
+corrections: the pre-commit prettier step's `git add -u` staged the record
+with the fix, and the rules forbid amending), so the operator can still split
+it out by reverting that commit's three fork files if the approved scope is to
+stay exact ([The manhole](#the-manhole-could-not-start)).
 
 | Package (lock)         | Advisory                              | Severity | Fixed in               | Outcome                                   |
 | ---------------------- | ------------------------------------- | -------- | ---------------------- | ----------------------------------------- |
@@ -290,25 +293,26 @@ the helper, and `tests/` had no manhole test.
 
 **Effect.** A homeserver whose config has a `type: manhole` listener and no
 `ssh_priv_key_path`/`ssh_pub_key_path` logged the ephemeral-key warning and
-then died: `boot.log` `AttributeError: type object 'Key' has no attribute
-'fromCryptographyKey'`, `homeserver.log` `synapse.app.\_base - 267 - CRITICAL
-
--   Error during startup`with a traceback through`homeserver.py`
-`start_listening`→`\_base.py` `listen_manhole`→`manhole.py` `manhole`→`\_ephemeral_rsa_key`; `/health`never answered. Reproduced in the second
-round from a`git archive`of`develop`'s fork directory under 26.4.0
-(`build-r2/boot-develop-mh.log`). A configured key pair never reached the
-helper and worked. So the 2026-09-13 hardening had never run, and the
-sentences describing it as working, in `docs/manhole.md`("generates a fresh
-key for each process"),`config_documentation.md`, `semgrep-triage-2026-09-13.md`'s
-fix paragraph and the worked example in the repository's root agent-notes file ("ephemeral key
-    generation rather than the shipped hardcoded one"), were untrue from
-    2026-09-13 until this change: an operator who followed them got a server that
-    would not start. The first round of this record and PATCHES.md's first-round
-    entry described the manhole's SSHSession behaviour under 26.10.0 as if the
-    manhole ran; both are reworded here.
+then died. `boot.log` ends in `AttributeError: type object 'Key' has no
+attribute 'fromCryptographyKey'`; `homeserver.log` has
+`synapse.app._base - 267 - CRITICAL - Error during startup` with a traceback
+through `homeserver.py` `start_listening`, `_base.py` `listen_manhole`,
+`manhole.py` `manhole` and `_ephemeral_rsa_key`; `/health` never answered.
+Reproduced in the second round from a `git archive` of `develop`'s fork
+directory under 26.4.0 (`build-r2/boot-develop-mh.log`). A configured key pair
+never reached the helper and worked. So the 2026-09-13 hardening had never
+run, and the sentences describing it as working, in `docs/manhole.md`
+("generates a fresh key for each process"), `config_documentation.md`, the fix
+paragraph of `semgrep-triage-2026-09-13.md` and the worked example in the
+repository's root agent-notes file ("ephemeral key generation rather than the
+shipped hardcoded one"), were untrue from 2026-09-13 until this change: an
+operator who followed them got a server that would not start. The first round
+of this record and PATCHES.md's first-round entry described the manhole's
+SSHSession behaviour under 26.10.0 as if the manhole ran; both are reworded
+here.
 
 **Fix.** `return Key(rsa.generate_private_key(public_exponent=65537,
-key_size=2048))`, with a comment that states the above, in its own commit.
+key_size=2048))`, with a comment that states the above, in commit `20362e4`.
 `manhole.py` was already a fork divergence with no PATCHES.md entry; it has
 one now, covering the 2026-09-13 change and this one. No documentation
 sentence needed changing: each describes what the code now does.
@@ -342,9 +346,10 @@ manhole logs, `Got remote error, code 10`, is the probe's own disconnect
 lines; normalised, the two differ only in those Twisted session lines.
 
 **Scope.** The operator approved the Twisted lock and the image-size
-correction. This fix is a third thing, kept to one line plus tests and its
-own commit so it can be dropped from the PR if the approved scope is to stay
-exact; leaving it out would leave a known startup crash in a documented
+correction. This fix is a third thing, kept to one line plus tests, in a
+commit separate from the lock and the ignore changes (`20362e4`; it also
+carries this record's corrections, see Scope) so it can be dropped from the PR
+if the approved scope is to stay exact; leaving it out would leave a known startup crash in a documented
 security feature with its fix in hand, and would leave this record's and
 PATCHES.md's statements about the manhole describing code that cannot run.
 
@@ -416,15 +421,19 @@ round's, with the database read at the time as 2026-11-01 19:08 UTC; the rows
 after them are the second round's, with the database of 2026-11-02 01:14 UTC
 that is on disk ([Method](#method)).
 
-| Run                                                                          | High/Critical reported                                                                                                                                                                       | Exit |
-| ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
-| `develop` (`f6da7b7`), `git archive`                                         | none                                                                                                                                                                                         | 0    |
-| `develop`, `--show-suppressed`                                               | none; suppressed: Twisted 26.4.0 under CVE-2026-115775, CVE-2026-115776, CVE-2026-115778 and GHSA-vpp8-g58w-m8mp, and image-size 1.2.1 under CVE-2025-71329 and CVE-2025-71330 (fixed 2.0.3) | 0    |
-| `develop`, every `exp:` set to 2026-11-02 (the run's own date, at 02:07 UTC) | the four Twisted ids and the two image-size ids                                                                                                                                              | 1    |
-| `develop`, every `exp:` set to 2026-11-03                                    | none                                                                                                                                                                                         | 0    |
-| this branch's worktree at `6b6d96e` (`node_modules` and `.git` skipped)      | none                                                                                                                                                                                         | 0    |
-| this branch, `git archive` of `03a426e`                                      | none                                                                                                                                                                                         | 0    |
-| same, `--show-suppressed`                                                    | none; suppressed: image-size 1.2.1 under CVE-2025-71329 and CVE-2025-71330 (fixed 2.0.3), and nothing else                                                                                   | 0    |
+| Run                                                                                      | High/Critical reported                                                                                                                                                                       | Exit |
+| ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
+| `develop` (`f6da7b7`), `git archive`                                                     | none                                                                                                                                                                                         | 0    |
+| `develop`, `--show-suppressed`                                                           | none; suppressed: Twisted 26.4.0 under CVE-2026-115775, CVE-2026-115776, CVE-2026-115778 and GHSA-vpp8-g58w-m8mp, and image-size 1.2.1 under CVE-2025-71329 and CVE-2025-71330 (fixed 2.0.3) | 0    |
+| `develop`, every `exp:` set to 2026-11-02 (the run's own date, at 02:07 UTC)             | the four Twisted ids and the two image-size ids                                                                                                                                              | 1    |
+| `develop`, every `exp:` set to 2026-11-03                                                | none                                                                                                                                                                                         | 0    |
+| this branch's worktree at `6b6d96e` (`node_modules` and `.git` skipped)                  | none                                                                                                                                                                                         | 0    |
+| this branch, `git archive` of `03a426e`                                                  | none                                                                                                                                                                                         | 0    |
+| same, `--show-suppressed`                                                                | none; suppressed: image-size 1.2.1 under CVE-2025-71329 and CVE-2025-71330 (fixed 2.0.3), and nothing else                                                                                   | 0    |
+| this branch, `git archive` of `20362e4` (second round; database of 2026-11-02 01:14 UTC) | none                                                                                                                                                                                         | 0    |
+| same, `--show-suppressed` (second round)                                                 | none; suppressed: image-size 1.2.1 under CVE-2025-71329 and CVE-2025-71330 (fixed 2.0.3), and nothing else                                                                                   | 0    |
+| `develop` (`f6da7b7`), `git archive`, second round, same database                        | none                                                                                                                                                                                         | 0    |
+| same, `--show-suppressed` (second round)                                                 | none; suppressed: the four Twisted ids and the two image-size ids, as in the first round                                                                                                     | 0    |
 
 So the gate is green on both sides, and on this branch it is green without any
 Twisted entry: Twisted 26.10.0 matches no advisory in that database. The two
@@ -434,14 +443,16 @@ stops applying at the start of 2026-11-30 (this host runs on UTC). The
 `develop` run with `--show-suppressed` also shows that Trivy matches image-size
 by CVE, which is why both ignore lists carry the CVE lines.
 
-The record's own commit changes no file Trivy reads.
+The record's commits change no file Trivy reads; the manhole commit changes
+none either, and the second-round rows above are the runs on it.
 
 ## Validation
 
 -   **Lock:** `poetry lock --check` (poetry 1.3.2), `.ci/scripts/check_lockfile.py`
     and `scripts-dev/check_locked_deps_have_sdists.py` (151 packages) pass;
     `poetry lock --check` passes again after the comment over `Twisted` was
-    rewritten (the `content-hash` does not cover comments). Every file hash in the two new
+    rewritten (the `content-hash` does not cover comments), and again in the
+    second round, which changed no lock file. Every file hash in the two new
     lock entries matches PyPI's JSON (2 of 2 for twisted, 50 of 50 for
     zope-interface). `poetry export --extras all`, with and without the dev
     group, differs from `develop`'s by the twisted and zope-interface lines
@@ -548,7 +559,8 @@ family not supported by protocol`, the same traceback apart from Twisted's
 -   **OSV:** osv-scanner 2.3.3 on `pnpm-lock.yaml` with `TZ=UTC`,
     `TZ=Etc/GMT-3` and `TZ=Pacific/Kiritimati`: exit 0 each time, "Filtered 4
     vulnerabilities" (deepmerge, the two image-size entries with the new
-    reason printed, minimatch), no unused-ignore line. On
+    reason printed, minimatch), no unused-ignore line; the second round re-ran
+    the three on its tree with the same output. On
     `apps/blackout-server/poetry.lock`, which no gate scans this way:
     `develop`'s lock shows the eight Twisted rows (the seven above and
     GHSA-8pqf, `--` for its fix) plus black 23.10.1, pygments 2.15.1 and
@@ -556,9 +568,10 @@ family not supported by protocol`, the same traceback apart from Twisted's
     black, pygments and sentry-sdk rows ([Found outside scope](#found-outside-scope-not-fixed-here)).
 -   **pnpm audit:** `pnpm audit --prod --audit-level high` and
     `pnpm run guard:audit-clean` exit 0, both reporting "1 low | 1 moderate
-    (1 ignored) | 2 high (2 ignored)". Unchanged by this PR.
--   **gitleaks 8.21.2** over `origin/develop..HEAD` after the first two
-    commits: 2 commits scanned, no leaks.
+    (1 ignored) | 2 high (2 ignored)", in both rounds. Unchanged by this PR.
+-   **gitleaks 8.21.2** over `origin/develop..HEAD`: after the first two
+    commits, 2 commits scanned, no leaks; after the fourth (`20362e4`), 4
+    commits scanned, no leaks.
 -   **prettier 2.8.1**, the root's version, `--check` on every changed
     Markdown and YAML file: clean. `.trivyignore` and `osv-scanner.toml` are
     skipped by `--ignore-unknown`; `pyproject.toml` and `poetry.lock` are
