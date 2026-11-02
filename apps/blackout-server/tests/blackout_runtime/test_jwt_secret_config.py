@@ -25,6 +25,12 @@ truthy, and the Railway template (``services/blackout-server``) rendered
 default, as that text, a non-empty string. The template now writes
 ``enabled: false``; a test below renders it as its entrypoint does.
 
+2026-11-02: the Railway template was removed, with its entrypoint, and so was
+the test that rendered it (``test_railway_template_leaves_jwt_login_off``);
+the operator chose removal over fixing the template. The refusal of a
+non-boolean ``enabled`` stays, and so does its test, which still refuses the
+text that template rendered. See PATCHES.md, 2026-11-02.
+
 Records: docs/security/dependency-advisories-server-desktop-2026-10-30.md
 (repository root) and PATCHES.md, 2026-10-30.
 """
@@ -35,11 +41,8 @@ import base64
 import hashlib
 import hmac
 import json
-import re
-from pathlib import Path
-from typing import Any, Dict, Mapping, Tuple
+from typing import Any, Dict, Tuple
 
-import yaml
 from cryptography.hazmat.primitives.asymmetric import ec
 
 from synapse.config import ConfigError
@@ -211,7 +214,9 @@ REFUSED_ALGORITHMS: Dict[str, Any] = {
 
 
 # Refused at jwt_config.enabled. Each string turned JWT login on before the
-# check, the first as the Railway template rendered it.
+# check, the first as the Railway template rendered it. (That template was
+# removed on 2026-11-02; any template that envsubst renders can still leave a
+# default as this text.)
 REFUSED_ENABLED: Dict[str, Any] = {
     "an envsubst default left as text": "${JWT_ENABLED:-false}",
     "the string false": "false",
@@ -221,29 +226,6 @@ REFUSED_ENABLED: Dict[str, Any] = {
     "zero": 0,
     "one": 1,
 }
-
-# The template services/blackout-server/entrypoint.sh renders for the image
-# railway.toml deploys.
-RAILWAY_TEMPLATE = (
-    Path(__file__).resolve().parents[2]
-    / "services"
-    / "blackout-server"
-    / "homeserver.yaml.template"
-)
-
-_ENVSUBST_REFERENCE = re.compile(
-    r"\$(?:\{([A-Za-z_][A-Za-z0-9_]*)\}|([A-Za-z_][A-Za-z0-9_]*))"
-)
-
-
-def _envsubst(text: str, env: Mapping[str, str]) -> str:
-    """Render ``text`` as GNU gettext's ``envsubst`` does with no SHELL-FORMAT:
-    ``$NAME`` and ``${NAME}`` become the variable's value, or nothing when it
-    is unset, and anything else, ``${NAME:-default}`` included, is copied as
-    it is."""
-    return _ENVSUBST_REFERENCE.sub(
-        lambda m: env.get(m.group(1) or m.group(2), ""), text
-    )
 
 
 def _parse(jwt_config: Dict[str, Any]) -> HomeServerConfig:
@@ -348,25 +330,6 @@ class JwtSecretConfigTestCase(TestCase):
                     {**jwt_config, "secret": "plain-secret", "algorithm": "HS256"}
                 )
                 self.assertIs(config.jwt.jwt_enabled, enabled)
-
-    def test_railway_template_leaves_jwt_login_off(self) -> None:
-        template = RAILWAY_TEMPLATE.read_text(encoding="utf-8")
-        envs: Tuple[Dict[str, str], ...] = (
-            {},
-            {"JWT_ENABLED": "true", "SYNAPSE_JWT_LOGIN_SECRET": "a-long-random-secret"},
-            # The API's session-signing secret must never become the JWT login
-            # secret: the template read JWT_SECRET until 2026-10-31.
-            {"JWT_SECRET": "the-api-session-signing-secret"},
-        )
-        for env in envs:
-            with self.subTest(env=env):
-                rendered = yaml.safe_load(_envsubst(template, env))
-                jwt_config = rendered["jwt_config"]
-                self.assertIs(jwt_config["enabled"], False)
-                self.assertEqual(
-                    jwt_config["secret"], env.get("SYNAPSE_JWT_LOGIN_SECRET", "")
-                )
-                self.assertFalse(_parse(jwt_config).jwt.jwt_enabled)
 
     def test_disabled_jwt_login_is_not_checked(self) -> None:
         for algorithm in ("HS256", "none"):
