@@ -683,10 +683,15 @@ on the manhole [here](../../manhole.md). Manhole sub-options include:
 
 - `username` : the username for the manhole. This defaults to 'matrix'.
 - `password`: The password for the manhole. This defaults to 'rabbithole'.
-- `ssh_priv_key_path` and `ssh_pub_key_path`: The private and public SSH key pair used to encrypt the manhole traffic.
+- `ssh_priv_key_path` and `ssh_pub_key_path`: The private and public halves of the manhole's SSH host key, which lets an SSH client check that it is talking to this server.
+  The keys that encrypt the manhole traffic come from the SSH key exchange on
+  each connection, not from this pair. An RSA, Ed25519 or ECDSA key works, in
+  the format `ssh-keygen` writes and without a passphrase.
   `ssh_priv_key_path` alone is enough: the public half is derived from the
-  private key. `ssh_pub_key_path` without `ssh_priv_key_path` cannot be used,
-  since a host key must be able to sign, and is ignored with a warning.
+  private key. A public key at `ssh_priv_key_path`, or an `ssh_pub_key_path`
+  that is not the public half of that private key, stops startup with a
+  configuration error. `ssh_pub_key_path` without `ssh_priv_key_path` cannot be
+  used, since a host key must be able to sign, and is ignored with a warning.
   Upstream Synapse falls back to a keypair hardcoded in its source when these
   are unset — published, therefore not secret, and identical on every install.
   **This build has removed that key** and generates a fresh one per process

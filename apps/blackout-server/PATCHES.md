@@ -1291,6 +1291,8 @@ Error during startup`), under either Twisted; a configured key pair never
   half derived from it (`priv_key.public()`) and no warning; a configured
   public key with no private key is ignored, since a host key must be able to
   sign, and the warning says so; with neither, the warning is unchanged.
+  (That held for an RSA private key only until the next bullet's fix; since
+  it, it holds for RSA, Ed25519 and ECDSA keys.)
   Upstream instead fills each unset half from its hardcoded pair, so a
   configured private key is served beside the hardcoded public key, which
   does not match it. Keep it, with the generated key above, through a
@@ -1299,6 +1301,42 @@ Error during startup`), under either Twisted; a configured key pair never
   gets the ephemeral pair and its own warning text, and a loopback SSH session
   with only the private key configured is shown that key's public half; the
   three fail against the file before this change, under 26.4.0 and 26.10.0.
+- `synapse/util/manhole.py` (`manhole`), found by the review of the fifth
+  round: the host key was filed as `factory.privateKeys[b"ssh-rsa"]` and
+  `publicKeys[b"ssh-rsa"]` whatever its type. Twisted's server offers the
+  signature algorithms of the keys in `privateKeys`
+  (`SSHFactory.buildProtocol`) and then looks the negotiated one up by key
+  type (`SSHServerTransport._getHostKeys`, `twisted/conch/ssh/transport.py`,
+  the same in 26.4.0 and 26.10.0), so with an Ed25519 or ECDSA key the
+  manhole started without a warning and every connection failed with a
+  `KeyError` (`b'ssh-ed25519'`, `b'ecdsa-sha2-nistp256'`, ...); on `develop` a
+  configured Ed25519 or ECDSA pair did the same. Both dicts are now keyed by
+  `priv_key.sshType()`, and each factory gets its own dicts instead of
+  writing into the two that `ConchFactory` declares on the class, which every
+  factory in the process shares. Upstream `develop`'s `manhole.py` (fetched
+  raw on 2026-11-02, sha256 `2aec8f2b…`) files every key under `b"ssh-rsa"`
+  in the shared dicts, so keep this through a reconciliation. Tests in the
+  same file: each of RSA, Ed25519 and ECDSA P-256, P-384 and P-521 is filed
+  under its own type and found by Twisted's own lookup for every algorithm
+  the server offers; a second factory leaves the first one's key alone; and
+  loopback SSH sessions on an Ed25519 key, an ECDSA P-256 pair, P-384 and
+  P-521 keys and an RSA key, each read from key files through the homeserver
+  config. The Ed25519 and ECDSA P-256 sessions and the two factory tests fail
+  against the file before this change, under 26.4.0 and 26.10.0.
+- `synapse/config/server.py` (`_check_manhole_host_key`, called from
+  `ServerConfig.read_config`), with the previous bullet: a `ConfigError` at
+  startup for a public key at `ssh_priv_key_path` (at
+  `manhole_settings.ssh_priv_key_path`), and for an `ssh_pub_key_path` whose
+  key type differs from the private key's or which is not the private key's
+  public half (at `manhole_settings.ssh_pub_key_path`); each message names
+  the file and what it holds. Upstream loads both files without comparing
+  them. Each refused config starts a manhole on which no SSH session
+  completes. Keep it through a reconciliation. Tests in
+  `tests/blackout_runtime/test_manhole.py`, through `HomeServerConfig`: the
+  three refusals for each key type (the type mismatch as Ed25519 with RSA,
+  RSA with ECDSA, and ECDSA P-256 with P-384), each failing against the file
+  before this change, and matching pairs and private keys alone still
+  loading.
 - `docs/manhole.md`: its option list and example named `ssh_priv_key` and
   `ssh_pub_key`. `synapse/config/server.py` reads only `ssh_priv_key_path`
   and `ssh_pub_key_path`, and `_MANHOLE_SETTINGS_SCHEMA` accepts unknown
@@ -1312,4 +1350,13 @@ Error during startup`), under either Twisted; a configured key pair never
   `manhole_settings` now says the private key alone is enough and the public
   key alone is ignored, and no longer says that leaving both unset "is no
   longer a confidentiality problem": a host key that changes on every restart
-  gives a client nothing to tell a restart from an impersonator.
+  gives a client nothing to tell a restart from an impersonator. With the
+  fifth-round fixes above, both pages also name the key types that work (RSA,
+  Ed25519, ECDSA) and the refusals at startup, and `docs/manhole.md`'s
+  example and `ssh-keygen` line use an Ed25519 key.
+- `docs/usage/configuration/config_documentation.md`, an upstream line: the
+  `ssh_priv_key_path` and `ssh_pub_key_path` bullet opened with upstream's
+  "The private and public SSH key pair used to encrypt the manhole traffic".
+  A host key authenticates the server; the keys that encrypt a session come
+  from the SSH key exchange. The fork's line says that instead. A fork change
+  to upstream's text, so keep it through a reconciliation.

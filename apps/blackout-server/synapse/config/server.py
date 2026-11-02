@@ -731,6 +731,13 @@ class ServerConfig(Config):
                     f"Failed to read manhole public key file {manhole_pub_key_path}"
                 ) from e
 
+        _check_manhole_host_key(
+            manhole_priv_key_path,
+            manhole_priv_key,
+            manhole_pub_key_path,
+            manhole_pub_key,
+        )
+
         self.manhole_settings = ManholeConfig(
             username=manhole_username,
             password=manhole_password,
@@ -1076,6 +1083,62 @@ def parse_listener_def(num: int, listener: Any) -> ListenerConfig:
                 bind_addresses.extend(DEFAULT_BIND_ADDRESSES)
 
         return TCPListenerConfig(port, bind_addresses, listener_type, tls, http_config)
+
+
+def _check_manhole_host_key(
+    priv_key_path: Optional[str],
+    priv_key: Optional[Key],
+    pub_key_path: Optional[str],
+    pub_key: Optional[Key],
+) -> None:
+    """Refuse a manhole host key the SSH server could not use.
+
+    A Blackout addition (PATCHES.md, 2026-11-02 Twisted entry). Upstream loads
+    both files without comparing them. The manhole files the host key under the
+    private key's own type and serves `pub_key` as its public half
+    (`synapse/util/manhole.py`), so each of these would start a manhole on which
+    no SSH session completes:
+
+    - a public key at `ssh_priv_key_path`: a host key must be able to sign;
+    - a public key of another type than the private key;
+    - a public key of the same type that is not the private key's public half.
+
+    Raises:
+        ConfigError: naming the setting at fault.
+    """
+    if priv_key is not None and priv_key.isPublic():
+        raise ConfigError(
+            f"The manhole private key file {priv_key_path} holds a public key"
+            f" ({priv_key.sshType().decode('ascii')}), not a private one."
+            " ssh_priv_key_path must name the private half of the host key, the"
+            " file ssh-keygen writes without the .pub suffix.",
+            ("manhole_settings", "ssh_priv_key_path"),
+        )
+
+    if priv_key is None or pub_key is None:
+        return
+
+    priv_type = priv_key.sshType().decode("ascii")
+    pub_type = pub_key.sshType().decode("ascii")
+    if pub_type != priv_type:
+        raise ConfigError(
+            f"The manhole public key file {pub_key_path} holds a {pub_type} key,"
+            f" and the private key file {priv_key_path} a {priv_type} key."
+            " ssh_pub_key_path must be the public half of the key at"
+            " ssh_priv_key_path, or be left unset: the public half is then"
+            " derived from the private key.",
+            ("manhole_settings", "ssh_pub_key_path"),
+        )
+
+    if pub_key.public().blob() != priv_key.public().blob():
+        raise ConfigError(
+            f"The manhole public key file {pub_key_path} is not the public half"
+            f" of the private key file {priv_key_path} (both {priv_type})."
+            " ssh_pub_key_path must be the public half of the key at"
+            " ssh_priv_key_path, or be left unset: the public half is then"
+            " derived from the private key.",
+            ("manhole_settings", "ssh_pub_key_path"),
+        )
 
 
 _MANHOLE_SETTINGS_SCHEMA = {

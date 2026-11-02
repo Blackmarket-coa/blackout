@@ -22,14 +22,30 @@ namespace. Nothing here pins Twisted's own session semantics (26.10.0 allows
 one shell request per channel, 26.4.0 allowed more); the shell must simply
 open.
 
+The host key is filed under its own key type. Until this change ``manhole()``
+filed every key under ``b"ssh-rsa"``, as upstream does, while Twisted offers the
+signature algorithms of the key it holds and then looks the negotiated one up
+by key type, so an Ed25519 or ECDSA key at ``ssh_priv_key_path`` started without
+a word and every connection failed. ``synapse/config/server.py`` now also
+refuses, at config load, a public key at ``ssh_priv_key_path`` and a configured
+public key that is not the private key's public half. The session tests for
+those key types load the key files through the homeserver config, as a
+deployment does.
+
 Records: docs/security/dependency-advisories-twisted-2026-11-02.md (repository
 root) and PATCHES.md, 2026-11-02.
 """
 
 from __future__ import annotations
 
+import os
+import shutil
 import struct
-from typing import Any, Dict, Optional, Tuple, cast
+import tempfile
+from typing import Any, Dict, List, Optional, Tuple, cast
+
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import ec, ed25519
 
 from twisted.conch import manhole_ssh
 from twisted.conch.ssh import channel, common, connection, transport, userauth
@@ -40,10 +56,13 @@ from twisted.internet.interfaces import IAddress, IListeningPort, IReactorTCP
 from twisted.internet.protocol import ServerFactory
 from twisted.python.failure import Failure
 
+from synapse.config._base import ConfigError
+from synapse.config.homeserver import HomeServerConfig
 from synapse.config.server import ManholeConfig
 from synapse.util.manhole import _ephemeral_rsa_key, manhole
 
 from tests.unittest import TestCase
+from tests.utils import default_config
 
 USERNAME = "matrix"
 PASSWORD = "rabbithole"
@@ -56,15 +75,91 @@ def _settings(priv: Optional[Key] = None, pub: Optional[Key] = None) -> ManholeC
 
 
 def _host_keys(factory: ServerFactory) -> Tuple[Key, Key]:
-    """The RSA host key pair the factory serves.
+    """The host key pair the factory serves, whatever type it is filed under.
 
     `manhole()` returns the ConchFactory as a ServerFactory, and conch types
-    these two dicts as bytes to bytes; both hold Key objects.
+    these two dicts as bytes to bytes; both hold Key objects. Each holds one
+    entry, under the same name; which name is `HostKeyTypeTestCase`'s subject,
+    so the session tests can reach a factory that files it wrongly.
     """
     conch = cast(manhole_ssh.ConchFactory, factory)
-    priv = cast(Key, conch.privateKeys[b"ssh-rsa"])
-    pub = cast(Key, conch.publicKeys[b"ssh-rsa"])
+    assert len(conch.privateKeys) == 1, conch.privateKeys
+    assert conch.privateKeys.keys() == conch.publicKeys.keys()
+    priv = cast(Key, next(iter(conch.privateKeys.values())))
+    pub = cast(Key, next(iter(conch.publicKeys.values())))
     return priv, pub
+
+
+def _rsa_key() -> Key:
+    return _ephemeral_rsa_key()
+
+
+def _ed25519_key() -> Key:
+    return Key(ed25519.Ed25519PrivateKey.generate())
+
+
+def _ecdsa_key(curve: ec.EllipticCurve) -> Key:
+    return Key(ec.generate_private_key(curve))
+
+
+def _key_kinds() -> List[Tuple[str, Key]]:
+    """One private key of each type the manhole must serve."""
+    return [
+        ("RSA", _rsa_key()),
+        ("Ed25519", _ed25519_key()),
+        ("ECDSA P-256", _ecdsa_key(ec.SECP256R1())),
+        ("ECDSA P-384", _ecdsa_key(ec.SECP384R1())),
+        ("ECDSA P-521", _ecdsa_key(ec.SECP521R1())),
+    ]
+
+
+def _write_key_files(directory: str, name: str, key: Key) -> Tuple[str, str]:
+    """Write `key` as ssh-keygen writes it: OpenSSH private key and `.pub`.
+
+    Returns the private and public file paths.
+    """
+    crypto_key = key._keyObject
+    priv_path = os.path.join(directory, name)
+    with open(priv_path, "wb") as f:
+        f.write(
+            crypto_key.private_bytes(
+                serialization.Encoding.PEM,
+                serialization.PrivateFormat.OpenSSH,
+                serialization.NoEncryption(),
+            )
+        )
+    pub_path = priv_path + ".pub"
+    with open(pub_path, "wb") as f:
+        f.write(
+            crypto_key.public_key().public_bytes(
+                serialization.Encoding.OpenSSH, serialization.PublicFormat.OpenSSH
+            )
+            + b" manhole-test\n"
+        )
+    return priv_path, pub_path
+
+
+def _load_manhole_settings(
+    priv_path: Optional[str] = None, pub_path: Optional[str] = None
+) -> ManholeConfig:
+    """Parse a homeserver config whose manhole_settings name these files."""
+    settings: Dict[str, str] = {"username": USERNAME, "password": PASSWORD}
+    if priv_path is not None:
+        settings["ssh_priv_key_path"] = priv_path
+    if pub_path is not None:
+        settings["ssh_pub_key_path"] = pub_path
+    config_dict = default_config("test")
+    config_dict["manhole_settings"] = settings
+    config = HomeServerConfig()
+    config.parse_config_dict(config_dict, "", "")
+    return config.server.manhole_settings
+
+
+def _key_dir(test: TestCase) -> str:
+    """A scratch directory for key files, removed when `test` ends."""
+    directory = tempfile.mkdtemp(prefix="manhole-keys-")
+    test.addCleanup(shutil.rmtree, directory)
+    return directory
 
 
 class EphemeralKeyTestCase(TestCase):
@@ -142,6 +237,134 @@ class EphemeralKeyTestCase(TestCase):
         self.assertEqual(priv.public().blob(), pub.blob())
 
 
+class HostKeyTypeTestCase(TestCase):
+    """The factory files the host key where Twisted's server looks for it."""
+
+    def test_each_key_type_is_filed_under_its_own_name(self) -> None:
+        for kind, priv in _key_kinds():
+            factory = cast(manhole_ssh.ConchFactory, manhole(_settings(priv), {}))
+            key_type = priv.sshType()
+            self.assertEqual(list(factory.privateKeys), [key_type], kind)
+            self.assertEqual(list(factory.publicKeys), [key_type], kind)
+
+            # What Twisted does with the factory: the server offers the
+            # signature algorithms of the keys it holds, then looks the
+            # negotiated one up by key type.
+            factory.startFactory()
+            self.addCleanup(factory.stopFactory)
+            server = factory.buildProtocol(None)
+            self.assertEqual(
+                server.supportedPublicKeys, priv.supportedSignatureAlgorithms(), kind
+            )
+            for algorithm in server.supportedPublicKeys:
+                pub, got_priv = server._getHostKeys(algorithm)
+                self.assertIs(got_priv, priv, (kind, algorithm))
+                self.assertEqual(pub.blob(), priv.public().blob(), (kind, algorithm))
+
+    def test_a_second_factory_leaves_the_first_ones_key_alone(self) -> None:
+        # ConchFactory declares both dicts on the class; the factories must
+        # not share them.
+        first_key = _ed25519_key()
+        second_key = _rsa_key()
+        first = manhole(_settings(first_key), {})
+        manhole(_settings(second_key), {})
+        priv, pub = _host_keys(first)
+        self.assertIs(priv, first_key)
+        self.assertEqual(pub.blob(), first_key.public().blob())
+
+
+def _another_key_like(key: Key) -> Key:
+    """A fresh private key of the same SSH key type as `key`."""
+    if key.type() == "RSA":
+        return _rsa_key()
+    if key.type() == "EC":
+        return _ecdsa_key(key._keyObject.curve)
+    return _ed25519_key()
+
+
+def _file_name(kind: str) -> str:
+    return kind.replace(" ", "_").replace("-", "")
+
+
+class ManholeKeyConfigTestCase(TestCase):
+    """synapse/config/server.py refuses a host key the manhole could not use."""
+
+    def _refusal(
+        self, label: str, priv_path: str, pub_path: Optional[str] = None
+    ) -> ConfigError:
+        try:
+            _load_manhole_settings(priv_path, pub_path)
+        except ConfigError as e:
+            return e
+        raise self.failureException(f"{label}: the config loaded, no ConfigError")
+
+    def test_public_key_at_the_private_key_path_is_refused(self) -> None:
+        directory = _key_dir(self)
+        for kind, key in _key_kinds():
+            _, pub_path = _write_key_files(directory, _file_name(kind), key)
+            e = self._refusal(kind, pub_path)
+            self.assertEqual(e.path, ("manhole_settings", "ssh_priv_key_path"), kind)
+            self.assertIn(pub_path, e.msg, kind)
+            self.assertIn("holds a public key", e.msg, kind)
+            self.assertIn(key.sshType().decode("ascii"), e.msg, kind)
+
+    def test_public_key_of_another_type_is_refused(self) -> None:
+        directory = _key_dir(self)
+        pairs = [
+            ("Ed25519 and RSA", _ed25519_key(), _rsa_key()),
+            ("RSA and ECDSA", _rsa_key(), _ecdsa_key(ec.SECP256R1())),
+            # Two ECDSA curves are two SSH key types.
+            ("P-256 and P-384", _ecdsa_key(ec.SECP256R1()), _ecdsa_key(ec.SECP384R1())),
+        ]
+        for i, (label, priv, other) in enumerate(pairs):
+            priv_path, _ = _write_key_files(directory, f"priv{i}", priv)
+            _, other_pub_path = _write_key_files(directory, f"other{i}", other)
+            e = self._refusal(label, priv_path, other_pub_path)
+            self.assertEqual(e.path, ("manhole_settings", "ssh_pub_key_path"), label)
+            self.assertIn(
+                f"{other_pub_path} holds a {other.sshType().decode('ascii')} key",
+                e.msg,
+                label,
+            )
+            self.assertIn(
+                f"{priv_path} a {priv.sshType().decode('ascii')} key", e.msg, label
+            )
+
+    def test_public_key_of_another_key_of_the_same_type_is_refused(self) -> None:
+        directory = _key_dir(self)
+        for kind, priv in _key_kinds():
+            other = _another_key_like(priv)
+            self.assertEqual(other.sshType(), priv.sshType(), kind)
+            name = _file_name(kind)
+            priv_path, _ = _write_key_files(directory, "priv_" + name, priv)
+            _, other_pub_path = _write_key_files(directory, "other_" + name, other)
+            e = self._refusal(kind, priv_path, other_pub_path)
+            self.assertEqual(e.path, ("manhole_settings", "ssh_pub_key_path"), kind)
+            self.assertIn(
+                f"{other_pub_path} is not the public half of the private key file"
+                f" {priv_path}",
+                e.msg,
+                kind,
+            )
+
+    def test_matching_pairs_and_private_keys_alone_load(self) -> None:
+        directory = _key_dir(self)
+        for kind, priv in _key_kinds():
+            priv_path, pub_path = _write_key_files(directory, _file_name(kind), priv)
+
+            pair = _load_manhole_settings(priv_path, pub_path)
+            assert pair.priv_key is not None and pair.pub_key is not None
+            self.assertFalse(pair.priv_key.isPublic(), kind)
+            self.assertTrue(pair.pub_key.isPublic(), kind)
+            self.assertEqual(pair.priv_key.sshType(), priv.sshType(), kind)
+            self.assertEqual(pair.pub_key.blob(), priv.public().blob(), kind)
+
+            alone = _load_manhole_settings(priv_path)
+            assert alone.priv_key is not None
+            self.assertIsNone(alone.pub_key, kind)
+            self.assertEqual(alone.priv_key.public().blob(), priv.public().blob(), kind)
+
+
 class _Probe:
     """What the client saw, filled in as the session proceeds."""
 
@@ -150,6 +373,7 @@ class _Probe:
         self.shell_opened = False
         self.output = b""
         self.host_key_blob: Optional[bytes] = None
+        self.key_alg: Optional[bytes] = None
         self.closed: "defer.Deferred[None]" = defer.Deferred()
 
     def fail(self, reason: Failure) -> None:
@@ -219,6 +443,7 @@ class _ClientTransport(transport.SSHClientTransport):
 
     def verifyHostKey(self, hostKey: bytes, fingerprint: str) -> "defer.Deferred[bool]":
         self.probe.host_key_blob = hostKey
+        self.probe.key_alg = self.keyAlg
         return defer.succeed(True)
 
     def connectionSecure(self) -> None:
@@ -317,6 +542,77 @@ class ManholeSessionTestCase(TestCase):
         async def run() -> None:
             probe, host_key = await self._session(_settings(priv, None), {"answer": 41})
             self.assertEqual(host_key.blob(), priv.public().blob())
+            self.assertEqual(probe.host_key_blob, priv.public().blob())
+
+        return defer.ensureDeferred(run())
+
+    def test_client_gets_a_shell_on_a_configured_ed25519_key(
+        self,
+    ) -> "defer.Deferred[None]":
+        # Only ssh_priv_key_path, an Ed25519 key in ssh-keygen's format, read
+        # through the homeserver config. Before the key was filed under its own
+        # type, the server offered ssh-ed25519, the client took it, and the
+        # server's lookup under that name raised KeyError: no session.
+        priv = _ed25519_key()
+        priv_path, _ = _write_key_files(_key_dir(self), "id_ed25519", priv)
+        settings = _load_manhole_settings(priv_path)
+
+        async def run() -> None:
+            probe, host_key = await self._session(settings, {"answer": 41})
+            self.assertEqual(probe.key_alg, b"ssh-ed25519")
+            self.assertEqual(host_key.blob(), priv.public().blob())
+            self.assertEqual(probe.host_key_blob, priv.public().blob())
+
+        return defer.ensureDeferred(run())
+
+    def test_client_gets_a_shell_on_a_configured_ecdsa_key_pair(
+        self,
+    ) -> "defer.Deferred[None]":
+        # Both paths, an ECDSA P-256 pair, read through the homeserver config.
+        priv = _ecdsa_key(ec.SECP256R1())
+        priv_path, pub_path = _write_key_files(_key_dir(self), "id_ecdsa", priv)
+        settings = _load_manhole_settings(priv_path, pub_path)
+
+        async def run() -> None:
+            probe, host_key = await self._session(settings, {"answer": 41})
+            self.assertEqual(probe.key_alg, b"ecdsa-sha2-nistp256")
+            self.assertEqual(host_key.blob(), priv.public().blob())
+            self.assertEqual(probe.host_key_blob, priv.public().blob())
+
+        return defer.ensureDeferred(run())
+
+    def test_client_gets_a_shell_on_the_other_ecdsa_curves(
+        self,
+    ) -> "defer.Deferred[None]":
+        # P-384 and P-521 sign with SHA-384 and SHA-512; each gets a session.
+        directory = _key_dir(self)
+
+        async def run() -> None:
+            for curve, key_type in (
+                (ec.SECP384R1(), b"ecdsa-sha2-nistp384"),
+                (ec.SECP521R1(), b"ecdsa-sha2-nistp521"),
+            ):
+                priv = _ecdsa_key(curve)
+                priv_path, _ = _write_key_files(directory, curve.name, priv)
+                settings = _load_manhole_settings(priv_path)
+                probe, _ = await self._session(settings, {"answer": 41})
+                self.assertEqual(probe.key_alg, key_type)
+                self.assertEqual(probe.host_key_blob, priv.public().blob())
+
+        return defer.ensureDeferred(run())
+
+    def test_client_gets_a_shell_on_a_configured_rsa_key_file(
+        self,
+    ) -> "defer.Deferred[None]":
+        # RSA through the same path, still served as before: the client takes
+        # rsa-sha2-512, which Twisted's lookup maps to ssh-rsa.
+        priv = _rsa_key()
+        priv_path, _ = _write_key_files(_key_dir(self), "id_rsa", priv)
+        settings = _load_manhole_settings(priv_path)
+
+        async def run() -> None:
+            probe, host_key = await self._session(settings, {"answer": 41})
+            self.assertEqual(probe.key_alg, b"rsa-sha2-512")
             self.assertEqual(probe.host_key_blob, priv.public().blob())
 
         return defer.ensureDeferred(run())

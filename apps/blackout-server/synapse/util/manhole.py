@@ -96,8 +96,9 @@ def manhole(settings: ManholeConfig, globals: Dict[str, Any]) -> ServerFactory:
     pub_key = settings.pub_key
     if priv_key is not None and pub_key is None:
         # A private key carries its public half, so a configured private key
-        # alone pins the host key. Upstream instead pairs it with the public
-        # half of its hardcoded key, which does not match.
+        # alone pins the host key (tested with RSA, Ed25519 and ECDSA keys).
+        # Upstream instead pairs it with the public half of its hardcoded key,
+        # which does not match.
         pub_key = priv_key.public()
     elif priv_key is None:
         # No private key: mint a pair for this process rather than fall back
@@ -137,10 +138,27 @@ def manhole(settings: ManholeConfig, globals: Dict[str, Any]) -> ServerFactory:
     # https://github.com/twisted/twisted/issues/11812 and /11813 .
     factory = manhole_ssh.ConchFactory(portal.Portal(rlm, [checker]))  # type: ignore[arg-type]
 
+    # File the host key under its own key type (b"ssh-rsa", b"ssh-ed25519",
+    # b"ecdsa-sha2-nistp256", ...). The server offers the signature
+    # algorithms of every key in `privateKeys` (`SSHFactory.buildProtocol`)
+    # and then looks the negotiated one up by key type
+    # (`SSHServerTransport._getHostKeys`, which maps rsa-sha2-256/512 to
+    # ssh-rsa), so an Ed25519 or ECDSA key filed under b"ssh-rsa", as upstream
+    # files every key, is offered, negotiated, and then not found: every
+    # connection fails with a KeyError while the homeserver starts cleanly.
+    # synapse/config/server.py refuses a public key at ssh_priv_key_path and a
+    # public key that is not this private key's, so both halves share a type.
+    #
+    # Each factory gets its own dicts. ConchFactory declares both as class
+    # attributes, so upstream's item assignment writes into dicts that every
+    # ConchFactory in the process shares; with keys filed by type, a factory
+    # would then also serve the keys of other types that earlier factories
+    # filed there.
+    key_type = priv_key.sshType()
     # conch has the wrong type on these dicts (says bytes to bytes,
     # should be bytes to Keys judging by how it's used).
-    factory.privateKeys[b"ssh-rsa"] = priv_key  # type: ignore[assignment]
-    factory.publicKeys[b"ssh-rsa"] = pub_key  # type: ignore[assignment]
+    factory.privateKeys = {key_type: priv_key}  # type: ignore[dict-item]
+    factory.publicKeys = {key_type: pub_key}  # type: ignore[dict-item]
 
     # ConchFactory is a Factory, not a ServerFactory, but they are identical.
     return factory  # type: ignore[return-value]

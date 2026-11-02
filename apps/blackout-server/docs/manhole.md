@@ -59,17 +59,24 @@ The following config options are available:
 
 - `username` - The username for the manhole (defaults to `matrix`)
 - `password` - The password for the manhole (defaults to `rabbithole`)
-- `ssh_priv_key_path` - The path to a private SSH key, the manhole's host key
+- `ssh_priv_key_path` - The path to a private SSH key, the manhole's host key:
+  an RSA, Ed25519 or ECDSA (P-256, P-384 or P-521) key, unencrypted, in the
+  format `ssh-keygen` writes. Synapse refuses to start if the file holds a
+  public key.
 - `ssh_pub_key_path` - The path to the matching public SSH key. Optional: when
-  it is unset, the public half is derived from the private key. Set on its own,
-  without `ssh_priv_key_path`, it is ignored with a warning, since a host key
-  must be able to sign.
+  it is unset, the public half is derived from the private key. When it is set,
+  it must be the public half of the key at `ssh_priv_key_path`; a public key of
+  another type, or of another key, stops startup with a configuration error.
+  Set on its own, without `ssh_priv_key_path`, it is ignored with a warning,
+  since a host key must be able to sign.
 
 Until the change that locked Twisted 26.10.0 in this build, this page named
 these `ssh_priv_key` and `ssh_pub_key`. The configuration parser reads only the
 `_path` names and accepts unknown keys without complaint, so a config written
 from the old text runs on an ephemeral host key (and, before that change, did
-not start at all).
+not start at all). Until the same change, only an RSA host key worked: with an
+Ed25519 or ECDSA key the manhole started without a warning and every connection
+to it failed, and a mismatched key pair was not refused.
 
 For example:
 
@@ -77,8 +84,8 @@ For example:
 manhole_settings:
   username: manhole
   password: mypassword
-  ssh_priv_key_path: '/home/synapse/manhole_keys/id_rsa'
-  ssh_pub_key_path: '/home/synapse/manhole_keys/id_rsa.pub'
+  ssh_priv_key_path: '/home/synapse/manhole_keys/id_ed25519'
+  ssh_pub_key_path: '/home/synapse/manhole_keys/id_ed25519.pub'
 ```
 
 ### Set a host key. This build will not use a shared one.
@@ -106,8 +113,13 @@ than a pinned one. To get a stable one, generate a keypair and point
 `ssh_priv_key_path` at its private half (`ssh_pub_key_path` is optional):
 
 ```bash
-ssh-keygen -t rsa -b 4096 -f /home/synapse/manhole_keys/id_rsa -N ""
+ssh-keygen -t ed25519 -f /home/synapse/manhole_keys/id_ed25519 -N ""
 ```
+
+An RSA key (`ssh-keygen -t rsa -b 4096`) or an ECDSA key (`-t ecdsa`) works as
+well. The key is a _host_ key: it lets your ssh client check that it is talking
+to your server. The keys that encrypt the session are agreed afresh by the SSH
+key exchange on each connection.
 
 That is the recommended setup for anything you use more than once, and it is
 now genuinely private rather than an override of a public default.
