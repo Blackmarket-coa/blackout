@@ -239,12 +239,31 @@ export const releaseContentHeld = (record: DeadmanSwitchRecord): boolean =>
  * store has answered (round 11 of part 2's review: in Postgres the arm now
  * awaits its own insert, so between the checks and the row a second arm would
  * otherwise read the counts without it and both would pass the bound). By
- * release id; removed when the store answers, whatever it answers.
+ * release id; removed when the store has answered and the arm has looked at
+ * its owner once more, whatever it answers; `done` settles then, so the
+ * owner's deletion can wait for an arm already past its checks
+ * (`armsInFlightSettledFor`).
  */
-const armsInFlight = new Map<string, { ownerId: string; recipients: string[]; armedAt: number }>();
+const armsInFlight = new Map<
+    string,
+    { ownerId: string; recipients: string[]; armedAt: number; done: Promise<void> }
+>();
 
 const armsInFlightOf = (ownerId: string) =>
     [...armsInFlight.values()].filter((arm) => arm.ownerId === ownerId);
+
+/**
+ * Settles once every arm of `ownerId`'s that this process is writing has been
+ * answered (the owner's deletion waits for it before it lists the owner's
+ * switches: round 13 of part 2's review found an arm whose insert was still
+ * being written when the deletion listed them, which landed after and stayed
+ * armed for an account that was gone). An arm whose checks pass after the
+ * deletion's synchronous writes is refused: the account and its identities are
+ * gone by then.
+ */
+export const armsInFlightSettledFor = async (ownerId: string): Promise<void> => {
+    await Promise.all(armsInFlightOf(ownerId).map((arm) => arm.done));
+};
 
 /**
  * Release switches of one owner whose content is still held, the ones this
@@ -381,6 +400,11 @@ export type OwnerIdentityRefusal =
     | { kind: 'owner_identity_missing' }
     | { kind: 'owner_identity_changed' };
 
+/** The owner's account is gone (`no_account`): arming and re-sealing are refused for it. */
+export type OwnerAccountRefusal = { kind: 'no_account' };
+
+const ownerAccountGone = (ownerId: string): boolean => db.getUserById(ownerId) === undefined;
+
 /**
  * The owner's current identity in the directory. Whether it is the one the
  * header names is the verifier's to say: `releaseSignatureVerifier` computes
@@ -460,6 +484,13 @@ export type ArmReleaseOutcome =
     | { kind: 'recipient_limit'; recipientAccountId: string }
     | { kind: 'id_taken' }
     /**
+     * The owner's account no longer exists: deleted by the time the arm was
+     * checked, or while its switch was written (the switch it wrote is then
+     * erased before the answer). Answered 404 `user_not_found`, as publishing
+     * a release identity is.
+     */
+    | OwnerAccountRefusal
+    /**
      * The database did not answer the switch's write in time (Postgres): one
      * that was sent may still land; one refused at once while another switch
      * statement stood unanswered was not sent, and cannot. Or the write
@@ -487,20 +518,29 @@ export type ArmReleaseOutcome =
  * which also refuses a header naming another identity than the owner's
  * current one; and, after the signatures awaited, the release id is still
  * free, every bound still has room, and the owner's and every recipient's
- * current identity is still the one checked. The writes follow with no await
- * between, the copies first and the switch last, and nothing deletes a copy,
- * so a crash between them, a failed arm or one that finds the id taken leaves
- * copies without a switch, which nothing lists or serves, rather than a
- * switch without copies, which would fire and release to nobody. The bounds
- * and the identities are checked twice on purpose: before the signatures, so
- * a refused arm costs no verification, and after them, because a burst of
- * arms that all passed the first checks against the same counts resumes here
- * one at a time, a recipient may have rotated or deleted during the awaits,
- * and nothing yields between the second check and the writes, so on one
- * replica exactly the bound passes and every copy written is sealed to a
- * current key (rounds 2 and 3 of part 2's review); across replicas the store
- * is eventually consistent and a bound can be exceeded within its refresh
- * window.
+ * current identity is still the one checked, and the owner's account still
+ * exists. The rows are then written in one awaited store call, each of its
+ * statements awaited in Postgres, the copies first and the switch last, and
+ * nothing deletes a copy, so a crash between them, a failed arm or one that
+ * finds the id taken leaves copies without a switch, which nothing lists or
+ * serves, rather than a switch without copies, which would fire and release
+ * to nobody. The bounds and the identities are checked twice on purpose:
+ * before the signatures, so a refused arm costs no verification, and after
+ * them, because a burst of arms that all passed the first checks against the
+ * same counts resumes here one at a time, and a recipient may have rotated
+ * or deleted during the awaits. Nothing yields between the second check and
+ * the moment the arm is counted as one this process is writing
+ * (`armsInFlight`), which counts toward every bound until the store has
+ * answered, and a database stall refuses every arm until a landed row is in
+ * the mirror, so on one process exactly the bound passes and every copy
+ * written is sealed to a current key (rounds 2, 3, 11 and 12 of part 2's
+ * review); across replicas the store is eventually consistent and a bound can
+ * be exceeded within its refresh window. Once the store has answered, the
+ * owner's account is looked at once more: where the owner's deletion ran
+ * while the rows were written, the switch is erased again before the answer
+ * and the arm is refused `no_account` (round 13: such an arm was answered 201
+ * and its switch, which the deletion had not listed, stayed armed and fired
+ * for an account that was gone).
  */
 export const armReleaseSwitch = async (input: {
     ownerId: string;
@@ -511,6 +551,9 @@ export const armReleaseSwitch = async (input: {
     if (!parsed.ok) return { kind: 'invalid_envelope', problem: parsed.problem };
     const envelope = parsed.value;
     if (envelope.ownerAccountId !== input.ownerId) return { kind: 'not_yours' };
+    // The account must still exist: another session of an account being
+    // deleted must not arm in its name (round 13 of part 2's review).
+    if (ownerAccountGone(input.ownerId)) return { kind: 'no_account' };
 
     const timerProblem = validateReleaseTimer(input.input);
     if (timerProblem) return { kind: 'invalid', message: timerProblem };
@@ -564,6 +607,7 @@ export const armReleaseSwitch = async (input: {
     }
     const identitiesAgain = identitiesStillCurrent(input.ownerId, owner.recordId, envelope.copies);
     if (identitiesAgain) return identitiesAgain;
+    if (ownerAccountGone(input.ownerId)) return { kind: 'no_account' };
     const lastCheckInAt = now.toISOString();
     const { triggerAt, releaseAt } = computeDeadlines({
         lastCheckInAt,
@@ -582,11 +626,16 @@ export const armReleaseSwitch = async (input: {
     // switch is found in the database afterwards (round 11: the owner was
     // answered 201 before the write-behind upsert ran, and a dropped one left
     // a switch only that process listed, which in the deployed layout never
-    // fired). Until the store answers, the arm counts toward every bound.
+    // fired). Until the store answers, the arm counts toward every bound,
+    // and the owner's deletion waits for it.
+    let settle!: () => void;
     armsInFlight.set(envelope.releaseId, {
         ownerId: input.ownerId,
         recipients,
         armedAt: now.getTime(),
+        done: new Promise<void>((resolve) => {
+            settle = resolve;
+        }),
     });
     let outcome: Awaited<ReturnType<typeof db.armDeadmanSwitch>>;
     try {
@@ -614,8 +663,17 @@ export const armReleaseSwitch = async (input: {
                 signature: copy.signature,
             }))
         );
+        // The owner's deletion may have run while the rows were written: it
+        // waits for this arm, but the switch is this arm's to take back, so
+        // that the owner's other session is not answered 201 for a switch of
+        // an account that is gone.
+        if (outcome.kind === 'armed' && ownerAccountGone(input.ownerId)) {
+            await db.eraseDeadmanSwitchUnlessFired(envelope.releaseId);
+            return { kind: 'no_account' };
+        }
     } finally {
         armsInFlight.delete(envelope.releaseId);
+        settle();
     }
     switch (outcome.kind) {
         case 'armed':
@@ -642,6 +700,7 @@ export type ResealReleaseOutcome =
     | { kind: 'invalid_copy'; problem: ReleaseEnvelopeProblem }
     | { kind: 'not_a_recipient'; recipientAccountId: string }
     | OwnerIdentityRefusal
+    | OwnerAccountRefusal
     | RecipientRefusal
     | { kind: 'invalid_signature'; recipientAccountId: string };
 
@@ -692,6 +751,7 @@ export const resealReleaseCopy = async (input: {
     ) {
         return { kind: 'not_a_recipient', recipientAccountId: copy.recipientAccountId };
     }
+    if (ownerAccountGone(input.ownerId)) return { kind: 'no_account' };
     const owner = currentOwnerIdentity(input.ownerId);
     if (!owner.ok) return owner.refusal;
     const state = recipientIdentityState(copy.recipientAccountId, copy.recipientFingerprint);
@@ -714,6 +774,7 @@ export const resealReleaseCopy = async (input: {
     if (!again.ok) return again.outcome;
     const identitiesAgain = identitiesStillCurrent(input.ownerId, owner.recordId, [copy]);
     if (identitiesAgain) return identitiesAgain;
+    if (ownerAccountGone(input.ownerId)) return { kind: 'no_account' };
     db.putDeadmanReleaseWrap({
         switchId: again.record.id,
         recipientAccountId: copy.recipientAccountId,
@@ -794,7 +855,9 @@ export const standsFired = (
  * nothing of anyone else's. Nothing before the trigger, nothing of a switch
  * they own, nothing of one cancelled with its `releasedAt` kept (which the
  * owner's deletion over a trigger committed elsewhere left until round 12),
- * nothing once the content was removed, newest release first.
+ * nothing once the content was removed, nothing of a switch whose owner's
+ * deletion has queued an erase this process has not seen land, newest
+ * release first.
  */
 export const releasedCopiesFor = (accountId: string): DeadmanReleasedCopy[] => {
     const releases: DeadmanReleasedCopy[] = [];
@@ -802,6 +865,10 @@ export const releasedCopiesFor = (accountId: string): DeadmanReleasedCopy[] => {
         if (!wrapIsHeld(wrap)) continue;
         const record = db.getDeadmanSwitch(wrap.switchId);
         if (!record || !standsFired(record) || record.ownerId === accountId) continue;
+        // Its owner's deletion has queued an erase not yet landed: this
+        // process's view is not Postgres's, so nothing is served from it
+        // until it lands (round 13 of part 2's review).
+        if (db.deadmanSwitchErasePending(record.id)) continue;
         const release = storedRelease(record);
         if (!release) continue;
         releases.push({
@@ -889,7 +956,12 @@ export const blankReleaseWraps = (switchId: string): number => {
  * (round 11: a cancel the database applied after its bound had passed, or a
  * re-seal that reached a replica after its cancel, left copies held on a
  * cancelled switch, served to nobody, until the owner cancelled again, which
- * nothing told them to). Those count as removed too. Returns how many
+ * nothing told them to), conditional in the store on the switch it holds
+ * being cancelled (`blankCopiesOfCancelledSwitch`; round 13: plain writes
+ * from this process's view, which the owner's queued erase had made
+ * cancelled, blanked every copy of a release that had fired elsewhere).
+ * Those count as removed too. A switch whose owner's deletion has queued an
+ * erase this process has not seen land is left alone. Returns how many
  * releases were removed this pass.
  */
 export const removeExpiredReleases = async (now: Date): Promise<number> => {
@@ -898,8 +970,9 @@ export const removeExpiredReleases = async (now: Date): Promise<number> => {
     for (const listed of db.listAllDeadmanSwitches()) {
         const record = db.getDeadmanSwitch(listed.id);
         if (!record || !isReleaseSwitch(record)) continue;
+        if (db.deadmanSwitchErasePending(record.id)) continue;
         if (record.status === 'cancelled') {
-            if (blankReleaseWraps(record.id) > 0) removed += 1;
+            if ((await db.blankCopiesOfCancelledSwitch(record.id)) > 0) removed += 1;
             continue;
         }
         if (!standsFired(record)) continue;

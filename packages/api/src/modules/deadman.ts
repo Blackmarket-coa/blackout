@@ -290,6 +290,10 @@ export async function sweepOverdueDeadmanSwitches(
     for (const listed of db.listAllDeadmanSwitches()) {
         const record = db.getDeadmanSwitch(listed.id);
         if (!record) continue;
+        // Its owner's deletion has queued an erase this process has not seen
+        // land: neither fired nor moved here meanwhile (round 13 of part 2's
+        // review). The erase decides on Postgres's row when it runs.
+        if (db.deadmanSwitchErasePending(record.id)) continue;
         if (record.status === 'triggered' || record.status === 'cancelled') {
             db.clearOwnerWriteUnanswered(record.id);
             continue;
@@ -455,6 +459,10 @@ const identityResponse = (
     >
 ) => {
     switch (outcome.kind) {
+        case 'no_account':
+            // The owner's account was deleted (another of its sessions is
+            // asking): answered as publishing a release identity is.
+            return c.json({ code: 'user_not_found', message: 'Account no longer exists' }, 404);
         case 'owner_identity_missing':
             return c.json(
                 {
@@ -768,7 +776,13 @@ function createDeadmanRouter() {
             // it; a release switch is read through GET /releases.
             const released = db
                 .listDeadmanSwitchesForRecipient(subject)
-                .filter((record) => record.status === 'triggered' && !isReleaseSwitch(record))
+                .filter(
+                    (record) =>
+                        record.status === 'triggered' &&
+                        !isReleaseSwitch(record) &&
+                        // An erase its owner's deletion queued has not landed here.
+                        !db.deadmanSwitchErasePending(record.id)
+                )
                 .map(recordToReleasedSwitch);
             return c.json({ switches: released });
         }
@@ -795,7 +809,8 @@ function createDeadmanRouter() {
             existing &&
             existing.status === 'triggered' &&
             !isReleaseSwitch(existing) &&
-            existing.recipients.includes(subject)
+            existing.recipients.includes(subject) &&
+            !db.deadmanSwitchErasePending(existing.id)
         ) {
             return c.json(recordToReleasedSwitch(existing));
         }

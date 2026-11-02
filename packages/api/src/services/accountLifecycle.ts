@@ -7,7 +7,13 @@ import type {
 } from '@blackout/protocol';
 import { db } from '../db/store';
 import type { UserRecord } from '../db/types';
-import { isReleaseSwitch, noticeCounts, releasedCopiesFor, standsFired } from './deadmanReleases';
+import {
+    armsInFlightSettledFor,
+    isReleaseSwitch,
+    noticeCounts,
+    releasedCopiesFor,
+    standsFired,
+} from './deadmanReleases';
 import { log } from '../telemetry/logger';
 import { recordToReleaseIdentity } from './releaseIdentities';
 import { matrixUserIdFor } from './userIdentity';
@@ -411,21 +417,32 @@ export const ACCOUNT_DELETION_FINISH_TIMEOUT_MS = 10 * 1000;
  * process had seen are ended there, unless one of those writes was dropped,
  * and another process (the worker) makes no room, invites nobody and sends
  * nothing for them after its next read of the database (a call it already
- * had on its way to the homeserver can still reach them). Then, in the database itself, every notice still pending to
- * the account ends and every notice row of theirs forgets its room,
- * including a row another process wrote that this one had not heard of (the
- * worker's sweep, moments before; `endDeadmanReleaseNoticesOfDeletedAccount`).
- * Nothing to do with one process. The route awaits it after
- * `confirmAccountDeletion` and after it revokes the session; a failure is
- * logged, the deletion stands, and such a row is then as the notifier
- * leaves it (round 6 of part 2's review). The wait for this last statement
- * alone is bounded: past `timeoutMs` (its connection, or writes queued after
- * the deletion's, stalled) it is logged and this returns, and the statement
- * goes on without anyone waiting for it, landing when it can (round 7:
- * unbounded, a stalled pool held the route's answer for good; round 8: the
- * bound covered the drain of the deletion's own writes too, so the route
- * could answer before any of them was in the database, and the worker then
- * made the person a room, invited them and sent the notice).
+ * had on its way to the homeserver can still reach them). Then, in the
+ * database itself, the deletion's last statements. First every switch the
+ * database holds for the account as its owner is erased as the deletion
+ * erases one (an unfired one cancelled and emptied with its copies blanked,
+ * a fired one keeping its content, `releasedAt` and the people's copies),
+ * and every copy still held that is sealed to the account is blanked
+ * (`eraseDeadmanSwitchesOfDeletedOwner`), so a switch this process's mirror
+ * did not have when the deletion listed the owner's switches is erased too:
+ * one whose arm was answered 503 and whose insert landed, one whose failed
+ * statement committed before this, one another process armed before it heard
+ * of the deletion (round 13 of part 2's review). Then every notice still
+ * pending to the account ends and every notice row of theirs forgets its
+ * room, including a row another process wrote that this one had not heard of
+ * (the worker's sweep, moments before; `endDeadmanReleaseNoticesOfDeletedAccount`).
+ * Nothing to do with one process. The route awaits them after
+ * `confirmAccountDeletion` and after it revokes the session; a failure of
+ * either is logged, the deletion stands, the other still runs, and such a row
+ * is then as the notifier, or the switch as the sweep, leaves it (round 6).
+ * The wait for these last statements alone is bounded: past `timeoutMs`
+ * (their connection, or writes queued after the deletion's, stalled) it is
+ * logged and this returns, and the statements go on without anyone waiting
+ * for them, landing when they can (round 7: unbounded, a stalled pool held
+ * the route's answer for good; round 8: the bound covered the drain of the
+ * deletion's own writes too, so the route could answer before any of them
+ * was in the database, and the worker then made the person a room, invited
+ * them and sent the notice).
  */
 export const finishAccountDeletion = async (
     accountId: string,
@@ -442,19 +459,29 @@ export const finishAccountDeletion = async (
         });
     }
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const end = Promise.resolve()
-        .then(() =>
-            store.endDeadmanReleaseNoticesOfDeletedAccount(accountId, new Date().toISOString())
-        )
-        .then(
-            () => 'done' as const,
-            (err: unknown) => {
-                log.warn('account_deletion_finish_failed', {
-                    error: err instanceof Error ? err.message : String(err),
-                });
-                return 'failed' as const;
-            }
-        );
+    const end = (async (): Promise<'done' | 'failed'> => {
+        let failed = false;
+        try {
+            await store.eraseDeadmanSwitchesOfDeletedOwner(accountId);
+        } catch (err) {
+            log.warn('account_deletion_switches_finish_failed', {
+                error: err instanceof Error ? err.message : String(err),
+            });
+            failed = true;
+        }
+        try {
+            await store.endDeadmanReleaseNoticesOfDeletedAccount(
+                accountId,
+                new Date().toISOString()
+            );
+        } catch (err) {
+            log.warn('account_deletion_finish_failed', {
+                error: err instanceof Error ? err.message : String(err),
+            });
+            failed = true;
+        }
+        return failed ? 'failed' : 'done';
+    })();
     const outcome = await Promise.race([
         end,
         new Promise<'timeout'>((resolve) => {
@@ -476,35 +503,49 @@ export type ConfirmDeletionOutcome =
 
 /**
  * Confirm and carry out an account deletion. Everything but the switches is
- * written to this process's mirror synchronously, before the first `await`;
- * `onConfirmed` runs then too, once the token is consumed and before anything
- * is awaited (the route revokes the deleting session's token in it, so the
+ * written to this process's mirror synchronously, before the first `await`:
+ * the release identities, the scheduled messages, every copy sealed to the
+ * account and the notices owed to it, the invitation admissions, the auth
+ * artefacts and the user row itself; `onConfirmed` runs first, once the token
+ * is consumed (the route revokes the deleting session's token in it, so the
  * token is refused on this process from that moment: round 7 of part 2's
- * review). The release identities go first, so that an arm or a re-seal by
- * one of the account's other sessions that reaches this process while the
- * switches' statements are awaited is refused for want of an owner identity
- * rather than leaving an armed switch behind the deletion.
+ * review). So from the first `await` on, the account's other sessions find no
+ * account on this process: publishing a release identity is refused
+ * `no_account`, and arming and re-sealing are refused `no_account` (and for
+ * want of an owner identity) before anything is written (round 13: the user
+ * row and the copies waited behind the switches' statements, so another
+ * session could publish a fresh identity in that window, arm with it, and
+ * leave a switch that fired for the account after it was gone; and a notice
+ * whose send answered in that window was recorded sent).
  *
- * Each switch of the owner's is erased by one statement decided in the
- * database (`eraseDeadmanSwitchUnlessFired`, decision 30, built in round 12
- * of part 2's review): one that has not fired there is cancelled and emptied,
- * and its sealed copies are blanked in the same call; one the database shows
- * fired, on this process or another this process had not heard from, is
- * erased as fired: its label goes, and so does the owner's own copy (below,
- * with every copy sealed to this account), while its content, the owner's
- * identity it was signed with (E13), its `releasedAt` and the recipients'
- * copies stay until the removal at least 365 days after it fired, as decision
- * 12 describes, since nothing can be re-sealed after the trigger and nobody
- * is left to open the owner's copy. The same statement erases a legacy
- * switch that fired elsewhere as fired (its payload stays for the people it
- * named, as before; its label goes). Where the database does not answer the
- * statement in time, is not sent it because another switch statement stands
- * unanswered, or fails it, the store queues the same statement in the
- * switch's lane (`queued`, logged), which decides on the database's row when
- * it runs and which the route's wait for this process's queued writes covers;
- * nothing writes this process's view of the switch whole over the row
- * (round 12's check: the fallback did, and cancelled a release that had fired
- * elsewhere).
+ * Then the switches. First the arms of the owner's this process is still
+ * writing, already past their checks, are waited for
+ * (`armsInFlightSettledFor`; each one that lands for an account that is gone
+ * erases its own switch and is refused), and only then are the owner's
+ * switches listed (round 13: an arm whose insert was being written when the
+ * deletion listed them landed after the list and stayed armed). Each switch
+ * of the owner's is erased by one call decided in the database
+ * (`eraseDeadmanSwitchUnlessFired`, decision 30, built in round 12 of part
+ * 2's review; statements on one connection, not a transaction): one that has
+ * not fired there is cancelled and emptied, and its sealed copies are
+ * blanked; one the database shows fired, on this process or another this
+ * process had not heard from, is erased as fired: its label goes, and so
+ * does the owner's own copy (above, with every copy sealed to this account),
+ * while its content, the owner's identity it was signed with (E13), its
+ * `releasedAt` and the recipients' copies stay until the removal at least 365
+ * days after it fired, as decision 12 describes, since nothing can be
+ * re-sealed after the trigger and nobody is left to open the owner's copy.
+ * The same call erases a legacy switch that fired elsewhere as fired (its
+ * payload stays for the people it named, as before; its label goes). Where
+ * the database does not answer the call in time, is not sent it because
+ * another switch statement stands unanswered, or fails it, the store queues
+ * the same call in the switch's lane (`queued`, logged), which decides on the
+ * database's row when it runs and which the route's wait for this process's
+ * queued writes covers; nothing writes this process's view of the switch over
+ * the row (round 12's check), and the mirror holds no view of its own of the
+ * erase meanwhile (round 13). The route then runs `finishAccountDeletion`,
+ * whose last statements erase, in the database, every switch it holds for
+ * the owner, including one this process never had.
  */
 export const confirmAccountDeletion = async (
     presentedToken: string,
@@ -521,10 +562,11 @@ export const confirmAccountDeletion = async (
     // Mark the token consumed before purging so a partial failure can't double-delete.
     db.consumeAccountDeletionToken(record.id);
     onConfirmed?.(record.userId);
+    // Everything but the switches, before any await: see above.
     // Release identities: the public keys go with the account, one row at a
     // time, so nothing but this account's rows is written. The private halves
     // are on the person's devices and in their recovery files, which the
-    // server never had. First, before any await: see above.
+    // server never had.
     for (const identity of db.listReleaseIdentitiesForAccount(record.userId)) {
         db.eraseReleaseIdentity(identity.id);
     }
@@ -532,14 +574,6 @@ export const confirmAccountDeletion = async (
     // pending ones, so nothing is posted for this account after it is gone.
     for (const msg of db.listScheduledMessagesForUser(record.userId)) {
         db.eraseScheduledMessage(msg.id);
-    }
-    // Dead-man switches: cancel the ones that have not fired and remove what
-    // the owner put in them, so none fires for an account that is gone. One
-    // that has fired, in the database's judgement, stays readable to the
-    // people it named; its label goes (above).
-    for (const sw of db.listDeadmanSwitchesForOwner(record.userId)) {
-        const outcome = await db.eraseDeadmanSwitchUnlessFired(sw.id);
-        if (outcome.kind === 'queued') log.warn('account_deletion_switch_erase_queued', {});
     }
     // Every copy sealed to this account goes, and the notices owed to it
     // end and forget their room (`eraseReleaseCopiesAndNoticesOf`; the route
@@ -555,6 +589,16 @@ export const confirmAccountDeletion = async (
     );
     db.purgeUserAuthArtifacts(record.userId);
     db.deleteUser(record.userId);
+    // Dead-man switches: cancel the ones that have not fired and remove what
+    // the owner put in them, so none fires for an account that is gone. One
+    // that has fired, in the database's judgement, stays readable to the
+    // people it named; its label goes. The arms already past their checks
+    // first, so that what they wrote is listed.
+    await armsInFlightSettledFor(record.userId);
+    for (const sw of db.listDeadmanSwitchesForOwner(record.userId)) {
+        const outcome = await db.eraseDeadmanSwitchUnlessFired(sw.id);
+        if (outcome.kind === 'queued') log.warn('account_deletion_switch_erase_queued', {});
+    }
     return { kind: 'ok', userId: record.userId };
 };
 

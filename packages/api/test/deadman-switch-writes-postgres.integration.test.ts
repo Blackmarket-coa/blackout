@@ -43,15 +43,21 @@ const protocol = await import('@blackout/protocol');
 const { default: app } = await import('../src/index');
 const { signJwt } = await import('../src/services/auth');
 const { sweepOverdueDeadmanSwitches } = await import('../src/modules/deadman');
-const { armReleaseSwitch, armsInFlightCount, heldReleasesNaming, releasedCopiesFor } = await import(
-    '../src/services/deadmanReleases'
-);
+const {
+    armReleaseSwitch,
+    armsInFlightCount,
+    heldReleasesNaming,
+    recordReleaseTrigger,
+    releasedCopiesFor,
+    removeExpiredReleases,
+} = await import('../src/services/deadmanReleases');
 const { confirmAccountDeletion, exportUserData, finishAccountDeletion, requestAccountDeletion } =
     await import('../src/services/accountLifecycle');
 const { runDeadmanReleaseNotifier } = await import('../src/services/deadmanReleaseNotifier');
 const { applyCheckIn } = await import('../src/services/deadmanScheduler');
 const { log } = await import('../src/telemetry/logger');
 type StoreChangePayload = import('../src/db/pgNotify').StoreChangePayload;
+type DeadmanSwitchRow = import('../src/db/types').DeadmanSwitchRecord;
 
 protocol.setKemProvider(protocol.mlKem768Provider);
 
@@ -1898,7 +1904,7 @@ test('a switch statement’s stall stands until the landed row is in the mirror:
     await here.drain();
 });
 
-test('the owner’s deletion is decided in Postgres: on a process that has not heard of a trigger another process committed it erases the release as fired (label and the owner’s copy gone; content, releasedAt and the recipients’ copies kept and served; a notice sent stands and one not yet sent still goes), a legacy switch fired elsewhere keeps its payload, an unfired switch loses everything, and an arm by the owner during the deletion is refused', async () => {
+test('the owner’s deletion is decided in Postgres: on a process that has not heard of a trigger another process committed it erases the release as fired (label and the owner’s copy gone; content, releasedAt and the recipients’ copies kept and served; a notice sent stands and one not yet sent still goes), a legacy switch fired elsewhere keeps its payload, an unfired switch loses everything, and while its statements run the account is already gone, so the owner’s other session can neither publish a release identity nor arm', async () => {
     // Decision 30, decided by the operator on 2026-11-02 and built in round
     // 12 of part 2's review: the deletion wrote each switch from the deleting
     // process's mirror, unconditionally, so on a process that had not heard of
@@ -1972,19 +1978,31 @@ test('the owner’s deletion is decided in Postgres: on a process that has not h
     }
 
     // The owner deletes their account on this process. While the first
-    // switch's erase statement runs, the owner's other session arms another
-    // release here: refused, the owner's identity is already gone.
+    // switch's erase statement runs, the owner's other session publishes its
+    // release identity again (the same one, which outside the window is a
+    // free 200) and arms another release here: both refused, the account is
+    // already gone (round 13 of part 2's review: the user row and the
+    // identities' history were still there behind the awaits, so the
+    // re-publish was 201 and an arm with it after the deletion fired).
     const issued = requestAccountDeletion({ userId: owner.id })!;
     let armDuring: ReturnType<typeof armReleaseSwitch> | undefined;
     // What the arm had answered while the deletion's first statement was
-    // still held: refused for want of an owner identity before any signature
-    // was checked, since the identities go before the first await (an arm
-    // refused only at its second identity check, once the deletion had
-    // finished, would read 'still verifying' here).
+    // still held: refused for want of an account before any signature was
+    // checked, since the user row goes before the first await (an arm refused
+    // only at its second check, once the deletion had finished, would read
+    // 'still verifying' here).
     let armWhileHeld: string | undefined;
+    let republishWhileHeld: number | undefined;
+    const announcedBefore = announced.length;
     const erases = intercept(
         (sql) => sql.startsWith('UPDATE deadman_switches SET headline = NULL'),
         async () => {
+            const republished = await app.request('/v1/release-identities/me', {
+                method: 'PUT',
+                headers: auth(owner),
+                body: JSON.stringify({ identity: owner.keySet.identity }),
+            });
+            republishWhileHeld = republished.status;
             armDuring = armReleaseSwitch({
                 ownerId: owner.id,
                 input: { checkInIntervalSeconds: 3600, gracePeriodSeconds: 0, envelope: extra },
@@ -2009,11 +2027,22 @@ test('the owner’s deletion is decided in Postgres: on a process that has not h
     assert.equal(revokedAt, 'before the awaits', 'the token is revoked before any statement');
     assert.equal(erases.calls(), 4, 'one statement per switch');
     assert.equal(
-        armWhileHeld,
-        'owner_identity_missing',
-        'the arm during the deletion is refused at once: the identities are already gone'
+        republishWhileHeld,
+        404,
+        'the re-publish during the deletion is refused: the account is already gone'
     );
-    assert.equal((await armDuring!).kind, 'owner_identity_missing');
+    assert.equal(
+        armWhileHeld,
+        'no_account',
+        'the arm during the deletion is refused at once: the account is already gone'
+    );
+    assert.equal((await armDuring!).kind, 'no_account');
+    assert.equal(here.getCurrentReleaseIdentity(owner.id), undefined, 'no identity outlives it');
+    await finishAccountDeletion(owner.id, here);
+    // After the deletion the other session's arm is refused too, by the route.
+    const armAfter = await post(owner, '/switches', armBody(extra, 3600));
+    assert.equal(armAfter.status, 404);
+    assert.equal(((await armAfter.json()) as { code: string }).code, 'user_not_found');
     await here.drain();
     assert.ok(
         here.listDeadmanSwitchesForOwner(owner.id).every((sw) => sw.status !== 'armed'),
@@ -2040,7 +2069,16 @@ test('the owner’s deletion is decided in Postgres: on a process that has not h
             true,
             'served to the person named, on this process too'
         );
-        assert.ok(announcedFor(sw.switchId).length >= 1, 'announced');
+        // Announced by the deletion itself, not only by the arm before it
+        // (round 13: the arm's own announcement satisfied this).
+        assert.ok(
+            announced
+                .slice(announcedBefore)
+                .some(
+                    (p) => p.m === 'deadmanSwitches' && p.op === 'u' && p.kv?.[0] === sw.switchId
+                ),
+            'announced by the deletion'
+        );
     }
     // The notice sent stands; the one not yet sent still goes.
     assert.deepEqual(await noticeRows(sent.switchId), [{ status: 'sent' }]);
@@ -2084,7 +2122,7 @@ test('the owner’s deletion is decided in Postgres: on a process that has not h
     await worker.drain();
 });
 
-test('the owner’s deletion where the database does not answer, is not sent, or fails the erase: the same statement is queued and decides on Postgres’s row when it runs, nothing writes this process’s view whole over it, so a release fired elsewhere stays fired with its copies and an unfired one is cancelled with its copies blanked', async () => {
+test('the owner’s deletion where the database does not answer, is not sent, or fails the erase: the same statement is queued and decides on Postgres’s row when it runs, this process keeps the switch as it had it meanwhile and a sweep pass here blanks nothing, so a release fired elsewhere stays fired with its copies and an unfired one is cancelled with its copies blanked', async () => {
     // Round 12 of part 2's review, on checking its own fix: where the
     // bounded erase statement was not answered, was refused at once because
     // a stall stood, or failed, the deletion fell back to this process's mirror, writing its erase whole
@@ -2123,6 +2161,7 @@ test('the owner’s deletion where the database does not answer, is not sent, or
         () => eraseGate
     );
     const issued = requestAccountDeletion({ userId: owner.id })!;
+    const announcedBefore = announced.length;
     let finishing: Promise<void> | undefined;
     let queued = 0;
     try {
@@ -2131,12 +2170,39 @@ test('the owner’s deletion where the database does not answer, is not sent, or
             assert.equal(outcome.kind, 'ok');
         });
         assert.equal(queued, 3, 'the three erases queued: one unanswered, two not sent');
-        // Meanwhile this process holds its own view of the erase, written
-        // nowhere: nothing of these is served or fired here.
-        for (const sw of [firedOne, firedTwo, unfired]) {
-            assert.notEqual(here.getDeadmanSwitch(sw.switchId)?.status, 'armed');
-            assert.equal(here.getDeadmanSwitch(sw.switchId)?.headline, undefined);
+        // Meanwhile this process keeps the switch whose erase is held as it
+        // last had it, marked as an erase not yet landed, and holds no view
+        // of its own of the erase (round 13 of part 2's review: it held its
+        // own erase, cancelled and emptied, and a sweep pass here, whose
+        // removal pass took that for a cancelled release, blanked every copy
+        // of a release fired elsewhere, which then stood fired with its
+        // content and nobody able to read it). A sweep pass here now blanks
+        // nothing, and the switch is not served here meanwhile. (The other
+        // two erases, queued in their own switches' lanes, may already have
+        // landed.)
+        assert.equal(here.deadmanSwitchErasePending(firedOne.switchId), true, 'marked');
+        assert.equal(here.getDeadmanSwitch(firedOne.switchId)?.status, 'armed', 'as it had it');
+        assert.equal(here.getDeadmanSwitch(firedOne.switchId)?.encryptedPayload !== '', true);
+        await sweepOverdueDeadmanSwitches(
+            new Date(firedAt.getTime() + 1_000),
+            Number.MAX_SAFE_INTEGER
+        );
+        await new Promise((r) => setTimeout(r, 50));
+        for (const sw of [firedOne, firedTwo]) {
+            assert.equal(
+                (await storedCopies(sw.switchId)).find(
+                    (c) => c.recipient_account_id === sw.recipient.id
+                )?.held,
+                true,
+                'a sweep pass here blanked nothing'
+            );
         }
+        assert.equal(here.deadmanSwitchErasePending(firedOne.switchId), true, 'still queued');
+        assert.equal(
+            releasedCopiesFor(firedOne.recipient.id).some((r) => r.releaseId === firedOne.switchId),
+            false,
+            'not served here while its erase is queued'
+        );
         // The route's wait for this process's queued writes covers the queued
         // erases: it does not finish while the first is still held.
         let finished = false;
@@ -2180,7 +2246,15 @@ test('the owner’s deletion where the database does not answer, is not sent, or
             true,
             'served to the person named'
         );
-        assert.ok(announcedFor(sw.switchId).length >= 1, 'announced');
+        assert.equal(here.deadmanSwitchErasePending(sw.switchId), false, 'the mark ended');
+        assert.ok(
+            announced
+                .slice(announcedBefore)
+                .some(
+                    (p) => p.m === 'deadmanSwitches' && p.op === 'u' && p.kv?.[0] === sw.switchId
+                ),
+            'announced by the deletion'
+        );
     }
     // The unfired one: cancelled, emptied, both copies blanked, in Postgres
     // and here.
@@ -2332,4 +2406,513 @@ test('an arm whose statement fails and whose look afterwards finds another owner
     here.updateDeadmanSwitch(id, { status: 'cancelled', encryptedPayload: '' });
     await here.drain();
     await elsewhere.drain();
+});
+
+test('an arm already past its checks when the owner’s deletion starts is waited for: its insert lands, the arm takes its switch back and is refused no_account, and nothing armed is left; one answered 503 whose insert lands later, and one another process armed, are erased by the deletion’s last statement in Postgres', async () => {
+    // Round 13 of part 2's review: the deletion listed the owner's switches
+    // from this process's mirror, which takes an arm's row only once Postgres
+    // has answered, and nothing on the database side erased by owner, so an
+    // arm whose insert was still being written, one answered 503 whose insert
+    // landed later, and one another process armed, each stayed armed with its
+    // content and every copy held, and fired at its deadline for an account
+    // that was gone.
+    const owner = await person();
+    const named = await person();
+    const envelope = await protocol.buildReleaseEnvelope({
+        ownerKeySet: owner.keySet,
+        recipients: [named.keySet.identity],
+        message: 'Synthetic test text.',
+    });
+    let openInsert!: () => void;
+    const insertGate = new Promise<void>((resolve) => {
+        openInsert = resolve;
+    });
+    let reachedInsert!: () => void;
+    const atInsert = new Promise<void>((resolve) => {
+        reachedInsert = resolve;
+    });
+    intercept(
+        (sql) => sql.startsWith('INSERT INTO deadman_switches'),
+        async () => {
+            reachedInsert();
+            await insertGate;
+        }
+    );
+    const arming = armReleaseSwitch({
+        ownerId: owner.id,
+        input: { checkInIntervalSeconds: 3600, gracePeriodSeconds: 0, envelope },
+    });
+    await atInsert;
+    restore();
+    const issued = requestAccountDeletion({ userId: owner.id })!;
+    let confirmed = false;
+    const deleting = confirmAccountDeletion(issued.token, owner.id).then((outcome) => {
+        confirmed = true;
+        return outcome;
+    });
+    await new Promise((r) => setTimeout(r, 150));
+    assert.equal(here.getUserById(owner.id), undefined, 'the account is already gone');
+    assert.equal(confirmed, false, 'the deletion waits for the arm already past its checks');
+    openInsert();
+    const [armedOutcome, deletion] = await Promise.all([arming, deleting]);
+    assert.equal(deletion.kind, 'ok');
+    assert.equal(armedOutcome.kind, 'no_account', 'refused: the account went while it wrote');
+    // The deletion's own writes only, not its last statement: the arm's
+    // switch is already erased.
+    await here.drain();
+    const row = await stored(envelope.releaseId);
+    assert.equal(row?.status, 'cancelled');
+    assert.equal(row?.encrypted_payload, '');
+    assert.deepEqual(
+        (await storedCopies(envelope.releaseId)).map((c) => c.held),
+        [false, false]
+    );
+    assert.equal(here.getDeadmanSwitch(envelope.releaseId)?.status, 'cancelled');
+
+    // An arm answered 503 whose insert lands after the deletion, and one
+    // another process armed before it heard of the deletion.
+    const second = await person();
+    const secondNamed = await person();
+    const late = await protocol.buildReleaseEnvelope({
+        ownerKeySet: second.keySet,
+        recipients: [secondNamed.keySet.identity],
+        message: 'Synthetic test text.',
+    });
+    const elsewhereEnvelope = await protocol.buildReleaseEnvelope({
+        ownerKeySet: second.keySet,
+        recipients: [secondNamed.keySet.identity],
+        message: 'Synthetic test text.',
+    });
+    const elsewhere = await otherProcess();
+    const fromElsewhere = switchInputFor(elsewhereEnvelope, second.id);
+    assert.equal(
+        (await elsewhere.armDeadmanSwitch(fromElsewhere.input, fromElsewhere.copies)).kind,
+        'armed'
+    );
+    await elsewhere.drain();
+    assert.equal(here.getDeadmanSwitch(elsewhereEnvelope.releaseId), undefined, 'not heard here');
+    here.switchStatementTimeoutMs = 150;
+    let openLate!: () => void;
+    const lateGate = new Promise<void>((resolve) => {
+        openLate = resolve;
+    });
+    intercept(
+        (sql) => sql.startsWith('INSERT INTO deadman_switches'),
+        () => lateGate
+    );
+    let finishing: Promise<void> | undefined;
+    try {
+        const res = await post(second, '/switches', armBody(late, 3600));
+        assert.equal(res.status, 503, 'not answered in time');
+        restore();
+        const issuedTwo = requestAccountDeletion({ userId: second.id })!;
+        assert.equal((await confirmAccountDeletion(issuedTwo.token, second.id)).kind, 'ok');
+        finishing = finishAccountDeletion(second.id, here);
+        await new Promise((r) => setTimeout(r, 100));
+        openLate();
+        await finishing;
+    } finally {
+        openLate();
+        restore();
+        await finishing?.catch(() => undefined);
+        here.switchStatementTimeoutMs = 30_000;
+    }
+    await settled();
+    for (const id of [late.releaseId, elsewhereEnvelope.releaseId]) {
+        const erased = await stored(id);
+        assert.equal(erased?.status, 'cancelled', 'erased by the deletion’s last statement');
+        assert.equal(erased?.encrypted_payload, '');
+        assert.deepEqual(
+            (await storedCopies(id)).map((c) => c.held),
+            [false, false]
+        );
+        assert.equal(here.getDeadmanSwitch(id)?.status, 'cancelled', 'taken here');
+    }
+    const fresh = await otherProcess();
+    assert.equal(fresh.getDeadmanSwitch(late.releaseId)?.status, 'cancelled', 'and hydrated so');
+    await elsewhere.drain();
+    await fresh.drain();
+});
+
+test('a copy a re-seal wrote just before the owner’s deletion, still queued when the erase blanks the copies, is blanked once more after it lands: no held copy is left on the cancelled switch', async () => {
+    // Round 13 of part 2's review: the erase's blanking of the copies runs in
+    // the switch's lane, and a re-seal's queued copy write in the copy's own
+    // lane, so the re-seal landed after the blanking and stayed held in
+    // Postgres while this mirror took the blank row.
+    const owner = await person();
+    const sw = await armedFor(owner, 3600, 'label r');
+    const wrap = here.getDeadmanReleaseWrap(sw.switchId, sw.recipient.id)!;
+    let openCopy!: () => void;
+    const copyGate = new Promise<void>((resolve) => {
+        openCopy = resolve;
+    });
+    intercept(
+        (sql) => sql.startsWith('INSERT INTO deadman_release_wraps'),
+        () => copyGate
+    );
+    let outcome: Awaited<ReturnType<typeof confirmAccountDeletion>> | undefined;
+    try {
+        here.putDeadmanReleaseWrap({
+            switchId: sw.switchId,
+            recipientAccountId: sw.recipient.id,
+            recipientFingerprint: wrap.recipientFingerprint,
+            sealedKey: wrap.sealedKey,
+            signature: wrap.signature,
+        });
+        await new Promise((r) => setTimeout(r, 50));
+        const issued = requestAccountDeletion({ userId: owner.id })!;
+        outcome = await confirmAccountDeletion(issued.token, owner.id);
+    } finally {
+        openCopy();
+        restore();
+    }
+    assert.equal(outcome?.kind, 'ok');
+    // The deletion's own writes only, not its last statement in Postgres.
+    await here.drain();
+    assert.equal((await stored(sw.switchId))?.status, 'cancelled');
+    assert.deepEqual(
+        (await storedCopies(sw.switchId)).map((c) => c.held),
+        [false, false],
+        'the re-sealed copy is blanked after it landed'
+    );
+    assert.equal(here.getDeadmanReleaseWrap(sw.switchId, sw.recipient.id)?.sealedKey, '');
+});
+
+test('the owner’s deletion of a switch whose row Postgres lacks (a write dropped before round 11) inserts the erased switch and erases it, and logs it', async () => {
+    // Round 13 of part 2's review: no test reached this path of the erase.
+    const owner = await person();
+    const sw = await armedFor(owner, 3600, 'label d');
+    await pg.query('DELETE FROM deadman_switches WHERE id = $1', [sw.switchId]);
+    assert.equal(await stored(sw.switchId), undefined, 'the row is gone');
+    const restored = await logged('deadman_switch_row_restored', async () => {
+        const issued = requestAccountDeletion({ userId: owner.id })!;
+        assert.equal((await confirmAccountDeletion(issued.token, owner.id)).kind, 'ok');
+        await here.drain();
+    });
+    assert.equal(restored, 1, 'logged');
+    const row = await stored(sw.switchId);
+    assert.equal(row?.status, 'cancelled', 'written, erased');
+    assert.equal(row?.encrypted_payload, '');
+    assert.equal(row?.headline, null);
+    assert.equal(here.getDeadmanSwitch(sw.switchId)?.status, 'cancelled');
+});
+
+test('a queued erase whose connection the pool refuses is tried once more and lands; one every attempt of which fails is dropped, and this process then reads the switch back as Postgres holds it, so a release fired elsewhere is served here and a sweep pass blanks nothing', async () => {
+    // Round 13 of part 2's review: a refused connection (the queue takes it
+    // outside the erase's own retry) dropped the erase at once; and a dropped
+    // erase left this process holding its own erased view for good, which its
+    // removal pass took for a cancelled release.
+    const owner = await person();
+    const sw = await armedFor(owner, 3600, 'label q');
+    await here.drain();
+    let thrown = 0;
+    let connects = 0;
+    let refused = 0;
+    pool.connect = async () => {
+        connects += 1;
+        if (thrown === 1 && refused === 0) {
+            refused += 1;
+            throw new Error('sorry, too many clients already');
+        }
+        const client = await realConnect();
+        return {
+            ...client,
+            async query<T = Record<string, unknown>>(sql: string, params?: unknown[]) {
+                if (sql.startsWith('UPDATE deadman_switches SET headline = NULL') && thrown === 0) {
+                    thrown += 1;
+                    throw new Error('Connection terminated unexpectedly');
+                }
+                return client.query<T>(sql, params);
+            },
+        };
+    };
+    let landed = 0;
+    let dropped = 0;
+    try {
+        landed = await logged('deadman_switch_erase_landed', async () => {
+            dropped = await logged('db_write_behind_failed', async () => {
+                const outcome = await here.eraseDeadmanSwitchUnlessFired(sw.switchId);
+                assert.equal(outcome.kind, 'queued');
+                await here.drain();
+            });
+        });
+    } finally {
+        restore();
+    }
+    assert.equal(thrown, 1, 'the statement failed');
+    assert.equal(refused, 1, 'the queued erase’s connection was refused once');
+    assert.equal(dropped, 0, 'not dropped');
+    assert.equal(landed, 1, 'tried once more, and landed');
+    assert.equal((await stored(sw.switchId))?.status, 'cancelled');
+    assert.deepEqual(
+        (await storedCopies(sw.switchId)).map((c) => c.held),
+        [false, false]
+    );
+    assert.equal(here.deadmanSwitchErasePending(sw.switchId), false);
+    assert.ok(connects >= 3);
+
+    // Every attempt fails, the deletion's last statement included: dropped,
+    // and read back.
+    const second = await person();
+    const fired = await armedFor(second, 60, 'label k');
+    const unfired = await armedFor(second, 3600, 'label u');
+    const worker = await otherProcess();
+    const firedAt = nextMoment();
+    assert.ok(
+        await worker.advanceDeadmanSwitch(
+            fired.switchId,
+            worker.getDeadmanSwitch(fired.switchId)!,
+            {
+                status: 'triggered',
+                releasedAt: firedAt.toISOString(),
+            }
+        )
+    );
+    await worker.drain();
+    assert.equal(here.getDeadmanSwitch(fired.switchId)?.status, 'armed', 'not heard here');
+    pool.connect = async () => {
+        const client = await realConnect();
+        return {
+            ...client,
+            async query<T = Record<string, unknown>>(sql: string, params?: unknown[]) {
+                if (sql.startsWith('UPDATE deadman_switches SET headline = NULL')) {
+                    throw new Error('Connection terminated unexpectedly');
+                }
+                return client.query<T>(sql, params);
+            },
+        };
+    };
+    let droppedTwo = 0;
+    try {
+        droppedTwo = await logged('db_write_behind_failed', async () => {
+            const issued = requestAccountDeletion({ userId: second.id })!;
+            assert.equal((await confirmAccountDeletion(issued.token, second.id)).kind, 'ok');
+            await finishAccountDeletion(second.id, here);
+        });
+    } finally {
+        restore();
+    }
+    await settled();
+    assert.ok(droppedTwo >= 2, 'both queued erases dropped');
+    // The unfired one: as Postgres had it, armed, which a process that reads
+    // it so fires at its deadline (the documented case where every attempt
+    // to erase it fails, the deletion's last statement included).
+    assert.equal((await stored(unfired.switchId))?.status, 'armed');
+    assert.equal(here.getDeadmanSwitch(unfired.switchId)?.status, 'armed');
+    assert.equal(here.deadmanSwitchErasePending(unfired.switchId), false, 'read back');
+    // Tidy: cancel it, so the pass below and later passes in this file do
+    // not fire it.
+    assert.equal(
+        (
+            await here.updateDeadmanSwitchIf(
+                unfired.switchId,
+                here.getDeadmanSwitch(unfired.switchId)!,
+                { status: 'cancelled', encryptedPayload: '' }
+            )
+        ).kind,
+        'applied'
+    );
+    // The release fired elsewhere: read back as Postgres has it, served here,
+    // and its label stays (the erase never landed).
+    const mirrored = here.getDeadmanSwitch(fired.switchId)!;
+    assert.equal(here.deadmanSwitchErasePending(fired.switchId), false, 'read back');
+    assert.equal(mirrored.status, 'triggered');
+    assert.equal(mirrored.releasedAt, firedAt.toISOString());
+    assert.equal((await stored(fired.switchId))?.headline, 'label k', 'the label stays');
+    assert.equal(
+        releasedCopiesFor(fired.recipient.id).some((r) => r.releaseId === fired.switchId),
+        true,
+        'served here'
+    );
+    await sweepOverdueDeadmanSwitches(new Date(firedAt.getTime() + 1_000), Number.MAX_SAFE_INTEGER);
+    await here.drain();
+    assert.equal(
+        (await storedCopies(fired.switchId)).find(
+            (c) => c.recipient_account_id === fired.recipient.id
+        )?.held,
+        true,
+        'a sweep pass here blanks nothing'
+    );
+    await here.drain();
+    await worker.drain();
+});
+
+test('the removal pass blanks a cancelled release switch’s copies only where Postgres has it cancelled: a view of it as cancelled that is behind a trigger blanks nothing, and the view is refreshed', async () => {
+    // Round 13 of part 2's review: the pass blanked them through plain writes
+    // from this process's view.
+    const owner = await person();
+    const sw = await armedFor(owner, 60, 'label v');
+    const worker = await otherProcess();
+    const firedAt = nextMoment();
+    assert.ok(
+        await worker.advanceDeadmanSwitch(sw.switchId, worker.getDeadmanSwitch(sw.switchId)!, {
+            status: 'triggered',
+            releasedAt: firedAt.toISOString(),
+        })
+    );
+    await worker.drain();
+    // This process's view: cancelled and emptied, behind Postgres's trigger.
+    const switches = (here as unknown as { deadmanSwitches: Map<string, DeadmanSwitchRow> })
+        .deadmanSwitches;
+    switches.set(sw.switchId, {
+        ...switches.get(sw.switchId)!,
+        status: 'cancelled',
+        encryptedPayload: '',
+    });
+    const behind = await logged('deadman_cancelled_view_behind', async () => {
+        await removeExpiredReleases(new Date(firedAt.getTime() + 1_000));
+    });
+    await here.drain();
+    assert.equal(behind, 1, 'logged');
+    assert.deepEqual(
+        (await storedCopies(sw.switchId)).map((c) => c.held),
+        [true, true],
+        'nothing blanked'
+    );
+    assert.equal(here.getDeadmanSwitch(sw.switchId)?.status, 'triggered', 'the view refreshed');
+    await worker.drain();
+});
+
+test('an arm whose statement fails and whose look afterwards finds the same owner’s cancelled switch with that id is 409 release_id_taken, as the same request is without the failure, not 201', async () => {
+    // Round 13 of part 2's review: the look compared the owner alone.
+    const owner = await person();
+    const named = await person();
+    const envelope = await protocol.buildReleaseEnvelope({
+        ownerKeySet: owner.keySet,
+        recipients: [named.keySet.identity],
+        message: 'Synthetic test text.',
+    });
+    const elsewhere = await otherProcess();
+    const { input, copies } = switchInputFor(envelope, owner.id);
+    assert.equal((await elsewhere.armDeadmanSwitch(input, copies)).kind, 'armed');
+    const cancelled = await elsewhere.updateDeadmanSwitchIf(
+        envelope.releaseId,
+        elsewhere.getDeadmanSwitch(envelope.releaseId)!,
+        { status: 'cancelled', encryptedPayload: '' }
+    );
+    assert.equal(cancelled.kind, 'applied');
+    await elsewhere.drain();
+    assert.equal(here.getDeadmanSwitch(envelope.releaseId), undefined, 'not heard here');
+    let thrown = 0;
+    pool.connect = async () => {
+        const client = await realConnect();
+        return {
+            ...client,
+            async query<T = Record<string, unknown>>(sql: string, params?: unknown[]) {
+                if (sql.startsWith('SELECT * FROM deadman_switches WHERE id') && thrown === 0) {
+                    thrown += 1;
+                    throw new Error('Connection terminated unexpectedly (test)');
+                }
+                return client.query<T>(sql, params);
+            },
+        };
+    };
+    let res!: Response;
+    try {
+        res = await post(owner, '/switches', armBody(envelope, 3600));
+    } finally {
+        restore();
+    }
+    assert.equal(thrown, 1, 'the statement failed');
+    assert.equal(res.status, 409, 'not armed');
+    assert.equal(((await res.json()) as { code: string }).code, 'release_id_taken');
+    assert.equal((await stored(envelope.releaseId))?.status, 'cancelled');
+    const control = await post(owner, '/switches', armBody(envelope, 3600));
+    assert.equal(control.status, 409, 'the same request without the failure');
+    await elsewhere.drain();
+});
+
+test('an account that owns a switch, deleted while a notice to it is being sent: the notice ends failed recipient_gone with no room or send recorded, since the account and its notices are gone before the deletion awaits its switch’s statement', async () => {
+    // Round 13 of part 2's review: the account's copies and notices and its
+    // row waited behind the switches' statements, so a send that answered
+    // while the account's own switch statement was on its way found the
+    // account and the row as they were and recorded the notice sent.
+    const owner = await person();
+    const account = await armedFor(owner, 60, 'label n');
+    const deleted = account.recipient;
+    // The account owns a switch of its own, so its deletion awaits a statement.
+    await armedFor(deleted, 3600, 'label own');
+    const at = nextMoment();
+    const fired = await recordReleaseTrigger(here.getDeadmanSwitch(account.switchId)!, at);
+    assert.ok(fired, 'fired');
+    await here.drain();
+    let openSend!: () => void;
+    const sendGate = new Promise<void>((resolve) => {
+        openSend = resolve;
+    });
+    let parked = 0;
+    let answered = false;
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url =
+            typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+        if (url.includes('/send/') && url.includes(account.switchId) && parked === 0) {
+            parked += 1;
+            await sendGate;
+            const res = await matrix.fetch(input, init);
+            answered = true;
+            return res;
+        }
+        return matrix.fetch(input, init);
+    }) as typeof fetch;
+    let tick: ReturnType<typeof runDeadmanReleaseNotifier> | undefined;
+    try {
+        tick = runDeadmanReleaseNotifier({ now: at });
+        for (let i = 0; i < 300 && parked === 0; i += 1) {
+            await new Promise((r) => setTimeout(r, 10));
+        }
+        assert.equal(parked, 1, 'the send is on its way');
+        // The deletion starts; while its own switch's statement is on its
+        // way, the parked send answers and the notifier records what it did
+        // (the tick itself then waits for the queue, which the held
+        // statement is in, so it ends after).
+        let noticeWhileHeld: string | undefined;
+        intercept(
+            (sql) => sql.startsWith('UPDATE deadman_switches SET headline = NULL'),
+            async () => {
+                openSend();
+                for (let i = 0; i < 300 && !answered; i += 1) {
+                    await new Promise((r) => setTimeout(r, 10));
+                }
+                await new Promise((r) => setTimeout(r, 300));
+                noticeWhileHeld = here.getDeadmanReleaseNotice(
+                    account.switchId,
+                    deleted.id
+                )?.status;
+            }
+        );
+        const issued = requestAccountDeletion({ userId: deleted.id })!;
+        assert.equal((await confirmAccountDeletion(issued.token, deleted.id)).kind, 'ok');
+        restore();
+        assert.equal(answered, true, 'the send answered while the statement was held');
+        assert.equal(noticeWhileHeld, 'failed', 'and the notice was already ended then');
+        await finishAccountDeletion(deleted.id, here);
+        await tick;
+    } finally {
+        openSend();
+        restore();
+        globalThis.fetch = realFetch;
+        await tick?.catch(() => undefined);
+    }
+    await here.drain();
+    const notice = here.getDeadmanReleaseNotice(account.switchId, deleted.id)!;
+    assert.equal(notice.status, 'failed');
+    assert.equal(notice.lastError, 'recipient_gone');
+    assert.equal(notice.roomId, undefined);
+    assert.equal(notice.sentAt, undefined);
+    const rows = (
+        await pg.query(
+            'SELECT status, last_error, room_id, sent_at FROM deadman_release_notices ' +
+                'WHERE switch_id = $1 AND recipient_account_id = $2',
+            [account.switchId, deleted.id]
+        )
+    ).rows as Array<{
+        status: string;
+        last_error: string;
+        room_id: string | null;
+        sent_at: Date | null;
+    }>;
+    assert.deepEqual(rows, [
+        { status: 'failed', last_error: 'recipient_gone', room_id: null, sent_at: null },
+    ]);
 });

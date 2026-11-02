@@ -1118,13 +1118,23 @@ export const runDeadmanReleaseNotifier = async (
     // for later is left for that time (round 8).
     for (const record of db.listAllDeadmanSwitches()) {
         if (!standsFired(record) || record.encryptedPayload === '') continue;
+        if (db.deadmanSwitchErasePending(record.id)) continue;
         result.caughtUp += writeReleaseNotices(record, record.releasedAt);
     }
 
     const due = db
         .listDueDeadmanReleaseNotices(now.toISOString())
-        // A row for a release switch that has not fired is not due: left alone.
-        .filter((notice) => !awaitsTrigger(db.getDeadmanSwitch(notice.switchId)))
+        // A row for a release switch that has not fired is not due: left
+        // alone. So is one whose switch's owner's deletion has queued an
+        // erase this process has not seen land: this process's view of the
+        // switch and its copies is not Postgres's until it does (round 13 of
+        // part 2's review: the notifier ended such a notice `recipient_gone`
+        // over copies a stale view had blanked).
+        .filter(
+            (notice) =>
+                !awaitsTrigger(db.getDeadmanSwitch(notice.switchId)) &&
+                !db.deadmanSwitchErasePending(notice.switchId)
+        )
         .slice(0, NOTICES_PER_TICK);
     result.due = due.length;
     for (const notice of due) {
