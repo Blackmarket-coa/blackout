@@ -169,19 +169,21 @@ jobs:
                   severity: CRITICAL,HIGH
                   ignore-unfixed: true
                   # Vulnerabilities only — secret scanning is owned by the
-                  # dedicated gitleaks job (with .gitleaksignore), so Trivy does
-                  # not double-report the vendored Synapse test-key fixtures
-                  # (e.g. apps/blackout-server/tests/http/ca.key and server.key,
-                  # which Trivy's secret scanner reports as private keys).
+                  # dedicated gitleaks job (with .gitleaksignore), which scans
+                  # only the commits a push or PR adds. Trivy's secret scanner
+                  # reads the whole tree, so it would report the vendored
+                  # Synapse test-key fixtures, which gitleaks sees only when a
+                  # commit touches them (e.g. apps/blackout-server/tests/http/
+                  # ca.key and server.key, which it reports as private keys).
                   scanners: vuln
                   # apps/blackout-server (the Synapse fork) is scanned: its
                   # poetry.lock and Cargo.lock are what infra/single-server-baseline
                   # builds into the blackout-synapse image, and nothing else
                   # gates them (upstream-advisories.yml lists element-hq/synapse's
                   # own advisories, not advisories against its dependencies).
-                  # Since 2026-11-02 the fork locks Twisted 26.10.0, and
-                  # .trivyignore no longer holds any poetry.lock entry; its
-                  # four Twisted 26.4.0 entries left with that bump
+                  # The fork locks Twisted 26.10.0, and .trivyignore holds no
+                  # poetry.lock entry; its four Twisted 26.4.0 entries left
+                  # with that bump
                   # (docs/security/dependency-advisories-twisted-2026-11-02.md).
                   # Nothing is skipped: the legacy
                   # FastAPI service under the fork directory

@@ -21,8 +21,8 @@
 # (GHSA-g3hv-75wg-m249), triaged in its entry below.
 
 # image-size 1.2.1 infinite-loop DoS, two advisories of the same class: crafted
-# JXL/HEIF box-types (GHSA-5p2g-fcmc-qvqq, 1.2.0 and later) and a zero-length
-# ICNS entry (GHSA-w3rx-r6r6-pgpr, 0.6.3 and later) each hang the parser and
+# JXL/HEIF box-types (GHSA-5p2g-fcmc-qvqq, 1.2.0 to 2.0.2) and a zero-length
+# ICNS entry (GHSA-w3rx-r6r6-pgpr, 0.6.3 to 2.0.2) each hang the parser and
 # block the event loop.
 #
 # A fix exists and is not taken. OSV and GitHub list both as fixed in 2.0.3
@@ -34,10 +34,12 @@
 # pipeline rather than fix it. metro 0.83.8 (the 0.83-stable tag, 2026-08-19)
 # dropped image-size for a parser of its own and is inside
 # @react-native/community-cli-plugin 0.82.1's ^0.83.1, so a metro update
-# within range removes the package and both entries. That update re-resolves
-# the React Native toolchain and is its own change, due before ignoreUntil.
-# Until 2026-11-02 this block and both reasons said no fixed version existed;
-# that had been false since 2026-09-14.
+# within range removes the package and both entries. That update also
+# re-resolves build tools the web clients use (terser, which both vite
+# versions in the lock resolve, and workbox-build's @babel/preset-env) and is
+# its own change, due before ignoreUntil. Until the Twisted 26.10.0 change
+# this block and both reasons said no fixed version existed; that had been
+# false since 2026-09-14.
 #
 # Does not apply to our usage. image-size is reached only through
 # metro -> @react-native/community-cli-plugin, i.e. React Native's build-time
