@@ -13,12 +13,12 @@ import { log } from '../telemetry/logger';
  */
 
 export interface GrantResult {
-  entry: ChannelPointsLedgerRecord;
-  balance: number;
+    entry: ChannelPointsLedgerRecord;
+    balance: number;
 }
 
 export const getBalance = (channelId: string, userId: string): number =>
-  db.getChannelPointsBalance(channelId, userId);
+    db.getChannelPointsBalance(channelId, userId);
 
 /**
  * Credit points to a viewer on a channel (creator-driven award, or a
@@ -26,26 +26,26 @@ export const getBalance = (channelId: string, userId: string): number =>
  * the caller; we clamp defensively.
  */
 export const grantPoints = (input: {
-  channelId: string;
-  userId: string;
-  points: number;
-  reason?: 'grant' | 'refund';
+    channelId: string;
+    userId: string;
+    points: number;
+    reason?: 'grant' | 'refund';
 }): GrantResult => {
-  const entry = db.appendChannelPointsLedger({
-    id: randomUUID(),
-    channelId: input.channelId,
-    userId: input.userId,
-    pointsDelta: Math.max(0, Math.floor(input.points)),
-    reason: input.reason ?? 'grant',
-  });
-  return { entry, balance: db.getChannelPointsBalance(input.channelId, input.userId) };
+    const entry = db.appendChannelPointsLedger({
+        id: randomUUID(),
+        channelId: input.channelId,
+        userId: input.userId,
+        pointsDelta: Math.max(0, Math.floor(input.points)),
+        reason: input.reason ?? 'grant',
+    });
+    return { entry, balance: db.getChannelPointsBalance(input.channelId, input.userId) };
 };
 
 export type RedeemOutcome =
-  | { kind: 'ok'; redemption: ChannelPointsLedgerRecord; balance: number }
-  | { kind: 'reward_not_found' }
-  | { kind: 'reward_inactive' }
-  | { kind: 'insufficient_points'; balance: number; cost: number };
+    | { kind: 'ok'; redemption: ChannelPointsLedgerRecord; balance: number }
+    | { kind: 'reward_not_found' }
+    | { kind: 'reward_inactive' }
+    | { kind: 'insufficient_points'; balance: number; cost: number };
 
 /**
  * Redeem a reward: validates the reward belongs to the channel and is active,
@@ -54,46 +54,44 @@ export type RedeemOutcome =
  * later positive `grant` entry, never a mutation of this row.
  */
 export const redeemReward = (input: {
-  channelId: string;
-  userId: string;
-  rewardId: string;
-  userInput?: string;
+    channelId: string;
+    userId: string;
+    rewardId: string;
+    userInput?: string;
 }): RedeemOutcome => {
-  const reward = db.getChannelPointsReward(input.rewardId);
-  if (!reward || reward.creatorId !== input.channelId) return { kind: 'reward_not_found' };
-  if (!reward.isActive) return { kind: 'reward_inactive' };
+    const reward = db.getChannelPointsReward(input.rewardId);
+    if (!reward || reward.creatorId !== input.channelId) return { kind: 'reward_not_found' };
+    if (!reward.isActive) return { kind: 'reward_inactive' };
 
-  const balance = db.getChannelPointsBalance(input.channelId, input.userId);
-  if (balance < reward.cost) {
-    return { kind: 'insufficient_points', balance, cost: reward.cost };
-  }
+    const balance = db.getChannelPointsBalance(input.channelId, input.userId);
+    if (balance < reward.cost) {
+        return { kind: 'insufficient_points', balance, cost: reward.cost };
+    }
 
-  const redemption = db.appendChannelPointsLedger({
-    id: randomUUID(),
-    channelId: input.channelId,
-    userId: input.userId,
-    pointsDelta: -reward.cost,
-    reason: 'redeem',
-    rewardId: reward.id,
-    rewardTitle: reward.title,
-    userInput: input.userInput,
-  });
+    const redemption = db.appendChannelPointsLedger({
+        id: randomUUID(),
+        channelId: input.channelId,
+        userId: input.userId,
+        pointsDelta: -reward.cost,
+        reason: 'redeem',
+        rewardId: reward.id,
+        rewardTitle: reward.title,
+        userInput: input.userInput,
+    });
 
-  void dispatchEvent({
-    type: 'channelpoints.redeemed',
-    blackoutUserId: input.channelId,
-    data: {
-      source: 'channel_points',
-      channelId: input.channelId,
-      userId: input.userId,
-      rewardId: reward.id,
-      rewardTitle: reward.title,
-      cost: reward.cost,
-      userInput: input.userInput ?? null,
-    },
-  }).catch((err) =>
-    log.warn('channel_points_redeem_dispatch_threw', { error: String(err) }),
-  );
+    void dispatchEvent({
+        type: 'channelpoints.redeemed',
+        blackoutUserId: input.channelId,
+        data: {
+            source: 'channel_points',
+            channelId: input.channelId,
+            userId: input.userId,
+            rewardId: reward.id,
+            rewardTitle: reward.title,
+            cost: reward.cost,
+            userInput: input.userInput ?? null,
+        },
+    }).catch((err) => log.warn('channel_points_redeem_dispatch_threw', { error: String(err) }));
 
-  return { kind: 'ok', redemption, balance: balance - reward.cost };
+    return { kind: 'ok', redemption, balance: balance - reward.cost };
 };

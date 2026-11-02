@@ -2,7 +2,7 @@ import type { Bounty, BountyApplication, BountyStatus } from '@blackout/core';
 import { db } from '../db/store';
 
 export function listBounties(
-    filter: { category?: string; status?: string; coalitionId?: string } = {},
+    filter: { category?: string; status?: string; coalitionId?: string } = {}
 ): Bounty[] {
     return db.listBounties(filter);
 }
@@ -45,7 +45,7 @@ export function getBounty(id: string): Bounty | null {
 // --- applications (producer ↔ creator matching) ---
 
 export function listBountyApplications(
-    filter: { bountyId?: string; applicantId?: string } = {},
+    filter: { bountyId?: string; applicantId?: string } = {}
 ): BountyApplication[] {
     return db.listBountyApplications(filter);
 }
@@ -61,7 +61,7 @@ export function applyToBounty(input: {
 
 export function acceptBountyApplication(
     bountyId: string,
-    applicantId: string,
+    applicantId: string
 ): { bounty: Bounty; application: BountyApplication } | null {
     return db.acceptBountyApplication(bountyId, applicantId) ?? null;
 }

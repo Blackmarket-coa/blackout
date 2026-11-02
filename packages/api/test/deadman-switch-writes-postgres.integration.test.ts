@@ -2597,7 +2597,7 @@ test('the owner’s deletion of a switch whose row Postgres lacks (a write dropp
     assert.equal(here.getDeadmanSwitch(sw.switchId)?.status, 'cancelled');
 });
 
-test('a queued erase whose connection the pool refuses is tried once more and lands; one every attempt of which fails is dropped, and this process then reads the switch back as Postgres holds it, so a release fired elsewhere is served here and a sweep pass blanks nothing', async () => {
+test('a queued erase whose connection the pool refuses is tried once more and lands; one every attempt of which fails is dropped, and this process then reads the switch back as Postgres holds it, so a release fired elsewhere is served here and a sweep pass blanks nothing; where the read back fails too, this process’s sweep does not fire the switch', async () => {
     // Round 13 of part 2's review: a refused connection (the queue takes it
     // outside the erase's own retry) dropped the erase at once; and a dropped
     // erase left this process holding its own erased view for good, which its
@@ -2733,8 +2733,64 @@ test('a queued erase whose connection the pool refuses is tried once more and la
         true,
         'a sweep pass here blanks nothing'
     );
+
+    // Every attempt fails and so does the read back: the mark stays, and
+    // this process's sweep does not fire the switch for the account that is
+    // gone (a process that reads it from Postgres, as after a restart, has it
+    // armed: the documented case).
+    const third = await person();
+    const stuck = await armedFor(third, 60, 'label s');
+    pool.connect = async () => {
+        const client = await realConnect();
+        return {
+            ...client,
+            async query<T = Record<string, unknown>>(sql: string, params?: unknown[]) {
+                if (
+                    sql.startsWith('UPDATE deadman_switches SET headline = NULL') ||
+                    sql.startsWith('SELECT * FROM deadman_switches WHERE id')
+                ) {
+                    throw new Error('Connection terminated unexpectedly');
+                }
+                return client.query<T>(sql, params);
+            },
+        };
+    };
+    let unread = 0;
+    try {
+        unread = await logged('deadman_switch_erase_read_back_failed', async () => {
+            const issued = requestAccountDeletion({ userId: third.id })!;
+            assert.equal((await confirmAccountDeletion(issued.token, third.id)).kind, 'ok');
+            await finishAccountDeletion(third.id, here);
+        });
+    } finally {
+        restore();
+    }
+    assert.equal(unread, 1, 'the read back failed');
+    assert.equal(here.deadmanSwitchErasePending(stuck.switchId), true, 'the mark stays');
+    const due = new Date(Date.parse(here.getDeadmanSwitch(stuck.switchId)!.triggerAt) + 1_000);
+    await sweepOverdueDeadmanSwitches(due, Number.MAX_SAFE_INTEGER);
+    await here.drain();
+    assert.equal((await stored(stuck.switchId))?.status, 'armed', 'not fired by this process');
+    assert.equal(here.getDeadmanSwitch(stuck.switchId)?.status, 'armed');
+    const restarted = await otherProcess();
+    assert.equal(restarted.getDeadmanSwitch(stuck.switchId)?.status, 'armed', 'as Postgres has it');
+    // Tidy: cancel it, so later passes in this file do not fire it.
+    assert.equal(
+        (
+            await here.updateDeadmanSwitchIf(
+                stuck.switchId,
+                here.getDeadmanSwitch(stuck.switchId)!,
+                {
+                    status: 'cancelled',
+                    encryptedPayload: '',
+                }
+            )
+        ).kind,
+        'applied'
+    );
     await here.drain();
     await worker.drain();
+    await restarted.drain();
 });
 
 test('the removal pass blanks a cancelled release switch’s copies only where Postgres has it cancelled: a view of it as cancelled that is behind a trigger blanks nothing, and the view is refreshed', async () => {

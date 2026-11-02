@@ -10,11 +10,7 @@
 import crypto from 'node:crypto';
 import { aggregateRatings, isValidRating, type RatingAggregate } from '@blackout/core';
 import { db } from '../db/store';
-import type {
-    PluginForkRecord,
-    PluginReviewRecord,
-    PluginShowcaseRecord,
-} from '../db/types';
+import type { PluginForkRecord, PluginReviewRecord, PluginShowcaseRecord } from '../db/types';
 
 /** Default-off gate. Flip `BLACKOUT_PLUGIN_SOCIAL=true` to enable. */
 export function pluginSocialEnabled(): boolean {
@@ -112,9 +108,6 @@ export function createShowcase(input: {
     });
 }
 
-export function listShowcasesForScope(
-    scopeType: string,
-    scopeId: string,
-): PluginShowcaseRecord[] {
+export function listShowcasesForScope(scopeType: string, scopeId: string): PluginShowcaseRecord[] {
     return db.listPluginShowcasesForScope(scopeType, scopeId);
 }

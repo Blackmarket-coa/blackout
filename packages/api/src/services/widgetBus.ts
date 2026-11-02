@@ -25,12 +25,12 @@ import type { NormalizedStreamlabsDonation } from '../integrations/streamlabs/do
  * currently emit `host` — Twitch deprecated host raids in 2022.
  */
 export type WidgetAlertType =
-  | 'follow'
-  | 'subscription'
-  | 'subscription_gift'
-  | 'donation'
-  | 'bits'
-  | 'raid';
+    | 'follow'
+    | 'subscription'
+    | 'subscription_gift'
+    | 'donation'
+    | 'bits'
+    | 'raid';
 
 /** Origin platform that produced an alert. Drives widget styling. */
 export type WidgetAlertOrigin = 'twitch' | 'patreon' | 'streamlabs';
@@ -42,19 +42,19 @@ export type WidgetAlertOrigin = 'twitch' | 'patreon' | 'streamlabs';
  * without a socket.io client.
  */
 export interface WidgetAlertEvent {
-  type: WidgetAlertType;
-  /** Origin platform — useful for clients that style by source. */
-  origin: WidgetAlertOrigin;
-  /** Server timestamp of when the bus saw the event, ms-since-epoch. */
-  publishedAtMs: number;
-  /** Streamlabs documents this as an array; we always emit length 1. */
-  message: Array<Record<string, unknown>>;
-  /**
-   * The full normalized event that produced this payload — lets richer
-   * Blackout-native widgets show stuff Streamlabs's shape elides (raid
-   * viewer counts, sub tier numbers, Patreon tier titles, etc.).
-   */
-  source: NormalizedTwitchEvent | NormalizedPatreonEvent | NormalizedStreamlabsDonation;
+    type: WidgetAlertType;
+    /** Origin platform — useful for clients that style by source. */
+    origin: WidgetAlertOrigin;
+    /** Server timestamp of when the bus saw the event, ms-since-epoch. */
+    publishedAtMs: number;
+    /** Streamlabs documents this as an array; we always emit length 1. */
+    message: Array<Record<string, unknown>>;
+    /**
+     * The full normalized event that produced this payload — lets richer
+     * Blackout-native widgets show stuff Streamlabs's shape elides (raid
+     * viewer counts, sub tier numbers, Patreon tier titles, etc.).
+     */
+    source: NormalizedTwitchEvent | NormalizedPatreonEvent | NormalizedStreamlabsDonation;
 }
 
 type Subscriber = (event: WidgetAlertEvent) => void;
@@ -67,46 +67,43 @@ const subscribers = new Map<string, Set<Subscriber>>();
  * disconnect to avoid leaking memory across long-running streams.
  */
 export const subscribe = (blackoutUserId: string, fn: Subscriber): (() => void) => {
-  let set = subscribers.get(blackoutUserId);
-  if (!set) {
-    set = new Set();
-    subscribers.set(blackoutUserId, set);
-  }
-  set.add(fn);
-  return () => {
-    const s = subscribers.get(blackoutUserId);
-    if (!s) return;
-    s.delete(fn);
-    if (s.size === 0) subscribers.delete(blackoutUserId);
-  };
+    let set = subscribers.get(blackoutUserId);
+    if (!set) {
+        set = new Set();
+        subscribers.set(blackoutUserId, set);
+    }
+    set.add(fn);
+    return () => {
+        const s = subscribers.get(blackoutUserId);
+        if (!s) return;
+        s.delete(fn);
+        if (s.size === 0) subscribers.delete(blackoutUserId);
+    };
 };
 
-export const publish = (
-  blackoutUserId: string,
-  event: WidgetAlertEvent,
-): { delivered: number } => {
-  const set = subscribers.get(blackoutUserId);
-  if (!set || set.size === 0) return { delivered: 0 };
-  let delivered = 0;
-  for (const fn of [...set]) {
-    try {
-      fn(event);
-      delivered += 1;
-    } catch {
-      // Subscriber errors are isolated — one bad listener doesn't break
-      // delivery to the rest. The SSE handler logs its own errors at the
-      // call site.
+export const publish = (blackoutUserId: string, event: WidgetAlertEvent): { delivered: number } => {
+    const set = subscribers.get(blackoutUserId);
+    if (!set || set.size === 0) return { delivered: 0 };
+    let delivered = 0;
+    for (const fn of [...set]) {
+        try {
+            fn(event);
+            delivered += 1;
+        } catch {
+            // Subscriber errors are isolated — one bad listener doesn't break
+            // delivery to the rest. The SSE handler logs its own errors at the
+            // call site.
+        }
     }
-  }
-  return { delivered };
+    return { delivered };
 };
 
 export const subscriberCount = (blackoutUserId: string): number =>
-  subscribers.get(blackoutUserId)?.size ?? 0;
+    subscribers.get(blackoutUserId)?.size ?? 0;
 
 /** Used by tests + graceful shutdown. */
 export const __test__ = { subscribers };
 
 export const clearAllSubscribersForTest = (): void => {
-  subscribers.clear();
+    subscribers.clear();
 };

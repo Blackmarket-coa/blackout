@@ -24,7 +24,7 @@ const bucketKey = (subject: string, scope: string, category: string): string =>
 export function getSettingsBucket(
     subject: string,
     scope: string,
-    category: string,
+    category: string
 ): Record<string, SettingsValue> {
     return { ...(buckets.get(bucketKey(subject, scope, category)) ?? {}) };
 }
@@ -39,7 +39,7 @@ export function setSettingsKey(
     scope: string,
     category: string,
     key: string,
-    value: SettingsValue,
+    value: SettingsValue
 ): Record<string, SettingsValue> {
     const mapKey = bucketKey(subject, scope, category);
     const current = { ...(buckets.get(mapKey) ?? {}) };

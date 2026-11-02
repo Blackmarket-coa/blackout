@@ -11,7 +11,7 @@ export function newDistributionId(): string {
 }
 
 export function listContent(
-    filter: { creatorId?: string; status?: CreatorContent['status'] } = {},
+    filter: { creatorId?: string; status?: CreatorContent['status'] } = {}
 ): CreatorContent[] {
     return db.listCreatorContent(filter);
 }
@@ -20,13 +20,15 @@ export function getContent(id: string): CreatorContent | null {
     return db.getCreatorContent(id) ?? null;
 }
 
-export function createContent(input: Parameters<typeof db.createCreatorContent>[0]): CreatorContent {
+export function createContent(
+    input: Parameters<typeof db.createCreatorContent>[0]
+): CreatorContent {
     return db.createCreatorContent(input);
 }
 
 export function updateContent(
     id: string,
-    patch: Parameters<typeof db.updateCreatorContent>[1],
+    patch: Parameters<typeof db.updateCreatorContent>[1]
 ): CreatorContent | null {
     return db.updateCreatorContent(id, patch) ?? null;
 }
@@ -71,7 +73,10 @@ export function publishDueScheduledContent(asOf?: string): number {
 /** Recently published content distributed to the Home feed, newest first. */
 export function listHomeContentFeed(limit = 30): CreatorContent[] {
     const homeContentIds = new Set(
-        db.listContentDistributions({}).filter((d) => d.target === 'home').map((d) => d.contentId),
+        db
+            .listContentDistributions({})
+            .filter((d) => d.target === 'home')
+            .map((d) => d.contentId)
     );
     return db
         .listCreatorContent({ status: 'published' })

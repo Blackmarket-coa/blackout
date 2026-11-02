@@ -9,23 +9,19 @@ export interface ListThreadActivityOptions {
 
 export function listThreadActivity(
     subject: string,
-    options: ListThreadActivityOptions = {},
+    options: ListThreadActivityOptions = {}
 ): ThreadActivityUpdatedPayload[] {
-    let result = (activitiesBySubject.get(subject) ?? []).filter(
-        (entry) => entry.unreadCount > 0,
-    );
+    let result = (activitiesBySubject.get(subject) ?? []).filter((entry) => entry.unreadCount > 0);
 
     if (options.sinceIso) {
         const sinceMs = new Date(options.sinceIso).getTime();
         if (!Number.isNaN(sinceMs)) {
-            result = result.filter(
-                (entry) => new Date(entry.occurredAt).getTime() > sinceMs,
-            );
+            result = result.filter((entry) => new Date(entry.occurredAt).getTime() > sinceMs);
         }
     }
 
     result = [...result].sort(
-        (a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime(),
+        (a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime()
     );
 
     if (typeof options.limit === 'number' && options.limit > 0) {
@@ -36,11 +32,11 @@ export function listThreadActivity(
 
 export function markThreadActivityRead(
     subject: string,
-    activityId: string,
+    activityId: string
 ): ThreadActivityUpdatedPayload {
     const occurredAt = new Date().toISOString();
     const existing = (activitiesBySubject.get(subject) ?? []).find(
-        (entry) => entry.activityId === activityId,
+        (entry) => entry.activityId === activityId
     );
     if (existing) {
         existing.unreadCount = 0;
@@ -62,7 +58,7 @@ export function markThreadActivityRead(
 /** Test/seed helper: replace a subject's activity list. */
 export function __setThreadActivityForTests(
     subject: string,
-    activities: ThreadActivityUpdatedPayload[],
+    activities: ThreadActivityUpdatedPayload[]
 ): void {
     activitiesBySubject.set(subject, activities);
 }

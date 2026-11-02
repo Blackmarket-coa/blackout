@@ -188,10 +188,16 @@ export function allocateShares(
     let allocatedGross = 0;
     for (const entry of entries) {
         if (!Number.isInteger(entry.grossCents) || entry.grossCents < 0) {
-            throw new AdRevenueError('amount_negative', 'grossCents must be a non-negative integer');
+            throw new AdRevenueError(
+                'amount_negative',
+                'grossCents must be a non-negative integer'
+            );
         }
         if (!db.getUserById(entry.creatorUserId)) {
-            throw new AdRevenueError('creator_unknown', `creator ${entry.creatorUserId} does not exist`);
+            throw new AdRevenueError(
+                'creator_unknown',
+                `creator ${entry.creatorUserId} does not exist`
+            );
         }
         if (seen.has(entry.creatorUserId)) {
             throw new AdRevenueError(

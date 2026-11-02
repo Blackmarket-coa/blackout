@@ -24,13 +24,11 @@ export const CREATOR_DRIVEN_ATTRIBUTION_KINDS = [
     'bounty_reward',
 ] as const satisfies readonly TipContextKind[];
 
-export type CreatorDrivenAttributionKind = (typeof CREATOR_DRIVEN_ATTRIBUTION_KINDS)[number];
+export type CreatorDrivenAttributionKind = typeof CREATOR_DRIVEN_ATTRIBUTION_KINDS[number];
 
 const ATTRIBUTION_KIND_SET = new Set<string>(CREATOR_DRIVEN_ATTRIBUTION_KINDS);
 
-export function isCreatorDrivenAttributionKind(
-    kind: string,
-): kind is CreatorDrivenAttributionKind {
+export function isCreatorDrivenAttributionKind(kind: string): kind is CreatorDrivenAttributionKind {
     return ATTRIBUTION_KIND_SET.has(kind);
 }
 
@@ -58,7 +56,12 @@ function emptyBucket(): CreatorDrivenSalesBucket {
     return { count: 0, gmvCents: 0, feeCents: 0, netCents: 0 };
 }
 
-function addToBucket(bucket: CreatorDrivenSalesBucket, gross: number, fee: number, net: number): void {
+function addToBucket(
+    bucket: CreatorDrivenSalesBucket,
+    gross: number,
+    fee: number,
+    net: number
+): void {
     bucket.count += 1;
     bucket.gmvCents += gross;
     bucket.feeCents += fee;
@@ -72,7 +75,7 @@ function addToBucket(bucket: CreatorDrivenSalesBucket, gross: number, fee: numbe
  */
 export function summarizeCreatorDrivenSalesFor(
     beneficiaryUserId: string,
-    options: { sinceIso?: string; limit?: number } = {},
+    options: { sinceIso?: string; limit?: number } = {}
 ): CreatorDrivenSalesSummary {
     const sinceMs = options.sinceIso ? Date.parse(options.sinceIso) : undefined;
     const tips = listTipsReceivedBy(beneficiaryUserId, options.limit ?? 1000);

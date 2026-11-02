@@ -27,96 +27,92 @@ const MATRIX_ROOM_RE = /^[!#][^:\s]+:[^:\s]+$/;
 const NAME_MAX = 80;
 const URL_MAX = 2048;
 
-const sha256Hex = (s: string): string =>
-  createHash('sha256').update(s).digest('hex');
+const sha256Hex = (s: string): string => createHash('sha256').update(s).digest('hex');
 
 const constantTimeEqualsHex = (a: string, b: string): boolean => {
-  if (a.length !== b.length) return false;
-  try {
-    return timingSafeEqual(Buffer.from(a, 'hex'), Buffer.from(b, 'hex'));
-  } catch {
-    return false;
-  }
+    if (a.length !== b.length) return false;
+    try {
+        return timingSafeEqual(Buffer.from(a, 'hex'), Buffer.from(b, 'hex'));
+    } catch {
+        return false;
+    }
 };
 
 export interface CreateWebhookInput {
-  blackoutUserId: string;
-  matrixRoomId: string;
-  name: string;
-  avatarUrl?: string;
+    blackoutUserId: string;
+    matrixRoomId: string;
+    name: string;
+    avatarUrl?: string;
 }
 
 export type CreateWebhookOutcome =
-  | {
-      kind: 'ok';
-      record: DiscordCompatWebhookRecord;
-      /** Plaintext token; only ever returned at create time. */
-      token: string;
-    }
-  | { kind: 'invalid_input'; reason: string };
+    | {
+          kind: 'ok';
+          record: DiscordCompatWebhookRecord;
+          /** Plaintext token; only ever returned at create time. */
+          token: string;
+      }
+    | { kind: 'invalid_input'; reason: string };
 
 const validateCreate = (
-  input: CreateWebhookInput,
+    input: CreateWebhookInput
 ): { ok: true } | { ok: false; reason: string } => {
-  if (!input.blackoutUserId) return { ok: false, reason: 'blackoutUserId is required' };
-  const room = input.matrixRoomId?.trim();
-  if (!room) return { ok: false, reason: 'matrixRoomId is required' };
-  if (!MATRIX_ROOM_RE.test(room)) {
-    return { ok: false, reason: 'matrixRoomId must look like "!opaque:server" or "#alias:server"' };
-  }
-  const name = input.name?.trim();
-  if (!name) return { ok: false, reason: 'name is required' };
-  if (name.length > NAME_MAX) {
-    return { ok: false, reason: `name must be ≤ ${NAME_MAX} chars` };
-  }
-  if (input.avatarUrl) {
-    const url = input.avatarUrl.trim();
-    if (url.length > URL_MAX) {
-      return { ok: false, reason: `avatarUrl must be ≤ ${URL_MAX} chars` };
+    if (!input.blackoutUserId) return { ok: false, reason: 'blackoutUserId is required' };
+    const room = input.matrixRoomId?.trim();
+    if (!room) return { ok: false, reason: 'matrixRoomId is required' };
+    if (!MATRIX_ROOM_RE.test(room)) {
+        return {
+            ok: false,
+            reason: 'matrixRoomId must look like "!opaque:server" or "#alias:server"',
+        };
     }
-    if (!/^https?:\/\//i.test(url)) {
-      return { ok: false, reason: 'avatarUrl must be an http(s) URL' };
+    const name = input.name?.trim();
+    if (!name) return { ok: false, reason: 'name is required' };
+    if (name.length > NAME_MAX) {
+        return { ok: false, reason: `name must be ≤ ${NAME_MAX} chars` };
     }
-  }
-  return { ok: true };
+    if (input.avatarUrl) {
+        const url = input.avatarUrl.trim();
+        if (url.length > URL_MAX) {
+            return { ok: false, reason: `avatarUrl must be ≤ ${URL_MAX} chars` };
+        }
+        if (!/^https?:\/\//i.test(url)) {
+            return { ok: false, reason: 'avatarUrl must be an http(s) URL' };
+        }
+    }
+    return { ok: true };
 };
 
 export const createWebhook = (input: CreateWebhookInput): CreateWebhookOutcome => {
-  const valid = validateCreate(input);
-  if (!valid.ok) return { kind: 'invalid_input', reason: valid.reason };
+    const valid = validateCreate(input);
+    if (!valid.ok) return { kind: 'invalid_input', reason: valid.reason };
 
-  const token = randomBytes(TOKEN_BYTES).toString('base64url');
-  const tokenHash = sha256Hex(token);
-  const record = db.createDiscordCompatWebhook({
-    id: randomUUID(),
-    blackoutUserId: input.blackoutUserId,
-    matrixRoomId: input.matrixRoomId.trim(),
-    name: input.name.trim(),
-    avatarUrl: input.avatarUrl?.trim() || undefined,
-    tokenHash,
-    isActive: true,
-    deliveryCount: 0,
-  });
-  return { kind: 'ok', record, token };
+    const token = randomBytes(TOKEN_BYTES).toString('base64url');
+    const tokenHash = sha256Hex(token);
+    const record = db.createDiscordCompatWebhook({
+        id: randomUUID(),
+        blackoutUserId: input.blackoutUserId,
+        matrixRoomId: input.matrixRoomId.trim(),
+        name: input.name.trim(),
+        avatarUrl: input.avatarUrl?.trim() || undefined,
+        tokenHash,
+        isActive: true,
+        deliveryCount: 0,
+    });
+    return { kind: 'ok', record, token };
 };
 
 export const listWebhooksForUser = (userId: string): DiscordCompatWebhookRecord[] =>
-  db.listDiscordCompatWebhooksForUser(userId);
+    db.listDiscordCompatWebhooksForUser(userId);
 
-export type DeleteWebhookOutcome =
-  | { kind: 'ok' }
-  | { kind: 'not_found' }
-  | { kind: 'forbidden' };
+export type DeleteWebhookOutcome = { kind: 'ok' } | { kind: 'not_found' } | { kind: 'forbidden' };
 
-export const deleteWebhook = (
-  blackoutUserId: string,
-  webhookId: string,
-): DeleteWebhookOutcome => {
-  const existing = db.getDiscordCompatWebhook(webhookId);
-  if (!existing) return { kind: 'not_found' };
-  if (existing.blackoutUserId !== blackoutUserId) return { kind: 'forbidden' };
-  db.deleteDiscordCompatWebhook(webhookId);
-  return { kind: 'ok' };
+export const deleteWebhook = (blackoutUserId: string, webhookId: string): DeleteWebhookOutcome => {
+    const existing = db.getDiscordCompatWebhook(webhookId);
+    if (!existing) return { kind: 'not_found' };
+    if (existing.blackoutUserId !== blackoutUserId) return { kind: 'forbidden' };
+    db.deleteDiscordCompatWebhook(webhookId);
+    return { kind: 'ok' };
 };
 
 // --------------- inbound delivery (the public, token-auth side) -------------
@@ -130,67 +126,65 @@ export const deleteWebhook = (
  * accepted but ignored — quietly, so senders don't error.
  */
 export interface DiscordExecutePayload {
-  content?: string | null;
-  username?: string | null;
-  avatar_url?: string | null;
-  tts?: boolean;
-  embeds?: Array<{
-    title?: string | null;
-    description?: string | null;
-    url?: string | null;
-    color?: number | null;
-    author?: { name?: string | null; url?: string | null; icon_url?: string | null } | null;
-    fields?: Array<{ name: string; value: string; inline?: boolean }> | null;
-    footer?: { text?: string | null; icon_url?: string | null } | null;
-    timestamp?: string | null;
-  }> | null;
-  allowed_mentions?: unknown;
-  components?: unknown;
+    content?: string | null;
+    username?: string | null;
+    avatar_url?: string | null;
+    tts?: boolean;
+    embeds?: Array<{
+        title?: string | null;
+        description?: string | null;
+        url?: string | null;
+        color?: number | null;
+        author?: { name?: string | null; url?: string | null; icon_url?: string | null } | null;
+        fields?: Array<{ name: string; value: string; inline?: boolean }> | null;
+        footer?: { text?: string | null; icon_url?: string | null } | null;
+        timestamp?: string | null;
+    }> | null;
+    allowed_mentions?: unknown;
+    components?: unknown;
 }
 
 export type DeliverOutcome =
-  | { kind: 'ok'; delivered: true }
-  | { kind: 'invalid_token' }
-  | { kind: 'inactive' }
-  | { kind: 'empty_payload' }
-  | { kind: 'matrix_failed'; status?: number; reason?: string };
+    | { kind: 'ok'; delivered: true }
+    | { kind: 'invalid_token' }
+    | { kind: 'inactive' }
+    | { kind: 'empty_payload' }
+    | { kind: 'matrix_failed'; status?: number; reason?: string };
 
 const formatEmbedColor = (color: number): string =>
-  `#${(color & 0xffffff).toString(16).padStart(6, '0')}`;
+    `#${(color & 0xffffff).toString(16).padStart(6, '0')}`;
 
 const formatEmbedTimestamp = (timestamp: string): string => {
-  const ms = Date.parse(timestamp);
-  if (Number.isNaN(ms)) return '';
-  return new Date(ms).toUTCString();
+    const ms = Date.parse(timestamp);
+    if (Number.isNaN(ms)) return '';
+    return new Date(ms).toUTCString();
 };
 
-const renderEmbedAsText = (
-  embed: NonNullable<DiscordExecutePayload['embeds']>[number],
-): string => {
-  const parts: string[] = [];
-  if (embed.author?.name) parts.push(`— ${embed.author.name}`);
-  if (embed.title) parts.push(`**${embed.title}**`);
-  if (embed.url) parts.push(embed.url);
-  if (embed.description) parts.push(embed.description);
-  if (embed.fields?.length) {
-    for (const f of embed.fields) {
-      if (f?.name && f?.value) parts.push(`${f.name}: ${f.value}`);
+const renderEmbedAsText = (embed: NonNullable<DiscordExecutePayload['embeds']>[number]): string => {
+    const parts: string[] = [];
+    if (embed.author?.name) parts.push(`— ${embed.author.name}`);
+    if (embed.title) parts.push(`**${embed.title}**`);
+    if (embed.url) parts.push(embed.url);
+    if (embed.description) parts.push(embed.description);
+    if (embed.fields?.length) {
+        for (const f of embed.fields) {
+            if (f?.name && f?.value) parts.push(`${f.name}: ${f.value}`);
+        }
     }
-  }
-  // Footer, timestamp and color are the embed's metadata row. Matrix text has
-  // no native embed accent colour, so we surface it as a hex tag alongside the
-  // footer/timestamp rather than dropping it.
-  const meta: string[] = [];
-  if (embed.footer?.text) meta.push(embed.footer.text);
-  if (embed.timestamp) {
-    const ts = formatEmbedTimestamp(embed.timestamp);
-    if (ts) meta.push(ts);
-  }
-  if (typeof embed.color === 'number' && Number.isFinite(embed.color)) {
-    meta.push(formatEmbedColor(embed.color));
-  }
-  if (meta.length) parts.push(`— ${meta.join(' • ')}`);
-  return parts.join('\n').trim();
+    // Footer, timestamp and color are the embed's metadata row. Matrix text has
+    // no native embed accent colour, so we surface it as a hex tag alongside the
+    // footer/timestamp rather than dropping it.
+    const meta: string[] = [];
+    if (embed.footer?.text) meta.push(embed.footer.text);
+    if (embed.timestamp) {
+        const ts = formatEmbedTimestamp(embed.timestamp);
+        if (ts) meta.push(ts);
+    }
+    if (typeof embed.color === 'number' && Number.isFinite(embed.color)) {
+        meta.push(formatEmbedColor(embed.color));
+    }
+    if (meta.length) parts.push(`— ${meta.join(' • ')}`);
+    return parts.join('\n').trim();
 };
 
 /**
@@ -200,74 +194,74 @@ const renderEmbedAsText = (
  * one bubble per webhook call too).
  */
 export const renderPayloadToMatrix = (
-  payload: DiscordExecutePayload,
-  webhook: { name: string; avatarUrl?: string },
+    payload: DiscordExecutePayload,
+    webhook: { name: string; avatarUrl?: string }
 ): Record<string, unknown> | null => {
-  const lines: string[] = [];
-  if (payload.content) lines.push(payload.content);
-  for (const embed of payload.embeds ?? []) {
-    if (!embed) continue;
-    const rendered = renderEmbedAsText(embed);
-    if (rendered) lines.push(rendered);
-  }
-  const body = lines.join('\n').trim();
-  if (!body) return null;
+    const lines: string[] = [];
+    if (payload.content) lines.push(payload.content);
+    for (const embed of payload.embeds ?? []) {
+        if (!embed) continue;
+        const rendered = renderEmbedAsText(embed);
+        if (rendered) lines.push(rendered);
+    }
+    const body = lines.join('\n').trim();
+    if (!body) return null;
 
-  const senderUsername = (payload.username?.trim() || webhook.name).slice(0, 80);
-  const senderAvatar = payload.avatar_url?.trim() || webhook.avatarUrl;
+    const senderUsername = (payload.username?.trim() || webhook.name).slice(0, 80);
+    const senderAvatar = payload.avatar_url?.trim() || webhook.avatarUrl;
 
-  return {
-    msgtype: 'm.text',
-    body,
-    'm.blackout.origin': 'discord_compat_webhook',
-    'm.blackout.origin_sender_username': senderUsername,
-    ...(senderAvatar ? { 'm.blackout.origin_sender_avatar_url': senderAvatar } : {}),
-  };
+    return {
+        msgtype: 'm.text',
+        body,
+        'm.blackout.origin': 'discord_compat_webhook',
+        'm.blackout.origin_sender_username': senderUsername,
+        ...(senderAvatar ? { 'm.blackout.origin_sender_avatar_url': senderAvatar } : {}),
+    };
 };
 
 export interface DeliverOptions {
-  matrixClient?: MatrixSendEventClient;
+    matrixClient?: MatrixSendEventClient;
 }
 
 export const deliverWebhookPayload = async (
-  webhookId: string,
-  presentedToken: string,
-  payload: DiscordExecutePayload,
-  options: DeliverOptions = {},
+    webhookId: string,
+    presentedToken: string,
+    payload: DiscordExecutePayload,
+    options: DeliverOptions = {}
 ): Promise<DeliverOutcome> => {
-  const record = db.getDiscordCompatWebhook(webhookId);
-  if (!record) return { kind: 'invalid_token' };
-  // Compare hashes in constant time so a presented-token side channel
-  // can't distinguish "wrong webhook id" from "wrong token".
-  const presentedHash = sha256Hex(presentedToken ?? '');
-  if (!constantTimeEqualsHex(presentedHash, record.tokenHash)) {
-    return { kind: 'invalid_token' };
-  }
-  if (!record.isActive) return { kind: 'inactive' };
+    const record = db.getDiscordCompatWebhook(webhookId);
+    if (!record) return { kind: 'invalid_token' };
+    // Compare hashes in constant time so a presented-token side channel
+    // can't distinguish "wrong webhook id" from "wrong token".
+    const presentedHash = sha256Hex(presentedToken ?? '');
+    if (!constantTimeEqualsHex(presentedHash, record.tokenHash)) {
+        return { kind: 'invalid_token' };
+    }
+    if (!record.isActive) return { kind: 'inactive' };
 
-  const content = renderPayloadToMatrix(payload ?? {}, {
-    name: record.name,
-    avatarUrl: record.avatarUrl,
-  });
-  if (!content) return { kind: 'empty_payload' };
-
-  const matrix = options.matrixClient ?? defaultMatrixClient;
-  const result = await matrix.sendEvent(record.matrixRoomId, content);
-  if (!result.ok) {
-    log.warn('discord_compat_webhook_matrix_send_failed', {
-      webhookId: record.id,
-      roomId: record.matrixRoomId,
-      status: result.status,
-      reason: result.reason,
+    const content = renderPayloadToMatrix(payload ?? {}, {
+        name: record.name,
+        avatarUrl: record.avatarUrl,
     });
-    return { kind: 'matrix_failed', status: result.status, reason: result.reason };
-  }
+    if (!content) return { kind: 'empty_payload' };
 
-  db.updateDiscordCompatWebhook(record.id, {
-    lastUsedAt: new Date().toISOString(),
-    deliveryCount: record.deliveryCount + 1,
-  });
-  return { kind: 'ok', delivered: true };
+    const matrix = options.matrixClient ?? defaultMatrixClient;
+    const result = await matrix.sendEvent(record.matrixRoomId, content);
+    if (!result.ok) {
+        log.warn('discord_compat_webhook_matrix_send_failed', {
+            webhookId: record.id,
+            roomId: record.matrixRoomId,
+            status: result.status,
+            reason: result.reason,
+        });
+        return { kind: 'matrix_failed', status: result.status, reason: result.reason };
+    }
+
+    db.updateDiscordCompatWebhook(record.id, {
+        lastUsedAt: new Date().toISOString(),
+        deliveryCount: record.deliveryCount + 1,
+    });
+    return { kind: 'ok', delivered: true };
 };
 
 export const __test__ = { sha256Hex };

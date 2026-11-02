@@ -59,7 +59,7 @@ export function discoverPlugins(query: DiscoverPluginsQuery = {}): PluginRecomme
                 rating: rating.average,
                 ratingCount: rating.count,
             };
-        },
+        }
     );
 
     const filtered = query.surface

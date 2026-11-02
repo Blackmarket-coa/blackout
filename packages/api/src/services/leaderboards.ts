@@ -24,7 +24,7 @@ function rank(entries: Omit<LeaderboardEntry, 'rank'>[], limit: number): Leaderb
  */
 export function leaderboard(
     category: LeaderboardCategory,
-    options: { region?: string; limit?: number } = {},
+    options: { region?: string; limit?: number } = {}
 ): LeaderboardEntry[] {
     const limit = Math.max(1, Math.min(options.limit ?? 20, 100));
 
@@ -53,7 +53,8 @@ export function leaderboard(
             title: project.title,
             subtitle: project.category,
             // Status dominates; recency (epoch ms) breaks ties within a status.
-            score: (PROJECT_STATUS_WEIGHT[project.status] ?? 0) * 1e13 + Date.parse(project.updatedAt),
+            score:
+                (PROJECT_STATUS_WEIGHT[project.status] ?? 0) * 1e13 + Date.parse(project.updatedAt),
         }));
         return rank(entries, limit);
     }

@@ -13,7 +13,7 @@ export const PRIVACY_FEATURES = [
     'bulk_deletion',
     'stego_advanced',
 ] as const;
-export type PrivacyFeature = (typeof PRIVACY_FEATURES)[number];
+export type PrivacyFeature = typeof PRIVACY_FEATURES[number];
 
 const VALID_FEATURES = new Set<string>(PRIVACY_FEATURES);
 const ACTIVE_STATUSES = new Set(['granted', 'pending']);

@@ -60,7 +60,7 @@ const challenges = new Map<string, ChallengeRecord>();
 export const issueChallenge = (
     userId: string,
     purpose: ChallengeRecord['purpose'],
-    now = Date.now(),
+    now = Date.now()
 ): ChallengeRecord => {
     const challenge = randomBytes(32).toString('base64url');
     const record: ChallengeRecord = { challenge, userId, purpose, issuedAt: now };
@@ -71,7 +71,7 @@ export const issueChallenge = (
 export const consumeChallenge = (
     challenge: string,
     expected: { userId: string; purpose: ChallengeRecord['purpose'] },
-    now = Date.now(),
+    now = Date.now()
 ): ChallengeRecord | null => {
     const record = challenges.get(challenge);
     if (!record) return null;
@@ -109,9 +109,7 @@ export const parseClientData = (clientDataJSON: string): ClientData | null => {
     }
 };
 
-export type ValidationResult =
-    | { ok: true }
-    | { ok: false; code: string; detail?: string };
+export type ValidationResult = { ok: true } | { ok: false; code: string; detail?: string };
 
 const safeChallengeEquals = (a: string, b: string): boolean => {
     const aBuf = Buffer.from(a, 'utf8');
@@ -122,7 +120,7 @@ const safeChallengeEquals = (a: string, b: string): boolean => {
 
 export const validateClientData = (
     clientData: ClientData,
-    expected: { type: 'webauthn.create' | 'webauthn.get'; challenge: string; origins: string[] },
+    expected: { type: 'webauthn.create' | 'webauthn.get'; challenge: string; origins: string[] }
 ): ValidationResult => {
     if (clientData.type !== expected.type) {
         return { ok: false, code: 'wrong_type', detail: clientData.type };
@@ -189,11 +187,10 @@ export type VerifyResult =
       }
     | { ok: false; code: string; detail?: string };
 
-const toBase64Url = (bytes: Uint8Array): string =>
-    Buffer.from(bytes).toString('base64url');
+const toBase64Url = (bytes: Uint8Array): string => Buffer.from(bytes).toString('base64url');
 
 const fromBase64Url = (s: string): Uint8Array<ArrayBuffer> =>
-  new Uint8Array(Buffer.from(s, 'base64url'));
+    new Uint8Array(Buffer.from(s, 'base64url'));
 
 /**
  * Server-side attestation verification. Delegates to
@@ -201,9 +198,7 @@ const fromBase64Url = (s: string): Uint8Array<ArrayBuffer> =>
  * clientDataJSON pre-checks (which give clearer error codes for the most
  * common operator misconfigurations: wrong origin, wrong type, etc.).
  */
-export const verifyAttestation = async (
-    input: AttestationVerifyInput,
-): Promise<VerifyResult> => {
+export const verifyAttestation = async (input: AttestationVerifyInput): Promise<VerifyResult> => {
     const cd = parseClientData(input.response.response.clientDataJSON);
     if (!cd) return { ok: false, code: 'malformed_client_data' };
     const validation = validateClientData(cd, {
@@ -250,9 +245,7 @@ export const verifyAttestation = async (
  * the new sign counter on success so that a cloned authenticator (counter
  * regression) is rejected on the next login.
  */
-export const verifyAssertion = async (
-    input: AssertionVerifyInput,
-): Promise<VerifyResult> => {
+export const verifyAssertion = async (input: AssertionVerifyInput): Promise<VerifyResult> => {
     const cd = parseClientData(input.response.response.clientDataJSON);
     if (!cd) return { ok: false, code: 'malformed_client_data' };
     const validation = validateClientData(cd, {

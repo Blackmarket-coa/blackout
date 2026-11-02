@@ -855,9 +855,7 @@ export const standsFired = (
  * nothing of anyone else's. Nothing before the trigger, nothing of a switch
  * they own, nothing of one cancelled with its `releasedAt` kept (which the
  * owner's deletion over a trigger committed elsewhere left until round 12),
- * nothing once the content was removed, nothing of a switch whose owner's
- * deletion has queued an erase this process has not seen land, newest
- * release first.
+ * nothing once the content was removed, newest release first.
  */
 export const releasedCopiesFor = (accountId: string): DeadmanReleasedCopy[] => {
     const releases: DeadmanReleasedCopy[] = [];
@@ -865,10 +863,6 @@ export const releasedCopiesFor = (accountId: string): DeadmanReleasedCopy[] => {
         if (!wrapIsHeld(wrap)) continue;
         const record = db.getDeadmanSwitch(wrap.switchId);
         if (!record || !standsFired(record) || record.ownerId === accountId) continue;
-        // Its owner's deletion has queued an erase not yet landed: this
-        // process's view is not Postgres's, so nothing is served from it
-        // until it lands (round 13 of part 2's review).
-        if (db.deadmanSwitchErasePending(record.id)) continue;
         const release = storedRelease(record);
         if (!release) continue;
         releases.push({
@@ -960,9 +954,8 @@ export const blankReleaseWraps = (switchId: string): number => {
  * being cancelled (`blankCopiesOfCancelledSwitch`; round 13: plain writes
  * from this process's view, which the owner's queued erase had made
  * cancelled, blanked every copy of a release that had fired elsewhere).
- * Those count as removed too. A switch whose owner's deletion has queued an
- * erase this process has not seen land is left alone. Returns how many
- * releases were removed this pass.
+ * Those count as removed too. Returns how many releases were removed this
+ * pass.
  */
 export const removeExpiredReleases = async (now: Date): Promise<number> => {
     let removed = 0;
@@ -970,7 +963,6 @@ export const removeExpiredReleases = async (now: Date): Promise<number> => {
     for (const listed of db.listAllDeadmanSwitches()) {
         const record = db.getDeadmanSwitch(listed.id);
         if (!record || !isReleaseSwitch(record)) continue;
-        if (db.deadmanSwitchErasePending(record.id)) continue;
         if (record.status === 'cancelled') {
             if ((await db.blankCopiesOfCancelledSwitch(record.id)) > 0) removed += 1;
             continue;

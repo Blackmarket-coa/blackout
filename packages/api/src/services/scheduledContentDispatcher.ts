@@ -21,7 +21,7 @@ export const runScheduledContentDispatch = (): { published: number } => {
 };
 
 export const startScheduledContentDispatcher = (
-    intervalMs: number = DEFAULT_INTERVAL_MS,
+    intervalMs: number = DEFAULT_INTERVAL_MS
 ): { stop: () => void } => {
     if (timer) return { stop: stopScheduledContentDispatcher };
     timer = setInterval(() => {

@@ -26,78 +26,78 @@ import { log } from '../telemetry/logger';
  */
 
 export interface RouteResult {
-  /** Per-target outcomes keyed by an opaque target id ("twitch:<channel>" / "youtube:<bridgeId>"). */
-  targets: Array<{
-    target: string;
-    kind: string;
-    detail?: string;
-  }>;
-  /** Count of targets that returned the OK status for their platform. */
-  delivered: number;
+    /** Per-target outcomes keyed by an opaque target id ("twitch:<channel>" / "youtube:<bridgeId>"). */
+    targets: Array<{
+        target: string;
+        kind: string;
+        detail?: string;
+    }>;
+    /** Count of targets that returned the OK status for their platform. */
+    delivered: number;
 }
 
 export interface RouteOptions {
-  /** Pluggable fetch passed through to the YouTube outbound (Twitch is in-process). */
-  fetch?: typeof fetch;
+    /** Pluggable fetch passed through to the YouTube outbound (Twitch is in-process). */
+    fetch?: typeof fetch;
 }
 
 export const routeOutboundMatrixMessage = async (
-  matrixRoomId: string,
-  body: string,
-  options: RouteOptions = {},
+    matrixRoomId: string,
+    body: string,
+    options: RouteOptions = {}
 ): Promise<RouteResult> => {
-  const result: RouteResult = { targets: [], delivered: 0 };
+    const result: RouteResult = { targets: [], delivered: 0 };
 
-  // ---- Twitch chat bridges ----
-  const twitchBridges = [...db.twitchChatBridges.values()].filter(
-    (row) => row.isActive && row.matrixRoomId === matrixRoomId,
-  );
-  for (const bridge of twitchBridges) {
-    const target = `twitch:${bridge.twitchChannel}`;
-    try {
-      const outcome = sendChatMessage(bridge.blackoutUserId, bridge.twitchChannel, body);
-      result.targets.push({
-        target,
-        kind: outcome.kind,
-        detail: 'state' in outcome ? outcome.state : undefined,
-      });
-      if (outcome.kind === 'ok') result.delivered += 1;
-      else
-        log.info('outbound_router_twitch_skipped', {
-          target,
-          kind: outcome.kind,
-        });
-    } catch (err) {
-      log.warn('outbound_router_twitch_threw', { target, error: String(err) });
-      result.targets.push({ target, kind: 'threw', detail: String(err) });
+    // ---- Twitch chat bridges ----
+    const twitchBridges = [...db.twitchChatBridges.values()].filter(
+        (row) => row.isActive && row.matrixRoomId === matrixRoomId
+    );
+    for (const bridge of twitchBridges) {
+        const target = `twitch:${bridge.twitchChannel}`;
+        try {
+            const outcome = sendChatMessage(bridge.blackoutUserId, bridge.twitchChannel, body);
+            result.targets.push({
+                target,
+                kind: outcome.kind,
+                detail: 'state' in outcome ? outcome.state : undefined,
+            });
+            if (outcome.kind === 'ok') result.delivered += 1;
+            else
+                log.info('outbound_router_twitch_skipped', {
+                    target,
+                    kind: outcome.kind,
+                });
+        } catch (err) {
+            log.warn('outbound_router_twitch_threw', { target, error: String(err) });
+            result.targets.push({ target, kind: 'threw', detail: String(err) });
+        }
     }
-  }
 
-  // ---- YouTube chat bridges ----
-  const youtubeBridges = [...db.youtubeChatBridges.values()].filter(
-    (row) => row.isActive && row.matrixRoomId === matrixRoomId,
-  );
-  for (const bridge of youtubeBridges) {
-    const target = `youtube:${bridge.youtubeChannelId}`;
-    try {
-      const outcome = await sendBridgeMessage(bridge, body, { fetch: options.fetch });
-      result.targets.push({
-        target,
-        kind: outcome.kind,
-      });
-      if (outcome.kind === 'ok') result.delivered += 1;
-      else
-        log.info('outbound_router_youtube_skipped', {
-          target,
-          kind: outcome.kind,
-        });
-    } catch (err) {
-      log.warn('outbound_router_youtube_threw', { target, error: String(err) });
-      result.targets.push({ target, kind: 'threw', detail: String(err) });
+    // ---- YouTube chat bridges ----
+    const youtubeBridges = [...db.youtubeChatBridges.values()].filter(
+        (row) => row.isActive && row.matrixRoomId === matrixRoomId
+    );
+    for (const bridge of youtubeBridges) {
+        const target = `youtube:${bridge.youtubeChannelId}`;
+        try {
+            const outcome = await sendBridgeMessage(bridge, body, { fetch: options.fetch });
+            result.targets.push({
+                target,
+                kind: outcome.kind,
+            });
+            if (outcome.kind === 'ok') result.delivered += 1;
+            else
+                log.info('outbound_router_youtube_skipped', {
+                    target,
+                    kind: outcome.kind,
+                });
+        } catch (err) {
+            log.warn('outbound_router_youtube_threw', { target, error: String(err) });
+            result.targets.push({ target, kind: 'threw', detail: String(err) });
+        }
     }
-  }
 
-  return result;
+    return result;
 };
 
 /**
@@ -106,10 +106,10 @@ export const routeOutboundMatrixMessage = async (
  * forwarded INTO Matrix ourselves (loop prevention).
  */
 export const shouldRouteOutbound = (eventContent: Record<string, unknown>): boolean => {
-  // Anything tagged with our origin marker came FROM a source platform
-  // and must NOT be re-sent. Future origins should land here too.
-  if (eventContent['m.blackout.origin']) return false;
-  // Only route m.text / m.notice (skip reactions, redactions, encrypted-only events).
-  const msgtype = (eventContent.msgtype ?? '') as string;
-  return msgtype === 'm.text' || msgtype === 'm.notice';
+    // Anything tagged with our origin marker came FROM a source platform
+    // and must NOT be re-sent. Future origins should land here too.
+    if (eventContent['m.blackout.origin']) return false;
+    // Only route m.text / m.notice (skip reactions, redactions, encrypted-only events).
+    const msgtype = (eventContent.msgtype ?? '') as string;
+    return msgtype === 'm.text' || msgtype === 'm.notice';
 };

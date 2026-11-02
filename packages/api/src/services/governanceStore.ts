@@ -1,8 +1,4 @@
-export type GovernanceMeetingStatus =
-    | 'scheduled'
-    | 'in_progress'
-    | 'completed'
-    | 'cancelled';
+export type GovernanceMeetingStatus = 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
 
 export interface GovernanceMeetingAttendee {
     id: string;
@@ -75,7 +71,9 @@ export function cancelMeeting(meetingId: string): GovernanceMeeting | null {
     return cancelled;
 }
 
-export function publishTreasurySnapshot(input: GovernanceTreasurySnapshot): GovernanceTreasurySnapshot {
+export function publishTreasurySnapshot(
+    input: GovernanceTreasurySnapshot
+): GovernanceTreasurySnapshot {
     treasurySnapshots.push({ ...input, lines: [...input.lines] });
     treasurySnapshots.sort((a, b) => b.generatedAt.localeCompare(a.generatedAt));
     return treasurySnapshots[0]!;
@@ -93,7 +91,7 @@ export function listTreasurySnapshots(options: { cursor?: string; limit?: number
     let start = 0;
     if (options.cursor) {
         const idx = treasurySnapshots.findIndex(
-            (snapshot) => snapshot.snapshotId === options.cursor,
+            (snapshot) => snapshot.snapshotId === options.cursor
         );
         start = idx >= 0 ? idx : treasurySnapshots.length;
     }
@@ -107,7 +105,7 @@ export function listTreasurySnapshots(options: { cursor?: string; limit?: number
  * the same id edits the goal — including flipping `status` to `met`/`archived`.
  */
 export function upsertTreasuryMilestone(
-    input: GovernanceTreasuryMilestone,
+    input: GovernanceTreasuryMilestone
 ): GovernanceTreasuryMilestone {
     if (!Number.isFinite(input.target) || input.target <= 0) {
         throw new Error('target_must_be_positive');
@@ -118,7 +116,7 @@ export function upsertTreasuryMilestone(
 
 /** List milestones, newest first. Archived ones are excluded unless requested. */
 export function listTreasuryMilestones(
-    options: { includeArchived?: boolean } = {},
+    options: { includeArchived?: boolean } = {}
 ): GovernanceTreasuryMilestone[] {
     const all = [...treasuryMilestones.values()];
     const filtered = options.includeArchived

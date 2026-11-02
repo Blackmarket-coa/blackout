@@ -3000,12 +3000,12 @@ class InMemoryDb {
      * Whether the owner's deletion has queued an erase of this switch that
      * has not yet landed (the Postgres store only: here the erase is made at
      * once). While it is pending, this process's mirror keeps the switch as
-     * it last had it, and the sweep, the removal pass, the notifier and every
-     * reader that serves a release leave it alone, so nothing this process
-     * does rests on a view of the switch that Postgres has not decided
-     * (round 13 of part 2's review: the mirror held its own erase of the
-     * switch meanwhile, cancelled and emptied, and the removal pass then
-     * blanked every copy of a release that had fired on another process).
+     * it last had it, never a view of its own of the erase (round 13 of part
+     * 2's review: it held its own erase, cancelled and emptied, and the
+     * removal pass took that for a cancelled release and blanked every copy
+     * of a release that had fired on another process), and the sweep does
+     * not move it, so a switch whose erase is lost and could not be read back
+     * is not fired by this process for the account that is gone.
      */
     deadmanSwitchErasePending(_id: string): boolean {
         return false;
@@ -10306,21 +10306,23 @@ export class PostgresBackedDb extends InMemoryDb {
      * review found a refused connection dropped the erase with no retry), is
      * tried once more as a fresh queued call. Until it lands this mirror
      * keeps the switch as it last had it, marked (`deadmanSwitchErasePending`),
-     * and the sweep, the removal pass, the notifier and the readers that
-     * serve a release leave a marked switch alone, so this process neither
-     * fires it nor serves it, blanks its copies, nor ends its notices on a
-     * view Postgres has not decided (round 13: the mirror held this
-     * process's own erase of the switch, cancelled and emptied, and the
+     * and the sweep does not move a marked switch (round 13: the mirror held
+     * this process's own erase of the switch, cancelled and emptied, and the
      * removal pass then blanked every copy of a release another process had
-     * fired, through plain writes no condition guarded). Where both attempts
+     * fired, through plain writes no condition guarded; that blanking is now
+     * also conditional in Postgres, `blankCopiesOfCancelledSwitch`). What this
+     * mirror serves or notifies meanwhile rests on the switch as Postgres last
+     * had it, as on any switch between a change elsewhere and its
+     * notification. Where both attempts
      * fail it is dropped, loudly (`db_write_behind_failed`, counted as the
      * queue's dropped writes are), the switch stays in Postgres as it was,
      * and the switch and its copies are read back from Postgres into this
      * mirror, which ends the mark, so this process then holds what Postgres
      * holds (round 13: it kept its own erased view for good); where that
-     * read fails too the mark stays, and this process leaves the switch alone
-     * until the deletion's last statement (`eraseDeadmanSwitchesOfDeletedOwner`)
-     * reaches it or the process restarts and reads it.
+     * read fails too the mark stays, and this process's sweep leaves the
+     * switch unmoved until the deletion's last statement
+     * (`eraseDeadmanSwitchesOfDeletedOwner`) reaches it or the process
+     * restarts and reads it.
      */
     private queueEraseUnlessFired(
         id: string,

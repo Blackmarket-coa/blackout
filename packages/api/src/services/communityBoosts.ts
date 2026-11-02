@@ -230,16 +230,17 @@ export function captureBoostPledge(
     return toView(updated);
 }
 
-export function cancelBoostPledge(
-    pledgeId: string,
-    actorUserId: string
-): PledgeView | undefined {
+export function cancelBoostPledge(pledgeId: string, actorUserId: string): PledgeView | undefined {
     const existing = db.getCommunityBoostPledge(pledgeId);
     if (!existing) return undefined;
     if (existing.pledgerUserId !== actorUserId) {
         throw new CommunityBoostError('forbidden', 'only the pledger can cancel');
     }
-    if (existing.status === 'canceled' || existing.status === 'refunded' || existing.status === 'expired') {
+    if (
+        existing.status === 'canceled' ||
+        existing.status === 'refunded' ||
+        existing.status === 'expired'
+    ) {
         return toView(existing);
     }
     const updated: CommunityBoostPledgeRecord = {

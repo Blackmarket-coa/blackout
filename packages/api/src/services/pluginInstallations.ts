@@ -88,7 +88,7 @@ function toModel(record: PluginInstallationRecord): PluginInstallation {
 export function authorizeScope(
     userId: string,
     userReputationTier: string,
-    scope: InstallScope,
+    scope: InstallScope
 ): InstallAuthorization {
     switch (scope.type) {
         case 'user':
@@ -127,7 +127,7 @@ export function authorizeAiCapability(
     capabilities: readonly string[],
     domain: string | null | undefined,
     scope: InstallScope,
-    denType?: DenType,
+    denType?: DenType
 ): InstallAuthorization {
     if (!pluginAiCapabilityEnabled()) return { ok: true, code: 'ok', message: '' };
     const usesAi = pluginUsesAi(capabilities, domain === 'ai' ? 'ai' : undefined);
@@ -158,7 +158,7 @@ export function authorizeAiCapability(
 export function authorizeGovernance(
     scope: InstallScope,
     isPaid: boolean,
-    governanceProposalId: string | null | undefined,
+    governanceProposalId: string | null | undefined
 ): InstallAuthorization {
     if (!pluginScopeGovernanceEnabled()) return { ok: true, code: 'ok', message: '' };
     if (scope.type !== 'coalition' || !isPaid) return { ok: true, code: 'ok', message: '' };
@@ -184,7 +184,7 @@ export function authorizeGovernance(
 export function authorizeEntitlement(
     userId: string,
     entitlementId: string | null,
-    requiresEntitlement: boolean,
+    requiresEntitlement: boolean
 ): InstallAuthorization {
     if (!entitlementId) {
         if (requiresEntitlement) {
@@ -268,7 +268,7 @@ export function installPluginAtScope(input: InstallPluginInput): PluginInstallat
 
 export function setInstallationStatus(
     installationId: string,
-    status: InstallStatus,
+    status: InstallStatus
 ): PluginInstallation | undefined {
     const updated = db.updatePluginInstallation(installationId, { status });
     return updated ? toModel(updated) : undefined;

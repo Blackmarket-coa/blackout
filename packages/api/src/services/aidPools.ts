@@ -51,7 +51,10 @@ function nowIso(): string {
     return new Date().toISOString();
 }
 
-function aggregate(poolId: string, currency: string): {
+function aggregate(
+    poolId: string,
+    currency: string
+): {
     raised: number;
     fee: number;
     net: number;
@@ -203,10 +206,7 @@ export function contributeToAidPool(input: ContributeToAidPoolInput): {
     }
 }
 
-export function fulfillAidPool(
-    poolId: string,
-    actorUserId: string
-): AidPoolView | undefined {
+export function fulfillAidPool(poolId: string, actorUserId: string): AidPoolView | undefined {
     const record = db.getAidPool(poolId);
     if (!record) return undefined;
     if (record.organizerUserId !== actorUserId) {

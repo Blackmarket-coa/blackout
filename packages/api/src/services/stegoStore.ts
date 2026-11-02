@@ -86,7 +86,7 @@ export class StegoChannelExistsError extends Error {
 
 export function createChannel(
     subject: string,
-    input: CreateStegoChannelInput,
+    input: CreateStegoChannelInput
 ): { snapshot: StegoChannelSnapshot; materialFingerprint: string } {
     const bucket = getOrCreateBucket(subject);
     const channelId = normalizeStegoChannelId(input.name);
@@ -124,7 +124,7 @@ export class StegoChannelNotFoundError extends Error {
 export function rotateChannel(
     subject: string,
     channelId: string,
-    input: RotateStegoChannelInput,
+    input: RotateStegoChannelInput
 ): { snapshot: StegoChannelSnapshot; materialFingerprint: string } {
     const bucket = subjects.get(subject);
     const record = bucket?.get(channelId);
@@ -138,7 +138,10 @@ export function rotateChannel(
         rotationIndex: record.snapshot.rotationIndex + 1,
         lastRotatedAt: rotatedAt,
     };
-    const materialFingerprint = fingerprintFor(input.passphrase, `${channelId}:${nextSnapshot.rotationIndex}`);
+    const materialFingerprint = fingerprintFor(
+        input.passphrase,
+        `${channelId}:${nextSnapshot.rotationIndex}`
+    );
     bucket!.set(channelId, {
         snapshot: nextSnapshot,
         passphraseHash: hashPassword(input.passphrase),
@@ -150,7 +153,7 @@ export function rotateChannel(
 export function expireChannel(
     subject: string,
     channelId: string,
-    reason: StegoChannelExpiryReason,
+    reason: StegoChannelExpiryReason
 ): StegoChannelSnapshot {
     const bucket = subjects.get(subject);
     const record = bucket?.get(channelId);

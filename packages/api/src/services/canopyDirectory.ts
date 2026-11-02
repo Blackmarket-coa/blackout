@@ -29,7 +29,9 @@ export function hasCanopy(canopyId: string): boolean {
     return db.getCanopyDirectoryEntry(canopyId) !== undefined;
 }
 
-export function listCanopies(filter: { federationTier?: CanopyFederationTier } = {}): CanopyDirectoryEntry[] {
+export function listCanopies(
+    filter: { federationTier?: CanopyFederationTier } = {}
+): CanopyDirectoryEntry[] {
     const all = db.listCanopyDirectoryEntries();
     const filtered = filter.federationTier
         ? all.filter((entry) => entry.federationTier === filter.federationTier)

@@ -16,16 +16,14 @@ import type { CanopyVoiceRoomRecord } from '../db/types';
  * failure so a creator who hasn't joined a voice channel yet sees a
  * clear error from their Stream Deck.
  */
-export const findActiveVoiceRoomForUser = (
-  userId: string,
-): CanopyVoiceRoomRecord | null => {
-  let best: CanopyVoiceRoomRecord | null = null;
-  for (const room of db.canopyVoiceRooms.values()) {
-    if (!room.active) continue;
-    if (room.createdBy !== userId) continue;
-    if (!best || Date.parse(room.updatedAt) > Date.parse(best.updatedAt)) {
-      best = room;
+export const findActiveVoiceRoomForUser = (userId: string): CanopyVoiceRoomRecord | null => {
+    let best: CanopyVoiceRoomRecord | null = null;
+    for (const room of db.canopyVoiceRooms.values()) {
+        if (!room.active) continue;
+        if (room.createdBy !== userId) continue;
+        if (!best || Date.parse(room.updatedAt) > Date.parse(best.updatedAt)) {
+            best = room;
+        }
     }
-  }
-  return best;
+    return best;
 };

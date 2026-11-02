@@ -4,5 +4,5 @@
  * to restore normal subscription/preset gating.
  */
 export function betaUnlockAllEnabled(): boolean {
-  return process.env.BLACKOUT_BETA_UNLOCK_ALL === 'true';
+    return process.env.BLACKOUT_BETA_UNLOCK_ALL === 'true';
 }

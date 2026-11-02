@@ -15,7 +15,10 @@ export interface StreamRevenueBreakdown {
     /** Of those tips, how many used a gift sku (subset of tipCount). */
     giftCount: number;
     /** Sum of currency keyed by code, in case the stream takes multi-currency tips. */
-    byCurrency: Record<string, { grossCents: number; feeCents: number; netCents: number; count: number }>;
+    byCurrency: Record<
+        string,
+        { grossCents: number; feeCents: number; netCents: number; count: number }
+    >;
     /** Number of distinct senders — useful for hype-train style milestones. */
     uniqueSenderCount: number;
     /** Captured-only — pending and refunded rows are excluded. */
@@ -100,9 +103,7 @@ export function evaluateStreamGoal(
     const ccy = breakdown.byCurrency[currency.toUpperCase()];
     const achievedCents = ccy?.grossCents ?? 0;
     const percent =
-        targetCents <= 0
-            ? 100
-            : Math.min(100, Math.round((achievedCents / targetCents) * 100));
+        targetCents <= 0 ? 100 : Math.min(100, Math.round((achievedCents / targetCents) * 100));
     const metAt = achievedCents >= targetCents ? new Date().toISOString() : null;
     const progress: StreamGoalProgress = {
         streamId,
@@ -131,7 +132,7 @@ export function evaluateStreamGoal(
                 log.warn('streamgoal_outbound_dispatch_threw', {
                     streamId,
                     error: String(err),
-                }),
+                })
             );
         }
     }

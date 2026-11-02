@@ -25,7 +25,7 @@ export function creatorFeeOverrideEnabled(): boolean {
 export function commissionForListing(
     grossCents: number,
     providerId: MarketplaceProviderId,
-    feeBpsOverride?: number,
+    feeBpsOverride?: number
 ): PlatformCommissionSplit {
     const feeBps = resolveListingFeeBps(providerId, feeBpsOverride, creatorFeeOverrideEnabled());
     return computePlatformCommission(grossCents, providerId, feeBps);
