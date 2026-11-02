@@ -270,12 +270,13 @@ export type DeadmanSwitchArmOutcome =
  * it had); `absent` where the store has no such switch; `queued` (the
  * Postgres store only) where the database did not answer the statement in
  * time, was not sent it because another switch statement stood unanswered,
- * or failed it: the same statement is then queued in the switch's lane and
+ * or failed it: the same call is then queued in the switch's lane and
  * decides on the row Postgres holds when it runs, and nothing of the mirror's
  * view of the switch is written over it (found when round 12 of part 2's
  * review was checked: the deletion wrote the mirror's erase whole in that
  * case, which landed after the statement and cancelled a release that had
- * fired elsewhere).
+ * fired elsewhere); meanwhile the mirror keeps the switch as it had it,
+ * marked (`deadmanSwitchErasePending`, round 13).
  */
 export type DeadmanSwitchEraseOutcome =
     | { kind: 'applied'; record: DeadmanSwitchRecord }
@@ -306,8 +307,11 @@ const erasedSwitchRecord = (record: DeadmanSwitchRecord): DeadmanSwitchRecord =>
  * row Postgres holds: the label goes, and by a `CASE` on the stored status a
  * switch that has not fired is cancelled with its content and backlog window
  * gone, while one that has keeps its status, content and `releasedAt`; then,
- * only where the row as updated has not fired, every held copy of the switch
- * is blanked, in the same call. Where Postgres has no row for the switch
+ * in a second statement and only where the row as updated has not fired,
+ * every held copy of the switch is blanked. The statements run on one
+ * connection and not in a transaction, so a failure between them leaves the
+ * switch cancelled with its copies held, which running this again (the
+ * queued call) or the deletion's last statement blanks. Where Postgres has no row for the switch
  * (this process's own write of it was dropped before round 11 of part 2's
  * review), `restore`, the mirror's erase, is inserted (insert-only, so a row
  * another process wrote meanwhile is kept) and the update run again on what
@@ -2976,10 +2980,11 @@ class InMemoryDb {
      * label goes; the status, the content, `releasedAt` and the copies stay),
      * wherever this mirror had it; where it has not, it is cancelled and
      * emptied and every held copy of it is blanked. Here, and in the file
-     * store, the mirror is the database. The Postgres store makes it one
-     * conditional statement in the switch's lane, the copies blanked in the
-     * same call where the stored row has not fired (round 12 of part 2's
-     * review, decision 30: the deletion wrote the switch from the deleting
+     * store, the mirror is the database. The Postgres store makes it one call
+     * in the switch's lane, a conditional statement on the switch and then,
+     * where the stored row has not fired, one blanking its copies, on one
+     * connection and not a transaction (round 12 of part 2's review, decision
+     * 30: the deletion wrote the switch from the deleting
      * process's mirror, so on a process that had not heard of a trigger
      * another process committed it cancelled a release that had fired and
      * removed its content and copies).

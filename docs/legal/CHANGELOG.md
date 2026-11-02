@@ -119,13 +119,15 @@ each correction.
 -   **Arming, checking in and cancelling are confirmed by the database** where
     the server keeps its data in one: an arm is answered as armed only once
     the database holds the switch and its copies; otherwise it is answered
-    with an error, after which the server finds nothing armed, or, where the
-    database does not confirm it within 30 seconds or the server cannot
-    look, as unconfirmed, in which case that arm may still be recorded and
-    then appears in your list. Either way, arming the same message again is
-    refused as already taken if the first was recorded (a write the
-    database was still finishing when the error was given can be recorded
-    after it), and the switch then appears in your list. A check-in or
+    with an error, after which the server finds nothing armed, or as
+    unconfirmed. Where the database did not confirm it within 30 seconds,
+    that arm may still be recorded, and then appears in your list. Where the
+    server could not look, or the database was still finishing the write
+    when the error was given, the arm may be recorded without appearing in
+    your list: no running server process knows of it, and it can fire after
+    the server restarts and reads it. Arming the same message again is
+    refused as already taken if the first was recorded, and the switch then
+    appears in your list. A check-in or
     cancel is answered only once the database has applied it to the switch
     as that server process read it, so one made after the switch fired is
     refused rather than taking the release back; one the database does not
@@ -141,20 +143,30 @@ each correction.
     switches with their content (whether a switch has fired is decided on
     the database's row, so one that fired on another process stays released
     even where the process handling the deletion had not yet been told of
-    it; where the database does not answer that question in time it is
-    asked again, queued, before the deletion is answered, and only if the
-    database fails it twice is that switch left as the database had it,
-    so one that had not fired could still fire); a fired one keeps its
+    it; from the moment the deletion is confirmed the process handling it
+    accepts no arm, re-seal or release key from the account's other
+    sessions, and waits for an arm of theirs it was already writing; where
+    the database does not answer that question in time it is asked again,
+    queued, before the deletion is answered, and a last step then erases in
+    the database every switch it holds for the account, including one that
+    process never had; a switch is left as the database had it, so one that
+    had not fired could still fire, only where all of those fail, where an
+    arm the database was still finishing after the server lost its
+    connection to it is recorded after that last step, or where another of
+    the account's sessions arms one, after that step, on an API process
+    that had not yet heard of the deletion); a fired one keeps its
     content, the copies for
     the people it named and the public key it was signed with, until they are
     removed at the first sweep 365 days or more after it fired, and only the
-    owner's own copy and the label go, so that what was
+    owner's own copy and the label go (the label stays where every attempt
+    to erase the switch fails), so that what was
     released stays checkable (a switch armed before
     releases, every switch that exists today, keeps its payload for the people
     it named with no removal date). As a person named on others' switches, the
     account's copies are removed (across several API replicas one sealed to it
-    in the moment the deletion reaches another replica can stay until that
-    release is cancelled or removed), a notice still owed to it is dropped
+    on a replica that has not yet heard of the deletion, after its last
+    step, can stay until that release is cancelled or removed), a notice
+    still owed to it is dropped
     once the deletion is confirmed (one the bot was already sending can still
     arrive, as can the invitation to its notices room it was already making;
     wherever the server keeps its data in a database the confirmation waits

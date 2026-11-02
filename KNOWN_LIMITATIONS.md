@@ -323,7 +323,11 @@ For the source-of-truth triage with tier/owner detail see
     `POST /v1/auth/account/delete/request` and `/confirm`.
 -   **State:** Deleting your Blackout account removes the account, its sessions
     and linked services, and cancels and erases your unsent scheduled messages.
-    It cancels your dead-man switches that have not fired and removes what you
+    From the moment you confirm, the server process handling your deletion
+    has removed your account and your release keys, so your other sessions
+    can no longer arm a switch, re-seal one or publish a release key through
+    it; it then waits for any arm of yours it was already writing, and
+    cancels your dead-man switches that have not fired and removes what you
     put in them, a release switch's sealed copies included (not the copies
     an arm that failed left behind, which no switch names: see Durability
     below). Whether a switch
@@ -332,21 +336,37 @@ For the source-of-truth triage with tier/owner detail see
     one process, a switch that fired on another process moments before your
     deletion reached one that had not yet been told stays fired, and is
     erased as a fired switch is (below). Where the database does not answer
-    that question in time, or fails it, the question is asked again, queued,
-    and the deletion is not answered until it has been; if the database
-    fails it a second time too, that switch is left as the database had it
-    (logged), so one that had not fired is still armed there and can fire at
-    its deadline. A release switch
+    that question in time, or fails it, the question is asked again, queued
+    (and once more if that fails too, a refused connection included), and
+    the deletion is not answered until it has been. Then, as its last step,
+    the deletion erases in the database every switch it holds for you the
+    same way, including one the process handling your deletion never had (an
+    arm of yours answered with an error whose write the database recorded
+    anyway, or one another server process accepted before it heard of your
+    deletion); that step is waited for at most 10 seconds and can finish
+    after the deletion is confirmed. A switch is left as the database had it
+    only where all of those fail (each is logged): one that had not fired is
+    then still armed there and can fire at its deadline, and its label
+    stays. Three other cases can leave a switch armed, able to fire, for an
+    account that is gone: an arm whose write the database was still
+    finishing after the server had lost its connection to it, recorded after
+    that last step; an arm another of your sessions makes on another server
+    process that has not yet heard of your deletion, after that last step
+    and before that process hears of it (the delay of the server's change
+    notifications, not measured); and a server that stops before your
+    deletion is confirmed, which can leave any part of it undone (below). A release switch
     that has already fired stays readable to the people it named, with the
     public release key it was signed with, until at least 365 days after it
     fired (it is removed at the server's first sweep after that); a switch
     armed before Blackout could release messages (every switch that exists
     today) keeps its payload for the people it named with no removal date,
-    because a release is not taken back. Either way its label is removed.
-    Copies of other people's releases sealed to you are removed (where the
-    API runs as several replicas, one that someone seals to you on another
-    replica in the moment your deletion is still reaching it can stay until
-    that release is cancelled or removed), a notice still owed to you is
+    because a release is not taken back. Either way its label is removed,
+    except where every attempt to erase the switch failed.
+    Copies of other people's releases sealed to you are removed, in the
+    database too by the deletion's last step (where the API runs as several
+    replicas, one that someone seals to you on another replica that has not
+    yet heard of your deletion, after that step, can stay until that release
+    is cancelled or removed), a notice still owed to you is
     dropped once your deletion is confirmed (one the bot was already sending
     at that moment can still arrive, and so can the invitation to your
     notices room it was already making). Wherever the server keeps its data
@@ -371,7 +391,9 @@ For the source-of-truth triage with tier/owner detail see
     account id, a random token and when it expires) stays too. It
     removes the release keys you published (their public halves), except the
     copy kept with a release switch of yours that has already fired, which goes
-    with that release; the fingerprint of the key each
+    with that release (where the API runs as several replicas, one that
+    another of your sessions publishes on a replica that has not yet heard of
+    your deletion, in that moment, stays); the fingerprint of the key each
     sealed copy was made for stays on the blanked copy rows. The private keys
     on your devices and in your recovery files stay until you remove them. It
     does not yet deactivate your Matrix account, and your
@@ -664,7 +686,8 @@ For the source-of-truth triage with tier/owner detail see
     began removing payloads still holds its payload until you cancel it again
     ("Remove message" in the panel). Deleting your account cancels your switches that
     have not fired and removes their payloads and labels, and a release
-    switch's sealed copies; a switch that has already fired, by the database's
+    switch's sealed copies, except in the cases "Deleting your account" above
+    names; a switch that has already fired, by the database's
     row rather than by what the process handling the deletion knew, keeps what it
     holds for the people it named, because a release is not taken back: a
     release switch its encrypted message until at least 365 days after it

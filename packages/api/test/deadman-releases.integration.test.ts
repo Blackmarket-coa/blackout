@@ -821,8 +821,10 @@ const burst = async (
 
 test('arms sent at once at the edge of each bound: exactly the bound passes and the rest are refused with its code', async () => {
     // Every bound is read before the signatures are verified and again right
-    // before the rows are written, with nothing yielding between the second
-    // read and the writes. Without the second read, a burst of arms that all
+    // before the arm is counted as one this process is writing, with nothing
+    // yielding between; it counts toward every bound until the store has
+    // answered (here, in memory, the rows are in the store at once; in
+    // Postgres the write is awaited). Without the second read, a burst of arms that all
     // passed the first read against the same counts all write (round 2 of the
     // independent review of part 2: 30 at once from one owner armed 30 against
     // a rate of 10 and a cap of 20; 100 at once naming one person armed 100
