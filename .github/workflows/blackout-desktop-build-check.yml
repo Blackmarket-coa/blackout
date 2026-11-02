@@ -1,0 +1,168 @@
+name: blackout-desktop-build-check
+
+# Build-only check of the desktop app (blackout-desktop, Tauri 2) on the three
+# runners the release job uses, with the release job's bundles and setup.
+# Unlike the release job it builds unsigned (--no-sign) and makes no updater
+# artifact, and nothing leaves the runner: no release, no tag, no uploaded
+# bundle (an unsigned build downloadable from a public repository can be taken
+# for a release). It references no secret.
+#
+# The release is blackout-desktop-tauri.yml. Do not dispatch that workflow to
+# test a build: its tauri-action step publishes a public, non-draft release
+# named after the ref, with the updater's latest.json. Dispatch this one.
+# Keep the setup below in step with that workflow's build job.
+
+on:
+    pull_request:
+        branches: [develop]
+        paths:
+            # What the Rust build and the bundler read: tauri.conf.json,
+            # Cargo.toml, Cargo.lock, src/, capabilities/, entitlements.plist,
+            # the icon SVG, and package.json (the @tauri-apps/cli range).
+            - 'blackout-desktop/**'
+            - '.github/workflows/blackout-desktop-build-check.yml'
+            # Resolves @tauri-apps/cli, which is the bundler, and every tool
+            # the frontend build runs.
+            - 'pnpm-lock.yaml'
+            # Root overrides, packageManager, the prepare script, and the
+            # workspace membership that the frontend hook relies on.
+            - 'package.json'
+            - 'pnpm-workspace.yaml'
+            # The frontend build's own configuration. This job is the only CI
+            # build of the client on macOS and Windows, so a path or plugin
+            # change here can break only here. The rest of the client is
+            # platform-independent JavaScript, which ci.yml already builds on
+            # every pull request.
+            - 'apps/blackout-client/package.json'
+            - 'apps/blackout-client/vite.config.*'
+            - 'apps/blackout-client/build.config.ts'
+            # The desktop bridge; the release workflow's own filter lists it.
+            - 'apps/blackout-client/src/platform/**'
+    workflow_dispatch:
+
+permissions:
+    contents: read
+
+concurrency:
+    group: blackout-desktop-build-check-${{ github.ref }}
+    cancel-in-progress: true
+
+jobs:
+    build:
+        name: Unsigned build (${{ matrix.os }})
+        strategy:
+            fail-fast: false
+            matrix:
+                include:
+                    - os: ubuntu-22.04
+                      bundle: 'deb,rpm,appimage'
+                      expect: 'deb/*.deb rpm/*.rpm appimage/*.AppImage'
+                    - os: macos-latest
+                      bundle: 'app,dmg'
+                      expect: 'macos/*.app dmg/*.dmg'
+                    - os: windows-latest
+                      bundle: 'msi,nsis'
+                      expect: 'msi/*.msi nsis/*-setup.exe'
+        runs-on: ${{ matrix.os }}
+        timeout-minutes: 60
+
+        steps:
+            - name: Checkout
+              uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+              with:
+                  persist-credentials: false
+
+            - name: Setup Node
+              uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6
+              with:
+                  node-version: 22
+
+            - name: Setup pnpm
+              uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5
+              with:
+                  version: 9.15.4
+
+            # The commit at the head of the action's stable branch; it installs
+            # the current stable Rust, as the release job's @stable does.
+            - name: Setup Rust
+              uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+
+            # The release job's packages. Because the app registers deep-link
+            # schemes, the AppImage bundler also copies /usr/bin/xdg-mime
+            # (xdg-utils) into the image; the runner image has it, as a
+            # dependency of its Google Chrome.
+            - name: Install Linux deps
+              if: runner.os == 'Linux'
+              run: |
+                  sudo apt-get update
+                  sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+
+            - name: Install dependencies
+              run: pnpm install --frozen-lockfile
+
+            # tauri.conf.json references icons generated from blackout.svg,
+            # which are gitignored; the release job generates them the same way.
+            - name: Generate app icons
+              working-directory: blackout-desktop
+              run: pnpm tauri icon src-tauri/icons/blackout.svg --output src-tauri/icons
+
+            # --no-sign skips code signing, notarization and updater signing.
+            # The --config merge turns createUpdaterArtifacts off for the
+            # compiled app and the bundler alike, so no updater bundle is made.
+            # tauri-action sets TAURI_BUNDLER_DMG_IGNORE_CI on macOS, so the
+            # release runs the DMG's Finder layout step; only the macOS DMG
+            # bundler reads it.
+            - name: Build unsigned bundles, no updater artifacts
+              working-directory: blackout-desktop
+              shell: bash
+              env:
+                  BUNDLES: ${{ matrix.bundle }}
+                  TAURI_BUNDLER_DMG_IGNORE_CI: 'true'
+              run: |
+                  pnpm tauri build --ci --no-sign --bundles "$BUNDLES" \
+                      --config '{"bundle":{"createUpdaterArtifacts":false}}'
+
+            # Lists the bundles in the job summary. They are not uploaded.
+            - name: Check the bundles, no updater output, Cargo.lock unchanged
+              shell: bash
+              env:
+                  EXPECT: ${{ matrix.expect }}
+                  OS: ${{ matrix.os }}
+              run: |
+                  dir=blackout-desktop/src-tauri/target/release/bundle
+                  status=0
+                  {
+                      echo "### Unsigned bundles on $OS (built, not uploaded)"
+                      echo '```'
+                  } >> "$GITHUB_STEP_SUMMARY"
+                  for pattern in $EXPECT; do
+                      found=0
+                      for f in "$dir"/$pattern; do
+                          [ -e "$f" ] || continue
+                          found=1
+                          if [ -d "$f" ]; then
+                              size="$(du -sk "$f" | cut -f1) KiB (directory)"
+                          else
+                              size="$(wc -c < "$f" | tr -d ' ') bytes"
+                          fi
+                          echo "${f#"$dir"/}  $size" | tee -a "$GITHUB_STEP_SUMMARY"
+                      done
+                      if [ "$found" = 0 ]; then
+                          echo "::error::no bundle matches $pattern"
+                          status=1
+                      fi
+                  done
+                  echo '```' >> "$GITHUB_STEP_SUMMARY"
+                  # Not *.tar.gz: the deb staging directory holds data.tar.gz.
+                  updater="$(find "$dir" \( -name '*.sig' -o -name '*.app.tar.gz' \
+                      -o -name '*.AppImage.tar.gz' -o -name '*.msi.zip' -o -name '*.nsis.zip' \
+                      -o -name 'latest.json' \) -print)"
+                  if [ -n "$updater" ]; then
+                      echo "::error::updater artifacts were produced: $updater"
+                      status=1
+                  fi
+                  if ! git diff --exit-code --stat -- blackout-desktop/src-tauri/Cargo.lock; then
+                      echo '::error::the build changed Cargo.lock'
+                      status=1
+                  fi
+                  exit "$status"
