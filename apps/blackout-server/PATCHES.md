@@ -993,3 +993,77 @@ service files, which upstream does not have. Found by the sixth review of
   MSC3861) or is refused at sign-in, with the error text and the fix, and
   the Railway template change, and points at the record. Upstream's
   `docs/upgrade.md` has no such section; keep it through a reconciliation.
+
+## 2026-11-02 the Railway template is removed
+
+The operator chose on 2026-11-02 to remove the Railway service template
+rather than fix it. Its image could not start: `entrypoint.sh` rendered
+`homeserver.yaml.template` with plain `envsubst`, which leaves every
+`${VAR:-default}` as text, so the listener port rendered as `${PORT:-8008}`
+and Synapse refused the config; and the image exported the lock without
+extras, so with no authlib `check_requirements("jwt")` stopped it too. Its
+JWT login, which the same render had turned on, was turned off in `48ab32d`
+(the 2026-10-31 entry above). The removed files are Blackout's own and have
+no upstream counterpart; `.dockerignore`, `README.rst` and `docs/upgrade.md`
+are upstream files with Blackout lines. Record:
+`docs/security/dependency-advisories-server-desktop-2026-10-30.md`
+(repository root), "Found outside scope", item 5, and the section "The
+Railway template is removed (2026-11-02)".
+
+- Removed:
+  - `railway.toml`: the Railway service (Dockerfile builder,
+    `startCommand = "/entrypoint.sh"`).
+  - `services/blackout-server/`: `Dockerfile`, `entrypoint.sh` (the
+    `BLACKOUT_PROFILE` selection and the `managed` profile's `envsubst`
+    render), `homeserver.yaml.template` and `.env.example`.
+    `services/blackout-api/` stays.
+  - `.github/workflows/blackout-image-lifecycle.yml`: its one job built
+    `services/blackout-server/Dockerfile` into
+    `ghcr.io/<owner>/blackout-server`. GitHub registers workflows only from
+    the repository root's `.github/workflows/`, and the repository's list
+    (33 workflows, read on 2026-11-02) has none under `apps/`, so it never
+    ran.
+  - `scripts-dev/railway/start.sh` and `nixpacks.toml`: the earlier
+    Synapse-on-Railway path (Nixpacks phases and a start script). Nothing
+    ran them; the fork's `railway.json`, which started `start.sh`, had
+    already been consolidated into `railway.toml`.
+  - `docs/railway_deploy.md`: the how-to for `railway.json`, `nixpacks.toml`
+    and `start.sh`.
+- `tests/blackout_runtime/test_jwt_secret_config.py`:
+  `test_railway_template_leaves_jwt_login_off`, whose only subject was the
+  template, is removed with it, and so are `RAILWAY_TEMPLATE`, `_envsubst`
+  and the imports only they used (`re`, `Path`, `Mapping`, `yaml`): 15 tests
+  become 14. `test_non_boolean_enabled_is_refused` stays, with its
+  `${JWT_ENABLED:-false}` case: it pins `JWTConfig._check_enabled`
+  (`synapse/config/jwt.py`), which stays and refuses that text from any
+  template.
+- `.dockerignore`: drops `!.nixpacks`, `!nixpacks.toml`, `!railway.json`,
+  `!.nixpacks/**`, `!scripts-dev` and `!scripts-dev/**`. Only the removed
+  Dockerfile copied `scripts-dev`. `!services` and `!services/**` stay:
+  `infra/single-server-baseline/deploy.sh` builds
+  `services/blackout-api/Dockerfile` with this directory as the context.
+- `README.rst`: the "Railway deployment" link to `docs/railway_deploy.md` is
+  gone.
+- Dated notes, not rewrites, where a document described the template or what
+  it ran: `docs/upgrade.md` ("The Railway service template", and the
+  managed-preflight and `BLACKOUT_PROFILE` sections),
+  `docs/ops/blackout_profile_startup.md`,
+  `docs/ops/managed_hosting_readiness.md`,
+  `docs/ops/blackout_image_lifecycle.md`, `DEPLOYMENT_CHECKLIST_REVIEW.md` and
+  its copy `docs/DEPLOYMENT_CHECKLIST_REVIEW.md`,
+  `docs/development/phase0_railway_standalone_tracker.md`,
+  `docs/development/blackout_feature_registry_update_tracker.md` (FR-002),
+  `docs/railway_deployment_hardening.md`, `docs/bmc_server_execution_plan.md`,
+  and three entries above in this file (the 2026-10-30 JWT secret entry, and
+  the two 2026-10-31 entries on the template and the operator notes).
+- Left in place for the operator to decide: `synapse/util/blackout_profiles.py`,
+  `synapse/util/managed_hosting.py` and `synapse/util/hosting_smoke.py`, their
+  tests under `tests/util/`, and `scripts-dev/blackout/managed_hosting_smoke.sh`,
+  `ci_hosting_smoke.py` and `managed_readiness_integration_smoke.py`.
+  `entrypoint.sh` was the only runtime caller of the first two; the tests and
+  smoke scripts call them directly. `release/train/image_provenance.json`
+  names the `blackout-image-lifecycle` workflow; it is the RC1 release record
+  and stays as written. The other Railway paths are not this template and
+  stay: `services/blackout-api/railway.toml` (the legacy FastAPI service)
+  and, outside this directory, the client's `railway.json` and
+  `infra/railway/`.
