@@ -2039,10 +2039,16 @@ test('the owner’s deletion is decided in Postgres: on a process that has not h
     assert.equal((await armDuring!).kind, 'no_account');
     assert.equal(here.getCurrentReleaseIdentity(owner.id), undefined, 'no identity outlives it');
     await finishAccountDeletion(owner.id, here);
-    // After the deletion the other session's arm is refused too, by the route.
+    // After the deletion the other session's arm and re-seal are refused too,
+    // by the routes.
     const armAfter = await post(owner, '/switches', armBody(extra, 3600));
     assert.equal(armAfter.status, 404);
     assert.equal(((await armAfter.json()) as { code: string }).code, 'user_not_found');
+    const resealAfter = await post(owner, `/switches/${unfired.switchId}/reseal`, {
+        copy: unfired.envelope.copies.find((c) => c.recipientAccountId === unfired.recipient.id),
+    });
+    assert.equal(resealAfter.status, 404);
+    assert.equal(((await resealAfter.json()) as { code: string }).code, 'user_not_found');
     await here.drain();
     assert.ok(
         here.listDeadmanSwitchesForOwner(owner.id).every((sw) => sw.status !== 'armed'),
@@ -2489,7 +2495,21 @@ test('an arm already past its checks when the owner’s deletion starts is waite
         (await elsewhere.armDeadmanSwitch(fromElsewhere.input, fromElsewhere.copies)).kind,
         'armed'
     );
+    // And a third owner's release naming the account, armed there too: its
+    // copy sealed to the account is one this process never had.
+    const thirdOwner = await person();
+    const naming = await protocol.buildReleaseEnvelope({
+        ownerKeySet: thirdOwner.keySet,
+        recipients: [second.keySet.identity],
+        message: 'Synthetic test text.',
+    });
+    const namingInput = switchInputFor(naming, thirdOwner.id);
+    assert.equal(
+        (await elsewhere.armDeadmanSwitch(namingInput.input, namingInput.copies)).kind,
+        'armed'
+    );
     await elsewhere.drain();
+    assert.equal(here.getDeadmanReleaseWrap(naming.releaseId, second.id), undefined);
     assert.equal(here.getDeadmanSwitch(elsewhereEnvelope.releaseId), undefined, 'not heard here');
     here.switchStatementTimeoutMs = 150;
     let openLate!: () => void;
@@ -2528,6 +2548,17 @@ test('an arm already past its checks when the owner’s deletion starts is waite
         );
         assert.equal(here.getDeadmanSwitch(id)?.status, 'cancelled', 'taken here');
     }
+    assert.deepEqual(
+        (await storedCopies(naming.releaseId))
+            .map((c) => [c.recipient_account_id === second.id, c.held])
+            .sort(),
+        [
+            [false, true],
+            [true, false],
+        ],
+        'the copy sealed to the account on another owner’s switch is blanked; the owner’s own stays'
+    );
+    assert.equal((await stored(naming.releaseId))?.status, 'armed', 'that switch is not touched');
     const fresh = await otherProcess();
     assert.equal(fresh.getDeadmanSwitch(late.releaseId)?.status, 'cancelled', 'and hydrated so');
     await elsewhere.drain();

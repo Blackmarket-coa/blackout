@@ -518,8 +518,10 @@ export type ArmReleaseOutcome =
  * which also refuses a header naming another identity than the owner's
  * current one; and, after the signatures awaited, the release id is still
  * free, every bound still has room, and the owner's and every recipient's
- * current identity is still the one checked, and the owner's account still
- * exists. The rows are then written in one awaited store call, each of its
+ * current identity is still the one checked (the owner's deletion erases
+ * the identities in the same synchronous step as the account, so an arm whose
+ * owner was deleted during the signatures is refused here). The rows are
+ * then written in one awaited store call, each of its
  * statements awaited in Postgres, the copies first and the switch last, and
  * nothing deletes a copy, so a crash between them, a failed arm or one that
  * finds the id taken leaves copies without a switch, which nothing lists or
@@ -607,7 +609,6 @@ export const armReleaseSwitch = async (input: {
     }
     const identitiesAgain = identitiesStillCurrent(input.ownerId, owner.recordId, envelope.copies);
     if (identitiesAgain) return identitiesAgain;
-    if (ownerAccountGone(input.ownerId)) return { kind: 'no_account' };
     const lastCheckInAt = now.toISOString();
     const { triggerAt, releaseAt } = computeDeadlines({
         lastCheckInAt,
@@ -724,6 +725,8 @@ export const resealReleaseCopy = async (input: {
     switchId: string;
     copy: unknown;
 }): Promise<ResealReleaseOutcome> => {
+    // Another session of a deleted account (round 13 of part 2's review).
+    if (ownerAccountGone(input.ownerId)) return { kind: 'no_account' };
     const readSwitch = ():
         | { ok: true; record: DeadmanSwitchRecord; release: StoredRelease }
         | { ok: false; outcome: ResealReleaseOutcome } => {
@@ -751,7 +754,6 @@ export const resealReleaseCopy = async (input: {
     ) {
         return { kind: 'not_a_recipient', recipientAccountId: copy.recipientAccountId };
     }
-    if (ownerAccountGone(input.ownerId)) return { kind: 'no_account' };
     const owner = currentOwnerIdentity(input.ownerId);
     if (!owner.ok) return owner.refusal;
     const state = recipientIdentityState(copy.recipientAccountId, copy.recipientFingerprint);
@@ -774,7 +776,6 @@ export const resealReleaseCopy = async (input: {
     if (!again.ok) return again.outcome;
     const identitiesAgain = identitiesStillCurrent(input.ownerId, owner.recordId, [copy]);
     if (identitiesAgain) return identitiesAgain;
-    if (ownerAccountGone(input.ownerId)) return { kind: 'no_account' };
     db.putDeadmanReleaseWrap({
         switchId: again.record.id,
         recipientAccountId: copy.recipientAccountId,
